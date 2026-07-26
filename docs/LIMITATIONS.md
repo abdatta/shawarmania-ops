@@ -1,0 +1,97 @@
+# Limitations
+
+Known edges, deliberate non-features, and honest gaps. Everything here is a decision, not an oversight — and each one names what would change if it stopped being acceptable.
+
+## Deliberately deferred from v1
+
+### Bills are record-only
+
+**No receipt printing, no GST computation, no digital receipts.** A bill is stored in the app and nothing more.
+
+This keeps the billing screen minimal and ships the counter faster. All three extensions are anticipated in the schema so that adding them later does **not** require migrating historical bills:
+
+- **`pricing_mode` is written on every bill** (`no_tax` in v1). When GST is enabled, old bills stay unambiguous instead of being silently reinterpreted under new rules.
+- **`tax_paise` exists and is zero.** The column arrives before it is needed, not after.
+- **Line items snapshot name and unit price**, so any later reprint or recomputation reflects what was actually charged.
+- **Per-outlet sequential `bill_number` from day one.** A sequence cannot be retrofitted over existing rows — printing and GST both need it, and this is the one that would genuinely hurt to add late.
+- **`customer_phone` is captured**, so digital receipts work later with no backfill.
+
+Tracked as three backlog items: `bill-thermal-printing`, `bill-gst-breakup`, `bill-digital-share` in [`openspec/todos/`](../openspec/todos/README.md).
+
+### Profit and loss is an estimate, not accounting
+
+This is not a filing-grade financial report and must not be used as one. Specifically it does not model depreciation, opening and closing stock valuation properly, accruals, aggregator commission, or taxes. It answers "is this shop making money this month?" — a genuinely useful question, and a different one from what an accountant needs.
+
+The cash-basis / consumption-basis distinction is real and the UI always states which is shown. See [Data Model](DATA_MODEL.md#two-modelling-traps-in-this-domain).
+
+### No aggregator reconciliation
+
+Swiggy and Zomato orders are recorded as bills so revenue and item-level sales stay complete. But **the recorded amount is the order value, not what Shawarmania actually receives** — aggregators settle later, net of commission. Aggregator revenue in this system is therefore systematically overstated relative to cash in the bank.
+
+This is the single largest known inaccuracy in the P&L. Worth fixing when aggregator volume matters enough to distort decisions; fixing it means either manual settlement entry or an aggregator integration.
+
+### Payroll is out of scope
+
+`salary_paise` on an employee is a reference figure for cost estimates. Nothing disburses money, tracks advances, or computes statutory deductions.
+
+### Menu is per-outlet, with no shared catalogue
+
+Each outlet owns its menu. Two outlets selling the same item means two rows. For two outlets this is fine and keeps isolation simple; at ten franchises, brand-wide menu consistency will want a master catalogue that outlets inherit from and override. Deferred until the franchise count makes it worth the complexity.
+
+### Customers are per-outlet
+
+The same person visiting both outlets is two customer records. Unifying them would mean reading across the isolation boundary — the exact thing the security model is built to prevent — for modest business value. Revisit only with a deliberate design for cross-outlet identity.
+
+## Real-world edges
+
+### Browser geolocation is spoofable
+
+Attendance location can be faked with browser devtools or a mock-location app. This **raises the bar; it is not proof.** It is stated here rather than assumed away because the consequence matters: a location flag must never be treated as evidence in a dispute about someone's pay.
+
+The counter-tablet check-in path is substantially stronger — the device is physically in the shop — and is available as an alternative wherever assurance matters more than convenience.
+
+GPS accuracy indoors also drifts 20–100m routinely, which is why the geofence has a manager override and a tablet fallback rather than being a hard wall.
+
+### An unsynced bill exists in exactly one place
+
+Between settling a bill offline and syncing it, the only copy is in that tablet's IndexedDB. **A destroyed or wiped tablet loses those bills.**
+
+Mitigated by draining aggressively, keeping the pending count always visible, and escalating a growing backlog to a warning. Not eliminated — that would need a second local device, which is out of proportion to the risk at this scale. See [Offline And Sync](OFFLINE_AND_SYNC.md).
+
+### Late bills against a closed day
+
+A bill synced after its business date was reconciled becomes a **reconciliation exception**, not a silent recalculation. The manager decides whether to reopen and re-close the day or accept the discrepancy with a note. Deliberate: a number a human signed off must never change by itself.
+
+### Clock skew on the counter tablet
+
+Both client and server timestamps are stored. A badly wrong tablet clock can produce a wrong `business_date`, since the business date is resolved on the device at settlement. Material disagreement between the two clocks should be surfaced as a signal. There is no automatic correction — repairing a business date automatically could move revenue between days, which is worse than flagging it.
+
+### Two tablets at one outlet
+
+Supported, but shift overlaps are flagged for a human rather than resolved automatically, because the right answer depends on what actually happened in the shop.
+
+## Operational gaps
+
+### No self-service password reset
+
+Resets are admin-initiated: an admin regenerates a one-time code and passes it on. Self-service needs an SMS or WhatsApp channel. Acceptable at current headcount; annoying at fifty staff across ten franchises.
+
+### No automated data retention
+
+Nothing is deleted automatically. Customer PII has no defined retention period, and attendance location data accumulates indefinitely. Both should get a retention policy before headcount or customer volume grows meaningfully. Noted in [Security And Privacy](SECURITY_AND_PRIVACY.md).
+
+### No audit log
+
+Who changed a price, voided a bill, or overrode a geofence is recorded on the affected row (`voided_by`, `override_by`, `recorded_by`), but there is no separate immutable audit trail. Sufficient for a small trusted team; insufficient if a franchise dispute ever turns adversarial.
+
+### Single Supabase project, single region
+
+All outlets share one project. Fine for West Bengal. A backup and restore procedure is documented in [Operations](OPERATIONS.md), but there is no tested disaster-recovery drill until the roadmap's operations work lands.
+
+## Not planned
+
+- Customer-facing ordering or loyalty
+- Table management or KOT — this is a counter format, not a dine-in restaurant
+- Supplier and purchase-order workflows
+- Multi-currency or multi-language (₹ and English only; revisit if franchises want Bengali)
+- Native mobile apps — the PWA is the delivery mechanism

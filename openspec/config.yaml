@@ -1,0 +1,44 @@
+schema: spec-driven
+
+context: |
+  Shawarmania Ops — a multi-outlet cash-counter and outlet-management PWA for
+  Shawarmania, a quick-service shawarma business in Kalyani and Kanchrapara,
+  West Bengal, expanding through franchises.
+
+  Tech stack: React 19 + TypeScript + Vite (installable PWA), Tailwind CSS v4 +
+  shadcn/ui, Supabase (Postgres, Row-Level Security, Auth, Edge Functions),
+  IndexedDB outbox (Dexie) for offline counter writes. Vitest + Playwright.
+
+  Four roles: Super Admin (all outlets), Franchise Admin (one outlet), Biller
+  (one outlet, shared counter tablet), Employee (own attendance only).
+
+  Non-negotiable constraints — a proposal that violates one of these is wrong:
+  - Outlet isolation is enforced by Row-Level Security in Postgres, never only
+    in the UI. Every outlet-scoped table ships its policy AND its isolation test
+    case in the change that creates it.
+  - Money is stored as integer paise. Never floats.
+  - Timestamps are timestamptz (UTC), displayed Asia/Kolkata. Business dates are
+    explicit `date` columns with a per-outlet cutover, never derived from a
+    timestamp at read time.
+  - Bill line items snapshot item name and unit price at sale time. Bills are
+    append-only once settled; corrections are voids plus new bills.
+  - The counter never blocks on the network. Counter writes carry client-
+    generated UUIDs and are idempotent.
+  - The Supabase service-role key never reaches the browser.
+  - Brand colours live only in the brand token layer; components read semantic
+    tokens and contain no hex literals.
+
+  Currency is Indian rupees; time zone is Asia/Kolkata. Full context is in
+  `docs/` — start at `docs/README.md`. The agent contract is `AGENTS.md`.
+
+rules:
+  proposal:
+    - State the user-visible behaviour change, not the implementation.
+    - Always include a "Non-goals" section.
+    - Name which docs/ pages the change will update before it can be archived.
+  design:
+    - Record rejected alternatives and why, not just the chosen approach.
+    - Call out any RLS policy, money arithmetic, or offline semantics explicitly.
+  tasks:
+    - Every outlet-scoped table added needs a matching isolation test task.
+    - End with a PHASE GATE task naming the checkpoint from ROADMAP.md.

@@ -1,0 +1,10 @@
+{
+  "name": "shawarmania-ops",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cash-counter and outlet-management PWA for Shawarmania",
+  "scripts": {
+    "roadmap:sync": "node openspec/tools/sync-roadmap-status.mjs"
+  }
+}
