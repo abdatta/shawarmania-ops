@@ -9,6 +9,19 @@
 - **Every outlet-scoped table ships an RLS policy in the same migration that creates it.** A table without a policy is a data leak, not a to-do item.
 - **Never log** customer phone numbers, employee coordinates, or full bill contents.
 - Access tokens live in memory and Supabase's managed storage. No hand-rolled token persistence.
+- **The repository is public.** GitHub Pages hosts the app for free only from a public repo, so everything committed here is world-readable — including `docs/`. Assume anything you write down is published. This makes the "never commit" rule above load-bearing rather than tidy.
+
+## What being a public repo does and does not expose
+
+Worth stating plainly, because "the repo is public" sounds worse than it is and better than it is in different places.
+
+**Not exposed**: no customer or employee data, no credentials. `.env` is gitignored, the service-role key exists only in Supabase's own secret storage, and seed data is synthetic by policy. The Supabase anon key will appear in the built bundle once the app talks to a backend — that is by design, and Row-Level Security is what protects the data behind it, not the key's secrecy.
+
+**Exposed**: the business's own contact details in [Business Context](BUSINESS_CONTEXT.md) — outlet phone number, delivery line, FSSAI licence numbers. These are already publicly displayed by the business and required to be, so this is republishing public facts rather than leaking private ones. It does make them scrapable in one place, which is a different thing from being on a shop wall.
+
+**Also exposed**: the security design itself — the RLS model, the auth posture, the threat model below. That is the intended trade. A tenancy model that only holds while nobody has read it was never holding.
+
+If the repo is ever made private, note that Pages from a private repo needs a paid GitHub plan; see [Operations](OPERATIONS.md#moving-to-a-custom-domain-later).
 
 ## Tenancy is the primary security property
 

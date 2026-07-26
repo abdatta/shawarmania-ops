@@ -1,6 +1,6 @@
 # Operations
 
-> Describes the intended setup. Nothing is provisioned or deployed yet; this lands with `project-foundations` and the operations work at the end of the roadmap.
+> The build and CI pipeline landed with `project-foundations`. Hosting and the Supabase projects are **not yet provisioned** — those need an account holder, and are flagged below where they apply. Outlet onboarding lands at the end of the roadmap.
 
 ## Environments
 
@@ -25,6 +25,21 @@ The anon key is designed to be public; Row-Level Security is what protects the d
 
 `.env.example` documents every variable. `.env` is gitignored and must stay that way.
 
+Local development needs the Supabase CLI and Docker. `supabase start` brings the stack up from the committed `supabase/config.toml` and prints the local anon key to paste into `.env`. It prints a service-role key too — that one never leaves the terminal.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request, in two jobs:
+
+| Job | Steps |
+|---|---|
+| `verify` | lint → format check → typecheck → unit tests → contrast validator → production build |
+| `e2e` | Playwright, including the offline app-shell suite; uploads its report on failure |
+
+`.github/workflows/deploy.yml` publishes to GitHub Pages on push to `main` — see below.
+
+Both checkouts use `fetch-depth: 0` because the build stamps the short commit SHA into the UI.
+
 ## Deployment
 
 The frontend is a static SPA — build, upload, done.
@@ -33,16 +48,46 @@ The frontend is a static SPA — build, upload, done.
 npm run build
 ```
 
-Deploys to Vercel or Cloudflare Pages on push to `main`. Immutable hashed assets, so a rollback is redeploying a previous build.
+Hosting is **GitHub Pages**, published by `.github/workflows/deploy.yml` on every push to `main`. It needs no third-party account and no DNS work, which is why it is the first-phase choice; Cloudflare Pages or Vercel remain better long-term hosting and are a workflow file plus DNS away.
+
+Two settings make it work, both one-time and both in the GitHub UI:
+
+1. The repo is **public** — Pages from a private repo requires a paid GitHub plan.
+2. **Settings → Pages → Source** is set to **GitHub Actions** (not "deploy from a branch").
+
+The site is served at `https://<owner>.github.io/<repo>/`. Assets are immutable and hashed, so a rollback is re-running the deploy workflow on an earlier commit (`Actions → Deploy to GitHub Pages → Run workflow`).
+
+### The base path
+
+A GitHub Pages project site serves from `/<repo>/`, not from the root, and that sub-path is baked into the build. It is set by the `BASE_PATH` environment variable at build time, defaulting to `/shawarmania-ops/` so that a plain `npm run build` produces a deployable artifact.
+
+Two consequences worth knowing before touching anything asset-related:
+
+- **Never hard-code a root-absolute URL in application code.** Use `import.meta.env.BASE_URL`, or a path Vite rewrites. A `/icons/logo.png` written by hand works locally at the root and 404s in production. The E2E suite runs under the sub-path and fails on any request that 404s, so this is caught in CI rather than on a tablet.
+- **Deep links depend on `404.html`.** Pages has no rewrite rules, so an unmatched path is a genuine 404; the build emits a copy of the shell as `404.html`, which Pages serves instead, and the app then routes the URL itself. A `.nojekyll` marker ships with it.
+
+**Changing the base path on an origin that has already served the app orphans the old service worker.** A worker registered at the old scope keeps serving the old shell, and the old shell's router does not recognise the new path — the app loads and then claims every route does not exist, which reads as a routing bug rather than a caching one. If that happens, unregister the worker and clear its caches for that origin. It does not apply to a custom-domain move (the origin changes, so there is no overlapping registration) but it does apply to a repo rename.
+
+### Moving to a custom domain later
+
+Set `BASE_PATH: /` in `deploy.yml`, add a `CNAME` file, and point DNS at Pages. No source file changes.
+
+To try a root build locally first, use PowerShell (`$env:BASE_PATH="/"; npm run build`). Git Bash on Windows rewrites a bare `/` into a Windows path before Node sees it, and the build silently comes out with a base of `/Program Files/Git/`.
+
+Note that the origin changes, so **every installed PWA must be reinstalled** — an installed app is bound to its origin. Plan that for a quiet trading period and re-enrol counter tablets deliberately rather than discovering it mid-shift.
+
+Privatising the repo at the same time needs a paid GitHub plan for Pages, or a move to different hosting. Worth deciding together with the domain, since both are disruptive in the same window.
 
 Database changes deploy as migrations, applied to staging first and then production. **Migrations are forward-only**; a mistake is corrected by a new migration, not by editing a released one.
 
 ### Service worker caution
 
-The PWA caches the app shell, which means **a bad deploy can persist on a counter tablet that has not refreshed**. Two mitigations, both non-optional:
+The PWA caches the app shell, which means **a bad deploy can persist on a counter tablet that has not refreshed**. Two mitigations, both non-optional, and both now implemented:
 
-- The service worker checks for a new version on launch and applies it on the next load.
-- A version identifier is visible somewhere in the UI, so "what build is that tablet on?" is answerable over the phone rather than by driving to the outlet.
+- The service worker checks for a new version on launch and applies it on the next load. It never reloads the page mid-use — that could discard a half-rung order with a customer waiting — so a new build takes effect one launch later. For the same reason `clientsClaim` is off: a worker that claimed an already-open page would start serving new-build assets to old-build code mid-shift.
+- The build identifier (short commit SHA and build time) is visible in the app footer, so "what build is that tablet on?" is answerable over the phone rather than by driving to the outlet.
+
+If a tablet needs forcing onto a new build, closing and reopening the app twice is enough. Do **not** clear site data as a first resort — from `counter-devices-and-offline` (#9) onward that destroys the outbox and any bills waiting in it.
 
 ## Onboarding a new franchise outlet
 

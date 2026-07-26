@@ -1,0 +1,17 @@
+dist/
+dev-dist/
+coverage/
+playwright-report/
+test-results/
+node_modules/
+public/icons/
+package-lock.json
+
+# Prettier does not own the prose.
+#
+# docs/ and openspec/ are hand-authored for human readers: tables are laid out
+# for legibility in the raw file, and emphasis markers are chosen deliberately.
+# Reformatting them produces large diffs that bury the actual edit, and CI would
+# then demand that churn on every docs change. Markdown here is reviewed, not
+# compiled.
+*.md

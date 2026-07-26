@@ -1,0 +1,144 @@
+/*
+ * tokens.css — the single token source file.
+ *
+ * This is the ONLY file under src/ permitted to contain hex colour literals;
+ * scripts/check-no-hex.mjs enforces that. It is also the file the contrast
+ * validator (scripts/check-contrast.mjs) parses, so there is no second token
+ * list that can drift out of sync with the app.
+ *
+ * Layers, per docs/DESIGN_SYSTEM.md:
+ *
+ *   brand.*     raw Shawarmania values — the only place a hex literal is allowed
+ *      |
+ *   semantic    roles: canvas, surface, content, primary, danger, focus...
+ *      |
+ *   components  read semantic tokens only, through Tailwind utilities
+ *
+ * Components never read a brand token. Replacing the brand block below is what
+ * makes a franchise re-skin a one-file change.
+ *
+ * Palette: "Stone & Ember" — warm neutral structure carrying a disciplined
+ * brand accent. The marketing site is maximalist; a tool someone stares at for
+ * eight hours needs the brand in the accent layer and structure everywhere else.
+ */
+
+:root {
+  /* ── Brand layer ───────────────────────────────────────────────────────
+     Taken from the live marketing site's own CSS, so the portal and the
+     storefront cannot drift apart. The portal consumes a subset of these
+     directly; the rest stay recorded here because this block is the brand of
+     record and the thing a franchise re-skin replaces. */
+  --brand-flame-gold: #ffc53d;
+  --brand-flame-orange: #f97316;
+  --brand-flame-red: #dc2626;
+  --brand-maroon: #7f1d1d;
+  --brand-cream: #f5e4c7;
+  --brand-cream-dim: #c9b795;
+  --brand-paper-raised: #fdf3de;
+  --brand-ink: #2b1d12;
+  --brand-ink-dim: #6f5b44;
+  --brand-bg: #14100b;
+  --brand-bg-raised: #1e1710;
+  --brand-veg: #16a34a;
+  --brand-nonveg: #b91c1c;
+
+  /* ── Brand layer, portal extensions ────────────────────────────────────
+     Values the ops portal needs that the marketing site has no equivalent
+     for. They live here rather than in the semantic layer so the "hex only in
+     the brand layer" rule stays literally true. */
+
+  /* Ember: the brand orange taken darker so it can carry white text.
+     --brand-flame-orange on white is 2.8:1 and cannot; --brand-ember is
+     5.2:1 and works as an ordinary button on a light ground. */
+  --brand-ember: #c2410c;
+  --brand-ember-deep: #9a3412;
+  --brand-ember-soft: #fdba74;
+
+  /* Warm neutral scale. Warm rather than grey so the portal still feels
+     related to the brand, but far less saturated than cream — a page you
+     read tables against for a whole shift. */
+  --brand-stone-50: #fafaf9;
+  --brand-stone-100: #f5f5f4;
+  --brand-stone-200: #e7e5e4;
+  --brand-stone-400: #a8a29e;
+  /* Deepened from the usual #78716c, which clears AA on the canvas by 0.09
+     (4.59:1). It passes, but a margin that thin breaks the moment anyone
+     nudges the canvas. This is 5.25:1. */
+  --brand-stone-500: #6f6862;
+  --brand-stone-700: #44403c;
+  --brand-stone-800: #292524;
+  --brand-stone-900: #1c1917;
+  --brand-stone-950: #0c0a09;
+  --brand-white: #ffffff;
+
+  /* Contrast-corrected status colours. Each is the same hue as its brand
+     counterpart, moved only as far as AA requires on its own ground. */
+  --brand-veg-deep: #15803d;
+  --brand-veg-soft: #4ade80;
+  --brand-nonveg-soft: #f87171;
+  --brand-amber-deep: #b45309;
+  --brand-amber: #fbbf24;
+}
+
+/* ── Semantic layer: light — the counter default ───────────────────────── */
+:root,
+[data-theme='light'] {
+  --canvas: var(--brand-stone-50);
+  --surface: var(--brand-white);
+  --surface-raised: var(--brand-stone-100);
+  --border: var(--brand-stone-200);
+  --content: var(--brand-stone-900);
+  --content-muted: var(--brand-stone-500);
+
+  --primary: var(--brand-ember);
+  --on-primary: var(--brand-white);
+  --accent-text: var(--brand-ember-deep);
+
+  --success: var(--brand-veg-deep);
+  --danger: var(--brand-nonveg);
+  --warning: var(--brand-amber-deep);
+  --on-warning: var(--brand-white);
+
+  /* Two rings: 2px brand ring, 1px darker ring outside it. The ember fill is
+     legible against the page on its own, but a ring drawn ON a primary button
+     would be ember-on-ember — the outer ring is what keeps focus visible
+     there. */
+  --focus-ring: var(--brand-ember);
+  --focus-ring-outer: var(--brand-stone-900);
+
+  /* Markers are a food-safety convention, not a brand decision, and they
+     carry a shape as well as a colour. Kept separate from --success and
+     --danger so a status colour can be corrected without changing what a veg
+     dot looks like. */
+  --marker-veg: var(--brand-veg);
+  --marker-nonveg: var(--brand-nonveg);
+}
+
+/* ── Semantic layer: dark — for phones in the evening ──────────────────── */
+[data-theme='dark'] {
+  --canvas: var(--brand-stone-950);
+  --surface: var(--brand-stone-900);
+  --surface-raised: var(--brand-stone-800);
+  --border: var(--brand-stone-700);
+  --content: var(--brand-stone-50);
+  --content-muted: var(--brand-stone-400);
+
+  /* The full-strength brand orange, which needs no deepening here: on a dark
+     ground it is 6.2:1 and takes dark ink. A semantic token names a role, and
+     the role "the thing you press" is best served by ember on light and the
+     brand orange itself on dark. */
+  --primary: var(--brand-flame-orange);
+  --on-primary: var(--brand-stone-900);
+  --accent-text: var(--brand-ember-soft);
+
+  --success: var(--brand-veg-soft);
+  --danger: var(--brand-nonveg-soft);
+  --warning: var(--brand-amber);
+  --on-warning: var(--brand-stone-900);
+
+  --focus-ring: var(--brand-flame-orange);
+  --focus-ring-outer: var(--brand-stone-950);
+
+  --marker-veg: var(--brand-veg-soft);
+  --marker-nonveg: var(--brand-nonveg-soft);
+}

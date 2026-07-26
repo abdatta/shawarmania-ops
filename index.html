@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!--
+      Root-absolute on purpose: Vite rewrites these with the deployment base at
+      build time. A `./` relative path would resolve against the *document* URL,
+      which breaks on a deep link served through the 404.html fallback.
+
+      All derived from assets/brand/shawarmania-mark-512.png — see
+      scripts/generate-icons.mjs.
+    -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
+    <title>Shawarmania Ops</title>
+    <script>
+      /*
+       * Resolve the theme before first paint. React mounts too late to prevent a
+       * flash of the wrong theme on a dark phone at night.
+       *
+       * The storage key must stay in sync with THEME_STORAGE_KEY in src/theme/theme.ts.
+       */
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('shawarmania.theme')
+          document.documentElement.dataset.theme =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+        } catch {
+          document.documentElement.dataset.theme = 'light'
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

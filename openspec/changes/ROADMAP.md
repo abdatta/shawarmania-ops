@@ -40,7 +40,7 @@ Promoting a surface from `demo` to `live` is the visible outcome of every `*-liv
 
 |  | # | Change | Model | Status | Hard dependencies | Checkpoint (gate) |
 |---|---|--------|-------|--------|-------------------|-------------------|
-|  | 1 | `project-foundations` | Opus | seeded | — | fresh clone → install, test, lint, typecheck, build all green; contrast validator passes in **both** themes; the empty app installs on a real Android phone and loads its shell with the network off; a push to `main` deploys |
+| 🔄 | 1 | `project-foundations` | Opus | active | — | fresh clone → install, test, lint, typecheck, build all green; contrast validator passes in **both** themes; the empty app installs on a real Android phone and loads its shell with the network off; a push to `main` deploys |
 |  | 2 | `data-model-and-tenancy` | **Fable** | seeded | #1 | isolation suite passes for **every** outlet-scoped table; a Franchise Admin session provably cannot read the other outlet's rows even with a hand-crafted request; both outlets seeded; TypeScript types generated |
 |  | 3 | `demo-mode-and-app-shell` | **Fable** | seeded | #1, #2 | all four role shells navigable in demo mode with a working role switcher; **a demo session provably cannot write to Supabase**; a real signed-in user cannot silently enter demo mode; the demo banner is never dismissible; a mock that drifts from schema types fails to compile |
 |  | 4 | `auth-and-roles` | Opus | seeded | #2, #3 | all four roles sign in and land on their own shell; an admin provisions a staff account end-to-end with a one-time code; deactivating an account blocks access without waiting for token expiry |

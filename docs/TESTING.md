@@ -1,8 +1,22 @@
 # Testing
 
-> Describes the intended strategy. No test harness exists yet; it lands with `project-foundations`.
+> The harness landed with `project-foundations`. The database-policy suite arrives with `data-model-and-tenancy`, because there is no schema to test until then.
 
 Testing effort follows risk, and in this app risk is concentrated in three places: **money arithmetic**, **tenancy isolation**, and **the offline path**. Those get disproportionate coverage. A settings form does not.
+
+## Commands
+
+```bash
+npm test          # Vitest: unit, component, and build-tooling suites
+npm run test:e2e  # Playwright: shell and the offline path, against a real build
+npm run lint      # ESLint (incl. layer boundaries) + the no-hex-outside-tokens check
+npm run typecheck # tsc --noEmit, strict
+npm run contrast  # WCAG validator over the token file, both themes
+```
+
+`npm test` runs `.test.ts` / `.test.tsx` under `src/` in a jsdom environment and `.test.mjs` under `scripts/` in a node environment. The shared setup file guards its DOM work, so the build-tooling suites do not need a second Vitest project to live alongside the app suites.
+
+`npm run test:e2e` builds the app and serves the build — never the dev server. The service worker only exists in a real build, and the offline gate is the whole point of that suite. Browsers install once with `npx playwright install chromium`.
 
 ## The layers
 
@@ -12,6 +26,10 @@ Testing effort follows risk, and in this app risk is concentrated in three place
 | Database policy tests | pgTAP or SQL fixtures | Row-Level Security isolation on every outlet-scoped table |
 | Component tests | Vitest + Testing Library | Interactive components, especially the billing surface |
 | End-to-end | Playwright | The critical paths, including offline billing |
+| Design-system checks | Node scripts | Contrast in both themes; no hex literal outside the brand layer |
+| Architecture boundaries | ESLint | Only `data-access` imports Supabase; `domain` imports nothing |
+
+The last two rows are worth stating explicitly. They enforce rules that would otherwise depend on reviewer memory, and rules enforced by memory decay. Both fail the build with a message naming the file and what to do instead.
 
 ## The three suites that matter
 
@@ -53,9 +71,15 @@ End-to-end, with the network genuinely disabled rather than mocked away.
 - A bill settled at 00:20, synced at 09:00, carries the **previous** business date.
 - A malformed bill is quarantined and surfaced, not silently dropped.
 
+The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install the worker, cut the network, reload, and assert the shell and its self-hosted fonts still render. Two details there are worth knowing before writing more offline tests.
+
+**A worker must control the page before it intercepts anything.** `clientsClaim` is deliberately off, so the worker installed on the first load does not take over that page — it serves from the next load onward. That is the safe choice: a worker claiming an open page would, on an update, start serving new-build assets to old-build code mid-shift. Offline tests therefore prime with an online load, a reload, and only then go offline.
+
+**`page.waitForFunction` does not await a returned Promise** — it sees a truthy Promise object and resolves immediately. Waiting on service-worker readiness that way silently races, and the test fails later and somewhere else. Use `page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined))`, which does await.
+
 ## Verification before calling a change done
 
-- `npm test` green, `npm run lint` clean, `npm run typecheck` clean.
+- `npm test` green, `npm run lint` clean, `npm run typecheck` clean. CI runs all of these, plus `npm run format:check`, `npm run contrast`, the production build, and the Playwright suite, on every push and pull request.
 - **Tenancy-touching changes**: the isolation suite passes, including new cases for any new table.
 - **Billing or offline changes**: the offline E2E path passes.
 - **UI changes**: run the app and look at it — phone viewport and tablet viewport, light and dark themes.

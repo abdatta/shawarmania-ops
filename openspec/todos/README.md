@@ -16,6 +16,7 @@ Keep entries behavior-focused:
 | [Bill Thermal Printing](./bill-thermal-printing.md) | Feature | Anticipated | Billing | A customer or regulator asks for a printed bill |
 | [Bill GST Breakup](./bill-gst-breakup.md) | Feature | Anticipated | Billing | The business registers for GST or a customer requires a tax invoice |
 | [Bill Digital Share](./bill-digital-share.md) | Feature | Anticipated | Billing | The owner wants digital receipts, or paper is being skipped anyway |
+| [Workbox Build-Chain Advisories](./workbox-build-advisories.md) | Investigation | Accepted | Build tooling | A fixed `workbox-build` ships, or an advisory becomes runtime-reachable |
 
 The three billing items are grouped deliberately: v1 ships bills as **record-only**, and all three extensions were anticipated in the schema so none of them requires migrating historical bills. See [Limitations](../../docs/LIMITATIONS.md#bills-are-record-only) for exactly which columns exist ahead of need, and why.
 
@@ -23,4 +24,4 @@ The three billing items are grouped deliberately: v1 ships bills as **record-onl
 
 | Former item | Where it went |
 | --- | --- |
-| _(none yet)_ | |
+| PWA Brand Icons | Absorbed into `project-foundations`. The real mark from the Shawarmania site is committed as `assets/brand/shawarmania-mark-512.png` and the whole icon set is derived from it, so the placeholders it was raised against no longer exist. |
