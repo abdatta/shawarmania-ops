@@ -12,6 +12,10 @@
 
 **Production data is never copied into staging or local.** It contains customer and employee PII. When a production-shaped dataset is needed for debugging, generate a synthetic one at the same scale.
 
+**Neither staging nor production is provisioned yet.** Everything through the schema work runs on the local stack; the first change that genuinely needs a hosted project is attendance (#5), which puts real staff data in production.
+
+⚠️ **The Supabase account already contains a project that has nothing to do with this system.** It is not linked to this repo and must not be. `supabase link` against it, or pointing `.env` at it, would run this project's migrations into unrelated data. When staging and production are created, they are **new projects** — confirmed with the owner on 2026-07-26. If a command ever reports this repo as linked, that is a mistake to undo rather than a convenience to accept.
+
 ## Configuration
 
 Client-side environment variables — only ever the public pair:

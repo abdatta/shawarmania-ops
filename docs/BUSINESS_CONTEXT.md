@@ -19,8 +19,15 @@ Both are live counters. These are the seed records for the system.
 | **District** | Nadia | North 24 Parganas |
 | **PIN** | 741235 | 743145 |
 | **Phone** | +91 89815 24778 | +91 89815 24778 |
+| **Business-day cutover** | 04:00 | 04:00 |
+| **Geofence radius** | 150 m | 150 m |
+| **Coordinates** | *not yet captured* | *not yet captured* |
 
 Home delivery line (shared): **033 2582 3100**. FSSAI licences: `22825123001193`, `12826013000341`.
+
+**Cutover and radius are owner-confirmed** (2026-07-26), matching the defaults in [Data Model](DATA_MODEL.md). The cutover only has to sit later than the latest close and earlier than the earliest open, so 04:00 has room on both sides; it is what puts a bill rung at 00:20 on the previous day's takings. The 150 m radius is deliberately forgiving — GPS drifts 20–100 m indoors, and a tight fence would block real staff standing at the counter more often than it would stop anyone gaming it. The manager override exists for the remainder.
+
+**Coordinates are outstanding and cannot be looked up.** They must be taken standing at each counter, not from a map search — a map pin can be tens of metres out, which against a 150 m fence is most of the margin. Attendance (#5) is where they become load-bearing; until then the schema seeds approximate values. See the 🧍 item in that change's proposal.
 
 Note that both outlets currently publish the same contact number. The data model still stores contact per outlet — franchise outlets will have their own, and the owner needs to reach a specific outlet.
 
