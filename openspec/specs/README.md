@@ -1,7 +1,5 @@
 # Living Specs
 
-**This directory is empty until the first change archives.** That is expected, not an oversight.
-
 Each subdirectory here is one **capability** — a coherent slice of system behaviour — holding a `spec.md` that states what the system is contractually required to do **right now**, in the present tense.
 
 ```
@@ -45,8 +43,16 @@ reject a request that names another outlet's identifier explicitly.
 
 Write behaviour, not implementation. A spec that names a React component or a file path has described *how*, and will be wrong the first time that code is refactored.
 
+## Current capabilities
+
+Landed with `project-foundations`. These are **foundation** capabilities: they describe how the repository and the shell behave rather than what the business does, which is why none of them appears in the domain list below.
+
+- [`project-scaffold`](project-scaffold/spec.md) — a clone that builds, layer boundaries enforced by tooling, CI, safe client configuration.
+- [`design-system`](design-system/spec.md) — token layering, both themes, verified contrast, the money and date formatters, touch sizing.
+- [`pwa-and-deployment`](pwa-and-deployment/spec.md) — installable, offline shell, non-disruptive updates, identifiable builds, sub-path hosting.
+
 ## Expected capabilities
 
-Derived from the roadmap; each arrives as its change archives:
+The domain capabilities, derived from the roadmap; each arrives as its change archives:
 
 `outlet-tenancy` · `staff-authentication` · `counter-device-trust` · `menu-catalogue` · `counter-billing` · `offline-settlement` · `inventory-ledger` · `expense-tracking` · `attendance-and-location` · `daily-cash-reconciliation` · `profit-estimates` · `outlet-alerts` · `cross-outlet-oversight`

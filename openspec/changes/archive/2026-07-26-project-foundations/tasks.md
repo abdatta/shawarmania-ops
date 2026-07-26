@@ -60,6 +60,6 @@
 
 - [x] 9.1 PHASE GATE: fresh clone → `npm install && npm test && npm run lint && npm run typecheck && npm run build` all green
 - [x] 9.2 PHASE GATE: contrast validator passes in both themes in CI
-- [ ] 9.3 🧍 PHASE GATE: the empty app installs on a real Android phone and loads its shell with the network off
+- [x] 9.3 PHASE GATE: the empty app installs on a real Android phone and loads its shell with the network off — verified by the owner on real hardware
 - [x] 9.4 PHASE GATE: a push to `main` deploys and the stable URL serves the new build identifier (`055313d`, both CI and Deploy workflows green)
 - [x] 9.5 PHASE GATE: on the deployed URL, a deep link opened cold renders the app rather than GitHub's 404 page — `/reports/today` served the shell and routed client-side
