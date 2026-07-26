@@ -29,7 +29,8 @@ enabled = true
 port = 54323
 
 # Local email testing. Nothing is ever sent to a real address from local.
-[inbucket]
+# (Named [inbucket] before CLI 2.x.)
+[local_smtp]
 enabled = true
 port = 54324
 
