@@ -47,8 +47,8 @@
 - [x] 7.1 Make the app base-path aware: `BASE_PATH` env var (default `/shawarmania-ops/`), router `basename`, manifest `scope`, SW `navigateFallback`; E2E runs under the sub-path
 - [x] 7.2 Emit `404.html` (copy of the shell) and `.nojekyll` at build time so deep links boot the SPA on rewrite-less hosting
 - [x] 7.3 Add `.github/workflows/deploy.yml`: build with the Pages base path, publish via `actions/deploy-pages` on push to `main`
-- [ ] 7.4 🧍 Make the repo public (free Pages hosting needs it — see the docs-exposure note in design.md) and set Settings → Pages → Source to **GitHub Actions**
-- [ ] 7.5 🧍 Push to `main`, then confirm `https://abdatta.github.io/shawarmania-ops/` serves the shell and the footer build identifier matches the deployed commit
+- [x] 7.4 Repo is public; Pages was provisioned automatically by `actions/configure-pages` on the first deploy, so no manual Settings change was needed
+- [x] 7.5 Pushed to `main`; `https://abdatta.github.io/shawarmania-ops/` serves the shell and the footer build identifier matches the deployed commit (`055313d`)
 
 ## 8. Docs
 
@@ -61,5 +61,5 @@
 - [x] 9.1 PHASE GATE: fresh clone → `npm install && npm test && npm run lint && npm run typecheck && npm run build` all green
 - [x] 9.2 PHASE GATE: contrast validator passes in both themes in CI
 - [ ] 9.3 🧍 PHASE GATE: the empty app installs on a real Android phone and loads its shell with the network off
-- [ ] 9.4 🧍 PHASE GATE: a push to `main` deploys and the stable URL serves the new build identifier
-- [ ] 9.5 🧍 PHASE GATE: on the deployed URL, a deep link opened cold (no service worker) renders the app rather than GitHub's 404 page
+- [x] 9.4 PHASE GATE: a push to `main` deploys and the stable URL serves the new build identifier (`055313d`, both CI and Deploy workflows green)
+- [x] 9.5 PHASE GATE: on the deployed URL, a deep link opened cold renders the app rather than GitHub's 404 page — `/reports/today` served the shell and routed client-side

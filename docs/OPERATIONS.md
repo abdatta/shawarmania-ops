@@ -50,12 +50,11 @@ npm run build
 
 Hosting is **GitHub Pages**, published by `.github/workflows/deploy.yml` on every push to `main`. It needs no third-party account and no DNS work, which is why it is the first-phase choice; Cloudflare Pages or Vercel remain better long-term hosting and are a workflow file plus DNS away.
 
-Two settings make it work, both one-time and both in the GitHub UI:
+One prerequisite, and it is not optional: **the repo is public.** Pages from a private repo requires a paid GitHub plan.
 
-1. The repo is **public** — Pages from a private repo requires a paid GitHub plan.
-2. **Settings → Pages → Source** is set to **GitHub Actions** (not "deploy from a branch").
+Beyond that the workflow is self-provisioning — `actions/configure-pages` enabled Pages on the first run, so the **Settings → Pages → Source** dropdown never had to be touched. If Pages is ever reset, that step will re-enable it rather than failing.
 
-The site is served at `https://<owner>.github.io/<repo>/`. Assets are immutable and hashed, so a rollback is re-running the deploy workflow on an earlier commit (`Actions → Deploy to GitHub Pages → Run workflow`).
+The site is live at **https://abdatta.github.io/shawarmania-ops/**, served at `https://<owner>.github.io/<repo>/`. Assets are immutable and hashed, so a rollback is re-running the deploy workflow on an earlier commit (`Actions → Deploy to GitHub Pages → Run workflow`).
 
 ### The base path
 
