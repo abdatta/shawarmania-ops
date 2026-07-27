@@ -48,15 +48,29 @@ refresh_token_reuse_interval = 10
 # Staff accounts are admin-provisioned; there is no self-service signup.
 enable_signup = false
 
+# Staff sign in with email + password, admin-provisioned with the address
+# pre-confirmed — no confirmation mail is ever sent (owner-confirmed
+# 2026-07-26, replacing the earlier phone+password model).
+#
+# enable_signup here maps to GoTrue's "external email enabled", which gates
+# email SIGN-IN as well as signup — it must stay true or admin-provisioned
+# users cannot log in at all. Self-service registration is blocked globally
+# by [auth] enable_signup = false above.
 [auth.email]
-enable_signup = false
+enable_signup = true
 enable_confirmations = false
 
-# Personal smartphones sign in with phone number + password. No SMS provider
-# and no TRAI/DLT registration is required, because no OTP is ever sent.
+# Phone auth is not used at all.
 [auth.sms]
 enable_signup = false
 enable_confirmations = false
+
+# Injects app_role and app_outlet_id into every access token so RLS policies
+# read claims instead of sub-querying profiles (the recursion trap in
+# docs/ARCHITECTURE.md). The function ships in the migration set.
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
 
 [analytics]
 enabled = false

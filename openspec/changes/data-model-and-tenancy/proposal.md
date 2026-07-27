@@ -32,4 +32,5 @@ It stays a change of its own at every level of consolidation. Nothing downstream
 
 ## Docs to update before archiving
 
-`docs/DATA_MODEL.md` — replace the design note with the shipped schema, and record any divergence from what was designed, with the reason.
+- `docs/DATA_MODEL.md` — replace the design note with the shipped schema, and record any divergence from what was designed, with the reason.
+- `docs/ROLES_AND_PERMISSIONS.md` and `AGENTS.md` (authentication sections) — the sign-in identifier changed from phone+password to email+password during implementation (owner-confirmed 2026-07-26; see design.md "Settled during implementation"). The device-enrolment + shift-PIN model for the counter tablet is unchanged.

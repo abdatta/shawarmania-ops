@@ -73,3 +73,36 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  # The tenancy boundary is enforced in the database, so the database is what
+  # gets tested: every migration applied to a fresh stack, the pgTAP isolation
+  # and write-contract suites, real-session REST probes, and a check that the
+  # committed TypeScript types match what the schema actually generates.
+  # The Supabase CLI version comes from package.json (devDependency), so local
+  # and CI always run the same one.
+  db:
+    name: Database policies and isolation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start the local stack (applies migrations and seed)
+        run: npx supabase start
+
+      - name: Database policy suite (pgTAP)
+        run: npm run test:db
+
+      - name: REST-level isolation probes
+        run: npm run test:rls
+
+      - name: Generated types are current
+        run: |
+          npm run db:types
+          git diff --exit-code src/data-access/database.types.ts

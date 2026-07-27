@@ -7,6 +7,11 @@ node_modules/
 public/icons/
 package-lock.json
 
+# Prettier does not own generated output. The committed types must stay
+# byte-identical to what `npm run db:types` emits, or the CI drift check
+# would fight the formatter.
+src/data-access/database.types.ts
+
 # Prettier does not own the prose.
 #
 # docs/ and openspec/ are hand-authored for human readers: tables are laid out
