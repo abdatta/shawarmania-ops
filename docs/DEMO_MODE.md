@@ -1,8 +1,10 @@
 # Demo Mode
 
-> Describes the design. Not built yet — it lands with `demo-mode-and-app-shell` (#3).
+> The machinery described here is **built** (`demo-mode-and-app-shell`, #3): the adapter seam, the gate registry, the demo session with its role switcher, and the safety rails all exist and are tested. The feature surfaces the demo will eventually show arrive with the `ui-*` changes; the internally-consistent scenario dataset with `ui-owner-console-and-demo` (#8).
 
 Demo mode renders the **entire** four-role experience with mocked data, so the product can be shown — to an investor, a prospective franchisee, or the staff who will use it — long before the backend behind it exists.
+
+Demo mode lives at a dedicated route prefix: **`/demo/owner`, `/demo/admin`, `/demo/counter`, `/demo/staff`** — one shareable URL per role. The role lives in the URL, so a deep link or a reload reconstructs the whole demo session with no stored state, and the role switcher is nothing more than navigation between prefixes. The prefix is also the safety structure: the demo route tree has its own provider stack, built only from mock adapters, so mixing demo and real data is unrepresentable rather than merely guarded against.
 
 It is not a testing convenience bolted on the side. It is the delivery strategy: every screen is built in demo first, then made real one at a time.
 
@@ -21,7 +23,7 @@ The classic failure of UI-first is designing screens the real data model cannot 
 
 ## The three gate states
 
-Every surface is in exactly one state, declared in a single registry:
+Every surface is in exactly one state, declared in a single registry — `src/gates/registry.ts`, a typed build-time constant. Navigation and routing derive from it; promoting a surface is a one-line reviewed diff made by the change that earns it, never a runtime toggle:
 
 | State | Real users see | Demo mode shows |
 |---|---|---|
@@ -51,16 +53,18 @@ SupabaseAdapter   MockAdapter
 
 The session provider is split the same way: a real Supabase session, or a demo session with an instant **role switcher**. Flipping between Super Admin, Franchise Admin, Biller and Employee without signing out is what makes a walkthrough compelling — and it is why demo mode needs no authentication at all, which in turn is why the demo can exist before auth does.
 
-**A screen that reaches for the Supabase client directly has broken the seam.** That is a review failure, not a style preference.
+Concretely: interfaces live in `src/data-access/adapters.ts` (one per domain area, added by the `ui-*` change that needs them — `outlets` is the exemplar), mock implementations and their fixtures under `src/data-access/mock/`, real ones under `src/data-access/supabase-adapters/`. Screens read the seam through `useAdapters()` and the session through `useSession()`; the demo tree provides both from `src/demo/`, parsing the role from the URL.
+
+**A screen that reaches for the Supabase client directly has broken the seam.** That is a review failure, not a style preference — and lint enforces it, twice over: no file outside `src/data-access/` may import the client, and nothing under `src/data-access/mock/` or `src/demo/` may import the client *or* the real adapters.
 
 ## Safety rules
 
 Demo mode ships to production, because it has to be showable from a deployed URL. That makes these load-bearing rather than nice-to-have:
 
-- **A demo session is structurally incapable of writing to real data.** Not discouraged — incapable, with a test that fails if a write escapes.
-- **A real signed-in user can never enter demo mode silently.** A biller who wandered into a demo and rang up fake bills would be a genuine operational problem.
-- **The demo indicator is always visible and cannot be dismissed.** This protects the business more than the viewer: a screenshot of invented revenue circulating as real trading data is a serious problem in a franchise sales conversation.
-- **Mock data is obviously synthetic.** Invented staff, invented customers, plausible-but-fabricated figures. The two real outlets and the real menu are fine — those are public business facts — but no real people.
+- **A demo session is structurally incapable of writing to real data.** Not discouraged — incapable, in four layers: the demo route tree only ever constructs mock adapters; lint forbids its modules from importing the client or the real adapters; a runtime tripwire makes `getSupabaseClient()` throw while the demo tree is mounted; and two tests fail if a write escapes anyway — a unit test that walks the demo tree with a spied `fetch`, and a Playwright spec that fails on *any* request leaving the app's own origin.
+- **A real signed-in user can never enter demo mode silently.** With a persisted session present, every `/demo/*` URL renders an interstitial naming the signed-in state; continuing is an explicit choice held per-tab (sessionStorage), so it dies with the tab rather than sticking to the account. A biller who wandered into a demo and rang up fake bills would be a genuine operational problem.
+- **The demo indicator is always visible and cannot be dismissed.** The banner strip — "Demo — fabricated data", with the role switcher beside it — is chrome, not state: rendered unconditionally by every demo shell, with no close affordance and no prop that hides it. Leaving `/demo` is the only way to remove it. This protects the business more than the viewer: a screenshot of invented revenue circulating as real trading data is a serious problem in a franchise sales conversation.
+- **Mock data is obviously synthetic.** Invented staff (the four demo personas are literally named Demo Owner, Demo Manager, Demo Biller, Demo Staff), invented customers, plausible-but-fabricated figures. The two real outlets and the real menu are fine — those are public business facts — but no real people, and fixtures carry no phone numbers at all. Every fixture is typed from the generated schema types, so a fixture the database could not serve fails to compile.
 
 ## Running a demo
 

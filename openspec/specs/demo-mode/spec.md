@@ -1,0 +1,177 @@
+# Demo Mode
+
+## Purpose
+
+Guarantees that the entire four-role experience is demonstrable from a deployed URL with fabricated data and no authentication, without any possibility of touching real data: screens read through typed adapter interfaces with mock and real implementations, every surface is gated by a single registry, a demo session is structurally incapable of reaching the backend, a real signed-in user never enters the demo silently, and the demo is always visibly a demo.
+
+## Requirements
+
+### Requirement: Screens read data through typed adapter interfaces
+
+Screens and features SHALL depend on typed data-adapter interfaces, one per
+domain area, and SHALL NOT depend on the database client or on a concrete
+adapter implementation. Each domain interface SHALL admit two
+implementations — a real adapter backed by the database client and a mock
+adapter backed by fixtures — and swapping one for the other SHALL require no
+change to any screen.
+
+#### Scenario: A screen is served by the mock adapter
+
+- **WHEN** a screen is rendered inside the demo provider tree
+- **THEN** it receives its data from the mock adapter through the same
+  interface the real adapter implements, with no screen-level code aware of
+  which implementation served it
+
+#### Scenario: Swapping the implementation does not touch the screen
+
+- **WHEN** the adapter provided for a domain is changed from mock to real
+- **THEN** the screens consuming that domain compile and render unchanged
+
+### Requirement: Mock fixtures are typed from the generated schema types
+
+Every mock fixture SHALL be typed from the TypeScript types generated from
+the database schema, so that a fixture describing data the database could not
+serve is a compile error.
+
+#### Scenario: A drifted fixture fails to compile
+
+- **WHEN** a fixture references a column that does not exist in the generated
+  schema types, or assigns a value of the wrong type
+- **THEN** the typecheck fails
+
+### Requirement: Every surface is gated by a single registry
+
+Every user-facing surface SHALL be declared in a single registry with exactly
+one state: `hidden`, `demo`, or `live`. Navigation and routing SHALL derive
+from the registry. A `hidden` surface SHALL be absent — producing no
+navigation entry and no reachable route — rather than disabled or greyed out.
+
+#### Scenario: A hidden surface is absent
+
+- **WHEN** a surface's registry state is `hidden`
+- **THEN** no navigation entry for it is rendered in any mode, and navigating
+  to its path directly does not render the surface
+
+#### Scenario: A demo surface renders only in demo mode
+
+- **WHEN** a surface's registry state is `demo`
+- **THEN** it is reachable and navigable inside demo mode, and is not
+  reachable outside demo mode
+
+#### Scenario: The registry is the single declaration point
+
+- **WHEN** a surface's state changes (for example `demo` to `live`)
+- **THEN** the change is a single registry edit, with no per-screen or
+  per-navigation conditional to update
+
+### Requirement: Demo mode renders the four-role experience without authentication
+
+Demo mode SHALL present the product's four role shells — Super Admin,
+Franchise Admin, Biller, and Employee — populated with mocked data, without
+requiring any authentication, from a shareable URL.
+
+#### Scenario: An unauthenticated visitor opens the demo
+
+- **WHEN** a visitor with no session opens a demo URL
+- **THEN** the corresponding role shell renders with mocked data, and no
+  sign-in is requested
+
+#### Scenario: The role switcher flips between all four roles
+
+- **WHEN** the visitor uses the demo role switcher
+- **THEN** the shell switches to the selected role's experience without any
+  sign-in or page reload beyond client-side navigation
+
+### Requirement: A demo session cannot write to the backend
+
+A demo session SHALL be structurally incapable of reaching the backend: the
+demo experience SHALL be served entirely from mock adapters, the database
+client SHALL fail loudly if invoked while demo mode is active, and an
+automated test SHALL fail if any demo interaction attempts a network request
+to the backend.
+
+#### Scenario: Demo interactions produce no backend traffic
+
+- **WHEN** every demo surface is exercised, including every write-shaped
+  interaction the mock adapters expose
+- **THEN** no network request is made to the backend
+
+#### Scenario: The database client trips in demo scope
+
+- **WHEN** code attempts to obtain the database client while demo mode is
+  active
+- **THEN** the call fails immediately and loudly rather than returning a
+  usable client
+
+#### Scenario: An escaped write fails the test suite
+
+- **WHEN** a code change causes any demo interaction to attempt a backend
+  request
+- **THEN** an automated test fails
+
+### Requirement: A real session never enters demo mode silently
+
+If a real authenticated session is present, navigating to demo mode SHALL
+interpose an explicit interstitial naming the signed-in state and requiring a
+deliberate choice before any demo surface renders. The choice to proceed
+SHALL NOT persist beyond the browser tab in which it was made.
+
+#### Scenario: A signed-in user navigates to a demo URL
+
+- **WHEN** a real session exists and the user navigates to any demo URL
+- **THEN** an interstitial renders instead of the demo surface, offering an
+  explicit continue-to-demo action and a way back
+
+#### Scenario: The continue choice does not outlive the tab
+
+- **WHEN** the user chose to continue to the demo and later opens a demo URL
+  in a new tab while still signed in
+- **THEN** the interstitial renders again
+
+#### Scenario: No session means no interstitial
+
+- **WHEN** no real session exists and a visitor opens a demo URL
+- **THEN** the demo renders directly
+
+### Requirement: The demo indicator is always visible and cannot be dismissed
+
+Every demo surface SHALL display a persistent demo indicator identifying the
+data as fabricated. The indicator SHALL offer no dismiss affordance and SHALL
+remain visible on every demo route, in both themes, on phone and tablet
+viewports. On the Biller shell it SHALL NOT occlude the billing actions.
+
+#### Scenario: The indicator is present on every demo route
+
+- **WHEN** any demo route renders, in either theme, on a phone or tablet
+  viewport
+- **THEN** the demo indicator is visible
+
+#### Scenario: The indicator cannot be dismissed
+
+- **WHEN** a user inspects the demo indicator for controls
+- **THEN** it exposes no affordance that hides or closes it, and no
+  interaction on the page removes it short of leaving demo mode
+
+### Requirement: Demo data is obviously synthetic
+
+Demo fixtures SHALL contain no real people. Invented staff and customers are
+required; the real outlets and the real menu MAY appear, as public business
+facts. Money values in fixtures SHALL be integer paise, matching the schema.
+
+#### Scenario: Personas are invented
+
+- **WHEN** the demo fixtures are reviewed
+- **THEN** every person appearing in them is invented, and no fixture value
+  is a real person's name or phone number
+
+### Requirement: A demo deep link reconstructs its session from the URL
+
+The demo role SHALL be encoded in the URL, so that a deep link into any demo
+surface — opened fresh or reloaded — reconstructs the same role's experience
+without any stored state.
+
+#### Scenario: Reloading a demo deep link
+
+- **WHEN** a demo URL for a specific role and surface is reloaded, or opened
+  in a fresh browser session
+- **THEN** the same role's shell renders the same surface

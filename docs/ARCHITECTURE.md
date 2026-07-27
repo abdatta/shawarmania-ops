@@ -1,6 +1,6 @@
 # Architecture
 
-> Describes the system as designed. No application code exists yet.
+> The scaffold, schema, adapter seam and app shell exist (#1–#3). Feature surfaces, auth flows, Edge Functions and the outbox arrive with later roadmap changes; those parts below describe the design they will follow.
 
 ## Runtime shape
 
@@ -85,9 +85,11 @@ The data-access layer is **swappable**, and that single decision carries the pro
 
 Every screen is built against the mock adapter first, behind a feature gate, and made real later by swapping the implementation — not by rewriting the screen. The session provider splits the same way: a real Supabase session, or a demo session with an instant role switcher.
 
-Two rules keep this honest. **Mocks are typed from the generated schema types**, so a fixture that drifts from what the database can actually serve fails to compile. And **a screen that imports the Supabase client directly has broken the seam** — that is a review failure, not a style preference.
+In code: interfaces in `src/data-access/adapters.ts` (one per domain area, added by the `ui-*` change that needs them), mocks and fixtures in `src/data-access/mock/`, real adapters in `src/data-access/supabase-adapters/`, contexts (`useAdapters()`, `useSession()`) supplying whichever pair the mounted tree constructed. The demo tree (`src/demo/`, mounted at `/demo/:role`) only ever constructs mocks, and a tripwire makes `getSupabaseClient()` throw while it is mounted.
 
-Surfaces are `hidden`, `demo`, or `live`, declared in one registry. Full detail, including the safety rules that let demo mode ship to production, is in [Demo Mode](DEMO_MODE.md).
+Two rules keep this honest. **Mocks are typed from the generated schema types**, so a fixture that drifts from what the database can actually serve fails to compile. And **a screen that imports the Supabase client directly has broken the seam** — that is a review failure, not a style preference, and lint enforces it.
+
+Surfaces are `hidden`, `demo`, or `live`, declared in one registry (`src/gates/registry.ts`) that navigation and routing derive from. Full detail, including the safety rules that let demo mode ship to production, is in [Demo Mode](DEMO_MODE.md).
 
 ## How a bill flows
 

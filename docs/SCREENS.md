@@ -1,10 +1,10 @@
 # Screens
 
-> Describes the intended surface. Nothing is built yet.
+> The four role shells exist and are walkable in demo mode (#3): phone shells with bottom-tab navigation for Super Admin, Franchise Admin and Employee, the fixed-chrome tablet shell for the Biller, each with a thin home overview. Every *feature* screen below is still to come — its shell, gate entry and layout primitives are waiting for it.
 
-One bundle serves all four roles. After sign-in the shell reads the role claim and mounts a different navigation and route set. Every screen below is additionally protected by Row-Level Security — hiding a route is convenience, not access control.
+One bundle serves all four roles. After sign-in the shell reads the role claim and mounts a different navigation and route set; in demo mode the same shells mount from the URL (`/demo/owner`, `/demo/admin`, `/demo/counter`, `/demo/staff` — the stable role path segments). Every screen below is additionally protected by Row-Level Security — hiding a route is convenience, not access control.
 
-**Every screen here is built twice over, in a sense**: first against mocked data behind a feature gate, so the whole experience is demonstrable early, and later wired to real data by a `*-live` change that swaps one adapter and promotes the gate — without redesigning anything. A screen in the `hidden` state is genuinely absent from navigation, not greyed out. See [Demo Mode](DEMO_MODE.md).
+**Every screen here is built twice over, in a sense**: first against mocked data behind a feature gate, so the whole experience is demonstrable early, and later wired to real data by a `*-live` change that swaps one adapter and promotes the gate — without redesigning anything. Gates live in `src/gates/registry.ts`; a screen in the `hidden` state is genuinely absent — no navigation entry, no reachable route — not greyed out. Shared layout primitives (page header, data table, empty state, form sheet, confirm dialog) live in `src/components/layout/` and every surface below composes them. See [Demo Mode](DEMO_MODE.md).
 
 ## Shared
 
