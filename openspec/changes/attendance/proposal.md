@@ -22,9 +22,18 @@ One consequence of skipping the split must not be skipped with it: **the attenda
 
 **Franchise Admin** — the outlet's attendance by day (who, when, from where, and any flags), the override approval action, and the employee roster with add/edit and employment status.
 
+**Outlet location, captured in place** — whoever is standing at the counter records the outlet's position from the device in their hand, sets the geofence radius, and sees how accurate the fix was before saving it. Today there is no outlet screen at all, so coordinates can only be written by someone at a keyboard, from a map search — which is precisely what a geofence must not be built on. The database already allows it (the `outlets` update policy and grant exist, both covered by the isolation suite); what is missing is the screen, and this change is building the position-reading machinery anyway.
+
 **Isolation test cases** for `employees` and `attendance`, including that an Employee reads only their own rows.
 
 **Demo fixtures** — the mock side of the attendance adapter, with the states worth demonstrating: a normal day, a blocked check-in awaiting override, and an approved override. Consumed by #8's walkthrough.
+
+## Design questions to settle during `/opsx:propose`
+
+- **What accuracy is good enough to save as an outlet's position?** A phone indoors can report a fix that is confidently wrong, and every future check-in is judged against this one number. Refusing or warning on a poor fix matters more here than it does at check-in, where a bad reading costs one override rather than poisoning the reference point.
+- **One reading, or several averaged?** A single sample at a counter surrounded by concrete may be worse than a few taken over several seconds.
+- **Who may capture it?** Editing outlets is Super Admin only in the capability matrix. If the person standing in the shop is the Franchise Admin, either the matrix changes or an owner has to make the trip.
+- **What radius?** 150 m is owner-confirmed, but it was chosen before anyone measured either shop.
 
 ## Non-goals
 
@@ -39,8 +48,8 @@ The employee's own history must show **exactly** what the manager sees. Asymmetr
 
 ## User-only gate steps
 
-- 🧍 Provision the production Supabase project and deploy.
-- 🧍 Capture accurate coordinates **at each counter**, not from a map search.
+- ✅ Provision the production Supabase project and deploy — done 2026-07-27, along with auth, so this change lands on a working backend.
+- 🧍 **Stand at each counter and capture the coordinates in the app.** No longer a SQL step: the point of building the capture screen is that this can only be done from the spot. It gates everything below it.
 - 🧍 Onboard real staff and watch a full day of real check-ins before calling the gate passed.
 
 ## Docs to update before archiving

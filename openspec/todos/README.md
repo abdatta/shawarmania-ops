@@ -22,7 +22,6 @@ Keep entries behavior-focused:
 | [Audit Log](./audit-log.md) | Feature | Anticipated | Security | The first franchise dispute, or headcount outgrowing "a small trusted team" |
 | [Data Retention Policy](./data-retention-policy.md) | Feature | Anticipated | Security | **A quarter of real attendance data in production** — sooner than customer volume |
 | [Self-Service Password Reset](./self-service-password-reset.md) | Feature | Anticipated | Auth | Admin-initiated resets become a bottleneck |
-| [Capture Outlet Location In The App](./capture-outlet-location-in-app.md) | Feature | **Wanted for attendance** | Outlets | Now — attendance cannot go live without outlet coordinates |
 | [Signed-In Password Change](./signed-in-password-change.md) | Feature | Deferred by decision | Auth | The shared Profile screen gets built for any reason |
 | [Workbox Build-Chain Advisories](./workbox-build-advisories.md) | Investigation | Accepted | Build tooling | A fixed `workbox-build` ships, or an advisory becomes runtime-reachable |
 
