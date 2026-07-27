@@ -8,7 +8,7 @@
 
 ## This Roadmap Is Deliberately Small
 
-Fourteen changes is a **starting position, not a forecast.** Real work surfaces as you build: a gate fails and reveals a missing capability, a demo exposes a screen nobody thought about, a real franchisee asks for something. Planning that work now would mean deciding it with the least information anyone will ever have about it.
+Fifteen changes is a **starting position, not a forecast.** Real work surfaces as you build: a gate fails and reveals a missing capability, a demo exposes a screen nobody thought about, a real franchisee asks for something. Planning that work now would mean deciding it with the least information anyone will ever have about it.
 
 So this roadmap plans the spine and leaves the branches to be discovered. Expect it to grow — probably to twice this size before the app is finished. That growth is the system working, not the plan failing.
 
@@ -44,7 +44,7 @@ Promoting a surface from `demo` to `live` is the visible outcome of every `*-liv
 | ✅ | 2 | A | `data-model-and-tenancy` | **Fable** | **archived 2026-07-26** | #1 | isolation suite passes for **every** outlet-scoped table; a Franchise Admin session provably cannot read the other outlet's rows even with a hand-crafted request; both outlets seeded; TypeScript types generated |
 | ✅ | 3 | A | `demo-mode-and-app-shell` | **Fable** | **archived 2026-07-27** | #1, #2 | all four role shells navigable in demo mode with a working role switcher; **a demo session provably cannot write to Supabase**; a real signed-in user cannot silently enter demo mode; the demo banner is never dismissible; a mock that drifts from schema types fails to compile |
 | ✅ | 4 | B | `auth-and-roles` | Opus | **archived 2026-07-27** | #2, #3 | all four roles sign in and land on their own shell; an admin provisions a staff account end-to-end with a one-time code; deactivating an account blocks access without waiting for token expiry |
-| 🔄 | 5 | B | `attendance` | Opus | active | #3, #4 | **real staff check in and out on their own phones in production**; in-fence succeeds, out-of-fence blocks then clears via manager override recorded with who and why; an Employee sees only their own records |
+| 🔄 | 5 | B | `attendance` | Opus | active | #3, #4, **#15** | **real staff check in and out on their own phones in production**; in-fence succeeds, out-of-fence blocks then clears via manager override recorded with who and why; an Employee sees only their own records |
 |  | 6 | C | `ui-billing-counter` | Opus | seeded | #3 | a full order can be rung and settled in demo mode on a tablet viewport; whole menu visible without scrolling; optional customer fields never block settling |
 |  | 7 | C | `ui-outlet-operations` | Opus | seeded | #3 | menu, inventory, expenses and a full day-close all walkable in demo mode — including a low-stock warning and a deliberate cash mismatch |
 |  | 8 | C | `ui-owner-console-and-demo` | Opus | seeded | #5, #6, #7 | **a single uninterrupted walkthrough of all four roles** on a deployed URL, with internally consistent mock data — a busy trading day whose bills, stock movements, cash close and alert all reconcile with each other |
@@ -54,6 +54,7 @@ Promoting a surface from `demo` to `live` is the visible outcome of every `*-liv
 |  | 12 | E | `daily-cash-live` | **Fable** | seeded | #10, #11 | expected closing matches the invariant from snapshotted inputs; the difference shows with the correct sign; **a bill syncing after close raises a reconciliation exception instead of rewriting a signed-off day** |
 |  | 13 | E | `owner-console-live` | Opus | seeded | #8, #10, #11, #12 | both P&L modes compute on real data and **a test proves raw materials are not double-counted**; the owner compares two real outlets; the outlet switcher never leaks a third; reports reconcile exactly to on-screen figures |
 |  | 14 | F | `outlet-onboarding` | Opus | seeded | #13 | a third outlet is created, staffed, tablet-enrolled and verified isolated **entirely through the UI, with zero code changes**; the runbook in `docs/OPERATIONS.md` matches what actually happened |
+|  | 15 | B | `outlet-and-staff-setup` | Opus | seeded | #4 | **from an empty database, entirely through the UI and with no SQL**: an owner creates an outlet, captures its position, provisions a manager and an employee, links that employee to a roster row, and the employee checks in from their own phone |
 
 **Wave column** — which [execution wave](#execution-waves) the change belongs to. The same letter appears in the change's own proposal banner (`> **Model**: … · **Wave**: …`), and the validator checks the two agree. Unlike the status cells this one is **authored, not derived**: `npm run roadmap:sync` never touches it, so a row added later must carry its own letter — and it may well be an *earlier* letter than its neighbours, since new work is numbered by arrival, not by wave. Waves are readability; **the dependency cells are law**. Where they permit more parallelism than the letters suggest, the wave notes below say so.
 
@@ -84,6 +85,8 @@ graph TD
     C3 --> C4
     C3 --> C5[5 attendance]
     C4 --> C5
+    C4 --> C15[15 outlet-and-staff-setup]
+    C15 --> C5
     C3 --> C6[6 ui-billing-counter]
     C3 --> C7[7 ui-outlet-operations]
     C5 --> C8[8 ui-owner-console-and-demo]
@@ -111,7 +114,9 @@ Changes within a wave can run in any order or in parallel; a wave starts when it
 
 - **Wave A — foundations (#1–#3)**: `project-foundations`, `data-model-and-tenancy`, `demo-mode-and-app-shell`. **Two keystones here.** #2 is the write contract every query inherits. #3 is the delivery contract every screen inherits — and it must come after #2 so mocks are typed from the real schema and cannot drift from it. Soft start: #2 needs only #1's *scaffold* half (repo, test harness, Supabase local), not the theme or PWA work — it may begin as soon as those tasks are checked.
 
-- **Wave B — attendance goes live (#4–#5)**: `auth-and-roles`, then `attendance`. **This wave ends with real staff checking in on their own phones in production** — the first genuine business value the project delivers, and a shakedown of auth, deployment and live data before billing depends on all three. #5 also registers its demo fixtures, because the Employee role's whole demo experience *is* attendance — see the note in Wave C.
+- **Wave B — attendance goes live (#4, #15, #5)**: `auth-and-roles`, `outlet-and-staff-setup`, and `attendance`. **This wave ends with real staff checking in on their own phones in production** — the first genuine business value the project delivers, and a shakedown of auth, deployment and live data before billing depends on all three. #5 also registers its demo fixtures, because the Employee role's whole demo experience *is* attendance — see the note in Wave C.
+
+  **#15 was discovered by #5 failing its own gate**, and is the clearest lesson this roadmap has produced so far. Attendance was built, tested at every layer, and deployed — and could not be used, because production had no outlet to attend and nothing in the app could create one, and because nothing ever linked an employee's login to their roster row. Both blanks were invisible to every test, since fixtures and seeds describe a business that is *already configured*. See **Configuration Surfaces** below, which exists so the next one is caught on paper.
 
 - **Wave C — the full experience, demo-gated (#6–#8)**: `ui-billing-counter` and `ui-outlet-operations` are **fully parallel** — each builds on the shell from #3 and touches no shared state, and since they depend only on #3 they **may run alongside Wave B** if bandwidth allows. `ui-owner-console-and-demo` follows, because the scenario dataset it builds must reconcile across every surface. Its dependency on #5 is about the attendance *surfaces and fixtures*, not the production rollout — #8 may start while #5's only open items are the 🧍 live-verification gates. **This wave ends with the demo milestone**: a deployed URL where the entire four-role experience walks through coherently.
 
@@ -120,6 +125,22 @@ Changes within a wave can run in any order or in parallel; a wave starts when it
 - **Wave E — operations and insight go live (#11–#13)**: `expenses-and-inventory-live`, `daily-cash-live`, `owner-console-live`. **#12 is the payoff of the whole billing chain** — the screen that answers "is the drawer right?" — and needs both real bills and real cash expenses to mean anything. #11 depends only on #4 and #7, so it **may start alongside Wave D**.
 
 - **Wave F — growth (#14)**: `outlet-onboarding`. **The change that proves the franchise thesis**, with a deliberately harsh gate — if a third outlet cannot be onboarded without a code change, the multi-outlet design has a defect far cheaper to find now than when a real franchisee is waiting.
+
+## Configuration Surfaces
+
+Every live capability needs configuration rows before it does anything, and **a mock never shows this, because fixtures arrive already configured.** That blind spot shipped a working attendance feature into a database with no outlets and no way to make one. This table is the antidote: it names each thing a live feature needs and the change that lets a human create it. **A row with no owning change is a bug in the plan, not a detail.**
+
+| Configuration | Needed before | Created by a human in |
+|---|---|---|
+| Outlet row (code, name, cutover) | everything | **#15** |
+| Outlet position and geofence | #5 check-in | #5 (capture screen) |
+| App accounts, one-time codes | everything | #4 |
+| Employee roster rows | #5 attendance | #5 |
+| **Account ↔ roster link** | #5 check-in | **#15** |
+| Menu categories and items | #10 billing | #7 demo → **#10 makes it real** |
+| Inventory items and thresholds | #11 | #7 demo → #11 makes it real |
+| Counter device enrolment | #9, #10 | #9 |
+| Opening cash float | #12 | #12 |
 
 ## Standing Principles
 
@@ -131,6 +152,7 @@ Changes within a wave can run in any order or in parallel; a wave starts when it
 - **Every outlet-scoped table ships its RLS policy and its isolation test case in the change that creates it.** Never as a follow-up.
 - **Money correctness beats convenience, every time.** Integer paise, snapshotted prices, append-only bills, explicit business dates.
 - **The counter never blocks.** Any change touching the billing path must leave settlement non-awaiting.
+- **A gate must be reachable from an empty database.** Before calling a feature live, name every configuration row it needs and the screen a human creates it in — see [Configuration Surfaces](#configuration-surfaces). A feature that works only against pre-wired fixtures and seeds is not live; it is demonstrable.
 - **Report gates honestly.** A checkpoint that was not run is not passed.
 - **New work goes to `todos/` first.** Discovering scope mid-change is normal; absorbing it silently is not.
 

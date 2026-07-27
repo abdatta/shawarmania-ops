@@ -1,6 +1,6 @@
 # Operations
 
-> The build and CI pipeline landed with `project-foundations`. Hosting and the Supabase projects are **not yet provisioned** — those need an account holder, and are flagged below where they apply. Outlet onboarding lands at the end of the roadmap.
+> The build and CI pipeline landed with `project-foundations`; hosting and the production Supabase project went live on 2026-07-27. **Outlet and staff setup is the current gap**: creating an outlet and linking an employee's login to their roster row both still need SQL, which `outlet-and-staff-setup` (#15) exists to fix. Steps below are marked where they are not yet built.
 
 ## Environments
 
@@ -12,7 +12,7 @@
 
 **Production data is never copied into staging or local.** It contains customer and employee PII. When a production-shaped dataset is needed for debugging, generate a synthetic one at the same scale.
 
-**Production is provisioned and live** (2026-07-27). Attendance runs on it: real staff check in from their own phones, so this is no longer a project where a mistake only costs local data. Staging is still not provisioned — changes go from local to production, which is acceptable at this size and worth revisiting before the next franchise.
+**Production is provisioned and live** (2026-07-27), and the attendance schema and screens are deployed to it. **No real data is in it yet** — zero outlets, zero employees, zero attendance rows — because the setup chain that would put them there is not built (#15). Treat it as live regardless: the next thing written to it is real. Staging is still not provisioned; changes go from local to production, which is acceptable at this size and worth revisiting before the next franchise.
 
 ⚠️ **The Supabase account already contains a project that has nothing to do with this system.** It is not linked to this repo and must not be. `supabase link` against it, or pointing `.env` at it, would run this project's migrations into unrelated data. When staging and production are created, they are **new projects** — confirmed with the owner on 2026-07-26. If a command ever reports this repo as linked, that is a mistake to undo rather than a convenience to accept.
 
@@ -96,13 +96,15 @@ If a tablet needs forcing onto a new build, closing and reopening the app twice 
 
 The repeatable path. **If any step here requires a code change, that is a bug** — outlet number seven must be a data operation.
 
-1. **Create the outlet** (Super Admin → Outlets): name, address, contact, coordinates, geofence radius, business-day cutover.
+> ⚠ **Steps 1, 4, 5, 6 and 7 are not fully built yet**, and the markers below say which. Until `outlet-and-staff-setup` (#15) lands, creating an outlet and linking an employee's login to their roster row both need SQL — which is exactly the defect #15 exists to remove, and the reason attendance shipped unreachable. Do not treat this list as a description of today.
+
+1. **Create the outlet** (Super Admin → Outlets): name, address, contact, geofence radius, business-day cutover. *(Not built — #15. Insert the row by hand until then.)*
 2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → *Capture position here*). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the Outlets screen shows it as unsurveyed.
-3. **Create the Franchise Admin** and hand over their one-time code.
-4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ.
-5. **Enrol the counter tablet**: sign in on the device, enrol it to this outlet, confirm it appears under Devices.
-6. **Add employees and billers** (Access), handing each their one-time code. Shift PINs arrive with counter-device enrolment; until then a Biller signs in with their own email on the tablet.
-7. **Set the opening cash float** for the first business day.
+3. **Create the Franchise Admin** (Super Admin → People) and hand over their one-time code. Needs the outlet to exist first — the form has no outlet to assign anyone to otherwise.
+4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ. *(Not built — demo only until #10.)*
+5. **Enrol the counter tablet**: sign in on the device, enrol it to this outlet, confirm it appears under Devices. *(Not built — #9.)*
+6. **Add employees and billers** (Access), handing each their one-time code — **then put each employee on the roster and link the two** (Admin → Staff). An account without a linked roster row can sign in and cannot check in, which looks like a bug to the person holding the phone. *(Linking not built — #15.)* Shift PINs arrive with counter-device enrolment; until then a Biller signs in with their own email on the tablet.
+7. **Set the opening cash float** for the first business day. *(Not built — #12.)*
 8. **Verify isolation before going live** — sign in as the new Franchise Admin and confirm no other outlet is visible anywhere. This is a real step, not a formality: it is the last point at which a misconfiguration is cheap to fix.
 
 ## First production deploy
