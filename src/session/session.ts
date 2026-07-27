@@ -17,10 +17,19 @@ export interface DemoPersona {
   outlet: Tables<'outlets'> | null
 }
 
+/**
+ * `userId` is present in both variants on purpose. "Which of these rows is
+ * me?" is a question surfaces ask in either mode — the People list marks your
+ * own row and offers you no destructive action on it — and a field that
+ * existed in only one mode would force exactly the mode-conditional branch the
+ * shell contract forbids. In demo it is the persona's id; nothing authenticates
+ * against it either way.
+ */
 export type Session =
   | { mode: 'real'; userId: string; role: Role; outletId: string | null; displayName: string }
   | {
       mode: 'demo'
+      userId: string
       role: Role
       outletId: string | null
       displayName: string

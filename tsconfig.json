@@ -27,9 +27,11 @@
   "include": [
     "src",
     "e2e",
+    "e2e-auth",
     "supabase/tests/rest",
     "vite.config.ts",
     "playwright.config.ts",
+    "playwright.auth.config.ts",
     "vitest.rls.config.ts"
   ]
 }

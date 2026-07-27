@@ -38,7 +38,13 @@ interface DataTableProps<T> {
   density?: 'phone' | 'counter'
 }
 
-export function DataTable<T>({ columns, rows, rowKey, empty, density = 'phone' }: DataTableProps<T>) {
+export function DataTable<T>({
+  columns,
+  rows,
+  rowKey,
+  empty,
+  density = 'phone',
+}: DataTableProps<T>) {
   if (rows.length === 0) return <>{empty}</>
 
   const rowHeight = density === 'counter' ? 'h-[var(--size-row)]' : 'h-[var(--size-row-phone)]'

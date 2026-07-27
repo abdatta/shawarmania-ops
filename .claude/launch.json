@@ -7,6 +7,13 @@
       "runtimeArgs": ["vite", "preview", "--port", "4280", "--strictPort", "--host", "127.0.0.1"],
       "port": 4280,
       "url": "http://127.0.0.1:4280"
+    },
+    {
+      "name": "preview-alt",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "preview", "--port", "4281", "--strictPort", "--host", "127.0.0.1"],
+      "port": 4281,
+      "url": "http://127.0.0.1:4281"
     }
   ]
 }

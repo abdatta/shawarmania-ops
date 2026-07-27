@@ -99,8 +99,25 @@ jobs:
       - name: Database policy suite (pgTAP)
         run: npm run test:db
 
-      - name: REST-level isolation probes
+      - name: REST-level isolation probes and account flows
         run: npm run test:rls
+
+      # The one browser suite that needs a real backend, so it lives in this
+      # job rather than the e2e one: four roles signing in, an account
+      # provisioned end to end with a one-time code, and a deactivation ending
+      # an open session.
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Auth end-to-end (against the local stack)
+        run: npm run test:e2e:auth
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-auth
+          path: playwright-report/
+          retention-days: 7
 
       - name: Generated types are current
         run: |

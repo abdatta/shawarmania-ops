@@ -12,17 +12,23 @@ import { ROLE_SEGMENTS } from '@/session/session'
  * Employee. Bottom tabs on phone widths (one-handed reach, always-visible
  * state), a left rail on wider screens; both render the same registry-derived
  * entries. Mode-agnostic by design (spec: a uniform session context serves
- * real and demo modes): the demo tree passes its banner through the slot,
- * and nothing here branches on mode beyond deriving the role's base path.
+ * real and demo modes): the demo tree passes its banner through one slot, the
+ * real tree passes its account menu through the other, and nothing here
+ * branches on mode beyond deriving the role's base path.
  */
-export function PhoneShell({ banner }: { banner?: ReactNode }) {
+export function PhoneShell({
+  banner,
+  accountMenu,
+}: {
+  banner?: ReactNode
+  accountMenu?: ReactNode
+}) {
   const session = useSession()
   const items = visibleSurfaces(session.role, session.mode)
   const segment = ROLE_SEGMENTS[session.role]
   const base = session.mode === 'demo' ? `/demo/${segment}` : `/${segment}`
 
-  const linkFor = (surface: Surface) =>
-    surface.path === '' ? base : `${base}/${surface.path}`
+  const linkFor = (surface: Surface) => (surface.path === '' ? base : `${base}/${surface.path}`)
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-content">
@@ -34,7 +40,10 @@ export function PhoneShell({ banner }: { banner?: ReactNode }) {
           </span>
           <span className="block truncate text-xs text-content-muted">{session.displayName}</span>
         </div>
-        <ThemeToggle />
+        <div className="flex shrink-0 items-center gap-1">
+          <ThemeToggle />
+          {accountMenu}
+        </div>
       </header>
 
       <div className="flex flex-1">

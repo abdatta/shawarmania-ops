@@ -55,7 +55,13 @@ begin
       ('10000000-0000-4000-a000-000000000008'::uuid, 'deactivated.kalyani@example.com'),
       ('10000000-0000-4000-a000-000000000009'::uuid, 'revoked.tablet.kalyani@example.com'),
       ('10000000-0000-4000-a000-00000000000a'::uuid, 'biller.kalyani@example.com'),
-      ('10000000-0000-4000-a000-00000000000b'::uuid, 'biller.kanchrapara@example.com')
+      ('10000000-0000-4000-a000-00000000000b'::uuid, 'biller.kanchrapara@example.com'),
+      -- Two accounts that exist only to carry an outstanding one-time code, so
+      -- the invite policies have rows to isolate and the activation flow has
+      -- something to redeem. Nothing else signs in as these, so a test that
+      -- redeems one and changes its password disturbs no other test.
+      ('10000000-0000-4000-a000-00000000000c'::uuid, 'pending.kalyani@example.com'),
+      ('10000000-0000-4000-a000-00000000000d'::uuid, 'pending.kanchrapara@example.com')
     ) as p (id, email)
   loop
     insert into auth.users
@@ -97,7 +103,30 @@ values
   ('10000000-0000-4000-a000-000000000008', 'Deactivated Admin Kal',  '911111111008', 'franchise_admin', '00000000-0000-4000-a000-000000000001', false),
   ('10000000-0000-4000-a000-000000000009', 'Revoked Tablet Kal',     '911111111009', 'biller',          '00000000-0000-4000-a000-000000000001', true),
   ('10000000-0000-4000-a000-00000000000a', 'Synthetic Biller Kal',   '911111111010', 'biller',          '00000000-0000-4000-a000-000000000001', true),
-  ('10000000-0000-4000-a000-00000000000b', 'Synthetic Biller Kpa',   '911111111011', 'biller',          '00000000-0000-4000-a000-000000000002', true);
+  ('10000000-0000-4000-a000-00000000000b', 'Synthetic Biller Kpa',   '911111111011', 'biller',          '00000000-0000-4000-a000-000000000002', true),
+  ('10000000-0000-4000-a000-00000000000c', 'Pending Staff Kal',      '911111111014', 'employee',        '00000000-0000-4000-a000-000000000001', true),
+  ('10000000-0000-4000-a000-00000000000d', 'Pending Staff Kpa',      '911111111015', 'employee',        '00000000-0000-4000-a000-000000000002', true);
+
+-- ---------------------------------------------------------------------------
+-- Outstanding one-time codes, one per outlet. Stored as a hash exactly as the
+-- Edge Function stores them; the plaintext codes are recorded here only
+-- because this file is local-only synthetic data and the tests need them:
+--   pending.kalyani@example.com      ABCDE-FGHJK
+--   pending.kanchrapara@example.com  KMNPQ-RSTVW
+-- Normalisation before hashing is "uppercase, drop everything non-alphanumeric",
+-- the same rule redeem-invite applies to what a person types.
+
+insert into public.account_invites
+  (id, profile_id, outlet_id, code_hash, issued_by, issued_at, expires_at)
+values
+  ('80000000-0000-4000-a000-000000000001',
+   '10000000-0000-4000-a000-00000000000c', '00000000-0000-4000-a000-000000000001',
+   encode(extensions.digest('ABCDEFGHJK', 'sha256'), 'hex'),
+   '10000000-0000-4000-a000-000000000002', now(), now() + interval '7 days'),
+  ('80000000-0000-4000-a000-000000000002',
+   '10000000-0000-4000-a000-00000000000d', '00000000-0000-4000-a000-000000000002',
+   encode(extensions.digest('KMNPQRSTVW', 'sha256'), 'hex'),
+   '10000000-0000-4000-a000-000000000003', now(), now() + interval '7 days');
 
 -- ---------------------------------------------------------------------------
 -- Counter devices. One live per outlet, plus one revoked (its profile stays

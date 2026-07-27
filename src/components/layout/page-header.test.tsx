@@ -12,7 +12,11 @@ function renderWithRouter(ui: React.ReactElement) {
 describe('PageHeader', () => {
   it('renders title, subtitle and the action slot', () => {
     renderWithRouter(
-      <PageHeader title="Daily cash" subtitle="Friday 26 July" action={<button>Close day</button>} />,
+      <PageHeader
+        title="Daily cash"
+        subtitle="Friday 26 July"
+        action={<button>Close day</button>}
+      />,
     )
     expect(screen.getByRole('heading', { level: 1, name: 'Daily cash' })).toBeInTheDocument()
     expect(screen.getByText('Friday 26 July')).toBeInTheDocument()

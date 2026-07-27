@@ -286,6 +286,72 @@ describe('the anonymous role', () => {
   })
 })
 
+describe('account invitations', () => {
+  // Selected columns, never `select('*')`: code_hash is withheld by
+  // column-level grant, so a whole-row read is refused on purpose.
+  const SAFE_COLUMNS = 'id, profile_id, outlet_id, expires_at, consumed_at, attempts'
+
+  it('a Franchise Admin sees their own outlet’s invite and not the other’s', async () => {
+    const fa = (await signIn(PERSONAS.faKalyani.email)).client
+    const { data, error } = await fa.from('account_invites').select(SAFE_COLUMNS)
+    expect(error).toBeNull()
+    // A property, not a population count: the account-flows suite provisions
+    // real Kalyani accounts against this same database.
+    expect(data?.length).toBeGreaterThan(0)
+    expect(data?.every((row) => row.outlet_id === OUTLETS.kalyani)).toBe(true)
+
+    const { data: other } = await fa
+      .from('account_invites')
+      .select(SAFE_COLUMNS)
+      .eq('outlet_id', OUTLETS.kanchrapara)
+    expect(other).toEqual([])
+  })
+
+  it('the code hash is unreadable over REST, for every role', async () => {
+    for (const persona of [PERSONAS.superAdmin, PERSONAS.faKalyani] as const) {
+      const client = (await signIn(persona.email)).client
+      const { error: named } = await client.from('account_invites').select('code_hash')
+      expect(named?.code, persona.email).toBe('42501')
+      const { error: star } = await client.from('account_invites').select('*')
+      expect(star?.code, persona.email).toBe('42501')
+    }
+  })
+
+  it('an Employee and a counter device see no invitations at all', async () => {
+    for (const persona of [PERSONAS.employeeKalyani, PERSONAS.deviceKalyani] as const) {
+      const client = (await signIn(persona.email)).client
+      const { data, error } = await client.from('account_invites').select(SAFE_COLUMNS)
+      expect(error, persona.email).toBeNull()
+      expect(data, persona.email).toEqual([])
+    }
+  })
+
+  it('no client can issue, extend, or delete an invitation', async () => {
+    const fa = (await signIn(PERSONAS.faKalyani.email)).client
+
+    const { error: inserted } = await fa.from('account_invites').insert({
+      profile_id: PERSONAS.employeeKalyani.sub,
+      outlet_id: OUTLETS.kalyani,
+      code_hash: 'forged',
+      issued_by: PERSONAS.faKalyani.sub,
+      expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+    })
+    expect(inserted?.code).toBe('42501')
+
+    const { error: updated } = await fa
+      .from('account_invites')
+      .update({ expires_at: new Date(Date.now() + 99 * 86_400_000).toISOString() })
+      .eq('outlet_id', OUTLETS.kalyani)
+    expect(updated?.code).toBe('42501')
+
+    const { error: deleted } = await fa
+      .from('account_invites')
+      .delete()
+      .eq('outlet_id', OUTLETS.kalyani)
+    expect(deleted?.code).toBe('42501')
+  })
+})
+
 describe('deliberately closed surfaces', () => {
   it('the bill number counters are invisible even to the Super Admin', async () => {
     const sa = (await signIn(PERSONAS.superAdmin.email)).client

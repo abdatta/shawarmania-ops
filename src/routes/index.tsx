@@ -1,19 +1,28 @@
 import { createBrowserRouter, redirect, type RouteObject } from 'react-router'
 
+import { Activate } from '@/auth/activate'
+import { RealRoot } from '@/auth/real-root'
+import { SignIn } from '@/auth/sign-in'
 import { DemoGate } from '@/demo/demo-gate'
-import { DemoHome } from '@/demo/demo-home'
 import { DemoRoot } from '@/demo/demo-root'
 
 import { Landing } from './landing'
 import { NotFound } from './not-found'
 import { RootLayout } from './root-layout'
+import { roleSurfaceRoutes } from './surfaces'
 
 /**
- * Two separate branches, deliberately (design D1): the real tree at the root
- * and the demo tree under /demo/:roleSegment, each with its own provider
- * stack. Surfaces gain routes here only as the gate registry lets them
- * render — a `hidden` surface has no route at all, so a deep link to one
- * lands on NotFound rather than a greyed-out shell.
+ * Three branches, deliberately (design D1 of #3, D2 of #4): the public one at
+ * the root, the demo tree under /demo/:roleSegment, and the real role tree at
+ * /:roleSegment — each with its own provider stack, and the two role trees
+ * never mounted at the same time.
+ *
+ * The role branches share their children (`roleSurfaceRoutes`) because they
+ * genuinely are the same surfaces; what differs is the gate registry's state
+ * for each, which the shared `GatedSurface` consults per session.
+ *
+ * Static segments outrank the dynamic one in React Router's ranking, so
+ * `/sign-in`, `/activate` and `/demo` are never swallowed by `/:roleSegment`.
  *
  * Exported so tests can mount the same tree in a memory router.
  */
@@ -23,6 +32,8 @@ export const appRoutes: RouteObject[] = [
     Component: RootLayout,
     children: [
       { index: true, Component: Landing },
+      { path: 'sign-in', Component: SignIn },
+      { path: 'activate', Component: Activate },
       { path: '*', Component: NotFound },
     ],
   },
@@ -34,14 +45,14 @@ export const appRoutes: RouteObject[] = [
       {
         path: ':roleSegment',
         Component: DemoRoot,
-        children: [
-          { index: true, Component: DemoHome },
-          // Hidden surfaces have no route: anything else under a role shell
-          // is honestly absent, inside the shell chrome.
-          { path: '*', Component: NotFound },
-        ],
+        children: roleSurfaceRoutes,
       },
     ],
+  },
+  {
+    path: '/:roleSegment',
+    Component: RealRoot,
+    children: roleSurfaceRoutes,
   },
 ]
 

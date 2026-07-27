@@ -1,4 +1,5 @@
 import type { DataAdapters } from '../adapters'
+import { createMockAccountsAdapter } from './accounts'
 import { createMockOutletsAdapter } from './outlets'
 
 /**
@@ -9,6 +10,7 @@ import { createMockOutletsAdapter } from './outlets'
 export function createMockAdapters(): DataAdapters {
   return {
     outlets: createMockOutletsAdapter(),
+    accounts: createMockAccountsAdapter(),
   }
 }
 

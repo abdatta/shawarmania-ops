@@ -8,7 +8,8 @@ Testing effort follows risk, and in this app risk is concentrated in three place
 
 ```bash
 npm test          # Vitest: unit, component, and build-tooling suites
-npm run test:e2e  # Playwright: shell and the offline path, against a real build
+npm run test:e2e  # Playwright: shell, demo and the offline path, against a real build
+npm run test:e2e:auth # Playwright: sign-in, provisioning, deactivation (needs the local stack)
 npm run test:db   # pgTAP: isolation + write-contract suites (needs the local stack)
 npm run test:rls  # REST probes: real sign-ins, hand-crafted cross-outlet requests
 npm run lint      # ESLint (incl. layer boundaries) + the no-hex-outside-tokens check
@@ -20,7 +21,11 @@ npm run db:reset  # apply every migration and the seed to a fresh database
 npm run db:types  # regenerate src/data-access/database.types.ts (CI fails on drift)
 ```
 
-`test:db` and `test:rls` need the local stack running with the seed applied (`db:start`, then `db:reset`). They are excluded from plain `npm test` so unit feedback stays instant; CI runs them in their own job against a fresh stack.
+`test:db`, `test:rls` and `test:e2e:auth` need the local stack running with the seed applied (`db:start`, then `db:reset`). They are excluded from plain `npm test` so unit feedback stays instant; CI runs them in their own job against a fresh stack.
+
+`test:e2e:auth` has its own Playwright config and its own port, because it is the one browser suite that needs a **real backend** — everything in `e2e/` runs against a build wired to a deliberately unreachable Supabase, which is what lets `npm run test:e2e` work on a laptop with no Docker. Keeping the ports apart means a preview server left running by one suite can never be reused by the other.
+
+**Editing an Edge Function? Restart the runtime.** The bundled edge-runtime container caches function modules, so a change to anything under `supabase/functions/` is invisible until `docker restart supabase_edge_runtime_shawarmania-ops` (or a full `db:stop`/`db:start`). A test that keeps failing against code you have already fixed is almost always this.
 
 `npm test` runs `.test.ts` / `.test.tsx` under `src/` in a jsdom environment and `.test.mjs` under `scripts/` in a node environment. The shared setup file guards its DOM work, so the build-tooling suites do not need a second Vitest project to live alongside the app suites.
 

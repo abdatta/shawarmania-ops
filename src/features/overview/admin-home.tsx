@@ -42,7 +42,9 @@ export function AdminHome() {
           <CardBody>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
               <dt className="font-semibold">Address</dt>
-              <dd>{[outlet.address_line1, outlet.city, outlet.pincode].filter(Boolean).join(', ')}</dd>
+              <dd>
+                {[outlet.address_line1, outlet.city, outlet.pincode].filter(Boolean).join(', ')}
+              </dd>
               <dt className="font-semibold">Phone</dt>
               <dd>{outlet.phone ?? '—'}</dd>
               <dt className="font-semibold">Business day starts</dt>

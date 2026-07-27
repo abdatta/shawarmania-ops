@@ -50,6 +50,7 @@ export function DemoRoot() {
     const persona = personaFixtures[role]
     return {
       mode: 'demo',
+      userId: persona.profile.id,
       role,
       outletId: persona.profile.outlet_id,
       displayName: persona.profile.full_name,

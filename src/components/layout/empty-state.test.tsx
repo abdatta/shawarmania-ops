@@ -13,7 +13,9 @@ describe('EmptyState', () => {
         action={<button>Add item</button>}
       />,
     )
-    expect(screen.getByText('Add the first inventory item to start the ledger.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Add the first inventory item to start the ledger.'),
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add item' })).toBeInTheDocument()
   })
 })

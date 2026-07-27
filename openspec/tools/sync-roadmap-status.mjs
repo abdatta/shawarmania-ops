@@ -21,8 +21,10 @@
 // same derivation, so they cannot drift from each other. If an inventory row is
 // missing the leading icon cell (e.g. a freshly hand-added row), it is inserted;
 // rows that already have it keep their column count. Rows are never inserted or
-// removed, and no other cell (model, deps, checkpoint) is touched. The table
-// header and separator rows carry no change number, so they are left as authored.
+// removed, and no other cell (wave, model, deps, checkpoint) is touched — the
+// Wave column in particular is authored, not derived, so it is left alone. The
+// table header and separator rows carry no change number, so they are left as
+// authored.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -85,32 +87,41 @@ const changed = []
 let modified = false
 
 // Inventory rows are the only table rows whose first data cell is a bare change
-// number immediately followed by a `backticked-name` cell. Working on split
-// cells (rather than a monster regex) tolerates both the pre-icon layout
-// (`| # | ...`) and the current layout (`| icon | # | ...`) and never matches
-// the other tables in this file. Layout columns after normalisation:
-//   0:''  1:icon  2:number  3:change  4:model  5:status  6:deps  7:checkpoint  8:''
+// number followed — directly, or one cell later across the Wave column — by a
+// `backticked-name` cell. Working on split cells (rather than a monster regex)
+// never matches the other tables in this file, and anchoring every offset on
+// the *name* cell rather than on fixed positions means an inserted column
+// shifts nothing. Layout columns after normalisation:
+//   0:''  1:icon  2:number  3:wave  4:change  5:model  6:status  7:deps  8:gate
+// Both the wave cell and the leading icon cell are optional, so the name index
+// is discovered rather than assumed.
 const ICON_COL = 1
-const STATUS_COL = 5
+
+// The `name` cell sits at numIdx+1 (no Wave column) or numIdx+2 (with one).
+const nameIdxFrom = (cells, numIdx) =>
+  [numIdx + 1, numIdx + 2].find((i) => nameOf(cells[i] ?? '')) ?? -1
 
 const out = lines.map((line) => {
   if (!line.startsWith('|')) return line
   const cells = line.split('|')
   const numIdx = cells.findIndex(isNumberCell)
   if (numIdx !== 1 && numIdx !== 2) return line // not an inventory row
-  const nameMatch = nameOf(cells[numIdx + 1] ?? '')
-  if (!nameMatch) return line // number cell not followed by a `name` → skip
-  const name = nameMatch[1].trim()
+  const nameIdx = nameIdxFrom(cells, numIdx)
+  if (nameIdx < 0) return line // number cell not followed by a `name` → skip
+  const name = nameOf(cells[nameIdx])[1].trim()
   const derived = deriveStatus(name)
   if (derived == null) return line // no folder → untouched
   const icon = iconFor(derived)
 
-  if (numIdx === 1)
+  // name → model → status; +1 more if inserting the icon cell shifts them right.
+  let statusIdx = nameIdx + 2
+  if (numIdx === 1) {
     cells.splice(ICON_COL, 0, ` ${icon} `) // insert missing icon cell
-  else cells[ICON_COL] = ` ${icon} ` // rewrite existing icon cell
-  if (cells[STATUS_COL] === undefined) return line // malformed row → leave alone
-  const prevStatus = cells[STATUS_COL].trim()
-  cells[STATUS_COL] = ` ${derived} `
+    statusIdx += 1
+  } else cells[ICON_COL] = ` ${icon} ` // rewrite existing icon cell
+  if (cells[statusIdx] === undefined) return line // malformed row → leave alone
+  const prevStatus = cells[statusIdx].trim()
+  cells[statusIdx] = ` ${derived} `
 
   const rebuilt = cells.join('|')
   if (rebuilt !== line) {

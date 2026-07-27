@@ -32,9 +32,28 @@ describe('demo scope tripwire', () => {
   it('getSupabaseClient throws loudly while the scope is active', () => {
     enterDemoScope()
     expect(() => getSupabaseClient()).toThrow(/Demo mode is active/)
+  })
+
+  it('stands down outside the scope, whatever the environment holds', () => {
+    // Deliberately does NOT assert a particular failure outside demo scope.
+    // The original version asserted the missing-env error, which only held on
+    // a machine with no .env — so setting one up to run the app locally turned
+    // this suite red. The property under test is the tripwire, not the config:
+    // outside the scope, demo mode is never the reason anything fails.
+    enterDemoScope()
     exitDemoScope()
-    // Outside the scope the tripwire stands down — with no env configured in
-    // tests the client still refuses, but for the ordinary reason.
-    expect(() => getSupabaseClient()).toThrow(/VITE_SUPABASE_URL/)
+
+    let thrown: unknown
+    try {
+      getSupabaseClient()
+    } catch (cause) {
+      thrown = cause
+    }
+
+    if (thrown !== undefined) {
+      // Configured badly or not at all: it may refuse, but never as "demo".
+      expect(String(thrown)).not.toMatch(/Demo mode is active/)
+      expect(String(thrown)).toMatch(/VITE_SUPABASE_URL/)
+    }
   })
 })

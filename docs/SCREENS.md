@@ -1,6 +1,6 @@
 # Screens
 
-> The four role shells exist and are walkable in demo mode (#3): phone shells with bottom-tab navigation for Super Admin, Franchise Admin and Employee, the fixed-chrome tablet shell for the Biller, each with a thin home overview. Every *feature* screen below is still to come — its shell, gate entry and layout primitives are waiting for it.
+> The four role shells exist, and all four roles now sign in and reach their own (#4): phone shells with bottom-tab navigation for Super Admin, Franchise Admin and Employee, the fixed-chrome tablet shell for the Biller, each with a thin home overview. Sign in, Set your password, People and Access are built. Every other *feature* screen below is still to come — its shell, gate entry and layout primitives are waiting for it.
 
 One bundle serves all four roles. After sign-in the shell reads the role claim and mounts a different navigation and route set; in demo mode the same shells mount from the URL (`/demo/owner`, `/demo/admin`, `/demo/counter`, `/demo/staff` — the stable role path segments). Every screen below is additionally protected by Row-Level Security — hiding a route is convenience, not access control.
 
@@ -8,9 +8,13 @@ One bundle serves all four roles. After sign-in the shell reads the role claim a
 
 ## Shared
 
-**Sign in** — email + password. One field pair, nothing else. First-time users arrive with a one-time code instead of a password and are walked through setting one.
+**Sign in** — email + password. One field pair, nothing else. A wrong address and a wrong password get the same sentence, deliberately: telling them apart would confirm which addresses have accounts. There is no "forgot password" link, because there is no self-service reset — the honest instruction is the activation link.
 
-**Profile** — own name, phone, role, assigned outlet. Change password. Sign out.
+**Set your password** — the first-run screen, and the whole of password reset. Email, the one-time code an admin handed over, and a new password; on success it signs you straight in. A separate screen rather than a sign-in field clever enough to guess whether you typed a password or a code — guessing would be wrong occasionally and confusing always, on somebody's first day.
+
+**Account menu** — in every shell's chrome: who you are, your role, your outlet, and sign out. Demo shells do not have one; there is no session to end.
+
+**Profile** — own name, phone, role, assigned outlet. Change password. Sign out. *(Not built. Sign-out lives in the account menu; changing a password you still know is [deferred by decision](../openspec/todos/signed-in-password-change.md).)*
 
 ## Biller — the counter tablet
 
@@ -68,7 +72,9 @@ Design commitments:
 
 **Attendance** — the outlet's staff by day: who checked in, when, from where, and any geofence flags. Approving an override request happens here.
 
-**Employees** — the outlet roster. Add and edit staff, set employment status, issue app access.
+**Employees** — the outlet roster. Add and edit staff, set employment status, joining date, salary. *(Not built.)* Giving someone an app login is a separate screen — see **Access** — because having a login and being on the payroll are different facts about a person, and either can be true without the other. The roster will link across to it.
+
+**Access** — app accounts for this outlet: create a Biller or an Employee, issue a one-time code, deactivate and reactivate. The same screen as the owner's **People**, seen through one outlet's authority — no outlet column, no role beyond Biller and Employee, and the privileged function refuses anything wider whatever the form sends.
 
 **Profit and loss** — outlet-level estimate for a chosen period, with the **cash-basis / consumption-basis toggle stated plainly on screen**, because the two answer different questions and mixing them is the classic error. See [Data Model](DATA_MODEL.md#two-modelling-traps-in-this-domain).
 
@@ -84,7 +90,7 @@ Design commitments:
 
 **Outlets** — create, edit, activate and deactivate outlets. Setting coordinates, geofence radius and business-day cutover happens here. Onboarding a new franchise starts here.
 
-**People** — all users across outlets. Create Franchise Admins, reassign roles, deactivate accounts.
+**People** — every account across all outlets. Create an account of any role in any outlet, issue a fresh one-time code, deactivate and reactivate. A newly issued code is shown **once**, with a plain statement that it cannot be looked up again — because only its hash is stored, and no client can read that. Your own row offers no actions: nobody manages their own account. *(Reassigning roles is not built yet; the database already cancels any outstanding code when someone is moved.)*
 
 **Comparison** — outlets side by side over a period: sales, expenses, estimated profit, cash differences. The screen that justifies the whole system for a multi-outlet owner.
 

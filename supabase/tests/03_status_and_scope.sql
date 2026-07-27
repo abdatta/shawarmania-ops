@@ -192,6 +192,80 @@ select lives_ok($q$
   update public.outlets set name = name where code = 'kalyani'
 $q$, 'super admin can update an outlet');
 
+-- ---------------------------------------------------------------------------
+-- Account invitations. Two properties beyond the cross-outlet sweep in 02:
+-- the code hash is readable by nobody, and no client writes the table at all.
+
+-- Counted over the seeded invites by id rather than over the whole table: the
+-- REST integration suite provisions real accounts against this same database,
+-- and an assertion that breaks when someone else does their job is a bad
+-- assertion. The property under test is visibility, not population.
+select is(
+  (select count(*) from public.account_invites
+    where id in ('80000000-0000-4000-a000-000000000001',
+                 '80000000-0000-4000-a000-000000000002')),
+  2::bigint,
+  'super admin sees both outlets'' outstanding invites');
+
+select throws_ok($q$
+  select code_hash from public.account_invites
+$q$, '42501', null, 'not even the super admin can read an invite code hash');
+
+-- `select *` expands to the withheld column, so the whole-row read is refused
+-- too — a client must name the columns it is allowed to have.
+select throws_ok($q$
+  select * from public.account_invites
+$q$, '42501', null, 'a whole-row invite read is refused because it includes the hash');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
+  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+
+select is(
+  (select count(*) from public.account_invites
+    where id = '80000000-0000-4000-a000-000000000001'),
+  1::bigint,
+  'franchise admin sees their own outlet''s outstanding invite');
+
+select is(
+  (select count(*) from public.account_invites
+    where outlet_id is distinct from '00000000-0000-4000-a000-000000000001'),
+  0::bigint,
+  'franchise admin sees nothing that is not their own outlet''s');
+
+select throws_ok($q$
+  select code_hash from public.account_invites
+$q$, '42501', null, 'franchise admin cannot read an invite code hash');
+
+select throws_ok($q$
+  insert into public.account_invites (profile_id, outlet_id, code_hash, issued_by, expires_at)
+  values ('10000000-0000-4000-a000-000000000006', '00000000-0000-4000-a000-000000000001',
+          'forged', '10000000-0000-4000-a000-000000000002', now() + interval '1 day')
+$q$, '42501', null, 'no client can issue an invite');
+
+select throws_ok($q$
+  update public.account_invites set expires_at = now() + interval '99 days'
+$q$, '42501', null, 'no client can extend an invite');
+
+select throws_ok($q$
+  delete from public.account_invites
+$q$, '42501', null, 'no client can delete an invite');
+
+-- Neither of the two roles that never issue codes sees any.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
+  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select is((select count(*) from public.account_invites), 0::bigint,
+  'an employee sees no invites, including their own');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
+  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select is((select count(*) from public.account_invites), 0::bigint,
+  'a counter device sees no invites');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000008'::uuid,
+  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select is((select count(*) from public.account_invites), 0::bigint,
+  'a deactivated admin sees no invites');
+
 reset role;
 
 select * from finish();

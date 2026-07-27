@@ -36,8 +36,23 @@ jobs:
       - name: Build
         # Project sites serve from /<repo>/. On a custom domain this becomes
         # BASE_PATH: / and nothing else changes.
+        #
+        # The Supabase pair is the PUBLIC pair, and it is baked into the
+        # JavaScript bundle — that is the design, not a leak: the anon key is
+        # meant to be public and Row-Level Security is what protects the data
+        # (docs/SECURITY_AND_PRIVACY.md). They live in repository variables
+        # rather than secrets for exactly that reason; a value published in
+        # every bundle is not a secret, and pretending otherwise makes the
+        # real secret — the service-role key — look equally routine.
+        #
+        # With both unset the build still succeeds and deploys a DEMO-ONLY
+        # site: the demo tree needs no backend, and sign-in reports that it
+        # cannot reach the server rather than crashing. That is the intended
+        # state until a Supabase project exists.
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
 
       - uses: actions/configure-pages@v5

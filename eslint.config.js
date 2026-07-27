@@ -112,7 +112,22 @@ export default tseslint.config(
   },
 
   {
-    files: ['**/*.{mjs,js}', 'vite.config.ts', 'playwright.config.ts'],
+    // Edge Functions run on Deno, not in the browser and not in Node: they use
+    // URL/JSR import specifiers and the Deno global, and tsconfig deliberately
+    // does not include them (its lib and module resolution are the app's).
+    // They are still linted — the rules that catch real mistakes do not care
+    // which runtime the file is for.
+    files: ['supabase/functions/**/*.ts'],
+    languageOptions: {
+      globals: { ...globals.browser, Deno: 'readonly' },
+    },
+    rules: {
+      'no-undef': 'off',
+    },
+  },
+
+  {
+    files: ['**/*.{mjs,js}', 'vite.config.ts', 'playwright.config.ts', 'playwright.auth.config.ts'],
     languageOptions: { globals: globals.node },
   },
 )

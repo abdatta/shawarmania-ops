@@ -2,7 +2,7 @@
 
 Shawarmania Ops is a multi-outlet cash-counter and outlet-management PWA for **Shawarmania**, a quick-service shawarma business operating in Kalyani and Kanchrapara, West Bengal. It handles counter billing, employee attendance, menu, inventory, expenses, daily cash reconciliation, basic profit/loss estimates, and outlet↔owner messaging — with each outlet's data strictly isolated so the business can grow through franchises.
 
-**Status: pre-implementation.** The documentation and roadmap exist; the application does not yet. Nothing below describes code that has been written. See [`openspec/changes/ROADMAP.md`](openspec/changes/ROADMAP.md) for what gets built and in what order.
+**Status: early implementation.** The schema, tenancy policies, the adapter seam, the four role shells, demo mode, and authentication all exist. Every *feature* surface — billing, inventory, expenses, cash, attendance — is still ahead. See [`openspec/changes/ROADMAP.md`](openspec/changes/ROADMAP.md) for what is built and what comes next; it is derived from the change folders, so it is never stale.
 
 ## North Star
 
@@ -72,8 +72,14 @@ Rationale for each of these choices is recorded in [Architecture](docs/ARCHITECT
 
 Two device contexts, deliberately different:
 
-- **Personal smartphones** (Super Admin, Franchise Admin, Employee): email + password, admin-provisioned with the address pre-confirmed. No SMS provider, no TRAI/DLT registration, no confirmation mail. (Owner-confirmed 2026-07-26; phone numbers are contact data, not credentials.)
-- **Counter tablet** (Biller): the *device* is enrolled once and holds a long-lived session scoped by RLS to exactly one outlet. Billers then unlock a shift with a short PIN, which selects attribution — it is not the security boundary.
+- **Personal smartphones** (Super Admin, Franchise Admin, Employee): email + password, admin-provisioned with the address pre-confirmed. No SMS provider, no TRAI/DLT registration, no confirmation mail. (Owner-confirmed 2026-07-26; phone numbers are contact data, not credentials.) **Built.**
+- **Counter tablet** (Biller): the *device* is enrolled once and holds a long-lived session scoped by RLS to exactly one outlet. Billers then unlock a shift with a short PIN, which selects attribution — it is not the security boundary. **Not built** — arrives with `counter-devices-and-offline`; until then a Biller signs in with their own email, which is recorded in [Limitations](docs/LIMITATIONS.md).
+
+Three rules that follow, and that a change touching auth must not quietly undo:
+
+- **Accounts are admin-provisioned with a one-time code, handed over by hand.** Nothing is ever emailed or texted. The code is stored only as a hash, in a column no client role can read — so it is shown to the issuing admin once and is genuinely unrecoverable afterwards. Every way redeeming it can fail returns one identical response.
+- **Privileged account operations re-derive the caller's authority from their own token**, never from the request body. Being an Edge Function is not authorisation.
+- **Deactivation is immediate at the database, and the client must not lag it.** A deactivated account cannot read its own profile row; that is the signal an open app uses to end its session rather than waiting out the token.
 
 Full detail, including the revocation story, is in [Roles And Permissions](docs/ROLES_AND_PERMISSIONS.md).
 
@@ -122,7 +128,8 @@ Commands:
 
 ## Verification
 
-- **Any change**: `npm test` and `npm run lint` green, `npm run typecheck` clean.
+- **Any change**: `npm test` and `npm run lint` green, `npm run typecheck` clean, `npm run build` clean.
+- **Auth-touching changes**: `npm run test:e2e:auth` against the local stack — four roles signing in, provisioning end to end, deactivation ending an open session.
 - **Tenancy-touching changes**: the RLS isolation test suite must pass. It asserts that a session scoped to one outlet cannot read another's rows for *every* outlet-scoped table — a new table without a matching test is an incomplete change.
 - **Billing or offline changes**: exercise the offline path — go offline, ring up bills, come back online, confirm exactly-once settlement with no duplicates.
 - **UI changes**: run the app and look at it, on a phone viewport and a tablet viewport, in both light and dark themes.

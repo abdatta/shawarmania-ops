@@ -101,9 +101,110 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
 3. **Create the Franchise Admin** and hand over their one-time code.
 4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ.
 5. **Enrol the counter tablet**: sign in on the device, enrol it to this outlet, confirm it appears under Devices.
-6. **Add employees and billers**, issue PINs and app access.
+6. **Add employees and billers** (Access), handing each their one-time code. Shift PINs arrive with counter-device enrolment; until then a Biller signs in with their own email on the tablet.
 7. **Set the opening cash float** for the first business day.
 8. **Verify isolation before going live** — sign in as the new Franchise Admin and confirm no other outlet is visible anywhere. This is a real step, not a formality: it is the last point at which a misconfiguration is cheap to fix.
+
+## First production deploy
+
+Once, per environment. Until it is done the deployed site is **demo-only**: the
+demo tree needs no backend, and sign-in honestly reports that it cannot reach
+the server.
+
+⚠ **Create a new project.** The Supabase account holds an unrelated project;
+linking this repo to it would run these migrations into someone else's data.
+
+1. **Create the project.** Region `ap-south-1` (Mumbai) — every user is in West
+   Bengal, and the round trip is the counter's latency. Keep the database
+   password somewhere durable; it is not recoverable.
+
+2. **Link and apply the schema.**
+
+   ```
+   npx supabase link --project-ref <ref>
+   npx supabase db push
+   ```
+
+   `db push` applies migrations only. **Never run `supabase db reset` against a
+   hosted project** — it drops everything and applies `seed.sql`, which creates
+   synthetic staff whose password is published in this repo.
+
+3. **Push the auth configuration.**
+
+   ```
+   npx supabase config push
+   ```
+
+   This carries the settings that make the whole permission model work:
+   signup disabled, email confirmations off, and — the one that silently
+   breaks everything if missed — the **custom access token hook**. Without it
+   tokens carry no `app_role` or `app_outlet_id`, every policy denies, and a
+   perfectly valid user sees a working app with nothing in it.
+
+   Then correct one thing by hand: `config.toml` carries a localhost
+   `site_url`, which is right for development and wrong for production. Set
+   Site URL to the deployed URL in Authentication → URL Configuration. Nothing
+   in v1 sends a link, so it is tidiness rather than function — until the first
+   feature that does.
+
+   Confirm in Authentication → Hooks that the access token hook is enabled and
+   points at `public.custom_access_token_hook`.
+
+4. **Deploy the Edge Functions** — after the migration, never before; they read
+   tables and functions it creates.
+
+   ```
+   npx supabase functions deploy admin-accounts
+   npx supabase functions deploy redeem-invite
+   ```
+
+   `redeem-invite` is declared `verify_jwt = false` in `config.toml`, because
+   somebody who has never set a password has no token to present. Check it took
+   effect: an unauthenticated `POST` with a wrong code must answer `400
+   invalid_code`, not `401`.
+
+5. **Create the first Super Admin.** Nothing in the app can do this — see
+   [`supabase/snippets/bootstrap-first-admin.sql`](../supabase/snippets/bootstrap-first-admin.sql),
+   which explains why and is safe to re-run. It is the only account ever
+   created by hand.
+
+6. **Create the outlets**, with coordinates captured standing at each counter.
+   Also by hand for now; the Outlets screen lands with `outlet-onboarding`.
+
+7. **Point the deployed site at the project.** Repository → Settings → Secrets
+   and variables → Actions → *Variables*:
+
+   | Variable | Value |
+   |---|---|
+   | `VITE_SUPABASE_URL` | `https://<ref>.supabase.co` |
+   | `VITE_SUPABASE_ANON_KEY` | the project's anon / publishable key |
+
+   Variables rather than secrets, deliberately: both values are compiled into
+   the JavaScript bundle and served to every visitor. That is the design — the
+   anon key is public and RLS is the protection — and filing them as secrets
+   would imply the service-role key is the same kind of thing. It is not, and
+   it never leaves Edge Function configuration.
+
+   Re-run the deploy workflow afterwards. A build that ran before the variables
+   existed has the old (empty) values baked in; the variables are read at build
+   time, not at page load.
+
+8. **Verify, in this order.** Sign in as the Super Admin → People lists your
+   own account → provision a Franchise Admin → redeem the code in a private
+   window → that admin sees their outlet and nothing of any other.
+
+## Managing accounts
+
+Accounts are admin-provisioned; there is no self-service signup, and nothing is ever emailed or texted to anybody.
+
+- **Super Admin → People** manages every account across all outlets.
+- **Franchise Admin → Access** manages Billers and Employees in that admin's own outlet, and nothing else. The limits are enforced server-side from the caller's own session, not by the form.
+
+**To give someone access**: add the account (name, email, role, outlet). A one-time code is shown **once**. Pass it on — WhatsApp is what the business already uses — and they set their own password at *Set your password* on the sign-in screen. There is nowhere to look the code up afterwards, so if the message is lost, issue a new one; doing so cancels the old code automatically.
+
+**To reset a password**: issue a new code for that account. That is the entire reset story.
+
+**To remove access**: deactivate the account. Do not delete it — history references it, and reactivating is one tap if the person comes back.
 
 ## Backups
 
@@ -134,6 +235,10 @@ No third-party analytics or session-recording tooling. The app handles customer 
 
 **Cash does not reconcile** → check for late-synced bills against a closed day (they surface as reconciliation exceptions), then cash expenses recorded under the wrong business date, then withdrawals not recorded.
 
-**Someone cannot sign in** → confirm the account is active and the phone number matches exactly. Regenerate a one-time code if the password is forgotten; there is no self-service reset.
+**Someone cannot sign in** → confirm the account is active (People, or Access for one outlet) and that the **email address** matches exactly. Sign-in gives one message for a wrong address and a wrong password alike, so it will not tell you which. Issue a new code if the password is forgotten; there is no self-service reset.
+
+**A one-time code will not work** → it expires after seven days, works once, is cancelled the moment a newer one is issued, and dies after five wrong attempts. All five look identical to the person typing it. The fix is always the same: issue a new code. Nobody can look the old one up — only a hash was ever stored.
+
+**Someone must lose access now** → deactivate the account (People / Access). It takes effect on their very next request, without waiting for their session to expire, and their open app ends its session and says why. Reactivating restores it; their password still works.
 
 **An employee cannot check in** → they are outside the geofence, or GPS will not fix. Use the counter tablet, or approve an override from the manager's phone.

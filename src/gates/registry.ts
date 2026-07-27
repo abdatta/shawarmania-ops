@@ -53,7 +53,7 @@ const defs = {
     role: 'super_admin',
     path: '',
     nav: { label: 'Overview', icon: LayoutDashboard, order: 1 },
-    state: 'demo',
+    state: 'live',
   },
   'owner-outlets': {
     role: 'super_admin',
@@ -65,7 +65,7 @@ const defs = {
     role: 'super_admin',
     path: 'people',
     nav: { label: 'People', icon: Users, order: 3 },
-    state: 'hidden',
+    state: 'live',
   },
   'owner-comparison': {
     role: 'super_admin',
@@ -91,7 +91,7 @@ const defs = {
     role: 'franchise_admin',
     path: '',
     nav: { label: 'Today', icon: LayoutDashboard, order: 1 },
-    state: 'demo',
+    state: 'live',
   },
   'admin-menu': {
     role: 'franchise_admin',
@@ -147,13 +147,26 @@ const defs = {
     nav: { label: 'Devices', icon: TabletSmartphone, order: 10 },
     state: 'hidden',
   },
+  /**
+   * App access for this outlet — create an account, issue a code, deactivate.
+   * Distinct from `admin-employees`, which is the HR roster (employment
+   * status, salary, joining date) and belongs with the operations surfaces.
+   * Having a login and being on the payroll are different facts about a
+   * person, and one can be true without the other.
+   */
+  'admin-people': {
+    role: 'franchise_admin',
+    path: 'people',
+    nav: { label: 'Access', icon: KeyRound, order: 11 },
+    state: 'live',
+  },
 
   // ── Biller — the counter tablet ──────────────────────────────────────────
   'counter-home': {
     role: 'biller',
     path: '',
     nav: { label: 'Counter', icon: Home, order: 1 },
-    state: 'demo',
+    state: 'live',
   },
   'counter-shift-unlock': {
     role: 'biller',
@@ -185,7 +198,7 @@ const defs = {
     role: 'employee',
     path: '',
     nav: { label: 'Home', icon: Home, order: 1 },
-    state: 'demo',
+    state: 'live',
   },
   'staff-attendance': {
     role: 'employee',

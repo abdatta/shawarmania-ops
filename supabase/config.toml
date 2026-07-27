@@ -42,11 +42,22 @@ file_size_limit = "50MiB"
 enabled = true
 site_url = "http://127.0.0.1:5173"
 additional_redirect_urls = ["http://127.0.0.1:5173"]
+# Short-lived access tokens are what make the claim model safe: app_role and
+# app_outlet_id are baked in at issue, so an hour bounds how stale a claim can
+# get. Deactivation does NOT rely on this — policies check status per request.
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
+# Tolerates the double-refresh a flaky counter connection produces.
 refresh_token_reuse_interval = 10
 # Staff accounts are admin-provisioned; there is no self-service signup.
 enable_signup = false
+
+# DELIBERATELY ABSENT: no refresh-token inactivity timeout. A delivery employee
+# who opens the app fortnightly must not be re-authenticating each time, and
+# there is no self-service password reset to rescue them if they are. Ending a
+# session early is an administrative act (deactivate the account), which bites
+# immediately through the policies — not a timer. Do not "tighten" this without
+# reading docs/ROLES_AND_PERMISSIONS.md first.
 
 # Staff sign in with email + password, admin-provisioned with the address
 # pre-confirmed — no confirmation mail is ever sent (owner-confirmed
@@ -77,3 +88,16 @@ enabled = false
 
 [edge_runtime]
 enabled = true
+
+# Account provisioning. The gateway check only proves the caller holds *a*
+# valid token — the anon key is one — so the function re-derives the caller's
+# role and outlet from their own session before doing anything.
+[functions.admin-accounts]
+verify_jwt = true
+
+# Redeeming a one-time code. Deliberately open: someone who has never set a
+# password has no token to present. Its protection is the code itself (50 bits,
+# hashed at rest, single use, five attempts, seven days) and a response that
+# looks the same however it fails.
+[functions.redeem-invite]
+verify_jwt = false

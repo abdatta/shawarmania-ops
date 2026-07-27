@@ -56,7 +56,10 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
 ## Authentication posture
 
 - Passwords are handled entirely by Supabase Auth. This repo never sees, stores, or transmits a password.
-- **One-time provisioning codes are single-use, short-lived, and delivered out-of-band** (in practice, over WhatsApp by an admin). They are not passwords and must not be reusable.
+- **One-time provisioning codes are single-use, short-lived, and delivered out-of-band** (in practice, over WhatsApp by an admin). They are not passwords and must not be reusable. As built: ten Crockford-base32 characters (50 bits), valid seven days, five attempts, and superseded the moment a replacement is issued — so exactly one code per account is ever live.
+- **A code is stored only as a hash, and that column is readable by nobody.** Not by a Franchise Admin, not by the Super Admin: the invite table's column grants omit it, so a request naming it — or `select *`, which expands to it — is refused by the database. The plaintext exists only in the response that issued it, which is why the screen says it cannot be looked up again.
+- **Redemption reveals nothing.** Unknown address, wrong code, expired, already used, attempts exhausted, deactivated account — one status, one body. The endpoint is unauthenticated by necessity and must never become a way to discover which addresses have accounts.
+- **Provisioning authority is re-derived from the caller's own token** inside the privileged function, never taken from the request. A Franchise Admin cannot mint an administrator, cannot reach another outlet, and cannot deactivate themselves.
 - **Counter PINs are not a security boundary.** They select which biller a bill is attributed to. The device session is the credential — see [Roles And Permissions](ROLES_AND_PERMISSIONS.md). Do not extend a PIN to gate anything sensitive.
 - **Device revocation is immediate**, enforced by a `revoked_at` check inside the policy rather than by waiting for a token to expire.
 - Deactivating an account is likewise a policy-level `is_active` check, not just a claim change.

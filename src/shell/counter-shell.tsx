@@ -9,10 +9,17 @@ import { useSession } from '@/session/context'
  * The Biller shell: landscape tablet, fixed chrome, nothing that scrolls
  * unexpectedly. The header carries the outlet name, the shift and sync
  * placeholders (filled by ui-billing-counter and counter-devices-and-offline
- * respectively), the theme toggle, and — in demo mode — the banner strip via
- * the slot, slim so it can never occlude billing actions.
+ * respectively), the theme toggle, the account menu when a real session filled
+ * that slot, and — in demo mode — the banner strip via the other, slim so it
+ * can never occlude billing actions.
  */
-export function CounterShell({ banner }: { banner?: ReactNode }) {
+export function CounterShell({
+  banner,
+  accountMenu,
+}: {
+  banner?: ReactNode
+  accountMenu?: ReactNode
+}) {
   const session = useSession()
   const { outlets } = useAdapters()
   const [outletName, setOutletName] = useState<string>()
@@ -45,6 +52,7 @@ export function CounterShell({ banner }: { banner?: ReactNode }) {
           synced
         </span>
         <ThemeToggle />
+        {accountMenu}
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto p-4">

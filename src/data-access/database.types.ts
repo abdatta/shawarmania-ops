@@ -34,6 +34,67 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_invites: {
+        Row: {
+          attempts: number
+          code_hash: string
+          consumed_at: string | null
+          expires_at: string
+          id: string
+          issued_at: string
+          issued_by: string
+          outlet_id: string | null
+          profile_id: string
+          superseded_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          code_hash: string
+          consumed_at?: string | null
+          expires_at: string
+          id?: string
+          issued_at?: string
+          issued_by: string
+          outlet_id?: string | null
+          profile_id: string
+          superseded_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          code_hash?: string
+          consumed_at?: string | null
+          expires_at?: string
+          id?: string
+          issued_at?: string
+          issued_by?: string
+          outlet_id?: string | null
+          profile_id?: string
+          superseded_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_invites_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_invites_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_invites_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alert_responses: {
         Row: {
           alert_id: string

@@ -58,13 +58,64 @@ describe('demo mode safety', () => {
     expect(await screen.findByText('Hello, Demo Staff')).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
-    // Every mock adapter method, including the ones no home calls yet.
+    // Every mock adapter method, including the ones no home calls yet — and
+    // emphatically including the writes. A demo that can provision an account
+    // is exactly the case where a real client would leak, so it is exercised
+    // here rather than assumed unreachable.
     const adapters = createMockAdapters()
     await adapters.outlets.listOutlets()
     await adapters.outlets.getOutlet(OUTLET_KALYANI_ID)
     await adapters.outlets.getOutlet('00000000-0000-4000-a000-00000000ffff')
 
+    const provisioned = await adapters.accounts.provision({
+      fullName: 'Demo Someone',
+      email: 'demo.someone@example.com',
+      role: 'employee',
+      outletId: OUTLET_KALYANI_ID,
+    })
+    await adapters.accounts.reissue(provisioned.profileId)
+    await adapters.accounts.setActive(provisioned.profileId, false)
+    await adapters.accounts.setActive(provisioned.profileId, true)
+    await adapters.accounts.listAccounts()
+
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('offers no sign out: there is no session to end', async () => {
+    const user = userEvent.setup()
+    renderDemo('/demo/owner')
+    await screen.findByTestId('demo-banner')
+
+    expect(screen.queryByTestId('account-menu')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
+
+    // Including on the Biller shell, whose chrome is built separately.
+    await user.click(screen.getByRole('link', { name: 'Counter' }))
+    await screen.findByTestId('shift-status')
+    expect(screen.queryByTestId('account-menu')).not.toBeInTheDocument()
+  })
+
+  it('runs the promoted People surface off mock data, writes included', async () => {
+    const user = userEvent.setup()
+    renderDemo('/demo/owner/people')
+
+    // `owner-people` is `live`, so it renders in demo mode too — served by the
+    // mock accounts adapter, with no path to Supabase.
+    expect(await screen.findByText('Demo Manager')).toBeInTheDocument()
+    expect(screen.getByText('Awaiting activation')).toBeInTheDocument()
+
+    // A write, through the real UI: the code panel appears and no request is made.
+    await user.click(screen.getAllByRole('button', { name: 'New code' })[0]!)
+    expect(await screen.findByTestId('issued-code')).toBeInTheDocument()
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(isDemoScopeActive()).toBe(true)
+  })
+
+  it('keeps account management away from the roles that never issue codes', async () => {
+    renderDemo('/demo/counter/people')
+    expect(await screen.findByText('That page does not exist')).toBeInTheDocument()
+    expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
   })
 
   it('arms the tripwire while the demo tree is mounted and stands down after', async () => {
