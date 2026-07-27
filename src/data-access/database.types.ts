@@ -1177,6 +1177,22 @@ export type Database = {
         }
       }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
+      issue_account_invite: {
+        Args: {
+          p_code_hash: string
+          p_issued_by: string
+          p_profile_id: string
+          p_valid_for: string
+        }
+        Returns: string
+      }
+      redeem_account_invite: {
+        Args: { p_code_hash: string; p_email: string; p_max_attempts?: number }
+        Returns: {
+          status: string
+          user_id: string
+        }[]
+      }
     }
     Enums: {
       alert_category:
