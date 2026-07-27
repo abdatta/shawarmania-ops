@@ -72,16 +72,29 @@ const defs = {
     nav: { label: 'People', icon: Users, order: 3 },
     state: 'live',
   },
+  /**
+   * The owner's own way into an outlet's roster. The Super Admin is outlet-less
+   * by constraint, so without an outlet picker here the one person who can
+   * create an outlet could not then put anyone on its staff list — and "why can
+   * this person not check in?" is a question asked by phone, to the owner
+   * (outlet-and-staff-setup, design D6).
+   */
+  'owner-employees': {
+    role: 'super_admin',
+    path: 'employees',
+    nav: { label: 'Staff', icon: ClipboardList, order: 4 },
+    state: 'live',
+  },
   'owner-comparison': {
     role: 'super_admin',
     path: 'comparison',
-    nav: { label: 'Compare', icon: BarChart3, order: 4 },
+    nav: { label: 'Compare', icon: BarChart3, order: 5 },
     state: 'hidden',
   },
   'owner-alerts': {
     role: 'super_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 5 },
+    nav: { label: 'Alerts', icon: Bell, order: 6 },
     state: 'hidden',
   },
   /** Drop into one outlet's Franchise Admin view, read-only. */

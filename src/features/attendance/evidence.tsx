@@ -3,7 +3,12 @@ import { CheckCircle2, MapPin, ShieldCheck, TriangleAlert } from 'lucide-react'
 import type { AttendanceEvent, AttendanceRecord } from '@/data-access/adapters'
 import { formatMetres, formatTime } from '@/domain'
 
-import { describeDay, isAwaitingOverride, isFlaggedCheckOut, isOutOfFence } from './attendance-record'
+import {
+  describeDay,
+  isAwaitingOverride,
+  isFlaggedCheckOut,
+  isOutOfFence,
+} from './attendance-record'
 
 /**
  * The evidence, rendered once and used by both sides.
@@ -52,7 +57,9 @@ export function EventEvidence({
             </span>
           )}
         </span>
-        {event.accuracyMetres !== null && <span>±{formatMetres(event.accuracyMetres)} accuracy</span>}
+        {event.accuracyMetres !== null && (
+          <span>±{formatMetres(event.accuracyMetres)} accuracy</span>
+        )}
         <span>{event.source === 'counter_tablet' ? 'counter tablet' : 'phone'}</span>
       </div>
     </div>

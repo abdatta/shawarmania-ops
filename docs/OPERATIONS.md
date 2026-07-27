@@ -1,6 +1,6 @@
 # Operations
 
-> The build and CI pipeline landed with `project-foundations`; hosting and the production Supabase project went live on 2026-07-27. **Outlet and staff setup is the current gap**: creating an outlet and linking an employee's login to their roster row both still need SQL, which `outlet-and-staff-setup` (#15) exists to fix. Steps below are marked where they are not yet built.
+> The build and CI pipeline landed with `project-foundations`; hosting and the production Supabase project went live on 2026-07-27. `outlet-and-staff-setup` (#15) closed the setup gap: **creating an outlet and linking an employee's login to their roster row are both done in the app**, and no step of onboarding needs SQL. The menu, tablet enrolment and the opening cash float are still to come, and the steps below say which.
 
 ## Environments
 
@@ -12,7 +12,7 @@
 
 **Production data is never copied into staging or local.** It contains customer and employee PII. When a production-shaped dataset is needed for debugging, generate a synthetic one at the same scale.
 
-**Production is provisioned and live** (2026-07-27), and the attendance schema and screens are deployed to it. **No real data is in it yet** — zero outlets, zero employees, zero attendance rows — because the setup chain that would put them there is not built (#15). Treat it as live regardless: the next thing written to it is real. Staging is still not provisioned; changes go from local to production, which is acceptable at this size and worth revisiting before the next franchise.
+**Production is provisioned and live** (2026-07-27), with the attendance and setup schema and screens deployed to it. Whatever is in it is real, and the first outlet created there is the business's own. Staging is still not provisioned; changes go from local to production, which is acceptable at this size and worth revisiting before the next franchise.
 
 ⚠️ **The Supabase account already contains a project that has nothing to do with this system.** It is not linked to this repo and must not be. `supabase link` against it, or pointing `.env` at it, would run this project's migrations into unrelated data. When staging and production are created, they are **new projects** — confirmed with the owner on 2026-07-26. If a command ever reports this repo as linked, that is a mistake to undo rather than a convenience to accept.
 
@@ -96,14 +96,14 @@ If a tablet needs forcing onto a new build, closing and reopening the app twice 
 
 The repeatable path. **If any step here requires a code change, that is a bug** — outlet number seven must be a data operation.
 
-> ⚠ **Steps 1, 4, 5, 6 and 7 are not fully built yet**, and the markers below say which. Until `outlet-and-staff-setup` (#15) lands, creating an outlet and linking an employee's login to their roster row both need SQL — which is exactly the defect #15 exists to remove, and the reason attendance shipped unreachable. Do not treat this list as a description of today.
+> ⚠ **Steps 4, 5 and 7 are not built yet** and are marked below. Everything else is done in the app — no SQL console, at any step. **Order matters**: an outlet has to exist before anybody can be assigned to it, and a roster row has to exist before anyone can be linked to it.
 
-1. **Create the outlet** (Super Admin → Outlets): name, address, contact, geofence radius, business-day cutover. *(Not built — #15. Insert the row by hand until then.)*
+1. **Create the outlet** (Super Admin → Outlets → *Add outlet*): short code, name, location label, address, phone, business-day cutover. On a brand-new installation this is the only thing there is to do, and the empty screen says so.
 2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → *Capture position here*). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the Outlets screen shows it as unsurveyed.
-3. **Create the Franchise Admin** (Super Admin → People) and hand over their one-time code. Needs the outlet to exist first — the form has no outlet to assign anyone to otherwise.
+3. **Create the Franchise Admin** (Super Admin → People) and hand over their one-time code. Needs the outlet to exist first — the form has no outlet to assign anyone to otherwise, and says so rather than showing an empty dropdown.
 4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ. *(Not built — demo only until #10.)*
-5. **Enrol the counter tablet**: sign in on the device, enrol it to this outlet, confirm it appears under Devices. *(Not built — #9.)*
-6. **Add employees and billers** (Access), handing each their one-time code — **then put each employee on the roster and link the two** (Admin → Staff). An account without a linked roster row can sign in and cannot check in, which looks like a bug to the person holding the phone. *(Linking not built — #15.)* Shift PINs arrive with counter-device enrolment; until then a Biller signs in with their own email on the tablet.
+5. **Enrol the counter tablet**: sign in on the device, enrol it to this outlet, confirm it appears under Devices. *(Not built — #9.)* Until then a Biller signs in with their own email on the tablet; shift PINs arrive with enrolment.
+6. **Add employees and billers** (Access), handing each their one-time code. When the role is Employee the form asks about the staff list — add them to it with a staff code, link them to somebody already on it, or leave them off — so the account and the roster row are created together. Anyone left off can be joined later from **Staff**, which shows on every row whether that person can actually check in. *An account with no linked roster row can sign in and cannot check in, and that looks like a bug to the person holding the phone*, so it is worth reading down the Staff list once before you finish.
 7. **Set the opening cash float** for the first business day. *(Not built — #12.)*
 8. **Verify isolation before going live** — sign in as the new Franchise Admin and confirm no other outlet is visible anywhere. This is a real step, not a formality: it is the last point at which a misconfiguration is cheap to fix.
 
@@ -170,13 +170,13 @@ linking this repo to it would run these migrations into someone else's data.
    which explains why and is safe to re-run. It is the only account ever
    created by hand.
 
-6. **Create the outlet rows** by hand for now — creating and editing outlets
-   lands with `outlet-onboarding`. Leave the coordinates null rather than
-   guessing them: an outlet with no position records check-ins without judging
-   them, which is honest, whereas a placeholder judges everyone against a point
-   nobody has stood on. Then **capture each position in the app**, standing at
-   the counter (Super Admin → Outlets), as described under *Onboarding a new
-   outlet* above.
+6. **Sign in as that Super Admin and create the outlets in the app** (Outlets →
+   *Add outlet*). Nothing here needs SQL, and nothing here should be given
+   coordinates from a map: create the row, then **capture each position
+   standing at the counter**, as described under *Onboarding a new franchise
+   outlet* above. An outlet with no position records check-ins without judging
+   them, which is honest; a placeholder judges everyone against a point nobody
+   has stood on.
 
 7. **Point the deployed site at the project.** Repository → Settings → Secrets
    and variables → Actions → *Variables*:
@@ -207,7 +207,9 @@ Accounts are admin-provisioned; there is no self-service signup, and nothing is 
 - **Super Admin → People** manages every account across all outlets.
 - **Franchise Admin → Access** manages Billers and Employees in that admin's own outlet, and nothing else. The limits are enforced server-side from the caller's own session, not by the form.
 
-**To give someone access**: add the account (name, email, role, outlet). A one-time code is shown **once**. Pass it on — WhatsApp is what the business already uses — and they set their own password at *Set your password* on the sign-in screen. There is nowhere to look the code up afterwards, so if the message is lost, issue a new one; doing so cancels the old code automatically.
+**To give someone access**: add the account (name, email, role, outlet). A one-time code is shown **once**, alongside the address that account will sign in with — read that address before you send anything, because it is the last cheap moment to catch a typo. Pass the code on — WhatsApp is what the business already uses — and they set their own password at *Set your password* on the sign-in screen. There is nowhere to look the code up afterwards, so if the message is lost, issue a new one; doing so cancels the old code automatically.
+
+**To fix a wrong email address**: *Change email* on their row. The one-time code you already handed over keeps working, so there is no need to issue another. Addresses are visible only to the admins who manage that account — never on the counter tablet.
 
 **To reset a password**: issue a new code for that account. That is the entire reset story.
 
@@ -242,10 +244,10 @@ No third-party analytics or session-recording tooling. The app handles customer 
 
 **Cash does not reconcile** → check for late-synced bills against a closed day (they surface as reconciliation exceptions), then cash expenses recorded under the wrong business date, then withdrawals not recorded.
 
-**Someone cannot sign in** → confirm the account is active (People, or Access for one outlet) and that the **email address** matches exactly. Sign-in gives one message for a wrong address and a wrong password alike, so it will not tell you which. Issue a new code if the password is forgotten; there is no self-service reset.
+**Someone cannot sign in** → **read the address on their row first** (People, or Access for one outlet). Sign-in gives one message for a wrong address and a wrong password alike, and *Set your password* does the same for a wrong address and a wrong code — so a mistyped address looks exactly like a broken code, and only the screen will tell you otherwise. Fix it with *Change email*; the code you already sent still works afterwards. Then confirm the account is active. Issue a new code if the password is forgotten; there is no self-service reset.
 
 **A one-time code will not work** → it expires after seven days, works once, is cancelled the moment a newer one is issued, and dies after five wrong attempts. All five look identical to the person typing it. The fix is always the same: issue a new code. Nobody can look the old one up — only a hash was ever stored.
 
 **Someone must lose access now** → deactivate the account (People / Access). It takes effect on their very next request, without waiting for their session to expire, and their open app ends its session and says why. Reactivating restores it; their password still works.
 
-**An employee cannot check in** → they are outside the geofence, or GPS will not fix. Use the counter tablet, or approve an override from the manager's phone.
+**An employee cannot check in** → in order: are they on the staff list, and is an app account linked to them? Staff says so on their row — a person with no linked account can sign in and will never see a check-in control. If the link is there, they are outside the geofence or GPS will not fix: use the counter tablet, or approve an override from the manager's phone. If check-in is refused outright with a message about the outlet being closed, somebody marked it closed on Outlets; reopening it is one tap and needs nothing else.

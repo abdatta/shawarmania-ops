@@ -9,6 +9,18 @@ import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from './outlets'
  * `DEMO_STAFF_EMPLOYEE_ID` is the roster row linked to the Employee persona's
  * profile, which is what makes the fourth role's walkthrough a working day
  * rather than an empty shell.
+ *
+ * **Two rows below are deliberately unfinished, and must stay that way.**
+ * Fixtures describing a business that is already configured are what let
+ * attendance ship unreachable — every test started from a wired-up world, and
+ * none asked how that world comes to exist (design D11):
+ *
+ *   * `DEMO_GRILLER_EMPLOYEE_ID` has no linked account, and an account of the
+ *     same name is waiting on Access. They are the pair a walkthrough joins.
+ *   * `DEMO_BLOCKED_EMPLOYEE_ID` has no account at all, and no account is
+ *     waiting for it — somebody on the payroll who simply does not use the app.
+ *
+ * Linking either of them in this file would delete the demonstration.
  */
 
 export const DEMO_STAFF_EMPLOYEE_ID = 'd2000000-0000-4000-a000-000000000001'

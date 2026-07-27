@@ -141,7 +141,11 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       status: adjudicate(
         seed.status,
         checkIn,
-        { latitude: outlet.latitude, longitude: outlet.longitude, radiusMetres: outlet.geofence_radius_m },
+        {
+          latitude: outlet.latitude,
+          longitude: outlet.longitude,
+          radiusMetres: outlet.geofence_radius_m,
+        },
         Boolean(seed.override),
       ),
       checkIn,
@@ -172,7 +176,8 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
   return {
     async getDay(employeeId, businessDate) {
       const record = records.find(
-        (candidate) => candidate.employeeId === employeeId && candidate.businessDate === businessDate,
+        (candidate) =>
+          candidate.employeeId === employeeId && candidate.businessDate === businessDate,
       )
       return record ? clone(record) : null
     },
@@ -194,7 +199,8 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
 
     async checkIn({ employeeId, outletId, businessDate, reading }) {
       const existing = records.find(
-        (candidate) => candidate.employeeId === employeeId && candidate.businessDate === businessDate,
+        (candidate) =>
+          candidate.employeeId === employeeId && candidate.businessDate === businessDate,
       )
       if (existing?.checkIn) {
         throw new AttendanceActionError(
@@ -217,7 +223,11 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         status: adjudicate(
           'present',
           event,
-          { latitude: outlet.latitude, longitude: outlet.longitude, radiusMetres: outlet.geofence_radius_m },
+          {
+            latitude: outlet.latitude,
+            longitude: outlet.longitude,
+            radiusMetres: outlet.geofence_radius_m,
+          },
           false,
         ),
         checkIn: event,

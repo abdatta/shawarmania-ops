@@ -26,6 +26,8 @@ Four roles. The governing rule: **a role's scope is enforced by Row-Level Securi
 | **People** |
 | Manage Franchise Admins | ✓ | — | — | — |
 | Manage Billers and Employees | ✓ | ✓ own outlet | — | — |
+| Manage the staff roster | ✓ any outlet | ✓ own outlet | — | R own row |
+| Link / unlink an account and a roster row | ✓ any outlet | ✓ own outlet | — | — |
 | Enrol / revoke counter device | ✓ | ✓ own outlet | — | — |
 | **Menu** |
 | View menu | R all | ✓ own outlet | R own outlet | — |
@@ -81,8 +83,34 @@ Password reset in v1 is admin-initiated: the admin issues a new one-time code. S
 | Create an account | any role, any outlet | Biller / Employee, own outlet only |
 | Issue a new code | any account but their own | own-outlet Billers and Employees |
 | Deactivate / reactivate | any account but their own | own-outlet Billers and Employees |
+| See / correct the sign-in address | any account, plus their own | own-outlet Billers and Employees, plus their own |
+
+**The sign-in address is deliberately not a column on `profiles`.** It lives in
+`auth.users`, which no client can read, and reaches an admin surface only
+through the privileged function — which refuses a Biller or an Employee
+outright rather than returning an empty result. The reason is specific:
+`profiles_select` lets a Biller read every profile in their own outlet, and a
+Biller *is a shared counter tablet* that whoever is standing at it can pick up.
+A column there would make every colleague's personal email address ambient on
+that device, permanently, as a side effect of an admin convenience.
+
+Correcting an address does **not** cancel an outstanding one-time code — the
+code is bound to the account, not the address, so it starts working the moment
+the address is right. This matters because a mistyped address is otherwise
+undiagnosable: redemption and sign-in both refuse an unknown address with the
+same uniform message they give a wrong password, so a typo presents as "the
+code is broken" and nothing contradicts it.
 
 Nobody manages their own account. Locking the only Super Admin out has no in-app recovery, and re-issuing your own code is meaningless while you are signed in.
+
+**Joining an account to a roster row** is a different kind of write and is governed differently. An app account (`profiles`) and a payroll roster row (`employees`) are separate records on purpose — a griller who never touches the app is on the roster and has no login; a relief manager may have a login and never appear on a payroll. The link between them is `employees.profile_id`, and it is what makes an Employee's own attendance findable at all.
+
+Unlike provisioning, that link is an **ordinary outlet-scoped write under Row-Level Security**, made by the admin's own session rather than by a privileged function. The service-role key exists because RLS cannot create an `auth.users` row; a roster column is not that, and moving it behind the key would put it beyond the policies that already govern it. Two rules are enforced by the database, not the form:
+
+- the linked account must belong to the **same outlet** as the roster row (`employee_profile_same_outlet`), and
+- one account may hold **at most one** roster row (`employees.profile_id` is unique) — two people sharing a login would make every attendance record ambiguous about who actually stood there.
+
+Unlinking stops that account reading or writing that roster row's attendance and **leaves every recorded day in place**, because the days were worked.
 
 ### Counter tablet — device enrolment + shift PIN
 

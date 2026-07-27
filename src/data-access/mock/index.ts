@@ -1,5 +1,5 @@
 import type { DataAdapters } from '../adapters'
-import { createMockAccountsAdapter } from './accounts'
+import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
 import { createMockAttendanceAdapter } from './attendance'
 import { createMockEmployeesAdapter } from './employees'
 import { createMockOutletsAdapter } from './outlets'
@@ -10,11 +10,16 @@ import { createMockOutletsAdapter } from './outlets'
  * real adapters — eslint enforces it (design D4, layer 1).
  */
 export function createMockAdapters(): DataAdapters {
+  // One account list, two adapters. Accounts and the roster describe the same
+  // people from different angles, and a demo where linking someone on Staff
+  // does not change what Access says would be demonstrating the wrong thing.
+  const accounts = createDemoAccounts()
+
   return {
     outlets: createMockOutletsAdapter(),
-    accounts: createMockAccountsAdapter(),
+    accounts: createMockAccountsAdapter(accounts),
     attendance: createMockAttendanceAdapter(),
-    employees: createMockEmployeesAdapter(),
+    employees: createMockEmployeesAdapter(accounts),
   }
 }
 

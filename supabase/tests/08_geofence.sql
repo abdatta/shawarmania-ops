@@ -42,6 +42,23 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- Independence from whatever ran before. supabase/tests/rest/ writes real,
+-- persistent check-ins to this same local database on today's business date,
+-- and so does this file, for the same seeded employee — so after an
+-- `npm run test:rls` this would die on a unique-constraint collision that has
+-- nothing to do with the geofence.
+--
+-- Attendance is append-only, correctly, so clearing it means suspending that
+-- guard for the length of this transaction. Scoped so it can never reach a
+-- seeded row: everything in seed.sql is dated yesterday or the day before. The
+-- file rolls back regardless.
+alter table public.attendance disable trigger attendance_no_delete;
+delete from public.attendance
+ where business_date = public.app_business_date(now(), time '04:00')
+   and business_date not in (current_date - 1, current_date - 2);
+alter table public.attendance enable trigger attendance_no_delete;
+
+-- ---------------------------------------------------------------------------
 -- The pinning table.
 
 select is(round(public.app_distance_m(22.9750, 88.4345, 22.9750, 88.4345)::numeric, 3),

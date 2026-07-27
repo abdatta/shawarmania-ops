@@ -119,9 +119,7 @@ export function OutletAttendance() {
       employee,
       record: records.find((record) => record.employeeId === employee.id) ?? null,
     }))
-  const awaiting = rows.filter(
-    (row) => row.record && isAwaitingOverride(row.record, radius),
-  ).length
+  const awaiting = rows.filter((row) => row.record && isAwaitingOverride(row.record, radius)).length
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -157,7 +155,11 @@ export function OutletAttendance() {
       )}
 
       {error && (
-        <p role="alert" data-testid="attendance-error" className="mb-3 text-sm font-semibold text-danger">
+        <p
+          role="alert"
+          data-testid="attendance-error"
+          className="mb-3 text-sm font-semibold text-danger"
+        >
           {error}
         </p>
       )}

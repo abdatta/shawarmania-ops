@@ -86,9 +86,19 @@ describe('resolveBusinessDate', () => {
     ['2026-07-25T14:30:00Z', '04:00', '2026-07-25', 'an afternoon bill, 20:00 IST'],
     ['2026-07-25T18:50:00Z', '04:00', '2026-07-25', '00:20 IST — still the previous business day'],
     ['2026-07-25T22:25:00Z', '04:00', '2026-07-25', '03:55 IST — five minutes before cutover'],
-    ['2026-07-25T22:30:00Z', '04:00', '2026-07-26', '04:00 IST — the cutover itself starts the new day'],
+    [
+      '2026-07-25T22:30:00Z',
+      '04:00',
+      '2026-07-26',
+      '04:00 IST — the cutover itself starts the new day',
+    ],
     ['2026-07-25T22:35:00Z', '04:00', '2026-07-26', '04:05 IST — after cutover'],
-    ['2026-07-25T18:50:00Z', '00:00', '2026-07-26', 'with no cutover, IST midnight is the boundary'],
+    [
+      '2026-07-25T18:50:00Z',
+      '00:00',
+      '2026-07-26',
+      'with no cutover, IST midnight is the boundary',
+    ],
     ['2026-07-25T14:30:00Z', '04:00:00', '2026-07-25', 'HH:MM:SS cutovers parse too'],
   ])('%s with cutover %s resolves to %s (%s)', (instant, cutover, expected) => {
     expect(resolveBusinessDate(instant, cutover)).toBe(expected)

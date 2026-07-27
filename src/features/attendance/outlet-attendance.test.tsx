@@ -136,9 +136,7 @@ describe('the outlet attendance day', () => {
     expect(screen.getByRole('button', { name: 'Next day' })).toBeDisabled()
 
     await user.click(screen.getByRole('button', { name: 'Previous day' }))
-    await waitFor(() =>
-      expect(screen.getByTestId('day-label')).not.toHaveTextContent('Today'),
-    )
+    await waitFor(() => expect(screen.getByTestId('day-label')).not.toHaveTextContent('Today'))
     expect(screen.getByRole('button', { name: 'Next day' })).toBeEnabled()
   })
 

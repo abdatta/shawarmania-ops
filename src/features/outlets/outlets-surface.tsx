@@ -1,6 +1,7 @@
 import { Crosshair, LoaderCircle, MapPin, MapPinOff, Store, TriangleAlert } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
+import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { PageHeader } from '@/components/layout/page-header'
@@ -9,6 +10,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useAdapters, type Tables } from '@/data-access'
+import { DataActionError, type NewOutlet } from '@/data-access/adapters'
 import {
   captureQuality,
   CAPTURE_ACCURACY_GOOD_M,
@@ -16,27 +18,107 @@ import {
   formatDateTime,
   formatMetres,
 } from '@/domain'
-import { watchBestPosition, type GeolocationFailureKind, type PositionReading } from '@/lib/geolocation'
+import {
+  watchBestPosition,
+  type GeolocationFailureKind,
+  type PositionReading,
+} from '@/lib/geolocation'
 
 /**
- * Outlets — and, the reason this screen exists now, capturing where each one
- * actually is.
+ * Outlets — creating them, editing them, and capturing where each one actually
+ * is.
+ *
+ * This is the first screen an owner sees on an empty database, and until
+ * outlet-and-staff-setup it was a dead end: it could capture a position onto an
+ * outlet but never produce one, so the whole product sat behind a row nobody
+ * could insert. The empty state is therefore the important state, and it is an
+ * instruction rather than a blank (design D2).
  *
  * A geofence built from a map search is a geofence built on a guess, and every
- * future check-in is judged against it. So the position is read from the device
- * standing at the counter, and the quality of that reading is shown before
- * anything is saved and stored alongside it afterwards.
+ * future check-in is judged against it. So the position is still read from the
+ * device standing at the counter — there is deliberately no field for typing
+ * coordinates in — and the quality of that reading is shown before anything is
+ * saved and stored alongside it afterwards.
  */
+
+interface Draft {
+  code: string
+  name: string
+  locationLabel: string
+  addressLine1: string
+  addressLine2: string
+  city: string
+  district: string
+  pincode: string
+  phone: string
+  businessDayCutover: string
+}
+
+const EMPTY_DRAFT: Draft = {
+  code: '',
+  name: '',
+  locationLabel: '',
+  addressLine1: '',
+  addressLine2: '',
+  city: '',
+  district: '',
+  pincode: '',
+  phone: '',
+  businessDayCutover: '04:00',
+}
+
+/** `04:00:00` from Postgres, `04:00` in a time input. */
+function toTimeInput(value: string): string {
+  return value.slice(0, 5)
+}
+
+function toDraft(outlet: Tables<'outlets'>): Draft {
+  return {
+    code: outlet.code,
+    name: outlet.name,
+    locationLabel: outlet.location_label,
+    addressLine1: outlet.address_line1 ?? '',
+    addressLine2: outlet.address_line2 ?? '',
+    city: outlet.city ?? '',
+    district: outlet.district ?? '',
+    pincode: outlet.pincode ?? '',
+    phone: outlet.phone ?? '',
+    businessDayCutover: toTimeInput(outlet.business_day_cutover),
+  }
+}
+
+function toPayload(draft: Draft): NewOutlet {
+  return {
+    code: draft.code,
+    name: draft.name,
+    locationLabel: draft.locationLabel,
+    addressLine1: draft.addressLine1,
+    addressLine2: draft.addressLine2,
+    city: draft.city,
+    district: draft.district,
+    pincode: draft.pincode,
+    phone: draft.phone,
+    businessDayCutover: draft.businessDayCutover,
+  }
+}
+
 export function OutletsSurface() {
   const { outlets: adapter } = useAdapters()
   const [outlets, setOutlets] = useState<Tables<'outlets'>[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [capturing, setCapturing] = useState<Tables<'outlets'> | null>(null)
+  const [editing, setEditing] = useState<Tables<'outlets'> | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
+  const [pendingClosure, setPendingClosure] = useState<Tables<'outlets'> | null>(null)
 
   useEffect(() => {
     let active = true
     void adapter
-      .listOutlets()
+      // The owner's management view is the one place a closed outlet must
+      // still be visible — otherwise reactivating it would be impossible.
+      .listOutlets({ includeInactive: true })
       .then((list) => {
         if (active) setOutlets(list)
       })
@@ -48,15 +130,74 @@ export function OutletsSurface() {
     }
   }, [adapter])
 
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true)
+    setError(null)
+    try {
+      await action()
+      setOutlets(await adapter.listOutlets({ includeInactive: true }))
+    } catch (cause) {
+      setError(
+        cause instanceof DataActionError
+          ? cause.message
+          : 'That did not work. Try again in a moment.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function openAdd() {
+    setEditing(null)
+    setDraft(EMPTY_DRAFT)
+    setError(null)
+    setFormOpen(true)
+  }
+
+  function openEdit(outlet: Tables<'outlets'>) {
+    setEditing(outlet)
+    setDraft(toDraft(outlet))
+    setError(null)
+    setFormOpen(true)
+  }
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    await run(async () => {
+      if (editing) {
+        await adapter.updateOutlet(editing.id, toPayload(draft))
+      } else {
+        await adapter.createOutlet(toPayload(draft))
+      }
+      setFormOpen(false)
+    })
+  }
+
+  const addButton = (
+    <button
+      type="button"
+      className={buttonVariants({ size: 'phone' })}
+      onClick={openAdd}
+      data-testid="add-outlet"
+    >
+      Add outlet
+    </button>
+  )
+
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title="Outlets"
         subtitle="Where each outlet is, and how far staff may be when they check in."
+        action={outlets && outlets.length > 0 ? addButton : undefined}
       />
 
       {error && (
-        <p role="alert" data-testid="outlets-error" className="mb-3 text-sm font-semibold text-danger">
+        <p
+          role="alert"
+          data-testid="outlets-error"
+          className="mb-3 text-sm font-semibold text-danger"
+        >
           {error}
         </p>
       )}
@@ -64,14 +205,59 @@ export function OutletsSurface() {
       {outlets === null ? (
         <p className="text-sm text-content-muted">Loading…</p>
       ) : outlets.length === 0 ? (
-        <EmptyState icon={Store} title="No outlets yet." />
+        <EmptyState
+          icon={Store}
+          title="Nothing exists yet — start with the shop. An outlet has to exist before anyone can be given an account, put on the staff list, or check in."
+          action={addButton}
+        />
       ) : (
         <div data-testid="outlet-list" className="space-y-3">
           {outlets.map((outlet) => (
-            <OutletCard key={outlet.id} outlet={outlet} onCapture={() => setCapturing(outlet)} />
+            <OutletCard
+              key={outlet.id}
+              outlet={outlet}
+              busy={busy}
+              onCapture={() => setCapturing(outlet)}
+              onEdit={() => openEdit(outlet)}
+              onToggleActive={() => {
+                if (outlet.is_active) setPendingClosure(outlet)
+                else void run(() => adapter.updateOutlet(outlet.id, { isActive: true }))
+              }}
+            />
           ))}
         </div>
       )}
+
+      {/* Keyed so opening the sheet for a different shop remounts rather than
+          leaving a previous outlet's values behind. */}
+      <OutletFormSheet
+        key={editing?.id ?? 'new'}
+        open={formOpen}
+        editing={editing}
+        draft={draft}
+        busy={busy}
+        onChange={setDraft}
+        onClose={() => setFormOpen(false)}
+        onSubmit={onSubmit}
+      />
+
+      <ConfirmDialog
+        open={pendingClosure !== null}
+        title="Mark this outlet closed?"
+        consequence={
+          pendingClosure
+            ? `${pendingClosure.name} stops appearing where accounts are assigned, and staff can no longer check in there — though anyone mid-shift can still check out. Nothing is deleted: the staff list, the app accounts and every recorded day stay exactly as they are, and nobody's login is revoked. Reopening it is one tap.`
+            : ''
+        }
+        confirmLabel="Mark closed"
+        danger
+        onClose={() => setPendingClosure(null)}
+        onConfirm={() => {
+          const target = pendingClosure
+          setPendingClosure(null)
+          if (target) void run(() => adapter.updateOutlet(target.id, { isActive: false }))
+        }}
+      />
 
       {/*
         Keyed by the outlet: opening the sheet for a different shop starts from
@@ -95,20 +281,36 @@ export function OutletsSurface() {
 
 function OutletCard({
   outlet,
+  busy,
   onCapture,
+  onEdit,
+  onToggleActive,
 }: {
   outlet: Tables<'outlets'>
+  busy: boolean
   onCapture: () => void
+  onEdit: () => void
+  onToggleActive: () => void
 }) {
   const surveyed = outlet.location_captured_at !== null
   const positioned = outlet.latitude !== null && outlet.longitude !== null
 
   return (
-    <Card className="space-y-3">
+    <Card className="space-y-3" data-testid={`outlet-${outlet.code}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-bold text-content">{outlet.name}</h2>
         <span className="text-xs text-content-muted">{outlet.location_label}</span>
       </div>
+
+      {!outlet.is_active && (
+        <p
+          data-testid={`closed-${outlet.code}`}
+          className="rounded-lg border border-border bg-surface-raised p-2 text-xs font-semibold text-content-muted"
+        >
+          Marked closed. Nobody can check in here, and this outlet is not offered when accounts are
+          assigned. Everything recorded is still here.
+        </p>
+      )}
 
       {surveyed ? (
         <div className="space-y-1 text-sm">
@@ -137,14 +339,168 @@ function OutletCard({
       )}
 
       <p className="text-xs text-content-muted">
-        Staff may check in within {formatMetres(outlet.geofence_radius_m)} of this point.
+        Staff may check in within {formatMetres(outlet.geofence_radius_m)} of this point. The
+        business day starts at {toTimeInput(outlet.business_day_cutover)}.
       </p>
 
-      <Button variant={surveyed ? 'secondary' : 'primary'} size="phone" onClick={onCapture}>
-        <Crosshair aria-hidden size={16} />
-        {surveyed ? 'Capture again' : 'Capture position here'}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button variant={surveyed ? 'secondary' : 'primary'} size="phone" onClick={onCapture}>
+          <Crosshair aria-hidden size={16} />
+          {surveyed ? 'Capture again' : 'Capture position here'}
+        </Button>
+        <Button variant="ghost" size="phone" disabled={busy} onClick={onEdit}>
+          Edit
+        </Button>
+        <Button variant="ghost" size="phone" disabled={busy} onClick={onToggleActive}>
+          {outlet.is_active ? 'Mark closed' : 'Reopen'}
+        </Button>
+      </div>
     </Card>
+  )
+}
+
+function OutletFormSheet({
+  open,
+  editing,
+  draft,
+  busy,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean
+  editing: Tables<'outlets'> | null
+  draft: Draft
+  busy: boolean
+  onChange: (draft: Draft) => void
+  onClose: () => void
+  onSubmit: (event: FormEvent) => void
+}) {
+  const set = (patch: Partial<Draft>) => onChange({ ...draft, ...patch })
+
+  return (
+    <FormSheet
+      open={open}
+      onClose={onClose}
+      title={editing ? `Edit ${editing.name}` : 'Add outlet'}
+      footer={
+        <button
+          type="submit"
+          form="outlet-form"
+          disabled={busy}
+          className={`${buttonVariants({ size: 'phone' })} w-full`}
+        >
+          {busy ? 'Saving…' : editing ? 'Save changes' : 'Create outlet'}
+        </button>
+      }
+    >
+      <form id="outlet-form" onSubmit={onSubmit} className="space-y-4" noValidate>
+        <Field label="Name" id="outlet-name">
+          <Input
+            id="outlet-name"
+            required
+            value={draft.name}
+            placeholder="Shawarmania Kalyani"
+            onChange={(event) => set({ name: event.target.value })}
+          />
+        </Field>
+
+        <Field label="Short code" id="outlet-code">
+          <Input
+            id="outlet-code"
+            required
+            autoCapitalize="none"
+            spellCheck={false}
+            value={draft.code}
+            placeholder="kalyani"
+            onChange={(event) => set({ code: event.target.value })}
+          />
+          <p className="text-xs text-content-muted">
+            How you refer to this shop in a sentence. It has to be different from every other
+            outlet&rsquo;s.
+          </p>
+        </Field>
+
+        <Field label="Location label" id="outlet-location-label">
+          <Input
+            id="outlet-location-label"
+            required
+            value={draft.locationLabel}
+            placeholder="Kalyani — Central Park"
+            onChange={(event) => set({ locationLabel: event.target.value })}
+          />
+        </Field>
+
+        <Field label="Address (optional)" id="outlet-address1">
+          <Input
+            id="outlet-address1"
+            value={draft.addressLine1}
+            placeholder="Street and landmark"
+            onChange={(event) => set({ addressLine1: event.target.value })}
+          />
+          <Input
+            aria-label="Address line 2"
+            className="mt-2"
+            value={draft.addressLine2}
+            placeholder="Line 2"
+            onChange={(event) => set({ addressLine2: event.target.value })}
+          />
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <Input
+              aria-label="City"
+              value={draft.city}
+              placeholder="City"
+              onChange={(event) => set({ city: event.target.value })}
+            />
+            <Input
+              aria-label="District"
+              value={draft.district}
+              placeholder="District"
+              onChange={(event) => set({ district: event.target.value })}
+            />
+          </div>
+          <Input
+            aria-label="PIN code"
+            className="mt-2"
+            inputMode="numeric"
+            value={draft.pincode}
+            placeholder="PIN code"
+            onChange={(event) => set({ pincode: event.target.value })}
+          />
+        </Field>
+
+        <Field label="Phone (optional)" id="outlet-phone">
+          <Input
+            id="outlet-phone"
+            type="tel"
+            value={draft.phone}
+            onChange={(event) => set({ phone: event.target.value })}
+          />
+        </Field>
+
+        <Field label="The business day starts at" id="outlet-cutover">
+          <Input
+            id="outlet-cutover"
+            type="time"
+            required
+            value={draft.businessDayCutover}
+            onChange={(event) => set({ businessDayCutover: event.target.value })}
+          />
+          <p className="text-xs text-content-muted">
+            Everything rung up after midnight but before this time still counts as the previous
+            day&rsquo;s trading. Changing it never moves anything already recorded — each day is
+            stamped when it happens, not worked out afterwards.
+          </p>
+        </Field>
+
+        {!editing && (
+          <p className="rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted">
+            You will capture where this outlet is afterwards, standing at the counter. Until then
+            its check-ins are recorded but not measured against a geofence.
+          </p>
+        )}
+      </form>
+    </FormSheet>
   )
 }
 
@@ -182,7 +538,9 @@ function CaptureSheet({
       onSample: (reading) => setState({ kind: 'sampling', best: reading }),
     })
     setState(
-      result.ok ? { kind: 'captured', reading: result.reading } : { kind: 'failed', failure: result.kind },
+      result.ok
+        ? { kind: 'captured', reading: result.reading }
+        : { kind: 'failed', failure: result.kind },
     )
   }
 
@@ -237,7 +595,14 @@ function CaptureSheet({
             onClick={() => void takeReading()}
             data-testid="take-reading"
           >
-            {state.kind === 'sampling' ? 'Reading…' : 'Take a reading'}
+            {state.kind === 'sampling'
+              ? 'Reading…'
+              : // A reading exists but was refused, so this is a retry and says
+                // so. Calling it "Take a reading" next to a result on screen
+                // reads as a second, different thing.
+                captured
+                ? 'Take another reading'
+                : 'Take a reading'}
           </Button>
         )
       }
@@ -314,33 +679,56 @@ function CaptureSheet({
               </p>
             )}
 
-            <div className="space-y-1">
-              <label htmlFor="capture-radius" className="block text-sm font-semibold">
-                How far from here may staff check in?
-              </label>
-              <Input
-                id="capture-radius"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                value={radius}
-                onChange={(event) => setRadius(event.target.value)}
-              />
-              <p className="text-xs text-content-muted">
-                Metres. 150 is the agreed default; widen it if the shop sits back from the road.
-              </p>
-            </div>
+            {/*
+              A reading too loose to save gets the evidence and the reason and
+              nothing else. The radius configures a save that cannot happen, and
+              the retry is already the footer — offering either here put two
+              controls for one action on the screen at once, which read as two
+              different actions.
+            */}
+            {quality !== 'unusable' && (
+              <>
+                <div className="space-y-1">
+                  <label htmlFor="capture-radius" className="block text-sm font-semibold">
+                    How far from here may staff check in?
+                  </label>
+                  <Input
+                    id="capture-radius"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    value={radius}
+                    onChange={(event) => setRadius(event.target.value)}
+                  />
+                  <p className="text-xs text-content-muted">
+                    Metres. 150 is the agreed default; widen it if the shop sits back from the road.
+                  </p>
+                </div>
 
-            <button
-              type="button"
-              className={`${buttonVariants({ variant: 'ghost', size: 'phone' })} w-full`}
-              onClick={() => void takeReading()}
-            >
-              Take another reading
-            </button>
+                <button
+                  type="button"
+                  className={`${buttonVariants({ variant: 'ghost', size: 'phone' })} w-full`}
+                  onClick={() => void takeReading()}
+                  data-testid="retake-reading"
+                >
+                  Take another reading
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
     </FormSheet>
+  )
+}
+
+function Field({ label, id, children }: { label: string; id: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="block text-sm font-semibold">
+        {label}
+      </label>
+      {children}
+    </div>
   )
 }

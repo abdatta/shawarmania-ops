@@ -30,15 +30,21 @@ const PERSONAS = {
  */
 const RUN = `${Date.now().toString(36)}`
 let seq = 0
-function freshPerson(label: string): { email: string; name: string } {
+function freshPerson(label: string): { email: string; name: string; staffCode: string } {
   const id = `${RUN}-${seq++}`
-  return { email: `e2e.${label}.${id}@example.com`, name: `E2E ${label} ${id}` }
+  return {
+    email: `e2e.${label}.${id}@example.com`,
+    name: `E2E ${label} ${id}`,
+    // Unique per run for the same reason the address is: a staff code is
+    // unique per outlet, and this suite writes to a database it does not reset.
+    staffCode: `E2E-${id}`.toUpperCase(),
+  }
 }
 
 /** Fills the form and submits. Says nothing about whether it worked. */
 async function attemptSignIn(page: Page, email: string, password: string) {
   await page.goto('sign-in')
-  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Email', { exact: true }).fill(email)
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
 }
@@ -109,7 +115,7 @@ test.describe('signing in', () => {
     await page.goto('admin/people')
     await expect(page).toHaveURL(/\/sign-in$/)
 
-    await page.getByLabel('Email').fill(PERSONAS.admin.email)
+    await page.getByLabel('Email', { exact: true }).fill(PERSONAS.admin.email)
     await page.getByLabel('Password').fill(PASSWORD)
     await page.getByRole('button', { name: 'Sign in' }).click()
 
@@ -147,12 +153,20 @@ test.describe('provisioning, end to end', () => {
 
     await page.getByRole('button', { name: 'Add account' }).click()
     await page.getByLabel('Full name').fill(person.name)
-    await page.getByLabel('Email').fill(person.email)
+    await page.getByLabel('Email', { exact: true }).fill(person.email)
+
+    // Provisioning an Employee asks about the staff list, and refuses to write
+    // a roster row with no staff code rather than inventing one. Answering it
+    // is what makes this account a person who can actually check in, so the
+    // walk answers it — against the real database, through the real form.
+    await page.getByRole('button', { name: 'Create and issue a code' }).click()
+    await expect(page.getByTestId('accounts-error')).toContainText('A staff code is needed')
+    await page.getByLabel('Staff code').fill(person.staffCode)
     await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
     const panel = page.getByTestId('issued-code')
     await expect(panel).toBeVisible()
-    const code = (await panel.locator('p').nth(1).innerText()).trim()
+    const code = (await panel.getByTestId('issued-code-value').innerText()).trim()
     expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
     await expect(panel).toContainText('shown once and cannot be looked up again')
 
@@ -170,7 +184,7 @@ test.describe('provisioning, end to end', () => {
     const context = await browser.newContext()
     const theirPhone = await context.newPage()
     await theirPhone.goto('activate')
-    await theirPhone.getByLabel('Email').fill(person.email)
+    await theirPhone.getByLabel('Email', { exact: true }).fill(person.email)
     await theirPhone.getByLabel('One-time code').fill(code)
     await theirPhone.getByLabel('New password').fill(NEW_PASSWORD)
     await theirPhone.getByRole('button', { name: 'Set password and sign in' }).click()
@@ -178,11 +192,19 @@ test.describe('provisioning, end to end', () => {
     await expect(theirPhone).toHaveURL(/\/staff$/)
     await expect(theirPhone.getByText(`Hello, ${person.name}`)).toBeVisible()
 
+    // The whole point of the chain: an account provisioned minutes ago, on a
+    // roster row created in the same breath, arrives at a working check-in
+    // rather than at "you are not on the staff list". That sentence is what a
+    // real employee saw before outlet-and-staff-setup, and it is the one thing
+    // no earlier test could have caught — the fixtures were always pre-linked.
+    await expect(theirPhone.getByTestId('attendance-action')).toBeVisible()
+    await expect(theirPhone.getByText(/not on .* staff list/)).toHaveCount(0)
+
     // The code is spent: a second person with the same message gets nowhere.
     const replayContext = await browser.newContext()
     const replay = await replayContext.newPage()
     await replay.goto('activate')
-    await replay.getByLabel('Email').fill(person.email)
+    await replay.getByLabel('Email', { exact: true }).fill(person.email)
     await replay.getByLabel('One-time code').fill(code)
     await replay.getByLabel('New password').fill('a-different-password')
     await replay.getByRole('button', { name: 'Set password and sign in' }).click()
@@ -218,17 +240,22 @@ test.describe('deactivation', () => {
     await page.goto('owner/people')
     await page.getByRole('button', { name: 'Add account' }).click()
     await page.getByLabel('Full name').fill(person.name)
-    await page.getByLabel('Email').fill(person.email)
+    await page.getByLabel('Email', { exact: true }).fill(person.email)
     await page.getByLabel('Outlet').selectOption({ label: 'Shawarmania Kalyani' })
+    // A login, not a payroll employee — which is a real answer to the staff-list
+    // question and the one this test wants, since deactivation is about the
+    // session and nothing else. It also means the third option is exercised
+    // against the real database somewhere.
+    await page.getByLabel('Not on the staff list').check()
     await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
-    const code = (await page.getByTestId('issued-code').locator('p').nth(1).innerText()).trim()
+    const code = (await page.getByTestId('issued-code-value').innerText()).trim()
 
     // …who activates on their own phone and is happily signed in.
     const context = await browser.newContext()
     const theirPhone = await context.newPage()
     await theirPhone.goto('activate')
-    await theirPhone.getByLabel('Email').fill(person.email)
+    await theirPhone.getByLabel('Email', { exact: true }).fill(person.email)
     await theirPhone.getByLabel('One-time code').fill(code)
     await theirPhone.getByLabel('New password').fill(NEW_PASSWORD)
     await theirPhone.getByRole('button', { name: 'Set password and sign in' }).click()
@@ -255,7 +282,7 @@ test.describe('deactivation', () => {
     )
 
     // And their password no longer gets them anywhere.
-    await theirPhone.getByLabel('Email').fill(person.email)
+    await theirPhone.getByLabel('Email', { exact: true }).fill(person.email)
     await theirPhone.getByLabel('Password').fill(NEW_PASSWORD)
     await theirPhone.getByRole('button', { name: 'Sign in' }).click()
     await expect(theirPhone.getByTestId('session-ended')).toBeVisible()

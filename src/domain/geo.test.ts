@@ -35,7 +35,12 @@ export const DISTANCE_FIXTURES = [
     to: [22.9412, 88.4288],
     metres: 602.913168,
   },
-  { name: 'a kilometre due north', from: [22.975, 88.4345], to: [22.984, 88.4345], metres: 1000.75434 },
+  {
+    name: 'a kilometre due north',
+    from: [22.975, 88.4345],
+    to: [22.984, 88.4345],
+    metres: 1000.75434,
+  },
   {
     name: 'between the two outlets',
     from: [22.975, 88.4345],
@@ -101,8 +106,9 @@ describe('evaluateFence', () => {
   })
 
   it('reports an outlet with no captured position rather than guessing', () => {
-    expect(evaluateFence({ latitude: null, longitude: null, radiusMetres: 150 }, at([22.975, 88.4345])))
-      .toEqual({ kind: 'unreferenced' })
+    expect(
+      evaluateFence({ latitude: null, longitude: null, radiusMetres: 150 }, at([22.975, 88.4345])),
+    ).toEqual({ kind: 'unreferenced' })
   })
 
   it('treats a half-captured position as uncaptured', () => {

@@ -26,8 +26,7 @@ export interface PositionReading {
 export type GeolocationFailureKind = 'unsupported' | 'denied' | 'unavailable' | 'timeout'
 
 export type PositionResult =
-  | { ok: true; reading: PositionReading }
-  | { ok: false; kind: GeolocationFailureKind }
+  { ok: true; reading: PositionReading } | { ok: false; kind: GeolocationFailureKind }
 
 /** Long enough for a cold GPS fix, short enough that nobody waits at a counter wondering. */
 const CHECK_IN_TIMEOUT_MS = 10_000

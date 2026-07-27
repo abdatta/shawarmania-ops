@@ -39,9 +39,8 @@ function atPosition(coords: { latitude: number; longitude: number; accuracy: num
 }
 
 function positionFails(code: number) {
-  getCurrentPosition.mockImplementation(
-    (_ok: PositionCallback, onError: PositionErrorCallback) =>
-      onError({ code } as GeolocationPositionError),
+  getCurrentPosition.mockImplementation((_ok: PositionCallback, onError: PositionErrorCallback) =>
+    onError({ code } as GeolocationPositionError),
   )
 }
 

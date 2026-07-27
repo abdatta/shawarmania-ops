@@ -119,9 +119,15 @@ select is(
   'both real outlets are seeded'
 );
 
+-- Named rather than counted across the table: the claim is about the two real
+-- shops, and outlets are creatable in the app now, so a bare count would also
+-- be answering "has anything else made an outlet on this database" — a
+-- different question with a different answer on every run.
 select is(
   (select count(*) from public.outlets
-    where business_day_cutover = time '04:00' and geofence_radius_m = 150),
+    where id in ('00000000-0000-4000-a000-000000000001',
+                 '00000000-0000-4000-a000-000000000002')
+      and business_day_cutover = time '04:00' and geofence_radius_m = 150),
   2::bigint,
   'owner-confirmed cutover 04:00 and 150 m geofence on both outlets'
 );

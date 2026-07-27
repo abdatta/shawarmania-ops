@@ -109,5 +109,19 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
+    /**
+     * Above Vitest's 5s default, and not because anything here is slow.
+     *
+     * These are component tests: a jsdom environment per file, several files in
+     * parallel, and `userEvent` typing one key at a time through a real event
+     * loop. Under that contention a test that does nothing but fill four fields
+     * can drift past five seconds on a busy machine — and it then fails with a
+     * timeout that says nothing about the thing it was asserting. That is the
+     * worst kind of red: it teaches people to re-run rather than to look.
+     *
+     * The number is a ceiling for a stuck test, not a budget to spend. A test
+     * that genuinely needs seconds is a test worth rewriting.
+     */
+    testTimeout: 20_000,
   },
 })

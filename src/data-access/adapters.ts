@@ -27,11 +27,61 @@ export interface OutletLocation {
   radiusMetres: number
 }
 
+/**
+ * A refusal a surface can say something useful about, rather than putting a
+ * raw Postgres message in front of someone standing at a counter. The `code`
+ * is machine-readable; anything unrecognised surfaces as a generic failure so
+ * that an internal string never leaks into the UI.
+ *
+ * One base for every domain: the per-domain classes below extend it and keep
+ * their names, and a surface that catches `DataActionError` catches all of
+ * them (design D8).
+ */
+export class DataActionError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'DataActionError'
+  }
+}
+
+/** A new outlet. `code` is the short handle people say out loud. */
+export interface NewOutlet {
+  code: string
+  name: string
+  locationLabel: string
+  addressLine1?: string | null
+  addressLine2?: string | null
+  city?: string | null
+  district?: string | null
+  pincode?: string | null
+  phone?: string | null
+  /** `HH:MM`, the per-outlet business-day boundary. */
+  businessDayCutover?: string
+}
+
+export type OutletPatch = Partial<
+  NewOutlet & {
+    isActive: boolean
+  }
+>
+
 export interface OutletsAdapter {
-  /** Active outlets, for the surfaces a role can see. */
-  listOutlets(): Promise<Tables<'outlets'>[]>
+  /**
+   * Outlets, for the surfaces a role can see. Active only by default, because
+   * every caller but the owner's management view is asking "which outlets are
+   * trading?" — an assignment list that offers a closed shop is offering a
+   * mistake.
+   */
+  listOutlets(options?: { includeInactive?: boolean }): Promise<Tables<'outlets'>[]>
   /** One outlet by id, or null if it does not exist. */
   getOutlet(id: string): Promise<Tables<'outlets'> | null>
+  /** Super Admin only — enforced by `outlets_insert`, not by the caller. */
+  createOutlet(outlet: NewOutlet): Promise<Tables<'outlets'>>
+  /** Super Admin only — enforced by `outlets_update`. */
+  updateOutlet(id: string, patch: OutletPatch): Promise<Tables<'outlets'>>
   /**
    * Record an outlet's surveyed position. Super Admin only — enforced by the
    * `outlets_update` policy, not by whether this method is offered (design D4).
@@ -45,6 +95,17 @@ export type AppRole = Tables<'profiles'>['role']
 export interface AccountSummary {
   id: string
   fullName: string
+  /**
+   * The address this account signs in with, or null when the caller may not
+   * see it — a Biller on the counter tablet gets null for everyone, because
+   * colleagues' contact details have no business being ambient on a shared
+   * device (design D12).
+   *
+   * It is not a column on `profiles`; it lives in `auth.users` and reaches
+   * here only through the privileged function. Null therefore also covers "the
+   * lookup failed", which degrades the list to names rather than blanking it.
+   */
+  email: string | null
   phone: string | null
   role: AppRole
   outletId: string | null
@@ -74,16 +135,12 @@ export interface IssuedCode {
 }
 
 /**
- * A refusal the UI can say something useful about. The `code` is the
- * machine-readable one the privileged function returned; anything unrecognised
- * surfaces as a generic failure rather than as a leaked internal string.
+ * A refusal from the privileged account functions, whose `code` is the
+ * machine-readable one the function itself returned.
  */
-export class AccountActionError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message)
+export class AccountActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
     this.name = 'AccountActionError'
   }
 }
@@ -99,6 +156,12 @@ export interface AccountsAdapter {
   provision(account: NewAccount): Promise<IssuedCode>
   reissue(profileId: string): Promise<IssuedCode>
   setActive(profileId: string, isActive: boolean): Promise<void>
+  /**
+   * Correct the address an account signs in with. Any outstanding one-time
+   * code survives — it is bound to the account, not the address, so it starts
+   * working the moment the address is right (design D13).
+   */
+  changeEmail(profileId: string, email: string): Promise<void>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -172,16 +235,10 @@ export interface CheckOutInput {
   reading: PositionReading | null
 }
 
-/**
- * A refusal an attendance surface can say something useful about, rather than
- * surfacing a raw Postgres message to someone standing at a counter.
- */
-export class AttendanceActionError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message)
+/** A refusal from the attendance write path. */
+export class AttendanceActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
     this.name = 'AttendanceActionError'
   }
 }
@@ -210,7 +267,26 @@ export interface AttendanceAdapter {
    * id — the database refuses anything else, so this argument is a convenience
    * for the caller, never a trust boundary.
    */
-  approveOverride(attendanceId: string, reason: string, approverId: string): Promise<AttendanceRecord>
+  approveOverride(
+    attendanceId: string,
+    reason: string,
+    approverId: string,
+  ): Promise<AttendanceRecord>
+}
+
+/**
+ * The app account linked to a roster row, resolved alongside it.
+ *
+ * Carried on the summary rather than joined in a screen because
+ * `getOwnEmployee` needs it too, and an Employee has no permission to list
+ * accounts (design D7). Its absence is the answer to "why can this person not
+ * check in?", so it is never merely omitted — it is null, and the screens say
+ * what null means.
+ */
+export interface LinkedAccount {
+  id: string
+  fullName: string
+  isActive: boolean
 }
 
 /** One roster row. Distinct from an app account: an employee may have no login. */
@@ -218,6 +294,7 @@ export interface EmployeeSummary {
   id: string
   outletId: string
   profileId: string | null
+  linkedAccount: LinkedAccount | null
   employeeCode: string
   fullName: string
   phone: string | null
@@ -233,6 +310,11 @@ export interface NewEmployee {
   phone?: string | null
   roleTitle?: string | null
   joinedOn?: string | null
+  /**
+   * Link the row to an app account as it is created — one write rather than
+   * two, which is what provisioning-with-a-roster-row does.
+   */
+  profileId?: string | null
 }
 
 export type EmployeePatch = Partial<
@@ -246,6 +328,18 @@ export interface EmployeesAdapter {
   getOwnEmployee(): Promise<EmployeeSummary | null>
   createEmployee(employee: NewEmployee): Promise<EmployeeSummary>
   updateEmployee(id: string, patch: EmployeePatch): Promise<EmployeeSummary>
+  /**
+   * Join an app account to a roster row. The database refuses a cross-outlet
+   * link and a second link to the same account; the caller's authority over
+   * the roster row is the `employees_update` policy's business, not this
+   * method's.
+   */
+  linkAccount(employeeId: string, profileId: string): Promise<EmployeeSummary>
+  /**
+   * Separate them again. Attendance already recorded against the roster row
+   * stays exactly where it is — the days were worked.
+   */
+  unlinkAccount(employeeId: string): Promise<EmployeeSummary>
 }
 
 /** The bag of domain adapters a session provider supplies to its tree. */

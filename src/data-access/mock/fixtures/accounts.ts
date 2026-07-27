@@ -25,6 +25,10 @@ const colleagues = [
     created_at: FIXTURE_CREATED_AT,
   },
   {
+    // The other half of an unfinished setup: this account and the `Demo
+    // Griller` roster row are the same person and are not yet linked, so this
+    // person can sign in and cannot check in. Deliberate — see
+    // fixtures/employees.ts. Do not link it here; the walkthrough links it.
     id: 'd1000000-0000-4000-a000-000000000006',
     full_name: 'Demo Griller',
     phone: null,

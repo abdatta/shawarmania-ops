@@ -11,9 +11,10 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
 import { useAdapters, type Tables } from '@/data-access'
 import {
-  AccountActionError,
+  DataActionError,
   type AccountSummary,
   type AppRole,
+  type EmployeeSummary,
   type IssuedCode,
 } from '@/data-access/adapters'
 import { useSession } from '@/session/context'
@@ -28,9 +29,18 @@ import { ROLE_LABELS } from '@/session/session'
  * is offered no role beyond Biller and Employee and no outlet but their own —
  * and the privileged function refuses those combinations again on the server,
  * from the caller's own token, whatever this form sends (design D5).
+ *
+ * Provisioning an Employee also offers the staff roster, because that is the
+ * natural moment to think about it — but it only ever *offers*. The schema
+ * separates an app account from a payroll roster row deliberately, and writing
+ * one as a silent side effect of the other would assert something the business
+ * has not said (outlet-and-staff-setup, design D4).
  */
 
 const ROLE_ORDER: AppRole[] = ['super_admin', 'franchise_admin', 'biller', 'employee']
+
+/** What to do about the staff roster while provisioning an Employee. */
+type RosterChoice = 'create' | 'link' | 'none'
 
 interface Draft {
   fullName: string
@@ -38,11 +48,14 @@ interface Draft {
   phone: string
   role: AppRole
   outletId: string
+  rosterChoice: RosterChoice
+  employeeCode: string
+  employeeId: string
 }
 
 export function AccountsSurface() {
   const session = useSession()
-  const { accounts: adapter, outlets: outletsAdapter } = useAdapters()
+  const { accounts: adapter, outlets: outletsAdapter, employees: employeesAdapter } = useAdapters()
 
   const isOwner = session.role === 'super_admin'
   const assignableRoles = useMemo<AppRole[]>(
@@ -52,8 +65,12 @@ export function AccountsSurface() {
 
   const [accounts, setAccounts] = useState<AccountSummary[] | null>(null)
   const [outlets, setOutlets] = useState<Tables<'outlets'>[]>([])
+  const [roster, setRoster] = useState<EmployeeSummary[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [issued, setIssued] = useState<(IssuedCode & { name: string }) | null>(null)
+  const [issued, setIssued] = useState<
+    (IssuedCode & { name: string; email: string | null }) | null
+  >(null)
+  const [correcting, setCorrecting] = useState<AccountSummary | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pendingDeactivation, setPendingDeactivation] = useState<AccountSummary | null>(null)
@@ -62,8 +79,11 @@ export function AccountsSurface() {
     fullName: '',
     email: '',
     phone: '',
-    role: isOwner ? 'employee' : 'employee',
+    role: 'employee',
     outletId: session.outletId ?? '',
+    rosterChoice: 'create',
+    employeeCode: '',
+    employeeId: '',
   })
 
   const refresh = useCallback(async () => {
@@ -87,6 +107,28 @@ export function AccountsSurface() {
     }
   }, [adapter, outletsAdapter])
 
+  // The roster for the outlet the form is currently pointed at — both to offer
+  // an existing person to link, and to say on the list whether an Employee
+  // account can actually check in.
+  const rosterOutletId = draft.role === 'super_admin' ? '' : draft.outletId
+  useEffect(() => {
+    if (!rosterOutletId) return
+    let active = true
+    void employeesAdapter
+      .listEmployees(rosterOutletId)
+      .then((list) => {
+        if (active) setRoster(list)
+      })
+      .catch(() => {
+        // A roster that will not load is not a reason to block provisioning —
+        // the choice below simply falls back to "not on the roster".
+        if (active) setRoster([])
+      })
+    return () => {
+      active = false
+    }
+  }, [employeesAdapter, rosterOutletId])
+
   const outletName = useCallback(
     (id: string | null) => outlets.find((outlet) => outlet.id === id)?.name ?? 'All outlets',
     [outlets],
@@ -100,7 +142,7 @@ export function AccountsSurface() {
       await refresh()
     } catch (cause) {
       setError(
-        cause instanceof AccountActionError
+        cause instanceof DataActionError
           ? cause.message
           : 'That did not work. Try again in a moment.',
       )
@@ -109,10 +151,48 @@ export function AccountsSurface() {
     }
   }
 
+  /** Unlinked, active people on this outlet's roster — candidates for a link. */
+  const linkableEmployees = useMemo(
+    () => roster.filter((row) => row.profileId === null && row.employmentStatus === 'active'),
+    [roster],
+  )
+
+  const rosterProfileIds = useMemo(
+    () => new Set(roster.map((row) => row.profileId).filter((id): id is string => id !== null)),
+    [roster],
+  )
+
+  /**
+   * Provisioning is one write; the roster row is a second one, made by this
+   * session under RLS rather than by the privileged function (design D3). That
+   * means it can fail on its own, and when it does the account still exists and
+   * the code is still valid — so the code is shown regardless, and the failure
+   * is reported as an unfinished link rather than a failed provisioning.
+   */
   async function onProvision(event: FormEvent) {
     event.preventDefault()
     const outletId = draft.role === 'super_admin' ? null : draft.outletId || null
-    await run(async () => {
+
+    // Checked before anything is written, not after. The roster row is the
+    // second of two writes, so an incomplete answer here would otherwise create
+    // the account and then fail — leaving an admin holding a code for somebody
+    // who is half set up, over a field they simply had not filled in.
+    if (outletId && draft.role === 'employee') {
+      if (draft.rosterChoice === 'create' && !draft.employeeCode.trim()) {
+        setError(
+          'A staff code is needed to put someone on the staff list — it is how their records are identified. Give one, or choose “Not on the staff list”.',
+        )
+        return
+      }
+      if (draft.rosterChoice === 'link' && !draft.employeeId) {
+        setError('Choose who they already are on the staff list, or pick another option.')
+        return
+      }
+    }
+
+    setBusy(true)
+    setError(null)
+    try {
       const code = await adapter.provision({
         fullName: draft.fullName,
         email: draft.email,
@@ -120,10 +200,48 @@ export function AccountsSurface() {
         role: draft.role,
         outletId,
       })
-      setIssued({ ...code, name: draft.fullName })
+      setIssued({ ...code, name: draft.fullName, email: draft.email.trim().toLowerCase() })
       setFormOpen(false)
-      setDraft((current) => ({ ...current, fullName: '', email: '', phone: '' }))
-    })
+
+      if (outletId && draft.role === 'employee' && draft.rosterChoice !== 'none') {
+        try {
+          if (draft.rosterChoice === 'create') {
+            await employeesAdapter.createEmployee({
+              outletId,
+              employeeCode: draft.employeeCode,
+              fullName: draft.fullName,
+              profileId: code.profileId,
+            })
+          } else if (draft.employeeId) {
+            await employeesAdapter.linkAccount(draft.employeeId, code.profileId)
+          }
+          setRoster(await employeesAdapter.listEmployees(outletId))
+        } catch (cause) {
+          const detail = cause instanceof DataActionError ? ` ${cause.message}` : ''
+          setError(
+            `${draft.fullName} has an account and the code below works, but they are not on the staff list yet — so they cannot check in.${detail} Finish it on Staff.`,
+          )
+        }
+      }
+
+      setDraft((current) => ({
+        ...current,
+        fullName: '',
+        email: '',
+        phone: '',
+        employeeCode: '',
+        employeeId: '',
+      }))
+      await refresh()
+    } catch (cause) {
+      setError(
+        cause instanceof DataActionError
+          ? cause.message
+          : 'That did not work. Try again in a moment.',
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   const columns: DataTableColumn<AccountSummary>[] = [
@@ -131,9 +249,24 @@ export function AccountsSurface() {
       id: 'name',
       header: 'Name',
       cell: (row) => (
-        <span className="font-semibold text-content">
-          {row.fullName}
-          {row.id === session.userId && <span className="text-content-muted"> (you)</span>}
+        <span>
+          <span className="font-semibold text-content">
+            {row.fullName}
+            {row.id === session.userId && <span className="text-content-muted"> (you)</span>}
+          </span>
+          {/*
+            Read back on the list because it is otherwise typed once and never
+            seen again — and a typo produces an account that refuses the code,
+            refuses sign-in, and says the same uninformative thing either way.
+          */}
+          {row.email && (
+            <span
+              data-testid={`email-${row.id}`}
+              className="block break-all text-xs text-content-muted"
+            >
+              {row.email}
+            </span>
+          )}
         </span>
       ),
     },
@@ -150,14 +283,33 @@ export function AccountsSurface() {
     {
       id: 'status',
       header: 'Status',
-      cell: (row) =>
-        !row.isActive ? (
-          <span className="font-semibold text-danger">Deactivated</span>
-        ) : row.invite ? (
-          <span className="text-content-muted">Awaiting activation</span>
-        ) : (
-          <span className="text-content-muted">Active</span>
-        ),
+      cell: (row) => (
+        <span>
+          {!row.isActive ? (
+            <span className="font-semibold text-danger">Deactivated</span>
+          ) : row.invite ? (
+            <span className="text-content-muted">Awaiting activation</span>
+          ) : (
+            <span className="text-content-muted">Active</span>
+          )}
+          {/*
+            Only Employees are expected on the roster, and only for the outlet
+            whose roster is loaded — saying "not on the roster" about someone
+            whose roster was never read would be inventing a fact.
+          */}
+          {row.role === 'employee' && row.outletId === rosterOutletId && (
+            <span className="block text-xs">
+              {rosterProfileIds.has(row.id) ? (
+                <span className="text-content-muted">On the staff list</span>
+              ) : (
+                <span data-testid={`off-roster-${row.id}`} className="text-warning">
+                  Not on the staff list — cannot check in
+                </span>
+              )}
+            </span>
+          )}
+        </span>
+      ),
     },
     {
       id: 'actions',
@@ -175,11 +327,14 @@ export function AccountsSurface() {
               onClick={() =>
                 void run(async () => {
                   const code = await adapter.reissue(row.id)
-                  setIssued({ ...code, name: row.fullName })
+                  setIssued({ ...code, name: row.fullName, email: row.email })
                 })
               }
             >
               New code
+            </Button>
+            <Button variant="ghost" size="phone" disabled={busy} onClick={() => setCorrecting(row)}>
+              Change email
             </Button>
             {row.isActive ? (
               <Button
@@ -316,27 +471,113 @@ export function AccountsSurface() {
 
           {draft.role !== 'super_admin' && (
             <Field label="Outlet" id="account-outlet">
-              <select
-                id="account-outlet"
-                className="h-[var(--size-control)] w-full rounded-lg border border-border bg-surface px-3 text-content focus-visible:focus-ring disabled:opacity-50"
-                value={draft.outletId}
-                disabled={!isOwner}
-                onChange={(event) => setDraft({ ...draft, outletId: event.target.value })}
-              >
-                <option value="">Choose an outlet</option>
-                {(isOwner
-                  ? outlets
-                  : outlets.filter((outlet) => outlet.id === session.outletId)
-                ).map((outlet) => (
-                  <option key={outlet.id} value={outlet.id}>
-                    {outlet.name}
-                  </option>
-                ))}
-              </select>
+              {outlets.length === 0 ? (
+                // The state a brand-new business is genuinely in. An empty
+                // dropdown here reads as a bug; the actual problem is one
+                // screen away (design D2).
+                <p
+                  data-testid="no-outlets"
+                  className="rounded-lg border border-warning bg-surface-raised p-2 text-sm text-content"
+                >
+                  There are no outlets yet, and every account except an owner has to belong to one.
+                  Create the outlet first — Outlets, then <em>Add outlet</em>.
+                </p>
+              ) : (
+                <select
+                  id="account-outlet"
+                  className="h-[var(--size-control)] w-full rounded-lg border border-border bg-surface px-3 text-content focus-visible:focus-ring disabled:opacity-50"
+                  value={draft.outletId}
+                  disabled={!isOwner}
+                  onChange={(event) => setDraft({ ...draft, outletId: event.target.value })}
+                >
+                  <option value="">Choose an outlet</option>
+                  {(isOwner
+                    ? outlets
+                    : outlets.filter((outlet) => outlet.id === session.outletId)
+                  ).map((outlet) => (
+                    <option key={outlet.id} value={outlet.id}>
+                      {outlet.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </Field>
+          )}
+
+          {draft.role === 'employee' && draft.outletId && (
+            <fieldset className="space-y-2 rounded-lg border border-border p-3">
+              <legend className="px-1 text-sm font-semibold">Staff list</legend>
+              <p className="text-xs text-content-muted">
+                Attendance follows the staff list, not app accounts. Without a place on it this
+                person can sign in and cannot check in.
+              </p>
+
+              <RosterOption
+                checked={draft.rosterChoice === 'create'}
+                onSelect={() => setDraft({ ...draft, rosterChoice: 'create' })}
+                label="Add them to the staff list"
+              >
+                {draft.rosterChoice === 'create' && (
+                  <Input
+                    aria-label="Staff code"
+                    className="mt-2"
+                    autoCapitalize="characters"
+                    placeholder="Staff code, e.g. KAL-05"
+                    value={draft.employeeCode}
+                    onChange={(event) => setDraft({ ...draft, employeeCode: event.target.value })}
+                  />
+                )}
+              </RosterOption>
+
+              {linkableEmployees.length > 0 && (
+                <RosterOption
+                  checked={draft.rosterChoice === 'link'}
+                  onSelect={() => setDraft({ ...draft, rosterChoice: 'link' })}
+                  label="They are already on the staff list"
+                >
+                  {draft.rosterChoice === 'link' && (
+                    <select
+                      aria-label="Person on the staff list"
+                      className="mt-2 h-[var(--size-control)] w-full rounded-lg border border-border bg-surface px-3 text-content focus-visible:focus-ring"
+                      value={draft.employeeId}
+                      onChange={(event) => setDraft({ ...draft, employeeId: event.target.value })}
+                    >
+                      <option value="">Choose a person</option>
+                      {linkableEmployees.map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.fullName} · {employee.employeeCode}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </RosterOption>
+              )}
+
+              <RosterOption
+                checked={draft.rosterChoice === 'none'}
+                onSelect={() => setDraft({ ...draft, rosterChoice: 'none' })}
+                label="Not on the staff list"
+              />
+            </fieldset>
           )}
         </form>
       </FormSheet>
+
+      {/* Keyed so opening it for a different person starts from their address. */}
+      <ChangeEmailSheet
+        key={correcting?.id ?? 'none'}
+        account={correcting}
+        busy={busy}
+        onClose={() => setCorrecting(null)}
+        onSubmit={(email) => {
+          const target = correcting
+          if (!target) return
+          void run(async () => {
+            await adapter.changeEmail(target.id, email)
+            setCorrecting(null)
+          })
+        }}
+      />
 
       <ConfirmDialog
         open={pendingDeactivation !== null}
@@ -371,6 +612,101 @@ function Field({ label, id, children }: { label: string; id: string; children: R
 }
 
 /**
+ * Correcting the address an account signs in with.
+ *
+ * Its own sheet rather than a general "edit account", because this exists for
+ * one situation — somebody typed it wrong and the person cannot get in — and a
+ * form that also renamed and re-roled them would bury the thing being fixed.
+ */
+function ChangeEmailSheet({
+  account,
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  account: AccountSummary | null
+  busy: boolean
+  onClose: () => void
+  onSubmit: (email: string) => void
+}) {
+  const [email, setEmail] = useState(account?.email ?? '')
+
+  return (
+    <FormSheet
+      open={account !== null}
+      onClose={onClose}
+      /*
+        Named for the consequence rather than the field, which also keeps the
+        dialog's aria-label out of the way: a sheet titled "Change email" is
+        matched by any substring search for "Email", including the one meant for
+        the provisioning form's field, and a closed <dialog> keeps its label.
+      */
+      title={account ? `Change sign-in address for ${account.fullName}` : 'Change sign-in address'}
+      footer={
+        <button
+          type="submit"
+          form="change-email"
+          disabled={busy || email.trim() === ''}
+          className={`${buttonVariants({ size: 'phone' })} w-full`}
+        >
+          {busy ? 'Saving…' : 'Save this address'}
+        </button>
+      }
+    >
+      <form
+        id="change-email"
+        noValidate
+        className="space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit(email)
+        }}
+      >
+        <Field label="Email" id="correct-email">
+          <Input
+            id="correct-email"
+            type="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </Field>
+        <p className="rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted">
+          This is the address they sign in with. Any one-time code you have already given them still
+          works — a code belongs to the account, not to the address — so there is no need to issue a
+          new one.
+        </p>
+      </form>
+    </FormSheet>
+  )
+}
+
+/** One of the three answers to "and the staff list?" — never a silent default. */
+function RosterOption({
+  checked,
+  onSelect,
+  label,
+  children,
+}: {
+  checked: boolean
+  onSelect: () => void
+  label: string
+  children?: React.ReactNode
+}) {
+  return (
+    <div>
+      <label className="flex items-center gap-2 text-sm text-content">
+        <input type="radio" name="roster-choice" checked={checked} onChange={onSelect} />
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+/**
  * The code, once. There is nowhere to look it up afterwards — only a hash is
  * stored, and that column is unreadable by every client — so this panel says
  * so rather than letting an admin discover it by navigating away.
@@ -379,7 +715,7 @@ function IssuedCodePanel({
   issued,
   onDismiss,
 }: {
-  issued: IssuedCode & { name: string }
+  issued: IssuedCode & { name: string; email: string | null }
   onDismiss: () => void
 }) {
   const [copied, setCopied] = useState(false)
@@ -390,7 +726,22 @@ function IssuedCodePanel({
       className="mb-4 rounded-xl border border-border bg-surface-raised p-4"
     >
       <p className="text-sm font-semibold text-content">One-time code for {issued.name}</p>
-      <p className="my-2 font-mono text-2xl font-bold tracking-widest text-content">
+      {/*
+        The address, at the one moment somebody is looking: about to pass the
+        code on. A wrong address here produces an account that refuses this very
+        code and never explains why, and this is the last cheap chance to catch
+        it — the form has already gone.
+      */}
+      {issued.email && (
+        <p data-testid="issued-code-email" className="break-all text-sm text-content-muted">
+          They will sign in as <strong className="text-content">{issued.email}</strong> — check that
+          is right before you send this.
+        </p>
+      )}
+      <p
+        data-testid="issued-code-value"
+        className="my-2 font-mono text-2xl font-bold tracking-widest text-content"
+      >
         {issued.code}
       </p>
       <p className="text-sm text-content-muted">

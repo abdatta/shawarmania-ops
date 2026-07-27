@@ -28,6 +28,7 @@ const INVITE_COLUMNS = 'profile_id, expires_at, attempts, consumed_at, supersede
 const MESSAGES: Record<string, string> = {
   forbidden: 'You are not allowed to do that for this account.',
   email_unavailable: 'That email address already has an account.',
+  too_many_accounts: 'There are more accounts than this screen can list. Tell somebody.',
   invalid_request: 'Something in that form was missing or malformed.',
   not_found: 'That account no longer exists.',
   unauthorised: 'Your session is no longer valid. Sign in again.',
@@ -47,13 +48,21 @@ async function callAdmin<T>(
 export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>): AccountsAdapter {
   return {
     async listAccounts(): Promise<AccountSummary[]> {
-      const [{ data: profiles, error }, { data: invites, error: inviteError }] = await Promise.all([
-        client
-          .from('profiles')
-          .select('id, full_name, phone, role, outlet_id, is_active')
-          .order('full_name'),
-        client.from('account_invites').select(INVITE_COLUMNS),
-      ])
+      const [{ data: profiles, error }, { data: invites, error: inviteError }, addresses] =
+        await Promise.all([
+          client
+            .from('profiles')
+            .select('id, full_name, phone, role, outlet_id, is_active')
+            .order('full_name'),
+          client.from('account_invites').select(INVITE_COLUMNS),
+          // The one field RLS cannot serve: the address lives in `auth.users`,
+          // deliberately not mirrored onto `profiles` where a Biller could read
+          // their whole outlet's (design D12). A refusal or an outage here
+          // costs the addresses and not the screen.
+          callAdmin<{ emails: Record<string, string> }>(client, { action: 'emails' })
+            .then((result) => result.emails)
+            .catch(() => ({}) as Record<string, string>),
+        ])
       if (error) throw error
       if (inviteError) throw inviteError
 
@@ -69,6 +78,7 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       return (profiles ?? []).map((profile) => ({
         id: profile.id,
         fullName: profile.full_name,
+        email: addresses[profile.id] ?? null,
         phone: profile.phone,
         role: profile.role as AppRole,
         outletId: profile.outlet_id,
@@ -94,6 +104,10 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
 
     async setActive(profileId: string, isActive: boolean): Promise<void> {
       await callAdmin(client, { action: 'set-active', profileId, isActive })
+    },
+
+    async changeEmail(profileId: string, email: string): Promise<void> {
+      await callAdmin(client, { action: 'set-email', profileId, email: email.trim() })
     },
   }
 }

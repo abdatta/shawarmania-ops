@@ -101,6 +101,12 @@ function toActionError(error: PostgrestError): AttendanceActionError {
       'Your day has already been started. Reload to see today’s status.',
     )
   }
+  if (detail.includes('outlet is not trading')) {
+    return new AttendanceActionError(
+      'outlet_closed',
+      'This outlet is marked closed, so check-in is not accepted. Ask your manager to reopen it.',
+    )
+  }
   if (detail.includes('captured check-in evidence is immutable')) {
     return new AttendanceActionError(
       'already_checked_in',
@@ -123,10 +129,7 @@ function toActionError(error: PostgrestError): AttendanceActionError {
     )
   }
   if (error.code === '42501' || error.code === 'PGRST116') {
-    return new AttendanceActionError(
-      'not_permitted',
-      'That is not something this account can do.',
-    )
+    return new AttendanceActionError('not_permitted', 'That is not something this account can do.')
   }
   return new AttendanceActionError('failed', 'That did not work. Try again in a moment.')
 }

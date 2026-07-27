@@ -31,6 +31,15 @@ Either path writes `employees.profile_id`; the existing `employee_profile_same_o
 
 **Isolation cases** for the new writes: outlet insert and update remain Super Admin only; a Franchise Admin may set `profile_id` only within their own outlet, and only to an account of their own outlet.
 
+**Make a mistyped email address survivable.** Added after the first walkthrough, because it defeats this change's own gate. An admin types the address once at provisioning and it is never shown again — `profiles` has no email column, and the address lives only in `auth.users`, which no client may read. A typo therefore produces an account that:
+
+- refuses the code with `invalid`, because `redeem_account_invite` looks the user up by address first and a miss is deliberately indistinguishable from a wrong code;
+- refuses sign-in with the same uniform message, by the same deliberate design;
+- shows nothing wrong on any screen, because no screen carries the address; and
+- cannot be corrected at all — the privileged function offers provision, reissue and set-active, and nothing else.
+
+So the person can never check in, and nobody can find out why. The address becomes readable to the admins who may manage the account, and correctable by them. **This is not an extension of the gate — it is the gate**: "entirely through the UI, with no SQL at any step" is not met by a setup step that fails silently and has no in-app repair.
+
 ## Design questions to settle during `/opsx:propose`
 
 - **Should provisioning an Employee account create the roster row automatically?** Convenient, and it quietly asserts that every Employee account is a payroll employee — which the schema deliberately says is not true. An offer with a sensible default may be right; a silent side effect is probably not.

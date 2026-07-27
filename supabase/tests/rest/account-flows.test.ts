@@ -471,3 +471,139 @@ describe('an outstanding invite over REST', () => {
     }
   })
 })
+
+/**
+ * The address an account signs in with: readable by the admins who manage it,
+ * correctable by them, and — the part that matters most — unreachable from the
+ * counter tablet.
+ *
+ * A Biller is a shared device that whoever is standing at it can pick up.
+ * Colleagues' personal contact details must not be ambient on it, which is why
+ * the address is never mirrored onto `public.profiles` (a Biller may read their
+ * own outlet's profiles) and why this function refuses the request outright
+ * rather than answering it with an empty object.
+ */
+describe('email addresses, and who may see them', () => {
+  it('is refused for a Biller — the counter tablet asks and is told no', async () => {
+    const biller = await tokenFor(PERSONAS.billerKalyani)
+    const result = await adminAccounts<{ error: string }>(biller, { action: 'emails' })
+
+    expect(result.status).toBe(403)
+    expect(result.body.error).toBe('forbidden')
+    // Not "an empty list": a boundary that merely happens to hold is not one.
+    expect(result.body).not.toHaveProperty('emails')
+  })
+
+  it('is refused for an Employee too', async () => {
+    const employee = await tokenFor(PERSONAS.employeeKalyani)
+    expect((await adminAccounts(employee, { action: 'emails' })).status).toBe(403)
+  })
+
+  it('gives a Franchise Admin their own outlet, and nothing across the boundary', async () => {
+    const { email, result } = await provisionAs(faKalyaniToken)
+    expect(result.status).toBe(201)
+
+    const seen = await adminAccounts<{ emails: Record<string, string> }>(faKalyaniToken, {
+      action: 'emails',
+    })
+    expect(seen.status).toBe(200)
+
+    const addresses = Object.values(seen.body.emails)
+    expect(addresses).toContain(email)
+    // The other outlet's manager and staff are outside this caller's authority.
+    expect(addresses).not.toContain(PERSONAS.faKanchrapara)
+    expect(addresses).not.toContain('staff.kanchrapara@example.com')
+  })
+
+  it('gives the Super Admin every outlet', async () => {
+    const seen = await adminAccounts<{ emails: Record<string, string> }>(superAdminToken, {
+      action: 'emails',
+    })
+    const addresses = Object.values(seen.body.emails)
+
+    expect(addresses).toContain(PERSONAS.faKalyani)
+    expect(addresses).toContain(PERSONAS.faKanchrapara)
+  })
+
+  it('corrects a mistyped address, and the code already sent still works', async () => {
+    // The situation this exists for: an owner fat-fingers a staff address, and
+    // the person is left with a code that refuses them and no way to find out
+    // why. Everything below is the recovery, entirely through the API.
+    const typo = freshEmail('typo')
+    const provisioned = await adminAccounts<Provisioned>(faKalyaniToken, {
+      action: 'provision',
+      fullName: 'Probe Mistyped',
+      email: typo,
+      role: 'employee',
+      outletId: OUTLETS.kalyani,
+    })
+    expect(provisioned.status).toBe(201)
+
+    const corrected = freshEmail('corrected')
+    const change = await adminAccounts(faKalyaniToken, {
+      action: 'set-email',
+      profileId: provisioned.body.profileId,
+      email: corrected,
+    })
+    expect(change.status).toBe(200)
+
+    // The typo'd address is gone, and the code is bound to the account rather
+    // than to the address — so the message the admin already sent still works.
+    expect(
+      (await redeem({ email: typo, code: provisioned.body.code, password: NEW_PASSWORD })).status,
+    ).toBe(400)
+    expect(
+      (await redeem({ email: corrected, code: provisioned.body.code, password: NEW_PASSWORD }))
+        .status,
+    ).toBe(204)
+
+    const session = await anonClient().auth.signInWithPassword({
+      email: corrected,
+      password: NEW_PASSWORD,
+    })
+    expect(session.error).toBeNull()
+  })
+
+  it('refuses an address another account already holds', async () => {
+    const { result } = await provisionAs(faKalyaniToken)
+    const clash = await adminAccounts<{ error: string }>(faKalyaniToken, {
+      action: 'set-email',
+      profileId: result.body.profileId,
+      email: PERSONAS.employeeKalyani,
+    })
+
+    expect(clash.status).toBe(409)
+    expect(clash.body.error).toBe('email_unavailable')
+  })
+
+  it('refuses a correction across the outlet boundary', async () => {
+    const kanchrapara = await provisionAs(superAdminToken, {
+      outletId: OUTLETS.kanchrapara,
+      fullName: 'Probe Other Outlet',
+    })
+
+    const reach = await adminAccounts<{ error: string }>(faKalyaniToken, {
+      action: 'set-email',
+      profileId: kanchrapara.result.body.profileId,
+      email: freshEmail('stolen'),
+    })
+
+    expect(reach.status).toBe(403)
+    expect(reach.body.error).toBe('forbidden')
+  })
+
+  it('refuses a Biller trying to change anybody’s address', async () => {
+    const biller = await tokenFor(PERSONAS.billerKalyani)
+    const { result } = await provisionAs(faKalyaniToken)
+
+    expect(
+      (
+        await adminAccounts(biller, {
+          action: 'set-email',
+          profileId: result.body.profileId,
+          email: freshEmail('nope'),
+        })
+      ).status,
+    ).toBe(403)
+  })
+})

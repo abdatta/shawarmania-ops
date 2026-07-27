@@ -117,8 +117,7 @@ export function resolveBusinessDate(instant: Date | string, cutover: string): st
     Number(parts.second),
   )
 
-  const cutoverMs =
-    (Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] ?? 0)) * 1000
+  const cutoverMs = (Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] ?? 0)) * 1000
 
   const shifted = new Date(wallClockMs - cutoverMs)
   const pad = (value: number) => String(value).padStart(2, '0')

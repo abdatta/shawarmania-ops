@@ -1,4 +1,12 @@
-import { CircleSlash, Clock, LoaderCircle, LogIn, LogOut, MapPinOff, TriangleAlert } from 'lucide-react'
+import {
+  CircleSlash,
+  Clock,
+  LoaderCircle,
+  LogIn,
+  LogOut,
+  MapPinOff,
+  TriangleAlert,
+} from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -46,7 +54,11 @@ const FAILURE_COPY: Record<GeolocationFailureKind, { title: string; advice: stri
 type Attempt =
   | { kind: 'idle' }
   | { kind: 'locating' }
-  | { kind: 'blocked'; verdict: Extract<FenceVerdict, { kind: 'outside' }>; reading: PositionReading }
+  | {
+      kind: 'blocked'
+      verdict: Extract<FenceVerdict, { kind: 'outside' }>
+      reading: PositionReading
+    }
   | { kind: 'unlocatable'; failure: GeolocationFailureKind }
   | { kind: 'error'; message: string }
 
@@ -185,7 +197,11 @@ export function CheckInCard({
       )}
 
       {attempt.kind === 'error' && (
-        <p role="alert" data-testid="attendance-error" className="text-sm font-semibold text-danger">
+        <p
+          role="alert"
+          data-testid="attendance-error"
+          className="text-sm font-semibold text-danger"
+        >
           {attempt.message}
         </p>
       )}

@@ -4,6 +4,7 @@ import {
   APP_ROLES,
   callerFrom,
   loadAccount,
+  managesAnyone,
   mayManage,
   mayProvision,
   serviceClient,
@@ -143,6 +144,76 @@ async function setActive(
   return json({ profileId: target.id, isActive }, 200)
 }
 
+/**
+ * The addresses this caller may see — the one field on an account that RLS
+ * cannot serve, because it lives in `auth.users` and no client may read that.
+ *
+ * Deliberately not mirrored onto `public.profiles`, which a Biller may read for
+ * their own outlet: a Biller is a shared counter tablet, and a column there
+ * would put every colleague's personal address on a device anyone can pick up
+ * (design D12). Hence the outright refusal below rather than a filter that
+ * returns nothing — a boundary, not a coincidence.
+ */
+async function emails(service: SupabaseClient, caller: Caller): Promise<Response> {
+  if (!managesAnyone(caller)) return json({ error: 'forbidden' }, 403)
+
+  // One page. This business will hold accounts in the dozens; a franchise
+  // network large enough to exceed this needs paging here and a different
+  // account surface anyway, and would rather find out from a wrong answer than
+  // from a silent truncation — so the cap is asserted, not assumed.
+  const { data, error } = await service.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  if (error) return json({ error: 'lookup_failed' }, 500)
+  if (data.users.length >= 1000) return json({ error: 'too_many_accounts' }, 500)
+
+  const visible: Record<string, string> = {}
+  for (const user of data.users) {
+    if (!user.email) continue
+    // Your own address is yours to see; everyone else's goes through the same
+    // matrix that governs re-issuing their code and turning them off.
+    if (user.id === caller.id) {
+      visible[user.id] = user.email
+      continue
+    }
+    const target = await loadAccount(service, user.id)
+    if (target && mayManage(caller, target)) visible[user.id] = user.email
+  }
+
+  return json({ emails: visible }, 200)
+}
+
+/**
+ * Correct the address an account signs in with.
+ *
+ * The outstanding code is left alone on purpose (design D13): it is bound to
+ * the profile rather than to the address, so it starts working the moment the
+ * address is right. Re-issuing would cancel a message the admin has already
+ * passed on and turn one mistake into two.
+ */
+async function setEmail(
+  service: SupabaseClient,
+  caller: Caller,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const profileId = str(body['profileId'])
+  const email = str(body['email'])?.toLowerCase()
+  if (!profileId || !email) return json({ error: 'invalid_request' }, 400)
+
+  const target = await loadAccount(service, profileId)
+  if (!target) return json({ error: 'not_found' }, 404)
+  if (!mayManage(caller, target)) return json({ error: 'forbidden' }, 403)
+
+  // Confirmed on write, as at creation: nothing in this system ever sends a
+  // confirmation mail, so an unconfirmed address is simply an account that
+  // cannot sign in.
+  const { error } = await service.auth.admin.updateUserById(target.id, {
+    email,
+    email_confirm: true,
+  })
+  if (error) return json({ error: 'email_unavailable' }, 409)
+
+  return json({ profileId: target.id, email }, 200)
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return preflight()
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
@@ -161,6 +232,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return await reissue(service, caller, body)
     case 'set-active':
       return await setActive(service, caller, body)
+    case 'emails':
+      return await emails(service, caller)
+    case 'set-email':
+      return await setEmail(service, caller, body)
     default:
       return json({ error: 'unknown_action' }, 400)
   }

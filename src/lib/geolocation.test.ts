@@ -163,12 +163,10 @@ describe('watchBestPosition', () => {
   })
 
   it('gives up immediately when permission is denied, rather than waiting out the window', async () => {
-    watchPosition.mockImplementation(
-      (_ok: PositionCallback, onError: PositionErrorCallback) => {
-        onError(failure(PERMISSION_DENIED))
-        return 7
-      },
-    )
+    watchPosition.mockImplementation((_ok: PositionCallback, onError: PositionErrorCallback) => {
+      onError(failure(PERMISSION_DENIED))
+      return 7
+    })
 
     // No timer advance: a denial resolves on its own.
     await expect(watchBestPosition()).resolves.toEqual({ ok: false, kind: 'denied' })
@@ -193,12 +191,10 @@ describe('watchBestPosition', () => {
   })
 
   it('reports the last failure when the window closes with no fix at all', async () => {
-    watchPosition.mockImplementation(
-      (_ok: PositionCallback, onError: PositionErrorCallback) => {
-        onError(failure(POSITION_UNAVAILABLE))
-        return 7
-      },
-    )
+    watchPosition.mockImplementation((_ok: PositionCallback, onError: PositionErrorCallback) => {
+      onError(failure(POSITION_UNAVAILABLE))
+      return 7
+    })
 
     const pending = watchBestPosition()
     await vi.advanceTimersByTimeAsync(8_000)
