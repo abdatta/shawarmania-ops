@@ -1,4 +1,5 @@
 import type { Tables } from '../../database.types'
+import { employeeFixtures } from './employees'
 import { outletFixtures } from './outlets'
 
 /**
@@ -32,4 +33,45 @@ export const missingRequiredColumns: Tables<'outlets'> = {}
 export const inventedRole: Pick<Tables<'profiles'>, 'role'> = {
   // @ts-expect-error — 'intern' is not an app_role.
   role: 'intern',
+}
+
+// The same proof for the roster fixtures attendance added.
+const validEmployee = employeeFixtures[0] as Tables<'employees'>
+
+export const employeeColumnTheSchemaLacks: Tables<'employees'> = {
+  ...validEmployee,
+  // @ts-expect-error — `nickname` is not a column of employees.
+  nickname: 'chef',
+}
+
+export const inventedEmploymentStatus: Pick<Tables<'employees'>, 'employment_status'> = {
+  // @ts-expect-error — 'on_leave' is not an employment_status.
+  employment_status: 'on_leave',
+}
+
+// The evidence columns attendance relies on must exist with the types the
+// adapters assume — a fixture or an adapter that drifted from the schema
+// would fail here rather than at runtime in front of an employee.
+export const attendanceEvidenceShape: Pick<
+  Tables<'attendance'>,
+  'check_in_distance_m' | 'check_in_accuracy_m' | 'check_in_source' | 'override_by_name'
+> = {
+  check_in_distance_m: 11.6,
+  check_in_accuracy_m: 14,
+  check_in_source: 'phone',
+  override_by_name: 'Demo Manager',
+}
+
+export const inventedCheckInSource: Pick<Tables<'attendance'>, 'check_in_source'> = {
+  // @ts-expect-error — 'smartwatch' is not a check_in_source.
+  check_in_source: 'smartwatch',
+}
+
+// The outlet capture evidence added by this change.
+export const outletCaptureShape: Pick<
+  Tables<'outlets'>,
+  'location_accuracy_m' | 'location_captured_at'
+> = {
+  location_accuracy_m: 9,
+  location_captured_at: '2026-07-24T09:15:00+00:00',
 }

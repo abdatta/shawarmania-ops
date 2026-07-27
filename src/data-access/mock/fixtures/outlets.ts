@@ -34,6 +34,8 @@ export const outletFixtures: Tables<'outlets'>[] = [
     business_day_cutover: '04:00:00',
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
+    location_accuracy_m: 9,
+    location_captured_at: '2026-07-24T09:15:00+00:00',
   },
   {
     id: OUTLET_KANCHRAPARA_ID,
@@ -52,5 +54,9 @@ export const outletFixtures: Tables<'outlets'>[] = [
     business_day_cutover: '04:00:00',
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
+    // Never surveyed, mirroring supabase/seed.sql — so the demo shows both
+    // states of the owner's outlet screen without anyone travelling.
+    location_accuracy_m: null,
+    location_captured_at: null,
   },
 ]

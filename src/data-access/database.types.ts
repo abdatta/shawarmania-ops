@@ -208,6 +208,7 @@ export type Database = {
           outlet_id: string
           override_at: string | null
           override_by: string | null
+          override_by_name: string | null
           override_reason: string | null
           status: Database["public"]["Enums"]["attendance_status"]
         }
@@ -235,6 +236,7 @@ export type Database = {
           outlet_id: string
           override_at?: string | null
           override_by?: string | null
+          override_by_name?: string | null
           override_reason?: string | null
           status: Database["public"]["Enums"]["attendance_status"]
         }
@@ -262,6 +264,7 @@ export type Database = {
           outlet_id?: string
           override_at?: string | null
           override_by?: string | null
+          override_by_name?: string | null
           override_reason?: string | null
           status?: Database["public"]["Enums"]["attendance_status"]
         }
@@ -987,6 +990,8 @@ export type Database = {
           id: string
           is_active: boolean
           latitude: number | null
+          location_accuracy_m: number | null
+          location_captured_at: string | null
           location_label: string
           longitude: number | null
           name: string
@@ -1005,6 +1010,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           latitude?: number | null
+          location_accuracy_m?: number | null
+          location_captured_at?: string | null
           location_label: string
           longitude?: number | null
           name: string
@@ -1023,6 +1030,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           latitude?: number | null
+          location_accuracy_m?: number | null
+          location_captured_at?: string | null
           location_label?: string
           longitude?: number | null
           name?: string
@@ -1132,6 +1141,10 @@ export type Database = {
         Returns: string
       }
       app_device_ok: { Args: never; Returns: boolean }
+      app_distance_m: {
+        Args: { lat1: number; lat2: number; lng1: number; lng2: number }
+        Returns: number
+      }
       app_employee_outlet: { Args: { emp: string }; Returns: string }
       app_outlet_id: { Args: never; Returns: string }
       app_profile_has: {

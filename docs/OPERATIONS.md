@@ -12,7 +12,7 @@
 
 **Production data is never copied into staging or local.** It contains customer and employee PII. When a production-shaped dataset is needed for debugging, generate a synthetic one at the same scale.
 
-**Neither staging nor production is provisioned yet.** Everything through the schema work runs on the local stack; the first change that genuinely needs a hosted project is attendance (#5), which puts real staff data in production.
+**Production is provisioned and live** (2026-07-27). Attendance runs on it: real staff check in from their own phones, so this is no longer a project where a mistake only costs local data. Staging is still not provisioned — changes go from local to production, which is acceptable at this size and worth revisiting before the next franchise.
 
 ⚠️ **The Supabase account already contains a project that has nothing to do with this system.** It is not linked to this repo and must not be. `supabase link` against it, or pointing `.env` at it, would run this project's migrations into unrelated data. When staging and production are created, they are **new projects** — confirmed with the owner on 2026-07-26. If a command ever reports this repo as linked, that is a mistake to undo rather than a convenience to accept.
 
@@ -97,7 +97,7 @@ If a tablet needs forcing onto a new build, closing and reopening the app twice 
 The repeatable path. **If any step here requires a code change, that is a bug** — outlet number seven must be a data operation.
 
 1. **Create the outlet** (Super Admin → Outlets): name, address, contact, coordinates, geofence radius, business-day cutover.
-2. **Set the coordinates accurately.** Attendance depends on them. Take them at the counter, not from a map search.
+2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → *Capture position here*). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the Outlets screen shows it as unsurveyed.
 3. **Create the Franchise Admin** and hand over their one-time code.
 4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ.
 5. **Enrol the counter tablet**: sign in on the device, enrol it to this outlet, confirm it appears under Devices.
@@ -168,8 +168,13 @@ linking this repo to it would run these migrations into someone else's data.
    which explains why and is safe to re-run. It is the only account ever
    created by hand.
 
-6. **Create the outlets**, with coordinates captured standing at each counter.
-   Also by hand for now; the Outlets screen lands with `outlet-onboarding`.
+6. **Create the outlet rows** by hand for now — creating and editing outlets
+   lands with `outlet-onboarding`. Leave the coordinates null rather than
+   guessing them: an outlet with no position records check-ins without judging
+   them, which is honest, whereas a placeholder judges everyone against a point
+   nobody has stood on. Then **capture each position in the app**, standing at
+   the counter (Super Admin → Outlets), as described under *Onboarding a new
+   outlet* above.
 
 7. **Point the deployed site at the project.** Repository → Settings → Secrets
    and variables → Actions → *Variables*:

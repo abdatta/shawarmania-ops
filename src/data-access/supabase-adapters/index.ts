@@ -1,6 +1,8 @@
 import { getSupabaseClient } from '../supabase'
 import type { DataAdapters } from '../adapters'
 import { createSupabaseAccountsAdapter } from './accounts'
+import { createSupabaseAttendanceAdapter } from './attendance'
+import { createSupabaseEmployeesAdapter } from './employees'
 import { createSupabaseOutletsAdapter } from './outlets'
 
 /**
@@ -13,5 +15,7 @@ export function createSupabaseAdapters(): DataAdapters {
   return {
     outlets: createSupabaseOutletsAdapter(client),
     accounts: createSupabaseAccountsAdapter(client),
+    attendance: createSupabaseAttendanceAdapter(client),
+    employees: createSupabaseEmployeesAdapter(client),
   }
 }

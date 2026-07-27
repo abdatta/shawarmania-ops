@@ -14,5 +14,19 @@ export {
   formatDateTime,
   formatTime,
   OUTLET_TIME_ZONE,
+  resolveBusinessDate,
+  shiftBusinessDate,
 } from './datetime'
+export {
+  captureQuality,
+  CAPTURE_ACCURACY_GOOD_M,
+  CAPTURE_ACCURACY_MAX_M,
+  distanceMetres,
+  evaluateFence,
+  formatMetres,
+  type Coordinates,
+  type CaptureQuality,
+  type FenceReference,
+  type FenceVerdict,
+} from './geo'
 export { formatPaise, NotPaiseError, paiseToRupees, rupeesToPaise } from './money'

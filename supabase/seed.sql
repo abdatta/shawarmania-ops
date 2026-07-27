@@ -19,18 +19,25 @@
 -- ⚠ Coordinates are PLACEHOLDERS — the real ones must be captured standing at
 -- each counter before attendance (#5) goes live. See docs/BUSINESS_CONTEXT.md.
 
+-- Kalyani carries synthetic capture metadata and Kanchrapara carries none, so
+-- both states of the owner's outlet screen — surveyed on site, and never
+-- captured — exist locally without anyone travelling.
+
 insert into public.outlets
   (id, code, name, location_label, address_line1, city, district, pincode, phone,
-   latitude, longitude, geofence_radius_m, business_day_cutover)
+   latitude, longitude, geofence_radius_m, business_day_cutover,
+   location_accuracy_m, location_captured_at)
 values
   ('00000000-0000-4000-a000-000000000001', 'kalyani', 'Shawarmania Kalyani',
    'Kalyani — Central Park', 'Ward 10, B-9 Diagonal Road, Near Central Park Ground',
    'Kalyani', 'Nadia', '741235', '+91 89815 24778',
-   22.9750, 88.4345, 150, time '04:00'),
+   22.9750, 88.4345, 150, time '04:00',
+   9, now() - interval '3 days'),
   ('00000000-0000-4000-a000-000000000002', 'kanchrapara', 'Shawarmania Kanchrapara',
    'Kanchrapara', '281, K G Path (N), Near Joramandir Bus Stand',
    'Kanchrapara', 'North 24 Parganas', '743145', '+91 89815 24778',
-   22.9450, 88.4330, 150, time '04:00');
+   22.9450, 88.4330, 150, time '04:00',
+   null, null);
 
 -- ---------------------------------------------------------------------------
 -- Auth users. Email + password, admin-provisioned with the address
@@ -474,7 +481,15 @@ values
    ((current_date - 1) + time '09:10') at time zone 'Asia/Kolkata', 22.94680, 88.43510, 35, 220, 'phone',
    null, null, null, null, null, null,
    '10000000-0000-4000-a000-000000000003', 'GPS drifted; staff visibly at counter (synthetic)',
-   ((current_date - 1) + time '09:12') at time zone 'Asia/Kolkata');
+   ((current_date - 1) + time '09:12') at time zone 'Asia/Kolkata'),
+  -- Kanchrapara griller, out of fence and still awaiting a decision: the state
+  -- a manager's day view has to make actionable. Status is 'absent' because
+  -- nobody has blessed it yet — which is what "blocked" means for payroll.
+  ('00000000-0000-4000-a000-000000000002', '20000000-0000-4000-a000-000000000004',
+   current_date - 1, 'absent',
+   ((current_date - 1) + time '09:40') at time zone 'Asia/Kolkata', 22.94120, 88.42880, 28, null, 'phone',
+   null, null, null, null, null, null,
+   null, null, null);
 
 -- ---------------------------------------------------------------------------
 -- Close D-2 at both outlets. Seeds run as the database owner, not through

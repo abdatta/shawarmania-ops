@@ -1,5 +1,7 @@
 import type { DataAdapters } from '../adapters'
 import { createMockAccountsAdapter } from './accounts'
+import { createMockAttendanceAdapter } from './attendance'
+import { createMockEmployeesAdapter } from './employees'
 import { createMockOutletsAdapter } from './outlets'
 
 /**
@@ -11,8 +13,11 @@ export function createMockAdapters(): DataAdapters {
   return {
     outlets: createMockOutletsAdapter(),
     accounts: createMockAccountsAdapter(),
+    attendance: createMockAttendanceAdapter(),
+    employees: createMockEmployeesAdapter(),
   }
 }
 
 export { personaFixtures } from './fixtures/personas'
 export { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
+export { employeeFixtures } from './fixtures/employees'

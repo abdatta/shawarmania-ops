@@ -275,6 +275,90 @@ describe('an Employee session', () => {
     const { data: menu } = await employee.from('menu_items').select('*')
     expect(menu).toEqual([])
   })
+
+  /**
+   * The geofence, attacked the way it would actually be attacked: a real token
+   * and a hand-crafted PostgREST request, not the app. pgTAP proves the trigger
+   * logic exhaustively; these prove it is reachable over HTTP and that the
+   * three obvious laundering routes are all closed.
+   */
+  it('cannot rewrite the verdict on its own attendance row', async () => {
+    const employee = (await signIn(PERSONAS.employeeKalyani.email)).client
+    const own = '20000000-0000-4000-a000-000000000001'
+
+    const { error } = await employee
+      .from('attendance')
+      .update({ status: 'half_day' })
+      .eq('employee_id', own)
+    expect(error?.message).toContain('cannot change their own attendance status')
+  })
+
+  it('cannot erase the evidence its verdict was derived from', async () => {
+    const employee = (await signIn(PERSONAS.employeeKalyani.email)).client
+    const own = '20000000-0000-4000-a000-000000000001'
+
+    const { error } = await employee
+      .from('attendance')
+      .update({ check_in_lat: null, check_in_lng: null })
+      .eq('employee_id', own)
+      .not('check_in_at', 'is', null)
+    expect(error?.message).toContain('captured check-in evidence is immutable')
+  })
+
+  it('cannot approve its own blocked check-in', async () => {
+    const employee = (await signIn(PERSONAS.employeeKalyani.email)).client
+    const own = '20000000-0000-4000-a000-000000000001'
+
+    const { error } = await employee
+      .from('attendance')
+      .update({
+        override_by: PERSONAS.employeeKalyani.sub,
+        override_reason: 'self-approved',
+        override_at: new Date().toISOString(),
+      })
+      .eq('employee_id', own)
+    expect(error?.message).toContain('only a franchise admin or super admin may record an override')
+  })
+})
+
+describe('the geofence reference point', () => {
+  /**
+   * Moving the fence is not the same power as overriding a check-in, even
+   * though the outcome can look alike. An override is recorded with who and
+   * why; moving the fence is silent and applies to everyone from then on. Only
+   * the Super Admin may do it (attendance, design D4).
+   */
+  it('cannot be moved by the Franchise Admin whose own staff it judges', async () => {
+    const fa = (await signIn(PERSONAS.faKalyani.email)).client
+
+    const { data, error } = await fa
+      .from('outlets')
+      .update({ latitude: 1, longitude: 1, geofence_radius_m: 5000 })
+      .eq('id', OUTLETS.kalyani)
+      .select('id')
+
+    // RLS filters the row out rather than raising: nothing was touched.
+    expect(error).toBeNull()
+    expect(data).toEqual([])
+
+    const { data: after } = await fa
+      .from('outlets')
+      .select('geofence_radius_m, latitude')
+      .eq('id', OUTLETS.kalyani)
+      .single()
+    expect(after?.geofence_radius_m).toBe(150)
+    expect(after?.latitude).toBeCloseTo(22.975, 3)
+  })
+
+  it('is invisible, let alone writable, across outlets', async () => {
+    const fa = (await signIn(PERSONAS.faKalyani.email)).client
+
+    const { data } = await fa
+      .from('outlets')
+      .select('id, latitude, geofence_radius_m')
+      .eq('id', OUTLETS.kanchrapara)
+    expect(data).toEqual([])
+  })
 })
 
 describe('the anonymous role', () => {

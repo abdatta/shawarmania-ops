@@ -55,11 +55,16 @@ const defs = {
     nav: { label: 'Overview', icon: LayoutDashboard, order: 1 },
     state: 'live',
   },
+  /**
+   * Where each outlet is. Live because the geofence reference point can only
+   * honestly be captured from the device standing at the counter, and only the
+   * Super Admin may write it (attendance, design D4).
+   */
   'owner-outlets': {
     role: 'super_admin',
     path: 'outlets',
     nav: { label: 'Outlets', icon: Store, order: 2 },
-    state: 'hidden',
+    state: 'live',
   },
   'owner-people': {
     role: 'super_admin',
@@ -121,13 +126,13 @@ const defs = {
     role: 'franchise_admin',
     path: 'attendance',
     nav: { label: 'Attendance', icon: CalendarCheck, order: 6 },
-    state: 'hidden',
+    state: 'live',
   },
   'admin-employees': {
     role: 'franchise_admin',
     path: 'employees',
     nav: { label: 'Staff', icon: Users, order: 7 },
-    state: 'hidden',
+    state: 'live',
   },
   'admin-pnl': {
     role: 'franchise_admin',
@@ -150,7 +155,7 @@ const defs = {
   /**
    * App access for this outlet — create an account, issue a code, deactivate.
    * Distinct from `admin-employees`, which is the HR roster (employment
-   * status, salary, joining date) and belongs with the operations surfaces.
+   * status, role, joining date) and belongs with the operations surfaces.
    * Having a login and being on the payroll are different facts about a
    * person, and one can be true without the other.
    */
@@ -204,7 +209,7 @@ const defs = {
     role: 'employee',
     path: 'my-attendance',
     nav: { label: 'My attendance', icon: CalendarCheck, order: 2 },
-    state: 'hidden',
+    state: 'live',
   },
   'staff-profile': {
     role: 'employee',

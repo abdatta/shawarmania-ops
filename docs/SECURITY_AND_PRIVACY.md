@@ -44,14 +44,17 @@ The isolation test suite asserts this for every outlet-scoped table (see [Testin
 
 ## Employee location monitoring
 
-Attendance uses location, which makes this app a workplace-monitoring tool. That deserves explicit handling rather than being buried in a feature.
+Attendance uses location, which makes this app a workplace-monitoring tool. That deserves explicit handling rather than being buried in a feature. This is live: real staff check in from their own phones.
 
-- **Location is captured at two moments only** — check-in and check-out. There is no background tracking, no continuous location, and nothing that reports where someone is between those events. Do not add one without a deliberate decision recorded in a change proposal.
-- **The employee can see everything recorded about them.** Their own attendance history shows the same coordinates, distances and flags a manager sees. Asymmetric visibility in a monitoring feature is how it becomes something people resent.
-- **A refused check-in is always appealable.** The manager override exists, and the counter-tablet path exists, so a GPS failure never costs someone their attendance record.
+- **Location is captured at two moments only** — check-in and check-out. There is no background tracking, no continuous location, and nothing that reports where someone is between those events. Do not add one without a deliberate decision recorded in a change proposal. This is enforceable by reading one file: `src/lib/geolocation.ts` is the only module in the app that touches `navigator.geolocation`, and a test asserts that a home screen sitting open reads no position.
+- **The employee can see everything recorded about them.** Their own attendance history shows the same coordinates, distances, accuracy, flags, and override reasons a manager sees — including the approver's name, which is snapshot onto the row precisely so the person it concerns can read it. Both views render through the same components, so the two cannot drift apart. Asymmetric visibility in a monitoring feature is how it becomes something people resent.
+- **A refused check-in is always appealable.** The manager override exists, and a refusal names the route to it rather than leaving someone stuck. Approving records who, when, and a reason that cannot be blank. *(The counter-tablet path is not built yet — until it is, the override is the only escape hatch, which costs an approval but never someone's record.)*
 - **What is stored is the minimum that makes the decision reviewable**: coordinates, accuracy, computed distance, source. Nothing about the device, nothing about the network, no history between events.
+- **The verdict is derived from the evidence, not asserted by the client.** The database recomputes every stored distance from the stored coordinates, so a row can never display a distance its own coordinates contradict, and the captured evidence is immutable once written. An employee cannot set their own attendance status, cannot erase the reading that judged them, and cannot approve themselves.
 
-Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This matters here for a reason people often invert: because the signal is imperfect, it must never be treated as proof in a dispute about someone's pay.
+**The geofence reference point is surveyed, not guessed.** An outlet's position is captured from a device standing at its counter, with the accuracy of that fix stored beside it and a hard refusal above ±50 m. A fence built from a map search would judge every check-in against a point nobody has stood on. Only the Super Admin may set it: a Franchise Admin already holds the override, but an override is recorded with who and why, whereas moving the fence is silent and applies to everyone from then on. Those are not the same power, and the audited one is the one a manager should have.
+
+Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This matters here for a reason people often invert: because the signal is imperfect, it must never be treated as proof in a dispute about someone's pay. Storing the inputs beside the verdict is what makes a human judgement possible; the app's job is to present the evidence, not to settle the argument.
 
 ## Authentication posture
 

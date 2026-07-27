@@ -56,7 +56,7 @@ Design commitments:
 
 **My shift** — bills created during this biller's current shift, with a running total by payment method. Read-only. Not the outlet's whole history — reviewing the day is a manager's job, and a shared tablet should not display the outlet's takings to whoever is standing at it.
 
-**Attendance kiosk** — the secondary check-in path. An employee taps their name and PIN on the tablet to clock in or out. Exists so that a dead phone or a failed GPS fix never leaves someone unable to record their attendance.
+**Attendance kiosk** — the secondary check-in path. An employee taps their name and PIN on the tablet to clock in or out. Exists so that a dead phone or a failed GPS fix never leaves someone unable to record their attendance. *(Not built — it needs enrolled devices. Until then the manager override is the only escape hatch, which is workable but costs an approval.)*
 
 ## Franchise Admin — one outlet, on a phone
 
@@ -70,9 +70,9 @@ Design commitments:
 
 **Daily cash** — the reconciliation screen. Opening float, cash sales (derived), cash expenses (derived), withdrawals, expected closing, and a field for the actual counted amount. The difference is shown prominently the moment it is entered, because that number is the entire point of the screen. Closing the day snapshots the figures.
 
-**Attendance** — the outlet's staff by day: who checked in, when, from where, and any geofence flags. Approving an override request happens here.
+**Attendance** — the outlet's staff by day: who checked in, when, from where, how accurate the reading was, and any geofence flags. **Every active roster member appears, including those with nothing recorded** — a day view that listed only the rows that exist would quietly hide the people who never arrived. A check-in the fence could not vouch for is marked as waiting for a decision and counted absent until it is approved; approving it records the approver and a reason that cannot be blank.
 
-**Employees** — the outlet roster. Add and edit staff, set employment status, joining date, salary. *(Not built.)* Giving someone an app login is a separate screen — see **Access** — because having a login and being on the payroll are different facts about a person, and either can be true without the other. The roster will link across to it.
+**Staff** — the outlet roster. Add and edit people, set role, joining date, and employment status; someone who has left stays on the record and drops off the attendance day. *(Pay is not on this screen: the roster shipped with attendance is the attendance-facing one, and salary is the most sensitive column on the table.)* Giving someone an app login is a separate screen — see **Access** — because having a login and being on the payroll are different facts about a person, and either can be true without the other.
 
 **Access** — app accounts for this outlet: create a Biller or an Employee, issue a one-time code, deactivate and reactivate. The same screen as the owner's **People**, seen through one outlet's authority — no outlet column, no role beyond Biller and Employee, and the privileged function refuses anything wider whatever the form sends.
 
@@ -88,7 +88,9 @@ Design commitments:
 
 **Outlet switcher** — pick an outlet and drop into the full Franchise Admin view of it, read-only for operational records. This is how the owner inspects a specific shop without a parallel set of screens.
 
-**Outlets** — create, edit, activate and deactivate outlets. Setting coordinates, geofence radius and business-day cutover happens here. Onboarding a new franchise starts here.
+**Outlets** — where each outlet is, and how far staff may be when they check in. **Position is captured on site, from the device standing at the counter**, never typed in or picked off a map: the screen takes a reading over a few seconds, keeps the tightest sample, and shows its accuracy before anything is saved. A fix looser than ±50 m is refused outright, and one between ±25 m and ±50 m saves with a warning — this reading is judged once and then judges every future check-in, so it deserves a stricter bar than a check-in does. The accuracy and the capture time are stored with the position, so an outlet carrying placeholder coordinates is visible as such rather than indistinguishable from a surveyed one. Only the Super Admin may write it: a manager already holds the override, but an override is recorded with who and why, while moving the fence is silent and applies to everyone from then on.
+
+*(Creating and deactivating outlets, and editing addresses and cutover, are not built yet — onboarding a new franchise will start here.)*
 
 **People** — every account across all outlets. Create an account of any role in any outlet, issue a fresh one-time code, deactivate and reactivate. A newly issued code is shown **once**, with a plain statement that it cannot be looked up again — because only its hash is stored, and no client can read that. Your own row offers no actions: nobody manages their own account. *(Reassigning roles is not built yet; the database already cancels any outstanding code when someone is moved.)*
 
@@ -98,9 +100,11 @@ Design commitments:
 
 ## Employee — a phone, and almost nothing else
 
-**Home** — one large check-in or check-out button, today's status, and the outlet they are assigned to. If the geofence blocks them, this screen explains why and offers to request a manager override.
+**Home** — one large check-in or check-out button, today's status, and the outlet they are assigned to.
 
-**My attendance** — own history: dates, hours, status. Own records only, enforced in the database.
+If the geofence blocks them, this screen says how far outside the limit they were, what the limit is, and how accurate their phone's reading was, then offers to ask a manager to approve it. **A refused check-in records nothing** until they choose to ask — walking away leaves no row and does not consume the one record that day allows. If the phone cannot supply a position at all, the screen names which of permission, signal, or timeout failed, and offers the same route through.
+
+**My attendance** — own history: dates, times, status, and for each day the same distance, accuracy, source, and override detail — including the approver's name and their reason — that the manager's view shows. Own records only, enforced in the database. The symmetry is deliberate and is built by sharing the components: asymmetric visibility in a monitoring feature is how it becomes something staff resent.
 
 ## Cross-cutting
 
