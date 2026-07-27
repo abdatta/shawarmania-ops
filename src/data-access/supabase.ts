@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 import type { Database } from './database.types'
+import { isDemoScopeActive } from './demo-scope'
 
 /**
  * The only module in the app permitted to import the Supabase client
@@ -22,6 +23,17 @@ import type { Database } from './database.types'
 let client: SupabaseClient<Database> | undefined
 
 export function getSupabaseClient(): SupabaseClient<Database> {
+  // The demo-scope tripwire (docs/DEMO_MODE.md): a demo session is
+  // structurally incapable of reaching Supabase, and any code path that
+  // tries anyway must fail loudly, before the env check, so it fails the
+  // same way everywhere.
+  if (isDemoScopeActive()) {
+    throw new Error(
+      'Demo mode is active — the Supabase client must never be constructed inside the ' +
+        'demo tree. Screens read data through the adapter seam; see docs/DEMO_MODE.md.',
+    )
+  }
+
   if (client) return client
 
   const url = import.meta.env.VITE_SUPABASE_URL
@@ -34,7 +46,15 @@ export function getSupabaseClient(): SupabaseClient<Database> {
   }
 
   client = createClient<Database>(url, anonKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+      // Fixed rather than derived from the project URL, so the demo-entry
+      // guard and its end-to-end test agree on where a session lives even if
+      // the Supabase project ever changes.
+      storageKey: 'shawarmania.auth',
+    },
   })
   return client
 }

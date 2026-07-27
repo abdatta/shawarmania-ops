@@ -51,5 +51,14 @@ export default defineConfig({
     url: BASE_URL,
     reuseExistingServer: !process.env['CI'],
     timeout: 180_000,
+    env: {
+      ...process.env,
+      // Dummy Supabase config, so the demo-entry guard has a constructable
+      // client to read its (seeded, fake) session through. Nothing in the
+      // suite may actually reach this host — the origin tripwire in
+      // e2e/demo.spec.ts fails the run if anything tries.
+      VITE_SUPABASE_URL: process.env['VITE_SUPABASE_URL'] ?? 'https://demo-only.supabase.co',
+      VITE_SUPABASE_ANON_KEY: process.env['VITE_SUPABASE_ANON_KEY'] ?? 'demo-only-anon-key',
+    },
   },
 })

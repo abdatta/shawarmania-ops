@@ -6,7 +6,9 @@ import { expect, test } from '@playwright/test'
 test('the shell loads and shows the running build', async ({ page }) => {
   await page.goto('.')
 
-  await expect(page.getByText('Shawarmania Ops')).toBeVisible()
+  // Scoped to the header banner: the landing card also says "Shawarmania
+  // Ops", and the shell chrome is what this test is about.
+  await expect(page.getByRole('banner').getByText('Shawarmania Ops')).toBeVisible()
 
   // Load-bearing: the app shell is cached, so a bad deploy can persist on a
   // tablet nobody has refreshed. "What build is that tablet on?" has to be
@@ -44,7 +46,7 @@ test('assets resolve under the deployment base path', async ({ page }) => {
   })
 
   await page.goto('.')
-  await expect(page.getByText('Shawarmania Ops')).toBeVisible()
+  await expect(page.getByRole('banner').getByText('Shawarmania Ops')).toBeVisible()
 
   // An absolute `/assets/...` left behind when the base changed shows up here
   // as a 404 rather than as a blank screen on someone's tablet.

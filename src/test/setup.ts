@@ -16,6 +16,18 @@ if (typeof window !== 'undefined') {
     document.documentElement.removeAttribute('data-theme')
   })
 
+  // jsdom does not implement the <dialog> top-layer methods the Modal base
+  // uses. The polyfill mirrors just enough: open flag plus the close event.
+  if (typeof HTMLDialogElement.prototype.showModal !== 'function') {
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.open = true
+    }
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.open = false
+      this.dispatchEvent(new Event('close'))
+    }
+  }
+
   // jsdom does not implement matchMedia, which the theme module reads.
   if (!window.matchMedia) {
     Object.defineProperty(window, 'matchMedia', {

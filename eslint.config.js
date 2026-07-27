@@ -59,6 +59,41 @@ export default tseslint.config(
   },
 
   {
+    // The demo tree and the mock adapters must be structurally incapable of
+    // reaching Supabase (docs/DEMO_MODE.md). The repo-wide rule above does
+    // not cover src/data-access/mock/** (it lives inside data-access), so
+    // both get an explicit, stricter boundary: no Supabase client, no real
+    // adapters, from anywhere under these trees. Test files are exempt: the
+    // boundary protects the shipped module graph, and the safety tests must
+    // import the client precisely to prove the tripwire trips.
+    files: ['src/data-access/mock/**/*.{ts,tsx}', 'src/demo/**/*.{ts,tsx}'],
+    ignores: ['**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@supabase/supabase-js',
+              message:
+                'The demo tree and mock adapters must be structurally incapable of reaching ' +
+                'Supabase — see docs/DEMO_MODE.md.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['**/supabase', '**/supabase-adapters', '**/supabase-adapters/**'],
+              message:
+                'The demo tree and mock adapters must not import the Supabase client or the ' +
+                'real adapters — see docs/DEMO_MODE.md.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
     files: ['src/domain/**/*.ts'],
     rules: {
       'no-restricted-imports': [

@@ -48,7 +48,7 @@ test.describe('offline app shell', () => {
     await context.setOffline(true)
     await page.reload()
 
-    await expect(page.getByText('Shawarmania Ops')).toBeVisible()
+    await expect(page.getByRole('banner').getByText('Shawarmania Ops')).toBeVisible()
     await expect(page.getByTestId('build-version')).toBeVisible()
 
     await context.setOffline(false)

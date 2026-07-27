@@ -7,8 +7,13 @@
  * imports it directly has broken the seam — that is a review failure, not a
  * style preference.
  *
- * The adapter interfaces themselves land with demo-mode-and-app-shell (#3),
- * once there is a schema (#2) to type them against.
+ * Screens consume the seam through this surface: the interfaces in
+ * `adapters.ts` and the context in `adapters-context.ts`. The factories are
+ * deliberately NOT re-exported here — the demo tree imports the mock factory,
+ * the real tree imports the Supabase factory, and no screen imports either.
  */
 
 export { getSupabaseClient } from './supabase'
+export type { DataAdapters, OutletsAdapter } from './adapters'
+export { AdaptersContext, useAdapters } from './adapters-context'
+export type { Tables, Database } from './database.types'
