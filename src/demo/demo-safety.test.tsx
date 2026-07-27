@@ -48,8 +48,8 @@ describe('demo mode safety', () => {
     expect(await screen.findByText('Outlet details')).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
-    // Counter.
-    await user.click(screen.getByRole('link', { name: 'Counter' }))
+    // Biller.
+    await user.click(screen.getByRole('link', { name: 'Biller' }))
     expect(await screen.findByTestId('shift-status')).toHaveTextContent('No shift open')
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
@@ -90,7 +90,7 @@ describe('demo mode safety', () => {
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
 
     // Including on the Biller shell, whose chrome is built separately.
-    await user.click(screen.getByRole('link', { name: 'Counter' }))
+    await user.click(screen.getByRole('link', { name: 'Biller' }))
     await screen.findByTestId('shift-status')
     expect(screen.queryByTestId('account-menu')).not.toBeInTheDocument()
   })
@@ -113,7 +113,7 @@ describe('demo mode safety', () => {
   })
 
   it('keeps account management away from the roles that never issue codes', async () => {
-    renderDemo('/demo/counter/people')
+    renderDemo('/demo/biller/people')
     expect(await screen.findByText('That page does not exist')).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
   })

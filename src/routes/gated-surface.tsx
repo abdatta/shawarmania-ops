@@ -13,7 +13,7 @@ import { NotFound } from './not-found'
  * `/:roleSegment/*`), so a path like `people` is shared by more than one role.
  * This is what makes that safe: the path is looked up against the *current
  * session's* role, and anything that role has no entry for is not a page. A
- * Biller typing `/counter/people` gets not-found inside their own shell —
+ * Biller typing `/biller/people` gets not-found inside their own shell —
  * the same honest answer a `hidden` surface gives (docs/DEMO_MODE.md).
  */
 export function GatedSurface({ path, children }: { path: string; children: ReactNode }) {

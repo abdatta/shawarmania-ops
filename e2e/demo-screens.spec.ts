@@ -12,7 +12,7 @@ import { expect, test, type Page } from '@playwright/test'
 const SHELLS = [
   { segment: 'owner', anchor: 'All outlets' },
   { segment: 'admin', anchor: 'Outlet details' },
-  { segment: 'counter', anchor: 'No shift open' },
+  { segment: 'biller', anchor: 'No shift open' },
   { segment: 'staff', anchor: 'Hello, Demo Staff' },
 ] as const
 

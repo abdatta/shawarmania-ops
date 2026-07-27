@@ -100,8 +100,9 @@ browsers do not zoom on focus.
 ### Requirement: Role paths are stable and readable
 
 Each role shell SHALL live under a stable path segment — `owner`, `admin`,
-`counter`, `staff` — used consistently by routing, the registry, and shared
-links, in both real and demo trees.
+`biller`, `staff` — used consistently by routing, the registry, and shared
+links, in both real and demo trees. Each segment SHALL name the person holding
+the role, never the place they work or the device they hold.
 
 #### Scenario: Role deep links are stable
 

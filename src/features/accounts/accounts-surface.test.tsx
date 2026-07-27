@@ -75,7 +75,7 @@ describe('the account surface', () => {
     const roles = within(screen.getByLabelText('Role'))
       .getAllByRole('option')
       .map((option) => option.textContent)
-    expect(roles).toEqual(['Counter', 'Staff'])
+    expect(roles).toEqual(['Biller', 'Staff'])
   })
 
   it('pins a Franchise Admin to their own outlet', async () => {
@@ -100,7 +100,7 @@ describe('the account surface', () => {
     const roles = within(screen.getByLabelText('Role'))
       .getAllByRole('option')
       .map((option) => option.textContent)
-    expect(roles).toEqual(['Owner', 'Admin', 'Counter', 'Staff'])
+    expect(roles).toEqual(['Owner', 'Admin', 'Biller', 'Staff'])
 
     // A Super Admin is outlet-less by schema constraint, so the field goes away
     // rather than offering a choice the database would reject.

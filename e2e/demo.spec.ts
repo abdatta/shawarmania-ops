@@ -9,7 +9,7 @@ import { expect, test } from '@playwright/test'
 // simply "same origin"; everything else — Supabase or otherwise — is a
 // violation.
 
-const ROLE_SEGMENTS = ['owner', 'admin', 'counter', 'staff'] as const
+const ROLE_SEGMENTS = ['owner', 'admin', 'biller', 'staff'] as const
 
 test('walking all four demo role shells makes no request beyond the app origin', async ({
   page,
@@ -30,7 +30,7 @@ test('walking all four demo role shells makes no request beyond the app origin',
   await switcher.getByRole('link', { name: 'Admin' }).click()
   await expect(page.getByText('Outlet details')).toBeVisible()
 
-  await switcher.getByRole('link', { name: 'Counter' }).click()
+  await switcher.getByRole('link', { name: 'Biller' }).click()
   await expect(page.getByTestId('shift-status')).toBeVisible()
 
   await switcher.getByRole('link', { name: 'Staff' }).click()

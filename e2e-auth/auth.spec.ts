@@ -17,7 +17,7 @@ const NEW_PASSWORD = 'a-genuinely-set-password'
 const PERSONAS = {
   owner: { email: 'owner@example.com', segment: 'owner', lands: 'All outlets' },
   admin: { email: 'admin.kalyani@example.com', segment: 'admin', lands: 'Outlet details' },
-  counter: { email: 'biller.kalyani@example.com', segment: 'counter', lands: 'No shift open' },
+  biller: { email: 'biller.kalyani@example.com', segment: 'biller', lands: 'No shift open' },
   staff: { email: 'staff.kalyani@example.com', segment: 'staff', lands: 'Hello, Synthetic Staff' },
 } as const
 
@@ -197,7 +197,7 @@ test.describe('provisioning, end to end', () => {
     await page.goto('admin/people')
 
     await page.getByRole('button', { name: 'Add account' }).click()
-    await expect(page.getByLabel('Role').locator('option')).toHaveText(['Counter', 'Staff'])
+    await expect(page.getByLabel('Role').locator('option')).toHaveText(['Biller', 'Staff'])
     await expect(page.getByLabel('Outlet')).toBeDisabled()
 
     // Their list is their outlet's, whatever the owner can see.

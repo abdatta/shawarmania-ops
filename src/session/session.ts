@@ -39,15 +39,19 @@ export type Session =
 export type SessionMode = Session['mode']
 
 /**
- * Role path segments — `owner`, `admin`, `counter`, `staff` — are the stable,
+ * Role path segments — `owner`, `admin`, `biller`, `staff` — are the stable,
  * shareable spelling of the four roles. They match how the business talks
  * about the people, not the internal enum, and they are used consistently by
  * routing, the gate registry, and shared links in both real and demo trees.
+ *
+ * The biller's segment names the *person*, not the station: `counter` is
+ * already the physical counter and the enrolled counter device (see the
+ * glossary), so a third meaning in the URL read as a place rather than a role.
  */
 export const ROLE_SEGMENTS = {
   super_admin: 'owner',
   franchise_admin: 'admin',
-  biller: 'counter',
+  biller: 'biller',
   employee: 'staff',
 } as const satisfies Record<Role, string>
 
@@ -56,7 +60,7 @@ export type RoleSegment = (typeof ROLE_SEGMENTS)[Role]
 export const ROLE_LABELS = {
   super_admin: 'Owner',
   franchise_admin: 'Admin',
-  biller: 'Counter',
+  biller: 'Biller',
   employee: 'Staff',
 } as const satisfies Record<Role, string>
 

@@ -4,7 +4,7 @@
 
 Demo mode renders the **entire** four-role experience with mocked data, so the product can be shown — to an investor, a prospective franchisee, or the staff who will use it — long before the backend behind it exists.
 
-Demo mode lives at a dedicated route prefix: **`/demo/owner`, `/demo/admin`, `/demo/counter`, `/demo/staff`** — one shareable URL per role. The role lives in the URL, so a deep link or a reload reconstructs the whole demo session with no stored state, and the role switcher is nothing more than navigation between prefixes. The prefix is also the safety structure: the demo route tree has its own provider stack, built only from mock adapters, so mixing demo and real data is unrepresentable rather than merely guarded against.
+Demo mode lives at a dedicated route prefix: **`/demo/owner`, `/demo/admin`, `/demo/biller`, `/demo/staff`** — one shareable URL per role. The role lives in the URL, so a deep link or a reload reconstructs the whole demo session with no stored state, and the role switcher is nothing more than navigation between prefixes. The prefix is also the safety structure: the demo route tree has its own provider stack, built only from mock adapters, so mixing demo and real data is unrepresentable rather than merely guarded against.
 
 It is not a testing convenience bolted on the side. It is the delivery strategy: every screen is built in demo first, then made real one at a time.
 
