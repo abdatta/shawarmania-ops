@@ -176,13 +176,17 @@ describe('the account surface', () => {
     )
   })
 
-  it('shows the manager no such banner, because they cannot be told', async () => {
+  it('never even asks on a manager’s behalf, since the answer is always a refusal', async () => {
     const adapters = createMockAdapters()
-    // Null is what the database answers anybody who is not the Super Admin.
-    vi.spyOn(adapters.accounts, 'failedActivations').mockResolvedValue(null)
+    const asked = vi.spyOn(adapters.accounts, 'failedActivations').mockResolvedValue(47)
 
     renderSurface('franchise_admin', adapters)
     await screen.findByRole('heading', { name: 'Access' })
+
+    // Mocked high on purpose: if the request were made, the banner would show.
+    // The database refuses this role, so making it would only leave a standing
+    // 403 on every load of this screen.
+    expect(asked).not.toHaveBeenCalled()
     expect(screen.queryByTestId('activation-pressure')).not.toBeInTheDocument()
   })
 

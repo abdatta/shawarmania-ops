@@ -113,8 +113,14 @@ export function AccountsSurface() {
 
   // Asked separately and allowed to fail quietly: a burst of failed activations
   // is worth knowing about, and never worth costing somebody the screen they
-  // came here to use. Every role but the Super Admin is answered null.
+  // came here to use.
+  //
+  // Not asked at all by anybody else. The database refuses every role but the
+  // Super Admin, and it is what makes that true — but firing a request we know
+  // will be refused would put a permanent 403 on every manager's screen load,
+  // which is exactly the kind of standing noise that hides a real one later.
   useEffect(() => {
+    if (!isOwner) return
     let active = true
     void adapter
       .failedActivations()
@@ -127,7 +133,7 @@ export function AccountsSurface() {
     return () => {
       active = false
     }
-  }, [adapter])
+  }, [adapter, isOwner])
 
   // The roster for the outlet the form is currently pointed at — both to offer
   // an existing person to link, and to say on the list whether an Employee
