@@ -9,14 +9,17 @@ import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
+import { QrCode } from '@/components/ui/qr-code'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
+  FAILED_ACTIVATION_NOTICE,
   type AccountSummary,
   type AppRole,
   type EmployeeSummary,
   type IssuedCode,
 } from '@/data-access/adapters'
+import { activationLink } from '@/lib/activation-link'
 import { useSession } from '@/session/context'
 import { ROLE_LABELS } from '@/session/session'
 
@@ -74,6 +77,7 @@ export function AccountsSurface() {
   const [formOpen, setFormOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pendingDeactivation, setPendingDeactivation] = useState<AccountSummary | null>(null)
+  const [failedActivations, setFailedActivations] = useState<number | null>(null)
 
   const [draft, setDraft] = useState<Draft>({
     fullName: '',
@@ -106,6 +110,24 @@ export function AccountsSurface() {
       active = false
     }
   }, [adapter, outletsAdapter])
+
+  // Asked separately and allowed to fail quietly: a burst of failed activations
+  // is worth knowing about, and never worth costing somebody the screen they
+  // came here to use. Every role but the Super Admin is answered null.
+  useEffect(() => {
+    let active = true
+    void adapter
+      .failedActivations()
+      .then((count) => {
+        if (active) setFailedActivations(count)
+      })
+      .catch(() => {
+        if (active) setFailedActivations(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [adapter])
 
   // The roster for the outlet the form is currently pointed at — both to offer
   // an existing person to link, and to say on the list whether an Employee
@@ -379,6 +401,23 @@ export function AccountsSurface() {
           </button>
         }
       />
+
+      {/*
+        Only failures are counted, and only across a quarter of an hour, so a
+        normal morning of onboarding contributes nothing at all. A number here
+        means somebody is trying codes — which is the only signal a targeted
+        guessing attempt gives off (design D10).
+      */}
+      {failedActivations !== null && failedActivations >= FAILED_ACTIVATION_NOTICE && (
+        <p
+          role="status"
+          data-testid="activation-pressure"
+          className="mb-4 rounded-xl border border-border bg-surface-raised p-3 text-sm font-semibold text-warning"
+        >
+          {failedActivations} failed activation attempts in the last fifteen minutes. Codes are
+          bounded and nothing is at immediate risk, but somebody is trying them.
+        </p>
+      )}
 
       {issued && <IssuedCodePanel issued={issued} onDismiss={() => setIssued(null)} />}
 
@@ -706,10 +745,34 @@ function RosterOption({
   )
 }
 
+/** A copy button that says it worked, because a clipboard write is invisible. */
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <Button
+      variant="secondary"
+      size="phone"
+      onClick={() => {
+        void navigator.clipboard
+          ?.writeText(text)
+          .then(() => setCopied(true))
+          .catch(() => setCopied(false))
+      }}
+    >
+      {copied ? 'Copied' : label}
+    </Button>
+  )
+}
+
 /**
- * The code, once. There is nowhere to look it up afterwards — only a hash is
- * stored, and that column is unreadable by every client — so this panel says
+ * The handover, once. There is nowhere to look it up afterwards — only a hash
+ * is stored, and that column is unreadable by every client — so this panel says
  * so rather than letting an admin discover it by navigating away.
+ *
+ * Three forms of the same secret, in the order they are most likely to be used
+ * (design D12): the link, which makes activation one tap and is what the
+ * primary Copy copies; the QR, for handing a phone across a counter; and the
+ * code itself, for reading out over a call.
  */
 function IssuedCodePanel({
   issued,
@@ -718,19 +781,19 @@ function IssuedCodePanel({
   issued: IssuedCode & { name: string; email: string | null }
   onDismiss: () => void
 }) {
-  const [copied, setCopied] = useState(false)
+  const link = activationLink(issued.code)
 
   return (
     <div
       data-testid="issued-code"
       className="mb-4 rounded-xl border border-border bg-surface-raised p-4"
     >
-      <p className="text-sm font-semibold text-content">One-time code for {issued.name}</p>
+      <p className="text-sm font-semibold text-content">Activation link for {issued.name}</p>
       {/*
         The address, at the one moment somebody is looking: about to pass the
-        code on. A wrong address here produces an account that refuses this very
-        code and never explains why, and this is the last cheap chance to catch
-        it — the form has already gone.
+        link on. A wrong address here produces an account whose owner opens the
+        link and finds somebody else's email on it — recoverable, but only if it
+        is caught. This is the cheap place to catch it; the form has already gone.
       */}
       {issued.email && (
         <p data-testid="issued-code-email" className="break-all text-sm text-content-muted">
@@ -738,30 +801,39 @@ function IssuedCodePanel({
           is right before you send this.
         </p>
       )}
+
       <p
-        data-testid="issued-code-value"
-        className="my-2 font-mono text-2xl font-bold tracking-widest text-content"
+        data-testid="issued-code-link"
+        className="my-2 rounded-lg border border-border bg-surface p-2 font-mono text-xs break-all text-content"
       >
-        {issued.code}
+        {link}
       </p>
-      <p className="text-sm text-content-muted">
-        Pass this on now — it is shown once and cannot be looked up again. It works once, and
-        expires {new Date(issued.expiresAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}.
-        If it is lost, issue a new one.
+
+      <div className="flex flex-wrap items-start gap-4">
+        <QrCode
+          value={link}
+          title={`Activation code for ${issued.name}`}
+          className="h-32 w-32 shrink-0 rounded-lg"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-content-muted">Or read out the code:</p>
+          <p
+            data-testid="issued-code-value"
+            className="font-mono text-2xl font-bold tracking-widest text-content"
+          >
+            {issued.code}
+          </p>
+        </div>
+      </div>
+
+      <p className="mt-3 text-sm text-content-muted">
+        Send this now — it is shown once and cannot be looked up again. It works once, and expires{' '}
+        {new Date(issued.expiresAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}. If it is
+        lost, issue a new one.
       </p>
-      <div className="mt-3 flex gap-2">
-        <Button
-          variant="secondary"
-          size="phone"
-          onClick={() => {
-            void navigator.clipboard
-              ?.writeText(issued.code)
-              .then(() => setCopied(true))
-              .catch(() => setCopied(false))
-          }}
-        >
-          {copied ? 'Copied' : 'Copy code'}
-        </Button>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <CopyButton text={link} label="Copy link" />
+        <CopyButton text={issued.code} label="Copy code" />
         <Button variant="ghost" size="phone" onClick={onDismiss}>
           Done
         </Button>

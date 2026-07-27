@@ -170,6 +170,13 @@ test.describe('provisioning, end to end', () => {
     expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
     await expect(panel).toContainText('shown once and cannot be looked up again')
 
+    // The link is what actually gets sent, so it is what the walk uses. It
+    // carries the code and never the address.
+    const link = (await panel.getByTestId('issued-code-link').innerText()).trim()
+    expect(link).toContain(`activate?code=${code}`)
+    expect(link).not.toContain('@')
+    await expect(panel.getByRole('img', { name: new RegExp(person.name) })).toBeVisible()
+
     // The new account is listed, and honestly described as not yet activated.
     await expect(page.getByRole('row', { name: person.name })).toContainText('Awaiting activation')
 
@@ -180,12 +187,18 @@ test.describe('provisioning, end to end', () => {
     await expect(page.getByTestId('issued-code')).toHaveCount(0)
     await expect(page.getByText(code)).toHaveCount(0)
 
-    // A different person, on a different device, with only the code.
+    // A different person, on a different device, opening the message they were
+    // sent. One tap, one field.
     const context = await browser.newContext()
     const theirPhone = await context.newPage()
-    await theirPhone.goto('activate')
-    await theirPhone.getByLabel('Email', { exact: true }).fill(person.email)
-    await theirPhone.getByLabel('One-time code').fill(code)
+    await theirPhone.goto(link)
+
+    // The address is shown for them to recognise, never asked for.
+    await expect(theirPhone.getByTestId('activate-address')).toHaveText(person.email)
+    await expect(theirPhone.getByLabel('Email', { exact: true })).toHaveCount(0)
+    await expect(theirPhone.getByLabel('One-time code')).toHaveCount(0)
+
+    await theirPhone.getByRole('button', { name: /Yes, that/ }).click()
     await theirPhone.getByLabel('New password').fill(NEW_PASSWORD)
     await theirPhone.getByRole('button', { name: 'Set password and sign in' }).click()
 
@@ -200,15 +213,14 @@ test.describe('provisioning, end to end', () => {
     await expect(theirPhone.getByTestId('attendance-action')).toBeVisible()
     await expect(theirPhone.getByText(/not on .* staff list/)).toHaveCount(0)
 
-    // The code is spent: a second person with the same message gets nowhere.
+    // The code is spent: a second person forwarded the same message gets
+    // nowhere — and is told so on arrival, before typing anything, because the
+    // link is checked the moment it opens.
     const replayContext = await browser.newContext()
     const replay = await replayContext.newPage()
-    await replay.goto('activate')
-    await replay.getByLabel('Email', { exact: true }).fill(person.email)
-    await replay.getByLabel('One-time code').fill(code)
-    await replay.getByLabel('New password').fill('a-different-password')
-    await replay.getByRole('button', { name: 'Set password and sign in' }).click()
-    await expect(replay.getByTestId('activate-error')).toContainText('not valid')
+    await replay.goto(link)
+    await expect(replay.getByTestId('activate-error')).toContainText('no longer usable')
+    await expect(replay.getByLabel('New password')).toHaveCount(0)
 
     await context.close()
     await replayContext.close()
@@ -249,14 +261,13 @@ test.describe('deactivation', () => {
     await page.getByLabel('Not on the staff list').check()
     await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
-    const code = (await page.getByTestId('issued-code-value').innerText()).trim()
+    const link = (await page.getByTestId('issued-code-link').innerText()).trim()
 
     // …who activates on their own phone and is happily signed in.
     const context = await browser.newContext()
     const theirPhone = await context.newPage()
-    await theirPhone.goto('activate')
-    await theirPhone.getByLabel('Email', { exact: true }).fill(person.email)
-    await theirPhone.getByLabel('One-time code').fill(code)
+    await theirPhone.goto(link)
+    await theirPhone.getByRole('button', { name: /Yes, that/ }).click()
     await theirPhone.getByLabel('New password').fill(NEW_PASSWORD)
     await theirPhone.getByRole('button', { name: 'Set password and sign in' }).click()
     await expect(theirPhone).toHaveURL(/\/staff$/)

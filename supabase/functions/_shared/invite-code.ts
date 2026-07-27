@@ -31,10 +31,35 @@ export function normaliseCode(raw: string): string {
     .replace(/[^0-9A-Z]/g, '')
 }
 
+/** SHA-256 hex of anything. */
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
 /** SHA-256 hex of a normalised code — the only form that reaches the database. */
 export async function hashCode(normalised: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalised))
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return await sha256Hex(normalised)
+}
+
+/**
+ * A hash of the caller's address, for the redemption rate limiter.
+ *
+ * Hashed because the attempts table would otherwise accumulate the IP
+ * addresses of staff activating accounts — personal data, indefinitely, for a
+ * counter that only needs equality.
+ *
+ * `x-forwarded-for` is a list the edge proxy appends to, and a client can
+ * prepend its own entry, so this is best-effort by construction. That is
+ * stated rather than hidden: the per-address limit stops one noisy client from
+ * eating the global budget, and the global limit — which no header can move —
+ * is the actual backstop. Returns null when there is no address to hash, and
+ * such attempts still count globally.
+ */
+export async function clientIpHash(req: Request): Promise<string | null> {
+  const forwarded = req.headers.get('x-forwarded-for') ?? ''
+  const first = forwarded.split(',')[0]?.trim() ?? ''
+  return first ? await sha256Hex(first) : null
 }
 
 /** How long a freshly issued code stays redeemable. */

@@ -26,6 +26,8 @@
   --color-focus-ring-outer: var(--focus-ring-outer);
   --color-marker-veg: var(--marker-veg);
   --color-marker-nonveg: var(--marker-nonveg);
+  --color-qr-module: var(--qr-module);
+  --color-qr-field: var(--qr-field);
 
   --font-sans: 'Nunito Sans Variable', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Lilita One', ui-sans-serif, system-ui, sans-serif;

@@ -90,7 +90,16 @@ export function SignIn() {
                 required
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
+                aria-describedby="signin-email-hint"
               />
+              {/*
+                Sign-in legitimately needs the address, so the least it can do
+                is say which one. "The email you gave your manager" is a
+                question somebody can actually answer about themselves.
+              */}
+              <p id="signin-email-hint" className="text-xs text-content-muted">
+                The email you gave your manager.
+              </p>
             </div>
 
             <div className="space-y-1">

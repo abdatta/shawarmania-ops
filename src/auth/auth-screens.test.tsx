@@ -35,6 +35,7 @@ const auth = vi.hoisted(() => {
   return {
     signIn: vi.fn(),
     signOut: vi.fn(),
+    previewInvite: vi.fn(),
     redeemInvite: vi.fn(),
     currentUser: vi.fn(),
     loadOwnProfile: vi.fn(),
@@ -129,48 +130,122 @@ describe('sign in', () => {
 })
 
 describe('activation', () => {
-  it('redeems the code, sets the password, and signs in', async () => {
+  const LINK = '/activate?code=ABCDE-FGHJK'
+
+  it('asks for a password and nothing else, once the address is confirmed', async () => {
     const user = userEvent.setup()
+    auth.previewInvite.mockResolvedValue('new.staff@example.com')
     auth.redeemInvite.mockResolvedValue(undefined)
     auth.signIn.mockResolvedValue({ userId: 'u-2', email: 'new.staff@example.com' })
 
-    renderAt('/activate')
-    await user.type(screen.getByLabelText('Email'), 'new.staff@example.com')
-    await user.type(screen.getByLabelText('One-time code'), 'ABCDE-FGHJK')
+    renderAt(LINK)
+
+    // The address is shown, never asked for.
+    expect(await screen.findByTestId('activate-address')).toHaveTextContent('new.staff@example.com')
+    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('One-time code')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Yes, that/ }))
     await user.type(screen.getByLabelText('New password'), 'a-real-password')
     await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
 
-    expect(auth.redeemInvite).toHaveBeenCalledWith(
-      'new.staff@example.com',
-      'ABCDE-FGHJK',
-      'a-real-password',
-    )
+    expect(auth.previewInvite).toHaveBeenCalledWith('ABCDE-FGHJK')
+    expect(auth.redeemInvite).toHaveBeenCalledWith('ABCDE-FGHJK', 'a-real-password')
     expect(auth.signIn).toHaveBeenCalledWith('new.staff@example.com', 'a-real-password')
   })
 
-  it('says what to do when the code will not work', async () => {
+  it('offers no password field until the person says the address is theirs', async () => {
+    auth.previewInvite.mockResolvedValue('new.staff@example.com')
+
+    renderAt(LINK)
+    await screen.findByTestId('activate-address')
+
+    expect(screen.queryByLabelText('New password')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /That.s not my email/ })).toBeInTheDocument()
+  })
+
+  it('sends somebody whose address is wrong to the person who can fix it', async () => {
     const user = userEvent.setup()
-    auth.redeemInvite.mockRejectedValue(
+    auth.previewInvite.mockResolvedValue('typo@example.com')
+
+    renderAt(LINK)
+    await screen.findByTestId('activate-address')
+    await user.click(screen.getByRole('button', { name: /That.s not my email/ }))
+
+    expect(screen.getByTestId('activate-not-me')).toHaveTextContent('Ask your manager')
+    expect(screen.queryByLabelText('New password')).not.toBeInTheDocument()
+    expect(auth.redeemInvite).not.toHaveBeenCalled()
+  })
+
+  it('says a dead link is dead before anything has been typed', async () => {
+    auth.previewInvite.mockRejectedValue(
       new auth.ActivationError(
         'invalid_code',
-        'That code is not valid — it may have expired or already been used. Ask your manager for a new one.',
+        'This link is no longer usable — it may have expired, or already been used. Ask your manager for a new one.',
       ),
     )
 
-    renderAt('/activate')
-    await user.type(screen.getByLabelText('Email'), 'new.staff@example.com')
-    await user.type(screen.getByLabelText('One-time code'), 'WRONG-CODE1')
-    await user.type(screen.getByLabelText('New password'), 'a-real-password')
-    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
+    renderAt(LINK)
 
     expect(await screen.findByTestId('activate-error')).toHaveTextContent(
       'Ask your manager for a new one.',
     )
+    expect(screen.queryByLabelText('New password')).not.toBeInTheDocument()
     expect(auth.signIn).not.toHaveBeenCalled()
   })
 
-  it('states the password rule before it is broken', () => {
+  it('names the password when the password is what was wrong', async () => {
+    const user = userEvent.setup()
+    auth.previewInvite.mockResolvedValue('new.staff@example.com')
+    auth.redeemInvite.mockRejectedValue(
+      new auth.ActivationError('weak_password', 'Choose a password of at least 10 characters.'),
+    )
+
+    renderAt(LINK)
+    await screen.findByTestId('activate-address')
+    await user.click(screen.getByRole('button', { name: /Yes, that/ }))
+    await user.type(screen.getByLabelText('New password'), 'short')
+    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
+
+    expect(await screen.findByTestId('activate-error')).toHaveTextContent('at least 10 characters')
+    // Still on the password field: the code is fine, only this attempt was not.
+    expect(screen.getByLabelText('New password')).toBeInTheDocument()
+  })
+
+  it('says when it is the rate limit refusing, not the code', async () => {
+    auth.previewInvite.mockRejectedValue(
+      new auth.ActivationError(
+        'rate_limited',
+        'Too many activation attempts from this connection. Wait a few minutes and try again.',
+      ),
+    )
+
+    renderAt(LINK)
+
+    expect(await screen.findByTestId('activate-error')).toHaveTextContent('Too many activation')
+  })
+
+  it('takes the code by hand when somebody arrives without a link', async () => {
+    const user = userEvent.setup()
+    auth.previewInvite.mockResolvedValue('new.staff@example.com')
+
     renderAt('/activate')
+    await user.type(screen.getByLabelText('One-time code'), 'ABCDE-FGHJK')
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(await screen.findByTestId('activate-address')).toHaveTextContent('new.staff@example.com')
+    // Even here, the address is confirmed rather than typed.
+    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument()
+  })
+
+  it('states the password rule before it is broken', async () => {
+    const user = userEvent.setup()
+    auth.previewInvite.mockResolvedValue('new.staff@example.com')
+
+    renderAt(LINK)
+    await screen.findByTestId('activate-address')
+    await user.click(screen.getByRole('button', { name: /Yes, that/ }))
+
     expect(screen.getByText('At least 10 characters.')).toBeInTheDocument()
   })
 })

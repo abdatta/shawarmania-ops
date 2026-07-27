@@ -133,6 +133,59 @@ describe('the account surface', () => {
     expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
   })
 
+  it('hands the code over as a link and a scannable code, not only characters', async () => {
+    const user = userEvent.setup()
+    renderSurface('super_admin')
+    await screen.findByRole('heading', { name: 'People' })
+
+    await user.click(screen.getByRole('button', { name: 'Add account' }))
+    await user.type(screen.getByLabelText('Full name'), 'New Starter')
+    await user.type(screen.getByLabelText('Email'), 'new.starter@example.com')
+    await user.selectOptions(screen.getByLabelText('Outlet'), OUTLET_KALYANI_ID)
+    await user.type(screen.getByLabelText('Staff code'), 'KAL-32')
+    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
+
+    const panel = await screen.findByTestId('issued-code')
+    const code = within(panel).getByTestId('issued-code-value').textContent!
+    const link = within(panel).getByTestId('issued-code-link').textContent!
+
+    expect(link).toContain('/activate?code=')
+    expect(link).toContain(code)
+    // The address is on the panel for the admin to check, and never in the URL
+    // — it would buy nothing and would land in history and link previews.
+    expect(link).not.toContain('@')
+    expect(
+      within(panel).getByRole('img', { name: /Activation code for New Starter/ }),
+    ).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Copy link' })).toBeInTheDocument()
+  })
+
+  it('says nothing about failed activations on a quiet day', async () => {
+    renderSurface('super_admin')
+    await screen.findByRole('heading', { name: 'People' })
+    expect(screen.queryByTestId('activation-pressure')).not.toBeInTheDocument()
+  })
+
+  it('tells the owner when somebody is working through codes', async () => {
+    const adapters = createMockAdapters()
+    vi.spyOn(adapters.accounts, 'failedActivations').mockResolvedValue(47)
+
+    renderSurface('super_admin', adapters)
+    expect(await screen.findByTestId('activation-pressure')).toHaveTextContent(
+      '47 failed activation attempts',
+    )
+  })
+
+  it('shows the manager no such banner, because they cannot be told', async () => {
+    const adapters = createMockAdapters()
+    // Null is what the database answers anybody who is not the Super Admin.
+    vi.spyOn(adapters.accounts, 'failedActivations').mockResolvedValue(null)
+
+    renderSurface('franchise_admin', adapters)
+    await screen.findByRole('heading', { name: 'Access' })
+    expect(screen.queryByTestId('activation-pressure')).not.toBeInTheDocument()
+  })
+
   it('never offers destructive actions on your own row', async () => {
     renderSurface('super_admin')
     const ownName = personaFixtures.super_admin.profile.full_name

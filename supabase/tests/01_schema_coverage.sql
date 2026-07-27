@@ -43,6 +43,11 @@ classified as (
       ) then 'outlet-scoped'
       when tbl in ('bill_items', 'alert_responses') then 'child-scoped'
       when tbl = 'outlets' then 'tenancy-root'
+      -- Tenant-less: belongs to no outlet at all, because the thing it counts
+      -- happens before anybody has an outlet. Listed by name rather than
+      -- inferred, so the next table with no outlet_id still has to be argued
+      -- for here instead of quietly slipping through.
+      when tbl in ('invite_redemption_attempts') then 'tenant-less'
     end as class
   from tables
 )
@@ -51,7 +56,7 @@ select is(
     (select string_agg(tbl, ', ' order by tbl) from classified where class is null),
     ''),
   '',
-  'every public table is classified outlet-scoped, child-scoped, or tenancy-root'
+  'every public table is classified outlet-scoped, child-scoped, tenancy-root, or tenant-less'
 );
 
 -- ---------------------------------------------------------------------------

@@ -160,7 +160,13 @@ select is((select count(*) from public.menu_items), 7::bigint,
   'fa_kalyani sees the full 7-item Kalyani menu');
 select is((select count(*) from public.bills), 9::bigint,
   'fa_kalyani sees all 9 Kalyani bills');
-select is((select count(*) from public.employees), 2::bigint,
+-- Scoped to the seeded codes rather than counted outright. The claim is "a
+-- Kalyani admin sees Kalyani's roster", and a bare count also answers "what
+-- else has written to this database today" — which after an `npm run
+-- test:e2e:auth` is a real roster row created through the real app, and a
+-- different question with a different answer on every run.
+select is((select count(*) from public.employees
+            where employee_code in ('KAL-E1', 'KAL-E2')), 2::bigint,
   'fa_kalyani sees both Kalyani roster rows');
 select is((select count(*) from public.daily_cash_records), 1::bigint,
   'fa_kalyani sees the Kalyani closed day');

@@ -112,6 +112,13 @@
      dot looks like. */
   --marker-veg: var(--brand-veg);
   --marker-nonveg: var(--brand-nonveg);
+
+  /* A scannable code is an encoding, not a colour choice: most readers will
+     not decode an inverted one, so this pair is identical in both themes and
+     that is the point of it existing. Naming it as a token keeps the rule
+     "components contain no hex" literally true rather than carved out. */
+  --qr-module: var(--brand-stone-950);
+  --qr-field: var(--brand-white);
 }
 
 /* ── Semantic layer: dark — for phones in the evening ──────────────────── */
@@ -141,4 +148,8 @@
 
   --marker-veg: var(--brand-veg-soft);
   --marker-nonveg: var(--brand-nonveg-soft);
+
+  /* Deliberately NOT inverted for dark mode — see the light block. */
+  --qr-module: var(--brand-stone-950);
+  --qr-field: var(--brand-white);
 }

@@ -146,7 +146,7 @@ describe('provisioning an account end to end', () => {
     })
     expect(beforeActivation.error).not.toBeNull()
 
-    const activation = await redeem({ email, code: result.body.code, password: NEW_PASSWORD })
+    const activation = await redeem({ code: result.body.code, password: NEW_PASSWORD })
     expect(activation.status).toBe(204)
 
     const session = await anonClient().auth.signInWithPassword({ email, password: NEW_PASSWORD })
@@ -161,10 +161,10 @@ describe('provisioning an account end to end', () => {
   })
 
   it('accepts a code however sloppily it was retyped', async () => {
-    const { email, result } = await provisionAs(superAdminToken)
+    const { result } = await provisionAs(superAdminToken)
     const mangled = ` ${result.body.code.toLowerCase().replace('-', '  ')} `
 
-    expect((await redeem({ email, code: mangled, password: NEW_PASSWORD })).status).toBe(204)
+    expect((await redeem({ code: mangled, password: NEW_PASSWORD })).status).toBe(204)
   })
 
   it('refuses a duplicate email address without creating anything', async () => {
@@ -273,11 +273,9 @@ describe('the authority matrix is enforced, not documented', () => {
 describe('the one-time code over the wire', () => {
   it('cannot be redeemed twice', async () => {
     const { email, result } = await provisionAs(superAdminToken)
-    expect((await redeem({ email, code: result.body.code, password: NEW_PASSWORD })).status).toBe(
-      204,
-    )
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(204)
 
-    const replay = await redeem({ email, code: result.body.code, password: 'yet-another-password' })
+    const replay = await redeem({ code: result.body.code, password: 'yet-another-password' })
     expect(replay.status).toBe(400)
 
     // And the password from the first, legitimate activation still stands.
@@ -286,7 +284,7 @@ describe('the one-time code over the wire', () => {
   })
 
   it('stops working the moment a replacement is issued', async () => {
-    const { email, result } = await provisionAs(superAdminToken)
+    const { result } = await provisionAs(superAdminToken)
     const reissued = await adminAccounts<Provisioned>(superAdminToken, {
       action: 'reissue',
       profileId: result.body.profileId,
@@ -294,43 +292,38 @@ describe('the one-time code over the wire', () => {
     expect(reissued.status).toBe(200)
     expect(reissued.body.code).not.toBe(result.body.code)
 
-    expect((await redeem({ email, code: result.body.code, password: NEW_PASSWORD })).status).toBe(
-      400,
-    )
-    expect((await redeem({ email, code: reissued.body.code, password: NEW_PASSWORD })).status).toBe(
-      204,
-    )
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(400)
+    expect((await redeem({ code: reissued.body.code, password: NEW_PASSWORD })).status).toBe(204)
   })
 
-  it('is exhausted by repeated wrong guesses', async () => {
-    const { email, result } = await provisionAs(superAdminToken)
+  it('is not disabled by somebody else guessing at it', async () => {
+    const { result } = await provisionAs(superAdminToken)
 
+    // The old per-invite ceiling made this the opposite: five wrong guesses
+    // aimed at one account killed that account's outstanding code, so a
+    // targeted guesser could lock a new starter out of their own activation
+    // over and over. Keyed on the code, a wrong guess matches no invite at all
+    // and there is nothing for it to burn.
     for (let attempt = 0; attempt < 5; attempt++) {
-      const wrong = await redeem({ email, code: 'ZZZZZ-ZZZZZ', password: NEW_PASSWORD })
-      expect(wrong.status).toBe(400)
+      expect((await redeem({ code: 'ZZZZZ-ZZZZZ', password: NEW_PASSWORD })).status).toBe(400)
     }
 
-    // The right code, now worthless: only a fresh invite revives the account.
-    expect((await redeem({ email, code: result.body.code, password: NEW_PASSWORD })).status).toBe(
-      400,
-    )
-
-    const revived = await adminAccounts<Provisioned>(superAdminToken, {
-      action: 'reissue',
-      profileId: result.body.profileId,
-    })
-    expect((await redeem({ email, code: revived.body.code, password: NEW_PASSWORD })).status).toBe(
-      204,
-    )
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(204)
   })
 
   it('reveals nothing: every failure looks the same', async () => {
-    const { email, result } = await provisionAs(superAdminToken)
+    const { result } = await provisionAs(superAdminToken)
+    const spent = await provisionAs(superAdminToken)
+    expect((await redeem({ code: spent.result.body.code, password: NEW_PASSWORD })).status).toBe(
+      204,
+    )
 
     const failures = await Promise.all([
-      redeem({ email: freshEmail('ghost'), code: result.body.code, password: NEW_PASSWORD }),
-      redeem({ email, code: 'ZZZZZ-ZZZZZ', password: NEW_PASSWORD }),
-      redeem({ email: PERSONAS.superAdmin, code: result.body.code, password: NEW_PASSWORD }),
+      // A code that never existed, one that has been spent, and one belonging
+      // to a deactivated account: three different truths, one answer.
+      redeem({ code: 'ZZZZZ-ZZZZZ', password: NEW_PASSWORD }),
+      redeem({ code: spent.result.body.code, password: NEW_PASSWORD }),
+      deactivateThenRedeem(result.body),
     ])
 
     const shapes = new Set(failures.map((f) => `${f.status}:${JSON.stringify(f.body)}`))
@@ -338,24 +331,32 @@ describe('the one-time code over the wire', () => {
     expect(failures[0]!.status).toBe(400)
   })
 
-  it('refuses a short password before consuming anything', async () => {
-    const { email, result } = await provisionAs(superAdminToken)
+  async function deactivateThenRedeem(provisioned: Provisioned): Promise<FnResult> {
+    await adminAccounts(superAdminToken, {
+      action: 'set-active',
+      profileId: provisioned.profileId,
+      isActive: false,
+    })
+    return await redeem({ code: provisioned.code, password: NEW_PASSWORD })
+  }
 
-    const weak = await redeem({ email, code: result.body.code, password: 'short' })
+  it('refuses a short password before consuming anything', async () => {
+    const { result } = await provisionAs(superAdminToken)
+
+    const weak = await redeem({ code: result.body.code, password: 'short' })
     expect(weak.status).toBe(400)
     expect(weak.body['error']).toBe('weak_password')
 
-    // The code survived the fumble.
-    expect((await redeem({ email, code: result.body.code, password: NEW_PASSWORD })).status).toBe(
-      204,
-    )
+    // The code survived the fumble, and so did the person's allowance: a
+    // password checked before anything is looked up records no failure.
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(204)
   })
 })
 
 describe('deactivation, without waiting for a token to expire', () => {
   it('blocks a live session at the next request', async () => {
     const { email, result } = await provisionAs(superAdminToken)
-    await redeem({ email, code: result.body.code, password: NEW_PASSWORD })
+    await redeem({ code: result.body.code, password: NEW_PASSWORD })
 
     const client = anonClient()
     const { data: session } = await client.auth.signInWithPassword({
@@ -390,7 +391,7 @@ describe('deactivation, without waiting for a token to expire', () => {
 
   it('leaves a deactivated account able to authenticate but unable to read', async () => {
     const { email, result } = await provisionAs(superAdminToken)
-    await redeem({ email, code: result.body.code, password: NEW_PASSWORD })
+    await redeem({ code: result.body.code, password: NEW_PASSWORD })
     await adminAccounts(superAdminToken, {
       action: 'set-active',
       profileId: result.body.profileId,
@@ -410,7 +411,7 @@ describe('deactivation, without waiting for a token to expire', () => {
 
   it('reactivates', async () => {
     const { email, result } = await provisionAs(superAdminToken)
-    await redeem({ email, code: result.body.code, password: NEW_PASSWORD })
+    await redeem({ code: result.body.code, password: NEW_PASSWORD })
     await adminAccounts(superAdminToken, {
       action: 'set-active',
       profileId: result.body.profileId,
@@ -547,15 +548,15 @@ describe('email addresses, and who may see them', () => {
     })
     expect(change.status).toBe(200)
 
-    // The typo'd address is gone, and the code is bound to the account rather
-    // than to the address — so the message the admin already sent still works.
-    expect(
-      (await redeem({ email: typo, code: provisioned.body.code, password: NEW_PASSWORD })).status,
-    ).toBe(400)
-    expect(
-      (await redeem({ email: corrected, code: provisioned.body.code, password: NEW_PASSWORD }))
-        .status,
-    ).toBe(204)
+    // The code is bound to the account rather than to the address, so the
+    // message the admin already sent still works — and the person who opens it
+    // is shown the corrected address rather than the typo.
+    const preview = await redeem({ action: 'preview', code: provisioned.body.code })
+    expect(preview.status).toBe(200)
+    expect(preview.body['email']).toBe(corrected)
+    expect(preview.body['email']).not.toBe(typo)
+
+    expect((await redeem({ code: provisioned.body.code, password: NEW_PASSWORD })).status).toBe(204)
 
     const session = await anonClient().auth.signInWithPassword({
       email: corrected,

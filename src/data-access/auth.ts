@@ -39,10 +39,17 @@ export class SignInError extends Error {
   }
 }
 
-/** An activation refusal. `invalid_code` covers every reason on purpose. */
+/**
+ * An activation refusal. `invalid_code` covers every code-related reason on
+ * purpose — unknown, expired, spent, superseded, deactivated account — because
+ * telling them apart would confirm which codes and accounts exist.
+ *
+ * `weak_password` and `rate_limited` are the two that may be specific: each
+ * describes the request rather than any account.
+ */
 export class ActivationError extends Error {
   constructor(
-    readonly code: 'invalid_code' | 'weak_password' | 'unavailable',
+    readonly code: 'invalid_code' | 'weak_password' | 'rate_limited' | 'unavailable',
     message: string,
   ) {
     super(message)
@@ -136,39 +143,61 @@ export function onAuthChange(listener: () => void): () => void {
   return () => data.subscription.unsubscribe()
 }
 
+/** The one message every code failure gets, and the reason it is one message. */
+const DEAD_CODE =
+  'This link is no longer usable — it may have expired, or already been used. Ask your manager for a new one.'
+
+const TOO_MANY =
+  'Too many activation attempts from this connection. Wait a few minutes and try again.'
+
+function activationFailure(reason: string | null): ActivationError {
+  if (reason === 'weak_password') {
+    return new ActivationError(
+      'weak_password',
+      `Choose a password of at least ${MIN_PASSWORD_LENGTH} characters.`,
+    )
+  }
+  if (reason === 'rate_limited') return new ActivationError('rate_limited', TOO_MANY)
+  if (reason === 'invalid_code') return new ActivationError('invalid_code', DEAD_CODE)
+  return new ActivationError('unavailable', 'Could not activate right now. Try again in a moment.')
+}
+
+/**
+ * Resolve a one-time code to the address its account will sign in with, so the
+ * person can confirm it is theirs rather than type it.
+ *
+ * Safe because the code is the key: whoever can ask has already proven
+ * possession of a live, single-use code for that one account, so the only
+ * address they can learn is the one they already hold a code for. Consumes
+ * nothing — somebody who says "that is not my email" leaves the code exactly as
+ * redeemable as they found it.
+ */
+export async function previewInvite(code: string): Promise<string> {
+  const { data, error } = await getSupabaseClient().functions.invoke<{ email?: string }>(
+    'redeem-invite',
+    { body: { action: 'preview', code } },
+  )
+  if (error) throw activationFailure(await failureCode(error))
+  if (!data?.email) throw activationFailure('invalid_code')
+  return data.email
+}
+
 /**
  * Redeem a one-time code and set a password. Requires no session — the point
  * is that the person does not have one yet — and returns none: they sign in
  * afterwards through the ordinary path, so there is exactly one way a session
  * is ever minted (design D5).
+ *
+ * Takes no address. The code identifies the account, which is what leaves a
+ * password as the only thing anybody types.
  */
-export async function redeemInvite(email: string, code: string, password: string): Promise<void> {
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    throw new ActivationError(
-      'weak_password',
-      `Choose a password of at least ${MIN_PASSWORD_LENGTH} characters.`,
-    )
-  }
+export async function redeemInvite(code: string, password: string): Promise<void> {
+  if (password.length < MIN_PASSWORD_LENGTH) throw activationFailure('weak_password')
 
   const { error } = await getSupabaseClient().functions.invoke('redeem-invite', {
-    body: { email: email.trim(), code, password },
+    body: { action: 'redeem', code, password },
   })
-  if (!error) return
-
-  const code_ = await failureCode(error)
-  if (code_ === 'weak_password') {
-    throw new ActivationError(
-      'weak_password',
-      `Choose a password of at least ${MIN_PASSWORD_LENGTH} characters.`,
-    )
-  }
-  if (code_ === 'invalid_code') {
-    throw new ActivationError(
-      'invalid_code',
-      'That code is not valid — it may have expired or already been used. Ask your manager for a new one.',
-    )
-  }
-  throw new ActivationError('unavailable', 'Could not activate right now. Try again in a moment.')
+  if (error) throw activationFailure(await failureCode(error))
 }
 
 /**

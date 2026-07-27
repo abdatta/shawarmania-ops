@@ -75,6 +75,16 @@ export const CHECKS = [
   { fg: '--on-warning', bg: '--warning', min: AA_TEXT, note: 'ink on warning — never white' },
 
   {
+    fg: '--qr-module',
+    bg: '--qr-field',
+    // A camera is stricter than an eye, and the fixed pair exists so this
+    // never drifts with the theme. Gated at text contrast, which it clears by
+    // a mile — the check is here to catch somebody "improving" it.
+    min: AA_TEXT,
+    note: 'a scannable code, identical in both themes on purpose',
+  },
+
+  {
     fg: '--marker-veg',
     bg: '--surface',
     min: AA_NON_TEXT,

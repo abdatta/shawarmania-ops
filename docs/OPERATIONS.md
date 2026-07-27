@@ -100,10 +100,10 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
 
 1. **Create the outlet** (Super Admin → Outlets → *Add outlet*): short code, name, location label, address, phone, business-day cutover. On a brand-new installation this is the only thing there is to do, and the empty screen says so.
 2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → *Capture position here*). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the Outlets screen shows it as unsurveyed.
-3. **Create the Franchise Admin** (Super Admin → People) and hand over their one-time code. Needs the outlet to exist first — the form has no outlet to assign anyone to otherwise, and says so rather than showing an empty dropdown.
+3. **Create the Franchise Admin** (Super Admin → People) and send them their activation link. Needs the outlet to exist first — the form has no outlet to assign anyone to otherwise, and says so rather than showing an empty dropdown.
 4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ. *(Not built — demo only until #10.)*
 5. **Enrol the counter tablet**: sign in on the device, enrol it to this outlet, confirm it appears under Devices. *(Not built — #9.)* Until then a Biller signs in with their own email on the tablet; shift PINs arrive with enrolment.
-6. **Add employees and billers** (Access), handing each their one-time code. When the role is Employee the form asks about the staff list — add them to it with a staff code, link them to somebody already on it, or leave them off — so the account and the roster row are created together. Anyone left off can be joined later from **Staff**, which shows on every row whether that person can actually check in. *An account with no linked roster row can sign in and cannot check in, and that looks like a bug to the person holding the phone*, so it is worth reading down the Staff list once before you finish.
+6. **Add employees and billers** (Access), sending each their activation link. When the role is Employee the form asks about the staff list — add them to it with a staff code, link them to somebody already on it, or leave them off — so the account and the roster row are created together. Anyone left off can be joined later from **Staff**, which shows on every row whether that person can actually check in. *An account with no linked roster row can sign in and cannot check in, and that looks like a bug to the person holding the phone*, so it is worth reading down the Staff list once before you finish.
 7. **Set the opening cash float** for the first business day. *(Not built — #12.)*
 8. **Verify isolation before going live** — sign in as the new Franchise Admin and confirm no other outlet is visible anywhere. This is a real step, not a formality: it is the last point at which a misconfiguration is cheap to fix.
 
@@ -197,8 +197,8 @@ linking this repo to it would run these migrations into someone else's data.
    time, not at page load.
 
 8. **Verify, in this order.** Sign in as the Super Admin → People lists your
-   own account → provision a Franchise Admin → redeem the code in a private
-   window → that admin sees their outlet and nothing of any other.
+   own account → provision a Franchise Admin → open the activation link in a
+   private window → that admin sees their outlet and nothing of any other.
 
 ## Managing accounts
 
@@ -207,7 +207,11 @@ Accounts are admin-provisioned; there is no self-service signup, and nothing is 
 - **Super Admin → People** manages every account across all outlets.
 - **Franchise Admin → Access** manages Billers and Employees in that admin's own outlet, and nothing else. The limits are enforced server-side from the caller's own session, not by the form.
 
-**To give someone access**: add the account (name, email, role, outlet). A one-time code is shown **once**, alongside the address that account will sign in with — read that address before you send anything, because it is the last cheap moment to catch a typo. Pass the code on — WhatsApp is what the business already uses — and they set their own password at *Set your password* on the sign-in screen. There is nowhere to look the code up afterwards, so if the message is lost, issue a new one; doing so cancels the old code automatically.
+**To give someone access**: add the account (name, email, role, outlet). The handover is shown **once**, alongside the address that account will sign in with — read that address before you send anything, because it is the last cheap moment to catch a typo. Send the **activation link** (WhatsApp is what the business already uses): they tap it, confirm the address is theirs, choose a password, and are in. The QR beside it is for handing a phone across a counter, and the code itself is there for reading out over a call — all three carry the same secret, and none carries the address. There is nowhere to look the code up afterwards, so if the message is lost, issue a new one; doing so cancels the old one automatically.
+
+**If somebody says the address on the link is not theirs**, they are being told to come to you, which is the point: fix it with *Change email* and send the link again. The link keeps working after the correction, but sending it again is what tells them it is safe to continue.
+
+**If the People screen says failed activations are unusually high** (owner only), somebody is trying codes. Nothing is at immediate risk — a code is 50 bits, single-use, and expires in a week — but it is worth knowing when it happens. Outstanding codes are unaffected by another person's guessing; the endpoint refuses the guesser, not the invite.
 
 **To fix a wrong email address**: *Change email* on their row. The one-time code you already handed over keeps working, so there is no need to issue another. Addresses are visible only to the admins who manage that account — never on the counter tablet.
 
@@ -244,9 +248,11 @@ No third-party analytics or session-recording tooling. The app handles customer 
 
 **Cash does not reconcile** → check for late-synced bills against a closed day (they surface as reconciliation exceptions), then cash expenses recorded under the wrong business date, then withdrawals not recorded.
 
-**Someone cannot sign in** → **read the address on their row first** (People, or Access for one outlet). Sign-in gives one message for a wrong address and a wrong password alike, and *Set your password* does the same for a wrong address and a wrong code — so a mistyped address looks exactly like a broken code, and only the screen will tell you otherwise. Fix it with *Change email*; the code you already sent still works afterwards. Then confirm the account is active. Issue a new code if the password is forgotten; there is no self-service reset.
+**Someone cannot sign in** → **read the address on their row first** (People, or Access for one outlet). Sign-in gives one message for a wrong address and a wrong password alike, so a mistyped address looks exactly like a forgotten password. Activation no longer hides this — the link shows the address and invites them to say it is wrong — but sign-in still needs it typed. Fix it with *Change email*; the link you already sent still works afterwards. Then confirm the account is active. Issue a new code if the password is forgotten; there is no self-service reset.
 
-**A one-time code will not work** → it expires after seven days, works once, is cancelled the moment a newer one is issued, and dies after five wrong attempts. All five look identical to the person typing it. The fix is always the same: issue a new code. Nobody can look the old one up — only a hash was ever stored.
+**An activation link will not work** → it expires after seven days, works once, and is cancelled the moment a newer one is issued or the person is moved to another role or outlet. All of those look identical to whoever opened it, deliberately — a link that said *which* would be a way to ask whether an account exists. The person sees this on arrival, before typing anything. The fix is always the same: issue a new one. Nobody can look the old one up; only a hash was ever stored.
+
+**"Too many activation attempts from this connection"** → the endpoint's own rate limit, not a problem with the code. It clears within fifteen minutes. A working activation never counts toward it — only failures do — so seeing this means something on that connection has been failing repeatedly.
 
 **Someone must lose access now** → deactivate the account (People / Access). It takes effect on their very next request, without waiting for their session to expire, and their open app ends its session and says why. Reactivating restores it; their password still works.
 

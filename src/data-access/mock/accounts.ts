@@ -58,7 +58,7 @@ export function createDemoAccounts(): AccountSummary[] {
     role: profile.role,
     outletId: profile.outlet_id,
     isActive: profile.is_active,
-    invite: profile.id === PENDING_ACCOUNT_ID ? { expiresAt: inSevenDays(), attempts: 0 } : null,
+    invite: profile.id === PENDING_ACCOUNT_ID ? { expiresAt: inSevenDays() } : null,
   }))
 }
 
@@ -92,7 +92,7 @@ export function createMockAccountsAdapter(accounts: AccountSummary[]): AccountsA
         role: account.role,
         outletId: account.outletId,
         isActive: true,
-        invite: { expiresAt, attempts: 0 },
+        invite: { expiresAt },
       })
       return { profileId: id, code: demoCode(), expiresAt }
     },
@@ -100,7 +100,7 @@ export function createMockAccountsAdapter(accounts: AccountSummary[]): AccountsA
     async reissue(profileId: string): Promise<IssuedCode> {
       const account = find(profileId)
       const expiresAt = inSevenDays()
-      account.invite = { expiresAt, attempts: 0 }
+      account.invite = { expiresAt }
       return { profileId, code: demoCode(), expiresAt }
     },
 
@@ -115,6 +115,15 @@ export function createMockAccountsAdapter(accounts: AccountSummary[]): AccountsA
       // The outstanding invite is untouched on purpose: a code is bound to the
       // account, not the address, and cancelling it would invalidate a message
       // the admin has already sent (design D13).
+    },
+
+    /**
+     * A demo is a quiet Tuesday, not an incident: below the notice threshold,
+     * so the banner it would otherwise trigger stays where it belongs — on the
+     * one screen that is genuinely being attacked.
+     */
+    async failedActivations() {
+      return 2
     },
   }
 

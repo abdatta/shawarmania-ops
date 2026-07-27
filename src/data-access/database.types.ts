@@ -888,6 +888,24 @@ export type Database = {
           },
         ]
       }
+      invite_redemption_attempts: {
+        Row: {
+          attempted_at: string
+          id: number
+          ip_hash: string | null
+        }
+        Insert: {
+          attempted_at?: string
+          id?: never
+          ip_hash?: string | null
+        }
+        Update: {
+          attempted_at?: string
+          id?: never
+          ip_hash?: string | null
+        }
+        Relationships: []
+      }
       menu_categories: {
         Row: {
           id: string
@@ -1190,6 +1208,16 @@ export type Database = {
         }
       }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
+      invite_attempts_exceeded: {
+        Args: {
+          p_global?: number
+          p_ip_hash: string
+          p_per_ip?: number
+          p_window?: string
+        }
+        Returns: boolean
+      }
+      invite_failure_pressure: { Args: { p_window?: string }; Returns: number }
       issue_account_invite: {
         Args: {
           p_code_hash: string
@@ -1199,8 +1227,19 @@ export type Database = {
         }
         Returns: string
       }
+      preview_account_invite: {
+        Args: { p_code_hash: string; p_ip_hash?: string }
+        Returns: {
+          email: string
+          status: string
+        }[]
+      }
+      record_invite_failure: {
+        Args: { p_ip_hash: string; p_window?: string }
+        Returns: undefined
+      }
       redeem_account_invite: {
-        Args: { p_code_hash: string; p_email: string; p_max_attempts?: number }
+        Args: { p_code_hash: string; p_ip_hash?: string }
         Returns: {
           status: string
           user_id: string

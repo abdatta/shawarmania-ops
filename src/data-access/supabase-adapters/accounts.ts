@@ -23,7 +23,7 @@ import type { Database } from '../database.types'
 
 // Never `select('*')`: the invite table withholds code_hash by column grant,
 // so a whole-row read is refused by design. Naming columns is the contract.
-const INVITE_COLUMNS = 'profile_id, expires_at, attempts, consumed_at, superseded_at'
+const INVITE_COLUMNS = 'profile_id, expires_at, consumed_at, superseded_at'
 
 const MESSAGES: Record<string, string> = {
   forbidden: 'You are not allowed to do that for this account.',
@@ -69,10 +69,7 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       const outstanding = new Map(
         (invites ?? [])
           .filter((invite) => invite.consumed_at === null && invite.superseded_at === null)
-          .map((invite) => [
-            invite.profile_id,
-            { expiresAt: invite.expires_at, attempts: invite.attempts },
-          ]),
+          .map((invite) => [invite.profile_id, { expiresAt: invite.expires_at }]),
       )
 
       return (profiles ?? []).map((profile) => ({
@@ -108,6 +105,20 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
 
     async changeEmail(profileId: string, email: string): Promise<void> {
       await callAdmin(client, { action: 'set-email', profileId, email: email.trim() })
+    },
+
+    /**
+     * How hard the activation endpoint is being hammered right now.
+     *
+     * A plain RPC rather than a trip through the privileged function: the
+     * database already knows the caller's role from their token, and the
+     * function refuses anyone who is not the Super Admin. Null when they may
+     * not ask — which is every other role, and is not an error worth a banner.
+     */
+    async failedActivations(): Promise<number | null> {
+      const { data, error } = await client.rpc('invite_failure_pressure')
+      if (error) return null
+      return typeof data === 'number' ? data : null
     },
   }
 }

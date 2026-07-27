@@ -116,7 +116,7 @@ export interface AccountSummary {
    * migration), and the code itself exists only in the response that issued
    * it. "Pending since Tuesday" is all a list can honestly show.
    */
-  invite: { expiresAt: string; attempts: number } | null
+  invite: { expiresAt: string } | null
 }
 
 export interface NewAccount {
@@ -162,7 +162,20 @@ export interface AccountsAdapter {
    * working the moment the address is right (design D13).
    */
   changeEmail(profileId: string, email: string): Promise<void>
+  /**
+   * Failed activation attempts across the whole endpoint in the current
+   * window. Null when the caller may not ask — which is every role but the
+   * Super Admin, and is an answer rather than a failure (design D10).
+   */
+  failedActivations(): Promise<number | null>
 }
+
+/**
+ * Above this many failed activations in a window, somebody should look. A real
+ * onboarding contributes nothing at all — only failures are counted — so a
+ * two-figure number here is already unusual rather than merely busy.
+ */
+export const FAILED_ACTIVATION_NOTICE = 25
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Attendance and the roster.
