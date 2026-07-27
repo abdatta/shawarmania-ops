@@ -112,6 +112,7 @@ This repo is spec-driven. **No code change without a change folder.**
 Commands:
 
 - `/next-change` — what to work on next, which model, and the pre-flight checklist. Derived live from files, never from memory.
+- `/propose-apply-verify <name>` — drive one change end to end: propose, apply, then an autonomous verify-fix-reverify loop ending in a verification report. Archiving stays a separate, deliberate step.
 - `/opsx:propose <name>` — expand a seeded change into design, specs, and tasks.
 - `/opsx:apply <name>` — implement its tasks.
 - `/opsx:archive <name>` — merge spec deltas into `openspec/specs/` and date-stamp the folder into `archive/`.
