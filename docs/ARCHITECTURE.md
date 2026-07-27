@@ -25,7 +25,7 @@
 │  │            │  │ outlet_id claims     │  │  exposed to the browser):    │ │
 │  └────────────┘  └──────────┬───────────┘  │  · provision staff account   │ │
 │                             │              │  · enrol / revoke device     │ │
-│  ┌──────────────────────────▼─────────────┐│  · issue bill number         │ │
+│  ┌──────────────────────────▼─────────────┐│                              │ │
 │  │  Postgres — RLS on every table         ││                              │ │
 │  │  policies read outlet_id from the JWT  │└──────────────────────────────┘ │
 │  └────────────────────────────────────────┘                                 │
@@ -121,11 +121,12 @@ Claims are refreshed on token refresh, so a role or outlet reassignment takes ef
 
 Anything requiring the service-role key runs in an Edge Function. The service-role key bypasses RLS entirely and **must never reach the browser**.
 
-- **Provision a staff account** — creating an auth user with a confirmed phone requires admin privileges.
+- **Provision a staff account** — creating an auth user with a confirmed email requires admin privileges.
 - **Enrol or revoke a counter device** — mints and invalidates the device's long-lived scoped session.
-- **Issue a bill number** — allocates from a per-outlet sequence atomically.
 
 Each function re-checks the caller's role from their JWT. Being an Edge Function is not authorisation.
+
+Bill numbers were originally sketched as a third Edge Function and deliberately moved **into the database**: a `before insert` trigger allocates from a per-outlet counter inside the insert transaction, which is atomic with the bill in a way a separate network call can never be — gapless on failure, race-safe under two devices, and the client's value is overwritten regardless.
 
 ## Offline boundary
 

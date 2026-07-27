@@ -72,7 +72,7 @@ Rationale for each of these choices is recorded in [Architecture](docs/ARCHITECT
 
 Two device contexts, deliberately different:
 
-- **Personal smartphones** (Super Admin, Franchise Admin, Employee): phone number + password, admin-provisioned. No SMS provider and no TRAI/DLT registration is required.
+- **Personal smartphones** (Super Admin, Franchise Admin, Employee): email + password, admin-provisioned with the address pre-confirmed. No SMS provider, no TRAI/DLT registration, no confirmation mail. (Owner-confirmed 2026-07-26; phone numbers are contact data, not credentials.)
 - **Counter tablet** (Biller): the *device* is enrolled once and holds a long-lived session scoped by RLS to exactly one outlet. Billers then unlock a shift with a short PIN, which selects attribution — it is not the security boundary.
 
 Full detail, including the revocation story, is in [Roles And Permissions](docs/ROLES_AND_PERMISSIONS.md).

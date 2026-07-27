@@ -1,6 +1,6 @@
 # Data Model
 
-> Describes the schema as designed. No migrations have been written yet. The authoritative version, once built, is the migration set in `supabase/migrations/`; this page explains intent and invariants.
+> The authoritative version is the migration set in `supabase/migrations/` (landed with `data-model-and-tenancy`, 2026-07-26); this page explains intent and invariants. Where implementation settled an open question or diverged from the original sketch, the decision is recorded inline with its reason.
 
 ## Conventions
 
@@ -13,6 +13,7 @@ Applied everywhere, without exception:
 - **Every outlet-scoped table** carries `outlet_id uuid not null references outlets(id)` and ships an RLS policy in the same migration.
 - **Enums** are Postgres enum types, so an invalid value is a constraint violation rather than a bad row.
 - Rows are **soft-deleted** (`is_active`, or a status enum) wherever history matters. Menu items and employees are never hard-deleted — old bills and attendance records reference them.
+- **Client privileges are explicit grants**, not defaults: the final migration is the manifest of every verb a session may even attempt (current Supabase images grant clients nothing automatically). DELETE is granted to no client role on any table, and `anon` holds nothing anywhere.
 
 ## Tenancy and identity
 
@@ -49,8 +50,10 @@ Menu is per-outlet from day one. Two outlets may share item names and differ on 
 - `payment_method`: `cash` | `upi` | `card` | `swiggy` | `zomato` | `other`.
 - `pricing_mode`: `no_tax` | `gst_inclusive` | `gst_exclusive`. **v1 always writes `no_tax` and `tax_paise = 0`.** It exists now so that when GST is enabled, historical bills stay unambiguous instead of being silently reinterpreted under new rules.
 - `unique (outlet_id, bill_number)` — bill numbers are unique within an outlet, not globally.
+- **`bill_number` is assigned by the database**: a `before insert` trigger allocates from a per-outlet counter row (`bill_number_counters`, invisible to clients) inside the insert transaction — race-safe, and gapless because a failed insert rolls the allocation back with it. A client-supplied value is overwritten, never trusted; the column's `default 0` exists only so generated client types treat it as server-supplied. *Divergence:* this replaced the "issue bill number" Edge Function sketched in the architecture — a trigger is atomic with the insert, an extra network hop cannot be.
 - Both clocks are kept. The client clock is what the biller experienced; the server clock is what the system can trust. When they disagree materially, that is a signal worth surfacing.
-- **Append-only once settled.** A mistake is voided and re-rung; totals are never edited in place.
+- **Append-only once settled**, enforced by trigger: the only legal update is `settled → void` touching only the void columns, role-gated to the outlet's Franchise Admin and the Super Admin; deletes are refused even for privileged writers. A mistake is voided and re-rung; totals are never edited in place.
+- `business_date` is **validated at write time**: a bill (or shift, or attendance check-in) whose stated date contradicts its timestamp under the outlet's cutover is rejected, not repaired.
 
 **`bill_items`**
 `id`, `bill_id`, `menu_item_id` (nullable reference, for analytics only), `item_name` (**snapshot**), `unit_price_paise` (**snapshot**), `quantity`, `line_total_paise`.
@@ -111,6 +114,8 @@ difference       = actual_closing − expected_closing
 
 The three derived inputs come from settled `cash` bills, `cash` expenses, and withdrawals for that outlet and business date. They are **snapshotted onto the record at close**, not recomputed on read — a bill that syncs late from an offline device must not silently rewrite a drawer count a manager already signed off. A late-arriving bill after close is a reconciliation exception, and should be surfaced as one.
 
+This is structural, not conventional: clients cannot write `daily_cash_records` at all. The `close_business_day()` function is the only path — it computes the three derived inputs server-side in the same transaction that writes the snapshot, is available only to an active Franchise Admin of that outlet (deliberately not the Super Admin), and refuses a duplicate close. CHECK constraints hold both equations on every row regardless of writer.
+
 ## Alerts
 
 **`alerts`** — `id`, `outlet_id`, `raised_by`, `subject`, `message`, `category` (`inventory` | `equipment` | `cash_mismatch` | `employee` | `supplier` | `other`), `priority` (`low` | `normal` | `high` | `urgent`), `status` (`open` | `acknowledged` | `resolved` | `closed`), `created_at`.
@@ -138,9 +143,11 @@ Cash basis is simpler and matches the drawer. Consumption basis is more accurate
 
 Offline bills can arrive after their business date has been reconciled. Any figure a human has signed off — a closed cash record, most obviously — must be **snapshotted, not recomputed**, and late arrivals must surface as exceptions rather than quietly changing history. Reports over open periods may recompute freely; reports over closed periods must not.
 
-## Integrity checks worth testing
+## Integrity checks, tested
 
-- Every outlet-scoped table has an RLS policy, and the isolation suite covers it. A new table without a test is an incomplete change.
+Every check below is enforced by the schema and covered by the suites in `supabase/tests/`: pgTAP with simulated claims (`npm run test:db`) plus REST-level probes that sign seeded personas in through the real auth service (`npm run test:rls`).
+
+- Every outlet-scoped table has an RLS policy, and the isolation suite covers it — by enumerating tables from the catalog and failing on any it cannot classify, so a new table without a test fails by name.
 - `total_paise = subtotal_paise − discount_paise + tax_paise` on every bill.
 - `line_total_paise = unit_price_paise × quantity` on every bill item.
 - `(outlet_id, bill_number)` is unique, and per-outlet sequences have no gaps attributable to the client.

@@ -1,6 +1,6 @@
 # Testing
 
-> The harness landed with `project-foundations`. The database-policy suite arrives with `data-model-and-tenancy`, because there is no schema to test until then.
+> The harness landed with `project-foundations`; the database-policy suites landed with `data-model-and-tenancy`.
 
 Testing effort follows risk, and in this app risk is concentrated in three places: **money arithmetic**, **tenancy isolation**, and **the offline path**. Those get disproportionate coverage. A settings form does not.
 
@@ -9,10 +9,18 @@ Testing effort follows risk, and in this app risk is concentrated in three place
 ```bash
 npm test          # Vitest: unit, component, and build-tooling suites
 npm run test:e2e  # Playwright: shell and the offline path, against a real build
+npm run test:db   # pgTAP: isolation + write-contract suites (needs the local stack)
+npm run test:rls  # REST probes: real sign-ins, hand-crafted cross-outlet requests
 npm run lint      # ESLint (incl. layer boundaries) + the no-hex-outside-tokens check
 npm run typecheck # tsc --noEmit, strict
 npm run contrast  # WCAG validator over the token file, both themes
+
+npm run db:start  # bring up the local Supabase stack (Docker)
+npm run db:reset  # apply every migration and the seed to a fresh database
+npm run db:types  # regenerate src/data-access/database.types.ts (CI fails on drift)
 ```
+
+`test:db` and `test:rls` need the local stack running with the seed applied (`db:start`, then `db:reset`). They are excluded from plain `npm test` so unit feedback stays instant; CI runs them in their own job against a fresh stack.
 
 `npm test` runs `.test.ts` / `.test.tsx` under `src/` in a jsdom environment and `.test.mjs` under `scripts/` in a node environment. The shared setup file guards its DOM work, so the build-tooling suites do not need a second Vitest project to live alongside the app suites.
 
@@ -23,7 +31,7 @@ npm run contrast  # WCAG validator over the token file, both themes
 | Layer | Tool | Covers |
 |---|---|---|
 | Domain unit tests | Vitest | Money maths, expected cash, business-date resolution, P&L, geofence distance |
-| Database policy tests | pgTAP or SQL fixtures | Row-Level Security isolation on every outlet-scoped table |
+| Database policy tests | pgTAP (`supabase/tests/`) + REST probes | RLS isolation and the write contract, on every outlet-scoped table |
 | Component tests | Vitest + Testing Library | Interactive components, especially the billing surface |
 | End-to-end | Playwright | The critical paths, including offline billing |
 | Design-system checks | Node scripts | Contrast in both themes; no hex literal outside the brand layer |
@@ -49,6 +57,8 @@ Pure functions over integer paise, so they are trivially testable and there is n
 
 The most important suite in the repo, because tenancy bugs are silent — nothing errors, a query just quietly returns more than it should.
 
+Two layers, because they prove different halves: pgTAP simulates each persona's claims exactly as PostgREST would present them and sweeps every table exhaustively; the REST probes sign seeded personas in through the real auth service and hand-craft cross-outlet requests over HTTP, proving the deployed stack injects and enforces those claims. Both include positive controls — a suite that passes because a role can read *nothing at all* is a bug the controls catch.
+
 For **every** outlet-scoped table, with sessions for each role:
 
 - A Franchise Admin, Biller, or Employee scoped to outlet A **cannot read** outlet B's rows.
@@ -58,7 +68,7 @@ For **every** outlet-scoped table, with sessions for each role:
 - A deactivated account **cannot** read or write anything, without waiting for token expiry.
 - An Employee can read **only their own** attendance rows.
 
-**A new outlet-scoped table without a case in this suite is an incomplete change.** The suite should be structured so that adding a table and forgetting the test is caught — enumerate the tables from the schema and fail on any that is uncovered, rather than relying on someone remembering.
+**A new outlet-scoped table without a case in this suite is an incomplete change.** The suite enforces this itself: it enumerates the tables from the database catalog and fails, naming the table, on any it cannot classify as outlet-scoped, child-scoped, or tenancy-root, or that lacks Row-Level Security — nobody has to remember.
 
 ### 3. The offline path
 

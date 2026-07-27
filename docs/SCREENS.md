@@ -8,7 +8,7 @@ One bundle serves all four roles. After sign-in the shell reads the role claim a
 
 ## Shared
 
-**Sign in** — phone number + password. One field pair, a large keypad-friendly phone input, nothing else. First-time users arrive with a one-time code instead of a password and are walked through setting one.
+**Sign in** — email + password. One field pair, nothing else. First-time users arrive with a one-time code instead of a password and are walked through setting one.
 
 **Profile** — own name, phone, role, assigned outlet. Change password. Sign out.
 

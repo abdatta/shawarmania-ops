@@ -45,14 +45,22 @@ Write behaviour, not implementation. A spec that names a React component or a fi
 
 ## Current capabilities
 
-Landed with `project-foundations`. These are **foundation** capabilities: they describe how the repository and the shell behave rather than what the business does, which is why none of them appears in the domain list below.
+Foundation capabilities landed with `project-foundations`; they describe how the repository and the shell behave rather than what the business does.
 
-- [`project-scaffold`](project-scaffold/spec.md) — a clone that builds, layer boundaries enforced by tooling, CI, safe client configuration.
+- [`project-scaffold`](project-scaffold/spec.md) — a clone that builds, layer boundaries enforced by tooling, CI (including the database suite), safe client configuration, committed drift-gated schema types.
 - [`design-system`](design-system/spec.md) — token layering, both themes, verified contrast, the money and date formatters, touch sizing.
 - [`pwa-and-deployment`](pwa-and-deployment/spec.md) — installable, offline shell, non-disruptive updates, identifiable builds, sub-path hosting.
 
+Domain capabilities landed with `data-model-and-tenancy`. These are **schema-level contracts**: they bind every future writer, while their screens and flows arrive with later changes.
+
+- [`outlet-tenancy`](outlet-tenancy/spec.md) — outlet isolation enforced in the database, claims-based scoping, immediate deactivation and revocation, enumerated coverage, two-outlet synthetic seeds.
+- [`counter-billing`](counter-billing/spec.md) — server-assigned gapless bill numbers, append-only bills with a void-only transition, snapshot line items, idempotent client-UUID writes, cutover-validated business dates.
+- [`inventory-ledger`](inventory-ledger/spec.md) — the movements ledger as append-only truth with a database-maintained stock cache.
+- [`daily-cash-reconciliation`](daily-cash-reconciliation/spec.md) — day close computed and snapshotted by the database, never recomputed, arithmetic held by constraints.
+- [`attendance-and-location`](attendance-and-location/spec.md) — location evidence stored beside the verdict, one row per employee per business day.
+
 ## Expected capabilities
 
-The domain capabilities, derived from the roadmap; each arrives as its change archives:
+The remaining domain capabilities, derived from the roadmap; each arrives as its change archives:
 
-`outlet-tenancy` · `staff-authentication` · `counter-device-trust` · `menu-catalogue` · `counter-billing` · `offline-settlement` · `inventory-ledger` · `expense-tracking` · `attendance-and-location` · `daily-cash-reconciliation` · `profit-estimates` · `outlet-alerts` · `cross-outlet-oversight`
+`staff-authentication` · `counter-device-trust` · `menu-catalogue` · `offline-settlement` · `expense-tracking` · `profit-estimates` · `outlet-alerts` · `cross-outlet-oversight`

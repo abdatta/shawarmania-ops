@@ -74,7 +74,7 @@ Supported, but shift overlaps are flagged for a human rather than resolved autom
 
 ### No self-service password reset
 
-Resets are admin-initiated: an admin regenerates a one-time code and passes it on. Self-service needs an SMS or WhatsApp channel. Acceptable at current headcount; annoying at fifty staff across ten franchises.
+Resets are admin-initiated: an admin regenerates a one-time code and passes it on. Self-service reset by email is now possible (email is the sign-in identifier) but not built; `auth-and-roles` decides whether v1 ships it. Acceptable at current headcount; annoying at fifty staff across ten franchises.
 
 ### No automated data retention
 

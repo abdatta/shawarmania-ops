@@ -58,15 +58,15 @@ Two deliberate asymmetries worth noting. **The Super Admin cannot create bills**
 
 ## Authentication
 
-### Personal smartphones — phone number + password
+### Personal smartphones — email + password
 
-Super Admins, Franchise Admins and Employees sign in with their phone number and a password they set themselves.
+Super Admins, Franchise Admins and Employees sign in with their email address and a password they set themselves.
 
-Accounts are **admin-provisioned**: an admin creates the person's record, the system issues a one-time code, and the admin passes it on (in practice over WhatsApp, which the business already uses). The person signs in with phone + code and sets a password. Sessions are long-lived; a field employee should not be re-authenticating weekly.
+*(Owner-confirmed 2026-07-26, replacing an earlier phone+password design. Phone sign-in turned out to drag in an SMS-provider dependency even with no OTP flow — the auth service gates password sign-in behind the provider flag — while email carries no external dependency at all: addresses are pre-confirmed at provisioning and no mail is ever sent. Phone numbers remain on profiles as contact data only.)*
 
-Supabase creates these users with a pre-confirmed phone, which means **no SMS provider and no TRAI/DLT sender-ID registration is needed**. That is not a minor convenience — DLT registration for transactional SMS in India is weeks of paperwork, and it would have blocked the whole project on an unrelated approval.
+Accounts are **admin-provisioned**: an admin creates the person's record with the email pre-confirmed, the system issues a one-time code, and the admin passes it on (in practice over WhatsApp, which the business already uses). The person signs in and sets a password. Sessions are long-lived; a field employee should not be re-authenticating weekly. No SMS provider and no TRAI/DLT registration is involved anywhere.
 
-Password reset in v1 is admin-initiated: the admin regenerates a one-time code. Self-service reset needs an SMS or WhatsApp channel and is deferred.
+Password reset in v1 is admin-initiated: the admin regenerates a one-time code. Self-service reset by email is now *possible* — email being the identifier removes the old SMS blocker — but whether v1 ships it is `auth-and-roles`' decision. Google sign-in mapped to the same email address is a possible later convenience, not a commitment.
 
 ### Counter tablet — device enrolment + shift PIN
 
