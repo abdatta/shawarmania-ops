@@ -68,6 +68,19 @@ export type OutletPatch = Partial<
   }
 >
 
+/**
+ * One thing still attached to an outlet, and how much of it. `table` is a
+ * database identifier — `employees`, `counter_devices` — because the set is
+ * read from the schema's own foreign keys rather than from a list somebody
+ * maintains, and a table added later has no English phrase waiting for it. The
+ * surface translates the ones it knows and shows the rest as they are: falling
+ * back to an identifier is acceptable, omitting a table is not.
+ */
+export interface OutletReference {
+  table: string
+  count: number
+}
+
 export interface OutletsAdapter {
   /**
    * Outlets, for the surfaces a role can see. Active only by default, because
@@ -87,6 +100,28 @@ export interface OutletsAdapter {
    * `outlets_update` policy, not by whether this method is offered (design D4).
    */
   saveLocation(id: string, location: OutletLocation): Promise<Tables<'outlets'>>
+  /**
+   * Remove an outlet entirely. Super Admin only, and only while nothing
+   * anywhere references it — both enforced in Postgres, by `outlets_delete`
+   * and by seventeen foreign keys of which not one cascades.
+   *
+   * **`outlets` is the only table in this schema any client may delete from**,
+   * which is why no other adapter here has a method like this and why adding
+   * one would be a schema change rather than an adapter change. The rule is
+   * that history is voided, deactivated or corrected rather than removed; an
+   * outlet nothing references has no history, which is the entire argument for
+   * the exception and the reason it stops at this table.
+   *
+   * Closing an outlet is the answer for one that traded. This is for one that
+   * should never have existed.
+   */
+  deleteOutlet(id: string): Promise<void>
+  /**
+   * What is still attached to an outlet, for explaining a refused delete.
+   * Returns only non-empty things, so an empty array means the outlet is
+   * deletable right now. Super Admin only.
+   */
+  outletReferences(id: string): Promise<OutletReference[]>
 }
 
 export type AppRole = Tables<'profiles'>['role']

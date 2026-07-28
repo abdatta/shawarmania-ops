@@ -67,7 +67,7 @@ side effect of adding a button.
 merely inactive, and not on the strength of a flag somebody set — while the
 database can prove no row anywhere points at it.
 
-**The schema already proves it, for free.** Eighteen columns across the schema
+**The schema already proves it, for free.** Seventeen columns across the schema
 reference `outlets(id)`, and **not one carries `on delete cascade`.** A
 populated outlet therefore refuses its own deletion with a foreign-key
 violation, with no bookkeeping to maintain and no list of tables to remember.

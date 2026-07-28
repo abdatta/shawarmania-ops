@@ -1,4 +1,12 @@
-import { DataActionError, type NewOutlet, type OutletPatch, type OutletsAdapter } from '../adapters'
+import {
+  DataActionError,
+  type NewOutlet,
+  type OutletPatch,
+  type OutletReference,
+  type OutletsAdapter,
+} from '../adapters'
+import { accountFixtures } from './fixtures/accounts'
+import { employeeFixtures } from './fixtures/employees'
 import { outletFixtures } from './fixtures/outlets'
 
 /**
@@ -9,7 +17,32 @@ import { outletFixtures } from './fixtures/outlets'
  * It refuses what the database refuses — a duplicate code, above all — because
  * a demo that accepts a write the real stack rejects teaches the wrong thing
  * about the product.
+ *
+ * Deletion is the sharpest case of that. The real refusal is a foreign key,
+ * and fixtures have none: a naive mock deletes every outlet happily and the
+ * demo teaches that outlets are freely removable, which is the opposite of
+ * what this schema does. So the reference count below is computed from the
+ * other fixture collections by hand — the mock's substitute for referential
+ * integrity, and the reason `deleteOutlet` refuses here exactly where Postgres
+ * refuses there (design D7).
  */
+
+/**
+ * Everything in the fixtures that points at an outlet, keyed by the table name
+ * the real function would return. Kept beside the fixtures rather than derived,
+ * because there is no catalog to read — and a collection added here without a
+ * line in this map is a demo that quietly under-reports.
+ */
+function referencesTo(outletId: string): OutletReference[] {
+  const counts: OutletReference[] = [
+    { table: 'employees', count: employeeFixtures.filter((e) => e.outlet_id === outletId).length },
+    { table: 'profiles', count: accountFixtures.filter((a) => a.outlet_id === outletId).length },
+  ]
+  // Only what is actually attached, matching outlet_reference_counts.
+  return counts
+    .filter((reference) => reference.count > 0)
+    .sort((a, b) => a.table.localeCompare(b.table))
+}
 
 /** Empty is absent, matching the real adapter. */
 function trimmed(value: string | null | undefined): string | null {
@@ -110,6 +143,26 @@ export function createMockOutletsAdapter(): OutletsAdapter {
       outlet.location_captured_at = new Date().toISOString()
       outlet.geofence_radius_m = location.radiusMetres
       return structuredClone(outlet)
+    },
+
+    async deleteOutlet(id: string) {
+      find(id)
+      if (referencesTo(id).length > 0) {
+        // The same code and the same shape the real adapter produces for a
+        // foreign-key violation, so the surface has one refusal to handle.
+        throw new DataActionError(
+          'outlet_in_use',
+          'Something is still attached to this outlet, so it cannot be deleted.',
+        )
+      }
+      outlets.splice(
+        outlets.findIndex((outlet) => outlet.id === id),
+        1,
+      )
+    },
+
+    async outletReferences(id: string) {
+      return referencesTo(id)
     },
   }
 }

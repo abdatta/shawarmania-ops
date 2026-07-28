@@ -12,7 +12,12 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useAdapters, type Tables } from '@/data-access'
-import { DataActionError, type AddressSuggestion, type NewOutlet } from '@/data-access/adapters'
+import {
+  DataActionError,
+  type AddressSuggestion,
+  type NewOutlet,
+  type OutletReference,
+} from '@/data-access/adapters'
 import {
   captureQuality,
   CAPTURE_ACCURACY_GOOD_M,
@@ -74,6 +79,50 @@ function toTimeInput(value: string): string {
   return value.slice(0, 5)
 }
 
+/**
+ * What to call an outlet on screen.
+ *
+ * The one outlet this app most needs to be able to act on has no name, no code
+ * and no location label — a manager tapped Create with the placeholders still
+ * showing. A heading that renders as nothing gives an owner nothing to aim at,
+ * so a nameless row says it is nameless rather than rendering blank.
+ */
+function outletLabel(outlet: Tables<'outlets'>): string {
+  return outlet.name.trim() || outlet.code.trim() || 'Outlet created without a name'
+}
+
+/**
+ * A card needs a stable handle, and the code is blank on exactly the row this
+ * screen must be able to delete. Falling back to the id keeps it addressable.
+ */
+function outletHandle(outlet: Tables<'outlets'>): string {
+  return outlet.code.trim() || outlet.id
+}
+
+/**
+ * Table names into words a person would say. Deliberately a handful, not a
+ * map of the schema: the refusal counts come from the database's own foreign
+ * keys, so a table added later arrives here with no phrase waiting for it and
+ * is shown as it is. Reading `alert_responses — 2` is worse than reading
+ * "alerts somebody replied to"; not being told about it at all is worse than
+ * both (design D6).
+ */
+const REFERENCE_WORDS: Record<string, string> = {
+  employees: 'staff on the roster',
+  profiles: 'app accounts',
+  counter_devices: 'counter tablets',
+  attendance: 'recorded attendance days',
+  bills: 'bills',
+  shifts: 'shifts',
+  expenses: 'recorded expenses',
+  inventory_items: 'stock items',
+  account_invites: 'outstanding invitations',
+}
+
+function referenceWords(reference: OutletReference): string {
+  return `${REFERENCE_WORDS[reference.table] ?? reference.table} — ${reference.count}`
+}
+
 function toDraft(outlet: Tables<'outlets'>): Draft {
   return {
     code: outlet.code,
@@ -114,6 +163,8 @@ export function OutletsSurface() {
   const [busy, setBusy] = useState(false)
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
   const [pendingClosure, setPendingClosure] = useState<Tables<'outlets'> | null>(null)
+  const [pendingDeletion, setPendingDeletion] = useState<Tables<'outlets'> | null>(null)
+  const [blocked, setBlocked] = useState<{ id: string; references: OutletReference[] } | null>(null)
 
   useEffect(() => {
     let active = true
@@ -144,6 +195,42 @@ export function OutletsSurface() {
           ? cause.message
           : 'That did not work. Try again in a moment.',
       )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Deleting is attempted, never predicted.
+   *
+   * The screen could ask what is attached first and grey the action out, and
+   * that would mean keeping a copy of the schema's foreign keys in this file —
+   * the drift the database is enumerated to avoid everywhere else in this
+   * repo. So the delete is tried, and a refusal is turned into the sentence
+   * the owner actually needs (design D2, D6).
+   */
+  async function deleteOutlet(outlet: Tables<'outlets'>) {
+    setBusy(true)
+    setError(null)
+    setBlocked(null)
+    try {
+      await adapter.deleteOutlet(outlet.id)
+      // In place rather than a refetch: the row is gone, and asking the server
+      // to confirm what it just did is a round trip that can only agree.
+      setOutlets((current) => current?.filter((candidate) => candidate.id !== outlet.id) ?? current)
+    } catch (cause) {
+      if (cause instanceof DataActionError && cause.code === 'outlet_in_use') {
+        // A count that cannot be fetched degrades to the generic refusal
+        // rather than blanking it: "something is attached" is still true.
+        const references = await adapter.outletReferences(outlet.id).catch(() => [])
+        setBlocked({ id: outlet.id, references })
+      } else {
+        setError(
+          cause instanceof DataActionError
+            ? cause.message
+            : 'That did not work. Try again in a moment.',
+        )
+      }
     } finally {
       setBusy(false)
     }
@@ -210,8 +297,13 @@ export function OutletsSurface() {
               key={outlet.id}
               outlet={outlet}
               busy={busy}
+              blockedBy={blocked?.id === outlet.id ? blocked.references : null}
               onCapture={() => setCapturing(outlet)}
               onEdit={() => openEdit(outlet)}
+              onDelete={() => {
+                setBlocked(null)
+                setPendingDeletion(outlet)
+              }}
               onToggleActive={() => {
                 if (outlet.is_active) setPendingClosure(outlet)
                 else void run(() => adapter.updateOutlet(outlet.id, { isActive: true }))
@@ -253,6 +345,31 @@ export function OutletsSurface() {
       />
 
       {/*
+        Deliberately no type-the-name step. The standard hardening for an
+        irreversible action is to make the operator type the record's name, and
+        the outlet that most needs deleting has neither a name nor a code to
+        type. Requiring the outlet to be closed first is what supplies the
+        second moment instead (design D3, D4).
+      */}
+      <ConfirmDialog
+        open={pendingDeletion !== null}
+        title="Delete this outlet?"
+        consequence={
+          pendingDeletion
+            ? `${outletLabel(pendingDeletion)} is removed, not hidden. Marking it closed left it on this screen and let you reopen it; this takes the row away, and there is no undo. It will work only if nothing at all is attached to it — no staff, no accounts, no recorded days — and the database will refuse it otherwise.`
+            : ''
+        }
+        confirmLabel="Delete outlet"
+        danger
+        onClose={() => setPendingDeletion(null)}
+        onConfirm={() => {
+          const target = pendingDeletion
+          setPendingDeletion(null)
+          if (target) void deleteOutlet(target)
+        }}
+      />
+
+      {/*
         Keyed by the outlet: opening the sheet for a different shop starts from
         a clean reading, as a remount rather than an effect resetting state.
       */}
@@ -275,34 +392,68 @@ export function OutletsSurface() {
 function OutletCard({
   outlet,
   busy,
+  blockedBy,
   onCapture,
   onEdit,
+  onDelete,
   onToggleActive,
 }: {
   outlet: Tables<'outlets'>
   busy: boolean
+  /** Non-null once a delete has been refused: what is still attached. */
+  blockedBy: OutletReference[] | null
   onCapture: () => void
   onEdit: () => void
+  onDelete: () => void
   onToggleActive: () => void
 }) {
   const surveyed = outlet.location_captured_at !== null
   const positioned = outlet.latitude !== null && outlet.longitude !== null
+  const handle = outletHandle(outlet)
 
   return (
-    <Card className="space-y-3" data-testid={`outlet-${outlet.code}`}>
+    <Card className="space-y-3" data-testid={`outlet-${handle}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-bold text-content">{outlet.name}</h2>
+        <h2 className="text-sm font-bold text-content">{outletLabel(outlet)}</h2>
         <span className="text-xs text-content-muted">{outlet.location_label}</span>
       </div>
 
       {!outlet.is_active && (
         <p
-          data-testid={`closed-${outlet.code}`}
+          data-testid={`closed-${handle}`}
           className="rounded-lg border border-border bg-surface-raised p-2 text-xs font-semibold text-content-muted"
         >
           Marked closed. Nobody can check in here, and this outlet is not offered when accounts are
-          assigned. Everything recorded is still here.
+          assigned. Everything recorded is still here. If this outlet should never have existed at
+          all, it can now be deleted — but only while nothing is attached to it.
         </p>
+      )}
+
+      {blockedBy !== null && (
+        <div
+          role="alert"
+          data-testid={`delete-blocked-${handle}`}
+          className="rounded-lg border border-danger bg-surface-raised p-2 text-xs text-content"
+        >
+          <p className="font-semibold">
+            This outlet was not deleted. Things are still attached to it:
+          </p>
+          {blockedBy.length > 0 ? (
+            <ul className="mt-1 list-inside list-disc">
+              {blockedBy.map((reference) => (
+                <li key={reference.table}>{referenceWords(reference)}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1">
+              What is attached could not be listed just now. Nothing was deleted.
+            </p>
+          )}
+          <p className="mt-1 text-content-muted">
+            Move or remove them and the outlet can be deleted then — there is nothing here to
+            re-mark afterwards.
+          </p>
+        </div>
       )}
 
       {surveyed ? (
@@ -319,7 +470,7 @@ function OutletCard({
         </div>
       ) : (
         <p
-          data-testid={`uncaptured-${outlet.code}`}
+          data-testid={`uncaptured-${handle}`}
           className="inline-flex items-start gap-2 rounded-lg border border-warning bg-surface-raised p-2 text-xs text-content"
         >
           <MapPinOff aria-hidden size={14} className="mt-0.5 shrink-0 text-warning" />
@@ -347,6 +498,22 @@ function OutletCard({
         <Button variant="ghost" size="phone" disabled={busy} onClick={onToggleActive}>
           {outlet.is_active ? 'Mark closed' : 'Reopen'}
         </Button>
+        {/*
+          Closed first. An active outlet gets the reversible action and nothing
+          else, so a mis-tap on a trading shop lands on Mark closed rather than
+          on the one thing that cannot be undone (design D3).
+        */}
+        {!outlet.is_active && (
+          <Button
+            variant="ghost"
+            size="phone"
+            disabled={busy}
+            onClick={onDelete}
+            data-testid={`delete-${handle}`}
+          >
+            Delete
+          </Button>
+        )}
       </div>
     </Card>
   )

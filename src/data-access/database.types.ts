@@ -1227,6 +1227,13 @@ export type Database = {
         }
         Returns: string
       }
+      outlet_reference_counts: {
+        Args: { p_outlet: string }
+        Returns: {
+          row_count: number
+          table_name: string
+        }[]
+      }
       preview_account_invite: {
         Args: { p_code_hash: string; p_ip_hash?: string }
         Returns: {

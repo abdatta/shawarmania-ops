@@ -22,6 +22,7 @@ Four roles. The governing rule: **a role's scope is enforced by Row-Level Securi
 | **Outlets** |
 | View outlet list | ✓ all | R own | — | — |
 | Create / edit / deactivate outlet | ✓ | — | — | — |
+| Delete an outlet | ✓ closed, and only while nothing references it | — | — | — |
 | Switch active outlet | ✓ | — | — | — |
 | **People** |
 | Manage Franchise Admins | ✓ | — | — | — |
@@ -55,6 +56,8 @@ Four roles. The governing rule: **a role's scope is enforced by Row-Level Securi
 | **Alerts** |
 | Raise an alert | — | ✓ own outlet | — | — |
 | View and respond | ✓ all | R own alerts | — | — |
+
+**Deleting an outlet is the only delete anybody has.** Every other record in the system is voided, deactivated or corrected — the database grants `DELETE` to no client role on any other table. The exception is bounded by a precondition Postgres enforces rather than the screen: an outlet goes only while nothing anywhere references it, so one that ever traded cannot be deleted at all. It is for a shop created by mistake, and the app offers it only after the outlet is marked closed, so the reversible action always comes first.
 
 Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to an enrolled device and a shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it.
 

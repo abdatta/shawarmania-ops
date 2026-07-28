@@ -30,7 +30,7 @@ existing deactivation requirement is untouched.
 
 ## D2 — The foreign key is the guard; nothing counts on its behalf
 
-Eighteen columns across the schema reference `outlets(id)`, and **not one
+Seventeen columns across the schema reference `outlets(id)`, and **not one
 carries `on delete cascade`**. A populated outlet therefore already refuses its
 own deletion, enforced by Postgres, with no flag to maintain and no list to keep
 in sync.

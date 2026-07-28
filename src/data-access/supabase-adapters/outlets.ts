@@ -1,15 +1,30 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import { DataActionError, type NewOutlet, type OutletPatch, type OutletsAdapter } from '../adapters'
+import {
+  DataActionError,
+  type NewOutlet,
+  type OutletPatch,
+  type OutletReference,
+  type OutletsAdapter,
+} from '../adapters'
 import type { Database, TablesInsert, TablesUpdate } from '../database.types'
 
 /**
  * The real outlets adapter.
  *
  * Every write here is offered to every caller and refused by the database for
- * all but the Super Admin (`outlets_insert`, `outlets_update`). That is the
- * point: the UI not showing a button is convenience, and the policy is the
- * boundary.
+ * all but the Super Admin (`outlets_insert`, `outlets_update`, and now
+ * `outlets_delete`). That is the point: the UI not showing a button is
+ * convenience, and the policy is the boundary.
+ *
+ * **`deleteOutlet` has no counterpart in any other adapter, and that is not an
+ * oversight.** `outlets` is the only table in this schema a client may delete
+ * from — everywhere else history is voided, deactivated or corrected rather
+ * than removed, and the grants migration says so. The exception is justified
+ * by the precondition the database enforces: an outlet can only go while
+ * nothing references it, and an outlet nothing references has no history to
+ * protect. Anyone reaching for `delete` on employees, bills or attendance is
+ * looking for a schema change, not a missing method.
  */
 
 /** Empty is absent, not an empty string — a blank address field means unknown. */
@@ -39,12 +54,23 @@ function toColumns(patch: OutletPatch): TablesUpdate<'outlets'> {
 /**
  * A duplicate `code` is the one refusal an owner will actually hit, and the
  * raw message names a constraint rather than the mistake.
+ *
+ * A foreign-key violation is the other: it is what a populated outlet's
+ * deletion looks like arriving from Postgres, and `employees_outlet_id_fkey`
+ * is not a sentence. The surface follows this with the actual counts; this
+ * message is what stands alone if that lookup fails too.
  */
 function asOutletError(error: { message: string; code?: string }): unknown {
   if (error.code === '23505' || error.message.includes('outlets_code_key')) {
     return new DataActionError(
       'code_taken',
       'That outlet code is already used. Pick another short code.',
+    )
+  }
+  if (error.code === '23503') {
+    return new DataActionError(
+      'outlet_in_use',
+      'Something is still attached to this outlet, so it cannot be deleted.',
     )
   }
   return error
@@ -98,6 +124,30 @@ export function createSupabaseOutletsAdapter(client: SupabaseClient<Database>): 
         .single()
       if (error) throw error
       return data
+    },
+
+    async deleteOutlet(id: string) {
+      // `.select()` is what turns a policy refusal into an answer. A DELETE
+      // that matches no row through RLS is not an error — it removes nothing
+      // and reports success — so trusting silence here would take the outlet
+      // off the screen while it sat untouched in the database.
+      const { data, error } = await table().delete().eq('id', id).select('id')
+      if (error) throw asOutletError(error)
+      if (!data || data.length === 0) {
+        throw new DataActionError(
+          'not_permitted',
+          'That outlet was not deleted. Only the owner can delete an outlet, and only from an account that is still active.',
+        )
+      }
+    },
+
+    async outletReferences(id: string) {
+      const { data, error } = await client.rpc('outlet_reference_counts', { p_outlet: id })
+      if (error) throw error
+      return (data ?? []).map((row): OutletReference => ({
+        table: row.table_name,
+        count: Number(row.row_count),
+      }))
     },
   }
 }

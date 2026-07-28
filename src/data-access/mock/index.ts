@@ -26,5 +26,10 @@ export function createMockAdapters(): DataAdapters {
 }
 
 export { personaFixtures } from './fixtures/personas'
-export { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
+export {
+  OUTLET_KALYANI_ID,
+  OUTLET_KANCHRAPARA_ID,
+  OUTLET_MISTAKE_ID,
+  outletFixtures,
+} from './fixtures/outlets'
 export { employeeFixtures } from './fixtures/employees'

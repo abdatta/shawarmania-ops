@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { isDemoScopeActive } from '@/data-access/demo-scope'
-import { createMockAdapters, OUTLET_KALYANI_ID } from '@/data-access/mock'
+import { createMockAdapters, OUTLET_KALYANI_ID, OUTLET_MISTAKE_ID } from '@/data-access/mock'
 import { getSupabaseClient } from '@/data-access/supabase'
 import { appRoutes } from '@/routes'
 
@@ -66,6 +66,14 @@ describe('demo mode safety', () => {
     await adapters.outlets.listOutlets()
     await adapters.outlets.getOutlet(OUTLET_KALYANI_ID)
     await adapters.outlets.getOutlet('00000000-0000-4000-a000-00000000ffff')
+
+    // Deletion, both ways. `outlets` is the one table a client may delete
+    // from, which makes it the one adapter method that could destroy something
+    // real if a demo session ever reached Supabase — so both outcomes are
+    // exercised here rather than assumed unreachable.
+    await adapters.outlets.outletReferences(OUTLET_KALYANI_ID)
+    await expect(adapters.outlets.deleteOutlet(OUTLET_KALYANI_ID)).rejects.toThrow(/still attached/)
+    await adapters.outlets.deleteOutlet(OUTLET_MISTAKE_ID)
 
     const provisioned = await adapters.accounts.provision({
       fullName: 'Demo Someone',

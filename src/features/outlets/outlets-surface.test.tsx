@@ -394,9 +394,126 @@ describe('closing and reopening an outlet', () => {
     )
     await screen.findByTestId('closed-kalyani')
 
-    // And it is gone from the list every other surface asks for.
+    // And it is gone from the list every other surface asks for. The owner's
+    // list still carries the closed mis-created outlet the fixtures start with.
     expect(await adapters.outlets.listOutlets()).toHaveLength(1)
-    expect(await adapters.outlets.listOutlets({ includeInactive: true })).toHaveLength(2)
+    expect(await adapters.outlets.listOutlets({ includeInactive: true })).toHaveLength(3)
+  })
+})
+
+/**
+ * Deleting an outlet — the one client-deletable table in the schema, and the
+ * only screen that offers it.
+ *
+ * Two things carry these tests. Closing comes first, so an active outlet must
+ * offer no way to delete at all; and a refused delete must say what is still
+ * attached rather than reporting an error, because "employees_outlet_id_fkey"
+ * is not something anybody can act on.
+ */
+describe('deleting an outlet', () => {
+  /** The fixtures' mis-created outlet: closed, and nothing points at it. */
+  const MISTAKE = 'demo-mistake'
+
+  it('offers no delete on an outlet that is trading', async () => {
+    renderOutlets()
+
+    const card = await screen.findByTestId('outlet-kalyani')
+    expect(within(card).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Mark closed' })).toBeInTheDocument()
+  })
+
+  it('offers it once the outlet is closed, and says why closing came first', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+
+    const card = await screen.findByTestId('outlet-kalyani')
+    await user.click(within(card).getByRole('button', { name: 'Mark closed' }))
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark closed' }),
+    )
+
+    const closed = await screen.findByTestId('outlet-kalyani')
+    expect(within(closed).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.getByTestId('closed-kalyani')).toHaveTextContent('should never have existed')
+  })
+
+  it('deletes nothing until the confirmation is accepted', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const adapters = createMockAdapters()
+    const remove = vi.spyOn(adapters.outlets, 'deleteOutlet')
+
+    renderOutlets(adapters)
+    await user.click(
+      within(await screen.findByTestId(`outlet-${MISTAKE}`)).getByTestId(`delete-${MISTAKE}`),
+    )
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('removed, not hidden')
+    expect(dialog).toHaveTextContent('no undo')
+    expect(remove).not.toHaveBeenCalled()
+
+    // And nothing is typed to get there: the outlet this exists to remove has
+    // no name and no code to type (design D4).
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(remove).not.toHaveBeenCalled()
+    expect(screen.getByTestId(`outlet-${MISTAKE}`)).toBeInTheDocument()
+  })
+
+  it('takes a deleted outlet off the list', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+
+    await user.click(
+      within(await screen.findByTestId(`outlet-${MISTAKE}`)).getByTestId(`delete-${MISTAKE}`),
+    )
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete outlet' }),
+    )
+
+    await waitFor(() => expect(screen.queryByTestId(`outlet-${MISTAKE}`)).not.toBeInTheDocument())
+    expect(screen.queryByTestId('outlets-error')).not.toBeInTheDocument()
+  })
+
+  it('names what is still attached when the database refuses, and keeps the outlet', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+
+    // Kanchrapara has a roster and accounts behind it, so it refuses — but it
+    // has to be closed before the action is even offered.
+    const card = await screen.findByTestId('outlet-kanchrapara')
+    await user.click(within(card).getByRole('button', { name: 'Mark closed' }))
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark closed' }),
+    )
+    await user.click(await screen.findByTestId('delete-kanchrapara'))
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete outlet' }),
+    )
+
+    const refusal = await screen.findByTestId('delete-blocked-kanchrapara')
+    expect(refusal).toHaveTextContent('staff on the roster')
+    expect(refusal).toHaveTextContent('app accounts')
+    // A constraint name is not a sentence, and must not reach the screen.
+    expect(refusal).not.toHaveTextContent('fkey')
+    expect(screen.getByTestId('outlet-kanchrapara')).toBeInTheDocument()
+  })
+
+  it('gives a nameless outlet something to aim at', async () => {
+    // The exact row this change exists to remove: created with the
+    // placeholders still showing, so name, code and location label are all
+    // blank. A card that renders as nothing cannot be acted on.
+    const adapters = createMockAdapters()
+    const [first] = await adapters.outlets.listOutlets({ includeInactive: true })
+    const nameless = { ...first!, id: 'blank-1', code: '  ', name: '   ', location_label: '' }
+    vi.spyOn(adapters.outlets, 'listOutlets').mockResolvedValue([{ ...nameless, is_active: false }])
+
+    renderOutlets(adapters)
+
+    const card = await screen.findByTestId('outlet-blank-1')
+    expect(card).toHaveTextContent('Outlet created without a name')
+    expect(within(card).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
   })
 })
 

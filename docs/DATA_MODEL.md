@@ -12,8 +12,8 @@ Applied everywhere, without exception:
 - **Business dates** are `date`, named `business_date`, written explicitly. Never derived from a timestamp at read time — see [Glossary](GLOSSARY.md#business-date).
 - **Every outlet-scoped table** carries `outlet_id uuid not null references outlets(id)` and ships an RLS policy in the same migration.
 - **Enums** are Postgres enum types, so an invalid value is a constraint violation rather than a bad row.
-- Rows are **soft-deleted** (`is_active`, or a status enum) wherever history matters. Menu items and employees are never hard-deleted — old bills and attendance records reference them.
-- **Client privileges are explicit grants**, not defaults: the final migration is the manifest of every verb a session may even attempt (current Supabase images grant clients nothing automatically). DELETE is granted to no client role on any table, and `anon` holds nothing anywhere.
+- Rows are **soft-deleted** (`is_active`, or a status enum) wherever history matters. Menu items and employees are never hard-deleted — old bills and attendance records reference them. **One row can be hard-deleted, and only one: an `outlet` that nothing anywhere references** (see below). The rule protects history; an outlet with no staff, no accounts, no recorded days and no bills has none.
+- **Client privileges are explicit grants**, not defaults: the final migration is the manifest of every verb a session may even attempt (current Supabase images grant clients nothing automatically). DELETE is granted to **exactly one** client capability — the Super Admin deleting an `outlet` nothing references, added by `20260728000001_outlet_deletion.sql` — and to no client role on any other table. `anon` holds nothing anywhere.
 
 ## Tenancy and identity
 
@@ -21,6 +21,10 @@ Applied everywhere, without exception:
 `id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `is_active`, `created_at`.
 
 Coordinates and radius exist for attendance verification. The cutover time is what makes cross-midnight trade reconcile correctly.
+
+**The one table a client may delete from.** `outlets_delete` lets the Super Admin remove an outlet, and seventeen foreign keys — not one of which cascades — mean the delete succeeds only while nothing anywhere references it. There is no bookkeeping column and no maintained list: the check *is* the live referential state, so an outlet whose staff and stock have been moved elsewhere becomes deletable on its own with nothing to re-mark. A deactivated account still counts as a reference. `public.outlet_reference_counts(uuid)` reads the foreign-key set from the catalog and reports what is still attached, so a table added later is covered without anyone editing it.
+
+`is_active` remains the answer for an outlet that traded — its staff, attendance and bills are history the business keeps. Deletion is for an outlet that should never have existed, and the app offers it only once the outlet is already marked closed.
 
 **`profiles`** — one row per app login, `id` matching `auth.users.id`.
 `id`, `full_name`, `phone`, `role` (`super_admin` | `franchise_admin` | `biller` | `employee`), `outlet_id` (null only for `super_admin`), `is_active`, `created_at`.

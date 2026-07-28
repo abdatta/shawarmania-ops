@@ -3,8 +3,15 @@
 -- explicit, deliberate grant — the manifest of what a session may even
 -- attempt. RLS then decides which rows; this layer decides which verbs.
 --
--- DELETE appears nowhere: nothing in this schema is client-deletable.
+-- DELETE appears nowhere below, and appears exactly once in the whole schema.
 -- History is voided, soft-deleted, or corrected — never removed.
+--
+-- The one exception, added by 20260728000001_outlet_deletion.sql: `outlets` is
+-- deletable by the Super Admin, and only while nothing anywhere references it.
+-- An outlet with no staff, no attendance, no bills, no stock and no accounts
+-- has no history for this rule to protect; the seventeen foreign keys pointing
+-- at outlets(id) — none of which cascades — are what enforce the precondition.
+-- Every other table in this schema is still client-deletable by nobody.
 
 -- Reads.
 grant select on public.outlets,
@@ -31,6 +38,8 @@ grant select on public.outlets,
 -- no client writes profiles, counter_devices, customers, or
 -- daily_cash_records; nothing touches bill_number_counters.
 grant insert, update on public.outlets to authenticated;          -- Super Admin, by policy
+-- delete on outlets is granted in 20260728000001_outlet_deletion.sql, the
+-- single exception described at the top of this file.
 grant insert, update on public.menu_categories to authenticated;
 grant insert, update on public.menu_items to authenticated;
 grant insert, update on public.shifts to authenticated;

@@ -88,6 +88,14 @@ This is exactly the arrangement that document argues against: a shared device ho
 
 Nothing is deleted automatically. Customer PII has no defined retention period, and attendance location data accumulates indefinitely. Both should get a retention policy before headcount or customer volume grows meaningfully. Noted in [Security And Privacy](SECURITY_AND_PRIVACY.md).
 
+### An outlet that ever had a manager cannot be emptied
+
+An outlet is deletable only while nothing references it, and a deactivated account still counts — the foreign key does not distinguish an active profile from a switched-off one, and this was left that way deliberately so that "nothing references it" stays literally true with no exception to explain in the refusal.
+
+The consequence is narrow but real. `profiles` carries `check ((role = 'super_admin') = (outlet_id is null))`, so a Franchise Admin cannot be made outlet-less without also changing their role. An outlet that has ever had a manager therefore cannot be emptied by deactivating them, and is undeletable unless that account is re-roled or removed by a privileged operation. Providing a detach path is an account-lifecycle change rather than a deletion one, and was kept out of scope.
+
+In practice this bites only for an outlet created and staffed by mistake. One created by mistake and never staffed deletes cleanly; one that traded should be marked closed rather than deleted anyway.
+
 ### No audit log
 
 Who changed a price, voided a bill, or overrode a geofence is recorded on the affected row (`voided_by`, `override_by`, `recorded_by`), but there is no separate immutable audit trail. Sufficient for a small trusted team; insufficient if a franchise dispute ever turns adversarial.
