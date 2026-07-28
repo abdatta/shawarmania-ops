@@ -346,7 +346,7 @@ export function AccountsSurface() {
       align: 'right',
       cell: (row) =>
         row.id === session.userId ? (
-          <span className="text-xs text-content-muted">—</span>
+          <span className="text-xs text-content-muted"></span>
         ) : (
           <span className="flex justify-end">
             <RowActionsMenu
