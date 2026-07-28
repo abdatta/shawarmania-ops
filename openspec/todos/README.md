@@ -25,6 +25,7 @@ Keep entries behavior-focused:
 | [Signed-In Password Change](./signed-in-password-change.md) | Feature | Deferred by decision | Auth | The shared Profile screen gets built for any reason |
 | [Workbox Build-Chain Advisories](./workbox-build-advisories.md) | Investigation | Accepted | Build tooling | A fixed `workbox-build` ships, or an advisory becomes runtime-reachable |
 | [Unreachable Backend Blames The Password](./unreachable-backend-blames-the-password.md) | **Defect** | Open | Auth | Anyone signs in on a bad connection — so, any shift |
+| [Attendance Gate: Two Clauses Never Walked](./attendance-gate-unwalked-clauses.md) | Verification gap | Accepted at archive | Attendance | The first real staff member checks in at a live outlet |
 
 The three billing items are grouped deliberately: v1 ships bills as **record-only**, and all three extensions were anticipated in the schema so none of them requires migrating historical bills. See [Limitations](../../docs/LIMITATIONS.md#bills-are-record-only) for exactly which columns exist ahead of need, and why.
 

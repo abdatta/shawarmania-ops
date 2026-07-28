@@ -76,4 +76,4 @@
 - [x] 9.5 Inspect the activation screen and the handover panel on a phone and a tablet viewport, light and dark, with zero console errors and no unexpected network traffic.
 - [x] 9.6 Verify the query string survives the SPA fallback in a real preview of the production build. (`vite preview` serves its own fallback, so this proves the router and the base path; the `404.html` half is proved by the existing "fallback matches the shell" case and confirmed on the deployment itself.)
 - [x] 9.7 Docs in this change: `docs/SCREENS.md` (activation is one field), `docs/OPERATIONS.md` (the handover step and the "a code will not work" runbook), `docs/SECURITY_AND_PRIVACY.md` (the guessing bound is an endpoint limit; attempt records hold a hashed address).
-- [ ] 9.8 🧍 Send yourself the link from a real phone and activate from a WhatsApp tap.
+- [x] 9.8 🧍 Send yourself the link from a real phone and activate from a WhatsApp tap.

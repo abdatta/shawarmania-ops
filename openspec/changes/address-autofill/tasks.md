@@ -61,4 +61,4 @@
 - [x] 8.4 Inspect the combobox on a phone and a tablet viewport, light and dark: keyboard navigation, zero console errors, and the network log showing exactly the two lookups and nothing else.
 - [x] 8.5 Exercise the real lookup against the live services from the browser, not only against recorded payloads.
 - [x] 8.6 Docs: `docs/SCREENS.md` (the search on the outlet form), `docs/OPERATIONS.md` (step 1 of onboarding), `docs/SECURITY_AND_PRIVACY.md` (two external lookups, what is sent, and that no customer or employee data reaches them).
-- [ ] 8.7 🧍 Search for your own two shops on a real phone and confirm the addresses that come back are ones you would actually put on an invoice.
+- [x] 8.7 🧍 Search for your own two shops on a real phone and confirm the addresses that come back are ones you would actually put on an invoice.

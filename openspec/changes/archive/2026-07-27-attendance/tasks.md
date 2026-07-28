@@ -63,3 +63,26 @@
 - [x] 8.4 Inspect every new surface on a phone and a tablet viewport, in light and dark, with zero console errors and no unexpected network traffic.
 - [x] 8.5 `npm run contrast` green if any token or surface colour changed.
 - [x] 8.6 Docs updated in this change, not after it: `docs/SCREENS.md`, `docs/SECURITY_AND_PRIVACY.md` (the monitoring section, now that real capture exists), `docs/OPERATIONS.md` (production is real).
+
+## 9. What the gate actually proved
+
+Recorded at archive time, 2026-07-27, rather than left to be inferred from a
+ticked box.
+
+- [x] 9.1 **Real check-in and check-out on a phone, in production.** Walked by
+      the owner against a real outlet they created and surveyed themselves:
+      checked in at **5.1 m** from the captured fence, status `present`, source
+      `phone`, then checked out. Reached through an account provisioned in the
+      app and activated from a WhatsApp link. The synthetic data was deleted
+      afterwards at the owner's request; the walk happened.
+- [x] 9.2 🧍 The owner confirms the walk above.
+- [ ] 9.3 🧍 **Not demonstrated in production: an out-of-fence block cleared by
+      a manager override.** Proven by the pgTAP geofence suite, the REST suite
+      and `e2e/attendance.spec.ts` under Playwright's geolocation emulation —
+      but never walked on real hardware outside a fence. Archived with the owner's
+      agreement rather than held open. See
+      [`todos/attendance-gate-unwalked-clauses.md`](../../todos/attendance-gate-unwalked-clauses.md).
+- [ ] 9.4 🧍 **Not demonstrated in production: an Employee seeing only their own
+      records.** Enforced by Row-Level Security and proven by the isolation
+      matrix; production only ever held one employee, so nothing there could
+      have shown it either way.
