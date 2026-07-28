@@ -22,6 +22,10 @@ Each earlier UI change ships plausible fixtures for its own screens, which is en
 
 **A guided walkthrough** — a documented route through all four roles, runnable by someone who did not build the product. Plus demo reset, so every walkthrough starts from the same state.
 
+**Handing the demo over** — the demo stops advertising itself and becomes something the owner distributes. "View the demo" leaves the public landing card, and the Super Admin's account menu gains the demo entry with a **copy-link** action beside it, so the one person who pitches franchisees can produce the URL without typing it from memory. What changes is who *finds* the link, not who may open it: the demo stays unauthenticated, because a shared link that demanded a login would not be a demo. It copies `/demo` rather than a role path — the banner's role switcher is right there, and a recipient should not be pinned to whichever role the owner happened to be looking at.
+
+Franchise Admins do not get it yet. That is a decision to revisit when somebody asks rather than an oversight: a manager showing the demo to a walk-in lead is plausible enough, and no harm follows from it since the link is public either way — but there is no reason to widen an affordance ahead of wanting it.
+
 ## Non-goals
 
 - No real figures, no export files, no outlet or user CRUD — #13. Creating an outlet is meaningless against mocks.
@@ -33,6 +37,10 @@ Each earlier UI change ships plausible fixtures for its own screens, which is en
 
 The P&L basis toggle is not a formatting choice. Even in demo, the screen must state which basis is shown.
 
+**The owner's own demo link must still hit the interstitial.** Following it while signed in lands on the "you are signed in — this is the demo" gate from #3, and that must not be special-cased into a smoother path for the person who owns the menu it now sits in. The gate exists because someone ringing up fake bills in a tab they thought was real would be a genuine operational problem, and an owner is no less capable of losing track of a tab than a biller is. It will read as a papercut to whoever meets it next; it is the rail working.
+
+**Removing the landing link makes the demo undiscoverable to everyone else**, which is the point, but it means the walkthrough's own instructions become the only route in for anyone who is not the owner. The documented route has to open with where the link comes from, or the first person asked to run a demo will not be able to start one.
+
 ## Docs to update before archiving
 
-`docs/SCREENS.md`, `docs/DEMO_MODE.md` (how to run the walkthrough and extend the scenario).
+`docs/SCREENS.md` (the account menu gains an entry, and it is the first thing in that chrome that is not the same for all four roles), `docs/DEMO_MODE.md` (how to run the walkthrough, extend the scenario, and where the link to share is found).
