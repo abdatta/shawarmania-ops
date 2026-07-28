@@ -1,6 +1,6 @@
 # Operations
 
-> The build and CI pipeline landed with `project-foundations`; hosting and the production Supabase project went live on 2026-07-27. `outlet-and-staff-setup` (#15) closed the setup gap: **creating an outlet and linking an employee's login to their roster row are both done in the app**, and no step of onboarding needs SQL. The menu, tablet enrolment and the opening cash float are still to come, and the steps below say which.
+> The build and CI pipeline landed with `project-foundations`; hosting and the production Supabase project went live on 2026-07-27. `outlet-and-staff-setup` (#15) closed the setup gap: **creating an outlet and linking an employee's login to their roster row are both done in the app**, and no step of onboarding needs SQL. `activation-without-typing` (#16) then made the handover a link — **you send it, they tap it and choose a password**, and the address they will sign in with is on the screen for them to confirm. The menu, tablet enrolment and the opening cash float are still to come, and the steps below say which.
 
 ## Environments
 
