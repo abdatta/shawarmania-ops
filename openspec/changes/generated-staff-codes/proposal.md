@@ -122,6 +122,14 @@ uses in the same migration, or seeding breaks.
 the owner's edit form must surface its refusal as a sentence rather than a
 constraint name.
 
+**This change now ships third**, after `outlet-deletion` (#20) and
+`blank-is-not-a-value` (#19). Two consequences. Its migration and pgTAP file are
+renumbered to `20260728000003` and `13_` — see [#19's design D6](../blank-is-not-a-value/design.md),
+which fixes all three numbers in one table. And the outlet form already guards
+its required fields by then, so task 7.1's Staff code prefix field —
+*"pre-filled, editable, never a blank box"* — inherits that guard rather than
+having to build one.
+
 **Tests keyed on the code will break.** `data-testid={\`unlinked-${employee.employeeCode}\`}`
 and its siblings in `employee-roster.tsx` and `outlet-attendance.tsx` assume the
 test knows the code in advance, which stops being true once the app picks it.

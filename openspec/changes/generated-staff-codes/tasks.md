@@ -5,7 +5,7 @@
 
 ## 1. The migration
 
-- [ ] 1.1 New migration `supabase/migrations/20260727000005_generated_staff_codes.sql`. No staff code changes; `employees_code_not_blank` and `employees_code_unique_per_outlet` untouched.
+- [ ] 1.1 New migration `supabase/migrations/20260728000003_generated_staff_codes.sql`. No staff code changes; `employees_code_not_blank` and `employees_code_unique_per_outlet` untouched. **The number is third of three** — `…0001` belongs to #20 and `…0002` to #19, both of which ship before this. Settled in [#19's design D6](../blank-is-not-a-value/design.md); do not renumber without editing that table.
 - [ ] 1.2 `outlets.staff_code_prefix` — add **nullable**, backfill `kalyani` → `KAL` and `kanchrapara` → `KAN`, then `set not null`, `unique`, and a check constraining it to three characters of the Crockford alphabet. That order is the only one that works on a table with rows (D4).
 - [ ] 1.3 `public.random_staff_suffix()` — four characters from `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, the alphabet already used by [`invite-code.ts`](../../../supabase/functions/_shared/invite-code.ts). Do not invent a second alphabet, and do not use one containing `I`, `L`, `O` or `U` (D3).
 - [ ] 1.4 `public.issue_employee_code()` — `before insert` trigger function. Return early when a code was supplied; `coalesce(btrim(new.employee_code), '') = ''` is the "not supplied" test, so `null`, `''` and whitespace all mean *issue one* (D2).
@@ -17,7 +17,7 @@
 
 ## 2. Database tests
 
-- [ ] 2.1 New `supabase/tests/11_generated_staff_codes.sql`, registered wherever the suite enumerates its files.
+- [ ] 2.1 New `supabase/tests/13_generated_staff_codes.sql` — `11_` belongs to #20 and `12_` to #19 (#19 design D6). `supabase test db` globs the directory, so there is nothing to register.
 - [ ] 2.2 An insert with no `employee_code` succeeds and the row carries a code matching `^KAL-[0-9A-HJKMNP-TV-Z]{4}$` — assert the *shape*, never a literal value.
 - [ ] 2.3 An insert at the other outlet carries that outlet's prefix, proving the prefix comes from the row's outlet.
 - [ ] 2.4 A row inserted with an explicit code keeps it, unchanged (D1).

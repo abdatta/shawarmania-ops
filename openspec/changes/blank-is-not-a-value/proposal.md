@@ -1,6 +1,12 @@
 # Proposal: blank-is-not-a-value
 
-> **Model**: Opus · **Wave**: B · **Depends on**: #15 · **Gate**: **a blank or whitespace-only value cannot be written into any required field from any form in the app, and the database refuses it too** — and no placeholder in the app can be mistaken for a value already filled in.
+> **Model**: Opus · **Wave**: B · **Depends on**: #15, **#20** · **Gate**: **a blank or whitespace-only value cannot be written into any required field from any form in the app, and the database refuses it too** — and no placeholder in the app can be mistaken for a value already filled in.
+
+> **#20 is a hard dependency, not a courtesy.** A CHECK constraint validates
+> against every existing row, and production holds an outlet whose name and code
+> are blank. The owner has ruled out renaming or editing that row — it is to be
+> removed through the app — so `outlet-deletion` must ship and be used before
+> this change's migration can apply at all. See design D7.
 
 ## Why
 
@@ -59,10 +65,11 @@ name of an input with no visible label and prefixing them would be nonsense.
 The convention already exists in this codebase — `Staff code, e.g. KAL-05` —
 and the outlet form is the outlier.
 
-**The one existing bad row is left alone.** This change stops the next one; it
-does not clean up after the last one. Renaming or closing the nameless outlet
-is a thing the owner can already do from the app today, and deleting it is
-`outlet-deletion` (#20).
+**The one existing bad row is removed by #20, before this change starts.** This
+change stops the next one; it does not clean up after the last one. The owner
+has declined to rename or edit the nameless outlet, so `outlet-deletion` (#20)
+removes it through the app first — which is why that change now blocks this one
+rather than following it.
 
 ## Capabilities
 
@@ -102,22 +109,25 @@ client-side refusal would add nothing.
 
 ## Watch out for
 
-**`code` is unique, and blanks collide.** Exactly one blank-coded outlet can
-exist today, because `''` is a value and `outlets_code_key` is unique. If this
-migration runs against a database that already has one, the check constraint
-fails on the existing row and the migration aborts. **The nameless production
-outlet must be given a name and a code before this ships**, or the migration
-must be written to tolerate it. This is the one ordering risk in the change.
+**The migration aborts if any bad row survives.** A CHECK validates against
+every existing row. #20 removes the known one; task 1.2 confirms there is not a
+second. Note that `''` is a value and `outlets_code_key` is unique, so at most
+one blank-coded outlet can exist — but a blank *name* or *location label* has no
+such limit and could be sitting on any number of rows.
 
-**The same trap on the roster and the profile tables.** Check every table this
-migration touches for rows that already violate the new constraint, in
-production and not only in seeds. Local seeds are clean by construction, so
-local success proves nothing about production here.
+**`employees.full_name` and `profiles.full_name` have no delete path**, and none
+is planned — #20 covers outlets only. A blank found on either table cannot be
+removed the way the nameless outlet can, so it must be corrected by hand or the
+constraint narrowed. Task 1.3 settles that with the owner **before** the
+migration is written, rather than discovering it when the migration fails.
 
-**`generated-staff-codes` (#18) claims migration `20260727000005`.** This change
-ships first, so its migration is dated later. #18's task 1.1 must be renumbered
-or the two arrive out of order — a task below does it explicitly rather than
-leaving it to be discovered.
+**Local seeds are clean by construction**, so a green local run is not evidence
+about production for any of the above.
+
+**Three unshipped changes each carry a migration.** #20, this change and #18 all
+add one, and migrations apply in filename order — an out-of-order arrival is
+raised by the Supabase CLI at deploy time. Design D6 fixes all three numbers in
+one table; section 8 applies the two that belong to other changes.
 
 **#18 adds a fourth required field to the outlet form.** Its task 7.1 promises a
 Staff code prefix field that is *"pre-filled, editable, never a blank box"* —
@@ -136,8 +146,8 @@ one, which is where the database earns its place.
 
 ## User-only gate steps
 
-- 🧍 Give the nameless production outlet a name and a code before deploying the
-  migration — or confirm the migration tolerates it.
+- 🧍 Confirm the nameless outlet is gone from production — deleted through the
+  app by #20 — before the migration is deployed.
 - 🧍 On a phone, try to create an outlet with a space in the name field and
   confirm the refusal names the field.
 

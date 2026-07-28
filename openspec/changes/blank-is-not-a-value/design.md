@@ -158,37 +158,101 @@ re-validation in both themes, and would still not distinguish a sample value
 from a field name — which is the actual confusion. Two characters of copy
 solve the reported problem; a token change does not.
 
-## D6 — This change's migration is dated after #18's, and #18 renumbers
+## D6 — Migration and test numbering across #20, #19 and #18
 
-`generated-staff-codes` claims `20260727000005` and has not been implemented.
-This change ships first, so its migration is `20260728000001`. If #18 later
-arrives still numbered `20260727000005`, it applies out of order — the Supabase
-CLI treats that as an error condition, and it would be found at deploy time.
+Three unshipped changes each carry a migration, and migrations apply in
+filename order. Out-of-order arrival is an error the Supabase CLI raises at
+deploy time, which is the worst moment to find it — so the numbering is settled
+here, once, for all three.
 
-**Renumber #18's task 1.1 to `20260728000002` as part of this change**, rather
-than leaving a trap. Editing another change's tasks file is unusual and is done
-here deliberately: the collision is caused by this change's sequencing, so it
-belongs to this change to resolve.
+Build order is `#20 → #19 → #18` (D7), so the numbers follow it:
 
-## D7 — The migration can fail on production data, and must be run knowing that
+| Order | Change | Migration | pgTAP file |
+|---|---|---|---|
+| 1st | #20 `outlet-deletion` | `20260728000001_*` | `11_*` |
+| 2nd | **#19 this change** | `20260728000002_required_fields_not_blank.sql` | `12_required_fields_not_blank.sql` |
+| 3rd | #18 `generated-staff-codes` | `20260728000003_generated_staff_codes.sql` | `13_generated_staff_codes.sql` |
 
-This is the only genuine risk in an otherwise small change.
+`10_activation.sql` is the last pgTAP file that exists, and
+`20260727000005_activation_without_typing.sql` the last migration — both shipped
+by #16. `supabase test db` globs the directory, so a pgTAP rename is a rename
+and nothing else.
 
-Production currently holds an outlet whose `name` and `code` are both blank.
-A check constraint is validated against existing rows when it is added, so this
-migration **will abort** against that database. Locally it will pass, because
-seeds are clean — so local success is not evidence here.
+Two of those rows describe files this change does not write:
 
-Two ways forward, and the choice is the owner's:
+- **#18 has been renumbered from `20260727000005` and `11_`**, and its tasks
+  file already carries the new numbers. Editing another change's artifacts is
+  unusual and was done deliberately, because a stale number is found at deploy
+  time. Note what that renumber also fixed: **`20260727000005` is not free — it
+  is the migration #16 shipped**, so #18's original claim collided with a
+  migration already on disk and would have failed on the first `db reset`,
+  regardless of anything in this change. Sequencing merely surfaced it.
+- **#20 is not yet proposed**, so it has claimed nothing. Its numbers are
+  *reserved* above and recorded in its own proposal, so that `/opsx:propose
+  outlet-deletion` finds them rather than picking `20260728000001` by counting
+  and colliding with nothing — or, worse, picking `20260728000002` and colliding
+  with this.
 
-1. **Give the row a name and a code first** (the app can already do this — the
-   edit path works), then migrate. Simplest, and leaves the constraint honest.
-2. **Add the constraint `not valid`**, then `validate constraint` after the row
-   is fixed. Correct for a table too large to lock, which `outlets` is not.
+If the order changes again, this table is the thing to edit first.
 
-**Option 1 is recommended** and is written as a user-only gate step. Option 2
-buys nothing here except a constraint that is temporarily lying.
+## D7 — `outlet-deletion` (#20) ships first, and this change hard-depends on it
 
-Whichever is chosen, `employees.full_name` and `profiles.full_name` need the
-same check against production before the migration runs, not only against
-seeds.
+Production holds an outlet whose `name` and `code` are both blank. A CHECK
+constraint is validated against every existing row when it is added, so this
+migration **will abort** against that database. Locally it passes, because seeds
+are clean — local success is not evidence here.
+
+Three ways out were considered. **The owner has ruled out touching the row:** it
+is to be removed through the app, not renamed, not edited, not corrected by
+hand.
+
+| | Approach | Verdict |
+|---|---|---|
+| 1 | Rename the row, then migrate | **Ruled out by the owner.** |
+| 2 | Add the constraint `NOT VALID`, `VALIDATE CONSTRAINT` after #20 | Rejected — see below |
+| 3 | Ship #20 first, delete the row, then migrate | **Chosen** |
+
+**Why not option 2**, which is the tempting one, because it would let this
+change land first and stop the recurrence sooner. A CHECK marked `NOT VALID`
+skips existing rows at creation time but **still fires on every subsequent
+UPDATE** of them. The nameless outlet would become entirely frozen — not
+renameable, and no longer even markable-closed, because setting `is_active`
+re-evaluates the constraint against a row whose name is still blank. Its only
+remaining exit would be #20. If #20 then slipped, production would hold an
+immovable row and no fallback. It also ships a constraint that is temporarily
+untrue of its own table, plus a `VALIDATE CONSTRAINT` step in a later change
+that has to be remembered.
+
+**Option 3 is chosen.** It costs a longer window in which a blank outlet can
+still be created — #20 is the larger change, and is not yet proposed — and buys
+a constraint that is fully validated from the moment it exists, with no
+two-phase migration, no follow-up step, and no state in which the bad row is
+harder to remove than it is today.
+
+**This makes #20 a hard dependency of #19, not a sequencing preference.** The
+roadmap's dependency column is law, and it now reads `#15, #20`.
+
+### Production state, verified 2026-07-28 (counts only, read-only)
+
+The risk above was measured rather than assumed, against the linked production
+project:
+
+| Column | Blank rows | Total rows |
+|---|---|---|
+| `outlets.name` | **1** | 3 |
+| `outlets.code` | **1** | 3 |
+| `outlets.location_label` | **1** | 3 |
+| `employees.full_name` | 0 | **0** |
+| `profiles.full_name` | 0 | 2 |
+
+All three outlet blanks are the **same row** — `7a81b17d-…`, created
+2026-07-28T06:24Z, still `is_active`. It is the only obstacle to this
+migration.
+
+**The `employees` / `profiles` concern does not materialise.** Both were the
+worrying case, because neither has a delete path and none is planned — a blank
+there could not have been cleared by #20 or by this change. `employees` is
+empty and both profiles carry a name, so there is nothing to correct and the
+constraint can be added at full strength. Task 1.3 stays as a re-check rather
+than an open question, because the measurement is a month older than the
+migration will be.

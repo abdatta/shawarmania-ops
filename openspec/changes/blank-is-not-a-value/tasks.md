@@ -5,13 +5,19 @@
 
 ## 1. Production data, before anything else
 
-- [ ] 1.1 **Confirm the nameless outlet has been given a name and a code in production.** A check constraint validates against existing rows, so the migration in section 2 aborts while that row exists (D7). Local seeds are clean, so a green local run proves nothing about this.
-- [ ] 1.2 Check `employees.full_name` and `profiles.full_name` in production for blank or whitespace-only values by the same reasoning. Fix any before migrating.
-- [ ] 1.3 Record what was found in the change's verification notes. If production was already clean, say so — a check that was run and found nothing is not the same as a check that was skipped.
+> **This change cannot begin until `outlet-deletion` (#20) has shipped and the
+> nameless outlet has been deleted through the app.** That is a hard dependency
+> rather than a preference — the owner has ruled out renaming or editing the
+> row, and a check constraint cannot be added while it exists. See D7.
+
+- [ ] 1.1 **Confirm the nameless outlet is gone from production**, removed through the app by #20 rather than by hand.
+- [ ] 1.2 Confirm no *other* outlet carries a blank or whitespace-only `name`, `code` or `location_label`. The constraint validates against every existing row; one survivor aborts the migration.
+- [ ] 1.3 Re-check `employees.full_name` and `profiles.full_name`. Both were clean on 2026-07-28 — `employees` empty, both profiles named — so this is a re-measurement, not an open question (D7). It still matters: **a blank found here has no #20 equivalent to remove it**, since neither table has a delete path and none is planned. If one has appeared, settle correcting it with the owner *before* writing the migration.
+- [ ] 1.4 Record what was found. If production was already clean, say so — a check that ran and found nothing is not the same as a check that was skipped. Local seeds are clean by construction, so a green local run is not evidence for any of this.
 
 ## 2. The migration
 
-- [ ] 2.1 New migration `supabase/migrations/20260728000001_required_fields_not_blank.sql`. Dated after `generated-staff-codes`' claimed number deliberately; section 8 renumbers that one (D6).
+- [ ] 2.1 New migration `supabase/migrations/20260728000002_required_fields_not_blank.sql`. The number is second of three and is settled in D6's table, not chosen by counting — `…0001` is reserved for #20, which ships first.
 - [ ] 2.2 `outlets_name_not_blank`, `outlets_code_not_blank`, `outlets_location_label_not_blank` — `check (length(btrim(<column>)) > 0)`, the identical shape to `employees_code_not_blank` in `20260727000004`. Do not invent a second form of this check (D4).
 - [ ] 2.3 `employees_full_name_not_blank` and `profiles_full_name_not_blank`, same shape.
 - [ ] 2.4 A header comment naming the defect this closes — a nameless outlet reached production — and pointing at `20260727000004`, which is the same fix on a different column. The next person to add a `not null` text column should find this.
@@ -20,7 +26,7 @@
 
 ## 3. Database tests
 
-- [ ] 3.1 New `supabase/tests/11_required_fields_not_blank.sql`. `supabase test db` globs the directory, so no registration step — but see 8.2 for the number.
+- [ ] 3.1 New `supabase/tests/12_required_fields_not_blank.sql` — `11_` is reserved for #20 (D6). `supabase test db` globs the directory, so there is no registration step.
 - [ ] 3.2 Inserting an outlet with `''` for `name`, for `code`, and for `location_label` is refused, one case each.
 - [ ] 3.3 Inserting an outlet with `'   '` for each of those three is refused — whitespace is the case a `not null` column already accepted.
 - [ ] 3.4 **Updating** an existing outlet's name to `''` and to `'   '` is refused. The create path is not the only way in (D4).
@@ -55,11 +61,17 @@
 - [ ] 7.4 Do not touch `activate.tsx:166` (`XXXXX-XXXXX`, a format mask), the address-search placeholder (an instruction), or `employee-roster.tsx:458` (already open-ended, and optional).
 - [ ] 7.5 No change to `Input` or to any token. The rule is copy, not styling (D5).
 
-## 8. Coordination with `generated-staff-codes` (#18)
+## 8. Coordination with the changes either side of this one
 
-- [ ] 8.1 Renumber #18's task 1.1 migration from `20260727000005_generated_staff_codes.sql` to `20260728000002_generated_staff_codes.sql`. This change ships first, and an out-of-order migration is found at deploy time (D6).
-- [ ] 8.2 Renumber #18's task 2.1 test file from `11_generated_staff_codes.sql` to `12_generated_staff_codes.sql`, since 3.1 takes 11.
-- [ ] 8.3 Add one line to #18's *Watch out for* noting that the outlet form now guards its required fields, so its task 7.1 prefix field inherits the guard rather than needing its own.
+Build order is `#20 → #19 → #18` (D7). Numbering follows it, per D6's table.
+
+#18's files were renumbered when this change was replanned, so these are
+confirmations rather than edits. Verify rather than assume — a stale number is
+found at deploy time, which is the worst moment (D6).
+
+- [ ] 8.1 Confirm `outlet-deletion` (#20) has shipped and taken `20260728000001_*` and `11_*`. If it took different numbers, D6's table is what is wrong — correct it there first, then everything below.
+- [ ] 8.2 Confirm #18's task 1.1 still reads `20260728000003_generated_staff_codes.sql` and its task 2.1 reads `13_generated_staff_codes.sql`.
+- [ ] 8.3 Confirm no migration in `supabase/migrations/` sorts after this change's but was authored before it — the whole point of the numbering table.
 
 ## 9. Component tests
 

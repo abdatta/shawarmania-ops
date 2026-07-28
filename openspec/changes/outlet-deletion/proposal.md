@@ -2,6 +2,16 @@
 
 > **Model**: Opus · **Wave**: B · **Depends on**: #15 · **Gate**: **an outlet with nothing attached to it is deleted from the app by the owner**, and one with anything attached refuses with a sentence naming what is still there — the refusal proved by a hand-crafted request, not by observing a disabled button.
 
+> **This change blocks `blank-is-not-a-value` (#19), which lists it as a hard
+> dependency.** #19 adds a CHECK constraint that validates against every
+> existing row, and production holds an outlet whose name and code are blank.
+> The owner has ruled out renaming or editing it, so it leaves through this
+> change's delete action or not at all. #19 cannot begin until it is gone.
+>
+> **Reserved numbers**, settled in #19's design D6 so that three unshipped
+> migrations do not collide: this change takes migration `20260728000001_*` and
+> pgTAP file `11_*`. Do not renumber without editing that table.
+
 ## Why
 
 An outlet created by mistake is permanent. There is no way to remove one from
@@ -13,6 +23,12 @@ during their first session; it sits in production, appears in the owner's list,
 and cannot be taken out. `blank-is-not-a-value` (#19) stops the next one being
 created. It does nothing about the one that exists, or about an outlet created
 correctly and then genuinely not needed.
+
+**And #19 cannot ship until this one has.** Its constraint refuses to be added
+while the nameless row is there, and the owner will not rename it to clear the
+way. So the change that closes the hole is waiting on the change that cleans up
+what fell through it — which makes this the more urgent of the two, not the
+larger one that can wait.
 
 **Marking an outlet closed is the right answer for an outlet that traded.** Its
 staff, its attendance and its bills are history the business must keep, and
@@ -90,6 +106,44 @@ say deletion is now generally acceptable.
 
 **Bulk deletion, or an undo.** One outlet, one confirmation, no recycle bin.
 
+## Production state, verified 2026-07-28 (counts only, read-only)
+
+Measured against the linked production project before this was written, because
+the safety argument above depends on facts rather than on the schema's
+intentions.
+
+| Outlet | Active | Rows referencing it, across all 17 FKs | Deletable |
+|---|---|---|---|
+| `(blank)` | yes | 0 | **yes** |
+| `skalyani` | yes | 0 | **yes** |
+| `skpa` | yes | 0 | **yes** |
+
+`employees` 0 rows · `attendance` 0 · `bills` 0 · `profiles` 2, **both
+`super_admin`**, neither scoped to an outlet.
+
+Three consequences, and the first is the important one:
+
+**The foreign-key guard currently protects nothing.** "Deletable only while
+nothing references it" is the safety property this whole change rests on, and
+today it is vacuous — production has no dependent rows at all, so *every*
+outlet is deletable, Kalyani and Kanchrapara included. The confirmation dialog
+is the only thing standing between a mis-tap and losing a real outlet. That
+does not invalidate the design — the guard becomes real the moment anyone is
+rostered — but it does mean the confirmation cannot be treated as a formality,
+and it changes the third open question below from a preference into a decision
+with teeth.
+
+**A type-the-name confirmation would make the target row undeletable.** The
+obvious way to harden an irreversible action is to make the owner type the
+outlet's name. The one outlet that most needs deleting has no name. Anything of
+that shape must fall back to something a blank row can satisfy.
+
+**Both production accounts are Super Admins.** This change is Super-Admin-only
+by design, which today means *everyone* gets the delete action, including the
+newly provisioned account whose first session produced the blank outlet. Worth
+knowing before deciding how heavy the confirmation is — and worth the owner
+knowing independently of this change.
+
 ## Open questions to settle in `/opsx:propose`
 
 **Emptying an outlet is not always possible, and the plan assumes it is.**
@@ -107,10 +161,13 @@ entry — the exact failure mode `01_schema_coverage.sql` exists to prevent
 elsewhere. Decide between a maintained mapping, a generic-but-honest sentence,
 and a counting query that enumerates from the catalog.
 
-**Whether an outlet must be closed before it can be deleted.** Requiring it adds
-a step to a two-step flow and a moment to reconsider. Not requiring it means one
-confirmation stands between an active outlet and its removal — which is only
-safe *because* the foreign-key check is doing the real work.
+**Whether an outlet must be closed before it can be deleted.** This was the
+softest of the four and the measurement above has hardened it. Requiring it adds
+a step and a moment to reconsider. Not requiring it means one confirmation
+stands between an active outlet and its removal — and the justification for
+that was *"the foreign-key check is doing the real work"*, which is presently
+false. Either require closed-first, or make the confirmation carry weight of its
+own, but do not ship the light version on a guard that is currently empty.
 
 **Whether the demo shows it.** The mock adapter has no foreign keys, so the
 refusal path has to be modelled deliberately or the demo will teach that every
