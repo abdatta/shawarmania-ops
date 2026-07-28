@@ -526,6 +526,12 @@ person types is a password.
 - **THEN** the one-time code is not presented on its own to be dictated or
   copied apart from the link
 
+#### Scenario: The scannable image can be enlarged for another camera
+
+- **WHEN** an admin taps the scannable image
+- **THEN** it is shown at a size another phone can read across a counter, and
+  can be dismissed back to the panel
+
 #### Scenario: The link contains no address
 
 - **WHEN** an activation link is generated for any account
