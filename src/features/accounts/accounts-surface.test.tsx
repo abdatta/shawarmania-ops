@@ -31,6 +31,11 @@ function sessionFor(role: Role): Session {
   }
 }
 
+/** Row actions live behind a kebab menu now, so a test has to open it first. */
+async function openRowActions(user: ReturnType<typeof userEvent.setup>, row: HTMLElement) {
+  await user.click(within(row).getByRole('button', { name: /^Actions for /i }))
+}
+
 function renderSurface(role: Role, adapters: DataAdapters = createMockAdapters()) {
   return {
     adapters,
@@ -212,6 +217,7 @@ describe('the account surface', () => {
     renderSurface('super_admin', adapters)
 
     const row = (await screen.findByText('Demo Manager')).closest('tr')!
+    await openRowActions(user, row)
     await user.click(within(row).getByRole('button', { name: 'Deactivate' }))
 
     const dialog = await screen.findByRole('dialog')
@@ -226,8 +232,10 @@ describe('the account surface', () => {
     await waitFor(() => {
       const updated = screen.getByText('Demo Manager').closest('tr')!
       expect(within(updated).getByText('Deactivated')).toBeInTheDocument()
-      expect(within(updated).getByRole('button', { name: 'Reactivate' })).toBeInTheDocument()
     })
+    const updated = screen.getByText('Demo Manager').closest('tr')!
+    await openRowActions(user, updated)
+    expect(within(updated).getByRole('button', { name: 'Reactivate' })).toBeInTheDocument()
   })
 
   it('surfaces a refusal instead of failing silently', async () => {
@@ -237,6 +245,7 @@ describe('the account surface', () => {
     renderSurface('super_admin', adapters)
 
     const row = (await screen.findByText('Demo Manager')).closest('tr')!
+    await openRowActions(user, row)
     await user.click(within(row).getByRole('button', { name: 'New code' }))
 
     expect(await screen.findByTestId('accounts-error')).toBeInTheDocument()
@@ -431,6 +440,7 @@ describe('the email address an account signs in with', () => {
     renderSurface('super_admin')
 
     const row = (await screen.findByText('Demo Manager')).closest('tr')!
+    await openRowActions(user, row)
     await user.click(within(row).getByRole('button', { name: 'New code' }))
 
     expect(await screen.findByTestId('issued-code-email')).toHaveTextContent(
@@ -445,6 +455,7 @@ describe('the email address an account signs in with', () => {
     renderSurface('super_admin', adapters)
 
     const row = (await screen.findByText('Demo Manager')).closest('tr')!
+    await openRowActions(user, row)
     await user.click(within(row).getByRole('button', { name: 'Change email' }))
 
     const field = screen.getByLabelText('Email')
@@ -469,6 +480,7 @@ describe('the email address an account signs in with', () => {
     renderSurface('super_admin')
 
     const row = (await screen.findByText('Demo Manager')).closest('tr')!
+    await openRowActions(user, row)
     await user.click(within(row).getByRole('button', { name: 'Change email' }))
 
     const field = screen.getByLabelText('Email')
@@ -480,6 +492,7 @@ describe('the email address an account signs in with', () => {
   })
 
   it('renders the list as names when the address lookup is refused', async () => {
+    const user = userEvent.setup()
     const adapters = createMockAdapters()
     // What a caller with no authority to read addresses gets: the privileged
     // function refuses, and the screen is names-only rather than blank.
@@ -493,6 +506,7 @@ describe('the email address an account signs in with', () => {
 
     const row = (await screen.findByText('Demo Manager')).closest('tr')!
     expect(within(row).queryByText(/@example\.com/)).not.toBeInTheDocument()
+    await openRowActions(user, row)
     expect(within(row).getByRole('button', { name: 'New code' })).toBeInTheDocument()
   })
 })

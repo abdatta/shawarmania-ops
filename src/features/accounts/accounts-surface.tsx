@@ -6,6 +6,7 @@ import { DataTable, type DataTableColumn } from '@/components/layout/data-table'
 import { EmptyState } from '@/components/layout/empty-state'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { PageHeader } from '@/components/layout/page-header'
+import { RowActionsMenu } from '@/components/layout/row-actions-menu'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
@@ -347,42 +348,37 @@ export function AccountsSurface() {
         row.id === session.userId ? (
           <span className="text-xs text-content-muted">—</span>
         ) : (
-          <span className="flex justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="phone"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  const code = await adapter.reissue(row.id)
-                  setIssued({ ...code, name: row.fullName, email: row.email })
-                })
-              }
-            >
-              New code
-            </Button>
-            <Button variant="ghost" size="phone" disabled={busy} onClick={() => setCorrecting(row)}>
-              Change email
-            </Button>
-            {row.isActive ? (
-              <Button
-                variant="ghost"
-                size="phone"
-                disabled={busy}
-                onClick={() => setPendingDeactivation(row)}
-              >
-                Deactivate
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="phone"
-                disabled={busy}
-                onClick={() => void run(() => adapter.setActive(row.id, true))}
-              >
-                Reactivate
-              </Button>
-            )}
+          <span className="flex justify-end">
+            <RowActionsMenu
+              label={`Actions for ${row.fullName}`}
+              actions={[
+                {
+                  label: 'New code',
+                  disabled: busy,
+                  onSelect: () =>
+                    void run(async () => {
+                      const code = await adapter.reissue(row.id)
+                      setIssued({ ...code, name: row.fullName, email: row.email })
+                    }),
+                },
+                {
+                  label: 'Change email',
+                  disabled: busy,
+                  onSelect: () => setCorrecting(row),
+                },
+                row.isActive
+                  ? {
+                      label: 'Deactivate',
+                      disabled: busy,
+                      onSelect: () => setPendingDeactivation(row),
+                    }
+                  : {
+                      label: 'Reactivate',
+                      disabled: busy,
+                      onSelect: () => void run(() => adapter.setActive(row.id, true)),
+                    },
+              ]}
+            />
           </span>
         ),
     },
