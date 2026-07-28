@@ -51,7 +51,7 @@
 
 ## 5. The Staff surface
 
-- [ ] 5.1 `src/features/employees/employee-roster.tsx` — remove the Staff-code field from the **add** path and the `!editing && !draft.employeeCode.trim()` guard at line 192.
+- [ ] 5.1 `src/features/employees/employee-roster.tsx` — remove the Staff-code field from the **add** path and the `!editing && !draft.employeeCode.trim()` guard at line 193.
 - [ ] 5.2 On the **edit** path the field stays, enabled for `session.role === 'super_admin'` and disabled otherwise (D6).
 - [ ] 5.3 Replace the helper text. *"A staff code identifies past records and does not change"* is now false: for the owner it says what changing it does and does not affect; for a manager it says the owner can change it. Neither sentence should read as an error.
 - [ ] 5.4 Send `employeeCode` in the update patch only when the owner actually changed it, so an ordinary edit by the owner does not trip the guard needlessly.
@@ -59,8 +59,8 @@
 
 ## 6. The Access surface
 
-- [ ] 6.1 `src/features/accounts/accounts-surface.tsx` — remove the Staff-code input (lines 560–573) and the `employeeCode` field from `Draft` and its resets.
-- [ ] 6.2 Remove the `rosterChoice === 'create' && !draft.employeeCode.trim()` guard at line 209 and its message. The *link them to someone* branch keeps its own "say who" guard — that half of the incomplete-answer scenario survives.
+- [ ] 6.1 `src/features/accounts/accounts-surface.tsx` — remove the Staff-code input (lines 552–566) and the `employeeCode` field from `Draft` and its resets.
+- [ ] 6.2 Remove the `rosterChoice === 'create' && !draft.employeeCode.trim()` guard at line 211 and its message. The *link them to someone* branch keeps its own "say who" guard — that half of the incomplete-answer scenario survives.
 - [ ] 6.3 The roster-choice copy no longer promises to ask for a code.
 - [ ] 6.4 The account-linking dropdown still shows `{employee.fullName} · {employee.employeeCode}` — the disambiguator keeps its job, now with a code the app chose.
 
@@ -74,7 +74,7 @@
 
 ## 8. Component tests
 
-- [ ] 8.1 Move the code-keyed test IDs to the row id in `employee-roster.tsx` (lines 512, 524, 534) and `outlet-attendance.tsx` (lines 256, 282), and update every test that selects on them (D8).
+- [ ] 8.1 Move the code-keyed test IDs to the row id in `employee-roster.tsx` (lines 509, 521, 531) and `outlet-attendance.tsx` (lines 256, 282), and update every test that selects on them (D8).
 - [ ] 8.2 `employee-roster.test.tsx` — adding a person succeeds with no code entered; the edit field is disabled for a Franchise Admin and enabled for a Super Admin.
 - [ ] 8.3 `accounts-surface.test.tsx` — provisioning an Employee with *add to the staff list* succeeds without a code; choosing *link to someone* without saying who still refuses.
 - [ ] 8.4 A test that the owner's code edit reaches the adapter only when the value actually changed (5.4).

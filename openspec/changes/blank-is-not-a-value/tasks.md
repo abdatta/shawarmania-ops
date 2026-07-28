@@ -2,6 +2,10 @@
 
 > Read [`proposal.md`](proposal.md) and [`design.md`](design.md) first.
 > Decision references (D1–D7) are to that design.
+>
+> **Line numbers below drift.** They were last checked against `main` at
+> `1778007`, which moved every one of them by a few lines. Where a line number
+> and a named symbol disagree, the symbol is what is meant.
 
 ## 1. Production data, before anything else
 
@@ -39,7 +43,7 @@
 
 ## 4. The Outlets surface
 
-- [ ] 4.1 `src/features/outlets/outlets-surface.tsx` — `onSubmit` (line 165) checks `name`, `code` and `locationLabel` for `.trim() === ''` before calling the adapter, and returns early having set `error`. Follow `onProvision`'s existing shape (D2).
+- [ ] 4.1 `src/features/outlets/outlets-surface.tsx` — `onSubmit` (line 166) checks `name`, `code` and `locationLabel` for `.trim() === ''` before calling the adapter, and returns early having set `error`. Follow `onProvision`'s existing shape (D2).
 - [ ] 4.2 The message names the field that is missing, in this repo's voice — a sentence, not `Name is required`. One message per field, not one generic message for all three.
 - [ ] 4.3 The guard runs on the edit path too, not only on create — it is one component for both, and clearing a name is the same mistake as never typing one.
 - [ ] 4.4 **The submit button stays enabled** (D3). Do not add `disabled` to the outlet form's footer button; four required fields behind a dead button says nothing about which one is missing.
@@ -47,21 +51,21 @@
 
 ## 5. The Staff surface
 
-- [ ] 5.1 `src/features/employees/employee-roster.tsx` — `onSubmit` (line 185) gains a `fullName.trim()` guard. The existing `employeeCode` guard at line 192 is **removed by #18**; do not restructure around it, and do not add a second guard to that field (D6 risk note).
+- [ ] 5.1 `src/features/employees/employee-roster.tsx` — `onSubmit` (line 186) gains a `fullName.trim()` guard. The existing `employeeCode` guard at line 193 is **removed by #18**; do not restructure around it, and do not add a second guard to that field (D6 risk note).
 - [ ] 5.2 The guard applies to the edit path as well as add.
 
 ## 6. The Access surface
 
-- [ ] 6.1 `src/features/accounts/accounts-surface.tsx` — `onProvision` (line 201) gains a `fullName.trim()` guard, placed with the existing pre-write checks so all reasons to refuse sit together.
+- [ ] 6.1 `src/features/accounts/accounts-surface.tsx` — `onProvision` (line 202) gains a `fullName.trim()` guard, placed with the existing pre-write checks so all reasons to refuse sit together.
 - [ ] 6.2 An `email.trim()` guard alongside it. `type="email"` is inert for the same reason `required` is, and a blank address provisions an account nobody can sign in to.
-- [ ] 6.3 Do **not** touch the staff-code input or its guard at line 209 — #18 deletes both (task 6.1, 6.2 there).
+- [ ] 6.3 Do **not** touch the staff-code input or its guard at line 211 — #18 deletes both (task 6.1, 6.2 there).
 
 ## 7. Placeholders
 
-- [ ] 7.1 `outlets-surface.tsx` lines 468, 480, 494 — prefix the three sample values with `e.g. ` (D5).
+- [ ] 7.1 `outlets-surface.tsx` lines 460, 472, 486 — prefix the three sample values with `e.g. ` (D5).
 - [ ] 7.2 `src/features/attendance/outlet-attendance.tsx:342` — same treatment; it is a sample sentence presented as bare text.
-- [ ] 7.3 **Do not touch** lines 520, 527, 534, 540, 549 of `outlets-surface.tsx`. Those placeholders are the accessible name of inputs carrying `aria-label` and no visible label; `e.g. City` would be incoherent (D5).
-- [ ] 7.4 Do not touch `activate.tsx:166` (`XXXXX-XXXXX`, a format mask), the address-search placeholder (an instruction), or `employee-roster.tsx:458` (already open-ended, and optional).
+- [ ] 7.3 **Do not touch** lines 512, 519, 526, 532, 541 of `outlets-surface.tsx`. Those placeholders are the accessible name of inputs carrying `aria-label` and no visible label; `e.g. City` would be incoherent (D5).
+- [ ] 7.4 Do not touch `activate.tsx:166` (`XXXXX-XXXXX`, a format mask), the address-search placeholder (an instruction), or `employee-roster.tsx:455` (already open-ended, and optional).
 - [ ] 7.5 No change to `Input` or to any token. The rule is copy, not styling (D5).
 
 ## 8. Coordination with the changes either side of this one
