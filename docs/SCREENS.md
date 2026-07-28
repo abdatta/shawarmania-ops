@@ -1,6 +1,8 @@
 # Screens
 
-> The four role shells exist, and all four roles now sign in and reach their own (#4): phone shells with bottom-tab navigation for Super Admin, Franchise Admin and Employee, the fixed-chrome tablet shell for the Biller, each with a thin home overview. Sign in, Set your password, People, Access, Outlets, Staff, Attendance and My attendance are built, and the setup chain from an empty database through to a working check-in runs entirely in the app (#5, #15) — **walked in production**: an outlet created and surveyed on site, a phone check-in at 5.1 m from its fence, and a check-out. Activation is one tap and one password — the code travels in a link, and the address is shown for confirmation rather than typed (#16). Every other *feature* screen below is still to come — its shell, gate entry and layout primitives are waiting for it.
+> The four role shells exist, and all four roles now sign in and reach their own (#4): phone shells with bottom-tab navigation for Super Admin, Franchise Admin and Employee, the fixed-chrome tablet shell for the Biller, each with a thin home overview. Sign in, Set your password, People, Access, Outlets, Staff, Attendance and My attendance are built, and the setup chain from an empty database through to a working check-in runs entirely in the app (#5, #15) — **walked in production**: an outlet created and surveyed on site, a phone check-in at 5.1 m from its fence, and a check-out. Activation is one tap and one password — the code travels in a link, and the address is shown for confirmation rather than typed (#16).
+>
+> **The counter and the manager's operational surfaces are built and demo-gated** (#6, #7): the billing counter with its shift screens and sync indicator, and Menu, Stock, Expenses and Daily cash — all walkable at `/demo/*` against mocked data, none of them connected to real data yet. They become real one at a time in #10, #11 and #12. Everything else below is still to come.
 
 One bundle serves all four roles. After sign-in the shell reads the role claim and mounts a different navigation and route set; in demo mode the same shells mount from the URL (`/demo/owner`, `/demo/admin`, `/demo/biller`, `/demo/staff` — the stable role path segments). Every screen below is additionally protected by Row-Level Security — hiding a route is convenience, not access control.
 
@@ -20,7 +22,9 @@ One bundle serves all four roles. After sign-in the shell reads the role claim a
 
 The only role that gets a purpose-built layout. Landscape tablet, fixed chrome, nothing that scrolls unexpectedly.
 
-**Shift unlock** — a grid of the outlet's billers by name; tap yours, enter your PIN, shift opens. Big targets, no keyboard. Also where a shift is handed over: the outgoing biller closes, the incoming one opens.
+The tablet's navigation is in its fixed header — Counter, Shift, Menu — derived from the same gate registry the phone shells read, so a surface this role has no entry for is absent rather than greyed out.
+
+**Shift unlock** — a grid of the outlet's billers by name; tap yours, enter your PIN, shift opens on the fourth digit. Big targets, no keyboard, and no extra confirm tap after the last digit. Also where a shift is handed over: the outgoing biller closes it — with the consequence stated plainly, because nothing already rung is affected — and the incoming one opens theirs. **A wrong PIN and an unknown biller get one identical sentence**: this tablet sits on a counter anybody can reach across, and telling the two apart would confirm which names are real. The PIN selects attribution and is not the security boundary; the device's own enrolled session is, and that arrives with #9.
 
 **Billing counter** — the heart of the product, and the screen most worth getting right.
 
@@ -45,30 +49,43 @@ The only role that gets a purpose-built layout. Landscape tablet, fixed chrome, 
 
 Design commitments:
 
-- **The whole menu fits on one screen.** Seven items today, and unlikely to exceed twenty. A search box or category tabs would be slower than looking.
-- **Tap to add, tap again to increment.** Quantity adjustment is available but rarely needed for a 1–3 item order.
-- **Customer name and phone are optional and never block settling.** At peak they will be skipped, and a required field would just get filled with junk.
-- **Payment method is one tap, then settle.** Two taps from a complete order to a cleared screen.
-- **Settling is instant.** The bill goes to the outbox; nothing is awaited. The screen clears for the next customer.
-- **Sync state is a small persistent indicator**, never a dialog.
+- **The whole menu fits on one screen.** Seven items today, and unlikely to exceed twenty. A search box or category tabs would be slower than looking. A test compares the grid's content height with its visible height at the smallest supported tablet size, so a menu that outgrows the screen fails a build rather than a shift.
+- **Tap to add, tap again to increment.** The tile *only* adds: a −/+ pair on it would halve the target at exactly the moment speed matters, and a mis-tap would then quietly decrement an order rather than visibly miss it. The count rides on the tile as feedback. Quantity is adjusted on the bill line instead, where the thumb already is.
+- **An item that is off the menu stays on the grid and refuses to be sold.** A tile that vanished when the kitchen ran out would read as a bug to whoever was looking straight at it.
+- **Customer name and phone are optional and never block settling.** At peak they will be skipped, and a required field would just get filled with junk. Free text for now; the field is shaped so select-from-history can be added later without relayout, and whether the counter may read the customer list at all is a decision for #10 — customer phone numbers are PII on a shared device.
+- **Payment method is one tap, then settle.** Two taps from a complete order to a cleared screen. **Cash is distinguished by size and position as well as colour** — it is the only method on its own full-width row, labelled as the one that reaches the drawer.
+- **Settling is instant.** The bill goes to the queue; nothing is awaited. The screen clears for the next customer in the same tick.
+- **Sync state is a small persistent indicator**, never a dialog — synced, *N* pending, or an escalated warning once five are waiting or the oldest has waited two minutes.
 
-**Bill confirmation** — a brief, dismissible summary after settling, showing the total and the bill reference. Auto-clears; a queue does not wait for an acknowledgement.
+**Bill confirmation** — a brief summary after settling: the total, the bill's provisional reference, and **Undo**. It clears itself; a queue does not wait for an acknowledgement.
 
-**My shift** — bills created during this biller's current shift, with a running total by payment method. Read-only. Not the outlet's whole history — reviewing the day is a manager's job, and a shared tablet should not display the outlet's takings to whoever is standing at it.
+A queued bill is identified as `Queued · A3F9` and never as an integer, because **bill numbers are the server's** — assigned per outlet and sequentially at insert — and showing a plausible-looking number before the bill has landed would be the worst possible lie to tell a biller or a customer. The number appears when it syncs.
+
+**Undo cancels an unsent queue entry; it never edits a bill.** It is offered for the few seconds the confirmation is on screen, which is exactly the window during which the bill cannot yet have been sent — so an Undo that is visible is always an Undo that works. Once the bill has gone, the only correction is a void, and that ships with #10.
+
+**Menu (read-only)** — the same screen a manager edits, seen from the counter: what is on, what is off, and what everything costs, so *"is that still available?"* does not need a walk to the kitchen. No editing affordances, and a sentence saying a manager makes the changes — but the boundary is the data layer's refusal, not the missing button.
+
+**My shift** — bills created during this biller's current shift, with a running total by payment method. Read-only. Not the outlet's whole history — reviewing the day is a manager's job, and a shared tablet should not display the outlet's takings to whoever is standing at it. *(Not built — it is bill history, and that ships with #10.)*
 
 **Attendance kiosk** — the secondary check-in path. An employee taps their name and PIN on the tablet to clock in or out. Exists so that a dead phone or a failed GPS fix never leaves someone unable to record their attendance. *(Not built — it needs enrolled devices. Until then the manager override is the only escape hatch, which is workable but costs an approval.)*
 
 ## Franchise Admin — one outlet, on a phone
 
-**Outlet dashboard** — today at a glance: sales so far split by payment method, cash position, low-stock items, open alerts, who is checked in. The screen a manager opens twenty times a day, so it answers questions without navigation.
+**Outlet dashboard** — today at a glance: sales so far split by payment method, cash position, low-stock items, open alerts, who is checked in. The screen a manager opens twenty times a day, so it answers questions without navigation. *(Still a placeholder. It is a `live` surface, so it may not render mock figures; it gets its real summary when the figures behind it become real — #11, #13.)*
 
-**Menu** — list, add, edit, and disable items and categories. Price changes and the availability toggle are the frequent actions and sit closest to the thumb. Editing a price warns that it applies to future bills only.
+**Menu** — categories and their items, each with its price, its availability, and a vegetarian marker that carries **shape as well as colour**, because the familiar square-and-dot mark is a colour-only distinction. Two frequent actions, deliberately different sizes of thing: **availability is one tap on the row**, because it happens mid-service when the kitchen runs out, and it changes the row in place without opening anything; **a price change is a form**, because it is rare and consequential and deserves the sentence saying it applies to future bills only. An item turned off stays on the list, labelled — a row that vanished would leave a manager nowhere to turn it back on. Bills already recorded keep the price they were charged at, because their line items snapshot it.
 
-**Inventory** — items with current quantity and a clear low-stock treatment. Recording a movement (added / used / wasted / correction) is the primary action. Each item opens to its movement ledger, so "why does it say 4kg?" is always answerable.
+**Inventory** — items with current quantity and unit, and a low-stock treatment that is **an icon and the words "Low stock"**, never a colour alone. Recording a movement (added / used / wasted / correction) is the primary action and sits on the row. **The sign comes from the kind of movement, not from the person**: somebody counting stock types how much was used, and a stray minus on a "used" entry would silently add stock that does not exist. A correction is the exception — its direction is the point — and it requires a note.
 
-**Expenses** — the day's expenses, and a fast add form: category, amount, payment method, description. Cash expenses are visually distinct because they alone affect the drawer.
+Each item opens to its own **movement ledger** at its own address, so *"why does it say 4 kg?"* can be settled by sending a link, which is how that question actually gets asked. The ledger shows each movement's signed change and the quantity it left behind, and **nothing on it can be edited or removed**: a mistake is corrected by recording a correction, and both rows stay. The quantity on the list is the sum of that ledger rather than a number stored beside it, so the two cannot drift.
 
-**Daily cash** — the reconciliation screen. Opening float, cash sales (derived), cash expenses (derived), withdrawals, expected closing, and a field for the actual counted amount. The difference is shown prominently the moment it is entered, because that number is the entire point of the screen. Closing the day snapshots the figures.
+**Expenses** — one business day at a time, with the day selectable and shown as a date. Each row carries its category, amount, method and description, and **cash rows are marked in words** — they alone come out of the drawer, and at close somebody has to find them by eye. The add form is four fields and no more: category, amount in rupees, payment method, description. The day's total is split into what was spent and how much of it was cash.
+
+**Daily cash** — the reconciliation screen, and the one this business was commissioned to get right. Opening float, cash sales (derived from settled cash bills), cash expenses (derived from cash expenses), withdrawals, and therefore the expected closing — everything above the single input is worked out, and each derived figure says so. **Only cash moves any of it**: a UPI sale is revenue and not drawer.
+
+A manager supplies one number, what they counted, and **the difference appears the moment it is typed** — with its direction in words as well as by sign, because a minus is the first thing a small screen loses and *"₹240 short"* is not a sentence anyone misreads. Closing snapshots the figures and states, first, that the day cannot be closed again.
+
+**A bill that arrives after a day has been closed does not change it.** The closed figures are what somebody counted and signed off; the late arrival is reported on this screen as a *reconciliation exception* naming the bill, its amount, when it was rung and when it landed. Silently folding it in is the failure this whole chain exists to prevent.
 
 **Attendance** — the outlet's staff by day: who checked in, when, from where, how accurate the reading was, and any geofence flags. **Every active roster member appears, including those with nothing recorded** — a day view that listed only the rows that exist would quietly hide the people who never arrived. A check-in the fence could not vouch for is marked as waiting for a decision and counted absent until it is approved; approving it records the approver and a reason that cannot be blank.
 

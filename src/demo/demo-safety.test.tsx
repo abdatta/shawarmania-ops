@@ -4,7 +4,12 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { isDemoScopeActive } from '@/data-access/demo-scope'
-import { createMockAdapters, OUTLET_KALYANI_ID, OUTLET_MISTAKE_ID } from '@/data-access/mock'
+import {
+  createDemoStore,
+  createMockAdapters,
+  OUTLET_KALYANI_ID,
+  OUTLET_MISTAKE_ID,
+} from '@/data-access/mock'
 import { getSupabaseClient } from '@/data-access/supabase'
 import { appRoutes } from '@/routes'
 
@@ -48,9 +53,11 @@ describe('demo mode safety', () => {
     expect(await screen.findByText('Outlet details')).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
-    // Biller.
+    // Biller. The counter chrome names whoever holds the open shift, which the
+    // demo store starts with — a walkthrough lands able to ring a bill rather
+    // than behind a PIN nobody was handed.
     await user.click(screen.getByRole('link', { name: 'Biller' }))
-    expect(await screen.findByTestId('shift-status')).toHaveTextContent('No shift open')
+    expect(await screen.findByTestId('shift-status')).toHaveTextContent('Demo Biller')
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
     // Staff.
@@ -63,6 +70,7 @@ describe('demo mode safety', () => {
     // is exactly the case where a real client would leak, so it is exercised
     // here rather than assumed unreachable.
     const adapters = createMockAdapters()
+    const today = createDemoStore().today
     await adapters.outlets.listOutlets()
     await adapters.outlets.getOutlet(OUTLET_KALYANI_ID)
     await adapters.outlets.getOutlet('00000000-0000-4000-a000-00000000ffff')
@@ -85,6 +93,79 @@ describe('demo mode safety', () => {
     await adapters.accounts.setActive(provisioned.profileId, false)
     await adapters.accounts.setActive(provisioned.profileId, true)
     await adapters.accounts.listAccounts()
+
+    // The operational and counter adapters this change added, reads and writes
+    // alike. Settling a bill and closing a day are the two writes that would
+    // matter most if a demo session ever reached Supabase, so neither is
+    // assumed unreachable.
+    const outletId = OUTLET_KALYANI_ID
+    const menu = await adapters.menu.listMenu(outletId)
+    const firstItem = menu[0]?.items[0]
+    if (!firstItem) throw new Error('fixtures must contain a menu item')
+    await adapters.menu.setItemAvailability(firstItem.id, false)
+    await adapters.menu.setItemAvailability(firstItem.id, true)
+    await adapters.menu.createItem({
+      outletId,
+      categoryId: menu[0]!.category.id,
+      name: 'Demo Extra',
+      pricePaise: 10000,
+      isVeg: true,
+    })
+
+    const stock = await adapters.inventory.listItems(outletId)
+    const firstStock = stock[0]
+    if (!firstStock) throw new Error('fixtures must contain a stock item')
+    await adapters.inventory.listMovements(firstStock.id)
+    await adapters.inventory.getItem(firstStock.id)
+    await adapters.inventory.recordMovement({
+      inventoryItemId: firstStock.id,
+      movementType: 'used',
+      quantity: 1,
+      businessDate: today,
+    })
+
+    await adapters.expenses.listExpenses(outletId, today)
+    await adapters.expenses.createExpense({
+      outletId,
+      businessDate: today,
+      category: 'other',
+      amountPaise: 10000,
+      paymentMethod: 'cash',
+    })
+
+    const openShift = adapters.billing.getCounterState().shift
+    if (!openShift) throw new Error('the demo store must start with a shift open')
+    await adapters.billing.listBillers(outletId)
+    await adapters.billing.settleBill({
+      clientId: '0e000000-0000-4000-8000-000000000001',
+      outletId,
+      shiftId: openShift.id,
+      businessDate: today,
+      paymentMethod: 'cash',
+      lines: [
+        {
+          menuItemId: firstItem.id,
+          itemName: firstItem.name,
+          unitPricePaise: firstItem.price_paise,
+          quantity: 1,
+        },
+      ],
+    })
+    await adapters.billing.cancelQueuedBill('0e000000-0000-4000-8000-000000000001')
+    await adapters.billing.closeShift(openShift.id)
+
+    await adapters.dailyCash.getDay(outletId, today)
+    await adapters.dailyCash.recordWithdrawal({
+      outletId,
+      businessDate: today,
+      amountPaise: 10000,
+      withdrawnBy: 'Demo Owner',
+    })
+    await adapters.dailyCash.closeDay({
+      outletId,
+      businessDate: today,
+      actualClosingPaise: 100000,
+    })
 
     expect(fetchSpy).not.toHaveBeenCalled()
   })
@@ -170,7 +251,10 @@ describe('demo mode safety', () => {
   })
 
   it('a deep link to a hidden surface lands on not-found inside the shell', async () => {
-    renderDemo('/demo/admin/inventory')
+    // `pnl` is still `hidden`; `inventory` used to be, and is now `demo`. The
+    // assertion is about a hidden surface, so it follows the gate rather than
+    // the path.
+    renderDemo('/demo/admin/pnl')
     expect(await screen.findByText('That page does not exist')).toBeInTheDocument()
     // Inside the shell: the demo banner is still there, because the URL is
     // still a demo URL — the surface is what is absent.

@@ -1,5 +1,8 @@
+import type { MovementType as DomainMovementType } from '@/domain'
+
 import type { Tables } from '../../database.types'
 import { employeeFixtures } from './employees'
+import { menuItemFixtures } from './menu'
 import { outletFixtures } from './outlets'
 
 /**
@@ -75,3 +78,71 @@ export const outletCaptureShape: Pick<
   location_accuracy_m: 9,
   location_captured_at: '2026-07-24T09:15:00+00:00',
 }
+
+// ── The menu fixtures the operational surfaces and the counter both read ─────
+
+const validMenuItem = menuItemFixtures[0] as Tables<'menu_items'>
+
+export const menuItemColumnTheSchemaLacks: Tables<'menu_items'> = {
+  ...validMenuItem,
+  // @ts-expect-error — `calories` is not a column of menu_items.
+  calories: 420,
+}
+
+// The rule that matters most here: a price is integer paise, and paise are a
+// number of them. A fixture that wrote ₹139 as `139.00` would compile if this
+// column were loosely typed, and would then be a hundredfold error in a till.
+export const menuPriceIsANumber: Pick<Tables<'menu_items'>, 'price_paise'> = {
+  // @ts-expect-error — price_paise is a number, not a string.
+  price_paise: '13900',
+}
+
+// @ts-expect-error — a bare object misses every required menu_items column.
+export const menuItemMissingRequiredColumns: Tables<'menu_items'> = {}
+
+export const menuCategoryShape: Pick<Tables<'menu_categories'>, 'sort_order' | 'is_active'> = {
+  sort_order: 1,
+  is_active: true,
+}
+
+// Bill line items are what make a price change safe: they carry their own
+// snapshot of the name and the price charged, so the counter can never join a
+// historical bill back to the live menu.
+export const billItemSnapshotShape: Pick<
+  Tables<'bill_items'>,
+  'item_name' | 'unit_price_paise' | 'line_total_paise' | 'quantity'
+> = {
+  item_name: 'Classic Chicken Shawarma',
+  unit_price_paise: 13900,
+  line_total_paise: 27800,
+  quantity: 2,
+}
+
+export const inventedPaymentMethod: Pick<Tables<'bills'>, 'payment_method'> = {
+  // @ts-expect-error — 'paytm' is not a payment_method.
+  payment_method: 'paytm',
+}
+
+export const inventedMovementType: Pick<Tables<'inventory_movements'>, 'movement_type'> = {
+  // @ts-expect-error — 'spoiled' is not a movement_type.
+  movement_type: 'spoiled',
+}
+
+export const inventedExpenseCategory: Pick<Tables<'expenses'>, 'category'> = {
+  // @ts-expect-error — 'travel' is not an expense_category.
+  category: 'travel',
+}
+
+/**
+ * `src/domain/` imports from nothing, so it carries its own literal union of
+ * movement types rather than reading the schema's enum. This is what keeps the
+ * copy honest: adding or renaming a `movement_type` in the database and not in
+ * the domain fails the build here, instead of producing a ledger that silently
+ * cannot describe one of its own rows.
+ */
+type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never
+
+export const movementTypesAgreeWithSchema: MutuallyAssignable<
+  DomainMovementType,
+  Tables<'inventory_movements'>['movement_type']
+> = true

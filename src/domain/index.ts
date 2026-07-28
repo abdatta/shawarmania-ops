@@ -9,6 +9,37 @@
  */
 
 export {
+  billReference,
+  billTotals,
+  classifySync,
+  lineTotalPaise,
+  provisionalReference,
+  provisionalToken,
+  SYNC_ESCALATION_COUNT,
+  SYNC_ESCALATION_MS,
+  UNDO_WINDOW_MS,
+  type BillLineAmounts,
+  type BillTotals,
+  type SyncStateKind,
+} from './billing'
+export {
+  describeDifference,
+  differencePaise,
+  expectedClosingPaise,
+  type CashDayInputs,
+  type DifferenceKind,
+} from './cash'
+export {
+  formatDelta,
+  formatQuantity,
+  isLowStock,
+  movementDelta,
+  QUANTITY_DECIMALS,
+  roundQuantity,
+  sumQuantities,
+  type MovementType,
+} from './inventory'
+export {
   formatBusinessDate,
   formatDate,
   formatDateTime,

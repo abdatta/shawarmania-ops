@@ -1,3 +1,4 @@
+import type { MovementType, SyncStateKind } from '@/domain'
 import type { PositionReading } from '@/lib/geolocation'
 
 import type { Tables } from './database.types'
@@ -424,12 +425,447 @@ export interface EmployeesAdapter {
   unlinkAccount(employeeId: string): Promise<EmployeeSummary>
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// The menu: what an outlet sells, and for how much.
+
+/**
+ * One category and the items under it, already sorted. Categories and items are
+ * two tables and one screen — and one billing grid — so the read that serves
+ * both returns them joined rather than making every caller re-assemble them and
+ * re-decide the sort.
+ */
+export interface MenuCategoryWithItems {
+  category: Tables<'menu_categories'>
+  items: Tables<'menu_items'>[]
+}
+
+export interface NewMenuCategory {
+  outletId: string
+  name: string
+  sortOrder?: number
+}
+
+export type MenuCategoryPatch = Partial<{
+  name: string
+  sortOrder: number
+  isActive: boolean
+}>
+
+/** A new menu item. `pricePaise` is integer paise — rupees never reach this layer. */
+export interface NewMenuItem {
+  outletId: string
+  categoryId: string
+  name: string
+  pricePaise: number
+  isVeg: boolean
+  description?: string | null
+  sortOrder?: number
+}
+
+export type MenuItemPatch = Partial<
+  Omit<NewMenuItem, 'outletId'> & {
+    isAvailable: boolean
+  }
+>
+
+/** A refusal from the menu write path. */
+export class MenuActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
+    this.name = 'MenuActionError'
+  }
+}
+
+export interface MenuAdapter {
+  /**
+   * The outlet's menu, categories in sort order with their items in sort order.
+   *
+   * Unavailable items are **included**. The manager's screen has to show what is
+   * off in order to turn it back on, and the counter has to show it in order to
+   * refuse it — a tile that vanishes when the kitchen runs out reads as a bug to
+   * a biller who was looking straight at it.
+   */
+  listMenu(outletId: string): Promise<MenuCategoryWithItems[]>
+  createCategory(category: NewMenuCategory): Promise<Tables<'menu_categories'>>
+  updateCategory(id: string, patch: MenuCategoryPatch): Promise<Tables<'menu_categories'>>
+  createItem(item: NewMenuItem): Promise<Tables<'menu_items'>>
+  /**
+   * Edit an item. A price change here applies to future bills only — bill line
+   * items snapshot `item_name` and `unit_price_paise`, so nothing already
+   * recorded moves. The surface says so before it saves; this is where it
+   * becomes true.
+   */
+  updateItem(id: string, patch: MenuItemPatch): Promise<Tables<'menu_items'>>
+  /**
+   * Turn one item on or off. Separate from `updateItem` because it is the
+   * frequent action and belongs on the row rather than behind a form — and
+   * because sending a whole item patch to flip one boolean invites a stale
+   * price riding along with it.
+   */
+  setItemAvailability(id: string, isAvailable: boolean): Promise<Tables<'menu_items'>>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The counter: shifts, bills, and the queue they leave through.
+
+export type PaymentMethod = Tables<'bills'>['payment_method']
+
+/** Somebody who can hold a shift at this counter. */
+export interface CounterBiller {
+  profileId: string
+  fullName: string
+}
+
+/** The open shift, which is what a bill is attributed to. */
+export interface CounterShift {
+  id: string
+  outletId: string
+  billerProfileId: string
+  /** Snapshotted so the chrome can say who is on without a second lookup. */
+  billerName: string
+  businessDate: string
+  openedAt: string
+}
+
+/**
+ * One line as the counter holds it.
+ *
+ * `itemName` and `unitPricePaise` are **snapshots taken when the line was
+ * created**, not references resolved at settle time. A price changed mid-order
+ * must not rewrite what is already on the panel, and a bill must never be
+ * joinable back to the live menu — that rule is the reason `bill_items` carries
+ * these two columns at all.
+ */
+export interface BillLineDraft {
+  menuItemId: string
+  itemName: string
+  unitPricePaise: number
+  quantity: number
+}
+
+export interface BillDraft {
+  /**
+   * Client-generated, and the bill's identity from the moment it exists. The
+   * queue may deliver it more than once; the same id must store one bill.
+   */
+  clientId: string
+  outletId: string
+  shiftId: string
+  /** Resolved from the outlet's cutover at the moment of settle, never at read time. */
+  businessDate: string
+  paymentMethod: PaymentMethod
+  lines: BillLineDraft[]
+  customerName?: string | null
+  customerPhone?: string | null
+}
+
+/**
+ * A bill that is waiting to be sent.
+ *
+ * It carries no bill number, and cannot: numbers are the server's, assigned per
+ * outlet and sequentially at insert. Showing a plausible integer before the bill
+ * has landed would be the worst possible lie to tell a biller, so the type has
+ * nowhere to put one.
+ *
+ * A delivered bill **leaves** the queue — it is a row in `bills` by then, and an
+ * outbox that never empties is not an outbox.
+ */
+export interface QueuedBill {
+  clientId: string
+  totalPaise: number
+  businessDate: string
+  /** Epoch milliseconds it entered the queue — what the escalation clock reads. */
+  queuedAt: number
+}
+
+export interface SyncState {
+  kind: SyncStateKind
+  pending: number
+}
+
+/** Everything the counter chrome and the counter screen both read. */
+export interface CounterState {
+  shift: CounterShift | null
+  /** The outbox: bills settled and not yet delivered, oldest first. */
+  queued: QueuedBill[]
+  sync: SyncState
+}
+
+/** A refusal from the counter. */
+export class BillingActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
+    this.name = 'BillingActionError'
+  }
+}
+
+export interface BillingAdapter {
+  /**
+   * The current counter state. Stable by reference between changes, so it can
+   * be read through `useSyncExternalStore` without re-rendering on every tick.
+   */
+  getCounterState(): CounterState
+  /** Subscribe to counter changes. Returns the unsubscribe function. */
+  subscribeCounter(listener: () => void): () => void
+  /** The outlet's billers, for the shift-unlock grid. */
+  listBillers(outletId: string): Promise<CounterBiller[]>
+  /**
+   * Open a shift. The PIN selects attribution and is not the security boundary
+   * — the device's own session is (#9). A wrong PIN and an unknown biller get
+   * one identical refusal.
+   */
+  openShift(input: {
+    outletId: string
+    billerProfileId: string
+    pin: string
+  }): Promise<CounterShift>
+  closeShift(shiftId: string): Promise<void>
+  /**
+   * Hand a bill to the queue.
+   *
+   * **Resolves once it is queued, never once it is sent**, and the counter does
+   * not await it either way: the panel clears the instant this is called. The
+   * caller already knows the bill's identity and its total, because it made
+   * both — so there is nothing to wait for.
+   */
+  settleBill(draft: BillDraft): Promise<void>
+  /**
+   * Cancel a queued bill that has not been sent — the undo. It removes a write
+   * that has not happened; it never edits a bill, because a settled bill is
+   * append-only. Refused once the bill has gone.
+   */
+  cancelQueuedBill(clientId: string): Promise<void>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stock: the ledger, and the cache the ledger maintains.
+
+export type InventoryUnit = Tables<'inventory_items'>['unit']
+
+/**
+ * One stock item as a list needs it.
+ *
+ * `currentQuantity` is **derived from the movements**, never a column a client
+ * writes: `openspec/specs/inventory-ledger/spec.md` makes the ledger the truth
+ * and the quantity a cache the database maintains from it, and an adapter that
+ * let a caller set it directly would be handing back the inversion the spec
+ * exists to prevent.
+ */
+export interface InventoryItemSummary {
+  id: string
+  outletId: string
+  name: string
+  unit: InventoryUnit
+  currentQuantity: number
+  lowStockThreshold: number
+  /** `currentQuantity <= lowStockThreshold`, resolved once so two screens agree. */
+  isLow: boolean
+  purchaseCostPaise: number
+  isActive: boolean
+  lastUpdatedAt: string
+}
+
+/** One row of an item's ledger, with the quantity it left behind. */
+export interface InventoryMovementRecord {
+  id: string
+  inventoryItemId: string
+  movementType: MovementType
+  /** Signed: added is positive, used and wasted negative, a correction as given. */
+  quantityDelta: number
+  /** The item's quantity after this movement — what makes a ledger readable. */
+  quantityAfter: number
+  note: string | null
+  businessDate: string
+  createdAt: string
+}
+
+export interface NewInventoryItem {
+  outletId: string
+  name: string
+  unit: InventoryUnit
+  lowStockThreshold: number
+  purchaseCostPaise?: number
+}
+
+export type InventoryItemPatch = Partial<{
+  name: string
+  lowStockThreshold: number
+  purchaseCostPaise: number
+  isActive: boolean
+}>
+
+export interface NewMovement {
+  inventoryItemId: string
+  movementType: MovementType
+  /**
+   * A magnitude for added / used / wasted — the sign comes from the kind of
+   * movement, so nobody counting stock has to remember a minus. A correction
+   * takes the signed value as given, because its direction is the point.
+   */
+  quantity: number
+  note?: string | null
+  businessDate: string
+}
+
+export class InventoryActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
+    this.name = 'InventoryActionError'
+  }
+}
+
+export interface InventoryAdapter {
+  listItems(outletId: string): Promise<InventoryItemSummary[]>
+  getItem(id: string): Promise<InventoryItemSummary | null>
+  /** One item's movements, most recent first. */
+  listMovements(inventoryItemId: string): Promise<InventoryMovementRecord[]>
+  createItem(item: NewInventoryItem): Promise<InventoryItemSummary>
+  updateItem(id: string, patch: InventoryItemPatch): Promise<InventoryItemSummary>
+  /**
+   * Append a movement. There is deliberately no update and no delete: a
+   * mistaken entry is corrected by a further movement carrying a note, and the
+   * original stays visible. History is corrected, never edited.
+   */
+  recordMovement(movement: NewMovement): Promise<InventoryItemSummary>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Expenses: what the outlet spent, and how.
+
+export type ExpenseCategory = Tables<'expenses'>['category']
+
+export interface ExpenseRecord {
+  id: string
+  outletId: string
+  businessDate: string
+  category: ExpenseCategory
+  amountPaise: number
+  paymentMethod: PaymentMethod
+  description: string | null
+  createdAt: string
+}
+
+export interface NewExpense {
+  outletId: string
+  businessDate: string
+  category: ExpenseCategory
+  /** Integer paise. Rupees are converted at the input boundary, never here. */
+  amountPaise: number
+  paymentMethod: PaymentMethod
+  description?: string | null
+}
+
+export class ExpenseActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
+    this.name = 'ExpenseActionError'
+  }
+}
+
+export interface ExpensesAdapter {
+  /** One outlet's expenses for one business date, most recent first. */
+  listExpenses(outletId: string, businessDate: string): Promise<ExpenseRecord[]>
+  createExpense(expense: NewExpense): Promise<ExpenseRecord>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Daily cash: the number a human signs their name to.
+
+/** A withdrawal from the drawer during the day. */
+export interface CashWithdrawalRecord {
+  id: string
+  amountPaise: number
+  withdrawnBy: string
+  reason: string | null
+  createdAt: string
+}
+
+/**
+ * A bill that reached the server after its business day had been closed.
+ *
+ * The closed figures do not move — that is what "a closed day is a snapshot"
+ * means — so the arrival has to surface somewhere, and it surfaces here.
+ */
+export interface ReconciliationException {
+  billId: string
+  billNumber: number
+  businessDate: string
+  totalPaise: number
+  paymentMethod: PaymentMethod
+  /** When it was rung, and when it landed. The gap is the whole problem. */
+  createdAt: string
+  syncedAt: string
+}
+
+/**
+ * One outlet's cash day.
+ *
+ * **Every derived figure is computed here, never supplied by the caller.** The
+ * `close_business_day` contract requires the database to compute them
+ * server-side inside the transaction that writes the record, and a mock that
+ * accepted them from a screen would be teaching the opposite.
+ */
+export interface DailyCashDay {
+  outletId: string
+  businessDate: string
+  openingCashPaise: number
+  /** Settled bills paid in cash for this date. No other method contributes. */
+  cashSalesPaise: number
+  /** Expenses paid in cash for this date. A UPI expense does not appear here. */
+  cashExpensesPaise: number
+  cashWithdrawnPaise: number
+  expectedClosingPaise: number
+  withdrawals: CashWithdrawalRecord[]
+  /** Non-null once the day has been closed: the snapshot, exactly as stored. */
+  closed: Tables<'daily_cash_records'> | null
+  /** Bills that arrived after this day was closed. Empty unless it was. */
+  exceptions: ReconciliationException[]
+}
+
+export interface NewWithdrawal {
+  outletId: string
+  businessDate: string
+  amountPaise: number
+  withdrawnBy: string
+  reason?: string | null
+}
+
+export interface CloseDayInput {
+  outletId: string
+  businessDate: string
+  /** The only two numbers a person supplies. Everything else is derived. */
+  actualClosingPaise: number
+  notes?: string | null
+}
+
+export class DailyCashActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
+    this.name = 'DailyCashActionError'
+  }
+}
+
+export interface DailyCashAdapter {
+  getDay(outletId: string, businessDate: string): Promise<DailyCashDay>
+  recordWithdrawal(withdrawal: NewWithdrawal): Promise<DailyCashDay>
+  /**
+   * Close the day. Refused for a date already closed — one record per outlet per
+   * business date — and the stored figures are never recomputed afterwards.
+   */
+  closeDay(input: CloseDayInput): Promise<Tables<'daily_cash_records'>>
+}
+
 /** The bag of domain adapters a session provider supplies to its tree. */
 export interface DataAdapters {
   outlets: OutletsAdapter
   accounts: AccountsAdapter
   attendance: AttendanceAdapter
   employees: EmployeesAdapter
+  menu: MenuAdapter
+  billing: BillingAdapter
+  inventory: InventoryAdapter
+  expenses: ExpensesAdapter
+  dailyCash: DailyCashAdapter
   addressLookup: AddressLookupAdapter
 }
 

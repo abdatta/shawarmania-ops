@@ -1,0 +1,390 @@
+import { Banknote, Wallet } from 'lucide-react'
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+
+import { EmptyState } from '@/components/layout/empty-state'
+import { FormSheet } from '@/components/layout/form-sheet'
+import { PageHeader } from '@/components/layout/page-header'
+import { AddButton } from '@/components/ui/add-button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Money } from '@/components/ui/money'
+import { Select } from '@/components/ui/select'
+import { useAdapters } from '@/data-access'
+import {
+  DataActionError,
+  type ExpenseCategory,
+  type ExpenseRecord,
+  type PaymentMethod,
+} from '@/data-access/adapters'
+import { formatBusinessDate, resolveBusinessDate, rupeesToPaise, shiftBusinessDate } from '@/domain'
+import { useSession } from '@/session/context'
+
+/**
+ * Expenses — one business day at a time.
+ *
+ * **Cash rows are marked, and marked in words.** They are the only ones that
+ * reach the drawer, so at close somebody has to find them by eye among the UPI
+ * and card entries; a colour alone would not survive a bright counter or a
+ * colour-blind reader.
+ *
+ * Four fields and no more. An expense form that asked for a supplier, a bill
+ * number and a GST breakup would be filled in wrongly or not at all, and what
+ * the cash reconciliation actually needs is the amount and the method.
+ *
+ * Raw materials appear here like any other category. Whether they are counted
+ * against the day they were bought or the stock they became is the P&L
+ * double-counting question, and it belongs to `owner-console-live` (#13) —
+ * `docs/DATA_MODEL.md` owns it and this screen must not answer it.
+ */
+
+const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
+  { value: 'raw_materials', label: 'Raw materials' },
+  { value: 'salaries', label: 'Salaries' },
+  { value: 'rent', label: 'Rent' },
+  { value: 'electricity', label: 'Electricity' },
+  { value: 'packaging', label: 'Packaging' },
+  { value: 'maintenance', label: 'Maintenance' },
+  { value: 'marketing', label: 'Marketing' },
+  { value: 'other', label: 'Other' },
+]
+
+const METHODS: { value: PaymentMethod; label: string }[] = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'upi', label: 'UPI' },
+  { value: 'card', label: 'Card' },
+  { value: 'other', label: 'Other' },
+]
+
+const CATEGORY_WORDS = Object.fromEntries(
+  CATEGORIES.map((category) => [category.value, category.label]),
+) as Record<ExpenseCategory, string>
+
+const METHOD_WORDS: Record<PaymentMethod, string> = {
+  cash: 'Cash',
+  upi: 'UPI',
+  card: 'Card',
+  swiggy: 'Swiggy',
+  zomato: 'Zomato',
+  other: 'Other',
+}
+
+interface Draft {
+  category: ExpenseCategory
+  /** Rupees, as typed. Converted to integer paise at the boundary. */
+  amount: string
+  paymentMethod: PaymentMethod
+  description: string
+}
+
+const EMPTY_DRAFT: Draft = {
+  category: 'raw_materials',
+  amount: '',
+  paymentMethod: 'cash',
+  description: '',
+}
+
+export function ExpensesSurface() {
+  const session = useSession()
+  const { expenses: adapter, outlets } = useAdapters()
+
+  // `today` is the anchor the day picker offers a week back from; `businessDate`
+  // is which of those days is on screen. Two values rather than one, because
+  // deriving the options from the selection would make yesterday's list start at
+  // yesterday and quietly lose the way back to today.
+  const [today, setToday] = useState<string | null>(null)
+  const [businessDate, setBusinessDate] = useState<string | null>(null)
+  const [expenses, setExpenses] = useState<ExpenseRecord[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
+
+  const outletId = session.outletId
+
+  useEffect(() => {
+    if (!outletId) return
+    let active = true
+    void outlets
+      .getOutlet(outletId)
+      .then((outlet) => {
+        if (!active || !outlet) return
+        // The day this screen opens on is resolved through the outlet's cutover,
+        // not read off the device: an expense entered at 00:30 belongs to the
+        // trading day that is still running.
+        const resolved = resolveBusinessDate(new Date(), outlet.business_day_cutover)
+        setToday(resolved)
+        setBusinessDate(resolved)
+      })
+      .catch(() => {
+        if (active) setError('Could not work out which day this is. Try again in a moment.')
+      })
+    return () => {
+      active = false
+    }
+  }, [outlets, outletId])
+
+  const load = useCallback(async () => {
+    if (!outletId || !businessDate) return
+    setExpenses(await adapter.listExpenses(outletId, businessDate))
+  }, [adapter, outletId, businessDate])
+
+  useEffect(() => {
+    if (!outletId || !businessDate) return
+    let active = true
+    void adapter
+      .listExpenses(outletId, businessDate)
+      .then((list) => {
+        if (active) setExpenses(list)
+      })
+      .catch(() => {
+        if (active) setError('Could not load the day’s expenses. Try again in a moment.')
+      })
+    return () => {
+      active = false
+    }
+  }, [adapter, outletId, businessDate])
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (!outletId || !businessDate) return
+
+    const rupees = Number(draft.amount.trim())
+    if (draft.amount.trim() === '' || !Number.isFinite(rupees) || rupees <= 0) {
+      setError('An expense needs an amount above zero, as a number of rupees.')
+      return
+    }
+
+    setBusy(true)
+    setError(null)
+    try {
+      await adapter.createExpense({
+        outletId,
+        businessDate,
+        category: draft.category,
+        amountPaise: rupeesToPaise(rupees),
+        paymentMethod: draft.paymentMethod,
+        description: draft.description,
+      })
+      setDraft(EMPTY_DRAFT)
+      setFormOpen(false)
+      await load()
+    } catch (cause) {
+      setError(
+        cause instanceof DataActionError
+          ? cause.message
+          : 'That did not work. Try again in a moment.',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const addButton = (
+    <AddButton
+      label="Add expense"
+      data-testid="add-expense"
+      onClick={() => {
+        setError(null)
+        setDraft(EMPTY_DRAFT)
+        setFormOpen(true)
+      }}
+    />
+  )
+
+  const total = (expenses ?? []).reduce((running, expense) => running + expense.amountPaise, 0)
+  const cashTotal = (expenses ?? [])
+    .filter((expense) => expense.paymentMethod === 'cash')
+    .reduce((running, expense) => running + expense.amountPaise, 0)
+
+  return (
+    <div className="mx-auto max-w-3xl">
+      <PageHeader
+        title="Expenses"
+        subtitle={
+          businessDate
+            ? `${formatBusinessDate(businessDate)} — cash entries are marked, because they alone come out of the drawer.`
+            : undefined
+        }
+        action={addButton}
+      />
+
+      {businessDate && today && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <label htmlFor="expense-day" className="text-xs font-semibold text-content-muted">
+            Day
+          </label>
+          <Select
+            id="expense-day"
+            className="h-11 w-auto"
+            value={businessDate}
+            onChange={(event) => setBusinessDate(event.target.value)}
+            data-testid="expense-day"
+          >
+            {Array.from({ length: 7 }, (_, index) => shiftBusinessDate(today, -index)).map((date) => (
+              <option key={date} value={date}>
+                {formatBusinessDate(date)}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+
+      {error && (
+        <p
+          role="alert"
+          data-testid="expenses-error"
+          className="mb-3 text-sm font-semibold text-danger"
+        >
+          {error}
+        </p>
+      )}
+
+      {expenses === null ? (
+        <p className="text-sm text-content-muted">Loading…</p>
+      ) : expenses.length === 0 ? (
+        <EmptyState
+          icon={Wallet}
+          title="Nothing recorded for this day yet. Add what the outlet spent — the cash ones will show up on the day’s cash count."
+          action={addButton}
+        />
+      ) : (
+        <>
+          <ul className="space-y-2" data-testid="expense-list">
+            {expenses.map((expense) => (
+              <li key={expense.id}>
+                <Card
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1"
+                  data-testid={`expense-${expense.id}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-content">
+                      {CATEGORY_WORDS[expense.category]}
+                      {expense.paymentMethod === 'cash' ? (
+                        <span
+                          data-testid={`cash-${expense.id}`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-primary px-2 py-0.5 text-xs font-semibold text-content"
+                        >
+                          <Banknote aria-hidden size={12} />
+                          Cash — from the drawer
+                        </span>
+                      ) : (
+                        <span className="text-xs font-normal text-content-muted">
+                          {METHOD_WORDS[expense.paymentMethod]}
+                        </span>
+                      )}
+                    </p>
+                    {expense.description && (
+                      <p className="truncate text-xs text-content-muted">{expense.description}</p>
+                    )}
+                  </div>
+                  <Money paise={expense.amountPaise} className="text-sm font-semibold" />
+                </Card>
+              </li>
+            ))}
+          </ul>
+
+          <Card className="mt-3 space-y-1" data-testid="expense-totals">
+            <p className="flex items-baseline justify-between text-sm">
+              <span className="text-content-muted">Spent this day</span>
+              <Money paise={total} className="font-semibold" />
+            </p>
+            <p className="flex items-baseline justify-between text-sm">
+              <span className="text-content-muted">Of which cash</span>
+              <Money paise={cashTotal} className="font-semibold" data-testid="expense-cash-total" />
+            </p>
+            <p className="text-xs text-content-muted">
+              Only the cash figure reaches the day&rsquo;s count. A UPI or card expense is real
+              money, but it never came out of this drawer.
+            </p>
+          </Card>
+        </>
+      )}
+
+      <FormSheet
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        title="Add expense"
+        error={error}
+        footer={
+          <button
+            type="submit"
+            form="expense-form"
+            disabled={busy}
+            className={`${buttonVariants({ size: 'phone' })} w-full`}
+          >
+            {busy ? 'Saving…' : 'Record expense'}
+          </button>
+        }
+      >
+        <form id="expense-form" onSubmit={submit} className="space-y-4" noValidate>
+          <Field label="Category" id="expense-category">
+            <Select
+              id="expense-category"
+              value={draft.category}
+              onChange={(event) =>
+                setDraft({ ...draft, category: event.target.value as ExpenseCategory })
+              }
+            >
+              {CATEGORIES.map((category) => (
+                <option key={category.value} value={category.value}>
+                  {category.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label="Amount (₹)" id="expense-amount">
+            <Input
+              id="expense-amount"
+              required
+              inputMode="decimal"
+              value={draft.amount}
+              placeholder="e.g. 2400"
+              onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
+            />
+          </Field>
+
+          <Field label="Paid with" id="expense-method">
+            <Select
+              id="expense-method"
+              value={draft.paymentMethod}
+              onChange={(event) =>
+                setDraft({ ...draft, paymentMethod: event.target.value as PaymentMethod })
+              }
+            >
+              {METHODS.map((method) => (
+                <option key={method.value} value={method.value}>
+                  {method.label}
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-content-muted">
+              Cash comes out of the drawer and shows on the day&rsquo;s count. Nothing else does.
+            </p>
+          </Field>
+
+          <Field label="Description (optional)" id="expense-description">
+            <Input
+              id="expense-description"
+              value={draft.description}
+              placeholder="e.g. Chicken from Nadia Poultry"
+              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+            />
+          </Field>
+        </form>
+      </FormSheet>
+    </div>
+  )
+}
+
+function Field({ label, id, children }: { label: string; id: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="block text-sm font-semibold">
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}

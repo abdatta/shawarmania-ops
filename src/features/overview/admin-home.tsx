@@ -8,9 +8,13 @@ import { useAdapters, type Tables } from '@/data-access'
 import { useSession } from '@/session/context'
 
 /**
- * The Franchise Admin home: the outlet at a glance. The real dashboard —
- * sales so far, cash position, low stock, who is in — arrives with
- * ui-outlet-operations (#7); this proves the shell and the seam.
+ * The Franchise Admin home: the outlet at a glance.
+ *
+ * Still a placeholder, deliberately. The operational surfaces behind it — Menu,
+ * Stock, Expenses, Cash — are walkable in demo now, but this surface is `live`,
+ * so filling it with mock-derived figures would put fabricated numbers in front
+ * of a real manager. It gets its real dashboard when those figures become real
+ * (#11, #13).
  */
 export function AdminHome() {
   const session = useSession()
@@ -55,7 +59,7 @@ export function AdminHome() {
       )}
       <EmptyState
         icon={LayoutDashboard}
-        title="Sales, cash, stock and attendance land here with the outlet-operations surfaces — walk them in this demo once they ship."
+        title="Today at a glance lands here once these figures are real. Menu, Stock, Expenses and Cash are already walkable — this page is the summary of them, and it waits for the data rather than inventing it."
       />
     </div>
   )

@@ -66,6 +66,19 @@ const colleagues = [
     is_active: false,
     created_at: FIXTURE_CREATED_AT,
   },
+  {
+    // Kalyani's second biller. A counter tablet is shared, and a handover needs
+    // somebody to hand over *to* — with one biller the shift screen can only
+    // demonstrate closing and reopening as the same person, which is the one
+    // case that never happens in a shop.
+    id: 'd1000000-0000-4000-a000-000000000010',
+    full_name: 'Demo Morning Biller',
+    phone: null,
+    role: 'biller',
+    outlet_id: OUTLET_KALYANI_ID,
+    is_active: true,
+    created_at: FIXTURE_CREATED_AT,
+  },
 ] as const satisfies readonly Tables<'profiles'>[]
 
 export const accountFixtures: readonly Tables<'profiles'>[] = [

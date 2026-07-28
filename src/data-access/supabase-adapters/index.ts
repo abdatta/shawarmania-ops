@@ -3,7 +3,14 @@ import type { DataAdapters } from '../adapters'
 import { createAddressLookupAdapter } from './address-lookup'
 import { createSupabaseAccountsAdapter } from './accounts'
 import { createSupabaseAttendanceAdapter } from './attendance'
+import { createSupabaseBillingAdapter } from './billing'
 import { createSupabaseEmployeesAdapter } from './employees'
+import { createSupabaseMenuAdapter } from './menu'
+import {
+  createSupabaseDailyCashAdapter,
+  createSupabaseExpensesAdapter,
+  createSupabaseInventoryAdapter,
+} from './operations'
 import { createSupabaseOutletsAdapter } from './outlets'
 
 /**
@@ -18,6 +25,17 @@ export function createSupabaseAdapters(): DataAdapters {
     accounts: createSupabaseAccountsAdapter(client),
     attendance: createSupabaseAttendanceAdapter(client),
     employees: createSupabaseEmployeesAdapter(client),
+    // Not connected yet, and says so: the menu surfaces are `demo`-gated and
+    // #10/#11 replace this. See supabase-adapters/menu.ts.
+    menu: createSupabaseMenuAdapter(),
+    // Likewise not connected: #9 brings the enrolled device and the outbox, #10
+    // the settlement path. See supabase-adapters/billing.ts.
+    billing: createSupabaseBillingAdapter(),
+    // Nor these: #11 makes stock and expenses real, #12 the cash close.
+    // See supabase-adapters/operations.ts.
+    inventory: createSupabaseInventoryAdapter(),
+    expenses: createSupabaseExpensesAdapter(),
+    dailyCash: createSupabaseDailyCashAdapter(),
     // Takes no client: it holds no credential and reaches no Supabase service.
     // It is here because this is the layer permitted to do I/O, and a screen
     // fetching for itself is exactly what the seam exists to prevent.

@@ -1,6 +1,6 @@
 # Demo Mode
 
-> The machinery described here is **built** (`demo-mode-and-app-shell`, #3): the adapter seam, the gate registry, the demo session with its role switcher, and the safety rails all exist and are tested. The feature surfaces the demo will eventually show arrive with the `ui-*` changes; the internally-consistent scenario dataset with `ui-owner-console-and-demo` (#8).
+> The machinery described here is **built** (`demo-mode-and-app-shell`, #3): the adapter seam, the gate registry, the demo session with its role switcher, and the safety rails all exist and are tested. The billing counter (#6) and the manager's operational surfaces (#7) are built on it and are walkable now; the owner console and the full scenario walkthrough arrive with `ui-owner-console-and-demo` (#8).
 
 Demo mode renders the **entire** four-role experience with mocked data, so the product can be shown — to an investor, a prospective franchisee, or the staff who will use it — long before the backend behind it exists.
 
@@ -65,6 +65,19 @@ Demo mode ships to production, because it has to be showable from a deployed URL
 - **A real signed-in user can never enter demo mode silently.** With a persisted session present, every `/demo/*` URL renders an interstitial naming the signed-in state; continuing is an explicit choice held per-tab (sessionStorage), so it dies with the tab rather than sticking to the account. A biller who wandered into a demo and rang up fake bills would be a genuine operational problem.
 - **The demo indicator is always visible and cannot be dismissed.** The banner strip — "Demo — fabricated data", with the role switcher beside it — is chrome, not state: rendered unconditionally by every demo shell, with no close affordance and no prop that hides it. Leaving `/demo` is the only way to remove it. This protects the business more than the viewer: a screenshot of invented revenue circulating as real trading data is a serious problem in a franchise sales conversation.
 - **Mock data is obviously synthetic.** Invented staff (the four demo personas are literally named Demo Owner, Demo Manager, Demo Biller, Demo Staff), invented customers, plausible-but-fabricated figures. The two real outlets and the real menu are fine — those are public business facts — but no real people, and fixtures carry no phone numbers at all. Every fixture is typed from the generated schema types, so a fixture the database could not serve fails to compile.
+
+## What the demo dataset starts with
+
+One mutable dataset is built per demo session (`src/data-access/mock/store.ts`) and shared by every mock adapter, so the figures on one screen are the rows behind another: the cash screen's takings *are* the bills the counter rang, and a stock item's quantity *is* the sum of the ledger it links to. It is constructed per session rather than as a module singleton, so **demo state resets** and every walkthrough starts from the same place.
+
+Worth knowing before running one:
+
+- **A shift is already open** for Demo Biller, so a walkthrough lands on the counter able to ring a bill. The shift screen is still fully walkable — close it, hand it over, open another.
+- **Every demo biller's PIN is `1234`.** It selects attribution and protects nothing; the real one arrives with `counter-devices-and-offline` (#9) as a hash with a real refusal path behind it. It exists here so the unlock and handover screens have something to refuse — a PIN pad that accepts anything demonstrates a product where it does.
+- **Business dates are relative to today**, resolved through the outlet's own cutover. Yesterday is a closed trading day; today is open and can be closed during a walkthrough.
+- **Three things have deliberately gone wrong**, because a demo where nothing does demonstrates nothing: one stock item is at its threshold, yesterday's drawer was ₹240 short, and a bill for yesterday arrived after that day had been signed off — which the cash screen reports as a reconciliation exception rather than quietly absorbing.
+- **Every current menu item is non-vegetarian**, because every item the business sells is built on chicken. The vegetarian marker has no live example rather than a fabricated one; create an item from the menu form to see it.
+- **The offline states are reached the way a real tablet reaches them.** There is no "pretend to be offline" control: put the device in aeroplane mode (or use DevTools) and ring bills — the indicator counts up, escalates at five waiting, and drains when the connection returns.
 
 ## Running a demo
 

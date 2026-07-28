@@ -9,7 +9,6 @@ import {
   KeyRound,
   LayoutDashboard,
   Package,
-  ReceiptText,
   Store,
   TabletSmartphone,
   TrendingUp,
@@ -115,25 +114,25 @@ const defs = {
     role: 'franchise_admin',
     path: 'menu',
     nav: { label: 'Menu', icon: UtensilsCrossed, order: 2 },
-    state: 'hidden',
+    state: 'demo',
   },
   'admin-inventory': {
     role: 'franchise_admin',
     path: 'inventory',
     nav: { label: 'Stock', icon: Package, order: 3 },
-    state: 'hidden',
+    state: 'demo',
   },
   'admin-expenses': {
     role: 'franchise_admin',
     path: 'expenses',
     nav: { label: 'Expenses', icon: Wallet, order: 4 },
-    state: 'hidden',
+    state: 'demo',
   },
   'admin-daily-cash': {
     role: 'franchise_admin',
     path: 'cash',
     nav: { label: 'Cash', icon: Banknote, order: 5 },
-    state: 'hidden',
+    state: 'demo',
   },
   'admin-attendance': {
     role: 'franchise_admin',
@@ -190,13 +189,30 @@ const defs = {
     role: 'biller',
     path: 'shift',
     nav: { label: 'Shift', icon: KeyRound, order: 2 },
-    state: 'hidden',
+    state: 'demo',
   },
+  /**
+   * The counter itself, and **deliberately without a navigation entry**: it is
+   * where `counter-home` sends a biller the moment this surface is renderable
+   * for them, so a tab beside Counter would be a second door into one room.
+   * Still a surface, because the gate is what decides whether that door opens.
+   */
   'counter-billing': {
     role: 'biller',
     path: 'billing',
-    nav: { label: 'Billing', icon: ReceiptText, order: 3 },
-    state: 'hidden',
+    state: 'demo',
+  },
+  /**
+   * The menu as the counter sees it: the same surface a manager edits, without
+   * the editing. It exists so the permission difference is visible rather than
+   * asserted — and so a biller can answer "is that still on?" without walking
+   * to the kitchen. The refusal behind it is the data layer's, not this entry's.
+   */
+  'counter-menu': {
+    role: 'biller',
+    path: 'menu',
+    nav: { label: 'Menu', icon: UtensilsCrossed, order: 3 },
+    state: 'demo',
   },
   'counter-my-shift': {
     role: 'biller',

@@ -12,7 +12,10 @@ import { expect, test, type Page } from '@playwright/test'
 const SHELLS = [
   { segment: 'owner', anchor: 'All outlets' },
   { segment: 'admin', anchor: 'Outlet details' },
-  { segment: 'biller', anchor: 'No shift open' },
+  // The counter chrome names whoever holds the open shift. The demo store
+  // starts with one open, so a walkthrough lands able to ring a bill rather
+  // than behind a PIN nobody was handed.
+  { segment: 'biller', anchor: 'Demo Biller' },
   { segment: 'staff', anchor: 'Hello, Demo Staff' },
 ] as const
 
