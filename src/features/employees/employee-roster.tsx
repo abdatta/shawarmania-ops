@@ -6,6 +6,7 @@ import { DataTable, type DataTableColumn } from '@/components/layout/data-table'
 import { EmptyState } from '@/components/layout/empty-state'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { PageHeader } from '@/components/layout/page-header'
+import { AddButton } from '@/components/ui/add-button'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
@@ -323,11 +324,7 @@ export function EmployeeRoster() {
       <PageHeader
         title="Staff"
         subtitle="Who works at this outlet. Separate from app accounts — someone can be on this list without a login, and the other way round."
-        action={
-          <button type="button" className={buttonVariants({ size: 'phone' })} onClick={openAdd}>
-            Add person
-          </button>
-        }
+        action={<AddButton label="Add person" onClick={openAdd} />}
       />
 
       {isOwner && outlets.length > 0 && (

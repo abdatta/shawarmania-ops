@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/layout/empty-state'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { PageHeader } from '@/components/layout/page-header'
 import { RowActionsMenu } from '@/components/layout/row-actions-menu'
+import { AddButton } from '@/components/ui/add-button'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
@@ -393,15 +394,7 @@ export function AccountsSurface() {
             ? 'Every account, across all outlets.'
             : 'App accounts for this outlet. Codes are handed over by you, never emailed.'
         }
-        action={
-          <button
-            type="button"
-            className={buttonVariants({ size: 'phone' })}
-            onClick={() => setFormOpen(true)}
-          >
-            Add account
-          </button>
-        }
+        action={<AddButton label="Add account" onClick={() => setFormOpen(true)} />}
       />
 
       {/*

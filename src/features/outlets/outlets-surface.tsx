@@ -5,6 +5,7 @@ import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { PageHeader } from '@/components/layout/page-header'
+import { AddButton } from '@/components/ui/add-button'
 import { AddressSearch } from '@/components/ui/address-search'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -174,16 +175,7 @@ export function OutletsSurface() {
     })
   }
 
-  const addButton = (
-    <button
-      type="button"
-      className={buttonVariants({ size: 'phone' })}
-      onClick={openAdd}
-      data-testid="add-outlet"
-    >
-      Add outlet
-    </button>
-  )
+  const addButton = <AddButton label="Add outlet" onClick={openAdd} data-testid="add-outlet" />
 
   return (
     <div className="mx-auto max-w-2xl">

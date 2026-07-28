@@ -188,6 +188,7 @@ The counter numbers are larger on purpose. Billing happens fast, one-handed, som
 
 ## Component conventions
 
+- **The "add new thing" trigger is `AddButton`** (`src/components/ui/add-button.tsx`), used once per page header. The visible label is always the plus icon and the word "Add" — never "Add outlet", "Add person", etc. — because the page title already says what's being added; `label` still sets the accessible name (`"Add outlet"`) so screen reader users get that same specificity without reading it visually. `whitespace-nowrap` is baked in so the icon and word can never wrap onto two lines. If a page's context genuinely doesn't make the object obvious, that's a sign the page needs a clearer title or subtitle — not a longer button.
 - **Money** renders through one formatter — paise in, `₹1,234` out, Indian digit grouping (`₹1,23,456`). Never format inline; never hand a float to a component.
 - **Dates** render in Asia/Kolkata through one formatter. Business dates render as dates, never as timestamps.
 - **Destructive actions** (void a bill, revoke a device) confirm, and say what will happen in plain words.
