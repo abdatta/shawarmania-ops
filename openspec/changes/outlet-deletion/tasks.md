@@ -30,6 +30,7 @@
 - [x] 2.10 **`outlet_reference_counts` covers a newly added table without being edited** — create a table referencing `outlets` inside the test, confirm it appears, drop it. This is the whole point of reading the catalog (D6). *Written as a real table in `public`, not a temporary one: Postgres refuses a foreign key from a temp table to a permanent one, so a temp table could never have referenced `outlets` at all. The file's own transaction is what makes it temporary.*
 - [x] 2.11 A non-owner cannot execute `outlet_reference_counts`.
 - [x] 2.12 The isolation suite and `01_schema_coverage.sql` both still pass. This change adds a policy and a grant; if either suite enumerates policies or verbs, it must account for the new one rather than be quietly wrong.
+- [x] 2.13 **The seam the SQL suite cannot reach**, in `supabase/tests/rest/outlet-deletion.test.ts`: `outlet_reference_counts` called as a PostgREST RPC the way the adapter calls it, and a Franchise Admin's delete arriving as a refusal rather than as a silent success. Added during apply, because 9.2 was the only thing that would have exercised either and it is deferred.
 
 ## 3. The adapter seam
 
@@ -80,8 +81,25 @@
 
 ## 9. Verification
 
-- [ ] 9.1 🧍 **Delete the nameless outlet from production, through the app.** This is the change's purpose and what unblocks #19. Mark it closed first, then delete.
+- [x] 9.1 🧍 **Delete the nameless outlet from production, through the app.** This is the change's purpose and what unblocks #19. Mark it closed first, then delete. *Done by the owner 2026-07-28. Confirmed read-only against production: two outlets remain (`skalyani`, `skpa`), and no row in any of the twelve columns #19 constrains holds a blank — so #19's constraints will validate cleanly on ADD.*
 - [ ] 9.2 🧍 Attempt to delete a real, populated outlet and confirm the refusal names what is attached and does not read like a crash. **Note:** production currently has no dependent rows at all, so this needs a row created for the purpose — or it must be run against staging. Do not skip it because the happy path passed.
+
+  > **Deferred until staff are onboarded (owner, 2026-07-28), and waiting is the
+  > cheaper option rather than merely the easier one.** Creating a row for the
+  > purpose now would leave permanent litter: `employees` has no client delete
+  > path at all, so a throwaway roster row could only be removed with the
+  > service-role credential — and until it was, it would pin its outlet as
+  > undeletable forever. Once anyone is genuinely rostered, this step costs
+  > nothing: attempt the delete on a real populated outlet, read the refusal,
+  > cancel. Nothing is created and nothing needs cleaning up.
+  >
+  > **What is still unproven while this waits** is narrower than the task
+  > implies, and worth naming so nobody assumes more coverage than exists. The
+  > `23503` → refusal mapping is proved in `11_outlet_deletion.sql`; the
+  > rendering of the counts is proved in `outlets-surface.test.tsx` and walked
+  > in demo mode. The one seam no layer exercises is
+  > `outlet_reference_counts` reached **as an RPC through PostgREST** — pgTAP
+  > calls it in SQL, and the mock does not call it at all.
 - [x] 9.3 `npm test`, `npm run lint`, `npm run typecheck`, `npm run build` all green.
 - [x] 9.4 `npm run test:db` passes, including the new file, the isolation suite and schema coverage.
 - [x] 9.5 Run the app on a phone viewport in both themes: close an outlet, delete it, and confirm the flow reads sensibly at each step.
@@ -89,4 +107,10 @@
 ## 10. PHASE GATE
 
 - [ ] 10.1 **An outlet with nothing attached to it is deleted from the app by the owner**, and one with anything attached refuses with a sentence naming what is still there — the refusal proved by a hand-crafted request from a non-owner session, not by observing a disabled button.
+
+  > **Half walked, 2026-07-28.** The deletion happened in production (9.1), and
+  > the non-owner refusal is proved by hand-crafted `delete` statements from
+  > Franchise Admin, Biller and Employee sessions in `11_outlet_deletion.sql` —
+  > no button was observed. The remaining half is 9.2, deferred above. This
+  > gate stays open until then: a checkpoint that was not run is not passed.
 - [x] 10.2 The no-client-delete doctrine in `docs/DATA_MODEL.md` and in the grants migration both name `outlets` as the single exception. Neither still claims deletion never happens.
