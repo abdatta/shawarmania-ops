@@ -145,6 +145,20 @@
 - [x] 11.3 `npm run test:e2e:auth` — this change touches provisioning, so the auth end-to-end path must be run rather than assumed.
 - [x] 11.4 Run the app: create an outlet, then add a person on Staff in demo mode and in a real session, on a phone viewport, in both themes.
 
+  > **Partially by proxy, and worth stating rather than glossing.** The browser
+  > walk was **demo mode only** — 375px, both themes: the prefix pre-filling to
+  > `BAR` from `barrackpore`, Kalyani's prefix visibly inert with its reason,
+  > adding a person with only a name and getting `KAL-07QF` back, and the code
+  > field disabled for a manager and enabled for the owner.
+  >
+  > The **real session** half was covered by `supabase/tests/rest/` and
+  > `test:e2e:auth` — real sign-in, real RLS, real triggers — and after deploy by
+  > a read-only check against production, where the schema issued `KAL-R6YK`
+  > itself and refused a blank name with `23514`. That is strong coverage of the
+  > real stack, and it is **not** the signed-in browser walk this task names. The
+  > owner has that check outstanding (2026-07-28); it is listed in the
+  > proposal's user-only gate steps and was not treated as done here.
+
 ## 12. PHASE GATE
 
 - [x] 12.1 **An admin adds a person to the staff list without being asked to invent anything, the roster shows a readable code the app chose, and a Franchise Admin's attempt to change one is refused by the database rather than by the form** — the last clause proved by a hand-crafted request from a Franchise Admin session, not by observing that the field is disabled.
