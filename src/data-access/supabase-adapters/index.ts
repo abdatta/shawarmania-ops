@@ -1,5 +1,6 @@
 import { getSupabaseClient } from '../supabase'
 import type { DataAdapters } from '../adapters'
+import { createAddressLookupAdapter } from './address-lookup'
 import { createSupabaseAccountsAdapter } from './accounts'
 import { createSupabaseAttendanceAdapter } from './attendance'
 import { createSupabaseEmployeesAdapter } from './employees'
@@ -17,5 +18,9 @@ export function createSupabaseAdapters(): DataAdapters {
     accounts: createSupabaseAccountsAdapter(client),
     attendance: createSupabaseAttendanceAdapter(client),
     employees: createSupabaseEmployeesAdapter(client),
+    // Takes no client: it holds no credential and reaches no Supabase service.
+    // It is here because this is the layer permitted to do I/O, and a screen
+    // fetching for itself is exactly what the seam exists to prevent.
+    addressLookup: createAddressLookupAdapter(),
   }
 }

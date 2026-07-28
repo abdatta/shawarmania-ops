@@ -1,4 +1,5 @@
 import type { DataAdapters } from '../adapters'
+import { createMockAddressLookupAdapter } from './address-lookup'
 import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
 import { createMockAttendanceAdapter } from './attendance'
 import { createMockEmployeesAdapter } from './employees'
@@ -20,6 +21,7 @@ export function createMockAdapters(): DataAdapters {
     accounts: createMockAccountsAdapter(accounts),
     attendance: createMockAttendanceAdapter(),
     employees: createMockEmployeesAdapter(accounts),
+    addressLookup: createMockAddressLookupAdapter(),
   }
 }
 

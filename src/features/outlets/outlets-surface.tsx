@@ -1,16 +1,17 @@
 import { Crosshair, LoaderCircle, MapPin, MapPinOff, Store, TriangleAlert } from 'lucide-react'
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { PageHeader } from '@/components/layout/page-header'
+import { AddressSearch } from '@/components/ui/address-search'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useAdapters, type Tables } from '@/data-access'
-import { DataActionError, type NewOutlet } from '@/data-access/adapters'
+import { DataActionError, type AddressSuggestion, type NewOutlet } from '@/data-access/adapters'
 import {
   captureQuality,
   CAPTURE_ACCURACY_GOOD_M,
@@ -376,7 +377,71 @@ function OutletFormSheet({
   onClose: () => void
   onSubmit: (event: FormEvent) => void
 }) {
+  const { addressLookup } = useAdapters()
   const set = (patch: Partial<Draft>) => onChange({ ...draft, ...patch })
+
+  /**
+   * The district is the field somebody is least able to answer from memory —
+   * Nadia for Kalyani, North 24 Parganas for Kanchrapara — and it is the one
+   * field no geocoder gets right for India. So it is resolved from the PIN
+   * rather than from the map, which also means it fills for somebody who types
+   * a PIN and never opens the search (design D4).
+   *
+   * Fire and forget: it never blocks the fill it follows, and a directory that
+   * does not answer simply leaves a field to type.
+   */
+  const draftRef = useRef(draft)
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
+
+  const fillDistrictFrom = useCallback(
+    (pincode: string) => {
+      if (!/^\d{6}$/.test(pincode.trim())) return
+      void addressLookup.districtForPincode(pincode).then((district) => {
+        // Read through the ref: the person keeps typing while this is in
+        // flight, and closing over a stale draft would undo whatever they did
+        // in the meantime.
+        if (district && draftRef.current.pincode.trim() === pincode.trim()) {
+          onChange({ ...draftRef.current, district })
+        }
+      })
+    },
+    [addressLookup, onChange],
+  )
+
+  // A hand-typed PIN resolves too, debounced so six digits are one lookup.
+  const typedPincode = draft.pincode
+  useEffect(() => {
+    if (draftRef.current.district.trim() !== '') return
+    const timer = setTimeout(() => fillDistrictFrom(typedPincode), 500)
+    return () => clearTimeout(timer)
+  }, [typedPincode, fillDistrictFrom])
+
+  /**
+   * A pick writes the whole address block, clearing what the suggestion does
+   * not carry. Merging into whatever was there produces a street from one place
+   * beside a PIN from another — the one failure nobody would notice.
+   *
+   * The location label is the exception, because it is the owner's own wording
+   * rather than an address component: filled when empty, never overwritten.
+   */
+  function applySuggestion(suggestion: AddressSuggestion) {
+    const label = draft.locationLabel.trim()
+    onChange({
+      ...draft,
+      locationLabel:
+        label === ''
+          ? [suggestion.city, suggestion.placeName].filter(Boolean).join(' — ')
+          : draft.locationLabel,
+      addressLine1: suggestion.addressLine1,
+      addressLine2: suggestion.addressLine2,
+      city: suggestion.city,
+      district: '',
+      pincode: suggestion.pincode,
+    })
+    fillDistrictFrom(suggestion.pincode)
+  }
 
   return (
     <FormSheet
@@ -430,6 +495,23 @@ function OutletFormSheet({
             onChange={(event) => set({ locationLabel: event.target.value })}
           />
         </Field>
+
+        {/*
+          A shortcut, not a step. It sits above the fields it fills so the
+          relationship is obvious, and the block below stays exactly as
+          typeable as it was — an outlet must be creatable when this finds
+          nothing, or when whoever is holding the phone has no signal.
+        */}
+        <AddressSearch
+          suggest={addressLookup.suggest}
+          onPick={applySuggestion}
+          // Deliberately not "Address (optional)" with a prefix: two adjacent
+          // fields whose names differ only by a leading word are hard to tell
+          // apart read aloud, which is how a screen reader gets them.
+          label="Find the address"
+          placeholder="Search a landmark, street or shop"
+          hint="Optional. Fills the fields below, and you can edit anything it gets wrong."
+        />
 
         <Field label="Address (optional)" id="outlet-address1">
           <Input

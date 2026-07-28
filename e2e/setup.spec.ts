@@ -128,3 +128,48 @@ test('the whole setup walk stays inside the app origin', async ({ page, baseURL 
 
   expect(foreign).toEqual([])
 })
+
+test('an address is filled from a search, and the search never leaves the origin', async ({
+  page,
+  baseURL,
+}) => {
+  // The address lookup is the first feature in this app that would legitimately
+  // call somebody else's service. In demo mode it must not — and the failure
+  // mode if it did is invisible in the UI, which is exactly why this asserts on
+  // the network rather than on the screen.
+  const origin = new URL(baseURL ?? 'http://127.0.0.1:4173/').origin
+  const foreign: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).origin !== origin) foreign.push(request.url())
+  })
+
+  await openOwnerOutlets(page)
+  await page.getByTestId('add-outlet').click()
+  await page.getByLabel('Name', { exact: true }).fill('Shawarmania Barrackpore')
+  await page.getByLabel('Short code').fill('barrackpore')
+
+  await page.getByRole('combobox', { name: /Find the address/ }).fill('Central Park')
+  await page.getByRole('option', { name: /Central Park/ }).click()
+
+  // One action, four fields — plus the district, which comes from the PIN
+  // because no geocoder answers it correctly for India.
+  await expect(page.getByLabel('Address (optional)')).toHaveValue('Central Park')
+  await expect(page.getByLabel('Address line 2')).toHaveValue('B-7')
+  await expect(page.getByLabel('City')).toHaveValue('Kalyani')
+  await expect(page.getByLabel('PIN code')).toHaveValue('741235')
+  await expect(page.getByLabel('District')).toHaveValue('Nadia')
+
+  // The label was empty, so the pick filled it; nothing overwrote anything.
+  await expect(page.getByLabel('Location label')).toHaveValue('Kalyani — Central Park')
+
+  await page.getByRole('button', { name: 'Create outlet' }).click()
+  await expect(page.getByTestId('outlet-barrackpore')).toBeVisible()
+
+  // A picked address must never survey an outlet: the fence is captured on
+  // site, and a rooftop centroid would mark somebody absent at their own counter.
+  await expect(page.getByTestId('uncaptured-barrackpore')).toContainText(
+    'not measured against a geofence at all',
+  )
+
+  expect(foreign).toEqual([])
+})

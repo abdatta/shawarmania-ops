@@ -399,3 +399,133 @@ describe('closing and reopening an outlet', () => {
     expect(await adapters.outlets.listOutlets({ includeInactive: true })).toHaveLength(2)
   })
 })
+
+/**
+ * The address search: what a pick actually writes, and what it deliberately
+ * leaves alone.
+ *
+ * The mock lookup is deliberately the same one the demo uses, so these tests
+ * and the demo walk cannot disagree about what a suggestion looks like.
+ */
+describe('filling an outlet address from a search', () => {
+  /** Type into the combobox and let the debounce elapse. */
+  async function search(user: ReturnType<typeof userEvent.setup>, query: string) {
+    await user.type(screen.getByRole('combobox', { name: /Find the address/ }), query)
+    await vi.advanceTimersByTimeAsync(400)
+  }
+
+  async function openForm(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByTestId('add-outlet'))
+  }
+
+  it('fills the whole address block in one pick', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+    await openForm(user)
+
+    await search(user, 'Central Park')
+    await user.click(await screen.findByRole('option', { name: /Central Park/ }))
+
+    expect(screen.getByLabelText('Address (optional)')).toHaveValue('Central Park')
+    expect(screen.getByLabelText('Address line 2')).toHaveValue('B-7')
+    expect(screen.getByLabelText('City')).toHaveValue('Kalyani')
+    expect(screen.getByLabelText('PIN code')).toHaveValue('741235')
+  })
+
+  it('fills the district from the PIN, which is the field the map gets wrong', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+    await openForm(user)
+
+    await search(user, 'Central Park')
+    await user.click(await screen.findByRole('option', { name: /Central Park/ }))
+
+    // OpenStreetMap would answer "B-7" here. Nadia is what goes on an invoice.
+    await waitFor(() => expect(screen.getByLabelText('District')).toHaveValue('Nadia'))
+  })
+
+  it('fills the district for somebody who never opens the search', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+    await openForm(user)
+
+    await user.type(screen.getByLabelText('PIN code'), '743145')
+    await vi.advanceTimersByTimeAsync(600)
+
+    await waitFor(() => expect(screen.getByLabelText('District')).toHaveValue('North 24 Parganas'))
+  })
+
+  it('never overwrites a label the admin wrote', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+    await openForm(user)
+
+    await user.type(screen.getByLabelText('Location label'), 'The corner shop')
+    await search(user, 'Central Park')
+    await user.click(await screen.findByRole('option', { name: /Central Park/ }))
+
+    expect(screen.getByLabelText('Location label')).toHaveValue('The corner shop')
+  })
+
+  it('fills an empty label from the place that was picked', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+    await openForm(user)
+
+    await search(user, 'Central Park')
+    await user.click(await screen.findByRole('option', { name: /Central Park/ }))
+
+    expect(screen.getByLabelText('Location label')).toHaveValue('Kalyani — Central Park')
+  })
+
+  it('leaves no mixture of two addresses behind', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+    await openForm(user)
+
+    await search(user, 'Central Park')
+    await user.click(await screen.findByRole('option', { name: /Central Park/ }))
+    expect(screen.getByLabelText('PIN code')).toHaveValue('741235')
+
+    // Ghoshpara Bazar carries no PIN. Keeping Kalyani's would put one place's
+    // street beside another's PIN code — the failure nobody would notice.
+    await user.clear(screen.getByRole('combobox', { name: /Find the address/ }))
+    await search(user, 'Ghoshpara')
+    await user.click(await screen.findByRole('option', { name: /Ghoshpara/ }))
+
+    expect(screen.getByLabelText('Address (optional)')).toHaveValue('Ghoshpara Road')
+    expect(screen.getByLabelText('PIN code')).toHaveValue('')
+  })
+
+  it('leaves every filled field editable', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+    await openForm(user)
+
+    await search(user, 'Central Park')
+    await user.click(await screen.findByRole('option', { name: /Central Park/ }))
+
+    await user.clear(screen.getByLabelText('Address (optional)'))
+    await user.type(screen.getByLabelText('Address (optional)'), 'Shop 4, Central Park')
+    expect(screen.getByLabelText('Address (optional)')).toHaveValue('Shop 4, Central Park')
+  })
+
+  it('gives the outlet an address and still no position', async () => {
+    // The whole reason the coordinates are dropped: a picked address must not
+    // arm the geofence against a rooftop centroid, or somebody is marked absent
+    // standing at their own counter.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+    await openForm(user)
+
+    await user.type(screen.getByLabelText('Name'), 'Shawarmania Barrackpore')
+    await user.type(screen.getByLabelText('Short code'), 'barrackpore')
+    await search(user, 'Central Park')
+    await user.click(await screen.findByRole('option', { name: /Central Park/ }))
+    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+
+    expect(await screen.findByTestId('uncaptured-barrackpore')).toHaveTextContent(
+      'not measured against a geofence at all',
+    )
+  })
+})

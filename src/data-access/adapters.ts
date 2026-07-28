@@ -361,4 +361,54 @@ export interface DataAdapters {
   accounts: AccountsAdapter
   attendance: AttendanceAdapter
   employees: EmployeesAdapter
+  addressLookup: AddressLookupAdapter
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Looking up a postal address.
+
+/**
+ * A place somebody can pick, reduced to the parts of a postal address.
+ *
+ * **There is no latitude or longitude here, and that absence is the design.**
+ * `outlets.latitude/longitude` is read directly by the check-in trigger, so a
+ * coordinate from a map search would arm the geofence against a rooftop
+ * centroid and mark somebody absent while they stand at their own counter.
+ * Capturing a position on site is the only thing that surveys an outlet
+ * (attendance design D4).
+ *
+ * A comment saying "do not use these" survives exactly until somebody needs
+ * them. A type that cannot carry them does not.
+ */
+export interface AddressSuggestion {
+  /** Stable within one result set; only ever used as a React key and an id. */
+  id: string
+  /** What the person reads in the list — enough to tell three near-identical places apart. */
+  label: string
+  /** Offered for the outlet's location label, and only when that field is empty. */
+  placeName: string
+  addressLine1: string
+  addressLine2: string
+  city: string
+  pincode: string
+}
+
+/**
+ * Postal address lookup: suggestions as somebody types, and the one field no
+ * geocoder answers correctly for India.
+ *
+ * Both calls are optional to whatever operation is in progress. Neither throws
+ * — an unreachable, refused or slow service resolves to nothing, because this
+ * is a convenience on an optional block and an error here would imply something
+ * needs fixing when nothing does.
+ */
+export interface AddressLookupAdapter {
+  suggest(query: string, signal?: AbortSignal): Promise<AddressSuggestion[]>
+  /**
+   * The Indian revenue district for a PIN code — Nadia for 741235, North 24
+   * Parganas for 743145. Deliberately not taken from the geocoder: OpenStreetMap's
+   * `district` for Kalyani is the sector `B-7` and its `county` is the
+   * municipality, neither of which is what goes on an invoice.
+   */
+  districtForPincode(pincode: string, signal?: AbortSignal): Promise<string | null>
 }

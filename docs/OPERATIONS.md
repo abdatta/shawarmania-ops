@@ -98,7 +98,7 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
 
 > ⚠ **Steps 4, 5 and 7 are not built yet** and are marked below. Everything else is done in the app — no SQL console, at any step. **Order matters**: an outlet has to exist before anybody can be assigned to it, and a roster row has to exist before anyone can be linked to it.
 
-1. **Create the outlet** (Super Admin → Outlets → *Add outlet*): short code, name, location label, address, phone, business-day cutover. On a brand-new installation this is the only thing there is to do, and the empty screen says so.
+1. **Create the outlet** (Super Admin → Outlets → *Add outlet*): short code, name, location label, address, phone, business-day cutover. Use **Find the address** to fill the address block from a search rather than typing five fields — it fills the District from the PIN code, which is the part nobody remembers. Check what it filled before saving; OpenStreetMap data is contributed rather than surveyed, and this address is what a GST invoice will carry. If it finds nothing, type it: the search is a shortcut and never a step. On a brand-new installation this is the only thing there is to do, and the empty screen says so.
 2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → *Capture position here*). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the Outlets screen shows it as unsurveyed.
 3. **Create the Franchise Admin** (Super Admin → People) and send them their activation link. Needs the outlet to exist first — the form has no outlet to assign anyone to otherwise, and says so rather than showing an empty dropdown.
 4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ. *(Not built — demo only until #10.)*
@@ -239,6 +239,8 @@ Deliberately minimal at this scale — the useful signals are operational rather
 - Supabase's built-in error and usage dashboards cover the rest.
 
 No third-party analytics or session-recording tooling. The app handles customer PII and employee location; sending that to an analytics vendor is not a trade worth making.
+
+**Two external services are contacted, both only from the outlet form.** `photon.komoot.io` (OpenStreetMap geocoding) and `api.postalpincode.in` (India Post's PIN directory) answer the address search. Both are keyless and free, so there is nothing to provision, restrict or renew — and nothing to notice when it expires. They see only what an admin types while looking up their own shop's address; no customer, employee or billing data reaches either, and neither is contacted anywhere else in the app. If either disappears the address block simply goes back to being typed.
 
 ## Runbook stubs
 

@@ -41,6 +41,10 @@ The isolation test suite asserts this for every outlet-scoped table (see [Testin
 | Bill contents | Customer | The transaction record | Retained; identifiable only where a customer was recorded |
 | Hash of a caller's IP address | Whoever fails an activation | Bounding code guessing | Never the address itself, and only on failure. Pruned to the fifteen-minute window; readable by nobody, only counted |
 
+**Two external lookups, and what they see.** The outlet form's address search queries `photon.komoot.io` (OpenStreetMap) and `api.postalpincode.in` (India Post). What leaves the browser is the text an admin types while looking up **their own shop's address**, and a PIN code. No customer record, no employee record, no bill and no session token is ever sent to either, and neither is contacted from any other screen. Both are keyless: there is no account, no API key to leak, and no billing relationship. Both are optional — a failure leaves a form that is typed by hand, which is what it was before.
+
+**The address search never supplies an outlet's position.** The coordinates a geocoder returns are dropped at the adapter boundary, and the type the application carries has no field to hold them. `outlets.latitude/longitude` is read directly by the check-in trigger, so a map-search coordinate would arm the geofence against a rooftop centroid — and mark somebody absent while they stand at their own counter. Capturing a position on site is the only thing that surveys an outlet.
+
 **Customer PII is collected at the counter, optionally, under time pressure.** Two consequences: the fields must never block settling a bill, and we should not treat the resulting data as reliable enough to build anything important on.
 
 ## Employee location monitoring
