@@ -28,7 +28,12 @@ describe('RowActionsMenu', () => {
   it('closes on Escape and returns focus to the trigger', async () => {
     const user = userEvent.setup()
 
-    render(<RowActionsMenu label="Actions for Demo Person" actions={[{ label: 'Edit', onSelect: () => {} }]} />)
+    render(
+      <RowActionsMenu
+        label="Actions for Demo Person"
+        actions={[{ label: 'Edit', onSelect: () => {} }]}
+      />,
+    )
 
     const trigger = screen.getByRole('button', { name: 'Actions for Demo Person' })
     await user.click(trigger)
