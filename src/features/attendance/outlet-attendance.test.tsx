@@ -6,6 +6,10 @@ import { describe, expect, it, vi } from 'vitest'
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters, OUTLET_KALYANI_ID } from '@/data-access/mock'
+import {
+  DEMO_BLOCKED_EMPLOYEE_ID,
+  DEMO_GRILLER_EMPLOYEE_ID,
+} from '@/data-access/mock/fixtures/employees'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
@@ -69,14 +73,14 @@ describe('the outlet attendance day', () => {
     expect(await screen.findByTestId('awaiting-count')).toHaveTextContent(
       '1 check-in is waiting for your decision.',
     )
-    expect(screen.getByTestId('approve-KAL-03')).toBeInTheDocument()
+    expect(screen.getByTestId(`approve-${DEMO_BLOCKED_EMPLOYEE_ID}`)).toBeInTheDocument()
     // The one that was inside the fence needs no decision.
-    expect(screen.queryByTestId('approve-KAL-02')).not.toBeInTheDocument()
+    expect(screen.queryByTestId(`approve-${DEMO_GRILLER_EMPLOYEE_ID}`)).not.toBeInTheDocument()
   })
 
   it('shows the evidence a decision has to be made on', async () => {
     renderDay()
-    const card = await screen.findByTestId('day-KAL-03')
+    const card = await screen.findByTestId(`day-${DEMO_BLOCKED_EMPLOYEE_ID}`)
 
     // Distance and the reading's own accuracy, beside the verdict — the two
     // numbers a manager needs to judge a drifting fix.
@@ -89,7 +93,7 @@ describe('the outlet attendance day', () => {
     const user = userEvent.setup()
     renderDay()
 
-    await user.click(await screen.findByTestId('approve-KAL-03'))
+    await user.click(await screen.findByTestId(`approve-${DEMO_BLOCKED_EMPLOYEE_ID}`))
     await user.type(
       screen.getByLabelText('Why are you approving this?'),
       'Seen at the counter at 9:30',
@@ -107,7 +111,7 @@ describe('the outlet attendance day', () => {
     const approve = vi.spyOn(adapters.attendance, 'approveOverride')
     renderDay(adapters)
 
-    await user.click(await screen.findByTestId('approve-KAL-03'))
+    await user.click(await screen.findByTestId(`approve-${DEMO_BLOCKED_EMPLOYEE_ID}`))
     const submit = screen.getByRole('button', { name: /Approve and record my reason/ })
 
     expect(submit).toBeDisabled()
@@ -121,7 +125,7 @@ describe('the outlet attendance day', () => {
     const approve = vi.spyOn(adapters.attendance, 'approveOverride')
     renderDay(adapters)
 
-    await user.click(await screen.findByTestId('approve-KAL-03'))
+    await user.click(await screen.findByTestId(`approve-${DEMO_BLOCKED_EMPLOYEE_ID}`))
     await user.type(screen.getByLabelText('Why are you approving this?'), '   ')
     await user.click(screen.getByRole('button', { name: /Approve and record my reason/ }))
 

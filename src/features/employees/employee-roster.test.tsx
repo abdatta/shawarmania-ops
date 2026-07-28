@@ -6,6 +6,11 @@ import { describe, expect, it, vi } from 'vitest'
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters, OUTLET_KALYANI_ID } from '@/data-access/mock'
+import {
+  DEMO_BLOCKED_EMPLOYEE_ID,
+  DEMO_GRILLER_EMPLOYEE_ID,
+  DEMO_STAFF_EMPLOYEE_ID,
+} from '@/data-access/mock/fixtures/employees'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
@@ -60,24 +65,39 @@ describe('the employee roster', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'Demo New Starter')
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-09')
     await user.type(screen.getByLabelText('Role (optional)'), 'Prep')
     await user.click(screen.getByRole('button', { name: 'Add to the list' }))
 
     expect(await screen.findByText('Demo New Starter')).toBeInTheDocument()
   })
 
-  it('refuses to add somebody with no staff code', async () => {
+  it('never asks for a staff code, and issues one anyway', async () => {
+    // This replaces an assertion that adding without a code was *refused*. The
+    // claim behind it survives unchanged — a roster row never ends up without a
+    // usable code — but the app now supplies it instead of demanding it, so the
+    // assertion moves from the refusal to the result.
     const user = userEvent.setup()
     const { adapters } = renderRoster()
     const create = vi.spyOn(adapters.employees, 'createEmployee')
 
     await user.click(await screen.findByRole('button', { name: 'Add person' }))
-    await user.type(screen.getByLabelText('Full name'), 'Demo Nameless')
+    expect(screen.queryByLabelText('Staff code')).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Full name'), 'Demo New Starter')
     await user.click(screen.getByRole('button', { name: 'Add to the list' }))
 
-    expect(await screen.findByTestId('roster-error')).toHaveTextContent('A staff code is needed')
-    expect(create).not.toHaveBeenCalled()
+    expect(await screen.findByText('Demo New Starter')).toBeInTheDocument()
+    expect(screen.queryByTestId('roster-error')).not.toBeInTheDocument()
+    // Nothing was invented at the keyboard and nothing was sent.
+    expect(create).toHaveBeenCalledWith(
+      expect.not.objectContaining({ employeeCode: expect.anything() }),
+    )
+
+    const created = await adapters.employees.listEmployees(OUTLET_KALYANI_ID)
+    const row = created.find((candidate) => candidate.fullName === 'Demo New Starter')!
+    // Shape, never a literal: the app picks the value, so a test that knew it
+    // in advance would be checking its own arithmetic.
+    expect(row.employeeCode).toMatch(/^KAL-[0-9A-HJKMNP-TV-Z]{4}$/)
   })
 
   it('refuses to add somebody with no name', async () => {
@@ -89,7 +109,6 @@ describe('the employee roster', () => {
     const create = vi.spyOn(adapters.employees, 'createEmployee')
 
     await user.click(await screen.findByRole('button', { name: 'Add person' }))
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-09')
     await user.click(screen.getByRole('button', { name: 'Add to the list' }))
 
     expect(await screen.findByTestId('roster-error')).toHaveTextContent('needs a name')
@@ -103,23 +122,25 @@ describe('the employee roster', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), '   ')
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-09')
     await user.click(screen.getByRole('button', { name: 'Add to the list' }))
 
     expect(await screen.findByTestId('roster-error')).toHaveTextContent('needs a name')
     expect(create).not.toHaveBeenCalled()
   })
 
-  it('refuses a staff code already used at this outlet', async () => {
+  it('shows a manager the staff code but does not let them change it', async () => {
     const user = userEvent.setup()
     renderRoster()
 
-    await user.click(await screen.findByRole('button', { name: 'Add person' }))
-    await user.type(screen.getByLabelText('Full name'), 'Demo Clash')
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-02')
-    await user.click(screen.getByRole('button', { name: 'Add to the list' }))
+    await screen.findByText('Demo Griller')
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]!)
 
-    expect(await screen.findByTestId('roster-error')).toHaveTextContent('already used')
+    const code = screen.getByLabelText('Staff code')
+    expect(code).toBeDisabled()
+    // Shape, not a literal — and it says who can change it, rather than
+    // claiming a staff code never changes, which stopped being true.
+    expect((code as HTMLInputElement).value).toMatch(/^KAL-/)
+    expect(screen.getByText(/only the owner can change it/i)).toBeInTheDocument()
   })
 
   it('edits someone without letting their staff code move', async () => {
@@ -182,9 +203,11 @@ describe('the account behind a person on the roster', () => {
     renderRoster()
 
     // Linked, active — the working case, named rather than merely ticked.
-    expect(await screen.findByTestId('linked-KAL-01')).toHaveTextContent('Demo Staff')
+    expect(await screen.findByTestId(`linked-${DEMO_STAFF_EMPLOYEE_ID}`)).toHaveTextContent(
+      'Demo Staff',
+    )
     // On the payroll with no login at all.
-    expect(screen.getByTestId('unlinked-KAL-03')).toHaveTextContent(
+    expect(screen.getByTestId(`unlinked-${DEMO_BLOCKED_EMPLOYEE_ID}`)).toHaveTextContent(
       'No app account — cannot check in from a phone',
     )
   })
@@ -212,14 +235,16 @@ describe('the account behind a person on the roster', () => {
     const user = userEvent.setup()
     renderRoster()
 
-    await screen.findByTestId('unlinked-KAL-02')
-    const row = screen.getByTestId('unlinked-KAL-02').closest('tr')!
+    await screen.findByTestId(`unlinked-${DEMO_GRILLER_EMPLOYEE_ID}`)
+    const row = screen.getByTestId(`unlinked-${DEMO_GRILLER_EMPLOYEE_ID}`).closest('tr')!
     await user.click(within(row).getByRole('button', { name: 'Edit' }))
 
     await user.selectOptions(screen.getByLabelText('App account'), ['Demo Griller'])
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findByTestId('linked-KAL-02')).toHaveTextContent('Demo Griller')
+    expect(await screen.findByTestId(`linked-${DEMO_GRILLER_EMPLOYEE_ID}`)).toHaveTextContent(
+      'Demo Griller',
+    )
   })
 
   it('adds a person and links them in one go', async () => {
@@ -229,11 +254,14 @@ describe('the account behind a person on the roster', () => {
     await screen.findByText('Demo Griller')
     await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'Demo Newcomer')
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-11')
     await user.selectOptions(screen.getByLabelText('App account'), ['Demo Griller'])
     await user.click(screen.getByRole('button', { name: 'Add to the list' }))
 
-    expect(await screen.findByTestId('linked-KAL-11')).toHaveTextContent('Demo Griller')
+    // Found by the name that was typed, not by a code — the app picks the code
+    // now, so this test cannot know it in advance. That is the whole reason the
+    // row test IDs moved onto the row id.
+    const row = (await screen.findByText('Demo Newcomer')).closest('tr')!
+    expect(within(row).getByText('Demo Griller')).toBeInTheDocument()
   })
 
   it('says what unlinking costs before it happens, and keeps the worked days', async () => {
@@ -241,8 +269,8 @@ describe('the account behind a person on the roster', () => {
     const { adapters } = renderRoster()
     const unlink = vi.spyOn(adapters.employees, 'unlinkAccount')
 
-    await screen.findByTestId('linked-KAL-01')
-    const row = screen.getByTestId('linked-KAL-01').closest('tr')!
+    await screen.findByTestId(`linked-${DEMO_STAFF_EMPLOYEE_ID}`)
+    const row = screen.getByTestId(`linked-${DEMO_STAFF_EMPLOYEE_ID}`).closest('tr')!
     await user.click(within(row).getByRole('button', { name: 'Unlink' }))
 
     const dialog = await screen.findByRole('dialog')
@@ -251,13 +279,13 @@ describe('the account behind a person on the roster', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'Unlink' }))
     await waitFor(() => expect(unlink).toHaveBeenCalled())
-    expect(await screen.findByTestId('unlinked-KAL-01')).toBeInTheDocument()
+    expect(await screen.findByTestId(`unlinked-${DEMO_STAFF_EMPLOYEE_ID}`)).toBeInTheDocument()
   })
 
   it('offers no unlink where there is no link', async () => {
     renderRoster()
 
-    const row = (await screen.findByTestId('unlinked-KAL-03')).closest('tr')!
+    const row = (await screen.findByTestId(`unlinked-${DEMO_BLOCKED_EMPLOYEE_ID}`)).closest('tr')!
     expect(within(row).queryByRole('button', { name: 'Unlink' })).not.toBeInTheDocument()
   })
 
@@ -266,11 +294,11 @@ describe('the account behind a person on the roster', () => {
     renderRoster()
 
     // Link it to the griller's roster row…
-    const row = (await screen.findByTestId('unlinked-KAL-02')).closest('tr')!
+    const row = (await screen.findByTestId(`unlinked-${DEMO_GRILLER_EMPLOYEE_ID}`)).closest('tr')!
     await user.click(within(row).getByRole('button', { name: 'Edit' }))
     await user.selectOptions(screen.getByLabelText('App account'), ['Demo Griller'])
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
-    await screen.findByTestId('linked-KAL-02')
+    await screen.findByTestId(`linked-${DEMO_GRILLER_EMPLOYEE_ID}`)
 
     // …and it is no longer on offer to anyone else. One login, one person, or
     // every attendance record becomes ambiguous about who actually stood there.
@@ -329,6 +357,63 @@ describe('the roster as the owner sees it', () => {
       ),
     }
   }
+
+  it('lets the owner change a staff code, and a manager only read it', async () => {
+    // The field is inert for a manager rather than absent: a missing field
+    // reads as a bug to somebody told the code can be changed, while a
+    // disabled one with a sentence beside it answers the question where it
+    // gets asked (design D6). The boundary is the trigger either way.
+    const user = userEvent.setup()
+    renderAsOwner()
+
+    await screen.findByText('Demo Griller')
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]!)
+    expect(screen.getByLabelText('Staff code')).toBeEnabled()
+  })
+
+  it('sends the code to the adapter only when it actually changed', async () => {
+    // `employee_code_guard` compares old to new, so writing the same value back
+    // is harmless — but carrying a staff-code write on every ordinary edit
+    // means a rename is quietly also a code write, and the first tightening of
+    // that guard would break every edit rather than the one that earned it.
+    const user = userEvent.setup()
+    const adapters = createMockAdapters()
+    const update = vi.spyOn(adapters.employees, 'updateEmployee')
+    renderAsOwner(adapters)
+
+    await screen.findByText('Demo Griller')
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]!)
+
+    const name = screen.getByLabelText('Full name')
+    await user.clear(name)
+    await user.type(name, 'Demo Renamed Only')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    expect(update).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.not.objectContaining({ employeeCode: expect.anything() }),
+    )
+  })
+
+  it('refuses a staff code already used at this outlet', async () => {
+    // Unreachable from the add path now that the app issues codes — so the
+    // assertion moves to the one path that can still collide, the owner
+    // setting a code by hand. The refusal itself is unchanged and must stay a
+    // sentence rather than a constraint name.
+    const user = userEvent.setup()
+    renderAsOwner()
+
+    await screen.findByText('Demo Griller')
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]!)
+
+    const code = screen.getByLabelText('Staff code')
+    await user.clear(code)
+    await user.type(code, 'KAL-02')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByTestId('roster-error')).toHaveTextContent('already used')
+  })
 
   it('picks an outlet instead of refusing to render', async () => {
     renderAsOwner()

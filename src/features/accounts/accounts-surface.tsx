@@ -54,7 +54,6 @@ interface Draft {
   role: AppRole
   outletId: string
   rosterChoice: RosterChoice
-  employeeCode: string
   employeeId: string
 }
 
@@ -88,7 +87,6 @@ export function AccountsSurface() {
     role: 'employee',
     outletId: session.outletId ?? '',
     rosterChoice: 'create',
-    employeeCode: '',
     employeeId: '',
   })
 
@@ -223,12 +221,6 @@ export function AccountsSurface() {
     }
 
     if (outletId && draft.role === 'employee') {
-      if (draft.rosterChoice === 'create' && !draft.employeeCode.trim()) {
-        setError(
-          'A staff code is needed to put someone on the staff list — it is how their records are identified. Give one, or choose “Not on the staff list”.',
-        )
-        return
-      }
       if (draft.rosterChoice === 'link' && !draft.employeeId) {
         setError('Choose who they already are on the staff list, or pick another option.')
         return
@@ -252,8 +244,8 @@ export function AccountsSurface() {
         try {
           if (draft.rosterChoice === 'create') {
             await employeesAdapter.createEmployee({
+              // No code: the database issues one from the outlet's prefix.
               outletId,
-              employeeCode: draft.employeeCode,
               fullName: draft.fullName,
               profileId: code.profileId,
             })
@@ -274,7 +266,6 @@ export function AccountsSurface() {
         fullName: '',
         email: '',
         phone: '',
-        employeeCode: '',
         employeeId: '',
       }))
       await refresh()
@@ -562,22 +553,17 @@ export function AccountsSurface() {
                 person can sign in and cannot check in.
               </p>
 
+              {/*
+                No staff-code input any more: the database issues one from the
+                outlet's prefix. Nobody here has a staff ID to copy in, so the
+                field only ever asked somebody to invent an identifier on a
+                phone, in the middle of onboarding a person.
+              */}
               <RosterOption
                 checked={draft.rosterChoice === 'create'}
                 onSelect={() => setDraft({ ...draft, rosterChoice: 'create' })}
                 label="Add them to the staff list"
-              >
-                {draft.rosterChoice === 'create' && (
-                  <Input
-                    aria-label="Staff code"
-                    className="mt-2"
-                    autoCapitalize="characters"
-                    placeholder="Staff code, e.g. KAL-05"
-                    value={draft.employeeCode}
-                    onChange={(event) => setDraft({ ...draft, employeeCode: event.target.value })}
-                  />
-                )}
-              </RosterOption>
+              />
 
               {linkableEmployees.length > 0 && (
                 <RosterOption

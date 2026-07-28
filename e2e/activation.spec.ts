@@ -21,7 +21,7 @@ test('an admin is handed a link, a scannable code, and the code itself', async (
   await page.getByLabel('Full name').fill('Demo Fresh Hire')
   await page.getByLabel('Email', { exact: true }).fill('demo.fresh.hire@example.com')
   await page.getByLabel('Outlet', { exact: true }).selectOption({ label: 'Shawarmania Kalyani' })
-  await page.getByLabel('Staff code').fill('KAL-90')
+  await expect(page.getByLabel('Staff code')).toHaveCount(0)
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
   const panel = page.getByTestId('issued-code')
@@ -61,7 +61,7 @@ test('producing the handover leaves the app origin alone', async ({ page, baseUR
   await page.getByLabel('Full name').fill('Demo Second Starter')
   await page.getByLabel('Email', { exact: true }).fill('demo.second.starter@example.com')
   await page.getByLabel('Outlet', { exact: true }).selectOption({ label: 'Shawarmania Kalyani' })
-  await page.getByLabel('Staff code').fill('KAL-91')
+  await expect(page.getByLabel('Staff code')).toHaveCount(0)
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
   await expect(page.getByTestId('issued-code')).toBeVisible()

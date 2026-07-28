@@ -1,4 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
+import {
+  DEMO_GRILLER_EMPLOYEE_ID,
+  DEMO_STAFF_EMPLOYEE_ID,
+} from '../src/data-access/mock/fixtures/employees'
 
 /**
  * The setup walk: creating an outlet, and joining an app account to the person
@@ -58,22 +62,24 @@ test('an account and a person on the roster are joined, and the join is legible'
   await page.goto('demo/admin/employees')
 
   // The demo ships both halves of the unfinished state on purpose.
-  await expect(page.getByTestId('unlinked-KAL-02')).toContainText('No app account')
-  await expect(page.getByTestId('linked-KAL-01')).toContainText('Demo Staff')
+  await expect(page.getByTestId(`unlinked-${DEMO_GRILLER_EMPLOYEE_ID}`)).toContainText(
+    'No app account',
+  )
+  await expect(page.getByTestId(`linked-${DEMO_STAFF_EMPLOYEE_ID}`)).toContainText('Demo Staff')
 
-  const row = page.getByTestId('unlinked-KAL-02').locator('xpath=ancestor::tr')
+  const row = page.getByTestId(`unlinked-${DEMO_GRILLER_EMPLOYEE_ID}`).locator('xpath=ancestor::tr')
   await row.getByRole('button', { name: 'Edit' }).click()
   await page.getByLabel('App account').selectOption({ label: 'Demo Griller' })
   await page.getByRole('button', { name: 'Save changes' }).click()
 
-  await expect(page.getByTestId('linked-KAL-02')).toContainText('Demo Griller')
-  await expect(page.getByTestId('unlinked-KAL-02')).toHaveCount(0)
+  await expect(page.getByTestId(`linked-${DEMO_GRILLER_EMPLOYEE_ID}`)).toContainText('Demo Griller')
+  await expect(page.getByTestId(`unlinked-${DEMO_GRILLER_EMPLOYEE_ID}`)).toHaveCount(0)
 })
 
 test('unlinking says what it costs and what it keeps', async ({ page }) => {
   await page.goto('demo/admin/employees')
 
-  const row = page.getByTestId('linked-KAL-01').locator('xpath=ancestor::tr')
+  const row = page.getByTestId(`linked-${DEMO_STAFF_EMPLOYEE_ID}`).locator('xpath=ancestor::tr')
   await row.getByRole('button', { name: 'Unlink' }).click()
 
   const dialog = page.getByRole('dialog')
@@ -81,7 +87,9 @@ test('unlinking says what it costs and what it keeps', async ({ page }) => {
   await expect(dialog).toContainText('those days were worked')
   await dialog.getByRole('button', { name: 'Unlink' }).click()
 
-  await expect(page.getByTestId('unlinked-KAL-01')).toContainText('No app account')
+  await expect(page.getByTestId(`unlinked-${DEMO_STAFF_EMPLOYEE_ID}`)).toContainText(
+    'No app account',
+  )
 })
 
 test('provisioning an Employee asks about the staff list rather than deciding', async ({
@@ -120,11 +128,11 @@ test('the whole setup walk stays inside the app origin', async ({ page, baseURL 
   await expect(page.getByTestId('outlet-barrackpore')).toBeVisible()
 
   await page.goto('demo/admin/employees')
-  const row = page.getByTestId('unlinked-KAL-02').locator('xpath=ancestor::tr')
+  const row = page.getByTestId(`unlinked-${DEMO_GRILLER_EMPLOYEE_ID}`).locator('xpath=ancestor::tr')
   await row.getByRole('button', { name: 'Edit' }).click()
   await page.getByLabel('App account').selectOption({ label: 'Demo Griller' })
   await page.getByRole('button', { name: 'Save changes' }).click()
-  await expect(page.getByTestId('linked-KAL-02')).toBeVisible()
+  await expect(page.getByTestId(`linked-${DEMO_GRILLER_EMPLOYEE_ID}`)).toBeVisible()
 
   expect(foreign).toEqual([])
 })

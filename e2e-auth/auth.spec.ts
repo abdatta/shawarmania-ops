@@ -30,14 +30,11 @@ const PERSONAS = {
  */
 const RUN = `${Date.now().toString(36)}`
 let seq = 0
-function freshPerson(label: string): { email: string; name: string; staffCode: string } {
+function freshPerson(label: string): { email: string; name: string } {
   const id = `${RUN}-${seq++}`
   return {
     email: `e2e.${label}.${id}@example.com`,
     name: `E2E ${label} ${id}`,
-    // Unique per run for the same reason the address is: a staff code is
-    // unique per outlet, and this suite writes to a database it does not reset.
-    staffCode: `E2E-${id}`.toUpperCase(),
   }
 }
 
@@ -155,13 +152,12 @@ test.describe('provisioning, end to end', () => {
     await page.getByLabel('Full name').fill(person.name)
     await page.getByLabel('Email', { exact: true }).fill(person.email)
 
-    // Provisioning an Employee asks about the staff list, and refuses to write
-    // a roster row with no staff code rather than inventing one. Answering it
-    // is what makes this account a person who can actually check in, so the
-    // walk answers it — against the real database, through the real form.
-    await page.getByRole('button', { name: 'Create and issue a code' }).click()
-    await expect(page.getByTestId('accounts-error')).toContainText('A staff code is needed')
-    await page.getByLabel('Staff code').fill(person.staffCode)
+    // Provisioning an Employee still writes a roster row — that is what makes
+    // this account a person who can actually check in, and it is why the walk
+    // goes through this form against the real database. What it no longer does
+    // is ask for a staff code: a `before insert` trigger issues one from the
+    // outlet's prefix. This used to be where the walk answered that question.
+    await expect(page.getByLabel('Staff code')).toHaveCount(0)
     await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
     const panel = page.getByTestId('issued-code')

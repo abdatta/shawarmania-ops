@@ -79,6 +79,13 @@ export function EmployeeRoster() {
   // The Super Admin is outlet-less by constraint, so they choose; everyone else
   // has exactly one outlet and no choice to make (design D6).
   const isOwner = session.role === 'super_admin'
+  /**
+   * Who may change a staff code. The form control is the convenience; the
+   * boundary is `employee_code_guard` in Postgres, because `employees_update`
+   * is a row policy and a row policy permits every column on a row it permits.
+   * A restriction living only here would be decoration.
+   */
+  const canEditCode = session.role === 'super_admin'
   const [outlets, setOutlets] = useState<Tables<'outlets'>[]>([])
   const [chosenOutletId, setChosenOutletId] = useState<string | null>(null)
   const outletId = session.outletId ?? chosenOutletId ?? outlets[0]?.id ?? null
@@ -198,14 +205,6 @@ export function EmployeeRoster() {
       return
     }
 
-    // A staff code identifies this person's records for years, so a blank one
-    // is a missing answer rather than an empty value. The database refuses it
-    // too; this is the sentence a person can act on.
-    if (!editing && !draft.employeeCode.trim()) {
-      setError('A staff code is needed — it is how this person’s records are identified.')
-      return
-    }
-
     await run(async () => {
       if (editing) {
         await adapter.updateEmployee(editing.id, {
@@ -213,6 +212,15 @@ export function EmployeeRoster() {
           phone: draft.phone.trim() || null,
           roleTitle: draft.roleTitle.trim() || null,
           joinedOn: draft.joinedOn || null,
+          // Only when it actually moved. `employee_code_guard` compares old to
+          // new, so writing the same value back is not a change and does not
+          // trip it — but sending the column on every ordinary edit means a
+          // manager renaming somebody would be carrying a staff-code write they
+          // never asked to make, and the first schema change that tightens the
+          // guard would break every edit rather than the one that earned it.
+          ...(canEditCode && draft.employeeCode.trim() !== editing.employeeCode
+            ? { employeeCode: draft.employeeCode.trim() }
+            : {}),
         })
         // Only ever an addition here. Removing a link is a row action with its
         // own confirmation, because it stops somebody checking in.
@@ -221,8 +229,11 @@ export function EmployeeRoster() {
         }
       } else {
         await adapter.createEmployee({
+          // No `employeeCode`: a `before insert` trigger issues one from the
+          // outlet's prefix. Nobody at Shawarmania has a staff ID to type, so
+          // asking for one was asking somebody to invent an identifier on a
+          // phone while onboarding a person.
           outletId,
-          employeeCode: draft.employeeCode,
           fullName: draft.fullName,
           phone: draft.phone.trim() || null,
           roleTitle: draft.roleTitle.trim() || null,
@@ -411,21 +422,33 @@ export function EmployeeRoster() {
             />
           </Field>
 
-          <Field label="Staff code" id="employee-code">
-            <Input
-              id="employee-code"
-              required
-              autoCapitalize="characters"
-              disabled={editing !== null}
-              value={draft.employeeCode}
-              onChange={(event) => setDraft({ ...draft, employeeCode: event.target.value })}
-            />
-            {editing && (
+          {/*
+            Only on the edit path. Adding somebody is name-and-done — the code
+            is issued by the database from this outlet's prefix.
+
+            Kept visible but inert for a manager rather than hidden: a missing
+            field reads as a bug to somebody who has been told the code can be
+            changed, while a disabled one with a sentence beside it answers the
+            question on the screen where it gets asked. The trigger is the
+            boundary either way (design D6).
+          */}
+          {editing && (
+            <Field label="Staff code" id="employee-code">
+              <Input
+                id="employee-code"
+                required
+                autoCapitalize="characters"
+                disabled={!canEditCode}
+                value={draft.employeeCode}
+                onChange={(event) => setDraft({ ...draft, employeeCode: event.target.value })}
+              />
               <p className="text-xs text-content-muted">
-                A staff code identifies past records and does not change.
+                {canEditCode
+                  ? 'The app issued this code. Changing it re-labels this person on the roster and on attendance; it does not move or re-point any day already recorded.'
+                  : 'The app issued this code. It tells two people with the same name apart — only the owner can change it.'}
               </p>
-            )}
-          </Field>
+            </Field>
+          )}
 
           <Field label="App account" id="employee-account">
             {editing?.linkedAccount ? (
@@ -518,7 +541,7 @@ function AccountCell({ employee }: { employee: EmployeeSummary }) {
   if (!employee.linkedAccount) {
     return (
       <span
-        data-testid={`unlinked-${employee.employeeCode}`}
+        data-testid={`unlinked-${employee.id}`}
         className="inline-flex items-start gap-1 text-xs text-content-muted"
       >
         <CircleAlert aria-hidden size={13} className="mt-0.5 shrink-0 text-warning" />
@@ -530,7 +553,7 @@ function AccountCell({ employee }: { employee: EmployeeSummary }) {
   if (!employee.linkedAccount.isActive) {
     return (
       <span
-        data-testid={`deactivated-${employee.employeeCode}`}
+        data-testid={`deactivated-${employee.id}`}
         className="inline-flex items-start gap-1 text-xs text-content"
       >
         <CircleAlert aria-hidden size={13} className="mt-0.5 shrink-0 text-danger" />
@@ -540,7 +563,7 @@ function AccountCell({ employee }: { employee: EmployeeSummary }) {
   }
 
   return (
-    <span data-testid={`linked-${employee.employeeCode}`} className="text-xs text-content">
+    <span data-testid={`linked-${employee.id}`} className="text-xs text-content">
       {employee.linkedAccount.fullName}
     </span>
   )

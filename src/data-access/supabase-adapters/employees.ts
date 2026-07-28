@@ -18,6 +18,15 @@ import type { Database, Tables } from '../database.types'
  * The link is an ordinary outlet-scoped write governed by `employees_update`
  * and the `employee_profile_same_outlet` trigger — never a privileged call
  * (design D3).
+ *
+ * **`employee_code` is issued by the database, not by this file.** A
+ * `before insert` trigger fills a blank or absent code with the outlet's
+ * `staff_code_prefix` and four Crockford base32 characters. Nothing at the call
+ * site reveals that, which is the trade generated-staff-codes accepted to make
+ * it a property of the table rather than a habit of one caller — the same trade
+ * already made for `employee_profile_same_outlet` and `validate_business_date`.
+ * Changing a code afterwards is the Super Admin's alone, enforced by
+ * `employee_code_guard` rather than by the form control that hides it.
  */
 
 /**
@@ -77,6 +86,12 @@ function asRosterError(error: { message: string; code?: string }): unknown {
       'A staff code is needed — it is how this person’s records are identified.',
     )
   }
+  // The trigger's own message, matched rather than a constraint name — there is
+  // no constraint here to name, and the boundary is deliberately not the form
+  // control that greys the field out.
+  if (error.message.includes('only the owner may change a staff code')) {
+    return new DataActionError('code_not_yours', 'Only the owner can change a staff code.')
+  }
   if (error.message.includes('employees_code_unique_per_outlet')) {
     return new AttendanceActionError(
       'code_taken',
@@ -135,7 +150,11 @@ export function createSupabaseEmployeesAdapter(client: SupabaseClient<Database>)
       const { data, error } = await table()
         .insert({
           outlet_id: employee.outletId,
-          employee_code: employee.employeeCode,
+          // Omitted rather than sent as an empty string when the caller has
+          // none. The trigger treats both the same, but a column that is not
+          // in the statement is the honest way to say "the database picks
+          // this", and it keeps the insert readable at the wire.
+          ...(employee.employeeCode?.trim() ? { employee_code: employee.employeeCode } : {}),
           full_name: employee.fullName,
           phone: employee.phone ?? null,
           role_title: employee.roleTitle ?? null,
@@ -158,6 +177,7 @@ export function createSupabaseEmployeesAdapter(client: SupabaseClient<Database>)
             employment_status: patch.employmentStatus,
           }),
           ...(patch.joinedOn !== undefined && { joined_on: patch.joinedOn }),
+          ...(patch.employeeCode !== undefined && { employee_code: patch.employeeCode }),
         })
         .eq('id', id)
         .select(COLUMNS)

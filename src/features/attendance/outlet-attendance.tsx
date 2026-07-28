@@ -253,7 +253,7 @@ function EmployeeDay({
 
   return (
     <Card
-      data-testid={`day-${employee.employeeCode}`}
+      data-testid={`day-${employee.id}`}
       className={awaiting ? 'space-y-2 border-warning' : 'space-y-2'}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -279,7 +279,7 @@ function EmployeeDay({
       )}
 
       {awaiting && (
-        <Button size="phone" onClick={onApprove} data-testid={`approve-${employee.employeeCode}`}>
+        <Button size="phone" onClick={onApprove} data-testid={`approve-${employee.id}`}>
           Review and approve
         </Button>
       )}

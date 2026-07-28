@@ -691,7 +691,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
-          employee_code: string
+          employee_code?: string
           employment_status?: Database["public"]["Enums"]["employment_status"]
           full_name: string
           id?: string
@@ -1015,6 +1015,7 @@ export type Database = {
           name: string
           phone: string | null
           pincode: string | null
+          staff_code_prefix: string
         }
         Insert: {
           address_line1?: string | null
@@ -1035,6 +1036,7 @@ export type Database = {
           name: string
           phone?: string | null
           pincode?: string | null
+          staff_code_prefix?: string
         }
         Update: {
           address_line1?: string | null
@@ -1055,6 +1057,7 @@ export type Database = {
           name?: string
           phone?: string | null
           pincode?: string | null
+          staff_code_prefix?: string
         }
         Relationships: []
       }
@@ -1208,6 +1211,7 @@ export type Database = {
         }
       }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
+      derive_staff_code_prefix: { Args: { p_code: string }; Returns: string }
       invite_attempts_exceeded: {
         Args: {
           p_global?: number
@@ -1241,6 +1245,7 @@ export type Database = {
           status: string
         }[]
       }
+      random_staff_suffix: { Args: never; Returns: string }
       record_invite_failure: {
         Args: { p_ip_hash: string; p_window?: string }
         Returns: undefined

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters, OUTLET_KALYANI_ID } from '@/data-access/mock'
+import { DEMO_STAFF_EMPLOYEE_ID } from '@/data-access/mock/fixtures/employees'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
@@ -77,7 +78,7 @@ describe('my attendance', () => {
 
     // The manager's view of today, including the outlet's blocked check-in.
     const manager = renderWith('franchise_admin', <OutletAttendance />, adapters)
-    const managerCard = await screen.findByTestId('day-KAL-01')
+    const managerCard = await screen.findByTestId(`day-${DEMO_STAFF_EMPLOYEE_ID}`)
     const managerSays = normalise(managerCard.textContent ?? '')
     manager.unmount()
 

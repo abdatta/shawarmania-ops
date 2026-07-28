@@ -19,9 +19,11 @@ Applied everywhere, without exception:
 ## Tenancy and identity
 
 **`outlets`** — the isolation unit.
-`id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `is_active`, `created_at`.
+`id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `staff_code_prefix`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `is_active`, `created_at`.
 
 Coordinates and radius exist for attendance verification. The cutover time is what makes cross-midnight trade reconcile correctly.
+
+`staff_code_prefix` is the three characters every staff code at this outlet begins with — `KAL`, `KAN` — unique across outlets and enforced as such. It is stored rather than derived from `code` at read time, because a derivation can collide retroactively: `kalyani` and a future `kalimpong` both truncate to `KAL`, and by then `KAL-` codes belong to somebody. When an outlet is created without one the database derives it (first three alphanumerics of the code, uppercased, numeric suffix if taken), so the form pre-fills a proposal rather than asking a question. **It freezes the moment any roster row exists at that outlet**, enforced by `outlet_prefix_guard`: every code already issued reads from it, and re-pointing it would leave them naming something that no longer exists.
 
 **The one table a client may delete from.** `outlets_delete` lets the Super Admin remove an outlet, and seventeen foreign keys — not one of which cascades — mean the delete succeeds only while nothing anywhere references it. There is no bookkeeping column and no maintained list: the check *is* the live referential state, so an outlet whose staff and stock have been moved elsewhere becomes deletable on its own with nothing to re-mark. A deactivated account still counts as a reference. `public.outlet_reference_counts(uuid)` reads the foreign-key set from the catalog and reports what is still attached, so a table added later is covered without anyone editing it.
 
@@ -91,7 +93,11 @@ Only expenses with `payment_method = 'cash'` affect the daily cash record.
 
 ## Employees and attendance
 
-**`employees`** — `id`, `outlet_id`, `profile_id` (nullable), `employee_code`, `full_name`, `phone`, `salary_paise`, `address`, `role_title`, `employment_status` (`active` | `inactive` | `terminated`), `joined_on`.
+**`employees`** — `id`, `outlet_id`, `profile_id` (nullable), `employee_code` (issued, see below), `full_name`, `phone`, `salary_paise`, `address`, `role_title`, `employment_status` (`active` | `inactive` | `terminated`), `joined_on`.
+
+**`employee_code` is issued by the database, never asked for.** A `before insert` trigger fills a blank or absent code with the outlet's `staff_code_prefix`, a hyphen, and four characters of Crockford base32 — `KAL-7KQ2`. The alphabet drops `I`, `L`, `O` and `U` because these codes are read aloud across a counter and dictated down a phone. A code that *was* supplied is stored unchanged, so an import arriving with its own numbering keeps working. Blank and absent mean the same thing on insert (*issue me one*) and different things on update, where `employees_code_not_blank` still refuses a blank outright — the row already has a code, so clearing it is a mistake rather than a request.
+
+The column is **display-only**: nothing keys on it. `attendance.employee_id` references the roster row's UUID, there is no foreign key on `employee_code`, and no query looks a person up by it. Its whole job is telling two people with the same name apart in three lists. **Only the Super Admin may change one**, enforced by `employee_code_guard` rather than by the form — `employees_update` is a row policy, and a row policy permits every column on a row it permits, so a restriction living in the UI would be decoration.
 
 `profile_id` is nullable because an employee record can exist before — or without — an app login. The employee roster and the auth system are deliberately separate concerns.
 

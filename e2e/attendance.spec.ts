@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { DEMO_BLOCKED_EMPLOYEE_ID } from '../src/data-access/mock/fixtures/employees'
 
 /**
  * The attendance walk, against a production build and a real browser.
@@ -82,7 +83,7 @@ test('a manager sees the outlet day, approves an override, and the reason sticks
   await expect(day).toBeVisible()
   await expect(page.getByTestId('awaiting-count')).toContainText('waiting for your decision')
 
-  await page.getByTestId('approve-KAL-03').click()
+  await page.getByTestId(`approve-${DEMO_BLOCKED_EMPLOYEE_ID}`).click()
   await page.getByLabel('Why are you approving this?').fill('At the counter, phone signal poor')
   await page.getByRole('button', { name: /Approve and record my reason/ }).click()
 

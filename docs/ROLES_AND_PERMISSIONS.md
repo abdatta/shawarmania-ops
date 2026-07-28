@@ -23,6 +23,7 @@ Four roles. The governing rule: **a role's scope is enforced by Row-Level Securi
 | View outlet list | ✓ all | R own | — | — |
 | Create / edit / deactivate outlet | ✓ | — | — | — |
 | Delete an outlet | ✓ closed, and only while nothing references it | — | — | — |
+| Change a staff code | ✓ | — read-only | — | — |
 | Switch active outlet | ✓ | — | — | — |
 | **People** |
 | Manage Franchise Admins | ✓ | — | — | — |

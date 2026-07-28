@@ -52,6 +52,17 @@ export interface NewOutlet {
   code: string
   name: string
   locationLabel: string
+  /**
+   * The three characters every staff code at this outlet begins with.
+   *
+   * Optional here: when it is absent or blank the database derives one from the
+   * outlet code — first three alphanumerics, uppercased, with a numeric suffix
+   * if that is taken — so a caller that does not care still gets a valid,
+   * unique prefix. The outlet form does care, and sends a pre-filled, editable
+   * value, because this string ends up on every staff code at the outlet
+   * forever.
+   */
+  staffCodePrefix?: string
   addressLine1?: string | null
   addressLine2?: string | null
   city?: string | null
@@ -353,7 +364,19 @@ export interface EmployeeSummary {
 
 export interface NewEmployee {
   outletId: string
-  employeeCode: string
+  /**
+   * Optional, and normally omitted: **the database issues it**.
+   *
+   * A `before insert` trigger fills a blank or absent code with the outlet's
+   * `staff_code_prefix` and four Crockford base32 characters — `KAL-7KQ2`.
+   * Nothing at this call site reveals that, which is the price of making "a
+   * roster row always has a sensible code" a property of the table rather than
+   * a habit of one caller.
+   *
+   * Supplying one still wins, unchanged, so an import that arrives with its own
+   * numbering scheme keeps working.
+   */
+  employeeCode?: string
   fullName: string
   phone?: string | null
   roleTitle?: string | null
@@ -366,7 +389,18 @@ export interface NewEmployee {
 }
 
 export type EmployeePatch = Partial<
-  Pick<EmployeeSummary, 'fullName' | 'phone' | 'roleTitle' | 'employmentStatus' | 'joinedOn'>
+  Pick<EmployeeSummary, 'fullName' | 'phone' | 'roleTitle' | 'employmentStatus' | 'joinedOn'> & {
+    /**
+     * **Only a Super Admin may send this, and the database is what enforces
+     * that** — an `employee_code_guard` trigger, not this type and not the form
+     * control. `employees_update` is a row policy, and a row policy permits
+     * every column on a row it permits, so a Franchise Admin can otherwise
+     * change a code freely. Send it only when the value actually changed;
+     * writing the same code back is not a change and does not trip the guard,
+     * but sending it on every ordinary edit invites one.
+     */
+    employeeCode: string
+  }
 >
 
 export interface EmployeesAdapter {

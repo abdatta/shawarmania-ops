@@ -23,18 +23,24 @@
 -- both states of the owner's outlet screen — surveyed on site, and never
 -- captured — exist locally without anyone travelling.
 
+-- `staff_code_prefix` is supplied rather than derived: seeding runs after the
+-- migrations against an empty table, so the backfill in
+-- `20260728000003_generated_staff_codes.sql` has nothing to act on here. These
+-- are the same two prefixes production carries, so a seeded code and a real one
+-- read alike.
 insert into public.outlets
-  (id, code, name, location_label, address_line1, city, district, pincode, phone,
+  (id, code, name, location_label, staff_code_prefix,
+   address_line1, city, district, pincode, phone,
    latitude, longitude, geofence_radius_m, business_day_cutover,
    location_accuracy_m, location_captured_at)
 values
   ('00000000-0000-4000-a000-000000000001', 'kalyani', 'Shawarmania Kalyani',
-   'Kalyani — Central Park', 'Ward 10, B-9 Diagonal Road, Near Central Park Ground',
+   'Kalyani — Central Park', 'KAL', 'Ward 10, B-9 Diagonal Road, Near Central Park Ground',
    'Kalyani', 'Nadia', '741235', '+91 89815 24778',
    22.9750, 88.4345, 150, time '04:00',
    9, now() - interval '3 days'),
   ('00000000-0000-4000-a000-000000000002', 'kanchrapara', 'Shawarmania Kanchrapara',
-   'Kanchrapara', '281, K G Path (N), Near Joramandir Bus Stand',
+   'Kanchrapara', 'KAN', '281, K G Path (N), Near Joramandir Bus Stand',
    'Kanchrapara', 'North 24 Parganas', '743145', '+91 89815 24778',
    22.9450, 88.4330, 150, time '04:00',
    null, null);

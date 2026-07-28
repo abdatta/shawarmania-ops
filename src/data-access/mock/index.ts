@@ -1,4 +1,4 @@
-import type { DataAdapters } from '../adapters'
+import type { AppRole, DataAdapters } from '../adapters'
 import { createMockAddressLookupAdapter } from './address-lookup'
 import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
 import { createMockAttendanceAdapter } from './attendance'
@@ -10,7 +10,7 @@ import { createMockOutletsAdapter } from './outlets'
  * Nothing under src/data-access/mock/ may import the Supabase client or the
  * real adapters — eslint enforces it (design D4, layer 1).
  */
-export function createMockAdapters(): DataAdapters {
+export function createMockAdapters(role: AppRole = 'super_admin'): DataAdapters {
   // One account list, two adapters. Accounts and the roster describe the same
   // people from different angles, and a demo where linking someone on Staff
   // does not change what Access says would be demonstrating the wrong thing.
@@ -20,7 +20,7 @@ export function createMockAdapters(): DataAdapters {
     outlets: createMockOutletsAdapter(),
     accounts: createMockAccountsAdapter(accounts),
     attendance: createMockAttendanceAdapter(),
-    employees: createMockEmployeesAdapter(accounts),
+    employees: createMockEmployeesAdapter(accounts, role),
     addressLookup: createMockAddressLookupAdapter(),
   }
 }

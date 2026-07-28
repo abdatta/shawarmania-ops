@@ -58,7 +58,10 @@ export function DemoRoot() {
     }
   }, [role])
 
-  const adapters = useMemo(() => createMockAdapters(), [])
+  // The persona's role reaches the mock so it can enforce the same owner-only
+  // boundary the database does — a demo that let a manager change a staff code
+  // would teach a product this one is not.
+  const adapters = useMemo(() => createMockAdapters(role ?? 'super_admin'), [role])
 
   if (!session) return <NotFound />
 

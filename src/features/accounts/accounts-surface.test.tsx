@@ -124,7 +124,6 @@ describe('the account surface', () => {
     await user.selectOptions(screen.getByLabelText('Outlet'), OUTLET_KALYANI_ID)
     // Provisioning an Employee also answers the staff-list question, and
     // "add them to it" needs a code (outlet-and-staff-setup).
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-31')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     const panel = await screen.findByTestId('issued-code')
@@ -147,7 +146,6 @@ describe('the account surface', () => {
     await user.type(screen.getByLabelText('Full name'), 'New Starter')
     await user.type(screen.getByLabelText('Email'), 'new.starter@example.com')
     await user.selectOptions(screen.getByLabelText('Outlet'), OUTLET_KALYANI_ID)
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-32')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     const panel = await screen.findByTestId('issued-code')
@@ -291,38 +289,46 @@ describe('the staff list, while provisioning', () => {
 
     await user.type(screen.getByLabelText('Full name'), 'Demo Newcomer')
     await user.type(screen.getByLabelText('Email'), 'newcomer@example.com')
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-21')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     await waitFor(() =>
       expect(create).toHaveBeenCalledWith(
         expect.objectContaining({
-          employeeCode: 'KAL-21',
           fullName: 'Demo Newcomer',
           profileId: expect.any(String),
         }),
       ),
     )
+    // The one write still carries no code: the database issues it. Asserting a
+    // literal here would be asserting the app's own arithmetic.
+    expect(create).toHaveBeenCalledWith(
+      expect.not.objectContaining({ employeeCode: expect.anything() }),
+    )
     expect(await screen.findByTestId('issued-code')).toBeInTheDocument()
   })
 
-  it('writes nothing at all when the staff code is missing', async () => {
+  it('never asks for a staff code, and provisions anyway', async () => {
+    // This replaces an assertion that provisioning was *refused* without a
+    // staff code. The claim it protected — an incomplete answer must not
+    // half-configure somebody — is unchanged and still covered by the
+    // “link to someone without saying who” test below. What has gone is the
+    // question itself: there is no field left to leave unanswered.
     const adapters = createMockAdapters()
     const provision = vi.spyOn(adapters.accounts, 'provision')
     const create = vi.spyOn(adapters.employees, 'createEmployee')
     const { user } = await openEmployeeForm('franchise_admin', adapters)
 
-    await user.type(screen.getByLabelText('Full name'), 'Demo Nameless')
-    await user.type(screen.getByLabelText('Email'), 'nameless@example.com')
+    expect(screen.queryByLabelText('Staff code')).not.toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Full name'), 'Demo Newcomer')
+    await user.type(screen.getByLabelText('Email'), 'newcomer@example.com')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
-    // Not the account, and not the roster row. Provisioning first and failing
-    // second would leave an admin holding a code for a half-configured person
-    // over a field they had simply not filled in.
-    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('A staff code is needed')
-    expect(provision).not.toHaveBeenCalled()
-    expect(create).not.toHaveBeenCalled()
-    expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('issued-code')).toBeInTheDocument()
+    expect(provision).toHaveBeenCalled()
+    expect(create).toHaveBeenCalledWith(
+      expect.not.objectContaining({ employeeCode: expect.anything() }),
+    )
   })
 
   it('writes nothing at all when the name is missing', async () => {
@@ -335,7 +341,6 @@ describe('the staff list, while provisioning', () => {
     const { user } = await openEmployeeForm('franchise_admin', adapters)
 
     await user.type(screen.getByLabelText('Email'), 'nameless@example.com')
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-22')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     expect(await screen.findByTestId('accounts-error')).toHaveTextContent('needs a name')
@@ -353,7 +358,6 @@ describe('the staff list, while provisioning', () => {
 
     await user.type(screen.getByLabelText('Full name'), '   ')
     await user.type(screen.getByLabelText('Email'), 'spaces@example.com')
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-23')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     expect(await screen.findByTestId('accounts-error')).toHaveTextContent('needs a name')
@@ -370,7 +374,6 @@ describe('the staff list, while provisioning', () => {
     const { user } = await openEmployeeForm('franchise_admin', adapters)
 
     await user.type(screen.getByLabelText('Full name'), 'Demo Unreachable')
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-24')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     expect(await screen.findByTestId('accounts-error')).toHaveTextContent('email address is needed')
@@ -432,7 +435,6 @@ describe('the staff list, while provisioning', () => {
 
     await user.type(screen.getByLabelText('Full name'), 'Demo Half Done')
     await user.type(screen.getByLabelText('Email'), 'half.done@example.com')
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-22')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     // The account exists and the code is valid — saying "that failed" would
@@ -475,7 +477,6 @@ describe('the email address an account signs in with', () => {
     await user.click(screen.getByRole('button', { name: 'Add account' }))
     await user.type(screen.getByLabelText('Full name'), 'Demo Newcomer')
     await user.type(screen.getByLabelText('Email'), 'Demo.Newcomer@Example.com')
-    await user.type(screen.getByLabelText('Staff code'), 'KAL-41')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     const panel = await screen.findByTestId('issued-code')

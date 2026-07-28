@@ -293,11 +293,40 @@ $q$, '23505', null,
 
 -- A staff code identifies a payroll record for years. Not-null stops it being
 -- absent and says nothing about it being empty, and an empty one satisfies
--- nothing a person needs.
+-- nothing a person needs. **A blank must never survive as a stored value** —
+-- that is the claim, and it still holds. What changed with generated-staff-codes
+-- is which mechanism keeps it: on insert a blank now means "issue me one", so
+-- the row ends up with a real code instead of being refused, and on update a
+-- blank is still refused outright, because the row already has a code and
+-- clearing it is a mistake rather than a request (that change's design D2).
+-- Both halves are asserted, so the original intent is covered rather than
+-- traded away for a passing run.
+insert into public.employees (id, outlet_id, employee_code, full_name)
+values ('20000000-0000-4000-a000-0000000000a9',
+        '00000000-0000-4000-a000-000000000001', '   ', 'Synthetic Blank Code');
+
+select matches(
+  (select employee_code from public.employees
+    where id = '20000000-0000-4000-a000-0000000000a9'),
+  '^KAL-[0-9A-HJKMNP-TV-Z]{4}$',
+  'a blank staff code on insert is issued a real one, never stored blank');
+
+-- Asserted as the owner, deliberately. This session is a Franchise Admin, who
+-- cannot change a staff code at all — a separate rule, proved in
+-- `13_generated_staff_codes.sql` — so asking here would raise `42501` and prove
+-- something about authority while saying nothing about blankness. Asking as the
+-- one person who *is* allowed to change a code isolates the claim: even they
+-- cannot clear one.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
+  'super_admin', null);
+
 select throws_ok($q$
-  insert into public.employees (outlet_id, employee_code, full_name)
-  values ('00000000-0000-4000-a000-000000000001', '   ', 'Synthetic Nameless')
-$q$, '23514', null, 'a blank staff code is a missing answer, not a value');
+  update public.employees set employee_code = '   '
+   where id = '20000000-0000-4000-a000-0000000000a9'
+$q$, '23514', null, 'and a blank staff code on update is still refused, even for the owner');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
+  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
 
 -- A roster row may be created already linked, in one write — which is what
 -- provisioning-with-a-roster-row does.

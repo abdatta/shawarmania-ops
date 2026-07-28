@@ -72,6 +72,38 @@ export function createMockOutletsAdapter(): OutletsAdapter {
     }
   }
 
+  const refuseDuplicatePrefix = (prefix: string, exceptId?: string) => {
+    if (outlets.some((outlet) => outlet.staff_code_prefix === prefix && outlet.id !== exceptId)) {
+      throw new DataActionError(
+        'prefix_taken',
+        'Another outlet already uses that staff code prefix. Pick three different characters.',
+      )
+    }
+  }
+
+  /**
+   * The same derivation the database uses when no prefix is supplied: first
+   * three alphanumerics of the code, uppercased, with a numeric suffix if that
+   * is taken. Written here too rather than imported, because the mock may not
+   * reach the real adapters — but it must agree with them, or the demo teaches
+   * a different product.
+   */
+  function derivePrefix(code: string): string {
+    const base = (
+      code
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .slice(0, 3)
+        .toUpperCase() || 'XXX'
+    ).padEnd(3, 'X')
+    let candidate = base
+    let n = 1
+    while (outlets.some((outlet) => outlet.staff_code_prefix === candidate)) {
+      candidate = base.slice(0, 3 - String(n).length) + String(n)
+      n += 1
+    }
+    return candidate
+  }
+
   return {
     async listOutlets(options = {}) {
       const visible = options.includeInactive ? outlets : outlets.filter((o) => o.is_active)
@@ -86,12 +118,15 @@ export function createMockOutletsAdapter(): OutletsAdapter {
     async createOutlet(outlet: NewOutlet) {
       const code = outlet.code.trim()
       refuseDuplicateCode(code)
+      const prefix = outlet.staffCodePrefix?.trim().toUpperCase() || derivePrefix(code)
+      refuseDuplicatePrefix(prefix)
 
       const created = {
         id: `d0000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`,
         code,
         name: outlet.name.trim(),
         location_label: outlet.locationLabel.trim(),
+        staff_code_prefix: prefix,
         address_line1: trimmed(outlet.addressLine1),
         address_line2: trimmed(outlet.addressLine2),
         city: trimmed(outlet.city),
@@ -117,7 +152,28 @@ export function createMockOutletsAdapter(): OutletsAdapter {
       const outlet = find(id)
       if (patch.code !== undefined) refuseDuplicateCode(patch.code.trim(), id)
 
+      if (patch.staffCodePrefix !== undefined) {
+        const next = patch.staffCodePrefix.trim().toUpperCase()
+        if (next !== outlet.staff_code_prefix) {
+          // Frozen once anything has been issued from it: `KAL-7KQ2` names a
+          // prefix, and re-pointing it would leave every code already issued
+          // reading from something that no longer exists. The real stack
+          // enforces this in `outlet_prefix_guard`; the demo must not teach a
+          // product where it is merely discouraged.
+          if (referencesTo(id).some((reference) => reference.table === 'employees')) {
+            throw new DataActionError(
+              'prefix_frozen',
+              'Staff codes have already been issued from this prefix, so it cannot change now.',
+            )
+          }
+          refuseDuplicatePrefix(next, id)
+        }
+      }
+
       Object.assign(outlet, {
+        ...(patch.staffCodePrefix !== undefined && {
+          staff_code_prefix: patch.staffCodePrefix.trim().toUpperCase(),
+        }),
         ...(patch.code !== undefined && { code: patch.code.trim() }),
         ...(patch.name !== undefined && { name: patch.name.trim() }),
         ...(patch.locationLabel !== undefined && { location_label: patch.locationLabel.trim() }),
