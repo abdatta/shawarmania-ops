@@ -250,8 +250,49 @@ export function OutletsSurface() {
     setFormOpen(true)
   }
 
+  /**
+   * The first required field left blank, as a sentence — or null if none is.
+   *
+   * An outlet reached production with no name because three layers each
+   * declined to check. This is the second of them. The `required` attributes on
+   * the inputs below do not validate anything: `noValidate` is on this form and
+   * on every other form in this app, deliberately, so that refusals are written
+   * in this app's voice rather than drawn by the browser. `required` stays
+   * because it also sets `aria-required`, which is the half of it that works
+   * (design D1).
+   *
+   * One message per field rather than one for all three. The form has four
+   * required fields among ten, and a message that does not say which one is
+   * missing is close to useless on a phone, where the offending field is
+   * usually scrolled out of sight.
+   */
+  function firstBlankRequiredField(): string | null {
+    if (draft.name.trim() === '') {
+      return 'An outlet needs a name — it is how every screen in the app refers to it.'
+    }
+    if (draft.code.trim() === '') {
+      return 'An outlet needs a short code, like “kalyani” — it is how staff refer to it in a sentence.'
+    }
+    if (draft.locationLabel.trim() === '') {
+      return 'An outlet needs a location label — it is what shows beside the name on every card.'
+    }
+    return null
+  }
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
+
+    // Checked before `run()`, which clears the error it would otherwise be
+    // handed. The guard covers the edit path as well as create: this is one
+    // component for both, and clearing a name is the same mistake as never
+    // typing one. The database refuses it either way — that is the boundary,
+    // and this is the convenience.
+    const blank = firstBlankRequiredField()
+    if (blank) {
+      setError(blank)
+      return
+    }
+
     await run(async () => {
       if (editing) {
         await adapter.updateOutlet(editing.id, toPayload(draft))
@@ -324,6 +365,7 @@ export function OutletsSurface() {
         onChange={setDraft}
         onClose={() => setFormOpen(false)}
         onSubmit={onSubmit}
+        error={error}
       />
 
       <ConfirmDialog
@@ -527,6 +569,7 @@ function OutletFormSheet({
   onChange,
   onClose,
   onSubmit,
+  error,
 }: {
   open: boolean
   editing: Tables<'outlets'> | null
@@ -535,6 +578,7 @@ function OutletFormSheet({
   onChange: (draft: Draft) => void
   onClose: () => void
   onSubmit: (event: FormEvent) => void
+  error: string | null
 }) {
   const { addressLookup } = useAdapters()
   const set = (patch: Partial<Draft>) => onChange({ ...draft, ...patch })
@@ -607,6 +651,7 @@ function OutletFormSheet({
       open={open}
       onClose={onClose}
       title={editing ? `Edit ${editing.name}` : 'Add outlet'}
+      error={error}
       footer={
         <button
           type="submit"
@@ -618,13 +663,31 @@ function OutletFormSheet({
         </button>
       }
     >
+      {/*
+        `noValidate` and `required` coexist on purpose, and it reads as
+        redundancy otherwise. `noValidate` switches off the browser's own
+        validation so that this app's refusals are its own sentences rather
+        than a bubble whose wording and position cannot be styled and vary
+        across the browsers a counter tablet and a staff phone run.
+        `required` stays because it still sets `aria-required`, which assistive
+        technology announces. So: `required` marks the field for the person,
+        `firstBlankRequiredField` refuses the submit, and a check constraint
+        refuses the write (design D1).
+
+        The three placeholders below are sample *values*, so they carry `e.g.`
+        — a manager once read `Shawarmania Kalyani` as a name already filled
+        in, which is how the nameless outlet was created. The address-block
+        placeholders further down are the accessible *name* of inputs with no
+        visible label; `e.g. City` would be incoherent, so they are left alone
+        (design D5).
+      */}
       <form id="outlet-form" onSubmit={onSubmit} className="space-y-4" noValidate>
         <Field label="Name" id="outlet-name">
           <Input
             id="outlet-name"
             required
             value={draft.name}
-            placeholder="Shawarmania Kalyani"
+            placeholder="e.g. Shawarmania Kalyani"
             onChange={(event) => set({ name: event.target.value })}
           />
         </Field>
@@ -636,7 +699,7 @@ function OutletFormSheet({
             autoCapitalize="none"
             spellCheck={false}
             value={draft.code}
-            placeholder="kalyani"
+            placeholder="e.g. kalyani"
             onChange={(event) => set({ code: event.target.value })}
           />
           <p className="text-xs text-content-muted">
@@ -650,7 +713,7 @@ function OutletFormSheet({
             id="outlet-location-label"
             required
             value={draft.locationLabel}
-            placeholder="Kalyani — Central Park"
+            placeholder="e.g. Kalyani — Central Park"
             onChange={(event) => set({ locationLabel: event.target.value })}
           />
         </Field>

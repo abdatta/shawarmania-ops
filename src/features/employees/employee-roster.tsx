@@ -187,6 +187,17 @@ export function EmployeeRoster() {
     event.preventDefault()
     if (!outletId) return
 
+    // A roster row is a person, so a blank name is a missing answer rather
+    // than an empty value — and `required` on the input does not catch it,
+    // because this form carries `noValidate` like every other form in the app.
+    // The database refuses it too; this is the sentence a person can act on.
+    // Applies to the edit path as well: clearing a name is the same mistake as
+    // never typing one.
+    if (!draft.fullName.trim()) {
+      setError('This person needs a name — it is how they appear on the roster and on attendance.')
+      return
+    }
+
     // A staff code identifies this person's records for years, so a blank one
     // is a missing answer rather than an empty value. The database refuses it
     // too; this is the sentence a person can act on.
@@ -378,6 +389,7 @@ export function EmployeeRoster() {
         open={formOpen}
         onClose={() => setFormOpen(false)}
         title={editing ? 'Edit person' : 'Add person'}
+        error={error}
         footer={
           <button
             type="submit"

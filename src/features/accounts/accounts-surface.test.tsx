@@ -325,6 +325,60 @@ describe('the staff list, while provisioning', () => {
     expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
   })
 
+  it('writes nothing at all when the name is missing', async () => {
+    // `required` on the input is inert: this form carries `noValidate`, like
+    // every other form in the app. The guard refuses, and
+    // `profiles_full_name_not_blank` refuses the write.
+    const adapters = createMockAdapters()
+    const provision = vi.spyOn(adapters.accounts, 'provision')
+    const create = vi.spyOn(adapters.employees, 'createEmployee')
+    const { user } = await openEmployeeForm('franchise_admin', adapters)
+
+    await user.type(screen.getByLabelText('Email'), 'nameless@example.com')
+    await user.type(screen.getByLabelText('Staff code'), 'KAL-22')
+    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
+
+    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('needs a name')
+    expect(provision).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
+    // No code is issued for an account that was never created. An admin left
+    // holding a code for nobody is the failure this ordering exists to avoid.
+    expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
+  })
+
+  it('treats a name of only spaces as no name at all', async () => {
+    const adapters = createMockAdapters()
+    const provision = vi.spyOn(adapters.accounts, 'provision')
+    const { user } = await openEmployeeForm('franchise_admin', adapters)
+
+    await user.type(screen.getByLabelText('Full name'), '   ')
+    await user.type(screen.getByLabelText('Email'), 'spaces@example.com')
+    await user.type(screen.getByLabelText('Staff code'), 'KAL-23')
+    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
+
+    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('needs a name')
+    expect(provision).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
+  })
+
+  it('writes nothing at all when the email address is missing', async () => {
+    // `type="email"` is inert for exactly the same reason `required` is, and a
+    // blank address provisions an account nobody can ever sign in to.
+    const adapters = createMockAdapters()
+    const provision = vi.spyOn(adapters.accounts, 'provision')
+    const create = vi.spyOn(adapters.employees, 'createEmployee')
+    const { user } = await openEmployeeForm('franchise_admin', adapters)
+
+    await user.type(screen.getByLabelText('Full name'), 'Demo Unreachable')
+    await user.type(screen.getByLabelText('Staff code'), 'KAL-24')
+    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
+
+    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('email address is needed')
+    expect(provision).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
+  })
+
   it('refuses to link without saying to whom', async () => {
     const adapters = createMockAdapters()
     const provision = vi.spyOn(adapters.accounts, 'provision')

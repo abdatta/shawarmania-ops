@@ -80,6 +80,36 @@ describe('the employee roster', () => {
     expect(create).not.toHaveBeenCalled()
   })
 
+  it('refuses to add somebody with no name', async () => {
+    // A roster row is a person. `required` on the input is inert — this form
+    // carries `noValidate` like every other form in the app — so the guard is
+    // what refuses, and `employees_full_name_not_blank` refuses the write.
+    const user = userEvent.setup()
+    const { adapters } = renderRoster()
+    const create = vi.spyOn(adapters.employees, 'createEmployee')
+
+    await user.click(await screen.findByRole('button', { name: 'Add person' }))
+    await user.type(screen.getByLabelText('Staff code'), 'KAL-09')
+    await user.click(screen.getByRole('button', { name: 'Add to the list' }))
+
+    expect(await screen.findByTestId('roster-error')).toHaveTextContent('needs a name')
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('treats a name of only spaces as no name at all', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderRoster()
+    const create = vi.spyOn(adapters.employees, 'createEmployee')
+
+    await user.click(await screen.findByRole('button', { name: 'Add person' }))
+    await user.type(screen.getByLabelText('Full name'), '   ')
+    await user.type(screen.getByLabelText('Staff code'), 'KAL-09')
+    await user.click(screen.getByRole('button', { name: 'Add to the list' }))
+
+    expect(await screen.findByTestId('roster-error')).toHaveTextContent('needs a name')
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it('refuses a staff code already used at this outlet', async () => {
     const user = userEvent.setup()
     renderRoster()
@@ -109,6 +139,22 @@ describe('the employee roster', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByText('Demo Renamed')).toBeInTheDocument()
+  })
+
+  it('refuses a name cleared while editing, not only one never typed', async () => {
+    // One component serves add and edit both, so a create-only guard would
+    // leave this way in wide open. The database refuses it either way.
+    const user = userEvent.setup()
+    const { adapters } = renderRoster()
+    const update = vi.spyOn(adapters.employees, 'updateEmployee')
+
+    await screen.findByText('Demo Griller')
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]!)
+    await user.clear(screen.getByLabelText('Full name'))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByTestId('roster-error')).toHaveTextContent('needs a name')
+    expect(update).not.toHaveBeenCalled()
   })
 
   it('ends and reinstates employment', async () => {

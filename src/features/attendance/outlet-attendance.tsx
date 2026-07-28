@@ -339,7 +339,7 @@ function OverrideSheet({
             id="override-reason"
             required
             value={reason}
-            placeholder="Seen at the counter; phone signal poor"
+            placeholder="e.g. Seen at the counter; phone signal poor"
             onChange={(event) => setReason(event.target.value)}
           />
           <p className="text-xs text-content-muted">

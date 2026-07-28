@@ -207,6 +207,21 @@ export function AccountsSurface() {
     // second of two writes, so an incomplete answer here would otherwise create
     // the account and then fail — leaving an admin holding a code for somebody
     // who is half set up, over a field they simply had not filled in.
+    //
+    // The name and address guards below apply to every role, so they sit ahead
+    // of the roster branch. Both fields carry attributes that look like they
+    // validate and do not: this form has `noValidate`, which makes `required`
+    // and `type="email"` inert on submit. A blank name provisions an account
+    // that is nobody, and a blank address provisions one nobody can sign in to.
+    if (!draft.fullName.trim()) {
+      setError('This account needs a name — it is how the person appears everywhere in the app.')
+      return
+    }
+    if (!draft.email.trim()) {
+      setError('An email address is needed — it is how this person signs in.')
+      return
+    }
+
     if (outletId && draft.role === 'employee') {
       if (draft.rosterChoice === 'create' && !draft.employeeCode.trim()) {
         setError(
@@ -446,6 +461,7 @@ export function AccountsSurface() {
         open={formOpen}
         onClose={() => setFormOpen(false)}
         title="Add account"
+        error={error}
         footer={
           <button
             type="submit"

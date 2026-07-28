@@ -646,3 +646,163 @@ describe('filling an outlet address from a search', () => {
     )
   })
 })
+
+/**
+ * Blank is not a value.
+ *
+ * An outlet reached production with no name: `required` was inert because the
+ * form carries `noValidate`, `onSubmit` went straight to the adapter, and
+ * `not null` has nothing to say about an empty string. These cover the middle
+ * layer. The database refuses the same writes, proved in
+ * `supabase/tests/12_required_fields_not_blank.sql`.
+ */
+describe('refusing a blank required field on the outlet form', () => {
+  async function openAdd(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByTestId('add-outlet'))
+  }
+
+  it('creates nothing and names the field when the name is left empty', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const adapters = createMockAdapters()
+    const create = vi.spyOn(adapters.outlets, 'createOutlet')
+    renderOutlets(adapters)
+
+    await openAdd(user)
+    await user.type(screen.getByLabelText('Short code'), 'barrackpore')
+    await user.type(screen.getByLabelText('Location label'), 'Barrackpore')
+    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+
+    expect(await screen.findByTestId('outlets-error')).toHaveTextContent('needs a name')
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('treats a name of only spaces as no name at all', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const adapters = createMockAdapters()
+    const create = vi.spyOn(adapters.outlets, 'createOutlet')
+    renderOutlets(adapters)
+
+    await openAdd(user)
+    // The case a `!== ''` guard would let straight through.
+    await user.type(screen.getByLabelText('Name'), '   ')
+    await user.type(screen.getByLabelText('Short code'), 'barrackpore')
+    await user.type(screen.getByLabelText('Location label'), 'Barrackpore')
+    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+
+    expect(await screen.findByTestId('outlets-error')).toHaveTextContent('needs a name')
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('names the short code, not just the first missing field it finds', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const adapters = createMockAdapters()
+    const create = vi.spyOn(adapters.outlets, 'createOutlet')
+    renderOutlets(adapters)
+
+    await openAdd(user)
+    await user.type(screen.getByLabelText('Name'), 'Shawarmania Barrackpore')
+    await user.type(screen.getByLabelText('Location label'), 'Barrackpore')
+    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+
+    // One message per field. A single "fill in the required fields" would say
+    // nothing about which of the four, on a phone where it is scrolled away.
+    expect(await screen.findByTestId('outlets-error')).toHaveTextContent('short code')
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('names the location label when that is the one left out', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const adapters = createMockAdapters()
+    const create = vi.spyOn(adapters.outlets, 'createOutlet')
+    renderOutlets(adapters)
+
+    await openAdd(user)
+    await user.type(screen.getByLabelText('Name'), 'Shawarmania Barrackpore')
+    await user.type(screen.getByLabelText('Short code'), 'barrackpore')
+    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+
+    expect(await screen.findByTestId('outlets-error')).toHaveTextContent('location label')
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('shows the refusal inside the open sheet, not on the page behind it', async () => {
+    // The bug this exists to catch: the surface's own error region sits on the
+    // page, and the form is a `fixed` overlay that covers the whole screen on a
+    // phone. A refusal left only on the page is in the DOM, passes a
+    // `findByTestId`, and is invisible to the person who just pressed the
+    // button — so the guard reads as a dead button rather than an answer.
+    // Design D3 keeps the button enabled precisely because the form "submits
+    // and tells you"; if it does not tell you, that reasoning is gone.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+
+    await openAdd(user)
+    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
+
+    const sheet = screen.getByRole('dialog')
+    const shown = within(sheet).getByTestId('form-sheet-error')
+    expect(shown).toHaveTextContent('needs a name')
+    expect(shown).toHaveAttribute('role', 'alert')
+  })
+
+  it('leaves the submit button enabled with every field empty', async () => {
+    // Design D3, encoded. A dead button on a ten-field form says nothing about
+    // which of the four required fields is missing; this form submits and then
+    // tells you. Without this test the decision is indistinguishable from an
+    // oversight, and the next person "fixes" it.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+
+    await openAdd(user)
+    expect(screen.getByRole('button', { name: 'Create outlet' })).toBeEnabled()
+  })
+
+  it('refuses a name cleared while editing, not only one never typed', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const adapters = createMockAdapters()
+    const update = vi.spyOn(adapters.outlets, 'updateOutlet')
+    renderOutlets(adapters)
+
+    const card = await screen.findByTestId('outlet-kalyani')
+    await user.click(within(card).getByRole('button', { name: 'Edit' }))
+    await user.clear(screen.getByLabelText('Name'))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByTestId('outlets-error')).toHaveTextContent('needs a name')
+    expect(update).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * A placeholder must not read as a value already filled in — and must not stop
+ * being a label where it is doing a label's job. The narrowness is the
+ * requirement (design D5), so both halves are asserted.
+ */
+describe('placeholders on the outlet form', () => {
+  it('prefixes the sample values so none of them reads as a filled-in value', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+    await user.click(await screen.findByTestId('add-outlet'))
+
+    // `Shawarmania Kalyani` is the name of a real outlet in this database. A
+    // manager read it as already filled in, and created the nameless outlet.
+    for (const label of ['Name', 'Short code', 'Location label']) {
+      expect(screen.getByLabelText(label)).toHaveAttribute(
+        'placeholder',
+        expect.stringMatching(/^e\.g\. /),
+      )
+    }
+  })
+
+  it('leaves the address placeholders alone, because they are the label', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+    await user.click(await screen.findByTestId('add-outlet'))
+
+    // These inputs carry `aria-label` and no visible label, so the placeholder
+    // is the accessible name. `e.g. City` would be incoherent.
+    for (const placeholder of ['City', 'District', 'PIN code', 'Line 2', 'Street and landmark']) {
+      expect(screen.getByPlaceholderText(placeholder)).toBeInTheDocument()
+    }
+  })
+})
