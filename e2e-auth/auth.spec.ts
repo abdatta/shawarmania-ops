@@ -231,7 +231,7 @@ test.describe('provisioning, end to end', () => {
 
     await page.getByRole('button', { name: 'Add account' }).click()
     await expect(page.getByLabel('Role').locator('option')).toHaveText(['Biller', 'Staff'])
-    await expect(page.getByLabel('Outlet')).toBeDisabled()
+    await expect(page.getByLabel('Outlet', { exact: true })).toBeDisabled()
 
     // Their list is their outlet's, whatever the owner can see.
     await expect(page.getByRole('columnheader', { name: 'Outlet' })).toHaveCount(0)
@@ -252,7 +252,7 @@ test.describe('deactivation', () => {
     await page.getByRole('button', { name: 'Add account' }).click()
     await page.getByLabel('Full name').fill(person.name)
     await page.getByLabel('Email', { exact: true }).fill(person.email)
-    await page.getByLabel('Outlet').selectOption({ label: 'Shawarmania Kalyani' })
+    await page.getByLabel('Outlet', { exact: true }).selectOption({ label: 'Shawarmania Kalyani' })
     // A login, not a payroll employee — which is a real answer to the staff-list
     // question and the one this test wants, since deactivation is about the
     // session and nothing else. It also means the third option is exercised
