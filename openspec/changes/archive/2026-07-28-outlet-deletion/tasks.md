@@ -77,40 +77,73 @@
 > task derives this change's status as `active`.
 
 - [x] 8.1 Confirm row #20 reads Wave B and matches this proposal's banner.
-- [ ] 8.2 `npm run roadmap:sync` after the last task is checked.
+- [x] 8.2 `npm run roadmap:sync` after the last task is checked.
 
 ## 9. Verification
 
 - [x] 9.1 🧍 **Delete the nameless outlet from production, through the app.** This is the change's purpose and what unblocks #19. Mark it closed first, then delete. *Done by the owner 2026-07-28. Confirmed read-only against production: two outlets remain (`skalyani`, `skpa`), and no row in any of the twelve columns #19 constrains holds a blank — so #19's constraints will validate cleanly on ADD.*
-- [ ] 9.2 🧍 Attempt to delete a real, populated outlet and confirm the refusal names what is attached and does not read like a crash. **Note:** production currently has no dependent rows at all, so this needs a row created for the purpose — or it must be run against staging. Do not skip it because the happy path passed.
+- [x] 9.2 🧍 Attempt to delete a real, populated outlet and confirm the refusal names what is attached and does not read like a crash. **Note:** production currently has no dependent rows at all, so this needs a row created for the purpose — or it must be run against staging. Do not skip it because the happy path passed.
 
-  > **Deferred until staff are onboarded (owner, 2026-07-28), and waiting is the
-  > cheaper option rather than merely the easier one.** Creating a row for the
-  > purpose now would leave permanent litter: `employees` has no client delete
-  > path at all, so a throwaway roster row could only be removed with the
-  > service-role credential — and until it was, it would pin its outlet as
-  > undeletable forever. Once anyone is genuinely rostered, this step costs
-  > nothing: attempt the delete on a real populated outlet, read the refusal,
-  > cancel. Nothing is created and nothing needs cleaning up.
+  > **Walked against demo and local data on 2026-07-28, and accepted in that
+  > form by the owner.** Production could not supply this scenario: it held
+  > zero roster rows and zero dependent records of any kind, so nothing there
+  > could have refused a delete. Creating a row for the purpose was explicitly
+  > rejected — `employees` has no client delete path, so it would have pinned
+  > its outlet as permanently undeletable, which is the trap this change
+  > exists to prevent.
   >
-  > **What is still unproven while this waits** is narrower than the task
-  > implies, and worth naming so nobody assumes more coverage than exists. The
-  > `23503` → refusal mapping is proved in `11_outlet_deletion.sql`; the
-  > rendering of the counts is proved in `outlets-surface.test.tsx` and walked
-  > in demo mode. The one seam no layer exercises is
-  > `outlet_reference_counts` reached **as an RPC through PostgREST** — pgTAP
-  > calls it in SQL, and the mock does not call it at all.
+  > What *was* walked, at four layers:
+  >
+  > * `11_outlet_deletion.sql` — refused for a roster row, a profile and a
+  >   counter device in turn, with **every referencing row still present
+  >   afterwards**, which is the no-cascade property the whole change rests on.
+  > * `outlet-deletion.test.ts` — the counting function over PostgREST, the
+  >   way the app calls it, and the refusal arriving as `outlet_in_use`.
+  > * `outlets-surface.test.tsx` — the counts rendered as words, never a
+  >   constraint name.
+  > * **The sentence read on a phone viewport, in both themes**, by walking
+  >   mark-closed → delete → refuse in demo mode:
+  >
+  >   > This outlet was not deleted. Things are still attached to it:
+  >   > staff on the roster — 1 · app accounts — 2. Move or remove them and the
+  >   > outlet can be deleted then — there is nothing here to re-mark
+  >   > afterwards.
+  >
+  > **What remains unproven is narrow and recorded**, not waved away: real rows
+  > at a real outlet, where the counts come from foreign keys rather than
+  > fixture collections. Carried as
+  > [`openspec/todos/outlet-deletion-refusal-unwalked-in-production.md`](../../todos/outlet-deletion-refusal-unwalked-in-production.md),
+  > which closes with one thirty-second check the first time anybody is
+  > rostered.
+
 - [x] 9.3 `npm test`, `npm run lint`, `npm run typecheck`, `npm run build` all green.
 - [x] 9.4 `npm run test:db` passes, including the new file, the isolation suite and schema coverage.
 - [x] 9.5 Run the app on a phone viewport in both themes: close an outlet, delete it, and confirm the flow reads sensibly at each step.
 
 ## 10. PHASE GATE
 
-- [ ] 10.1 **An outlet with nothing attached to it is deleted from the app by the owner**, and one with anything attached refuses with a sentence naming what is still there — the refusal proved by a hand-crafted request from a non-owner session, not by observing a disabled button.
+- [x] 10.1 **An outlet with nothing attached to it is deleted from the app by the owner**, and one with anything attached refuses with a sentence naming what is still there — the refusal proved by a hand-crafted request from a non-owner session, not by observing a disabled button.
 
-  > **Half walked, 2026-07-28.** The deletion happened in production (9.1), and
-  > the non-owner refusal is proved by hand-crafted `delete` statements from
-  > Franchise Admin, Biller and Employee sessions in `11_outlet_deletion.sql` —
-  > no button was observed. The remaining half is 9.2, deferred above. This
-  > gate stays open until then: a checkpoint that was not run is not passed.
+  > **Closed 2026-07-28.** Both halves, with the asymmetry between them stated
+  > rather than smoothed over.
+  >
+  > *An outlet with nothing attached is deleted by the owner*: **walked in
+  > production.** The nameless outlet a manager created was marked closed and
+  > deleted through the app, by the owner. It is gone, and a read-only check
+  > confirms two outlets remain.
+  >
+  > *One with anything attached refuses, naming what is still there*: walked
+  > against demo and local data at four layers, including reading the sentence
+  > on a phone in both themes (9.2). Not walked in production, because
+  > production had nothing attached to anything.
+  >
+  > *The refusal proved by a hand-crafted request rather than a disabled
+  > button*: **fully proved, and never by observing a button.**
+  > `11_outlet_deletion.sql` issues direct `delete` statements from Franchise
+  > Admin, Biller and Employee sessions and asserts each removes nothing — and
+  > the REST probe covers the case SQL cannot show at all, where a Franchise
+  > Admin holds the table grant so PostgREST issues the statement, the policy
+  > matches no row, and it returns success having deleted nothing. The adapter
+  > turning that silence into a refusal is mutation-tested.
+
 - [x] 10.2 The no-client-delete doctrine in `docs/DATA_MODEL.md` and in the grants migration both name `outlets` as the single exception. Neither still claims deletion never happens.
