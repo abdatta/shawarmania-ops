@@ -147,6 +147,7 @@ describe('activation', () => {
 
     await user.click(screen.getByRole('button', { name: /Yes, that/ }))
     await user.type(screen.getByLabelText('New password'), 'a-real-password')
+    await user.type(screen.getByLabelText('Confirm password'), 'a-real-password')
     await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
 
     expect(auth.previewInvite).toHaveBeenCalledWith('ABCDE-FGHJK')
@@ -205,6 +206,7 @@ describe('activation', () => {
     await screen.findByTestId('activate-address')
     await user.click(screen.getByRole('button', { name: /Yes, that/ }))
     await user.type(screen.getByLabelText('New password'), 'short')
+    await user.type(screen.getByLabelText('Confirm password'), 'short')
     await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
 
     expect(await screen.findByTestId('activate-error')).toHaveTextContent('at least 10 characters')
@@ -247,5 +249,53 @@ describe('activation', () => {
     await user.click(screen.getByRole('button', { name: /Yes, that/ }))
 
     expect(screen.getByText('At least 10 characters.')).toBeInTheDocument()
+  })
+})
+
+/**
+ * The repeat field. It exists because the password is typed blind, once, on a
+ * phone, with no way back: a typo sets a password nobody knows and spends the
+ * one-time code proving it.
+ */
+describe('confirming the new password', () => {
+  const LINK = '/activate?code=ABCDE-FGHJK'
+
+  async function reachPasswordFields() {
+    const user = userEvent.setup()
+    auth.previewInvite.mockResolvedValue('new.staff@example.com')
+    renderAt(LINK)
+    await screen.findByTestId('activate-address')
+    await user.click(screen.getByRole('button', { name: /Yes, that/ }))
+    return user
+  }
+
+  it('refuses two different passwords without spending anything', async () => {
+    const user = await reachPasswordFields()
+
+    await user.type(screen.getByLabelText('New password'), 'a-real-password')
+    await user.type(screen.getByLabelText('Confirm password'), 'a-real-passwrod')
+    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
+
+    expect(await screen.findByTestId('activate-error')).toHaveTextContent('are not the same')
+    // Decided on the client, so the code is untouched and no allowance is spent.
+    expect(auth.redeemInvite).not.toHaveBeenCalled()
+    expect(auth.signIn).not.toHaveBeenCalled()
+  })
+
+  it('lets them correct the repeat and carry on', async () => {
+    const user = await reachPasswordFields()
+    auth.redeemInvite.mockResolvedValue(undefined)
+    auth.signIn.mockResolvedValue({ userId: 'u-3', email: 'new.staff@example.com' })
+
+    await user.type(screen.getByLabelText('New password'), 'a-real-password')
+    await user.type(screen.getByLabelText('Confirm password'), 'wrong')
+    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
+    await screen.findByTestId('activate-error')
+
+    await user.clear(screen.getByLabelText('Confirm password'))
+    await user.type(screen.getByLabelText('Confirm password'), 'a-real-password')
+    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
+
+    expect(auth.redeemInvite).toHaveBeenCalledWith('ABCDE-FGHJK', 'a-real-password')
   })
 })

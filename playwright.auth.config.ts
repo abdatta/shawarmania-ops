@@ -40,7 +40,22 @@ export default defineConfig({
   webServer: {
     command: `npm run build && npx vite preview --port ${PORT} --strictPort --host 127.0.0.1`,
     url: BASE_URL,
-    reuseExistingServer: !process.env['CI'],
+    /**
+     * Never reused, even locally, because the separate port above does not
+     * isolate as much as it looks like it does.
+     *
+     * `vite preview` reads `dist/` from disk per request, and BOTH suites build
+     * into it — the demo config deliberately building against an unreachable
+     * Supabase host so nothing in it can call a backend. Reusing a still-alive
+     * server here skips the rebuild, so this suite would run against whichever
+     * build happened to be on disk. After a demo run that is a build pointed at
+     * a host that does not exist, and every provisioning step fails with the
+     * generic "that did not work" — which reads as a product bug and is not one.
+     *
+     * The cost is one rebuild per run; the alternative is a suite whose result
+     * depends on what ran before it.
+     */
+    reuseExistingServer: false,
     timeout: 180_000,
     env: {
       ...process.env,

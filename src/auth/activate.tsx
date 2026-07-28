@@ -72,6 +72,7 @@ export function Activate() {
   const [state, setState] = useState<State>(linkCode ? { kind: 'checking' } : { kind: 'need-code' })
   const [typedCode, setTypedCode] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmation, setConfirmation] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -106,6 +107,15 @@ export function Activate() {
   async function onPasswordSubmit(event: FormEvent) {
     event.preventDefault()
     if (state.kind !== 'password') return
+
+    // Checked here rather than at the endpoint, which has no business knowing
+    // there were two boxes. It also means a mistyped repeat never reaches the
+    // rate limiter and never spends the one-time code.
+    if (password !== confirmation) {
+      setError('Those two passwords are not the same.')
+      return
+    }
+
     setBusy(true)
     setError(null)
     try {
@@ -247,6 +257,26 @@ export function Activate() {
                   <p className="text-xs text-content-muted">
                     At least {MIN_PASSWORD_LENGTH} characters.
                   </p>
+                </div>
+
+                {/*
+                  Typed twice because it is typed blind, once, on a phone, and
+                  the person has no way back: a typo here sets a password nobody
+                  knows, the code is spent proving it, and an admin has to issue
+                  a new one before they can try again.
+                */}
+                <div className="space-y-1">
+                  <label htmlFor="activate-confirm" className="block text-sm font-semibold">
+                    Confirm password
+                  </label>
+                  <Input
+                    id="activate-confirm"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    value={confirmation}
+                    onChange={(event) => setConfirmation(event.target.value)}
+                  />
                 </div>
 
                 {error && (

@@ -499,10 +499,15 @@ The confirmation SHALL state both consequences before the link is removed.
 
 ### Requirement: An activation link carries the code so nothing but a password is typed
 
-The surface that issues a one-time code SHALL also offer an activation link
-containing that code, suitable for sending over an ordinary messaging app. The
-link SHALL be built from the running deployment's own origin and base path, so
-it is correct under a sub-path deployment and under a custom domain without a
+The surface that issues a one-time code SHALL offer an activation link
+containing that code, suitable for sending over an ordinary messaging app, and
+SHALL offer it as the **only** handover: a scannable image of the link, the link
+itself, and one action to copy it. The raw code SHALL NOT be displayed as a
+separate thing to pass on, so that there is one way to hand access over rather
+than a choice between several.
+
+The link SHALL be built from the running deployment's own origin and base path,
+so it is correct under a sub-path deployment and under a custom domain without a
 code change. The link SHALL NOT contain the email address or any other personal
 detail.
 
@@ -512,8 +517,14 @@ person types is a password.
 #### Scenario: Issuing a code produces a link that carries it
 
 - **WHEN** an admin provisions an account or re-issues a code
-- **THEN** the issued-code panel offers an activation link containing that code,
-  alongside the code itself
+- **THEN** the panel offers a scannable image of the activation link, the link
+  itself, and a way to copy it
+
+#### Scenario: The code is not offered as a separate handover
+
+- **WHEN** an admin views a freshly issued handover
+- **THEN** the one-time code is not presented on its own to be dictated or
+  copied apart from the link
 
 #### Scenario: The link contains no address
 
@@ -583,6 +594,28 @@ Activation SHALL NOT ask the person to retype the address.
   redeemed, superseded or unknown
 - **THEN** the screen says the link is not usable and offers no password field,
   without the person having typed anything
+
+### Requirement: A new password is typed twice
+
+Activation SHALL require the new password to be entered twice and SHALL refuse
+to proceed unless the two entries match. The refusal SHALL name the mismatch,
+and SHALL be decided by the client before any request is made — so a mistyped
+repeat costs neither a rate-limit allowance nor the one-time code.
+
+The password is typed blind, once, with no way back: a typo sets a password
+nobody knows, spends the code proving it, and leaves the person needing a new
+one from an admin before they can try again.
+
+#### Scenario: Mismatched entries are refused without consuming anything
+
+- **WHEN** a person enters two different passwords and submits
+- **THEN** they are told the two do not match, no request is made, and the code
+  remains redeemable
+
+#### Scenario: Matching entries activate the account
+
+- **WHEN** a person enters the same password in both fields and submits
+- **THEN** the password is set and they are signed in
 
 ### Requirement: Redemption is rate-limited at the endpoint, and says so when it refuses
 

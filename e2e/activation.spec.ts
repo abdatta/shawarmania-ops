@@ -27,13 +27,17 @@ test('an admin is handed a link, a scannable code, and the code itself', async (
   const panel = page.getByTestId('issued-code')
   await expect(panel).toBeVisible()
 
-  const code = (await panel.getByTestId('issued-code-value').innerText()).trim()
   const link = (await panel.getByTestId('issued-code-link').innerText()).trim()
+  const code = new URL(link).searchParams.get('code')!
 
   expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
-  expect(link).toContain(`activate?code=${code}`)
   // The address is on the panel for the admin to check, and never in the URL.
   expect(link).not.toContain('@')
+
+  // One handover. The code lives inside the URL and is deliberately not
+  // printed beside it as a second thing somebody could send instead.
+  await expect(panel.getByTestId('issued-code-value')).toHaveCount(0)
+  await expect(panel.getByRole('button', { name: 'Copy code' })).toHaveCount(0)
   await expect(panel.getByTestId('issued-code-email')).toContainText('demo.fresh.hire@example.com')
 
   // Drawn in the page, from real modules — not an <img> pointed somewhere.

@@ -166,15 +166,13 @@ test.describe('provisioning, end to end', () => {
 
     const panel = page.getByTestId('issued-code')
     await expect(panel).toBeVisible()
-    const code = (await panel.getByTestId('issued-code-value').innerText()).trim()
-    expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
-    await expect(panel).toContainText('shown once and cannot be looked up again')
-
-    // The link is what actually gets sent, so it is what the walk uses. It
-    // carries the code and never the address.
+    // The link is the whole handover, so it is what the walk uses. It carries
+    // the code and never the address.
     const link = (await panel.getByTestId('issued-code-link').innerText()).trim()
-    expect(link).toContain(`activate?code=${code}`)
+    const code = new URL(link).searchParams.get('code')!
+    expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
     expect(link).not.toContain('@')
+    await expect(panel).toContainText('Shown once')
     await expect(panel.getByRole('img', { name: new RegExp(person.name) })).toBeVisible()
 
     // The new account is listed, and honestly described as not yet activated.
@@ -200,6 +198,7 @@ test.describe('provisioning, end to end', () => {
 
     await theirPhone.getByRole('button', { name: /Yes, that/ }).click()
     await theirPhone.getByLabel('New password').fill(NEW_PASSWORD)
+    await theirPhone.getByLabel('Confirm password').fill(NEW_PASSWORD)
     await theirPhone.getByRole('button', { name: 'Set password and sign in' }).click()
 
     await expect(theirPhone).toHaveURL(/\/staff$/)
@@ -269,6 +268,7 @@ test.describe('deactivation', () => {
     await theirPhone.goto(link)
     await theirPhone.getByRole('button', { name: /Yes, that/ }).click()
     await theirPhone.getByLabel('New password').fill(NEW_PASSWORD)
+    await theirPhone.getByLabel('Confirm password').fill(NEW_PASSWORD)
     await theirPhone.getByRole('button', { name: 'Set password and sign in' }).click()
     await expect(theirPhone).toHaveURL(/\/staff$/)
 

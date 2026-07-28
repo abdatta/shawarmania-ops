@@ -756,7 +756,6 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <Button
-      variant="secondary"
       size="phone"
       onClick={() => {
         void navigator.clipboard
@@ -772,13 +771,17 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 
 /**
  * The handover, once. There is nowhere to look it up afterwards — only a hash
- * is stored, and that column is unreadable by every client — so this panel says
- * so rather than letting an admin discover it by navigating away.
+ * is stored, and that column is unreadable by every client.
  *
- * Three forms of the same secret, in the order they are most likely to be used
- * (design D12): the link, which makes activation one tap and is what the
- * primary Copy copies; the QR, for handing a phone across a counter; and the
- * code itself, for reading out over a call.
+ * **The link is the only handover offered.** The raw code used to sit beside it
+ * for reading out over a call, and that turned one action into a choice between
+ * three: it made the panel wordy, and it invited a handover that skips the tap
+ * this whole flow exists to provide. Anyone who genuinely must dictate one can
+ * still read the code out of the URL, so nothing is actually lost by not
+ * printing it twice.
+ *
+ * Everything here earns its line. The address is the exception worth keeping
+ * text for: it is the last cheap moment to catch a typo before the message goes.
  */
 function IssuedCodePanel({
   issued,
@@ -796,54 +799,42 @@ function IssuedCodePanel({
     >
       <p className="text-sm font-semibold text-content">Activation link for {issued.name}</p>
       {/*
-        The address, at the one moment somebody is looking: about to pass the
-        link on. A wrong address here produces an account whose owner opens the
-        link and finds somebody else's email on it — recoverable, but only if it
-        is caught. This is the cheap place to catch it; the form has already gone.
+        A wrong address here produces an account whose owner opens the link and
+        finds somebody else's email on it — recoverable, but only if it is
+        caught. This is the cheap place to catch it; the form has already gone.
       */}
       {issued.email && (
         <p data-testid="issued-code-email" className="break-all text-sm text-content-muted">
-          They will sign in as <strong className="text-content">{issued.email}</strong> — check that
-          is right before you send this.
+          Signs in as <strong className="text-content">{issued.email}</strong> — check this.
         </p>
       )}
 
-      <p
-        data-testid="issued-code-link"
-        className="my-2 rounded-lg border border-border bg-surface p-2 font-mono text-xs break-all text-content"
-      >
-        {link}
-      </p>
-
-      <div className="flex flex-wrap items-start gap-4">
+      <div className="mt-3 flex flex-wrap items-center gap-4">
         <QrCode
           value={link}
-          title={`Activation code for ${issued.name}`}
-          className="h-32 w-32 shrink-0 rounded-lg"
+          title={`Activation link for ${issued.name}`}
+          className="h-36 w-36 shrink-0 rounded-lg"
         />
-        <div className="min-w-0 flex-1">
-          <p className="text-xs text-content-muted">Or read out the code:</p>
+        <div className="min-w-0 flex-1 space-y-3">
           <p
-            data-testid="issued-code-value"
-            className="font-mono text-2xl font-bold tracking-widest text-content"
+            data-testid="issued-code-link"
+            className="rounded-lg border border-border bg-surface p-2 font-mono text-xs break-all text-content"
           >
-            {issued.code}
+            {link}
           </p>
+          <div className="flex flex-wrap gap-2">
+            <CopyButton text={link} label="Copy link" />
+            <Button variant="ghost" size="phone" onClick={onDismiss}>
+              Done
+            </Button>
+          </div>
         </div>
       </div>
 
-      <p className="mt-3 text-sm text-content-muted">
-        Send this now — it is shown once and cannot be looked up again. It works once, and expires{' '}
-        {new Date(issued.expiresAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}. If it is
-        lost, issue a new one.
+      <p className="mt-3 text-xs text-content-muted">
+        Shown once · works once · expires{' '}
+        {new Date(issued.expiresAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
       </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <CopyButton text={link} label="Copy link" />
-        <CopyButton text={issued.code} label="Copy code" />
-        <Button variant="ghost" size="phone" onClick={onDismiss}>
-          Done
-        </Button>
-      </div>
     </div>
   )
 }

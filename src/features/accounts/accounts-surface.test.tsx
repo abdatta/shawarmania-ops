@@ -123,17 +123,17 @@ describe('the account surface', () => {
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     const panel = await screen.findByTestId('issued-code')
-    expect(
-      within(panel).getByText(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/),
-    ).toBeInTheDocument()
-    expect(panel).toHaveTextContent('shown once and cannot be looked up again')
+    expect(within(panel).getByTestId('issued-code-link')).toHaveTextContent(
+      /\/activate\?code=[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/,
+    )
+    expect(panel).toHaveTextContent('Shown once')
 
     // Dismissing it is final: nothing puts it back.
     await user.click(within(panel).getByRole('button', { name: 'Done' }))
     expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
   })
 
-  it('hands the code over as a link and a scannable code, not only characters', async () => {
+  it('offers the link and nothing else to hand over', async () => {
     const user = userEvent.setup()
     renderSurface('super_admin')
     await screen.findByRole('heading', { name: 'People' })
@@ -146,18 +146,23 @@ describe('the account surface', () => {
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     const panel = await screen.findByTestId('issued-code')
-    const code = within(panel).getByTestId('issued-code-value').textContent!
     const link = within(panel).getByTestId('issued-code-link').textContent!
+    const code = new URL(link).searchParams.get('code')!
 
-    expect(link).toContain('/activate?code=')
-    expect(link).toContain(code)
+    expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
     // The address is on the panel for the admin to check, and never in the URL
     // — it would buy nothing and would land in history and link previews.
     expect(link).not.toContain('@')
     expect(
-      within(panel).getByRole('img', { name: /Activation code for New Starter/ }),
+      within(panel).getByRole('img', { name: /Activation link for New Starter/ }),
     ).toBeInTheDocument()
     expect(within(panel).getByRole('button', { name: 'Copy link' })).toBeInTheDocument()
+
+    // One handover, not a choice between three. The code exists inside the URL
+    // and is deliberately not printed beside it as a second thing to send.
+    expect(within(panel).queryByTestId('issued-code-value')).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: 'Copy code' })).not.toBeInTheDocument()
+    expect(within(panel).queryByText(code)).not.toBeInTheDocument()
   })
 
   it('says nothing about failed activations on a quiet day', async () => {
@@ -416,7 +421,9 @@ describe('the email address an account signs in with', () => {
     expect(within(panel).getByTestId('issued-code-email')).toHaveTextContent(
       'demo.newcomer@example.com',
     )
-    expect(panel).toHaveTextContent('check that is right before you send this')
+    // The nudge survives the trim: the address is shown to be checked, not
+    // merely displayed. It is the last cheap moment to catch a typo.
+    expect(panel).toHaveTextContent('check this')
   })
 
   it('is read back when a code is re-issued, not only at creation', async () => {
