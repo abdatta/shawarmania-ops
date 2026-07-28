@@ -275,6 +275,7 @@ test.describe('deactivation', () => {
     // The owner deactivates them while that phone is still open.
     await page.getByTestId('issued-code').getByRole('button', { name: 'Done' }).click()
     const row = page.getByRole('row', { name: person.name })
+    await row.getByRole('button', { name: /^Actions for /i }).click()
     await row.getByRole('button', { name: 'Deactivate' }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toContainText('immediately')
