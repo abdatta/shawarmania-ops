@@ -22,7 +22,7 @@ export function RootLayout() {
         <Outlet />
       </main>
 
-      <footer className="border-t border-border px-4 py-3">
+      <footer className="border-t border-border px-4 py-3 text-center">
         <BuildVersion />
       </footer>
     </div>

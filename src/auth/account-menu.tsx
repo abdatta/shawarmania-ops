@@ -1,6 +1,7 @@
 import { UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
+import { BuildVersion } from '@/components/build-version'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { useAdapters } from '@/data-access/adapters-context'
 import { useSession } from '@/session/context'
@@ -65,6 +66,7 @@ export function AccountMenu({ onSignOut }: { onSignOut: () => void | Promise<voi
         >
           Sign out
         </button>
+        <BuildVersion className="mt-3 border-t border-border pt-3 text-center" />
       </div>
     </details>
   )
