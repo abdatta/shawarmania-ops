@@ -138,40 +138,67 @@ obvious way to harden an irreversible action is to make the owner type the
 outlet's name. The one outlet that most needs deleting has no name. Anything of
 that shape must fall back to something a blank row can satisfy.
 
-**Both production accounts are Super Admins.** This change is Super-Admin-only
-by design, which today means *everyone* gets the delete action, including the
-newly provisioned account whose first session produced the blank outlet. Worth
-knowing before deciding how heavy the confirmation is — and worth the owner
-knowing independently of this change.
+**Both production accounts are Super Admins**, which the owner has confirmed is
+intended — the second account is a co-owner, not a manager. That is what let it
+create an outlet at all, since `outlets_insert` requires `super_admin`, and it
+means this change's delete action reaches both accounts on day one. Recorded
+because the role is the whole authorisation story here, not because it is
+wrong.
 
-## Open questions to settle in `/opsx:propose`
+**The empty `employees`, `attendance` and `bills` tables are not evidence that
+#5's gate went unwalked.** Real check-ins happened and the rows were removed
+afterwards with the service-role credential, which is the only thing that can
+delete them. Noted so the emptiness is not re-litigated by the next person to
+look.
 
-**Emptying an outlet is not always possible, and the plan assumes it is.**
-`profiles` carries `check ((role = 'super_admin') = (outlet_id is null))` — a
-Franchise Admin *cannot* be made outlet-less without also changing their role.
-So "reassign everyone, then delete" has no clean path for admin accounts
-specifically. Decide whether deactivated accounts still block a delete, and
-whether that is the right answer.
+## Settled by the owner, 2026-07-28
 
-**How the refusal is worded, and how it stays true.** Catching the foreign-key
-violation yields a constraint name like `employees_outlet_id_fkey`. Mapping
-table to plain English ("3 people are still on this outlet's staff list") is
-cheap, but it is a mapping a human maintains, and a table added later gets no
-entry — the exact failure mode `01_schema_coverage.sql` exists to prevent
-elsewhere. Decide between a maintained mapping, a generic-but-honest sentence,
-and a counting query that enumerates from the catalog.
+The four questions this seed carried were answered before the design was
+written. Recorded here because each has a cost that a later reader should see
+was accepted deliberately.
 
-**Whether an outlet must be closed before it can be deleted.** This was the
-softest of the four and the measurement above has hardened it. Requiring it adds
-a step and a moment to reconsider. Not requiring it means one confirmation
-stands between an active outlet and its removal — and the justification for
-that was *"the foreign-key check is doing the real work"*, which is presently
-false. Either require closed-first, or make the confirmation carry weight of its
-own, but do not ship the light version on a guard that is currently empty.
+**An outlet must be marked closed before it can be deleted.** The reversible
+action precedes the irreversible one. This is a direct consequence of the
+measurement above: the argument for a one-step delete was that the foreign-key
+check does the real work, and today it does not.
 
-**Whether the demo shows it.** The mock adapter has no foreign keys, so the
-refusal path has to be modelled deliberately or the demo will teach that every
-outlet is deletable.
+**The confirmation is the existing `ConfirmDialog`, with no type-to-confirm.**
+The standard hardening — type the record's name — is unsatisfiable for the one
+row this change exists to remove, which has neither a name nor a code. The
+closed-first step supplies the deliberation instead.
+
+**A deactivated account still blocks a delete.** "Nothing references it" stays
+literally true. The accepted cost: `profiles` cannot be outlet-less in a scoped
+role, so an outlet that has ever had a Franchise Admin cannot be emptied by
+deactivating them.
+
+**The refusal counts from the database catalog**, not from a maintained mapping
+of table names to English. A table added later is covered without anyone
+remembering — the same instinct that makes the isolation suite read the catalog.
+
+**Detaching accounts from an outlet stays out of scope**, so "empty it, then
+delete it" remains a property of the foreign keys rather than a flow this change
+provides.
+
+## Open questions carried into implementation
+
+Smaller than the ones above, and none of them blocks a start.
+
+**Which table names get friendlier words.** The refusal returns identifiers.
+A handful — `employees`, `profiles`, `counter_devices` — deserve a phrase a
+person would say. The rest can fall back to the raw name. Falling back is
+acceptable; omitting a table because nobody wrote a phrase for it is not.
+
+**Whether `01_schema_coverage.sql` needs teaching about the new verb.** It
+enumerates the schema and fails on a table that opts out of its expectations.
+A table that is now deletable by a client may or may not trip it. Find out by
+running it rather than by reading it.
+
+**What the Outlets card actually renders for a blank row.** Its heading is the
+name and its badge is the location label, both empty on the target outlet, and
+its test id is keyed to the code. It needs to be identifiable enough to act on —
+this is the one row the whole change exists to remove, and it must not be the
+one row that is hard to click.
 
 ## User-only gate steps
 

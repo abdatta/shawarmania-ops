@@ -46,11 +46,20 @@ on the Staff form and on the Access form both.
 
 ## Scope
 
-**The database refuses blanks in the fields that must not be blank.** Check
-constraints on `outlets.name`, `outlets.code`, `outlets.location_label`,
-`employees.full_name` and `profiles.full_name`, in the same shape as
-`employees_code_not_blank` and `attendance_override_reason_not_blank` — a
-third instance of a pattern this schema already has twice.
+**The database refuses blanks in every `not null` text column a human types.**
+Check constraints in the same shape as `employees_code_not_blank` and
+`attendance_override_reason_not_blank` — further instances of a pattern this
+schema already has twice, not a new mechanism.
+
+Five columns behind surfaces that exist: `outlets.name`, `outlets.code`,
+`outlets.location_label`, `employees.full_name`, `profiles.full_name`.
+
+Seven more behind surfaces still ahead, guarded before the form that fills them
+is written: `menu_categories.name`, `menu_items.name`, `inventory_items.name`,
+`alerts.subject`, `alerts.message`, `alert_responses.message`, and
+`bill_items.item_name`. Each is one line in a migration already being written,
+and the alternative is #6, #7 and #11 each rediscovering this bug on their own
+surface.
 
 **Three forms refuse before writing.** The outlet form, the Access provisioning
 form and the Staff form each check their required fields for blankness on

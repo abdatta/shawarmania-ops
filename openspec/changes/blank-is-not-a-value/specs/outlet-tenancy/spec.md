@@ -32,3 +32,35 @@ form is the convenience, and both are required.
 
 - **WHEN** a Super Admin edits an existing outlet and clears its name
 - **THEN** the write is refused and the outlet keeps the name it had
+
+### Requirement: A required text column is never satisfied by an empty string
+
+A required text column SHALL refuse a value that is empty or entirely
+whitespace, and not only one that is absent. This applies to every `not null`
+text column a person fills in and a person later reads. `not null` alone SHALL
+NOT be treated as sufficient, because it constrains absence rather than
+emptiness — an empty string satisfies it while satisfying nothing anybody needs.
+
+This SHALL hold for columns whose surface does not exist yet, so that a form
+written later inherits the guarantee rather than rediscovering its absence. A
+column added after this requirement SHALL carry the same guard in the migration
+that creates it, in the same way an outlet-scoped table ships its Row-Level
+Security policy in the change that creates it.
+
+#### Scenario: A required text column refuses an empty string
+
+- **WHEN** any caller writes an empty string to a required text column, on
+  insert or on update
+- **THEN** the database refuses the write
+
+#### Scenario: A required text column refuses whitespace
+
+- **WHEN** any caller writes a value of only spaces to a required text column
+- **THEN** the database refuses the write, because whitespace is the case a
+  not-null constraint silently accepts
+
+#### Scenario: A surface built later inherits the guard
+
+- **WHEN** a form is written for a column that was guarded before the form
+  existed, and it submits a blank value
+- **THEN** the database refuses it, whether or not that form checked first

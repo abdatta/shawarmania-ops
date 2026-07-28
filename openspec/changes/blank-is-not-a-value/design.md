@@ -108,8 +108,13 @@ would be the tidier abstraction and would mean five columns changing type in a
 migration that currently only adds constraints, which is a much larger blast
 radius for no behavioural gain.
 
-Five columns, all of them things a human types and a human later reads to
-identify something:
+The rule is: **every `not null` text column a human types and a human later
+reads to identify something.** Applying it to the whole schema rather than only
+to the surfaces built so far is the owner's call, and it is the cheaper one —
+each is a one-line constraint in a migration that is already being written,
+and the alternative is every future surface rediscovering this bug.
+
+Columns whose surface exists today:
 
 | Table | Column | Why it must not be blank |
 |---|---|---|
@@ -119,9 +124,28 @@ identify something:
 | `employees` | `full_name` | the roster row is a person |
 | `profiles` | `full_name` | the account is a person |
 
+Columns whose surface arrives with #6, #7 and #11 — same hole, guarded ahead of
+the form that will fill them:
+
+| Table | Column | Filled by |
+|---|---|---|
+| `menu_categories` | `name` | #7 menu editor |
+| `menu_items` | `name` | #7 menu editor |
+| `inventory_items` | `name` | #7 / #11 inventory |
+| `alerts` | `subject`, `message` | #8 / #13 messaging |
+| `alert_responses` | `message` | #8 / #13 messaging |
+
+`bill_items.item_name` is the judgment call and is **included**. It is written
+by the system as a price-and-name snapshot rather than typed, so it cannot go
+blank once `menu_items.name` cannot — but the constraint costs nothing, and a
+snapshot column that silently accepted a blank would be the hardest of all of
+these to notice, since it only shows up on a historical bill nobody re-reads.
+
 Deliberately excluded: everything nullable. `trimmed()` in the outlets adapter
 already maps a blank optional field to `null`, which is the correct
-representation of "not known" and is unchanged by this.
+representation of "not known" and is unchanged by this. Also excluded:
+`employees.employee_code`, which already has `employees_code_not_blank` — this
+change adds instances of that pattern, it does not restate it.
 
 ## D5 — The placeholder rule is narrow, and the narrowness is the point
 

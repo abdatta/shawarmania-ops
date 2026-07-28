@@ -91,7 +91,11 @@
 
 ## 10. Roadmap
 
-- [x] 10.1 Add row #18 `generated-staff-codes` to `openspec/changes/ROADMAP.md` — Wave B, Opus, depends on #15, carrying this change's gate. *(Done at propose time.)*
+> Row #18 was added to the roadmap at propose time. It is deliberately **not**
+> a checked box: one checked task derives this change's status as `active`,
+> which would claim implementation had begun when none has.
+
+- [ ] 10.1 Confirm row #18 still reads Wave B and matches this proposal's banner — the wave letter is authored rather than derived, so `roadmap:sync` never corrects it.
 - [ ] 10.2 `npm run roadmap:sync` after the last task is checked, so the status cell tracks reality. Never hand-stamp it.
 
 ## 11. Verification

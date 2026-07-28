@@ -20,9 +20,11 @@
 - [ ] 2.1 New migration `supabase/migrations/20260728000002_required_fields_not_blank.sql`. The number is second of three and is settled in D6's table, not chosen by counting — `…0001` is reserved for #20, which ships first.
 - [ ] 2.2 `outlets_name_not_blank`, `outlets_code_not_blank`, `outlets_location_label_not_blank` — `check (length(btrim(<column>)) > 0)`, the identical shape to `employees_code_not_blank` in `20260727000004`. Do not invent a second form of this check (D4).
 - [ ] 2.3 `employees_full_name_not_blank` and `profiles_full_name_not_blank`, same shape.
-- [ ] 2.4 A header comment naming the defect this closes — a nameless outlet reached production — and pointing at `20260727000004`, which is the same fix on a different column. The next person to add a `not null` text column should find this.
-- [ ] 2.5 No column types change, no domain is introduced, no trigger is added. Constraints only (D4).
-- [ ] 2.6 Regenerate database types if the generator reflects constraints; confirm nothing downstream breaks if it does not.
+- [ ] 2.4 The same constraint on the columns whose surfaces are still ahead (D4): `menu_categories.name`, `menu_items.name`, `inventory_items.name`, `alerts.subject`, `alerts.message`, `alert_responses.message`, and `bill_items.item_name`. Naming convention `<table>_<column>_not_blank` throughout.
+- [ ] 2.5 Before adding each of 2.4's constraints, confirm the table holds no violating row in production. All seven are empty or near-empty today, but the constraint validates against whatever is there at deploy time, not at authoring time.
+- [ ] 2.6 A header comment naming the defect this closes — a nameless outlet reached production — and pointing at `20260727000004`, which is the same fix on a different column. The next person to add a `not null` text column should find this.
+- [ ] 2.7 No column types change, no domain is introduced, no trigger is added. Constraints only (D4).
+- [ ] 2.8 Regenerate database types if the generator reflects constraints; confirm nothing downstream breaks if it does not.
 
 ## 3. Database tests
 
@@ -32,7 +34,8 @@
 - [ ] 3.4 **Updating** an existing outlet's name to `''` and to `'   '` is refused. The create path is not the only way in (D4).
 - [ ] 3.5 An outlet with ordinary values still inserts and updates — the constraint refuses blanks and nothing else.
 - [ ] 3.6 The same insert/update/whitespace matrix for `employees.full_name` and `profiles.full_name`.
-- [ ] 3.7 The existing isolation suite still passes unchanged. This change adds no table and alters no policy; that should be visibly true rather than assumed.
+- [ ] 3.7 One insert-blank and one insert-whitespace case per column added by 2.4, so the guards on the not-yet-built surfaces are proven rather than assumed — they have no form test to back them up until #6, #7 and #11 arrive.
+- [ ] 3.8 The existing isolation suite still passes unchanged. This change adds no table and alters no policy; that should be visibly true rather than assumed.
 
 ## 4. The Outlets surface
 
