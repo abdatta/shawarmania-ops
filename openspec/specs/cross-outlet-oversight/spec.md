@@ -29,10 +29,11 @@ absence stated, and SHALL NOT be omitted from the list.
 
 ### Requirement: Every console figure is derived from recorded rows
 
-Every figure the owner console, comparison, report and profit surfaces show
-SHALL be derived from recorded bills, expenses, inventory movements and cash
-records. No figure SHALL be supplied to the data layer by the caller, and no
-figure SHALL be stored as a total that its own rows do not produce.
+Every figure SHALL be derived from recorded rows: what the owner console,
+comparison, report and profit surfaces show comes from recorded bills,
+expenses, inventory movements and cash records. No figure SHALL be supplied
+to the data layer by the caller, and no figure SHALL be stored as a total
+that its own rows do not produce.
 
 A business day that has been closed SHALL contribute the figures snapshotted
 at close, never a recomputation of them.
