@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Explore OpenSpec Change'
+  short_description: 'Explore ideas without implementing them'
+  default_prompt: 'Use $openspec-explore to think through this idea before implementation.'

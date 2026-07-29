@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Propose OpenSpec Change'
+  short_description: 'Create proposal, design, specs, and tasks'
+  default_prompt: 'Use $openspec-propose to turn this idea into a complete change proposal.'

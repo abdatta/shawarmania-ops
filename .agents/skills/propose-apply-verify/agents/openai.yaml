@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Propose Apply Verify'
+  short_description: 'Drive one change through verified completion'
+  default_prompt: 'Use $propose-apply-verify to propose, implement, and verify one change.'

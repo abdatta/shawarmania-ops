@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Next Change'
+  short_description: 'Recommend the next roadmap change'
+  default_prompt: 'Use $next-change to recommend what to work on next.'
