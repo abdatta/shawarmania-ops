@@ -1,6 +1,6 @@
 # Security And Privacy
 
-> Describes the intended posture. Nothing is built yet.
+> This posture is enforced in the deployed app — auth, tenancy RLS and attendance are live. Sections covering surfaces not yet built (the counter-tablet path) say so inline.
 
 ## Hard rules
 
@@ -15,7 +15,7 @@
 
 Worth stating plainly, because "the repo is public" sounds worse than it is and better than it is in different places.
 
-**Not exposed**: no customer or employee data, no credentials. `.env` is gitignored, the service-role key exists only in Supabase's own secret storage, and seed data is synthetic by policy. The Supabase anon key will appear in the built bundle once the app talks to a backend — that is by design, and Row-Level Security is what protects the data behind it, not the key's secrecy.
+**Not exposed**: no customer or employee data, no credentials. `.env` is gitignored, the service-role key exists only in Supabase's own secret storage, and seed data is synthetic by policy. The Supabase anon key appears in the built bundle — that is by design, and Row-Level Security is what protects the data behind it, not the key's secrecy.
 
 **Exposed**: the business's own contact details in [Business Context](BUSINESS_CONTEXT.md) — outlet phone number, delivery line, FSSAI licence numbers. These are already publicly displayed by the business and required to be, so this is republishing public facts rather than leaking private ones. It does make them scrapable in one place, which is a different thing from being on a shop wall.
 

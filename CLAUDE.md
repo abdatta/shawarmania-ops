@@ -4,7 +4,7 @@ Read [`AGENTS.md`](AGENTS.md) — it is the single agent contract for this repo,
 
 Quick orientation:
 
-- **What is this?** A multi-outlet cash-counter and outlet-management PWA for Shawarmania. Currently pre-implementation: docs and roadmap exist, the app does not.
+- **What is this?** A multi-outlet cash-counter and outlet-management PWA for Shawarmania. Under active roadmap-driven implementation: attendance is live in production, the four-role UI is demonstrable end to end, and billing/expenses/cash/owner-console are being swapped from mock to live per the roadmap.
 - **What do I work on?** Run `/next-change`. It derives the recommendation from the roadmap and change folders, live.
 - **How do I make a change?** `/opsx:propose` → `/opsx:apply` → `/opsx:archive`. No code change without a change folder. `/propose-apply-verify <name>` runs the first two plus an autonomous verification loop in one go.
 - **Where is the truth?** `docs/` for what the app is, `openspec/specs/` for what it must do, `openspec/changes/` for what's changing.
