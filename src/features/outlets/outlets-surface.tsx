@@ -1,5 +1,13 @@
 import { Crosshair, LoaderCircle, MapPin, MapPinOff, Store, TriangleAlert } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
@@ -22,9 +30,13 @@ import {
   captureQuality,
   CAPTURE_ACCURACY_GOOD_M,
   CAPTURE_ACCURACY_MAX_M,
+  describeCutover,
   formatDateTime,
   formatMetres,
+  QUIET_HOURS_FROM,
+  QUIET_HOURS_UNTIL,
 } from '@/domain'
+import { cn } from '@/lib/cn'
 import {
   watchBestPosition,
   type GeolocationFailureKind,
@@ -528,8 +540,8 @@ function OutletCard({
       )}
 
       <p className="text-xs text-content-muted">
-        Staff may check in within {formatMetres(outlet.geofence_radius_m)} of this point. The
-        business day starts at {toTimeInput(outlet.business_day_cutover)}.
+        Staff may check in within {formatMetres(outlet.geofence_radius_m)} of this point. The day
+        rolls over at {toTimeInput(outlet.business_day_cutover)}.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -787,7 +799,14 @@ function OutletFormSheet({
           />
         </Field>
 
-        <Field label="The business day starts at" id="outlet-cutover">
+        {/*
+          Not "The business day starts at". That label reads as an opening
+          time, and a real outlet was set up with its opening time here — which
+          files the morning's prep under yesterday. The label now names the
+          seam, and the preview below shows the chosen value working rather
+          than asking anyone to picture it.
+        */}
+        <Field label="The day rolls over at" id="outlet-cutover">
           <Input
             id="outlet-cutover"
             type="time"
@@ -796,9 +815,14 @@ function OutletFormSheet({
             onChange={(event) => set({ businessDayCutover: event.target.value })}
           />
           <p className="text-xs text-content-muted">
-            Everything rung up after midnight but before this time still counts as the previous
-            day&rsquo;s trading. Changing it never moves anything already recorded — each day is
-            stamped when it happens, not worked out afterwards.
+            Not the opening time. This is where one day&rsquo;s trading ends and the next begins, so
+            it belongs in the quiet hours while the counter is shut — anywhere between{' '}
+            {QUIET_HOURS_FROM} and {QUIET_HOURS_UNTIL} keeps a night&rsquo;s work together.
+          </p>
+          <CutoverPreview cutover={draft.businessDayCutover} />
+          <p className="text-xs text-content-muted">
+            Changing it never moves anything already recorded — each day is stamped when it happens,
+            not worked out afterwards.
           </p>
         </Field>
 
@@ -810,6 +834,78 @@ function OutletFormSheet({
         )}
       </form>
     </FormSheet>
+  )
+}
+
+/**
+ * The chosen cutover, run against one trading session and shown landing.
+ *
+ * Prose about "after midnight but before this time" only reads correctly to
+ * someone who already picked an early-morning value; it stays silent for
+ * exactly the person who picked a daytime one. So this argues from the
+ * arithmetic instead: four moments from a single night, each labelled with the
+ * business day it would be filed under, updating as the field is scrubbed.
+ * When they do not all agree, the value is wrong and the panel says so.
+ */
+function CutoverPreview({ cutover }: { cutover: string }) {
+  // A `type="time"` input is either empty or a full HH:MM — never half-typed.
+  const advice = useMemo(
+    () => (/^\d{2}:\d{2}/.test(cutover) ? describeCutover(cutover) : null),
+    [cutover],
+  )
+  if (!advice) return null
+
+  return (
+    <div
+      data-testid="cutover-preview"
+      className={cn(
+        'space-y-2 rounded-lg border bg-surface-raised p-2 text-xs',
+        advice.splits ? 'border-warning' : 'border-border',
+      )}
+    >
+      <p className="text-content">
+        A business day then runs{' '}
+        <strong className="font-semibold">
+          {advice.startsAt} to {advice.endsAt}
+        </strong>{' '}
+        {advice.endsNextDay ? 'the next day' : 'the same day'}.
+      </p>
+      <p className="text-content-muted">
+        A counter opening late morning and shutting after midnight would file:
+      </p>
+      <ul className="space-y-0.5">
+        {advice.session.map((moment) => (
+          <li key={moment.label} className="flex items-baseline justify-between gap-3">
+            <span className="text-content-muted">
+              {moment.label}, {moment.at}
+              {moment.afterMidnight && ' (after midnight)'}
+            </span>
+            <span
+              className={cn(
+                'shrink-0',
+                moment.filedUnder === 'the day itself'
+                  ? 'text-content-muted'
+                  : 'font-semibold text-warning',
+              )}
+            >
+              {moment.filedUnder}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {advice.splits && (
+        <p
+          data-testid="cutover-warning"
+          className="flex items-start gap-2 border-t border-border pt-2 text-content"
+        >
+          <TriangleAlert aria-hidden size={14} className="mt-0.5 shrink-0 text-warning" />
+          <span>
+            One night&rsquo;s trading would be split across two business days, so no cash count or
+            day total for that night can add up the way anyone standing at the counter saw it.
+          </span>
+        </p>
+      )}
+    </div>
   )
 }
 

@@ -58,7 +58,7 @@ export function AdminHome() {
               </dd>
               <dt className="font-semibold">Phone</dt>
               <dd>{outlet.phone ?? '—'}</dd>
-              <dt className="font-semibold">Business day starts</dt>
+              <dt className="font-semibold">Day rolls over at</dt>
               <dd>{outlet.business_day_cutover.slice(0, 5)}</dd>
             </dl>
           </CardBody>

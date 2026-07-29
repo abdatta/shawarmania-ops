@@ -346,8 +346,41 @@ describe('creating and editing an outlet', () => {
     const card = await screen.findByTestId('outlet-kalyani')
     await user.click(within(card).getByRole('button', { name: 'Edit' }))
 
-    expect(screen.getByLabelText('The business day starts at')).toHaveValue('04:00')
+    expect(screen.getByLabelText('The day rolls over at')).toHaveValue('04:00')
     expect(screen.getByText(/never moves anything already recorded/)).toBeInTheDocument()
+  })
+
+  it('names the cutover as a seam rather than an opening time', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+
+    const card = await screen.findByTestId('outlet-kalyani')
+    await user.click(within(card).getByRole('button', { name: 'Edit' }))
+
+    expect(screen.getByText(/Not the opening time/)).toBeInTheDocument()
+    expect(screen.getByTestId('cutover-preview')).toHaveTextContent('04:00 to 03:59')
+    expect(screen.queryByTestId('cutover-warning')).not.toBeInTheDocument()
+  })
+
+  // The mistake this field actually invites: an opening time typed into a
+  // seam. The preview has to object before the value is saved, not after a
+  // month of days stamped one behind.
+  it('warns while an opening time is being typed into the cutover', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderOutlets()
+
+    const card = await screen.findByTestId('outlet-kalyani')
+    await user.click(within(card).getByRole('button', { name: 'Edit' }))
+
+    const cutover = screen.getByLabelText('The day rolls over at')
+    await user.clear(cutover)
+    await user.type(cutover, '12:00')
+
+    expect(await screen.findByTestId('cutover-warning')).toHaveTextContent(
+      'split across two business days',
+    )
+    expect(screen.getByTestId('cutover-preview')).toHaveTextContent('Prep starts, 11:00')
+    expect(screen.getByTestId('cutover-preview')).toHaveTextContent('the day before')
   })
 })
 

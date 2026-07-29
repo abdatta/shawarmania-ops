@@ -47,9 +47,15 @@ writes there like any manager. That authority comes from the assignment rather
 than from being the owner, which is exactly why it stops at that outlet.
 
 **Self-assignment** is refused, with one deliberate carve-out: a Super Admin
-may place *themselves* at an outlet. It is a convenience rather than a
-necessity — self-granting an outlet role cannot widen what an owner may already
-do, and cannot reach the owner role itself.
+may place *themselves* at an outlet. The principle behind it is the owner's
+(2026-07-29): **a Super Admin should be able to do everything standalone** —
+needing a second owner present to perform an act is a dependency the business
+does not want, and it holds whether the business has one owner or five.
+
+The carve-out is safe because it cannot widen anything: an outlet role confers
+less than the owner role already does, `super_admin` stays refused as a
+self-grant for everybody, and the last live Super Admin assignment stays
+unremovable — so no owner can strand the business by acting alone either.
 **Nobody, ever, may grant themselves the `super_admin` role** — the only
 self-grant that widens what a person can do — and the last live Super Admin
 assignment cannot be ended by anyone, including its holder.

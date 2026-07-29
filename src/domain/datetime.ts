@@ -124,6 +124,114 @@ export function resolveBusinessDate(instant: Date | string, cutover: string): st
   return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`
 }
 
+/**
+ * A moment in one trading session, used to show a cutover working.
+ *
+ * The times are a typical Shawarmania day — the counter opens late morning and
+ * the last bill is rung after midnight — not any particular outlet's hours.
+ * They are fixed on purpose: this exists to demonstrate the rule, and a
+ * demonstration that moves with the data demonstrates nothing.
+ */
+export const TRADING_SESSION: readonly TradingMoment[] = [
+  { label: 'Prep starts', at: '11:00', afterMidnight: false },
+  { label: 'Afternoon', at: '16:00', afterMidnight: false },
+  { label: 'Evening rush', at: '20:00', afterMidnight: false },
+  { label: 'Last bill', at: '00:30', afterMidnight: true },
+]
+
+/**
+ * The hours a counter is reliably shut.
+ *
+ * A cutover anywhere in this band leaves a whole trading session on one
+ * business day — asserted minute by minute in `datetime.test.ts`, so the
+ * guidance shown on screen cannot drift away from the arithmetic.
+ */
+export const QUIET_HOURS_FROM = '01:00'
+export const QUIET_HOURS_UNTIL = '06:00'
+
+export interface TradingMoment {
+  /** What is happening, in the counter's words. */
+  label: string
+  /** Wall-clock time in Asia/Kolkata, `HH:MM`. */
+  at: string
+  /** True when this falls after midnight, on the calendar day after opening. */
+  afterMidnight: boolean
+}
+
+/** Which business day a moment lands on, relative to the day the shop opened. */
+export type CutoverFiling = 'the day itself' | 'the day before' | 'the next day'
+
+export interface CutoverSample extends TradingMoment {
+  filedUnder: CutoverFiling
+}
+
+export interface CutoverAdvice {
+  /** The cutover itself, normalised to `HH:MM`. */
+  startsAt: string
+  /** The last minute the same business day still covers, `HH:MM`. */
+  endsAt: string
+  /** False only for a midnight cutover, where the window closes the same day. */
+  endsNextDay: boolean
+  /** `TRADING_SESSION`, each moment resolved against this cutover. */
+  session: CutoverSample[]
+  /** True when that one session lands on more than one business day. */
+  splits: boolean
+}
+
+// Any mid-month day works. The answer is a property of the cutover, not of the
+// date, and mid-month keeps the ±1 day shift away from a month boundary while
+// reading a diff.
+const CUTOVER_REFERENCE_DAY = '2026-05-12'
+
+/**
+ * What a proposed cutover would actually do, shown rather than described.
+ *
+ * The cutover is the seam between two business days, not the outlet's opening
+ * time, and the two readings are easy to confuse — a real outlet was set up
+ * with its opening time here. So this resolves a whole trading session against
+ * the proposed value: if the morning's prep and that night's last bill land on
+ * different business days, the value is wrong and the screen can say so with
+ * the arithmetic in view.
+ *
+ * @param cutover a candidate `business_day_cutover`, as `HH:MM` or `HH:MM:SS`
+ */
+export function describeCutover(cutover: string): CutoverAdvice {
+  const match = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(cutover)
+  if (!match) {
+    throw new TypeError(`Expected a HH:MM or HH:MM:SS cutover, got "${cutover}"`)
+  }
+
+  const pad = (value: number) => String(value).padStart(2, '0')
+  const startsAt = `${match[1]}:${match[2]}`
+  const minutes = Number(match[1]) * 60 + Number(match[2])
+  const lastMinute = (minutes + 1439) % 1440
+  const endsAt = `${pad(Math.floor(lastMinute / 60))}:${pad(lastMinute % 60)}`
+
+  const session = TRADING_SESSION.map((moment) => {
+    const day = moment.afterMidnight
+      ? shiftBusinessDate(CUTOVER_REFERENCE_DAY, 1)
+      : CUTOVER_REFERENCE_DAY
+    // +05:30 is Asia/Kolkata year round — India keeps no daylight saving — so
+    // the wall-clock times above round-trip exactly through the resolver.
+    const filedOn = resolveBusinessDate(`${day}T${moment.at}:00+05:30`, startsAt)
+    const filedUnder: CutoverFiling =
+      filedOn === CUTOVER_REFERENCE_DAY
+        ? 'the day itself'
+        : filedOn < CUTOVER_REFERENCE_DAY
+          ? 'the day before'
+          : 'the next day'
+    return { ...moment, filedUnder }
+  })
+
+  return {
+    startsAt,
+    endsAt,
+    endsNextDay: minutes !== 0,
+    session,
+    splits: session.some((moment) => moment.filedUnder !== 'the day itself'),
+  }
+}
+
 /** `2026-07-25` shifted by whole days, staying a calendar label throughout. */
 export function shiftBusinessDate(businessDate: string, days: number): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) {

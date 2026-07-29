@@ -29,6 +29,8 @@ stored.
 
 Each outlet has a `business_day_cutover` time (default 04:00 IST). A bill rung at 00:20 on the 12th belongs to business date the 11th, because it is part of the 11th's evening trade and will be counted in the 11th's drawer.
 
+**The cutover is the seam between two trading days, not the outlet's opening time.** It belongs in the hours the counter is shut — later than the latest close, earlier than the earliest open — which for Shawarmania is roughly 01:00 to 06:00. An opening time entered here would file the morning's prep under the previous day and split one night's trading across two business dates. That is not hypothetical: both production outlets were first set up with their opening time in this field, so the outlet form now resolves a whole session against whatever is typed and shows where each moment would land.
+
 Stored as an explicit `date` column on every operational record. **Never computed from `created_at` at read time** — that would silently reassign records if the cutover ever changed, and would break every historical total. If you find yourself writing `DATE(created_at)`, you have introduced a bug.
 
 ### Paise

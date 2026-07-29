@@ -145,6 +145,14 @@ An outlet code SHALL be unique across the business, and an attempt to reuse one
 SHALL be refused with a message naming the collision rather than a raw database
 error.
 
+The business-day cutover SHALL be presented as the seam between two trading
+days rather than as an opening time, and the form SHALL resolve a full trading
+session against the value currently entered — stating which business day each
+moment would be filed under, and warning when one session would be split across
+more than one business day. The value is still accepted: this is a warning
+about a choice, not a validation rule, because no outlet's real hours are known
+to the form.
+
 #### Scenario: The owner creates the first outlet
 
 - **WHEN** a Super Admin with no outlets in the database submits a new outlet
@@ -162,6 +170,15 @@ error.
 
 - **WHEN** a Super Admin submits an outlet whose code is already in use
 - **THEN** the write is refused and the form explains that the code is taken
+
+#### Scenario: An opening time typed into the cutover is shown splitting a night
+
+- **WHEN** a Super Admin enters a cutover that falls inside trading hours, such
+  as the outlet's opening time
+- **THEN** the form states the window that business day would then cover, shows
+  at least one moment of a single trading session landing on a different
+  business day from the rest, and warns that one night's trading would be split
+  across two business days
 
 ### Requirement: An empty database presents an instruction, not a blank screen
 

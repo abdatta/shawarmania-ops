@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  describeCutover,
   formatBusinessDate,
   formatDate,
   formatDateTime,
   formatTime,
+  QUIET_HOURS_FROM,
+  QUIET_HOURS_UNTIL,
   resolveBusinessDate,
   shiftBusinessDate,
 } from './datetime'
@@ -122,6 +125,87 @@ describe('resolveBusinessDate', () => {
 
   it('rejects an unparseable instant', () => {
     expect(() => resolveBusinessDate('not a date', '04:00')).toThrow(TypeError)
+  })
+})
+
+describe('describeCutover', () => {
+  it('states the window a business day covers', () => {
+    expect(describeCutover('04:00')).toMatchObject({
+      startsAt: '04:00',
+      endsAt: '03:59',
+      endsNextDay: true,
+    })
+  })
+
+  it('closes the window the same day when the cutover is midnight', () => {
+    expect(describeCutover('00:00')).toMatchObject({
+      startsAt: '00:00',
+      endsAt: '23:59',
+      endsNextDay: false,
+    })
+  })
+
+  it('normalises a stored HH:MM:SS cutover', () => {
+    expect(describeCutover('04:00:00').startsAt).toBe('04:00')
+  })
+
+  // The value the outlets were actually set up with, and the reason this
+  // function exists: 12:00 reads like an opening time and behaves like a
+  // guillotine through the middle of a trading day.
+  it('shows an opening-time cutover cutting the session in half', () => {
+    const advice = describeCutover('12:00')
+    expect(advice.splits).toBe(true)
+    expect(advice.session.map((moment) => moment.filedUnder)).toEqual([
+      'the day before',
+      'the day itself',
+      'the day itself',
+      'the day itself',
+    ])
+  })
+
+  it('shows an evening cutover taking the afternoon with it', () => {
+    expect(describeCutover('17:00').session.map((moment) => moment.filedUnder)).toEqual([
+      'the day before',
+      'the day before',
+      'the day itself',
+      'the day itself',
+    ])
+  })
+
+  it('shows a midnight cutover stranding the last bill on the next day', () => {
+    const advice = describeCutover('00:00')
+    expect(advice.splits).toBe(true)
+    expect(advice.session.at(-1)).toMatchObject({ at: '00:30', filedUnder: 'the next day' })
+  })
+
+  it('keeps the whole session on one day at the default cutover', () => {
+    const advice = describeCutover('04:00')
+    expect(advice.splits).toBe(false)
+    expect(advice.session.every((moment) => moment.filedUnder === 'the day itself')).toBe(true)
+  })
+
+  // The screen tells whoever is choosing that anything in the quiet hours is
+  // safe. That claim is only worth making if every minute of it holds.
+  it('leaves a session intact at every minute of the advertised quiet hours', () => {
+    const toMinutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5))
+    const pad = (value: number) => String(value).padStart(2, '0')
+
+    const offenders: string[] = []
+    for (
+      let minute = toMinutes(QUIET_HOURS_FROM);
+      minute <= toMinutes(QUIET_HOURS_UNTIL);
+      minute++
+    ) {
+      const cutover = `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`
+      if (describeCutover(cutover).splits) offenders.push(cutover)
+    }
+
+    expect(offenders).toEqual([])
+  })
+
+  it('rejects a malformed cutover rather than guessing', () => {
+    expect(() => describeCutover('')).toThrow(TypeError)
+    expect(() => describeCutover('4am')).toThrow(TypeError)
   })
 })
 

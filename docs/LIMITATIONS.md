@@ -28,11 +28,15 @@ which is a visible, recorded act.
 
 Self-assignment is refused for everyone except a Super Admin placing themselves
 at an outlet — and nobody at all may grant themselves the owner role. The
-carve-out exists because production holds exactly one Super Admin: requiring a
-second person would make the owner day-running a shop impossible without first
-minting a second owner account, which is a larger security decision than the
-one it avoids. If a second Super Admin ever exists, the carve-out can be
-removed by deleting one branch of one policy.
+carve-out is deliberate, on the owner's principle that **a Super Admin should
+be able to do everything standalone** (2026-07-29): needing a second owner
+present to perform an act is a dependency the business does not want, however
+many owners exist.
+
+It cannot widen anything — an outlet role confers less than the owner role
+already does, and the last live Super Admin assignment stays unremovable — so
+the worst it permits is an owner giving themselves a narrower hat than the one
+they already wear.
 
 ## Deliberately deferred from v1
 

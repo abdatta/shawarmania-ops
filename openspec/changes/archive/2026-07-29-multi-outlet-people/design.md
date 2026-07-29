@@ -244,16 +244,20 @@ to match:
 
 The alternative was requiring a second Super Admin to do it.
 
-**Correction, recorded at deploy time (2026-07-29):** this decision was argued
-on the premise that production held exactly one Super Admin, which the
-pre-deploy dump showed to be false — it holds **two**. The strict rule was
-therefore workable all along: either owner could have placed the other. The
-carve-out was confirmed by the owner anyway, on its own merits rather than on
-necessity: self-granting an *outlet* role cannot escalate to the owner role,
-which stays refused for everybody, and the last live Super Admin assignment
-stays unremovable. It is narrow, database-enforced, and cheap to reverse — one
-branch in one policy — so revisiting it is a follow-up change rather than a
-correction to this one.
+**Correction, recorded at deploy time (2026-07-29):** this decision was first
+argued on the premise that production held exactly one Super Admin, which the
+pre-deploy dump showed to be false — it holds **two**, and the owner knew.
+
+The premise was wrong; the decision was not. The owner's actual reason, given
+when the discrepancy was put to them, is stronger and does not depend on how
+many owners exist: **a Super Admin should be able to do everything standalone.**
+Needing a second owner present to perform an act is a dependency the business
+does not want, at any headcount.
+
+It stays safe for the reasons the rest of this section gives: an outlet role
+confers less than the owner role already does, `super_admin` remains refused as
+a self-grant for everybody, and the last live Super Admin assignment remains
+unremovable — so acting alone can never strand the business.
 
 The Gate clause "nobody assigns themselves anything" becomes "nobody grants
 themselves the owner role, and the last Super Admin cannot lose it".
