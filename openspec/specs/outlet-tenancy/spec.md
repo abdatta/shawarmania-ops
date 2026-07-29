@@ -71,17 +71,18 @@ request, without waiting for its session token to expire.
 
 ### Requirement: An Employee reads only their own records
 
-An Employee session SHALL read only their own attendance rows, and none of any
-colleague, in either outlet.
+An Employee session SHALL read only their own attendance rows — the rows
+keyed to their own account — and none of any colleague, in either outlet.
 
 #### Scenario: Employee lists attendance
 
 - **WHEN** an Employee lists attendance rows
-- **THEN** only rows for their own employee record are returned
+- **THEN** only rows keyed to their own account are returned
 
 #### Scenario: Employee requests a colleague's rows
 
-- **WHEN** an Employee issues a request explicitly naming a colleague's employee id
+- **WHEN** an Employee issues a request explicitly naming a colleague's
+  account id
 - **THEN** zero rows are returned
 
 ### Requirement: A Biller reads only their own shift's bills
@@ -201,17 +202,17 @@ presenting an empty selector.
 
 An outlet SHALL carry an active state that the Super Admin can set. A
 deactivated outlet SHALL disappear from assignment lists and operating views,
-and SHALL NOT cascade: its accounts, its roster rows and its recorded
-attendance SHALL remain exactly as they were, and reactivation SHALL restore
-the outlet with all of them intact.
+and SHALL NOT cascade: its accounts and its recorded attendance SHALL remain
+exactly as they were, and reactivation SHALL restore the outlet with all of
+them intact.
 
 The confirmation for deactivation SHALL state what it does not do, so that an
 owner who expects it to revoke logins is corrected before acting.
 
 #### Scenario: Deactivation leaves accounts and history intact
 
-- **WHEN** a Super Admin deactivates an outlet that has accounts, roster rows
-  and recorded attendance
+- **WHEN** a Super Admin deactivates an outlet that has accounts and recorded
+  attendance
 - **THEN** all of those rows still exist and are unchanged, and reactivating the
   outlet restores it to the lists it left
 
@@ -422,8 +423,8 @@ carries no history, and bounded to that table alone.
 
 #### Scenario: The owner deletes an outlet nothing references
 
-- **WHEN** a Super Admin deletes an outlet that no account, roster row, device,
-  bill, stock item, expense or alert refers to
+- **WHEN** a Super Admin deletes an outlet that no account, device, bill,
+  stock item, expense or alert refers to
 - **THEN** the outlet is removed and no longer appears on any surface
 
 #### Scenario: A populated outlet cannot be deleted
@@ -476,7 +477,7 @@ included without anyone remembering to add it.
 #### Scenario: A blocked delete names what is still attached
 
 - **WHEN** a Super Admin attempts to delete a closed outlet that still has
-  accounts and roster rows
+  accounts and recorded attendance
 - **THEN** the refusal names those things and their counts, in words rather
   than as a constraint name
 

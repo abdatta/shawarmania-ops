@@ -28,8 +28,8 @@ Four roles. The governing rule: **a role's scope is enforced by Row-Level Securi
 | **People** |
 | Manage Franchise Admins | ✓ | — | — | — |
 | Manage Billers and Employees | ✓ | ✓ own outlet | — | — |
-| Manage the staff roster | ✓ any outlet | ✓ own outlet | — | R own row |
-| Link / unlink an account and a roster row | ✓ any outlet | ✓ own outlet | — | — |
+| Edit staff facts (role title, dates; the code is owner-only) | ✓ any outlet | ✓ own outlet | — | R own row |
+| Mark a person departed / returned | ✓ any outlet | ✓ own outlet | — | — |
 | Enrol / revoke counter device | ✓ | ✓ own outlet | — | — |
 | **Menu** |
 | View menu | R all | ✓ own outlet | R own outlet | — |
@@ -46,6 +46,7 @@ Four roles. The governing rule: **a role's scope is enforced by Row-Level Securi
 | Record | — | ✓ own outlet | — | — |
 | **Attendance** |
 | Check in / out | — | ✓ self | — | ✓ self |
+| Enter attendance for someone (past time, today) | ✓ any outlet | ✓ own outlet | — | — |
 | View attendance | R all | ✓ own outlet | — | R self |
 | Override a failed geofence check | ✓ | ✓ own outlet | — | — |
 | **Daily cash** |
@@ -107,14 +108,13 @@ code is broken" and nothing contradicts it.
 
 Nobody manages their own account. Locking the only Super Admin out has no in-app recovery, and re-issuing your own code is meaningless while you are signed in.
 
-**Joining an account to a roster row** is a different kind of write and is governed differently. An app account (`profiles`) and a payroll roster row (`employees`) are separate records on purpose — a griller who never touches the app is on the roster and has no login; a relief manager may have a login and never appear on a payroll. The link between them is `employees.profile_id`, and it is what makes an Employee's own attendance findable at all.
+**Editing a person's staff facts** is a different kind of write and is governed differently. Since `staff-as-accounts` (#21) the person *is* the account: there is no roster table and no link step, and a griller who never touches the app is simply an account on a placeholder address that cannot be signed in with. Staff facts — role title, joining and leaving dates, the issued staff code — are an **ordinary column-scoped write under Row-Level Security**, made by the admin's own session rather than by the privileged function: the column grant plus `profiles_update_staff` allow the Super Admin any outlet and a Franchise Admin their own, while identity and access columns (role, outlet, active, the sign-in address) stay reachable only through the privileged function. Three rules are enforced by the database, not the form:
 
-Unlike provisioning, that link is an **ordinary outlet-scoped write under Row-Level Security**, made by the admin's own session rather than by a privileged function. The service-role key exists because RLS cannot create an `auth.users` row; a roster column is not that, and moving it behind the key would put it beyond the policies that already govern it. Two rules are enforced by the database, not the form:
+- only the Super Admin may change an issued staff code (`staff_code_guard`), and an issued code can never be blanked;
+- `left_on` cannot precede `joined_on`; and
+- **departure and deactivation are independent facts** — marking someone departed does not end their sessions, and deactivating them does not remove them from the staff record. The People surface offers both together at departure so neither is forgotten.
 
-- the linked account must belong to the **same outlet** as the roster row (`employee_profile_same_outlet`), and
-- one account may hold **at most one** roster row (`employees.profile_id` is unique) — two people sharing a login would make every attendance record ambiguous about who actually stood there.
-
-Unlinking stops that account reading or writing that roster row's attendance and **leaves every recorded day in place**, because the days were worked.
+**Deleting a person with recorded history is refused by the database itself**: every foreign key onto `profiles` is NO ACTION (the sole exception is the invite cascade), so the account stays because the days were worked. Remove access by deactivating; remove list membership with a leaving date.
 
 ### Counter tablet — device enrolment + shift PIN
 
@@ -135,7 +135,7 @@ Employees check in from their own phones. The browser's Geolocation API supplies
 
 **Policy: block outside the geofence, with a Franchise Admin override.** A check-in beyond the radius is refused and offers to request an override; the manager approves from their phone, and the approval is recorded on the attendance row with who approved it and why.
 
-The counter tablet is the **secondary check-in path** and the practical escape hatch. If an employee's phone is dead, out of data, or cannot get a GPS fix, they check in on the tablet — which is unambiguously in the shop. This is what makes hard-blocking survivable in daily use: there is always a way to clock in that does not depend on one person's phone behaving.
+**Manager-entered attendance is the escape hatch.** An attendance kiosk on the counter tablet was considered and rejected by the owner (2026-07-28) — one shared device, usually busy billing, is the wrong place for everyone's check-in queue. Instead, when a phone is dead, out of data, or cannot get a fix, a Franchise Admin records the check-in or check-out themselves: past times only, on the outlet's current business day, and the row carries `manual` as its source with the enterer's identity stamped server-side, so it always reads *entered by* that admin. The Super Admin can do the same at any outlet; an Employee or Biller session is refused by policy. Manual events carry no coordinates and are never judged by the fence — the fence judges a phone's claim to be standing somewhere, and an admin's entry is an attestation, not a claim. This is what makes hard-blocking survivable in daily use: there is always a way to record a shift that does not depend on one person's phone behaving.
 
 Every attendance row stores the captured coordinates, the GPS accuracy, the computed distance, and the source. Storing the inputs beside the verdict is what makes a disputed check-in reviewable — "the app said no" is not an acceptable answer to an employee about their pay.
 

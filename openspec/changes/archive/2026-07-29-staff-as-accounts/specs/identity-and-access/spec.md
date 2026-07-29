@@ -71,10 +71,10 @@ never deletion.
 
 ### Requirement: Departure and access are two independent facts
 
-Whether an account may sign in (`is_active`) and whether the person still
-works here (`left_on`) SHALL be two columns with no database coupling,
-because one bit cannot express "access cut but still employed" — the state
-the emergency lever produces.
+The people model SHALL keep whether an account may sign in (`is_active`) and
+whether the person still works here (`left_on`) as two columns with no
+database coupling, because one bit cannot express "access cut but still
+employed" — the state the emergency lever produces.
 
 Deactivating an account SHALL end its open session immediately and SHALL NOT
 remove the person from the staff list or the day's attendance surface.
@@ -114,11 +114,12 @@ expense when the owner wants it in the books.
 
 ### Requirement: A placeholder address is visible, not silent
 
-An account whose address is a migration placeholder (one that cannot receive
-anything) SHALL be visibly marked on the People surface as needing a real
-address, and the fix SHALL be the existing address-correction path followed
-by issuing a code. Nothing SHALL send anything to a placeholder address,
-because no code exists for such an account until an admin has replaced it.
+An account whose address is a migration placeholder SHALL be visibly marked
+on the People surface as needing a real address — a placeholder being one
+that cannot receive anything — and the fix SHALL be the existing
+address-correction path followed by issuing a code. Nothing SHALL send
+anything to a placeholder address, because no code exists for such an
+account until an admin has replaced it.
 
 #### Scenario: A migrated person's address asks to be fixed
 
@@ -305,6 +306,39 @@ inert for anyone else, so the refusal is not discovered by attempting it.
 
 - **WHEN** a Super Admin sets a new staff code on a staff account
 - **THEN** the write succeeds and the People surface shows the new code
+
+### Requirement: A person's name is never blank
+
+A person's account SHALL carry a non-empty full name, enforced by the
+database and not only by a form. A name consisting entirely of whitespace
+SHALL be refused.
+
+A name is the only field on the record that a human reads to know who the
+record is about. A staff code disambiguates two people with the same name; it
+does not identify a person with no name at all. The same reasoning that made a
+blank staff code unacceptable applies with more force to the name beside it.
+
+The surface that writes the record SHALL refuse before writing and SHALL name
+the field that is missing, on the People surface's create and edit paths
+alike.
+
+#### Scenario: A person cannot be created without a name
+
+- **WHEN** an admin submits the People form with the full name empty or
+  containing only spaces
+- **THEN** no account is created, no one-time code is issued, and the form says
+  which field is missing
+
+#### Scenario: The database refuses a blank name whatever the client sends
+
+- **WHEN** any caller inserts or updates a profile whose full name is empty or
+  entirely whitespace, including by a request that bypasses the form
+- **THEN** the database refuses the write
+
+#### Scenario: An existing person cannot be edited into a nameless one
+
+- **WHEN** an admin edits a person and clears the full name
+- **THEN** the write is refused and the row keeps the name it had
 
 ## REMOVED Requirements
 

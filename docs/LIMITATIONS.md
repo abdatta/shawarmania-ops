@@ -32,7 +32,7 @@ This is the single largest known inaccuracy in the P&L. Worth fixing when aggreg
 
 ### Payroll is out of scope
 
-`salary_paise` on an employee is a reference figure for cost estimates. Nothing disburses money, tracks advances, or computes statutory deductions.
+There is no salary data anywhere in the schema or the UI — `staff-as-accounts` (#21) removed the roster's `salary_paise` rather than migrating it, by owner decision. Attendance feeds whatever payroll process the business runs outside the app, and wages actually paid are recorded as ordinary expenses under the `salaries` category. If payroll ever becomes in-scope, salary fields return by migration onto the person's account record — nothing else has to move.
 
 ### Menu is per-outlet, with no shared catalogue
 

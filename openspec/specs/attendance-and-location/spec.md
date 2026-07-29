@@ -29,6 +29,25 @@ business date.
 - **WHEN** a second attendance row is inserted for the same employee and business date
 - **THEN** the database rejects it with a constraint violation
 
+### Requirement: Attendance belongs to the person's account
+
+An attendance row SHALL reference the person's account record directly, with
+one row per person per business day. Rows SHALL survive the person's
+departure and the account's deactivation — the days were worked — and
+recorded attendance SHALL block deletion of the account it belongs to.
+
+#### Scenario: Departure does not touch the record
+
+- **WHEN** a person with recorded attendance is marked departed or their
+  account is deactivated
+- **THEN** every attendance row remains, attributed to the same person
+
+#### Scenario: One row per person per day
+
+- **WHEN** a second check-in is recorded for a person on a business day that
+  already holds their row
+- **THEN** the existing row is updated; no second row is created
+
 ### Requirement: A closed outlet accepts no new check-ins and never blocks a check-out
 
 A check-in recorded against an outlet whose active state is off SHALL be
@@ -55,19 +74,6 @@ started.
 
 - **WHEN** a deactivated outlet is reactivated
 - **THEN** check-ins are accepted again with no other intervention
-
-### Requirement: An employee with no linked roster row is told what is missing
-
-An account whose profile is linked to no roster row SHALL be told, on its own
-attendance surface, that it is not on the staff list and that an admin must add
-them — not shown an empty day, an error, or a check-in control that cannot
-work.
-
-#### Scenario: A signed-in Employee who is on no roster
-
-- **WHEN** an Employee with no linked roster row opens their attendance surface
-- **THEN** they are told they are not on the staff list yet and that their
-  manager can add them, and no check-in control is offered
 
 ### Requirement: An employee checks in and out from their own phone
 
@@ -198,36 +204,96 @@ accuracy, source, and any override with its approver and reason.
 ### Requirement: A manager reviews the outlet's attendance day
 
 A Franchise Admin SHALL be able to view their own outlet's attendance for a
-chosen business day, showing for each employee the check-in and check-out
-times, the distance and accuracy of each reading, the source, and any flags,
-and SHALL be able to act on pending overrides from that view.
+chosen business day, showing for each current staff member the check-in and
+check-out times, the distance and accuracy of each reading, the source, and
+any flags, and SHALL be able to act on pending overrides and record manual
+entries from that view. A person whose account is deactivated but who has not
+left SHALL still be listed — cutting access does not falsify the day.
 
 #### Scenario: A manager opens the day
 
 - **WHEN** a Franchise Admin opens attendance for a business day
-- **THEN** every roster employee's record for that day is listed with times, evidence, and flags, and rows awaiting an override are distinguished
+- **THEN** every current staff member's record for that day is listed with
+  times, evidence, and flags; rows awaiting an override are distinguished;
+  and manually entered events show who entered them
 
 #### Scenario: A manager opens a day at another outlet
 
-- **WHEN** a Franchise Admin requests attendance rows belonging to an outlet other than their own
+- **WHEN** a Franchise Admin requests attendance rows belonging to an outlet
+  other than their own
 - **THEN** no rows are returned
 
-### Requirement: A manager maintains the employee roster
+#### Scenario: A deactivated person is still on the day
 
-A Franchise Admin SHALL be able to list, add, and edit their own outlet's
-employee roster, including employment status, and a Super Admin SHALL be able
-to do so for any outlet. Roster records SHALL remain distinct from app
-accounts: an employee may exist without a login.
+- **WHEN** a person's account is deactivated with no departure recorded
+- **THEN** they remain listed on the outlet's attendance day
 
-#### Scenario: A manager adds an employee
+### Requirement: An admin records attendance on someone's behalf
 
-- **WHEN** a Franchise Admin adds an employee to their outlet with a code and name
-- **THEN** the roster row is created for their own outlet, with no app account implied or required
+A Franchise Admin SHALL be able to record a check-in or check-out for a
+person at their own outlet, and a Super Admin for a person at any outlet, at
+a past or current time on the outlet's current business day — never a future
+time. This is the escape hatch that keeps hard geofence blocking humane: the
+phone died, the person forgot, the network was down.
 
-#### Scenario: A manager ends someone's employment
+A manual entry SHALL be stamped by the database with who entered it — the
+enterer's id and a snapshot of their name, never client-supplied — and with a
+source that names it manual. It SHALL carry no coordinates, because the admin
+was not standing where the person was and fabricated evidence is worse than
+none; the geofence SHALL NOT judge a manual event. The enterer stamp is the
+accountability in evidence's place.
 
-- **WHEN** a Franchise Admin sets an employee's employment status to inactive or terminated
-- **THEN** the roster reflects it and that employee is no longer offered for new attendance
+An Employee or counter-device session SHALL be refused a manual entry by the
+database, not only by the absence of a control.
+
+#### Scenario: A past-time check-in for someone else
+
+- **WHEN** a Franchise Admin records a check-in for a person at their outlet
+  with this morning's time
+- **THEN** the row holds that time, source manual, and the admin's identity
+  and name as enterer, stamped by the database
+
+#### Scenario: A manual entry is visibly not a self check-in
+
+- **WHEN** any surface renders an attendance event that was entered manually
+- **THEN** it shows who entered it in place of GPS evidence, distinct from a
+  phone self check-in, wherever attendance is read
+
+#### Scenario: A future time is refused
+
+- **WHEN** an admin attempts a manual entry with a time later than now
+- **THEN** the database refuses the write
+
+#### Scenario: A non-admin cannot fabricate a manual entry
+
+- **WHEN** an Employee or counter-device session hand-crafts a write with
+  source manual
+- **THEN** the database refuses it
+
+#### Scenario: The enterer stamp cannot be forged
+
+- **WHEN** a manual entry is written naming some other account as its enterer
+- **THEN** the stored enterer is the session that actually wrote it
+
+### Requirement: A manager maintains the outlet's staff list
+
+A Franchise Admin SHALL be able to list and edit the staff facts of people at
+their own outlet, and a Super Admin at any outlet, on the account records
+themselves — there is no separate roster. Marking a person departed SHALL
+remove them from the staff list and from new attendance days while every
+recorded row survives.
+
+#### Scenario: A manager edits a person
+
+- **WHEN** a Franchise Admin edits the job title or joining date of a person
+  at their outlet
+- **THEN** the account record reflects it everywhere people are shown
+
+#### Scenario: A manager ends someone's time at the outlet
+
+- **WHEN** a Franchise Admin marks a person as having left
+- **THEN** the person leaves the staff list and is no longer offered for new
+  attendance, and their recorded days remain
 
 ### Requirement: An outlet's position is captured on site, by the owner
 

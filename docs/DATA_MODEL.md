@@ -13,7 +13,7 @@ Applied everywhere, without exception:
 - **Every outlet-scoped table** carries `outlet_id uuid not null references outlets(id)` and ships an RLS policy in the same migration.
 - **Enums** are Postgres enum types, so an invalid value is a constraint violation rather than a bad row.
 - **A required text column cannot be blank.** `not null` stops a column being *absent* and says nothing about it being *empty*, and an empty string satisfies it while satisfying nothing a person needs — which is how an outlet with no name reached production. Every `not null` text column a human types and a human later reads to identify something carries `check (length(btrim(<column>)) > 0)`, named `<table>_<column>_not_blank`. `btrim` is the point: whitespace-only is the case a naive `<> ''` guard still lets through. The forms refuse it too, but the forms are the convenience — this is the boundary. Nullable columns are deliberately exempt: a blank optional field is stored as `null`, which is the correct representation of *not known*.
-- Rows are **soft-deleted** (`is_active`, or a status enum) wherever history matters. Menu items and employees are never hard-deleted — old bills and attendance records reference them. **One row can be hard-deleted, and only one: an `outlet` that nothing anywhere references** (see below). The rule protects history; an outlet with no staff, no accounts, no recorded days and no bills has none.
+- Rows are **soft-deleted** (`is_active`, or a status enum) wherever history matters. Menu items and people (`profiles`) are never hard-deleted — old bills and attendance records reference them. **One row can be hard-deleted, and only one: an `outlet` that nothing anywhere references** (see below). The rule protects history; an outlet with no staff, no accounts, no recorded days and no bills has none.
 - **Client privileges are explicit grants**, not defaults: the final migration is the manifest of every verb a session may even attempt (current Supabase images grant clients nothing automatically). DELETE is granted to **exactly one** client capability — the Super Admin deleting an `outlet` nothing references, added by `20260728000001_outlet_deletion.sql` — and to no client role on any other table. `anon` holds nothing anywhere.
 
 ## Tenancy and identity
@@ -23,16 +23,18 @@ Applied everywhere, without exception:
 
 Coordinates and radius exist for attendance verification. The cutover time is what makes cross-midnight trade reconcile correctly.
 
-`staff_code_prefix` is the three characters every staff code at this outlet begins with — `KAL`, `KAN` — unique across outlets and enforced as such. It is stored rather than derived from `code` at read time, because a derivation can collide retroactively: `kalyani` and a future `kalimpong` both truncate to `KAL`, and by then `KAL-` codes belong to somebody. When an outlet is created without one the database derives it (first three alphanumerics of the code, uppercased, numeric suffix if taken), so the form pre-fills a proposal rather than asking a question. **It freezes the moment any roster row exists at that outlet**, enforced by `outlet_prefix_guard`: every code already issued reads from it, and re-pointing it would leave them naming something that no longer exists.
+`staff_code_prefix` is the three characters every staff code at this outlet begins with — `KAL`, `KAN` — unique across outlets and enforced as such. It is stored rather than derived from `code` at read time, because a derivation can collide retroactively: `kalyani` and a future `kalimpong` both truncate to `KAL`, and by then `KAL-` codes belong to somebody. When an outlet is created without one the database derives it (first three alphanumerics of the code, uppercased, numeric suffix if taken), so the form pre-fills a proposal rather than asking a question. **It freezes the moment any staff code has been issued at that outlet**, enforced by `outlet_prefix_guard`: every code already issued reads from it, and re-pointing it would leave them naming something that no longer exists.
 
-**The one table a client may delete from.** `outlets_delete` lets the Super Admin remove an outlet, and seventeen foreign keys — not one of which cascades — mean the delete succeeds only while nothing anywhere references it. There is no bookkeeping column and no maintained list: the check *is* the live referential state, so an outlet whose staff and stock have been moved elsewhere becomes deletable on its own with nothing to re-mark. A deactivated account still counts as a reference. `public.outlet_reference_counts(uuid)` reads the foreign-key set from the catalog and reports what is still attached, so a table added later is covered without anyone editing it.
+**The one table a client may delete from.** `outlets_delete` lets the Super Admin remove an outlet, and sixteen foreign keys — not one of which cascades — mean the delete succeeds only while nothing anywhere references it. There is no bookkeeping column and no maintained list: the check *is* the live referential state, so an outlet whose staff and stock have been moved elsewhere becomes deletable on its own with nothing to re-mark. A deactivated account still counts as a reference. `public.outlet_reference_counts(uuid)` reads the foreign-key set from the catalog and reports what is still attached, so a table added later is covered without anyone editing it.
 
 `is_active` remains the answer for an outlet that traded — its staff, attendance and bills are history the business keeps. Deletion is for an outlet that should never have existed, and the app offers it only once the outlet is already marked closed.
 
-**`profiles`** — one row per app login, `id` matching `auth.users.id`.
-`id`, `full_name`, `phone`, `role` (`super_admin` | `franchise_admin` | `biller` | `employee`), `outlet_id` (null only for `super_admin`), `is_active`, `created_at`.
+**`profiles`** — one row per person, `id` matching `auth.users.id`.
+`id`, `full_name`, `phone`, `role` (`super_admin` | `franchise_admin` | `biller` | `employee`), `outlet_id` (null only for `super_admin`), `is_active`, `staff_code` (issued — see below), `role_title`, `joined_on`, `left_on`, `created_at`.
 
 Mirrored into JWT claims by the access-token hook. `is_active` is checked in policies directly so deactivation takes effect immediately rather than at next token refresh.
+
+**The person is the account** (`staff-as-accounts`, #21): there is no separate roster table and no link step. A person who never opens the app still exists as an account, provisioned on a placeholder address under the reserved `.invalid` TLD — it cannot be signed in with, and the People surface shows it as *Needs an address* rather than passing it off as real. `is_active` and `left_on` are **two independent facts**: deactivation is the session lever and bites immediately; a `left_on` date is staff-list membership — it removes the person from lists and today's attendance surface while every recorded day stays. No payroll column exists anywhere, by owner decision. **Deleting a person with recorded history is refused by the foreign keys themselves**: every FK onto `profiles(id)` is NO ACTION except the invite cascade, and a migration-time self-check aborts a deploy that ever introduces another cascade.
 
 **`counter_devices`** — enrolled tablets.
 `id`, `outlet_id`, `label`, `enrolled_by`, `enrolled_at`, `revoked_at`, `last_seen_at`.
@@ -91,22 +93,22 @@ Quantity is `numeric`, not integer paise — 1.5 kg is a real quantity. Money on
 
 Only expenses with `payment_method = 'cash'` affect the daily cash record.
 
-## Employees and attendance
+## Staff facts and attendance
 
-**`employees`** — `id`, `outlet_id`, `profile_id` (nullable), `employee_code` (issued, see below), `full_name`, `phone`, `salary_paise`, `address`, `role_title`, `employment_status` (`active` | `inactive` | `terminated`), `joined_on`.
+Staff facts live on `profiles` — there is no employees table since #21. The columns are `staff_code`, `role_title`, `joined_on` and `left_on`, updatable as an ordinary column-scoped RLS write (`profiles_update_staff`: the Super Admin at any outlet, a Franchise Admin at their own); identity and access columns stay reachable only through the privileged function.
 
-**`employee_code` is issued by the database, never asked for.** A `before insert` trigger fills a blank or absent code with the outlet's `staff_code_prefix`, a hyphen, and four characters of Crockford base32 — `KAL-7KQ2`. The alphabet drops `I`, `L`, `O` and `U` because these codes are read aloud across a counter and dictated down a phone. A code that *was* supplied is stored unchanged, so an import arriving with its own numbering keeps working. Blank and absent mean the same thing on insert (*issue me one*) and different things on update, where `employees_code_not_blank` still refuses a blank outright — the row already has a code, so clearing it is a mistake rather than a request.
+**`staff_code` is issued by the database, never asked for.** A trigger fills a blank or absent code — for person roles with an outlet, on insert — with the outlet's `staff_code_prefix`, a hyphen, and four characters of Crockford base32 — `KAL-7KQ2`. The alphabet drops `I`, `L`, `O` and `U` because these codes are read aloud across a counter and dictated down a phone. A code that *was* supplied is stored unchanged, so an import arriving with its own numbering keeps working. Blank and absent mean the same thing on insert (*issue me one*) and different things on update, where `profiles_staff_code_not_blank` still refuses a blank outright — the row already has a code, so clearing it is a mistake rather than a request. `unique (outlet_id, staff_code)`.
 
-The column is **display-only**: nothing keys on it. `attendance.employee_id` references the roster row's UUID, there is no foreign key on `employee_code`, and no query looks a person up by it. Its whole job is telling two people with the same name apart in three lists. **Only the Super Admin may change one**, enforced by `employee_code_guard` rather than by the form — `employees_update` is a row policy, and a row policy permits every column on a row it permits, so a restriction living in the UI would be decoration.
+The column is **display-only**: nothing keys on it. `attendance.person_id` references the account's UUID, there is no foreign key on `staff_code`, and no query looks a person up by it. Its whole job is telling two people with the same name apart in lists. **Only the Super Admin may change one**, enforced by `staff_code_guard` rather than by the form — `profiles_update_staff` is a row policy, and a row policy permits every granted column on a row it permits, so a restriction living in the UI would be decoration.
 
-`profile_id` is nullable because an employee record can exist before — or without — an app login. The employee roster and the auth system are deliberately separate concerns.
-
-**`attendance`** — `id`, `outlet_id`, `employee_id`, `business_date`, `status` (`present` | `absent` | `half_day` | `leave`),
-check-in: `check_in_at`, `check_in_lat`, `check_in_lng`, `check_in_accuracy_m`, `check_in_distance_m`, `check_in_source` (`phone` | `counter_tablet`),
-check-out: the same five fields prefixed `check_out_`,
+**`attendance`** — `id`, `outlet_id`, `person_id` (→ `profiles(id)`, no cascade), `business_date`, `status` (`present` | `absent` | `half_day` | `leave`),
+check-in: `check_in_at`, `check_in_lat`, `check_in_lng`, `check_in_accuracy_m`, `check_in_distance_m`, `check_in_source` (`phone` | `counter_tablet` | `manual`), `check_in_entered_by`, `check_in_entered_by_name`,
+check-out: the same seven fields prefixed `check_out_`,
 override: `override_by`, `override_reason`, `override_at`.
 
-`unique (employee_id, business_date)`.
+`unique (person_id, business_date)`.
+
+**A `manual` event is an admin recording attendance on someone's behalf** — the escape hatch for a phone that cannot check in, the kiosk having been rejected. The `entered_by` / `entered_by_name` pair is stamped by the guard trigger from the acting session, never accepted from the client; constraints tie the pair to the `manual` source and forbid coordinates on manual events, so the geofence never judges them. Times must be in the past, on the outlet's current business day. A Franchise Admin enters for their own outlet, the Super Admin for any; an Employee or Biller session is refused.
 
 Captured coordinates, GPS accuracy, **and** computed distance are all stored. Storing the inputs alongside the verdict is what makes a disputed check-in reviewable instead of a black box — "the app said no" is not an acceptable answer to an employee.
 

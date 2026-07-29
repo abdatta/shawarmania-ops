@@ -36,7 +36,7 @@ The isolation test suite asserts this for every outlet-scoped table (see [Testin
 | Data | Whose | Why | Rules |
 |---|---|---|---|
 | Name, phone | Customer | Repeat-customer records, future digital receipts | Optional at billing. Never logged, never exported casually |
-| Name, phone, address, salary | Employee | Roster and cost estimates | Visible to their outlet's admin and the owner. Never to other staff |
+| Name, phone, staff facts (code, role title, joining/leaving dates) | Staff | The staff record on their account | Visible to their outlet's admin and the owner. Never to other staff. No salary and no home address is stored anywhere |
 | Check-in coordinates, accuracy, distance | Employee | Attendance verification | Captured only at check-in and check-out. Never continuous |
 | Bill contents | Customer | The transaction record | Retained; identifiable only where a customer was recorded |
 | Hash of a caller's IP address | Whoever fails an activation | Bounding code guessing | Never the address itself, and only on failure. Pruned to the fifteen-minute window; readable by nobody, only counted |

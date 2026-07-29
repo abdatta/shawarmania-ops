@@ -10,7 +10,7 @@ The project exists because Shawarmania has outgrown running two counters on memo
 - **Menu management** — items, categories, prices, availability, per outlet.
 - **Inventory** — stock added, used, wasted, corrected, with low-stock warnings.
 - **Expenses** — categorised outlet spending with payment method and who recorded it.
-- **Employees and attendance** — staff records, check-in/check-out with location verification, attendance history.
+- **People and attendance** — staff as app accounts, check-in/check-out with location verification, manager-entered attendance when a phone cannot, attendance history.
 - **Daily cash** — opening float, cash sales, cash expenses, withdrawals, expected vs actual closing, and the difference.
 - **Profit and loss** — basic outlet-level operational estimates, and cross-outlet comparison for the owner.
 - **Alerts** — outlet managers raise issues to the owner and get responses.
@@ -21,7 +21,7 @@ Deliberately out of scope. Each of these is a real thing a restaurant might want
 
 - **It is not an accounting system.** Profit and loss here is an operational estimate for running a shop, not a filing-grade financial report. See [Limitations](LIMITATIONS.md) for what that means concretely.
 - **It is not a customer-facing ordering app.** Swiggy and Zomato already do delivery; those orders are recorded as bills, not fulfilled here.
-- **It does not do payroll.** Employee salary is stored as a reference figure for cost estimates; it does not run disbursements.
+- **It does not do payroll.** No salary is stored anywhere in the system (owner decision, 2026-07-28). Attendance feeds whatever payroll process runs outside the app, and wages actually paid are recorded as expenses like any other cost.
 - **It does not integrate with Swiggy/Zomato APIs.** Aggregator orders are entered at the counter as bills with the matching payment method.
 - **It does not print receipts, compute GST, or send digital receipts** — in v1. The data model is built so all three can be added without migrating historical bills. See [Limitations](LIMITATIONS.md).
 - **It is not a supplier or purchase-order system.** Stock arriving is a movement and an expense, not a procurement workflow.
