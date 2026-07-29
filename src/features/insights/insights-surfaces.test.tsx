@@ -81,9 +81,7 @@ describe('ComparisonSurface', () => {
     renderSurface(<ComparisonSurface />)
 
     await screen.findByText('Shawarmania Kalyani')
-    expect(screen.getByTestId('comparison-basis-note')).toHaveTextContent(
-      PROFIT_BASIS_LABELS.cash,
-    )
+    expect(screen.getByTestId('comparison-basis-note')).toHaveTextContent(PROFIT_BASIS_LABELS.cash)
 
     await user.selectOptions(screen.getByTestId('comparison-basis'), 'consumption')
     await waitFor(() =>

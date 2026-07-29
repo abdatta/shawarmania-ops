@@ -108,7 +108,11 @@ export function ShiftUnlock() {
       />
 
       {error && (
-        <p role="alert" data-testid="shift-error" className="mb-3 text-sm font-semibold text-danger">
+        <p
+          role="alert"
+          data-testid="shift-error"
+          className="mb-3 text-sm font-semibold text-danger"
+        >
           {error}
         </p>
       )}

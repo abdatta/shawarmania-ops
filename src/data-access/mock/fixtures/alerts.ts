@@ -95,7 +95,8 @@ export const alertSeeds: AlertSeed[] = [
     priority: 'normal',
     status: 'resolved',
     subject: 'Grill regulator replaced',
-    message: 'The regulator was leaking. Replaced it this afternoon; the expense is on today’s list.',
+    message:
+      'The regulator was leaking. Replaced it this afternoon; the expense is on today’s list.',
     daysAgo: 0,
     time: '13:20',
     responses: [
@@ -118,7 +119,8 @@ export const alertSeeds: AlertSeed[] = [
     priority: 'low',
     status: 'open',
     subject: 'Packaging supplier raised prices',
-    message: 'Boxes are up by ₹2 each from next month. Worth asking the Kalyani supplier for a quote?',
+    message:
+      'Boxes are up by ₹2 each from next month. Worth asking the Kalyani supplier for a quote?',
     daysAgo: 1,
     time: '16:20',
   },

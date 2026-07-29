@@ -55,13 +55,7 @@ function slotFor(outletId: string): string {
 export type MenuCategoryKey = 'shawarma' | 'burgers'
 
 export type MenuItemKey =
-  | 'classic'
-  | 'mayo'
-  | 'double'
-  | 'mozzarella'
-  | 'salad'
-  | 'stuffed'
-  | 'burger'
+  'classic' | 'mayo' | 'double' | 'mozzarella' | 'salad' | 'stuffed' | 'burger'
 
 const CATEGORY_ORDER: MenuCategoryKey[] = ['shawarma', 'burgers']
 

@@ -54,7 +54,8 @@ export function createMockInventoryAdapter(store: DemoStore): InventoryAdapter {
       .filter((movement) => movement.inventory_item_id === itemId)
       .sort(
         (a, b) =>
-          a.business_date.localeCompare(b.business_date) || a.created_at.localeCompare(b.created_at),
+          a.business_date.localeCompare(b.business_date) ||
+          a.created_at.localeCompare(b.created_at),
       )
 
   /** The cache, recomputed. Always equal to the ledger, because it *is* the ledger. */

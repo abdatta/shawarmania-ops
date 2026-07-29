@@ -1,8 +1,4 @@
-import {
-  AlertActionError,
-  type AlertsAdapter,
-  type InsightsAdapter,
-} from '../adapters'
+import { AlertActionError, type AlertsAdapter, type InsightsAdapter } from '../adapters'
 
 /**
  * The real alerts and insights adapters — **deliberately not connected yet**.

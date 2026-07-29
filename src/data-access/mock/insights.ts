@@ -121,8 +121,7 @@ export function createMockInsightsAdapter(
   function consumedMovements(outletId: string, dates: readonly string[]): ConsumedMovement[] {
     return store.inventoryMovements
       .filter(
-        (movement) =>
-          movement.outlet_id === outletId && dates.includes(movement.business_date),
+        (movement) => movement.outlet_id === outletId && dates.includes(movement.business_date),
       )
       .map((movement) => {
         const item = store.inventoryItems.find(

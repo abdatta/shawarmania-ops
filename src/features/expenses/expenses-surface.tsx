@@ -221,11 +221,13 @@ export function ExpensesSurface() {
             onChange={(event) => setBusinessDate(event.target.value)}
             data-testid="expense-day"
           >
-            {Array.from({ length: 7 }, (_, index) => shiftBusinessDate(today, -index)).map((date) => (
-              <option key={date} value={date}>
-                {formatBusinessDate(date)}
-              </option>
-            ))}
+            {Array.from({ length: 7 }, (_, index) => shiftBusinessDate(today, -index)).map(
+              (date) => (
+                <option key={date} value={date}>
+                  {formatBusinessDate(date)}
+                </option>
+              ),
+            )}
           </Select>
         </div>
       )}

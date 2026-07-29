@@ -286,8 +286,8 @@ function AttentionRow({
   if (items.length === 0) {
     return (
       <p className="text-xs text-content-muted" data-testid={`attention-${outletId}`}>
-        {summary.checkedInCount === 1 ? '1 person' : `${summary.checkedInCount} people`} checked in ·
-        nothing needs attention
+        {summary.checkedInCount === 1 ? '1 person' : `${summary.checkedInCount} people`} checked in
+        · nothing needs attention
       </p>
     )
   }

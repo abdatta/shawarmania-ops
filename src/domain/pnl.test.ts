@@ -116,9 +116,9 @@ describe('profit estimation', () => {
 
     const consumption = profitEstimate('consumption', inputs)
     expect(consumption.consumedPaise).toBeGreaterThan(0)
-    expect(
-      consumption.salesPaise - consumption.expensesPaise - consumption.consumedPaise,
-    ).toBe(consumption.profitPaise)
+    expect(consumption.salesPaise - consumption.expensesPaise - consumption.consumedPaise).toBe(
+      consumption.profitPaise,
+    )
 
     expect(PROFIT_BASIS_LABELS.cash).not.toBe(PROFIT_BASIS_LABELS.consumption)
   })

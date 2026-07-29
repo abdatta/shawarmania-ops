@@ -11,10 +11,7 @@ import {
 } from '../adapters'
 import type { Tables } from '../database.types'
 import { accountFixtures } from './fixtures/accounts'
-import {
-  DEMO_BILLER_PIN,
-  DEMO_COUNTER_DEVICE_ID,
-} from './fixtures/billing'
+import { DEMO_BILLER_PIN, DEMO_COUNTER_DEVICE_ID } from './fixtures/billing'
 import type { DemoStore } from './store'
 
 /**
@@ -52,9 +49,7 @@ const SEND_LATENCY_MS = 400
 const TICK_MS = 1000
 
 function nameOf(profileId: string): string {
-  return (
-    accountFixtures.find((account) => account.id === profileId)?.full_name ?? 'Unknown biller'
-  )
+  return accountFixtures.find((account) => account.id === profileId)?.full_name ?? 'Unknown biller'
 }
 
 function toShift(row: Tables<'shifts'>): CounterShift {

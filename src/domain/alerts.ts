@@ -57,7 +57,10 @@ export const ALERT_PRIORITY_ORDER: readonly AlertPriority[] = ['urgent', 'high',
  * than an open normal one, because the open one has not been read yet. Within a
  * status, priority decides.
  */
-export function alertAttentionRank(alert: { status: AlertStatus; priority: AlertPriority }): number {
+export function alertAttentionRank(alert: {
+  status: AlertStatus
+  priority: AlertPriority
+}): number {
   const statusRank: Record<AlertStatus, number> = {
     open: 0,
     acknowledged: 1,

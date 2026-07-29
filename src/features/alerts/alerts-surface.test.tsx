@@ -112,7 +112,9 @@ describe('AlertsSurface — the owner’s inbox', () => {
       ),
     )
     // Still open: reading something is not the same as acting on it.
-    expect(within(screen.getByTestId('alert-detail')).getByText('Status — Open')).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('alert-detail')).getByText('Status — Open'),
+    ).toBeInTheDocument()
   })
 
   it('walks the sequence and offers nothing once an alert is closed', async () => {
@@ -171,8 +173,9 @@ describe('AlertsSurface — the manager’s end', () => {
     )
 
     const raised = await store.alerts.listAlerts()
-    expect(raised.find((alert) => alert.subject === 'Freezer is not holding temperature')?.status)
-      .toBe('open')
+    expect(
+      raised.find((alert) => alert.subject === 'Freezer is not holding temperature')?.status,
+    ).toBe('open')
   })
 
   it('refuses a blank message by naming the field, and records nothing', async () => {

@@ -226,16 +226,16 @@ export function DailyCashSurface() {
               <ul className="space-y-1 text-xs text-content">
                 {day.exceptions.map((exception) => (
                   <li key={exception.billId} data-testid={`exception-${exception.billId}`}>
-                    {billReference(exception.billNumber)} — <Money paise={exception.totalPaise} />{' '}
-                    ({exception.paymentMethod}), rung {formatDateTime(exception.createdAt)} and
+                    {billReference(exception.billNumber)} — <Money paise={exception.totalPaise} /> (
+                    {exception.paymentMethod}), rung {formatDateTime(exception.createdAt)} and
                     received {formatDateTime(exception.syncedAt)}.
                   </li>
                 ))}
               </ul>
               <p className="text-xs text-content-muted">
                 The figures below have <strong>not</strong> been changed. A closed day is what was
-                counted and signed off, and a bill landing afterwards must not rewrite it — so it
-                is reported here instead, for somebody to account for.
+                counted and signed off, and a bill landing afterwards must not rewrite it — so it is
+                reported here instead, for somebody to account for.
               </p>
             </Card>
           )}

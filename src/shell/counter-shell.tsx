@@ -48,7 +48,8 @@ export function CounterShell({
     }
   }, [outlets, session.outletId])
 
-  const base = session.mode === 'demo' ? `/demo/${ROLE_SEGMENTS.biller}` : `/${ROLE_SEGMENTS.biller}`
+  const base =
+    session.mode === 'demo' ? `/demo/${ROLE_SEGMENTS.biller}` : `/${ROLE_SEGMENTS.biller}`
   const items = visibleSurfaces(session.role, session.mode)
 
   return (

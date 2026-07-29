@@ -171,7 +171,10 @@ describe('DailyCashSurface — yesterday, closed with a mismatch', () => {
 
     await screen.findByTestId('cash-day')
     const options = within(screen.getByTestId('cash-day')).getAllByRole('option')
-    await user.selectOptions(screen.getByTestId('cash-day'), (options[1] as HTMLOptionElement).value)
+    await user.selectOptions(
+      screen.getByTestId('cash-day'),
+      (options[1] as HTMLOptionElement).value,
+    )
 
     const closed = await screen.findByTestId('closed-day')
     expect(within(closed).getByTestId('closed-difference')).toHaveAttribute(

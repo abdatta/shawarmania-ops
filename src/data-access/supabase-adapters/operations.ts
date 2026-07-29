@@ -23,8 +23,7 @@ import {
  * the writes refuse in this app's voice rather than throwing something raw.
  */
 
-const NOT_LIVE =
-  'This is not connected to real data yet. It is being demonstrated first.'
+const NOT_LIVE = 'This is not connected to real data yet. It is being demonstrated first.'
 
 export function createSupabaseInventoryAdapter(): InventoryAdapter {
   const notLive = () => Promise.reject(new InventoryActionError('not_live', NOT_LIVE))

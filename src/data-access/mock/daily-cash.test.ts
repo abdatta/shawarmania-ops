@@ -172,9 +172,7 @@ describe('mock daily cash adapter', () => {
       const day = await adapter.getDay(DEMO_OUTLET_ID, yesterday)
 
       const everyCashBill = store.bills
-        .filter(
-          (bill) => bill.business_date === yesterday && bill.payment_method === 'cash',
-        )
+        .filter((bill) => bill.business_date === yesterday && bill.payment_method === 'cash')
         .reduce((running, bill) => running + bill.total_paise, 0)
 
       // The stored figure is smaller than the rows now say, because one of them

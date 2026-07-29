@@ -12,7 +12,9 @@ import { appRoutes } from '@/routes'
  */
 
 function renderDemo(path: string) {
-  return render(<RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: [path] })} />)
+  return render(
+    <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: [path] })} />,
+  )
 }
 
 async function reset(user: ReturnType<typeof userEvent.setup>) {
@@ -55,9 +57,7 @@ describe('demo reset', () => {
     await waitFor(() =>
       expect(screen.getByTestId('expense-list')).not.toHaveTextContent('Reset probe'),
     )
-    expect(within(screen.getByTestId('expense-list')).getAllByRole('listitem')).toHaveLength(
-      before,
-    )
+    expect(within(screen.getByTestId('expense-list')).getAllByRole('listitem')).toHaveLength(before)
 
     // Still on the manager's expenses surface. A reset that sent the reader
     // back to the owner would cost them their place mid-walkthrough.

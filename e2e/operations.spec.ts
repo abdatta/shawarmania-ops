@@ -73,7 +73,10 @@ test.describe('the operations surfaces', () => {
 
     const closed = page.getByTestId('closed-day')
     await expect(closed).toBeVisible()
-    await expect(closed.getByTestId('closed-difference')).toHaveAttribute('data-difference', 'short')
+    await expect(closed.getByTestId('closed-difference')).toHaveAttribute(
+      'data-difference',
+      'short',
+    )
     // Closed for good: no way to do it again.
     await expect(page.getByTestId('close-day-button')).toHaveCount(0)
 
@@ -86,7 +89,9 @@ test.describe('the operations surfaces', () => {
 
     // Yesterday is the second option — today is the first.
     const options = page.getByTestId('cash-day').locator('option')
-    await page.getByTestId('cash-day').selectOption(await options.nth(1).getAttribute('value') ?? '')
+    await page
+      .getByTestId('cash-day')
+      .selectOption((await options.nth(1).getAttribute('value')) ?? '')
 
     const exception = page.getByTestId('reconciliation-exception')
     await expect(exception).toBeVisible()
@@ -104,7 +109,10 @@ test.describe('the operations surfaces', () => {
 
   test('records a movement and a stock item’s figure follows its ledger', async ({ page }) => {
     await page.goto('demo/admin/inventory')
-    const chicken = page.getByTestId('stock-list').getByRole('listitem').filter({ hasText: 'Chicken' })
+    const chicken = page
+      .getByTestId('stock-list')
+      .getByRole('listitem')
+      .filter({ hasText: 'Chicken' })
 
     // Read the starting figure rather than pinning it: the scenario's stock is
     // chosen so the ledger reconciles with the bills that consumed it, and it

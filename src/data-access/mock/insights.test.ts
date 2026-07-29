@@ -12,7 +12,10 @@ import { createDemoStore, DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID, type DemoStore 
  * a closed day reports its snapshot, and only the owner reads across outlets.
  */
 describe('mock insights adapter', () => {
-  const asOwner = (): { store: DemoStore; adapter: ReturnType<typeof createMockInsightsAdapter> } => {
+  const asOwner = (): {
+    store: DemoStore
+    adapter: ReturnType<typeof createMockInsightsAdapter>
+  } => {
     const store = createDemoStore()
     return {
       store,
@@ -113,9 +116,8 @@ describe('mock insights adapter', () => {
     expect(kanchrapara?.lowStockCount).toBe(0)
 
     expect(kalyani?.openAlertCount).toBe(
-      store.alerts.filter(
-        (alert) => alert.outlet_id === DEMO_OUTLET_ID && alert.status === 'open',
-      ).length,
+      store.alerts.filter((alert) => alert.outlet_id === DEMO_OUTLET_ID && alert.status === 'open')
+        .length,
     )
   })
 
@@ -170,9 +172,9 @@ describe('mock insights adapter', () => {
     )
     expect(summary?.days.some((day) => day.salesPaise === 0)).toBe(true)
     expect(summary?.days.some((day) => day.salesPaise > 0)).toBe(true)
-    expect(
-      summary?.days.reduce((running, day) => running + day.salesPaise, 0),
-    ).toBe(summary?.salesPaise)
+    expect(summary?.days.reduce((running, day) => running + day.salesPaise, 0)).toBe(
+      summary?.salesPaise,
+    )
   })
 
   it('compares outlets, and only the ones the caller may read', async () => {

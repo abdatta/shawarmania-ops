@@ -31,7 +31,10 @@ function sessionFor(role: Role): Session {
   }
 }
 
-function renderMenu(role: Role = 'franchise_admin', adapters: DataAdapters = createMockAdapters(role)) {
+function renderMenu(
+  role: Role = 'franchise_admin',
+  adapters: DataAdapters = createMockAdapters(role),
+) {
   return {
     adapters,
     ...render(
@@ -175,8 +178,8 @@ describe('MenuSurface — the Biller', () => {
     await screen.findByTestId('menu-list')
 
     // The hand-crafted equivalent: call the adapter the surface was given.
-    await expect(
-      adapters.menu.setItemAvailability(MENU_ITEM_CLASSIC_ID, false),
-    ).rejects.toThrow(/read it only/i)
+    await expect(adapters.menu.setItemAvailability(MENU_ITEM_CLASSIC_ID, false)).rejects.toThrow(
+      /read it only/i,
+    )
   })
 })

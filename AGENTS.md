@@ -128,7 +128,7 @@ Commands:
 
 ## Verification
 
-- **Any change**: `npm test` and `npm run lint` green, `npm run typecheck` clean, `npm run build` clean.
+- **Any change**: `npm test` and `npm run lint` green, `npm run typecheck` clean, `npm run build` clean, `npm run format:check` clean. **Formatting is a CI gate too** — it is listed here because leaving it off this list is exactly how it went red unnoticed across two changes; `npm run format` fixes it.
 - **Auth-touching changes**: `npm run test:e2e:auth` against the local stack — four roles signing in, provisioning end to end, deactivation ending an open session.
 - **Tenancy-touching changes**: the RLS isolation test suite must pass. It asserts that a session scoped to one outlet cannot read another's rows for *every* outlet-scoped table — a new table without a matching test is an incomplete change.
 - **Billing or offline changes**: exercise the offline path — go offline, ring up bills, come back online, confirm exactly-once settlement with no duplicates.

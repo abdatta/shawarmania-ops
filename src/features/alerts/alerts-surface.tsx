@@ -236,8 +236,7 @@ export function AlertsSurface() {
                   <span>· {formatDateTime(alert.createdAt)}</span>
                   {alert.responseCount > 0 && (
                     <span>
-                      ·{' '}
-                      {alert.responseCount === 1 ? '1 reply' : `${alert.responseCount} replies`}
+                      · {alert.responseCount === 1 ? '1 reply' : `${alert.responseCount} replies`}
                     </span>
                   )}
                 </p>

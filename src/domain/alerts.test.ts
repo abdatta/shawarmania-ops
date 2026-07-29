@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  alertAttentionRank,
-  canTransition,
-  nextStatuses,
-  type AlertStatus,
-} from './alerts'
+import { alertAttentionRank, canTransition, nextStatuses, type AlertStatus } from './alerts'
 
 const ALL: AlertStatus[] = ['open', 'acknowledged', 'resolved', 'closed']
 

@@ -60,10 +60,7 @@ describe('mock billing adapter', () => {
     const adapter = createMockBillingAdapter(createDemoStore())
     const billers = await adapter.listBillers(DEMO_OUTLET_ID)
 
-    expect(billers.map((biller) => biller.fullName)).toEqual([
-      'Demo Biller',
-      'Demo Morning Biller',
-    ])
+    expect(billers.map((biller) => biller.fullName)).toEqual(['Demo Biller', 'Demo Morning Biller'])
     // The Kanchrapara biller belongs to another counter entirely.
     expect(billers.map((biller) => biller.fullName)).not.toContain('Demo Evening Biller')
   })
@@ -161,9 +158,9 @@ describe('mock billing adapter', () => {
     await adapter.settleBill(draft(store, 'eeeeeeee-0000-4000-8000-000000000001'))
     await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
 
-    await expect(
-      adapter.cancelQueuedBill('eeeeeeee-0000-4000-8000-000000000001'),
-    ).rejects.toThrow(/already gone/)
+    await expect(adapter.cancelQueuedBill('eeeeeeee-0000-4000-8000-000000000001')).rejects.toThrow(
+      /already gone/,
+    )
   })
 
   it('snapshots the line, so a later menu price change cannot rewrite it', async () => {
@@ -189,9 +186,9 @@ describe('mock billing adapter', () => {
     const store = createDemoStore()
     const adapter = createMockBillingAdapter(store)
 
-    await expect(
-      adapter.settleBill({ ...draft(store, 'a1'), lines: [] }),
-    ).rejects.toThrow(/nothing on this bill/)
+    await expect(adapter.settleBill({ ...draft(store, 'a1'), lines: [] })).rejects.toThrow(
+      /nothing on this bill/,
+    )
 
     await adapter.closeShift(DEMO_OPEN_SHIFT_ID)
     await expect(adapter.settleBill(draft(store, 'a2'))).rejects.toThrow(/No shift is open/)

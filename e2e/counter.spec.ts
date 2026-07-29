@@ -65,7 +65,9 @@ test.describe('the counter', () => {
 
     const confirmation = page.getByTestId('settled-confirmation')
     await expect(confirmation).toContainText('₹727')
-    await expect(page.getByTestId('provisional-reference')).toHaveText(/^Queued · [A-Z][0-9A-Z]{3}$/)
+    await expect(page.getByTestId('provisional-reference')).toHaveText(
+      /^Queued · [A-Z][0-9A-Z]{3}$/,
+    )
 
     // It clears itself; nothing has to be acknowledged.
     await expect(confirmation).toBeHidden({ timeout: AFTER_SEND_MS })
@@ -93,7 +95,9 @@ test.describe('the counter', () => {
   })
 
   test('will not sell an item that is off the menu', async ({ page }) => {
-    const off = page.getByRole('button', { name: 'Stuffed Lebanese Chicken Shawarma — off the menu' })
+    const off = page.getByRole('button', {
+      name: 'Stuffed Lebanese Chicken Shawarma — off the menu',
+    })
     await expect(off).toBeVisible()
     await expect(off).toBeDisabled()
   })

@@ -202,7 +202,11 @@ export function InventorySurface() {
       />
 
       {error && (
-        <p role="alert" data-testid="stock-error" className="mb-3 text-sm font-semibold text-danger">
+        <p
+          role="alert"
+          data-testid="stock-error"
+          className="mb-3 text-sm font-semibold text-danger"
+        >
           {error}
         </p>
       )}
@@ -219,7 +223,10 @@ export function InventorySurface() {
         <ul className="space-y-2" data-testid="stock-list">
           {items.map((item) => (
             <li key={item.id}>
-              <Card className="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid={`stock-${item.id}`}>
+              <Card
+                className="flex flex-wrap items-center gap-x-3 gap-y-2"
+                data-testid={`stock-${item.id}`}
+              >
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-content">
                     {item.name}

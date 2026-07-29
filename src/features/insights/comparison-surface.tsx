@@ -90,7 +90,8 @@ export function ComparisonSurface() {
           <span className="text-content-muted">balanced</span>
         ) : (
           <span data-difference={describeDifference(row.cashDifferencePaise)}>
-            {formatPaise(Math.abs(row.cashDifferencePaise))} {describeDifference(row.cashDifferencePaise)}
+            {formatPaise(Math.abs(row.cashDifferencePaise))}{' '}
+            {describeDifference(row.cashDifferencePaise)}
           </span>
         ),
     },

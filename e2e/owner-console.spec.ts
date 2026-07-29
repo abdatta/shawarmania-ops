@@ -149,7 +149,11 @@ test('an alert raised by the manager reaches the owner and is worked through', a
     .getByRole('link', { name: 'Owner' })
     .click()
   await expect(page.getByRole('heading', { name: 'All outlets' })).toBeVisible()
-  await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Alerts' }).first().click()
+  await page
+    .getByRole('navigation', { name: 'Primary' })
+    .getByRole('link', { name: 'Alerts' })
+    .first()
+    .click()
   await expect(page).toHaveURL(/\/demo\/owner\/alerts$/)
 
   const raised = page.getByTestId('alert-list').getByText('Freezer is not holding temperature')
@@ -234,7 +238,9 @@ const OWNER_SURFACES = [
 
 for (const viewport of VIEWPORTS) {
   for (const theme of ['light', 'dark'] as const) {
-    test(`the owner surfaces render in ${theme} on ${viewport.name}`, async ({ page }, testInfo) => {
+    test(`the owner surfaces render in ${theme} on ${viewport.name}`, async ({
+      page,
+    }, testInfo) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height })
       await page.goto('.')
       await page.evaluate((value) => localStorage.setItem('shawarmania.theme', value), theme)
@@ -250,10 +256,10 @@ for (const viewport of VIEWPORTS) {
         )
         expect(overflow, `${surface.path} overflows horizontally`).toBeLessThanOrEqual(1)
 
-        await testInfo.attach(
-          `${surface.path.replace(/\//g, '-')}-${theme}-${viewport.name}`,
-          { body: await page.screenshot(), contentType: 'image/png' },
-        )
+        await testInfo.attach(`${surface.path.replace(/\//g, '-')}-${theme}-${viewport.name}`, {
+          body: await page.screenshot(),
+          contentType: 'image/png',
+        })
       }
     })
   }

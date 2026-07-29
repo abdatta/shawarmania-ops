@@ -391,8 +391,7 @@ export function createDemoStore(): DemoStore {
           .reduce((running, expense) => running + expense.amount_paise, 0)
         const closedWithdrawn = withdrawals
           .filter(
-            (withdrawal) =>
-              withdrawal.outlet_id === outletId && withdrawal.business_date === date,
+            (withdrawal) => withdrawal.outlet_id === outletId && withdrawal.business_date === date,
           )
           .reduce((running, withdrawal) => running + withdrawal.amount_paise, 0)
 

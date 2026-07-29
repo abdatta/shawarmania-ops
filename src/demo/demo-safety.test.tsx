@@ -48,9 +48,7 @@ describe('demo mode safety', () => {
     expect(await screen.findByText('All outlets')).toBeInTheDocument()
     // The card's own heading, not the switcher option that carries the same
     // name — the assertion is that the outlet's figures rendered.
-    expect(
-      await screen.findByRole('heading', { name: 'Shawarmania Kalyani' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Shawarmania Kalyani' })).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
     // Role switcher: Admin.
