@@ -2,7 +2,7 @@
 
 This folder is the durable project wiki. It describes **what the app is and why** — in the present tense, with no change history. History lives in `openspec/changes/archive/`.
 
-> **The app is not built yet.** These pages describe the system as designed and agreed. Where a page describes something not yet implemented, it says so.
+> These pages describe the system as designed and agreed — much of it now built and some of it live in production. Where a page describes something not yet implemented, it says so; the [roadmap](../openspec/changes/ROADMAP.md) is the authority on what is real versus demo-only.
 
 ## Start here
 

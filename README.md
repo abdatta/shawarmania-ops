@@ -4,7 +4,7 @@ A cash-counter and outlet-management PWA for **Shawarmania** — "Kalyani's Prem
 
 The app handles counter billing, employee attendance, menu management, inventory, expense tracking, daily cash reconciliation, basic profit/loss estimates, and messaging between outlet managers and the owner. It supports many outlets while keeping each outlet's data strictly separate.
 
-> **Status: pre-implementation.** This repo currently contains the documentation, specifications, and build roadmap. No application code has been written yet.
+> **Status: mid-roadmap.** Attendance is live in production, and the full four-role experience is demonstrable end to end in demo mode. Billing, inventory, cash and the owner console are built against mock data and are being made real change by change — see [`openspec/changes/ROADMAP.md`](openspec/changes/ROADMAP.md) for exactly where things stand.
 
 ## What gets built
 
