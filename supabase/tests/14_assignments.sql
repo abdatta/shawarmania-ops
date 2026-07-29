@@ -52,21 +52,17 @@ $$;
 -- a token that says the right thing. This is the property the whole change
 -- rests on, and it is asserted by absence.
 
+-- The hook outlived #22 as an inert stub so that applying that migration could
+-- not break sign-in on a project whose auth settings still registered it. The
+-- registration is gone (2026-07-30) and so is the function: there is now no
+-- code path at all by which a token could be handed authority.
 select is(
   (select count(*) from pg_proc p
      join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
-      and p.proname in ('app_role', 'app_outlet_id')),
+      and p.proname in ('app_role', 'app_outlet_id', 'custom_access_token_hook')),
   0::bigint,
-  'the claim helpers no longer exist');
-
--- The hook survives as an inert stub rather than being dropped, so that a
--- project whose auth settings still register it keeps issuing tokens. What
--- matters is that it injects nothing.
-select is(
-  public.custom_access_token_hook('{"claims": {"sub": "x"}}'::jsonb),
-  '{"claims": {"sub": "x"}}'::jsonb,
-  'the access-token hook returns its event untouched — no authority in a token');
+  'the claim helpers and the access-token hook no longer exist');
 
 -- A fabricated authority claim buys nothing, because nothing reads one.
 reset role;
