@@ -22,17 +22,33 @@ describe('mock daily cash adapter', () => {
     const { store, adapter } = over()
     const day = await adapter.getDay(DEMO_OUTLET_ID, store.today)
 
+    // Scoped to this outlet as well as to cash: the drawer at Kalyani is moved
+    // by Kalyani's cash bills and by nothing that happened at Kanchrapara.
     const cashOnly = store.bills
       .filter(
-        (bill) => bill.business_date === store.today && bill.payment_method === 'cash',
+        (bill) =>
+          bill.outlet_id === DEMO_OUTLET_ID &&
+          bill.business_date === store.today &&
+          bill.payment_method === 'cash',
       )
       .reduce((running, bill) => running + bill.total_paise, 0)
     const everything = store.bills
-      .filter((bill) => bill.business_date === store.today)
+      .filter((bill) => bill.outlet_id === DEMO_OUTLET_ID && bill.business_date === store.today)
+      .reduce((running, bill) => running + bill.total_paise, 0)
+    const otherOutletCash = store.bills
+      .filter(
+        (bill) =>
+          bill.outlet_id !== DEMO_OUTLET_ID &&
+          bill.business_date === store.today &&
+          bill.payment_method === 'cash',
+      )
       .reduce((running, bill) => running + bill.total_paise, 0)
 
     expect(day.cashSalesPaise).toBe(cashOnly)
     expect(day.cashSalesPaise).toBeLessThan(everything)
+    // The scenario has to actually contain the thing being excluded, or the
+    // assertion above would pass against a single-outlet dataset by accident.
+    expect(otherOutletCash).toBeGreaterThan(0)
   })
 
   it('counts only cash expenses against the drawer', async () => {

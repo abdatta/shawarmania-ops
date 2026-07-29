@@ -61,3 +61,29 @@ export {
   type FenceVerdict,
 } from './geo'
 export { formatPaise, NotPaiseError, paiseToRupees, rupeesToPaise } from './money'
+export {
+  cashBasisProfitPaise,
+  consumptionBasisProfitPaise,
+  inventoryConsumedPaise,
+  nonRawMaterialExpensesPaise,
+  profitEstimate,
+  PROFIT_BASIS_DESCRIPTIONS,
+  PROFIT_BASIS_LABELS,
+  rawMaterialExpensesPaise,
+  RAW_MATERIALS_CATEGORY,
+  totalExpensesPaise,
+  type ConsumedMovement,
+  type ExpenseAmount,
+  type ProfitBasis,
+  type ProfitEstimate,
+  type ProfitInputs,
+} from './pnl'
+export {
+  ALERT_PRIORITY_ORDER,
+  ALERT_STATUS_LABELS,
+  alertAttentionRank,
+  canTransition,
+  nextStatuses,
+  type AlertPriority,
+  type AlertStatus,
+} from './alerts'

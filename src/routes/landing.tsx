@@ -8,7 +8,15 @@ import { ROLE_SEGMENTS } from '@/session/session'
 /**
  * The root. A signed-in visitor is simply taken to their own shell — landing
  * on a marketing card when you are already staff is a step, not a welcome —
- * and everyone else gets the two ways in: sign in, or walk the demo.
+ * and everyone else gets the way in: sign in, or set a password from a code.
+ *
+ * **There is deliberately no route into the demo here.** The demo stopped
+ * advertising itself when it became something the owner distributes: the link
+ * lives in the Super Admin's account menu, with a copy action beside it, so the
+ * one person who pitches franchisees can produce the URL without typing it from
+ * memory (ui-owner-console-and-demo, design D9). The demo itself stays
+ * unauthenticated — a shared link that demanded a login would not be a demo —
+ * so what changed is who *finds* it, not who may open it.
  *
  * This is outside the demo branch, so reading the real session here is safe:
  * the demo-scope tripwire only guards code rendering under /demo.
@@ -32,9 +40,6 @@ export function Landing() {
           <div className="flex flex-wrap gap-2">
             <Link to="/sign-in" className={buttonVariants({ size: 'phone' })}>
               Sign in
-            </Link>
-            <Link to="/demo" className={buttonVariants({ variant: 'secondary', size: 'phone' })}>
-              View the demo
             </Link>
           </div>
           <p className="text-sm">

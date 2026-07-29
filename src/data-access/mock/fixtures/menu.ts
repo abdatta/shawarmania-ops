@@ -1,5 +1,5 @@
 import type { Tables } from '../../database.types'
-import { OUTLET_KALYANI_ID } from './outlets'
+import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from './outlets'
 
 /**
  * The live menu, as of `docs/BUSINESS_CONTEXT.md`. Public business facts, so
@@ -16,98 +16,177 @@ import { OUTLET_KALYANI_ID } from './outlets'
  * `veg-marker.test.tsx` instead, and a walkthrough can create a vegetarian item
  * from the menu form in seconds.
  *
- * One item is deliberately unavailable. A menu screen that has only ever been
- * seen with everything in stock has not been reviewed, and the counter's
- * "cannot sell what is off" rule needs something to be off.
+ * **Both trading outlets carry their own rows.** `menu_categories` and
+ * `menu_items` are outlet-scoped tables, so a shared menu is not something this
+ * schema can express — a demo that gave two outlets one set of rows would be
+ * demonstrating a product with a brand-wide catalogue, which is
+ * [`shared-menu-catalogue`](../../../../openspec/todos/shared-menu-catalogue.md)
+ * and is deliberately not built. The blueprint below is materialised once per
+ * outlet, so the two menus agree without being the same rows (design D1).
+ *
+ * One item is deliberately unavailable **at Kalyani only**. A menu screen that
+ * has only ever been seen with everything in stock has not been reviewed, and
+ * the counter's "cannot sell what is off" rule needs something to be off —
+ * while Kanchrapara stays the tidy outlet, so that Kalyani's problems read as
+ * differences rather than as how the app always looks (design D2).
  */
 
 const CREATED_AT = '2026-07-26T00:00:00+00:00'
 
-export const MENU_CATEGORY_SHAWARMA_ID = 'd4000000-0000-4000-a000-000000000001'
-export const MENU_CATEGORY_BURGERS_ID = 'd4000000-0000-4000-a000-000000000002'
-
-/** Named because the counter's "an unavailable item is not sellable" test needs it. */
-export const MENU_ITEM_STUFFED_ID = 'd4000000-0000-4000-b000-000000000006'
-/** The bestseller — the item most demo bills are rung against. */
-export const MENU_ITEM_CLASSIC_ID = 'd4000000-0000-4000-b000-000000000001'
-export const MENU_ITEM_MAYO_ID = 'd4000000-0000-4000-b000-000000000002'
-export const MENU_ITEM_DOUBLE_ID = 'd4000000-0000-4000-b000-000000000003'
-export const MENU_ITEM_MOZZARELLA_ID = 'd4000000-0000-4000-b000-000000000004'
-export const MENU_ITEM_BURGER_ID = 'd4000000-0000-4000-b000-000000000007'
-
-export const menuCategoryFixtures: Tables<'menu_categories'>[] = [
-  {
-    id: MENU_CATEGORY_SHAWARMA_ID,
-    outlet_id: OUTLET_KALYANI_ID,
-    name: 'Shawarma',
-    sort_order: 1,
-    is_active: true,
-  },
-  {
-    id: MENU_CATEGORY_BURGERS_ID,
-    outlet_id: OUTLET_KALYANI_ID,
-    name: 'Burgers',
-    sort_order: 2,
-    is_active: true,
-  },
-]
-
-function item(
-  id: string,
-  categoryId: string,
-  name: string,
-  pricePaise: number,
-  sortOrder: number,
-  options: { description?: string; isAvailable?: boolean } = {},
-): Tables<'menu_items'> {
-  return {
-    id,
-    outlet_id: OUTLET_KALYANI_ID,
-    category_id: categoryId,
-    name,
-    description: options.description ?? null,
-    price_paise: pricePaise,
-    is_veg: false,
-    is_available: options.isAvailable ?? true,
-    sort_order: sortOrder,
-    created_at: CREATED_AT,
-    updated_at: CREATED_AT,
-  }
+/**
+ * The per-outlet slot in every generated id's fourth group. Kalyani keeps
+ * `a000`/`b000` so every id that existed before this change is unchanged — a
+ * fixture id is a stable handle that tests and other fixtures point at.
+ */
+const OUTLET_SLOTS: Record<string, string> = {
+  [OUTLET_KALYANI_ID]: '000',
+  [OUTLET_KANCHRAPARA_ID]: '001',
 }
 
-export const menuItemFixtures: Tables<'menu_items'>[] = [
-  item(MENU_ITEM_CLASSIC_ID, MENU_CATEGORY_SHAWARMA_ID, 'Classic Chicken Shawarma', 13900, 1, {
+/** Outlets that trade, and therefore have a menu. The mistake outlet has none. */
+export const MENU_OUTLET_IDS = [OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID]
+
+function slotFor(outletId: string): string {
+  const slot = OUTLET_SLOTS[outletId]
+  if (!slot) throw new Error(`No demo menu is defined for outlet ${outletId}.`)
+  return slot
+}
+
+export type MenuCategoryKey = 'shawarma' | 'burgers'
+
+export type MenuItemKey =
+  | 'classic'
+  | 'mayo'
+  | 'double'
+  | 'mozzarella'
+  | 'salad'
+  | 'stuffed'
+  | 'burger'
+
+const CATEGORY_ORDER: MenuCategoryKey[] = ['shawarma', 'burgers']
+
+/** The stable id of one outlet's category. */
+export function menuCategoryId(outletId: string, key: MenuCategoryKey): string {
+  const index = CATEGORY_ORDER.indexOf(key) + 1
+  return `d4000000-0000-4000-a${slotFor(outletId)}-${String(index).padStart(12, '0')}`
+}
+
+interface ItemBlueprint {
+  key: MenuItemKey
+  category: MenuCategoryKey
+  name: string
+  pricePaise: number
+  sortOrder: number
+  description?: string
+}
+
+/**
+ * The menu itself, once. Ordered so each item's position in this array is its
+ * id suffix — which is why the order below matches the ids the previous
+ * single-outlet fixture handed out.
+ */
+const ITEM_BLUEPRINT: ItemBlueprint[] = [
+  {
+    key: 'classic',
+    category: 'shawarma',
+    name: 'Classic Chicken Shawarma',
+    pricePaise: 13900,
+    sortOrder: 1,
     description: 'Bestseller',
-  }),
-  item(MENU_ITEM_MAYO_ID, MENU_CATEGORY_SHAWARMA_ID, 'Mayonnaise Chicken Shawarma', 15900, 2, {
+  },
+  {
+    key: 'mayo',
+    category: 'shawarma',
+    name: 'Mayonnaise Chicken Shawarma',
+    pricePaise: 15900,
+    sortOrder: 2,
     description: 'Top rated',
-  }),
-  item(MENU_ITEM_DOUBLE_ID, MENU_CATEGORY_SHAWARMA_ID, 'Double Chicken Shawarma', 17900, 3),
-  item(
-    MENU_ITEM_MOZZARELLA_ID,
-    MENU_CATEGORY_SHAWARMA_ID,
-    'Mozzarella Cheese Chicken Shawarma',
-    19900,
-    4,
-  ),
-  item(
-    'd4000000-0000-4000-b000-000000000005',
-    MENU_CATEGORY_SHAWARMA_ID,
-    'Healthy Chicken Shawarma Salad',
-    21900,
-    5,
-    { description: '25.8g protein per 100g' },
-  ),
-  item(
-    MENU_ITEM_STUFFED_ID,
-    MENU_CATEGORY_SHAWARMA_ID,
-    'Stuffed Lebanese Chicken Shawarma',
-    23800,
-    6,
-    // Off today. The counter must show it and refuse to sell it.
-    { description: 'Saaj / pita style', isAvailable: false },
-  ),
-  item(MENU_ITEM_BURGER_ID, MENU_CATEGORY_BURGERS_ID, 'Fully Loaded Smashed Burger', 25000, 1, {
+  },
+  {
+    key: 'double',
+    category: 'shawarma',
+    name: 'Double Chicken Shawarma',
+    pricePaise: 17900,
+    sortOrder: 3,
+  },
+  {
+    key: 'mozzarella',
+    category: 'shawarma',
+    name: 'Mozzarella Cheese Chicken Shawarma',
+    pricePaise: 19900,
+    sortOrder: 4,
+  },
+  {
+    key: 'salad',
+    category: 'shawarma',
+    name: 'Healthy Chicken Shawarma Salad',
+    pricePaise: 21900,
+    sortOrder: 5,
+    description: '25.8g protein per 100g',
+  },
+  {
+    key: 'stuffed',
+    category: 'shawarma',
+    name: 'Stuffed Lebanese Chicken Shawarma',
+    pricePaise: 23800,
+    sortOrder: 6,
+    description: 'Saaj / pita style',
+  },
+  {
+    key: 'burger',
+    category: 'burgers',
+    name: 'Fully Loaded Smashed Burger',
+    pricePaise: 25000,
+    sortOrder: 1,
     description: 'New',
-  }),
+  },
 ]
+
+/** The stable id of one outlet's menu item. */
+export function menuItemId(outletId: string, key: MenuItemKey): string {
+  const index = ITEM_BLUEPRINT.findIndex((item) => item.key === key) + 1
+  if (index === 0) throw new Error(`No demo menu item: ${key}`)
+  return `d4000000-0000-4000-b${slotFor(outletId)}-${String(index).padStart(12, '0')}`
+}
+
+/** Off today, at Kalyani only. The counter must show it and refuse to sell it. */
+const UNAVAILABLE_AT_KALYANI: MenuItemKey = 'stuffed'
+
+export const MENU_CATEGORY_SHAWARMA_ID = menuCategoryId(OUTLET_KALYANI_ID, 'shawarma')
+export const MENU_CATEGORY_BURGERS_ID = menuCategoryId(OUTLET_KALYANI_ID, 'burgers')
+
+/** Named because the counter's "an unavailable item is not sellable" test needs it. */
+export const MENU_ITEM_STUFFED_ID = menuItemId(OUTLET_KALYANI_ID, 'stuffed')
+/** The bestseller — the item most demo bills are rung against. */
+export const MENU_ITEM_CLASSIC_ID = menuItemId(OUTLET_KALYANI_ID, 'classic')
+export const MENU_ITEM_MAYO_ID = menuItemId(OUTLET_KALYANI_ID, 'mayo')
+export const MENU_ITEM_DOUBLE_ID = menuItemId(OUTLET_KALYANI_ID, 'double')
+export const MENU_ITEM_MOZZARELLA_ID = menuItemId(OUTLET_KALYANI_ID, 'mozzarella')
+export const MENU_ITEM_BURGER_ID = menuItemId(OUTLET_KALYANI_ID, 'burger')
+
+export const menuCategoryFixtures: Tables<'menu_categories'>[] = MENU_OUTLET_IDS.flatMap(
+  (outletId) =>
+    CATEGORY_ORDER.map((key, index) => ({
+      id: menuCategoryId(outletId, key),
+      outlet_id: outletId,
+      name: key === 'shawarma' ? 'Shawarma' : 'Burgers',
+      sort_order: index + 1,
+      is_active: true,
+    })),
+)
+
+export const menuItemFixtures: Tables<'menu_items'>[] = MENU_OUTLET_IDS.flatMap((outletId) =>
+  ITEM_BLUEPRINT.map((blueprint) => ({
+    id: menuItemId(outletId, blueprint.key),
+    outlet_id: outletId,
+    category_id: menuCategoryId(outletId, blueprint.category),
+    name: blueprint.name,
+    description: blueprint.description ?? null,
+    price_paise: blueprint.pricePaise,
+    is_veg: false,
+    is_available: !(outletId === OUTLET_KALYANI_ID && blueprint.key === UNAVAILABLE_AT_KALYANI),
+    sort_order: blueprint.sortOrder,
+    created_at: CREATED_AT,
+    updated_at: CREATED_AT,
+  })),
+)

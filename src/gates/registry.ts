@@ -88,19 +88,36 @@ const defs = {
     role: 'super_admin',
     path: 'comparison',
     nav: { label: 'Compare', icon: BarChart3, order: 5 },
-    state: 'hidden',
+    state: 'demo',
   },
   'owner-alerts': {
     role: 'super_admin',
     path: 'alerts',
     nav: { label: 'Alerts', icon: Bell, order: 6 },
-    state: 'hidden',
+    state: 'demo',
+  },
+  /**
+   * Profit and loss, and period reports — **deliberately without navigation
+   * entries**. Six tabs is already as much as a bottom bar holds on a phone,
+   * and both of these answer a question somebody asks while looking at today's
+   * figures: they are reached from the console, which is where that question
+   * gets asked (design D14).
+   */
+  'owner-pnl': {
+    role: 'super_admin',
+    path: 'pnl',
+    state: 'demo',
+  },
+  'owner-reports': {
+    role: 'super_admin',
+    path: 'reports',
+    state: 'demo',
   },
   /** Drop into one outlet's Franchise Admin view, read-only. */
   'owner-outlet-view': {
     role: 'super_admin',
-    path: 'outlet',
-    state: 'hidden',
+    path: 'outlet/:outletId',
+    state: 'demo',
   },
 
   // ── Franchise Admin — one outlet, on a phone ─────────────────────────────
@@ -150,13 +167,13 @@ const defs = {
     role: 'franchise_admin',
     path: 'pnl',
     nav: { label: 'P&L', icon: TrendingUp, order: 8 },
-    state: 'hidden',
+    state: 'demo',
   },
   'admin-alerts': {
     role: 'franchise_admin',
     path: 'alerts',
     nav: { label: 'Alerts', icon: Bell, order: 9 },
-    state: 'hidden',
+    state: 'demo',
   },
   'admin-devices': {
     role: 'franchise_admin',

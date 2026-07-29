@@ -5,12 +5,21 @@ import { describe, expect, it } from 'vitest'
 
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
-import { createMockAdapters } from '@/data-access/mock'
+import { createMockAdapters, OUTLET_KALYANI_ID } from '@/data-access/mock'
+import { expenseSeeds } from '@/data-access/mock/fixtures/operations'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
+import { formatPaise } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 
 import { ExpensesSurface } from './expenses-surface'
+
+/** Today's expenses at the persona's outlet, straight from the seeds. */
+function todaysExpenses() {
+  return expenseSeeds.filter(
+    (seed) => seed.daysAgo === 0 && (seed.outletId ?? OUTLET_KALYANI_ID) === OUTLET_KALYANI_ID,
+  )
+}
 
 const managerSession: Session = {
   mode: 'demo',
@@ -55,10 +64,18 @@ describe('ExpensesSurface', () => {
     renderExpenses()
 
     const totals = await screen.findByTestId('expense-totals')
-    // Today: ₹1,200 raw materials (cash) + ₹850 packaging (UPI) + ₹450
-    // maintenance (cash) = ₹2,500 spent, ₹1,650 of it cash.
-    expect(within(totals).getByText('₹2,500')).toBeInTheDocument()
-    expect(screen.getByTestId('expense-cash-total')).toHaveTextContent('₹1,650')
+    // Derived from the fixtures rather than pinned: the demo's expenses are
+    // chosen so the P&L's two bases visibly differ, and they move when that
+    // does. What is asserted is that the day totals and that cash is separated.
+    const today = todaysExpenses()
+    const spent = today.reduce((running, expense) => running + expense.amountPaise, 0)
+    const cash = today
+      .filter((expense) => expense.paymentMethod === 'cash')
+      .reduce((running, expense) => running + expense.amountPaise, 0)
+
+    expect(cash).toBeLessThan(spent)
+    expect(within(totals).getByText(formatPaise(spent))).toBeInTheDocument()
+    expect(screen.getByTestId('expense-cash-total')).toHaveTextContent(formatPaise(cash))
   })
 
   it('records an expense and shows it on the day', async () => {
@@ -73,9 +90,15 @@ describe('ExpensesSurface', () => {
     await user.type(screen.getByLabelText('Description (optional)'), 'Advance to the griller')
     await user.click(screen.getByRole('button', { name: 'Record expense' }))
 
+    const cashBefore = todaysExpenses()
+      .filter((expense) => expense.paymentMethod === 'cash')
+      .reduce((running, expense) => running + expense.amountPaise, 0)
+
     expect(await screen.findByText('Advance to the griller')).toBeInTheDocument()
     await waitFor(() => {
-      expect(screen.getByTestId('expense-cash-total')).toHaveTextContent('₹5,150')
+      expect(screen.getByTestId('expense-cash-total')).toHaveTextContent(
+        formatPaise(cashBefore + 350_000),
+      )
     })
   })
 

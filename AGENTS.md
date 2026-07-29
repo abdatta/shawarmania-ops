@@ -2,7 +2,7 @@
 
 Shawarmania Ops is a multi-outlet cash-counter and outlet-management PWA for **Shawarmania**, a quick-service shawarma business operating in Kalyani and Kanchrapara, West Bengal. It handles counter billing, employee attendance, menu, inventory, expenses, daily cash reconciliation, basic profit/loss estimates, and outlet↔owner messaging — with each outlet's data strictly isolated so the business can grow through franchises.
 
-**Status: early implementation.** The schema, tenancy policies, the adapter seam, the four role shells, demo mode, and authentication all exist. Every *feature* surface — billing, inventory, expenses, cash, attendance — is still ahead. See [`openspec/changes/ROADMAP.md`](openspec/changes/ROADMAP.md) for what is built and what comes next; it is derived from the change folders, so it is never stale.
+**Status: the whole UI is walkable; most of it is not yet real.** The schema, tenancy policies, the adapter seam, the four role shells, demo mode and authentication all exist, and attendance runs in production. Every other surface — billing, menu, inventory, expenses, daily cash, and the owner's console, comparison, P&L, reports and alerts — is **built and demo-gated**, walkable end to end at `/demo` over one internally consistent scenario spanning both outlets. Making each one real is what the remaining `*-live` changes do. See [`openspec/changes/ROADMAP.md`](openspec/changes/ROADMAP.md) for what is built and what comes next; it is derived from the change folders, so it is never stale.
 
 ## North Star
 

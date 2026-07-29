@@ -92,6 +92,9 @@ describe('mock inventory adapter', () => {
   it('keeps both rows when a mistake is corrected', async () => {
     const { store, adapter } = adapterOver()
     const before = (await adapter.listMovements(INVENTORY_CHICKEN_ID)).length
+    // Read, not pinned: the scenario's quantities move with the trade they are
+    // chosen to reconcile with. What is being asserted is that the pair cancels.
+    const started = (await adapter.getItem(INVENTORY_CHICKEN_ID))!.currentQuantity
 
     await adapter.recordMovement({
       inventoryItemId: INVENTORY_CHICKEN_ID,
@@ -110,7 +113,7 @@ describe('mock inventory adapter', () => {
     const movements = await adapter.listMovements(INVENTORY_CHICKEN_ID)
     expect(movements.length).toBe(before + 2)
     // And the two cancel out, which is what "corrected, not edited" means.
-    expect((await adapter.getItem(INVENTORY_CHICKEN_ID))!.currentQuantity).toBe(12.5)
+    expect((await adapter.getItem(INVENTORY_CHICKEN_ID))!.currentQuantity).toBe(started)
   })
 
   it('refuses a correction with no note', async () => {

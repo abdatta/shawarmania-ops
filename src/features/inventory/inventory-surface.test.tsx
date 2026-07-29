@@ -10,13 +10,34 @@ import {
   INVENTORY_CHICKEN_ID,
   INVENTORY_MAYO_ID,
   INVENTORY_PITA_ID,
+  inventoryItemFixtures,
+  movementSeeds,
 } from '@/data-access/mock/fixtures/operations'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
+import { roundQuantity } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 
 import { InventorySurface } from './inventory-surface'
 import { MovementLedger } from './movement-ledger'
+
+/**
+ * Read from the fixtures rather than pinned to literals. The scenario's stock
+ * figures are chosen so the ledger reconciles with the bills that consumed it,
+ * so they move when the trade does — and a test that hard-codes them has to be
+ * re-pinned every time, which teaches people to edit assertions to make them
+ * pass.
+ */
+function quantityOf(itemId: string): number {
+  const item = inventoryItemFixtures.find((candidate) => candidate.id === itemId)
+  if (!item) throw new Error(`No fixture for ${itemId}`)
+  return item.current_quantity
+}
+
+/** One item's seeds in ledger order, oldest first. */
+function movementsFor(itemId: string) {
+  return movementSeeds.filter((seed) => seed.itemId === itemId)
+}
 
 const managerSession: Session = {
   mode: 'demo',
@@ -71,10 +92,15 @@ describe('InventorySurface', () => {
 
   it('shows each item’s quantity with its unit', async () => {
     renderStock()
+    // Read from the fixtures rather than pinned to a literal: the scenario's
+    // quantities are chosen to reconcile with the bills, and a test that
+    // hard-codes them has to be re-pinned every time the trade changes.
     expect(await screen.findByTestId(`quantity-${INVENTORY_CHICKEN_ID}`)).toHaveTextContent(
-      '12.5 kg',
+      `${quantityOf(INVENTORY_CHICKEN_ID)} kg`,
     )
-    expect(screen.getByTestId(`quantity-${INVENTORY_PITA_ID}`)).toHaveTextContent('8 packet')
+    expect(screen.getByTestId(`quantity-${INVENTORY_PITA_ID}`)).toHaveTextContent(
+      `${quantityOf(INVENTORY_PITA_ID)} packet`,
+    )
   })
 
   it('takes stock down when a used movement is recorded, with no minus typed', async () => {
@@ -86,8 +112,11 @@ describe('InventorySurface', () => {
     await user.type(screen.getByLabelText('How much (kg)'), '2.5')
     await user.click(screen.getByRole('button', { name: 'Record movement' }))
 
+    const after = roundQuantity(quantityOf(INVENTORY_CHICKEN_ID) - 2.5)
     await waitFor(() => {
-      expect(screen.getByTestId(`quantity-${INVENTORY_CHICKEN_ID}`)).toHaveTextContent('10 kg')
+      expect(screen.getByTestId(`quantity-${INVENTORY_CHICKEN_ID}`)).toHaveTextContent(
+        `${after} kg`,
+      )
     })
   })
 
@@ -95,9 +124,14 @@ describe('InventorySurface', () => {
     const user = userEvent.setup()
     renderStock()
 
+    // Enough to cross the threshold from wherever the scenario currently has
+    // it — the figure moves with the trade it is chosen to reconcile with.
+    const item = inventoryItemFixtures.find((candidate) => candidate.id === INVENTORY_CHICKEN_ID)!
+    const enough = roundQuantity(item.current_quantity - item.low_stock_threshold + 0.1)
+
     await user.click(await screen.findByTestId(`record-${INVENTORY_CHICKEN_ID}`))
     await user.selectOptions(screen.getByLabelText('What happened'), 'used')
-    await user.type(screen.getByLabelText('How much (kg)'), '8')
+    await user.type(screen.getByLabelText('How much (kg)'), String(enough))
     await user.click(screen.getByRole('button', { name: 'Record movement' }))
 
     expect(await screen.findByTestId(`low-stock-${INVENTORY_CHICKEN_ID}`)).toBeInTheDocument()
@@ -111,7 +145,9 @@ describe('InventorySurface', () => {
     await user.click(screen.getByRole('button', { name: 'Record movement' }))
 
     expect(await screen.findByTestId('form-sheet-error')).toHaveTextContent(/cannot be zero/i)
-    expect(screen.getByTestId(`quantity-${INVENTORY_CHICKEN_ID}`)).toHaveTextContent('12.5 kg')
+    expect(screen.getByTestId(`quantity-${INVENTORY_CHICKEN_ID}`)).toHaveTextContent(
+      `${quantityOf(INVENTORY_CHICKEN_ID)} kg`,
+    )
   })
 
   it('adds a new item, which starts at nothing because its ledger is empty', async () => {
@@ -138,11 +174,15 @@ describe('MovementLedger', () => {
 
     await screen.findByRole('heading', { name: 'Pita bread' })
     const rows = screen.getAllByRole('row').slice(1)
-    expect(rows.length).toBe(5)
+    expect(rows.length).toBe(movementsFor(INVENTORY_PITA_ID).length)
 
-    // The newest row leaves the item at its current quantity.
-    expect(within(rows[0]!).getByText('8 packet')).toBeInTheDocument()
-    expect(within(rows[0]!).getByText('−3')).toBeInTheDocument()
+    // The newest row leaves the item at its current quantity — which is the
+    // property that makes the ledger answer "why does it say 6 packet?".
+    const newest = movementsFor(INVENTORY_PITA_ID).at(-1)!
+    expect(
+      within(rows[0]!).getByText(`${quantityOf(INVENTORY_PITA_ID)} packet`),
+    ).toBeInTheDocument()
+    expect(within(rows[0]!).getByText(`−${newest.quantity}`)).toBeInTheDocument()
   })
 
   it('shows a correction beside the row it corrects, both intact', async () => {
@@ -151,7 +191,9 @@ describe('MovementLedger', () => {
     await screen.findByRole('heading', { name: 'Mayonnaise' })
     expect(screen.getByText('Correction')).toBeInTheDocument()
     expect(screen.getByText(/half a litre less/i)).toBeInTheDocument()
-    expect(screen.getAllByText('Used').length).toBe(2)
+    expect(screen.getAllByText('Used').length).toBe(
+      movementsFor(INVENTORY_MAYO_ID).filter((movement) => movement.movementType === 'used').length,
+    )
   })
 
   it('offers nothing that would edit or remove a movement', async () => {

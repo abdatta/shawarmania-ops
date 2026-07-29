@@ -23,7 +23,10 @@ test('walking all four demo role shells makes no request beyond the app origin',
 
   await page.goto('demo/owner')
   await expect(page.getByTestId('demo-banner')).toBeVisible()
-  await expect(page.getByText('Shawarmania Kalyani')).toBeVisible()
+  // The card's own heading. The outlet switcher carries the same name as an
+  // option, so a bare text match is ambiguous — and the assertion here is that
+  // the outlet's figures rendered, not that its name appears somewhere.
+  await expect(page.getByRole('heading', { name: 'Shawarmania Kalyani' })).toBeVisible()
 
   // The switcher, through all four roles.
   const switcher = page.getByRole('navigation', { name: 'Demo role switcher' })
@@ -37,7 +40,7 @@ test('walking all four demo role shells makes no request beyond the app origin',
   await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
 
   await switcher.getByRole('link', { name: 'Owner' }).click()
-  await expect(page.getByText('All outlets')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'All outlets' })).toBeVisible()
 
   expect(violations).toEqual([])
 })
@@ -48,8 +51,20 @@ test('the demo banner is on every demo route and offers no dismissal', async ({ 
     const banner = page.getByTestId('demo-banner')
     await expect(banner, segment).toBeVisible()
     await expect(banner, segment).toContainText('Demo — fabricated data')
-    // No button of any kind inside the banner — the switcher is links only.
-    await expect(banner.locator('button'), segment).toHaveCount(0)
+
+    // The invariant itself rather than a proxy for it: press every control in
+    // the strip and the strip is still there. Counting buttons stood in for
+    // this until the banner gained one — the reset — that does something other
+    // than dismiss it.
+    const controls = banner.locator('button')
+    const count = await controls.count()
+    for (let index = 0; index < count; index += 1) {
+      await controls.nth(index).click()
+      await expect(banner, segment).toBeVisible()
+      const cancel = page.getByRole('button', { name: 'Cancel' })
+      if (await cancel.isVisible()) await cancel.click()
+    }
+    await expect(banner, segment).toBeVisible()
   }
 })
 
@@ -76,20 +91,32 @@ test('the demo index lands on the owner shell', async ({ page }) => {
 test('a hidden surface is absent: its deep link lands on not-found inside the shell', async ({
   page,
 }) => {
-  // `pnl` is still `hidden`; `inventory` used to be, and is `demo` since
-  // ui-outlet-operations. The assertion is about a hidden surface, so it
+  // `devices` is still `hidden`; `pnl` used to be, and is `demo` since
+  // ui-owner-console-and-demo. The assertion is about a hidden surface, so it
   // follows the gate rather than the path.
-  await page.goto('demo/admin/pnl')
+  await page.goto('demo/admin/devices')
   await expect(page.getByText('That page does not exist')).toBeVisible()
   // Still a demo URL, so the banner still stands.
   await expect(page.getByTestId('demo-banner')).toBeVisible()
 })
 
-test('the landing page links into the demo', async ({ page }) => {
+test('the landing page offers no route into the demo', async ({ page }) => {
   await page.goto('.')
-  await page.getByRole('link', { name: 'View the demo' }).click()
-  await expect(page).toHaveURL(/\/demo\/owner$/)
+  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible()
+
+  // The demo stopped advertising itself when it became something the owner
+  // distributes. The link lives in the Super Admin's account menu now; nothing
+  // on the public root should point at /demo (ui-owner-console-and-demo, D9).
+  await expect(page.getByRole('link', { name: /demo/i })).toHaveCount(0)
+  expect(await page.locator('a[href*="/demo"]').count()).toBe(0)
+})
+
+test('the demo is still reachable without a session, by URL', async ({ page }) => {
+  // Removing the link changed who *finds* the demo, not who may open it — a
+  // shared link that demanded a login would not be a demo.
+  await page.goto('demo/owner')
   await expect(page.getByTestId('demo-banner')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'All outlets' })).toBeVisible()
 })
 
 test.describe('with a persisted real session', () => {
@@ -134,7 +161,17 @@ test.describe('with a persisted real session', () => {
 
     await page.getByRole('button', { name: 'Continue to demo' }).click()
     await expect(page.getByTestId('demo-banner')).toBeVisible()
-    await expect(page.getByText('All outlets')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'All outlets' })).toBeVisible()
+  })
+
+  test('the link the owner hands out meets the interstitial too', async ({ page }) => {
+    // `/demo` is exactly what the account menu copies. Following it while
+    // signed in must land on the gate like any other demo URL — there is no
+    // smoother path for the person who owns the menu it now sits in, because
+    // an owner is no less capable of losing track of a tab than a biller is.
+    await page.goto('demo')
+    await expect(page.getByTestId('demo-interstitial')).toBeVisible()
+    await expect(page.getByTestId('demo-banner')).not.toBeVisible()
   })
 
   test('the continue choice is tab-scoped: a fresh tab is gated again', async ({
@@ -156,7 +193,7 @@ test.describe('with a persisted real session', () => {
   test('back to the app leaves demo without acknowledging', async ({ page }) => {
     await page.goto('demo/owner')
     await page.getByRole('link', { name: 'Back to the app' }).click()
-    await expect(page.getByRole('link', { name: 'View the demo' })).toBeVisible()
+    await expect(page).toHaveURL(/\/$/)
 
     // Nothing was acknowledged, so demo entry gates again.
     await page.goto('demo/owner')

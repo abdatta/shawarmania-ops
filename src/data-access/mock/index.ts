@@ -1,36 +1,83 @@
 import type { AppRole, DataAdapters } from '../adapters'
 import { createMockAddressLookupAdapter } from './address-lookup'
 import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
+import { createMockAlertsAdapter } from './alerts'
 import { createMockAttendanceAdapter } from './attendance'
 import { createMockBillingAdapter } from './billing'
 import { createMockDailyCashAdapter } from './daily-cash'
 import { createMockEmployeesAdapter } from './employees'
 import { createMockExpensesAdapter } from './expenses'
+import { createMockInsightsAdapter } from './insights'
 import { createMockInventoryAdapter } from './inventory'
 import { createMockMenuAdapter } from './menu'
 import { createMockOutletsAdapter } from './outlets'
+import { personaFixtures } from './fixtures/personas'
 import { createDemoStore } from './store'
+
+/**
+ * Everything one demo *session* holds, independent of who is currently looking
+ * at it.
+ *
+ * **This is separate from the adapters on purpose.** Several mocks are built
+ * per role — the menu refuses a Biller's write, alerts and insights enforce the
+ * cross-outlet boundary — so switching roles rebuilds the adapters. If the data
+ * were built with them, every role switch would start a fresh demo, and
+ * *"raise an alert as the manager, flip roles, answer it as the owner"* — the
+ * demonstration this whole change exists for — would show the owner an empty
+ * inbox. The same applies to an employee checking in and flipping to the
+ * manager to have it approved.
+ *
+ * So the data outlives the role, and only a reset replaces it
+ * (ui-owner-console-and-demo, design D10).
+ */
+export interface DemoData {
+  /** One account list, two adapters — accounts and the roster are one set of people. */
+  accounts: ReturnType<typeof createDemoAccounts>
+  /**
+   * One trading day described from several angles. Figures that contradict each
+   * other two screens apart are how a demo stops being believed.
+   */
+  store: ReturnType<typeof createDemoStore>
+  /** Holds its own state, so it belongs to the session rather than to a role. */
+  attendance: ReturnType<typeof createMockAttendanceAdapter>
+}
+
+export function createDemoData(): DemoData {
+  return {
+    accounts: createDemoAccounts(),
+    store: createDemoStore(),
+    attendance: createMockAttendanceAdapter(),
+  }
+}
 
 /**
  * Everything the demo tree needs, and the only factory it may import.
  * Nothing under src/data-access/mock/ may import the Supabase client or the
  * real adapters — eslint enforces it (design D4, layer 1).
+ *
+ * `data` defaults to a fresh session, which is what a test wants; the demo tree
+ * passes the same one across role switches.
  */
-export function createMockAdapters(role: AppRole = 'super_admin'): DataAdapters {
-  // One account list, two adapters. Accounts and the roster describe the same
-  // people from different angles, and a demo where linking someone on Staff
-  // does not change what Access says would be demonstrating the wrong thing.
-  const accounts = createDemoAccounts()
+export function createMockAdapters(
+  role: AppRole = 'super_admin',
+  data: DemoData = createDemoData(),
+): DataAdapters {
+  const { accounts, store, attendance } = data
 
-  // The same argument, one size up: the operational surfaces describe one
-  // trading day from several angles, and figures that contradict each other two
-  // screens apart are how a demo stops being believed.
-  const store = createDemoStore()
+  // Who the mocks think is asking. Derived from the same persona the demo tree
+  // builds its session from, so an adapter's idea of the caller cannot drift
+  // from the session's — the alerts and insights mocks both enforce the
+  // cross-outlet boundary from it.
+  const persona = personaFixtures[role]
+  const session = {
+    userId: persona.profile.id,
+    outletId: persona.profile.outlet_id,
+  }
 
   return {
     outlets: createMockOutletsAdapter(),
     accounts: createMockAccountsAdapter(accounts),
-    attendance: createMockAttendanceAdapter(),
+    attendance,
     employees: createMockEmployeesAdapter(accounts, role),
     // The persona's role reaches the menu mock so it refuses a Biller's write
     // where `menu_items_write` will refuse it.
@@ -39,6 +86,10 @@ export function createMockAdapters(role: AppRole = 'super_admin'): DataAdapters 
     inventory: createMockInventoryAdapter(store),
     expenses: createMockExpensesAdapter(store),
     dailyCash: createMockDailyCashAdapter(store),
+    // Both enforce the boundary the RLS policies will: only the Super Admin
+    // reads across outlets, and asking for somebody else's returns nothing.
+    alerts: createMockAlertsAdapter(store, role, session),
+    insights: createMockInsightsAdapter(store, attendance, role, session),
     addressLookup: createMockAddressLookupAdapter(),
   }
 }

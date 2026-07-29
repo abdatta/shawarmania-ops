@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { enterDemoScope, exitDemoScope } from '@/data-access/demo-scope'
-import { createMockAdapters, personaFixtures } from '@/data-access/mock'
+import { createDemoData, createMockAdapters, personaFixtures } from '@/data-access/mock'
 import { NotFound } from '@/routes/not-found'
 import { CounterShell } from '@/shell/counter-shell'
 import { PhoneShell } from '@/shell/phone-shell'
@@ -11,6 +11,7 @@ import { SessionContext } from '@/session/context'
 import { roleFromSegment, type Session } from '@/session/session'
 
 import { DemoBanner } from './demo-banner'
+import { DemoResetContext } from './demo-reset'
 
 /**
  * The demo branch's provider stack (design D1/D8). The role comes from the
@@ -58,10 +59,38 @@ export function DemoRoot() {
     }
   }, [role])
 
+  /**
+   * Bumped by the reset control. Every mock adapter — and the store beneath
+   * them — is rebuilt when it changes, which is the whole of "demo state
+   * resets": there is no snapshot to restore, because the starting state is
+   * what `createDemoStore()` produces every time (design D10).
+   *
+   * The role stays in the URL, so a reset returns to the surface it was called
+   * from rather than sending the reader back to the owner.
+   */
+  const [resetCount, setResetCount] = useState(0)
+  const reset = useCallback(() => setResetCount((count) => count + 1), [])
+
+  /**
+   * The demo's data, which **outlives a role switch**. Several mocks are built
+   * per role, so switching rebuilds the adapters — and if the data went with
+   * them, raising an alert as the manager and answering it as the owner would
+   * show an empty inbox, because it would be a different demo by then.
+   *
+   * Only a reset replaces it.
+   */
+  const data = useMemo(
+    () => createDemoData(),
+    // resetCount is the point of this dependency: a fresh dataset is exactly
+    // what a reset is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resetCount],
+  )
+
   // The persona's role reaches the mock so it can enforce the same owner-only
   // boundary the database does — a demo that let a manager change a staff code
   // would teach a product this one is not.
-  const adapters = useMemo(() => createMockAdapters(role ?? 'super_admin'), [role])
+  const adapters = useMemo(() => createMockAdapters(role ?? 'super_admin', data), [role, data])
 
   if (!session) return <NotFound />
 
@@ -69,9 +98,14 @@ export function DemoRoot() {
 
   return (
     <SessionContext.Provider value={session}>
-      <AdaptersContext.Provider value={adapters}>
-        <Shell banner={<DemoBanner />} />
-      </AdaptersContext.Provider>
+      <DemoResetContext.Provider value={reset}>
+        {/* Keyed so a reset remounts the surfaces too. New adapters alone
+            would reload the data and leave a half-filled form open over it,
+            which is not "the same place every walkthrough starts". */}
+        <AdaptersContext.Provider key={resetCount} value={adapters}>
+          <Shell banner={<DemoBanner />} />
+        </AdaptersContext.Provider>
+      </DemoResetContext.Provider>
     </SessionContext.Provider>
   )
 }

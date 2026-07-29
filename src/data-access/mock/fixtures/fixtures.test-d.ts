@@ -1,4 +1,8 @@
-import type { MovementType as DomainMovementType } from '@/domain'
+import type {
+  AlertPriority as DomainAlertPriority,
+  AlertStatus as DomainAlertStatus,
+  MovementType as DomainMovementType,
+} from '@/domain'
 
 import type { Tables } from '../../database.types'
 import { employeeFixtures } from './employees'
@@ -145,4 +149,53 @@ type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : neve
 export const movementTypesAgreeWithSchema: MutuallyAssignable<
   DomainMovementType,
   Tables<'inventory_movements'>['movement_type']
+> = true
+
+// ── Alerts, added by the owner console ──────────────────────────────────────
+
+const validAlert: Tables<'alerts'> = {
+  id: 'de000000-0000-4000-a000-000000000001',
+  outlet_id: 'd0000000-0000-4000-a000-000000000001',
+  raised_by: 'd1000000-0000-4000-a000-000000000002',
+  category: 'inventory',
+  priority: 'high',
+  status: 'open',
+  subject: 'Pita bread will not last tomorrow',
+  message: 'Down to 8 packets.',
+  created_at: '2026-07-28T05:10:00+00:00',
+}
+
+export const alertColumnTheSchemaLacks: Tables<'alerts'> = {
+  ...validAlert,
+  // @ts-expect-error — `assignee` is not a column of alerts; alerts are not routed.
+  assignee: 'someone',
+}
+
+// @ts-expect-error — a bare object misses every required alerts column.
+export const alertMissingRequiredColumns: Tables<'alerts'> = {}
+
+export const inventedAlertCategory: Pick<Tables<'alerts'>, 'category'> = {
+  // @ts-expect-error — 'weather' is not an alert_category.
+  category: 'weather',
+}
+
+export const inventedAlertPriority: Pick<Tables<'alerts'>, 'priority'> = {
+  // @ts-expect-error — 'critical' is not an alert_priority.
+  priority: 'critical',
+}
+
+export const inventedAlertStatus: Pick<Tables<'alerts'>, 'status'> = {
+  // @ts-expect-error — 'wontfix' is not an alert_status.
+  status: 'wontfix',
+}
+
+/** The same standing proof for the alert lifecycle's own literal unions. */
+export const alertStatusesAgreeWithSchema: MutuallyAssignable<
+  DomainAlertStatus,
+  Tables<'alerts'>['status']
+> = true
+
+export const alertPrioritiesAgreeWithSchema: MutuallyAssignable<
+  DomainAlertPriority,
+  Tables<'alerts'>['priority']
 > = true

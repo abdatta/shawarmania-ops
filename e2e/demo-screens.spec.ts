@@ -9,14 +9,19 @@ import { expect, test, type Page } from '@playwright/test'
  * theme attribute, in every cell of the matrix.
  */
 
+/**
+ * The owner's anchor is matched by role: "All outlets" is both the console's
+ * heading and an option in its outlet switcher, and a bare text match is
+ * ambiguous across the two.
+ */
 const SHELLS = [
-  { segment: 'owner', anchor: 'All outlets' },
-  { segment: 'admin', anchor: 'Outlet details' },
+  { segment: 'owner', anchor: (page: Page) => page.getByRole('heading', { name: 'All outlets' }) },
+  { segment: 'admin', anchor: (page: Page) => page.getByText('Outlet details') },
   // The counter chrome names whoever holds the open shift. The demo store
   // starts with one open, so a walkthrough lands able to ring a bill rather
   // than behind a PIN nobody was handed.
-  { segment: 'biller', anchor: 'Demo Biller' },
-  { segment: 'staff', anchor: 'Hello, Demo Staff' },
+  { segment: 'biller', anchor: (page: Page) => page.getByText('Demo Biller') },
+  { segment: 'staff', anchor: (page: Page) => page.getByText('Hello, Demo Staff') },
 ] as const
 
 const VIEWPORTS = [
@@ -43,7 +48,7 @@ for (const viewport of VIEWPORTS) {
         await page.goto(`demo/${shell.segment}`)
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
         await expect(page.getByTestId('demo-banner')).toBeVisible()
-        await expect(page.getByText(shell.anchor)).toBeVisible()
+        await expect(shell.anchor(page)).toBeVisible()
 
         await testInfo.attach(`${shell.segment}-${theme}-${viewport.name}`, {
           body: await page.screenshot(),

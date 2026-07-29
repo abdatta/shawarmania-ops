@@ -105,17 +105,24 @@ test.describe('the operations surfaces', () => {
   test('records a movement and a stock item’s figure follows its ledger', async ({ page }) => {
     await page.goto('demo/admin/inventory')
     const chicken = page.getByTestId('stock-list').getByRole('listitem').filter({ hasText: 'Chicken' })
-    await expect(chicken).toContainText('12.5 kg')
+
+    // Read the starting figure rather than pinning it: the scenario's stock is
+    // chosen so the ledger reconciles with the bills that consumed it, and it
+    // moves when the trade does. What is asserted is that recording 2.5 kg used
+    // takes the figure down by 2.5 — and that the ledger says the same.
+    const started = Number(/([\d.]+) kg/.exec((await chicken.innerText()) ?? '')?.[1])
+    expect(started).toBeGreaterThan(2.5)
+    const expected = `${Math.round((started - 2.5) * 1000) / 1000} kg`
 
     await chicken.getByRole('button', { name: 'Record' }).click()
     await page.getByLabel('What happened').selectOption('used')
     await page.getByLabel(/How much/).fill('2.5')
     await page.getByRole('button', { name: 'Record movement' }).click()
 
-    await expect(chicken).toContainText('10 kg')
+    await expect(chicken).toContainText(expected)
 
     await chicken.getByRole('link', { name: 'Ledger' }).click()
-    await expect(page.getByRole('table')).toContainText('10 kg')
+    await expect(page.getByRole('table')).toContainText(expected)
   })
 
   test('a Biller reads the menu and is offered nothing that changes it', async ({ page }) => {

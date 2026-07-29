@@ -12,6 +12,7 @@ import {
   createSupabaseInventoryAdapter,
 } from './operations'
 import { createSupabaseOutletsAdapter } from './outlets'
+import { createSupabaseAlertsAdapter, createSupabaseInsightsAdapter } from './oversight'
 
 /**
  * The real-adapter factory the real session tree provides. The demo tree must
@@ -36,6 +37,11 @@ export function createSupabaseAdapters(): DataAdapters {
     inventory: createSupabaseInventoryAdapter(),
     expenses: createSupabaseExpensesAdapter(),
     dailyCash: createSupabaseDailyCashAdapter(),
+    // Alerts are `demo`-gated, so nothing calls this one. Insights is the
+    // exception: `owner-dashboard` is `live` and does call it — and `null` is
+    // its honest answer until #13. See supabase-adapters/oversight.ts.
+    alerts: createSupabaseAlertsAdapter(),
+    insights: createSupabaseInsightsAdapter(),
     // Takes no client: it holds no credential and reaches no Supabase service.
     // It is here because this is the layer permitted to do I/O, and a screen
     // fetching for itself is exactly what the seam exists to prevent.

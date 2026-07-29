@@ -1,6 +1,7 @@
 import type { RouteObject } from 'react-router'
 
 import { AccountsSurface } from '@/features/accounts/accounts-surface'
+import { AlertsSurface } from '@/features/alerts/alerts-surface'
 import { MyAttendance } from '@/features/attendance/my-attendance'
 import { OutletAttendance } from '@/features/attendance/outlet-attendance'
 import { BillingCounter } from '@/features/billing/billing-counter'
@@ -8,6 +9,10 @@ import { ShiftUnlock } from '@/features/billing/shift-unlock'
 import { DailyCashSurface } from '@/features/cash/daily-cash-surface'
 import { EmployeeRoster } from '@/features/employees/employee-roster'
 import { ExpensesSurface } from '@/features/expenses/expenses-surface'
+import { ComparisonSurface } from '@/features/insights/comparison-surface'
+import { OutletDayView } from '@/features/insights/outlet-day-view'
+import { PnlSurface } from '@/features/insights/pnl-surface'
+import { ReportsSurface } from '@/features/insights/reports-surface'
 import { InventorySurface } from '@/features/inventory/inventory-surface'
 import { MovementLedger } from '@/features/inventory/movement-ledger'
 import { MenuSurface } from '@/features/menu/menu-surface'
@@ -134,6 +139,52 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="cash">
         <DailyCashSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // One path, two roles again: `admin-alerts` raises and `owner-alerts` is
+    // the cross-outlet inbox, and the same component serves both because the
+    // difference between them is the adapter's, not the screen's.
+    path: 'alerts',
+    element: (
+      <GatedSurface path="alerts">
+        <AlertsSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'pnl',
+    element: (
+      <GatedSurface path="pnl">
+        <PnlSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'reports',
+    element: (
+      <GatedSurface path="reports">
+        <ReportsSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'comparison',
+    element: (
+      <GatedSurface path="comparison">
+        <ComparisonSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // The outlet switcher's destination. The parameter is part of the surface's
+    // declared path, so the gate is looked up against the pattern rather than
+    // against whichever outlet id happens to be in the URL.
+    path: 'outlet/:outletId',
+    element: (
+      <GatedSurface path="outlet/:outletId">
+        <OutletDayView />
       </GatedSurface>
     ),
   },

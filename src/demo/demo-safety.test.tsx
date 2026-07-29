@@ -8,6 +8,7 @@ import {
   createDemoStore,
   createMockAdapters,
   OUTLET_KALYANI_ID,
+  OUTLET_KANCHRAPARA_ID,
   OUTLET_MISTAKE_ID,
 } from '@/data-access/mock'
 import { getSupabaseClient } from '@/data-access/supabase'
@@ -45,7 +46,11 @@ describe('demo mode safety', () => {
     // Owner home, served by the mock outlets adapter (async — the fixture
     // rows land a microtask after the header).
     expect(await screen.findByText('All outlets')).toBeInTheDocument()
-    expect(await screen.findByText('Shawarmania Kalyani')).toBeInTheDocument()
+    // The card's own heading, not the switcher option that carries the same
+    // name — the assertion is that the outlet's figures rendered.
+    expect(
+      await screen.findByRole('heading', { name: 'Shawarmania Kalyani' }),
+    ).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
     // Role switcher: Admin.
@@ -167,6 +172,26 @@ describe('demo mode safety', () => {
       actualClosingPaise: 100000,
     })
 
+    // The owner's own adapters. `insights` reads across both outlets and
+    // `alerts` writes, so between them they cover the two shapes that would
+    // leak if a demo session ever reached Supabase.
+    const period = { from: today, to: today }
+    await adapters.insights.outletDay(outletId, today)
+    await adapters.insights.periodSummary(outletId, period, 'consumption')
+    await adapters.insights.comparison([outletId, OUTLET_KANCHRAPARA_ID], period, 'cash')
+
+    await adapters.alerts.listAlerts()
+    const raised = await adapters.alerts.raiseAlert({
+      outletId,
+      category: 'other',
+      priority: 'normal',
+      subject: 'Demo alert',
+      message: 'Raised while proving the demo cannot reach the network.',
+    })
+    await adapters.alerts.getAlert(raised.id)
+    await adapters.alerts.respond(raised.id, 'Seen.')
+    await adapters.alerts.setStatus(raised.id, 'acknowledged')
+
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
@@ -231,17 +256,32 @@ describe('demo mode safety', () => {
   })
 
   it('the demo banner offers no dismiss affordance', async () => {
+    const user = userEvent.setup()
     renderDemo('/demo/owner')
     const banner = await screen.findByTestId('demo-banner')
 
-    // The only interactive elements inside the banner are the role switcher
-    // links — no button of any kind, nothing that could hide it.
-    expect(banner.querySelectorAll('button')).toHaveLength(0)
+    // The links are the role switcher, and they all stay inside /demo.
     const links = banner.querySelectorAll('a')
     expect(links).toHaveLength(4)
     for (const link of links) {
       expect(link.getAttribute('href')).toMatch(/^\/demo\//)
     }
+
+    // The invariant itself, rather than a proxy for it: press **every** control
+    // in this strip and the strip is still there afterwards. Counting buttons
+    // used to stand in for this, and stopped being able to the moment the
+    // banner gained one that does something other than dismiss it.
+    const controls = [...banner.querySelectorAll('button')]
+    expect(controls.length).toBeGreaterThan(0)
+    for (const control of controls) {
+      await user.click(control)
+      expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
+      // Anything that opened a dialog is dismissed again, so the next control
+      // is genuinely clicked rather than blocked by an overlay.
+      const cancel = screen.queryByRole('button', { name: 'Cancel' })
+      if (cancel) await user.click(cancel)
+    }
+    expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
   })
 
   it('an unknown role segment is absent, not greyed out', async () => {
@@ -251,10 +291,10 @@ describe('demo mode safety', () => {
   })
 
   it('a deep link to a hidden surface lands on not-found inside the shell', async () => {
-    // `pnl` is still `hidden`; `inventory` used to be, and is now `demo`. The
+    // `devices` is still `hidden`; `pnl` used to be, and is now `demo`. The
     // assertion is about a hidden surface, so it follows the gate rather than
     // the path.
-    renderDemo('/demo/admin/pnl')
+    renderDemo('/demo/admin/devices')
     expect(await screen.findByText('That page does not exist')).toBeInTheDocument()
     // Inside the shell: the demo banner is still there, because the URL is
     // still a demo URL — the surface is what is absent.
