@@ -1,0 +1,25 @@
+-- Drop the access-token hook. Nothing registers it any more.
+--
+-- `multi-outlet-people` (#22) emptied this function to `select event` rather
+-- than dropping it, for one reason: GoTrue's access-token hook is registered in
+-- the project's own auth settings, not in this schema, so dropping it while
+-- that registration still pointed here would have failed every token issue —
+-- locking out the one person who could go and turn it off. It has injected
+-- nothing since.
+--
+-- The registration was removed from Authentication -> Hooks on 2026-07-30, so
+-- the stub has nothing left to protect.
+--
+-- If token issuance somehow fails after this with a hook error, the
+-- registration was not in fact gone. Recovery does **not** depend on anyone
+-- being able to sign in — it is a direct Postgres connection:
+--
+--   create or replace function public.custom_access_token_hook(event jsonb)
+--   returns jsonb language sql stable security definer set search_path = ''
+--   as $$ select event $$;
+--   grant execute on function public.custom_access_token_hook(jsonb)
+--     to supabase_auth_admin;
+--   revoke execute on function public.custom_access_token_hook(jsonb)
+--     from public, anon, authenticated;
+
+drop function public.custom_access_token_hook(jsonb);

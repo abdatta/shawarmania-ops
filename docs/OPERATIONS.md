@@ -140,20 +140,21 @@ linking this repo to it would run these migrations into someone else's data.
    This carries the settings that make the whole permission model work:
    signup disabled and email confirmations off.
 
-   **The access-token hook is finished with.** `multi-outlet-people` (#22)
-   dropped both claim helpers: authority is resolved from
-   `public.assignments` on every request, so a token carries nothing about what
-   a person may do.
+   **There is no access-token hook.** `multi-outlet-people` (#22) dropped both
+   claim helpers — authority is resolved from `public.assignments` on every
+   request, so a token carries nothing about what a person may do — and the
+   hook function itself was dropped on 2026-07-30 once the registration was
+   removed from Authentication → Hooks. A fresh project needs no hook
+   registered at any point.
 
-   The function itself is **deliberately left in place as a no-op** rather than
-   dropped, so that applying the migration cannot break sign-in on a project
-   whose auth settings still register it — dropping it while the registration
-   stood would fail every token issue and lock everybody out, including whoever
-   would go and turn it off. Order of operations, therefore:
-
-   1. apply the migration (`db push`) — sign-in keeps working throughout;
-   2. then disable the hook in Authentication → Hooks, at leisure;
-   3. a later one-line migration may drop the stub once no project registers it.
+   That retirement was deliberately done in two steps rather than one, and the
+   reason is worth keeping: a deployed project registers its hook in its own
+   auth settings, not in `config.toml`, so dropping the function while the
+   registration still stood would have failed every token issue and locked
+   everybody out — including whoever would go and turn it off. So #22 emptied
+   the function to `select event`, the registration came off in the dashboard,
+   and only then did a one-line migration drop it. **A schema migration must
+   never be able to lock the owner out of their own business.**
 
    Then correct one thing by hand: `config.toml` carries a localhost
    `site_url`, which is right for development and wrong for production. Set

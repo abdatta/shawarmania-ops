@@ -1212,7 +1212,6 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       invite_attempts_exceeded: {
         Args: {
           p_global?: number
