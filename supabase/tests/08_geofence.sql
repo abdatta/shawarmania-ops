@@ -14,16 +14,16 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
-create function pg_temp.impersonate(p_sub uuid, p_role text, p_outlet uuid)
+-- Claims carry `sub` and nothing about authority (multi-outlet-people): scope
+-- is resolved from the seeded `assignments` rows, exactly as a real session's
+-- is.
+create function pg_temp.impersonate(p_sub uuid)
 returns void language plpgsql as $$
 begin
   execute 'reset role';
   perform set_config(
     'request.jwt.claims',
-    json_build_object(
-      'sub', p_sub, 'role', 'authenticated',
-      'app_role', p_role, 'app_outlet_id', p_outlet
-    )::text,
+    json_build_object('sub', p_sub, 'role', 'authenticated')::text,
     true);
   execute 'set local role authenticated';
 end;
@@ -119,8 +119,7 @@ select is((select check_in_distance_m from public.attendance
 -- ---------------------------------------------------------------------------
 -- An employee cannot claim `present` from outside the fence.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 select lives_ok($q$
   insert into public.attendance
@@ -164,8 +163,7 @@ select is((select status::text from public.attendance
 
 -- The counter tablet is exempt: an enrolled device standing in the outlet,
 -- with no GPS to offer.
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 select lives_ok($q$
   insert into public.attendance
@@ -176,8 +174,7 @@ $q$, 'the counter tablet checks someone in without coordinates');
 
 -- Read back as the manager: a Biller may write attendance and may not read it,
 -- which is its own small proof that the write path is narrower than the view.
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select is((select status::text from public.attendance
             where person_id = '20000000-0000-4000-a000-000000000002'
@@ -197,8 +194,7 @@ select is((select latitude from public.outlets
             where id = '00000000-0000-4000-a000-000000000002'), null,
   'setup: Kanchrapara now has no captured position');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000007'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000002'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000007'::uuid);
 
 select lives_ok($q$
   insert into public.attendance
@@ -221,8 +217,7 @@ select is((select check_in_distance_m from public.attendance
   null,
   'with the distance stored as unknown rather than guessed at');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 -- Erasing the evidence must not launder the verdict.
 select throws_ok($q$
@@ -256,8 +251,7 @@ select is(round((select check_out_distance_m from public.attendance
 -- ---------------------------------------------------------------------------
 -- The manager's side: an override clears the block, a blank reason does not.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select throws_ok($q$
   update public.attendance
@@ -340,8 +334,7 @@ select is((select geofence_radius_m from public.outlets
             where id = '00000000-0000-4000-a000-000000000001'), 150,
   'and the outlet''s radius is unchanged');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
-  'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select is((select location_captured_at from public.outlets
             where id = '00000000-0000-4000-a000-000000000002'), null,

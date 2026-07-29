@@ -19,17 +19,37 @@ export const APP_ROLES: readonly AppRole[] = [
   'employee',
 ]
 
-export interface Caller {
-  id: string
+/**
+ * One place a person may work, as one role. Since multi-outlet-people a person
+ * holds a SET of these rather than a single role-and-outlet pair, so every
+ * capability below is a question about the set.
+ */
+export interface Assignment {
   role: AppRole
   outletId: string | null
 }
 
+export interface Caller {
+  id: string
+  assignments: Assignment[]
+}
+
 export interface TargetAccount {
   id: string
-  role: AppRole
-  outletId: string | null
+  assignments: Assignment[]
   isActive: boolean
+}
+
+/** Does this person hold the business-wide owner role? */
+export function isOwner(who: { assignments: Assignment[] }): boolean {
+  return who.assignments.some((a) => a.role === 'super_admin')
+}
+
+/** The outlets this person holds a live assignment at, in the given role. */
+export function outletsFor(who: { assignments: Assignment[] }, role: AppRole): string[] {
+  return who.assignments
+    .filter((a) => a.role === role && a.outletId !== null)
+    .map((a) => a.outletId as string)
 }
 
 /** The privileged client. Its key is injected by the runtime and never leaves it. */
@@ -59,7 +79,7 @@ export async function callerFrom(req: Request, service: SupabaseClient): Promise
   const profile = await loadAccount(service, data.user.id)
   if (!profile || !profile.isActive) return null
 
-  return { id: profile.id, role: profile.role, outletId: profile.outletId }
+  return { id: profile.id, assignments: profile.assignments }
 }
 
 export async function loadAccount(
@@ -68,14 +88,23 @@ export async function loadAccount(
 ): Promise<TargetAccount | null> {
   const { data, error } = await service
     .from('profiles')
-    .select('id, role, outlet_id, is_active')
+    .select('id, is_active, assignments(role, outlet_id, ended_on)')
     .eq('id', profileId)
     .maybeSingle()
   if (error || !data) return null
+
+  // Live rows only. An ended assignment is history, and history confers
+  // nothing — the same rule the database's own helpers apply.
+  const rows = (data.assignments ?? []) as {
+    role: AppRole
+    outlet_id: string | null
+    ended_on: string | null
+  }[]
   return {
     id: data.id as string,
-    role: data.role as AppRole,
-    outletId: (data.outlet_id as string | null) ?? null,
+    assignments: rows
+      .filter((a) => a.ended_on === null)
+      .map((a) => ({ role: a.role, outletId: a.outlet_id })),
     isActive: data.is_active as boolean,
   }
 }
@@ -99,15 +128,42 @@ export function mayProvision(
     targetRole === 'super_admin' ? targetOutletId === null : targetOutletId !== null
   if (!outletShapeValid) return false
 
-  if (caller.role === 'super_admin') return true
-  if (caller.role === 'franchise_admin') {
-    return (
-      (targetRole === 'biller' || targetRole === 'employee') &&
-      caller.outletId !== null &&
-      targetOutletId === caller.outletId
-    )
+  if (isOwner(caller)) return true
+  if (targetRole !== 'biller' && targetRole !== 'employee') return false
+  return targetOutletId !== null && outletsFor(caller, 'franchise_admin').includes(targetOutletId)
+}
+
+/**
+ * May this caller grant, or end, this assignment?
+ *
+ * The database enforces the same rule (`assignments_insert` plus its guard);
+ * this is the edge restating it so a refusal is a 403 with a name rather than
+ * a policy violation surfacing as a 500.
+ *
+ * **The self-assignment carve-out lives here too** (multi-outlet-people design
+ * D7): a Super Admin may place themselves at an outlet, because production
+ * holds exactly one and requiring a second person would make the owner
+ * day-running a shop impossible; nobody may ever grant themselves the owner
+ * role, which is the only self-grant that widens what they can do.
+ */
+export function mayAssign(
+  caller: Caller,
+  targetPersonId: string,
+  role: AppRole,
+  outletId: string | null,
+): boolean {
+  const outletShapeValid = role === 'super_admin' ? outletId === null : outletId !== null
+  if (!outletShapeValid) return false
+
+  if (targetPersonId === caller.id) {
+    if (role === 'super_admin') return false
+    if (!isOwner(caller)) return false
+    return true
   }
-  return false
+
+  if (isOwner(caller)) return true
+  if (role !== 'biller' && role !== 'employee') return false
+  return outletId !== null && outletsFor(caller, 'franchise_admin').includes(outletId)
 }
 
 /**
@@ -121,15 +177,21 @@ export function mayProvision(
  */
 export function mayManage(caller: Caller, target: TargetAccount): boolean {
   if (caller.id === target.id) return false
-  if (caller.role === 'super_admin') return true
-  if (caller.role === 'franchise_admin') {
-    return (
-      (target.role === 'biller' || target.role === 'employee') &&
-      caller.outletId !== null &&
-      target.outletId === caller.outletId
-    )
-  }
-  return false
+  if (isOwner(caller)) return true
+
+  const managed = outletsFor(caller, 'franchise_admin')
+  if (managed.length === 0) return false
+
+  // An account is not this manager's to act on unless EVERY place the person
+  // works is a place this manager runs. Deactivating somebody who also works
+  // at the other outlet would reach across the boundary through the person —
+  // the account is one object, and switching it off switches it off
+  // everywhere. Somebody with no assignment at all is nobody's to manage but
+  // the owner's, which the empty-set case gives for free.
+  if (target.assignments.length === 0) return false
+  return target.assignments.every(
+    (a) => a.role !== 'super_admin' && a.outletId !== null && managed.includes(a.outletId),
+  )
 }
 
 /**
@@ -142,5 +204,5 @@ export function mayManage(caller: Caller, target: TargetAccount): boolean {
  * "You may not ask" is one that stays held when the matching changes.
  */
 export function managesAnyone(caller: Caller): boolean {
-  return caller.role === 'super_admin' || caller.role === 'franchise_admin'
+  return isOwner(caller) || outletsFor(caller, 'franchise_admin').length > 0
 }

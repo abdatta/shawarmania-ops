@@ -22,16 +22,16 @@ delete from public.attendance
    and business_date not in (current_date - 1, current_date - 2);
 alter table public.attendance enable trigger attendance_no_delete;
 
-create function pg_temp.impersonate(p_sub uuid, p_role text, p_outlet uuid)
+-- Claims carry `sub` and nothing about authority (multi-outlet-people): scope
+-- is resolved from the seeded `assignments` rows, exactly as a real session's
+-- is.
+create function pg_temp.impersonate(p_sub uuid)
 returns void language plpgsql as $$
 begin
   execute 'reset role';
   perform set_config(
     'request.jwt.claims',
-    json_build_object(
-      'sub', p_sub, 'role', 'authenticated',
-      'app_role', p_role, 'app_outlet_id', p_outlet
-    )::text,
+    json_build_object('sub', p_sub, 'role', 'authenticated')::text,
     true);
   execute 'set local role authenticated';
 end;
@@ -50,8 +50,7 @@ $$;
 -- ---------------------------------------------------------------------------
 -- Attendance.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 -- An employee checks themselves in from their phone, evidence attached.
 select lives_ok($q$
@@ -100,8 +99,7 @@ select throws_ok($q$
 $q$, 'P0001', null, 'an employee cannot record an override');
 
 -- The counter tablet is the secondary check-in path, and says so.
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 select lives_ok($q$
   insert into public.attendance
@@ -120,8 +118,7 @@ $q$, '42501', null, 'the tablet cannot record a phone-sourced check-in (and not 
 
 -- A manager override is recorded with who and why; the guard demands it be
 -- the session's own identity.
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select lives_ok($q$
   update public.attendance
@@ -232,8 +229,7 @@ select throws_ok($q$
 $q$, 'P0001', null, 'an enterer stamp on a non-manual event is refused');
 
 -- The Super Admin has the same capability at any outlet.
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
-  'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select lives_ok($q$
   insert into public.attendance
@@ -254,8 +250,7 @@ select is(
 -- manual check-in was recorded for updates their own row — the update policy
 -- permits the row, so what refuses the manual check-out is the guard's role
 -- gate, not an accident of policy branch shapes.
-select pg_temp.impersonate('10000000-0000-4000-a000-00000000000c'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-00000000000c'::uuid);
 
 select throws_ok($q$
   update public.attendance
@@ -264,8 +259,7 @@ select throws_ok($q$
      and business_date = public.app_business_date(now(), time '04:00')
 $q$, 'P0001', null, 'an employee cannot hand-craft a manual event, even on their own row');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 -- The guard answers before the policy can (BEFORE triggers run ahead of the
 -- WITH CHECK), so the refusal arrives as the guard's named error rather than
@@ -286,8 +280,7 @@ $q$, 'P0001', null, 'attendance rows cannot be deleted, even by the owner');
 -- ---------------------------------------------------------------------------
 -- Alerts.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select lives_ok($q$
   insert into public.alerts (outlet_id, raised_by, subject, message, category, priority)
@@ -314,8 +307,7 @@ select ok(
   (select count(*) from public.alert_responses) >= 1,
   'the franchise admin reads the owner''s responses on their thread');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
-  'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select lives_ok($q$
   insert into public.alert_responses (alert_id, responder_profile_id, message)
@@ -333,11 +325,89 @@ select throws_ok($q$
    where id = '70000000-0000-4000-a000-000000000001'
 $q$, 'P0001', null, 'only the status of an alert may change');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 select is((select count(*) from public.alerts), 0::bigint,
   'employees see no alerts');
+
+-- ---------------------------------------------------------------------------
+-- The split day (multi-outlet-people): one person, one business date, two
+-- outlets. This is the pair the old `(person_id, business_date)` uniqueness
+-- made impossible.
+
+select pg_temp.impersonate('10000000-0000-4000-a000-00000000000e'::uuid);
+
+select lives_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status,
+     check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000e',
+          public.app_business_date(now(), time '04:00'), 'present',
+          now(), 22.97501, 88.43451, 12, 'phone')
+$q$, 'the split-shift person checks in at Kalyani from their own phone');
+
+select lives_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status,
+     check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
+  values ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-00000000000e',
+          public.app_business_date(now(), time '04:00'), 'present',
+          now(), 22.94501, 88.43301, 12, 'phone')
+$q$, 'and at Kanchrapara on the same business date, from the same phone');
+
+select is(
+  (select count(*) from public.attendance
+    where person_id = '10000000-0000-4000-a000-00000000000e'
+      and business_date = public.app_business_date(now(), time '04:00')),
+  2::bigint,
+  'both rows exist, one per outlet, each recording exactly who');
+
+select is(
+  (select count(*) from public.attendance
+    where person_id = '10000000-0000-4000-a000-00000000000e'
+      and business_date = public.app_business_date(now(), time '04:00')
+      and status = 'present'),
+  2::bigint,
+  'and each was judged present by its own outlet''s fence');
+
+select throws_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status,
+     check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000e',
+          public.app_business_date(now(), time '04:00'), 'present',
+          now(), 22.97501, 88.43451, 12, 'phone')
+$q$, '23505', null, 'a second row at the SAME outlet on the same date is still refused');
+
+-- A single-outlet person is unchanged: they cannot check in where they do not
+-- work, however the request is crafted.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
+
+select throws_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status,
+     check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
+  values ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-000000000006',
+          public.app_business_date(now(), time '04:00'), 'present',
+          now(), 22.94501, 88.43301, 12, 'phone')
+$q$, '42501', null, 'an employee cannot check in at an outlet they hold no assignment at');
+
+-- Each manager sees only the half of the split day worked at their own outlet.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
+select is(
+  (select count(*) from public.attendance
+    where person_id = '10000000-0000-4000-a000-00000000000e'
+      and business_date = public.app_business_date(now(), time '04:00')),
+  1::bigint,
+  'the Kalyani manager sees only the Kalyani half of the split day');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000003'::uuid);
+select is(
+  (select count(*) from public.attendance
+    where person_id = '10000000-0000-4000-a000-00000000000e'
+      and business_date = public.app_business_date(now(), time '04:00')),
+  1::bigint,
+  'and the Kanchrapara manager only theirs');
 
 reset role;
 

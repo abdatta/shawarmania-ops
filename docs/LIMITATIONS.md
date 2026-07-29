@@ -2,6 +2,38 @@
 
 Known edges, deliberate non-features, and honest gaps. Everything here is a decision, not an oversight — and each one names what would change if it stopped being acceptable.
 
+## A multi-outlet person with no position cannot check in
+
+Somebody assigned to two outlets checks in from one action and the geofence
+decides which shop they are at. When the phone can supply **no position at
+all** — permission refused, no fix — there is nothing to decide it with, and
+the app refuses rather than guessing: a day recorded at the wrong shop is worse
+than a day recorded late. They are told to ask an admin, who records it as a
+manual entry exactly as for any other phone that cannot check in.
+
+Somebody assigned to **one** outlet is unaffected: their row is written with no
+coordinates, the fence declines to judge it, and a manager clears it — which is
+what has always happened.
+
+## The owner's remote entries are non-cash, and that is a bound not a warning
+
+The Super Admin can record a non-cash expense and a stock correction at any
+outlet. They cannot record a cash expense, a withdrawal or a day close there,
+and the refusal is the database's rather than a form's — so nothing recorded
+remotely can move a drawer somebody else is responsible for counting. An owner
+who genuinely needs the cash path takes an assignment as that outlet's manager,
+which is a visible, recorded act.
+
+## Only a Super Admin may assign themselves
+
+Self-assignment is refused for everyone except a Super Admin placing themselves
+at an outlet — and nobody at all may grant themselves the owner role. The
+carve-out exists because production holds exactly one Super Admin: requiring a
+second person would make the owner day-running a shop impossible without first
+minting a second owner account, which is a larger security decision than the
+one it avoids. If a second Super Admin ever exists, the carve-out can be
+removed by deleting one branch of one policy.
+
 ## Deliberately deferred from v1
 
 ### Bills are record-only

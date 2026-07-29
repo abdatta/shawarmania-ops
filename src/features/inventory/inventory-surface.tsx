@@ -18,7 +18,7 @@ import {
   type InventoryUnit,
 } from '@/data-access/adapters'
 import { formatQuantity, resolveBusinessDate, type MovementType } from '@/domain'
-import { useSession } from '@/session/context'
+import { useOutletScope } from '@/features/outlet-scope'
 
 /**
  * Stock — what is in the shop, and the ledger that says why.
@@ -62,6 +62,10 @@ interface MovementDraft {
 
 const EMPTY_MOVEMENT: MovementDraft = { movementType: 'used', quantity: '', note: '' }
 
+/** What an owner recording into somebody else's books is told, once. */
+const REMOTE_ENTRY_NOTE =
+  'Recording into an outlet you do not run. Only a correction is available, and this will be recorded as yours.'
+
 interface ItemDraft {
   name: string
   unit: InventoryUnit
@@ -71,7 +75,6 @@ interface ItemDraft {
 const EMPTY_ITEM: ItemDraft = { name: '', unit: 'kg', lowStockThreshold: '' }
 
 export function InventorySurface() {
-  const session = useSession()
   const { inventory: adapter, outlets } = useAdapters()
 
   const [items, setItems] = useState<InventoryItemSummary[] | null>(null)
@@ -83,7 +86,17 @@ export function InventorySurface() {
   const [itemFormOpen, setItemFormOpen] = useState(false)
   const [itemDraft, setItemDraft] = useState<ItemDraft>(EMPTY_ITEM)
 
-  const outletId = session.outletId
+  // Which outlet this surface is about. One for nearly everybody; a
+  // per-surface choice for somebody who manages more than one, which
+  // confers nothing — the database decides every write from the
+  // assignment (multi-outlet-people, design D6).
+  const { outletId, managed, selector: outletSelector } = useOutletScope()
+
+  // As on expenses: at an outlet the caller does not run, only a correction is
+  // available, because that is the only movement `inventory_movements_insert`
+  // accepts from the owner's branch. Receiving and consuming stock is done
+  // standing in the shop (multi-outlet-people, design D8).
+  const movements = managed ? MOVEMENTS : MOVEMENTS.filter((kind) => kind.value === 'correction')
 
   const load = useCallback(async () => {
     if (!outletId) return
@@ -152,7 +165,7 @@ export function InventorySurface() {
         businessDate,
       })
       setMoving(null)
-      setMovement(EMPTY_MOVEMENT)
+      setMovement(managed ? EMPTY_MOVEMENT : { ...EMPTY_MOVEMENT, movementType: 'correction' })
     })
   }
 
@@ -196,9 +209,10 @@ export function InventorySurface() {
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
+        scope={outletSelector}
         title="Stock"
         subtitle="What is in the shop, and the ledger behind every figure."
-        action={items && items.length > 0 ? addButton : undefined}
+        action={managed && items && items.length > 0 ? addButton : undefined}
       />
 
       {error && (
@@ -217,7 +231,7 @@ export function InventorySurface() {
         <EmptyState
           icon={Package}
           title="Nothing is being tracked yet. Add the things you count — chicken, pita, packaging — and every delivery and every day's use goes on their ledgers."
-          action={addButton}
+          action={managed ? addButton : undefined}
         />
       ) : (
         <ul className="space-y-2" data-testid="stock-list">
@@ -254,7 +268,11 @@ export function InventorySurface() {
                     data-testid={`record-${item.id}`}
                     onClick={() => {
                       setError(null)
-                      setMovement(EMPTY_MOVEMENT)
+                      setMovement(
+                        managed
+                          ? EMPTY_MOVEMENT
+                          : { ...EMPTY_MOVEMENT, movementType: 'correction' },
+                      )
                       setMoving(item)
                     }}
                   >
@@ -292,6 +310,15 @@ export function InventorySurface() {
         }
       >
         <form id="movement-form" onSubmit={submitMovement} className="space-y-4" noValidate>
+          {!managed && (
+            <p
+              data-testid="remote-entry-note"
+              className="rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted"
+            >
+              {REMOTE_ENTRY_NOTE}
+            </p>
+          )}
+
           <Field label="What happened" id="movement-type">
             <Select
               id="movement-type"
@@ -300,7 +327,7 @@ export function InventorySurface() {
                 setMovement({ ...movement, movementType: event.target.value as MovementType })
               }
             >
-              {MOVEMENTS.map((kind) => (
+              {movements.map((kind) => (
                 <option key={kind.value} value={kind.value}>
                   {kind.label}
                 </option>

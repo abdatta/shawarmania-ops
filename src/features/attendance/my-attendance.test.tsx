@@ -4,10 +4,11 @@ import { describe, expect, it } from 'vitest'
 
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
-import { createMockAdapters, OUTLET_KALYANI_ID } from '@/data-access/mock'
+import { createMockAdapters } from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { MyAttendance } from './my-attendance'
 import { OutletAttendance } from './outlet-attendance'
@@ -26,8 +27,8 @@ function sessionFor(role: 'employee' | 'franchise_admin'): Session {
   return {
     mode: 'demo',
     userId: persona.profile.id,
-    role,
-    outletId: OUTLET_KALYANI_ID,
+    assignments: persona.assignments,
+    ...deriveSessionScope(persona.assignments),
     displayName: persona.profile.full_name,
     persona,
   }

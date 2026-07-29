@@ -36,6 +36,7 @@ const SEED_PASSWORD = 'shawarmania-local'
 const NEW_PASSWORD = 'a-genuinely-set-password'
 /** A Kalyani person, for the cross-outlet edit this suite must be refused. */
 const KALYANI_EMPLOYEE_PROFILE = '10000000-0000-4000-a000-000000000006'
+const KALYANI_OUTLET = '00000000-0000-4000-a000-000000000001'
 
 type Client = SupabaseClient<Database>
 
@@ -197,29 +198,43 @@ describe('creating an outlet', () => {
 })
 
 describe('the person the one act created', () => {
-  it('carries an issued staff code and the staff facts the form sent', async () => {
+  it('carries the job title the form sent, and the assignment that placed them', async () => {
     const people = await createSupabaseAccountsAdapter(manager).listAccounts()
     const person = people.find((row) => row.id === employeeProfileId)
 
     expect(person).toBeDefined()
-    // The database issued the code from the probe outlet's own prefix; the
-    // shape is the contract, the value is the database's to pick.
-    expect(person?.staffCode).toMatch(/^[A-Z0-9]{3}-[0-9A-HJKMNP-TV-Z]{4}$/)
     expect(person?.roleTitle).toBe('Grill')
-    expect(person?.joinedOn).toBe('2026-07-01')
-    expect(person?.leftOn).toBeNull()
+
+    // One act wrote both rows: the account, and the assignment that says where
+    // they work. An account with neither would be a person who exists and
+    // works nowhere.
+    const live = (person?.assignments ?? []).filter((a) => a.endedOn === null)
+    expect(live).toHaveLength(1)
+    expect(live[0]?.role).toBe('employee')
+    expect(live[0]?.outletId).toBe(outletId)
+    expect(live[0]?.startedOn).toBe('2026-07-01')
   })
 
   it('can read their own person record the moment they activate', async () => {
     const { data, error } = await employee
       .from('profiles')
-      .select('id, full_name, staff_code, role_title')
+      .select('id, full_name, role_title')
       .eq('id', employeeProfileId)
       .single()
 
     expect(error).toBeNull()
     expect(data?.full_name).toBe('Probe Griller')
-    expect(data?.staff_code).toBeTruthy()
+    expect(data?.role_title).toBe('Grill')
+  })
+
+  it('reads their own assignment, which is what says where they may check in', async () => {
+    const { data, error } = await employee
+      .from('assignments')
+      .select('role, outlet_id, ended_on')
+      .eq('person_id', employeeProfileId)
+
+    expect(error).toBeNull()
+    expect(data).toEqual([{ role: 'employee', outlet_id: outletId, ended_on: null }])
   })
 
   it('has staff facts their manager can edit, under RLS', async () => {
@@ -230,11 +245,16 @@ describe('the person the one act created', () => {
     expect(updated.roleTitle).toBe('Senior Grill')
   })
 
-  it('whose staff code the manager cannot change — the database refuses by name', async () => {
-    const accounts = createSupabaseAccountsAdapter(manager)
-    await expect(
-      accounts.updateStaffFacts(employeeProfileId, { staffCode: 'PRB-HACK' }),
-    ).rejects.toMatchObject({ code: 'code_not_yours' })
+  it('whose placement the manager cannot move to an outlet they do not manage', async () => {
+    // Where somebody works is not a staff fact any more — it is an assignment,
+    // with its own policy. A manager may place people at outlets they manage
+    // and nowhere else, whatever the request says.
+    const { error } = await manager.from('assignments').insert({
+      person_id: employeeProfileId,
+      role: 'employee',
+      outlet_id: KALYANI_OUTLET,
+    })
+    expect(error?.code).toBe('42501')
   })
 
   it('and a person at another outlet is out of the manager’s reach entirely', async () => {
@@ -299,7 +319,7 @@ describe('the check-in the whole chain existed for', () => {
     await createSupabaseOutletsAdapter(owner).updateOutlet(outletId, { isActive: false })
 
     const attendance = createSupabaseAttendanceAdapter(employee)
-    const day = await attendance.getDay(employeeProfileId, businessDate)
+    const day = await attendance.getDay(employeeProfileId, businessDate, outletId)
     const closed = await attendance.checkOut({
       attendanceId: day!.id,
       reading: {
@@ -317,13 +337,18 @@ describe('the check-in the whole chain existed for', () => {
 
   it('survives the person leaving — the days were worked', async () => {
     const accounts = createSupabaseAccountsAdapter(manager)
-    await accounts.updateStaffFacts(employeeProfileId, { leftOn: businessDate })
+    const before = (await accounts.listAccounts()).find((row) => row.id === employeeProfileId)
+    const live = (before?.assignments ?? []).find((a) => a.endedOn === null)
+    expect(live).toBeDefined()
+
+    await accounts.endAssignment(live!.id)
 
     // The record is not erased by the departure; the manager still reads it,
     // and so does the person — it is their own history.
     const day = await createSupabaseAttendanceAdapter(manager).getDay(
       employeeProfileId,
       businessDate,
+      outletId,
     )
     expect(day?.checkIn).not.toBeNull()
     expect(day?.checkOut).not.toBeNull()
@@ -332,9 +357,22 @@ describe('the check-in the whole chain existed for', () => {
       await createSupabaseAttendanceAdapter(employee).listHistory(employeeProfileId)
     expect(ownHistory.length).toBeGreaterThan(0)
 
-    // And departure is reversible — people come back.
-    const returned = await accounts.updateStaffFacts(employeeProfileId, { leftOn: null })
-    expect(returned.leftOn).toBeNull()
+    // Ending their last assignment takes them out of this manager's reach
+    // entirely — they no longer share an outlet, and that is the isolation
+    // working rather than the account having gone anywhere. The owner can
+    // still see them, and still place them back.
+    const stillHere = (await accounts.listAccounts()).find((row) => row.id === employeeProfileId)
+    expect(stillHere).toBeUndefined()
+
+    const asOwner = createSupabaseAccountsAdapter(owner)
+    const seen = (await asOwner.listAccounts()).find((row) => row.id === employeeProfileId)
+    expect(seen).toBeDefined()
+    // Ended, not deleted: the rows it produced stay explicable.
+    expect(seen?.assignments.some((a) => a.endedOn !== null)).toBe(true)
+
+    await asOwner.grantAssignment({ personId: employeeProfileId, role: 'employee', outletId })
+    const back = (await asOwner.listAccounts()).find((row) => row.id === employeeProfileId)
+    expect(back?.assignments.filter((a) => a.endedOn === null)).toHaveLength(1)
   })
 })
 

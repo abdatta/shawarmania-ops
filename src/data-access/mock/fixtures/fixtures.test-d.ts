@@ -36,8 +36,10 @@ export const wrongValueType: Pick<Tables<'outlets'>, 'geofence_radius_m'> = {
 // @ts-expect-error — a bare object misses every required outlets column.
 export const missingRequiredColumns: Tables<'outlets'> = {}
 
-// A fixture must not invent enum members.
-export const inventedRole: Pick<Tables<'profiles'>, 'role'> = {
+// A fixture must not invent enum members. The role lives on the assignment
+// since multi-outlet-people — a person may hold several, so it was never a
+// property of the account.
+export const inventedRole: Pick<Tables<'assignments'>, 'role'> = {
   // @ts-expect-error — 'intern' is not an app_role.
   role: 'intern',
 }
@@ -52,15 +54,26 @@ export const accountColumnTheSchemaLacks: Tables<'profiles'> = {
   nickname: 'chef',
 }
 
-// The merged staff facts must exist with the types the adapters assume.
-export const staffFactsShape: Pick<
-  Tables<'profiles'>,
-  'staff_code' | 'role_title' | 'joined_on' | 'left_on'
-> = {
-  staff_code: 'KAL-01',
+// What the account still carries: the person, not the placement.
+export const staffFactsShape: Pick<Tables<'profiles'>, 'role_title'> = {
   role_title: 'Counter staff',
-  joined_on: '2026-01-12',
-  left_on: null,
+}
+
+// And what the placement carries. `ended_on` null is a live assignment.
+export const assignmentShape: Pick<
+  Tables<'assignments'>,
+  'person_id' | 'role' | 'outlet_id' | 'started_on' | 'ended_on'
+> = {
+  person_id: 'd1000000-0000-4000-a000-000000000004',
+  role: 'employee',
+  outlet_id: 'd0000000-0000-4000-a000-000000000001',
+  started_on: '2026-01-12',
+  ended_on: null,
+}
+
+// @ts-expect-error — the staff code retired with multi-outlet-people.
+export const staffCodeIsGone: Pick<Tables<'profiles'>, 'staff_code'> = {
+  staff_code: 'KAL-01',
 }
 
 // @ts-expect-error — `salary_paise` was dropped, not moved: no payroll here.

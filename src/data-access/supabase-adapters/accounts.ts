@@ -23,20 +23,28 @@ import type { Database } from '../database.types'
  * admin's own RLS write, exactly as roster edits were before the merge.
  */
 
+// The assignments come back embedded rather than in a second query: a person
+// and where they work are one answer to one question, and two round trips
+// would let the list render somebody whose placement had not arrived yet.
 const PROFILE_COLUMNS =
-  'id, full_name, phone, role, outlet_id, is_active, staff_code, role_title, joined_on, left_on'
+  'id, full_name, phone, is_active, role_title, ' +
+  'assignments(id, role, outlet_id, started_on, ended_on)'
+
+interface AssignmentRow {
+  id: string
+  role: AppRole
+  outlet_id: string | null
+  started_on: string
+  ended_on: string | null
+}
 
 interface ProfileRow {
   id: string
   full_name: string
   phone: string | null
-  role: AppRole
-  outlet_id: string | null
   is_active: boolean
-  staff_code: string | null
   role_title: string | null
-  joined_on: string | null
-  left_on: string | null
+  assignments: AssignmentRow[] | null
 }
 
 /**
@@ -47,26 +55,8 @@ interface ProfileRow {
 function toStaffFactsError(error: PostgrestError): AccountActionError {
   const detail = `${error.message} ${error.details ?? ''}`
 
-  if (detail.includes('only the owner may change a staff code')) {
-    return new AccountActionError('code_not_yours', 'Only the owner can change a staff code.')
-  }
-  if (detail.includes('a staff code cannot be removed once issued')) {
-    return new AccountActionError(
-      'code_required',
-      'A staff code is needed — it is how this person’s records are identified.',
-    )
-  }
-  if (detail.includes('profiles_staff_code_unique_per_outlet')) {
-    return new AccountActionError('code_taken', 'That staff code is already used at this outlet.')
-  }
   if (detail.includes('profiles_full_name_not_blank')) {
     return new AccountActionError('name_required', 'A person needs a name.')
-  }
-  if (detail.includes('profiles_left_after_joining')) {
-    return new AccountActionError(
-      'left_before_joining',
-      'A departure date cannot be before the joining date.',
-    )
   }
   if (error.code === '42501') {
     return new AccountActionError('forbidden', 'You are not allowed to do that for this account.')
@@ -80,6 +70,9 @@ const INVITE_COLUMNS = 'profile_id, expires_at, consumed_at, superseded_at'
 
 const MESSAGES: Record<string, string> = {
   forbidden: 'You are not allowed to do that for this account.',
+  already_assigned: 'This person already works at that outlet.',
+  last_super_admin: 'There has to be an owner. Appoint another one before removing this.',
+  assignment_rejected: 'That role and outlet do not go together.',
   email_unavailable: 'That email address already has an account.',
   too_many_accounts: 'There are more accounts than this screen can list. Tell somebody.',
   invalid_request: 'Something in that form was missing or malformed.',
@@ -108,13 +101,15 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
     fullName: profile.full_name,
     email,
     phone: profile.phone,
-    role: profile.role,
-    outletId: profile.outlet_id,
     isActive: profile.is_active,
-    staffCode: profile.staff_code,
     roleTitle: profile.role_title,
-    joinedOn: profile.joined_on,
-    leftOn: profile.left_on,
+    assignments: (profile.assignments ?? []).map((a) => ({
+      id: a.id,
+      role: a.role,
+      outletId: a.outlet_id,
+      startedOn: a.started_on,
+      endedOn: a.ended_on,
+    })),
     invite,
   })
 
@@ -141,7 +136,7 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
           .map((invite) => [invite.profile_id, { expiresAt: invite.expires_at }]),
       )
 
-      return ((profiles ?? []) as ProfileRow[]).map((profile) =>
+      return ((profiles ?? []) as unknown as ProfileRow[]).map((profile) =>
         toSummary(profile, addresses[profile.id] ?? null, outstanding.get(profile.id) ?? null),
       )
     },
@@ -172,6 +167,29 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
     },
 
     /**
+     * Placing a person, and un-placing them. Privileged for the same reason
+     * provisioning is: the authority is re-derived from the caller's own token,
+     * never from what the request says about itself. The database enforces the
+     * identical rule underneath — this seam only makes the refusal legible.
+     */
+    async grantAssignment(input: {
+      personId: string
+      role: AppRole
+      outletId: string | null
+    }): Promise<void> {
+      await callAdmin(client, {
+        action: 'assign',
+        personId: input.personId,
+        role: input.role,
+        outletId: input.outletId,
+      })
+    },
+
+    async endAssignment(assignmentId: string): Promise<void> {
+      await callAdmin(client, { action: 'end-assignment', assignmentId })
+    },
+
+    /**
      * The one account write that is not privileged: staff facts belong to the
      * admin's own session under RLS, exactly as roster edits always did. The
      * database is the boundary for every rule here — cross-outlet reach, the
@@ -183,9 +201,6 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
         .update({
           ...(patch.fullName !== undefined && { full_name: patch.fullName }),
           ...(patch.roleTitle !== undefined && { role_title: patch.roleTitle }),
-          ...(patch.joinedOn !== undefined && { joined_on: patch.joinedOn }),
-          ...(patch.leftOn !== undefined && { left_on: patch.leftOn }),
-          ...(patch.staffCode !== undefined && { staff_code: patch.staffCode }),
         })
         .eq('id', profileId)
         .select(PROFILE_COLUMNS)
@@ -198,7 +213,7 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
           'You are not allowed to do that for this account.',
         )
       }
-      return toSummary(data as ProfileRow, null, null)
+      return toSummary(data as unknown as ProfileRow, null, null)
     },
 
     /**

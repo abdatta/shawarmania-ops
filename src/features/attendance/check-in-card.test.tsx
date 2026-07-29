@@ -5,10 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
-import { createMockAdapters, OUTLET_KALYANI_ID } from '@/data-access/mock'
+import { createMockAdapters, OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { StaffHome } from '../overview/staff-home'
 
@@ -56,21 +57,36 @@ afterEach(() => {
   Reflect.deleteProperty(navigator, 'geolocation')
 })
 
-const employeeSession: Session = {
-  mode: 'demo',
-  userId: personaFixtures.employee.profile.id,
-  role: 'employee',
-  outletId: OUTLET_KALYANI_ID,
-  displayName: personaFixtures.employee.profile.full_name,
-  persona: personaFixtures.employee,
+/**
+ * The Employee persona works both outlets since multi-outlet-people, which is
+ * the whole point of them — but most of what this file asserts is the
+ * single-outlet experience, and that has to keep reading exactly as it did.
+ * So the sessions are built explicitly: one assignment, or both.
+ */
+function sessionWith(assignments: typeof personaFixtures.employee.assignments): Session {
+  return {
+    mode: 'demo',
+    userId: personaFixtures.employee.profile.id,
+    assignments,
+    ...deriveSessionScope(assignments),
+    displayName: personaFixtures.employee.profile.full_name,
+    persona: personaFixtures.employee,
+  }
 }
 
-function renderHome(adapters: DataAdapters = createMockAdapters()) {
+const oneOutlet = personaFixtures.employee.assignments.slice(0, 1)
+const employeeSession: Session = sessionWith(oneOutlet)
+const bothOutletsSession: Session = sessionWith(personaFixtures.employee.assignments)
+
+function renderHome(
+  adapters: DataAdapters = createMockAdapters(),
+  session: Session = employeeSession,
+) {
   return {
     adapters,
     ...render(
       <MemoryRouter>
-        <SessionContext.Provider value={employeeSession}>
+        <SessionContext.Provider value={session}>
           <AdaptersContext.Provider value={adapters}>
             <StaffHome />
           </AdaptersContext.Provider>
@@ -198,5 +214,89 @@ describe('the employee home', () => {
 
     // The no-background-tracking rule, asserted rather than trusted.
     expect(getCurrentPosition).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The person who works at two outlets.
+ *
+ * The gate clause this change exists for: they check in and out at each from
+ * their own phone, with nothing to switch — the fence works out where they
+ * are. Everything below is about that resolution, because the writing itself
+ * is the same code path a single-outlet person takes.
+ */
+describe('an employee assigned to two outlets', () => {
+  /** Kanchrapara's counter, from its own outlet fixture. */
+  const AT_KANCHRAPARA = { latitude: 22.94508, longitude: 88.43312, accuracy: 14 }
+
+  it('offers no outlet choice at all — the fence is the only chooser', async () => {
+    atPosition(AT_COUNTER)
+    renderHome(createMockAdapters(), bothOutletsSession)
+
+    await screen.findByTestId('attendance-action')
+    // Not a select, not a pair of buttons, not a "which shop?" prompt. The
+    // proposal rejected anything a person has to switch, and this is where
+    // that would have crept back in.
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByText(/which (shop|outlet)/i)).not.toBeInTheDocument()
+  })
+
+  it('records the check-in at the outlet they are standing in', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters()
+    const checkIn = vi.spyOn(adapters.attendance, 'checkIn')
+    atPosition(AT_KANCHRAPARA)
+    renderHome(adapters, bothOutletsSession)
+
+    await user.click(await screen.findByTestId('attendance-action'))
+
+    await waitFor(() => expect(checkIn).toHaveBeenCalled())
+    expect(checkIn.mock.calls[0]?.[0].outletId).toBe(OUTLET_KANCHRAPARA_ID)
+  })
+
+  it('records it at the other outlet when they are standing there instead', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters()
+    const checkIn = vi.spyOn(adapters.attendance, 'checkIn')
+    atPosition(AT_COUNTER)
+    renderHome(adapters, bothOutletsSession)
+
+    await user.click(await screen.findByTestId('attendance-action'))
+
+    await waitFor(() => expect(checkIn).toHaveBeenCalled())
+    expect(checkIn.mock.calls[0]?.[0].outletId).toBe(OUTLET_KALYANI_ID)
+  })
+
+  it('blocks at the nearest assigned outlet when they are inside neither fence', async () => {
+    const user = userEvent.setup()
+    atPosition(DOWN_THE_ROAD)
+    renderHome(createMockAdapters(), bothOutletsSession)
+
+    await user.click(await screen.findByTestId('attendance-action'))
+
+    // Blocked, with an override to ask for — and named, because "the outlet"
+    // means nothing to somebody who works at two. DOWN_THE_ROAD is Kalyani's
+    // neighbourhood, so Kalyani is who gets asked.
+    const blocked = await screen.findByTestId('attendance-blocked')
+    expect(blocked).toHaveTextContent('Shawarmania Kalyani')
+    expect(screen.getByTestId('request-override')).toBeInTheDocument()
+  })
+
+  it('refuses rather than guesses when the phone can supply no position', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters()
+    const checkIn = vi.spyOn(adapters.attendance, 'checkIn')
+    positionFails(1)
+    renderHome(adapters, bothOutletsSession)
+
+    await user.click(await screen.findByTestId('attendance-action'))
+
+    // The one place a multi-outlet person is ever stopped (design D5): nothing
+    // can honestly resolve where they are, so nothing is written and they are
+    // handed to a human rather than to a control they would have to learn.
+    expect(await screen.findByTestId('attendance-unresolvable')).toHaveTextContent(
+      /ask your manager to record today/i,
+    )
+    expect(checkIn).not.toHaveBeenCalled()
   })
 })

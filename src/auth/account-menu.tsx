@@ -6,7 +6,7 @@ import { BuildVersion } from '@/components/build-version'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { useAdapters } from '@/data-access/adapters-context'
 import { useSession } from '@/session/context'
-import { ROLE_LABELS } from '@/session/session'
+import { heldRoles, holdsRole, ROLE_LABELS } from '@/session/session'
 
 /** Where the demo lives. Never a role path — see `DemoLink`. */
 const DEMO_PATH = '/demo'
@@ -60,10 +60,14 @@ export function AccountMenu({ onSignOut }: { onSignOut: () => void | Promise<voi
           {session.displayName}
         </p>
         <p className="text-xs text-content-muted">
-          {ROLE_LABELS[session.role]}
+          {/* Every role they hold, because one person may hold several and a
+              menu naming one of them would be picking a favourite. */}
+          {heldRoles(session)
+            .map((role) => ROLE_LABELS[role])
+            .join(' · ') || 'No outlet'}
           {outletName ? ` · ${outletName}` : ''}
         </p>
-        {session.role === 'super_admin' && <DemoLink />}
+        {holdsRole(session, 'super_admin') && <DemoLink />}
 
         <button
           type="button"

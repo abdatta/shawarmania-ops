@@ -27,7 +27,7 @@ If the repo is ever made private, note that Pages from a private repo needs a pa
 
 Almost every security question in this app reduces to "can this person see another outlet's data?", and the answer must be structural.
 
-Enforcement is in Postgres, evaluated per row, driven by JWT claims. A frontend bug cannot leak another outlet's rows because the database will not return them. Route guards and conditional navigation are convenience, and are never the only thing standing between a Biller and the owner's cross-outlet view.
+Enforcement is in Postgres, evaluated per row, driven by the requesting person's **assignments** — not by anything in their token, which since `multi-outlet-people` carries no authority at all. A frontend bug cannot leak another outlet's rows because the database will not return them, and a forged claim buys nothing because nothing reads one. Route guards and conditional navigation are convenience, and are never the only thing standing between a Biller and the owner's cross-outlet view.
 
 The isolation test suite asserts this for every outlet-scoped table (see [Testing](TESTING.md)). It exists because tenancy bugs are silent — nothing errors, a query just quietly returns more than it should.
 
@@ -73,6 +73,7 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
 - **Provisioning authority is re-derived from the caller's own token** inside the privileged function, never taken from the request. A Franchise Admin cannot mint an administrator, cannot reach another outlet, and cannot deactivate themselves.
 - **Counter PINs are not a security boundary.** They select which biller a bill is attributed to. The device session is the credential — see [Roles And Permissions](ROLES_AND_PERMISSIONS.md). Do not extend a PIN to gate anything sensitive.
 - **Device revocation is immediate**, enforced by a `revoked_at` check inside the policy rather than by waiting for a token to expire.
+- **An assignment change is immediate too**, and for a stronger reason: the policies read `assignments` on every request, so granting or ending one needs no reissue and no sign-out. Nothing in this system waits for a token any more.
 - Deactivating an account is likewise a policy-level `is_active` check, not just a claim change.
 
 ## Threat model — what actually worries us

@@ -9,6 +9,7 @@ import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { Landing } from '@/routes/landing'
 import { SessionContext } from '@/session/context'
 import type { Role, Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { AccountMenu } from './account-menu'
 
@@ -26,12 +27,12 @@ import { AccountMenu } from './account-menu'
  * demo shell offers none, there being no session to end.
  */
 function sessionFor(role: Role): Session {
-  const { profile } = personaFixtures[role]
+  const { profile, assignments } = personaFixtures[role]
   return {
     mode: 'real',
     userId: profile.id,
-    role,
-    outletId: profile.outlet_id,
+    assignments,
+    ...deriveSessionScope(assignments),
     displayName: profile.full_name,
   }
 }

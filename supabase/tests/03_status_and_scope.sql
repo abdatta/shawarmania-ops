@@ -10,16 +10,16 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
-create function pg_temp.impersonate(p_sub uuid, p_role text, p_outlet uuid)
+-- Claims carry `sub` and nothing about authority (multi-outlet-people): scope
+-- is resolved from the seeded `assignments` rows, exactly as a real session's
+-- is.
+create function pg_temp.impersonate(p_sub uuid)
 returns void language plpgsql as $$
 begin
   execute 'reset role';
   perform set_config(
     'request.jwt.claims',
-    json_build_object(
-      'sub', p_sub, 'role', 'authenticated',
-      'app_role', p_role, 'app_outlet_id', p_outlet
-    )::text,
+    json_build_object('sub', p_sub, 'role', 'authenticated')::text,
     true);
   execute 'set local role authenticated';
 end;
@@ -41,8 +41,7 @@ $$;
 -- A deactivated Franchise Admin with otherwise-perfect claims: nothing, not
 -- even their own profile.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000008'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000008'::uuid);
 
 select is((select count(*) from public.menu_items), 0::bigint,
   'deactivated admin reads no menu');
@@ -63,8 +62,7 @@ $q$, '42501', null, 'deactivated admin cannot write');
 -- A revoked counter device with a still-live session and an active profile:
 -- the device check alone blocks it.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000009'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000009'::uuid);
 
 select is((select count(*) from public.menu_items), 0::bigint,
   'revoked device reads no menu');
@@ -95,8 +93,7 @@ $q$, '42501', null, 'revoked device cannot insert a bill');
 -- Employee self-scope: their own rows and nobody else's, even inside their
 -- own outlet.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 select is(
   (select count(*) from public.attendance
@@ -124,8 +121,7 @@ select is((select count(*) from public.menu_items), 0::bigint,
 -- Biller shift scope: the device sees bills of its open shifts only — not
 -- the closed morning shift, not the reconciled day before yesterday.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 select is((select count(*) from public.bills), 2::bigint,
   'device sees exactly the open shift''s two bills');
@@ -144,34 +140,45 @@ select is(
 -- ---------------------------------------------------------------------------
 -- Write paths that must not exist for clients at all.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select throws_ok($q$
-  insert into public.profiles (id, full_name, role, outlet_id)
-  values (gen_random_uuid(), 'Forged Profile', 'franchise_admin',
-          '00000000-0000-4000-a000-000000000001')
+  insert into public.profiles (id, full_name)
+  values (gen_random_uuid(), 'Forged Profile')
 $q$, '42501', null, 'no client can insert a profile');
 
--- Since staff-as-accounts the profile row splits in two along the column
--- axis: staff facts (name, code, title, dates) are the admin's own RLS
--- write, identity and access (role, outlet, is_active) remain privileged.
--- The column-level grant is the boundary between them.
+-- The profile row splits in two along the column axis: staff facts (name, job
+-- title) are the admin's own RLS write, access (is_active) remains
+-- privileged. The column-level grant is the boundary between them. Since
+-- multi-outlet-people, role and outlet are not on this row at all — they are
+-- assignments, with their own policy and their own guard.
 
 select throws_ok($q$
   update public.profiles set is_active = false
    where id = '10000000-0000-4000-a000-000000000006'
 $q$, '42501', null, 'no client can touch is_active — the panic lever stays privileged');
 
+select is(
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles'
+      and column_name in ('role', 'outlet_id', 'staff_code', 'joined_on', 'left_on')),
+  0::bigint,
+  'role, outlet and the staff code are gone from the account record entirely');
+
+-- A manager cannot move somebody to another outlet, because moving is now
+-- granting an assignment there — and the policy refuses an outlet they do not
+-- manage.
 select throws_ok($q$
-  update public.profiles set role = 'franchise_admin'
-   where id = '10000000-0000-4000-a000-000000000006'
-$q$, '42501', null, 'no client can change a role');
+  insert into public.assignments (person_id, role, outlet_id)
+  values ('10000000-0000-4000-a000-000000000006', 'employee',
+          '00000000-0000-4000-a000-000000000002')
+$q$, '42501', null, 'no manager can place a person at an outlet they do not manage');
 
 select throws_ok($q$
-  update public.profiles set outlet_id = '00000000-0000-4000-a000-000000000002'
-   where id = '10000000-0000-4000-a000-000000000006'
-$q$, '42501', null, 'no client can move a person between outlets');
+  insert into public.assignments (person_id, role, outlet_id)
+  values ('10000000-0000-4000-a000-000000000006', 'franchise_admin',
+          '00000000-0000-4000-a000-000000000001')
+$q$, '42501', null, 'no manager can promote somebody to their own rank');
 
 select is(
   pg_temp.rows_touched($q$
@@ -180,8 +187,7 @@ select is(
   1::bigint,
   'a franchise admin edits the staff facts of their own outlet''s person');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 select is(
   pg_temp.rows_touched($q$
@@ -190,8 +196,7 @@ select is(
   0::bigint,
   'an employee cannot edit their own staff facts — the row is an admin''s to maintain');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select throws_ok($q$
   update public.counter_devices set revoked_at = null
@@ -220,8 +225,7 @@ select is(
   0::bigint,
   'franchise admin cannot update any outlet row');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
-  'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select lives_ok($q$
   update public.outlets set name = name where code = 'kalyani'
@@ -252,8 +256,7 @@ select throws_ok($q$
   select * from public.account_invites
 $q$, '42501', null, 'a whole-row invite read is refused because it includes the hash');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select is(
   (select count(*) from public.account_invites
@@ -261,19 +264,23 @@ select is(
   1::bigint,
   'franchise admin sees their own outlet''s outstanding invite');
 
+-- Since multi-outlet-people an invite carries no outlet of its own — it is
+-- about a person, and a person may be at several outlets. The scoping question
+-- is therefore "may this caller manage that person", and the other outlet's
+-- pending staff member is the row that must not appear.
 select is(
   (select count(*) from public.account_invites
-    where outlet_id is distinct from '00000000-0000-4000-a000-000000000001'),
+    where profile_id = '10000000-0000-4000-a000-00000000000d'),
   0::bigint,
-  'franchise admin sees nothing that is not their own outlet''s');
+  'franchise admin sees no invite for a person assigned only to the other outlet');
 
 select throws_ok($q$
   select code_hash from public.account_invites
 $q$, '42501', null, 'franchise admin cannot read an invite code hash');
 
 select throws_ok($q$
-  insert into public.account_invites (profile_id, outlet_id, code_hash, issued_by, expires_at)
-  values ('10000000-0000-4000-a000-000000000006', '00000000-0000-4000-a000-000000000001',
+  insert into public.account_invites (profile_id, code_hash, issued_by, expires_at)
+  values ('10000000-0000-4000-a000-000000000006',
           'forged', '10000000-0000-4000-a000-000000000002', now() + interval '1 day')
 $q$, '42501', null, 'no client can issue an invite');
 
@@ -286,18 +293,15 @@ select throws_ok($q$
 $q$, '42501', null, 'no client can delete an invite');
 
 -- Neither of the two roles that never issue codes sees any.
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 select is((select count(*) from public.account_invites), 0::bigint,
   'an employee sees no invites, including their own');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 select is((select count(*) from public.account_invites), 0::bigint,
   'a counter device sees no invites');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000008'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000008'::uuid);
 select is((select count(*) from public.account_invites), 0::bigint,
   'a deactivated admin sees no invites');
 

@@ -23,7 +23,11 @@ const COLUMNS =
   'check_out_at, check_out_lat, check_out_lng, check_out_accuracy_m, check_out_distance_m, check_out_source, ' +
   'check_out_entered_by, check_out_entered_by_name, ' +
   'override_by, override_by_name, override_reason, override_at, ' +
-  'profiles!attendance_person_id_fkey!inner(staff_code, full_name)'
+  'profiles!attendance_person_id_fkey!inner(full_name), ' +
+  // Named on the row since multi-outlet-people: a person may work a morning at
+  // one outlet and an evening at another, so their own history has to say which
+  // day was where rather than let the reader assume.
+  'outlets!attendance_outlet_id_fkey(name)'
 
 interface JoinedRow {
   id: string
@@ -51,15 +55,16 @@ interface JoinedRow {
   override_by_name: string | null
   override_reason: string | null
   override_at: string | null
-  profiles: { staff_code: string | null; full_name: string } | null
+  profiles: { full_name: string } | null
+  outlets: { name: string } | null
 }
 
 function toRecord(row: JoinedRow): AttendanceRecord {
   return {
     id: row.id,
     outletId: row.outlet_id,
+    outletName: row.outlets?.name ?? null,
     personId: row.person_id,
-    staffCode: row.profiles?.staff_code ?? null,
     personName: row.profiles?.full_name ?? '',
     businessDate: row.business_date,
     status: row.status,
@@ -174,11 +179,12 @@ export function createSupabaseAttendanceAdapter(
   }
 
   return {
-    async getDay(personId, businessDate) {
+    async getDay(personId, businessDate, outletId) {
       const { data, error } = await table()
         .select(COLUMNS)
         .eq('person_id', personId)
         .eq('business_date', businessDate)
+        .eq('outlet_id', outletId)
         .maybeSingle()
       if (error) throw toActionError(error)
       return data ? toRecord(data as unknown as JoinedRow) : null

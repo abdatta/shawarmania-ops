@@ -52,7 +52,6 @@ interface Draft {
   code: string
   name: string
   locationLabel: string
-  staffCodePrefix: string
   addressLine1: string
   addressLine2: string
   city: string
@@ -66,7 +65,6 @@ const EMPTY_DRAFT: Draft = {
   code: '',
   name: '',
   locationLabel: '',
-  staffCodePrefix: '',
   addressLine1: '',
   addressLine2: '',
   city: '',
@@ -74,23 +72,6 @@ const EMPTY_DRAFT: Draft = {
   pincode: '',
   phone: '',
   businessDayCutover: '04:00',
-}
-
-/**
- * The prefix proposed for an outlet code as it is typed: the first three
- * alphanumerics, uppercased. `new-shop` gives `NEW`, not `NEW-`.
- *
- * Only ever a proposal. The owner can overwrite it, and the database derives
- * its own if the box is left empty — including the numeric suffix that settles
- * a collision, which this cannot do because it does not know the other outlets'
- * prefixes. Getting a taken prefix back as a sentence is the fallback, and it
- * is why this is pre-filled rather than authoritative.
- */
-function proposePrefix(code: string): string {
-  return code
-    .replace(/[^a-zA-Z0-9]/g, '')
-    .slice(0, 3)
-    .toUpperCase()
 }
 
 /** `04:00:00` from Postgres, `04:00` in a time input. */
@@ -127,6 +108,10 @@ function outletHandle(outlet: Tables<'outlets'>): string {
  * both (design D6).
  */
 const REFERENCE_WORDS: Record<string, string> = {
+  // Since multi-outlet-people it is the ASSIGNMENT that points at an outlet, so
+  // that is the row the refusal counts — and "people" is still the word for it,
+  // because that is what an owner sees when they look at the shop.
+  assignments: 'people',
   profiles: 'people',
   counter_devices: 'counter tablets',
   attendance: 'recorded attendance days',
@@ -146,7 +131,6 @@ function toDraft(outlet: Tables<'outlets'>): Draft {
     code: outlet.code,
     name: outlet.name,
     locationLabel: outlet.location_label,
-    staffCodePrefix: outlet.staff_code_prefix,
     addressLine1: outlet.address_line1 ?? '',
     addressLine2: outlet.address_line2 ?? '',
     city: outlet.city ?? '',
@@ -162,7 +146,6 @@ function toPayload(draft: Draft): NewOutlet {
     code: draft.code,
     name: draft.name,
     locationLabel: draft.locationLabel,
-    staffCodePrefix: draft.staffCodePrefix,
     addressLine1: draft.addressLine1,
     addressLine2: draft.addressLine2,
     city: draft.city,
@@ -295,9 +278,6 @@ export function OutletsSurface() {
     }
     if (draft.locationLabel.trim() === '') {
       return 'An outlet needs a location label — it is what shows beside the name on every card.'
-    }
-    if (draft.staffCodePrefix.trim() === '') {
-      return 'An outlet needs a staff code prefix — every staff code here begins with it.'
     }
     return null
   }
@@ -603,48 +583,8 @@ function OutletFormSheet({
   onSubmit: (event: FormEvent) => void
   error: string | null
 }) {
-  const { addressLookup, outlets: outletsAdapter } = useAdapters()
+  const { addressLookup } = useAdapters()
   const set = (patch: Partial<Draft>) => onChange({ ...draft, ...patch })
-
-  /**
-   * Whether this outlet's prefix has already been spent.
-   *
-   * `KAL-7KQ2` names a prefix, so re-pointing it would leave every code already
-   * issued reading from something that no longer exists. The database refuses
-   * the change; this is what stops the owner discovering that by being refused,
-   * which design D4 called out specifically.
-   *
-   * Asked rather than assumed, and asked through the same catalog-reading RPC
-   * the delete path uses — this file keeps no copy of what references an
-   * outlet. A lookup that fails leaves the field editable and the database
-   * refuses on submit, which is the right way round: a failed read must not
-   * lock a field that was legitimately open.
-   *
-   * Nothing resets this on the way out, because nothing has to: the sheet is
-   * keyed on the outlet being edited, so opening it for a different one is a
-   * remount and this starts `false` again.
-   */
-  const [prefixFrozen, setPrefixFrozen] = useState(false)
-  useEffect(() => {
-    if (!open || !editing) return
-    let active = true
-    void outletsAdapter
-      .outletReferences(editing.id)
-      .then((references) => {
-        if (active) {
-          // People at the outlet stand in for "a staff code has been issued
-          // here" — a close proxy, not the rule itself. The trigger is the
-          // boundary; this only decides whether the field looks editable.
-          setPrefixFrozen(references.some((reference) => reference.table === 'profiles'))
-        }
-      })
-      .catch(() => {
-        if (active) setPrefixFrozen(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [open, editing, outletsAdapter])
 
   /**
    * The district is the field somebody is least able to answer from memory —
@@ -764,38 +704,12 @@ function OutletFormSheet({
             value={draft.code}
             placeholder="e.g. kalyani"
             onChange={(event) => {
-              // The prefix follows the code only while it is still the
-              // proposal. Once somebody has typed their own it stops moving
-              // under them — a field that silently rewrites what you entered
-              // is worse than one that was never filled in.
-              const next = event.target.value
-              set(
-                draft.staffCodePrefix === proposePrefix(draft.code)
-                  ? { code: next, staffCodePrefix: proposePrefix(next) }
-                  : { code: next },
-              )
+              set({ code: event.target.value })
             }}
           />
           <p className="text-xs text-content-muted">
             How you refer to this shop in a sentence. It has to be different from every other
             outlet&rsquo;s.
-          </p>
-        </Field>
-
-        <Field label="Staff code prefix" id="outlet-staff-code-prefix">
-          <Input
-            id="outlet-staff-code-prefix"
-            required
-            autoCapitalize="characters"
-            maxLength={3}
-            disabled={prefixFrozen}
-            value={draft.staffCodePrefix}
-            onChange={(event) => set({ staffCodePrefix: event.target.value.toUpperCase() })}
-          />
-          <p className="text-xs text-content-muted">
-            {prefixFrozen
-              ? 'Staff codes have already been issued from this prefix, so it cannot change now — every code at this outlet begins with it.'
-              : 'Every staff code at this outlet begins with these three characters, like KAL-7KQ2.'}
           </p>
         </Field>
 

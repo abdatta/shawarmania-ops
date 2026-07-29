@@ -53,17 +53,6 @@ export interface NewOutlet {
   code: string
   name: string
   locationLabel: string
-  /**
-   * The three characters every staff code at this outlet begins with.
-   *
-   * Optional here: when it is absent or blank the database derives one from the
-   * outlet code — first three alphanumerics, uppercased, with a numeric suffix
-   * if that is taken — so a caller that does not care still gets a valid,
-   * unique prefix. The outlet form does care, and sends a pre-filled, editable
-   * value, because this string ends up on every staff code at the outlet
-   * forever.
-   */
-  staffCodePrefix?: string
   addressLine1?: string | null
   addressLine2?: string | null
   city?: string | null
@@ -136,13 +125,81 @@ export interface OutletsAdapter {
   outletReferences(id: string): Promise<OutletReference[]>
 }
 
-export type AppRole = Tables<'profiles'>['role']
+export type AppRole = Tables<'assignments'>['role']
 
 /**
- * One person on the People surface: the account, its invite state, and — since
- * staff-as-accounts — the staff facts that used to live on a roster row. There
- * is exactly one record per person; a login and a staff-list membership are
- * the same thing.
+ * One place a person works, as one role.
+ *
+ * Since multi-outlet-people this is where authority lives: a person holds a
+ * SET of these rather than a single role-and-outlet pair, and every policy in
+ * the database answers by membership in that set. `endedOn` null means live;
+ * an ended assignment is kept, because rows written under it have to stay
+ * explicable.
+ *
+ * `outletId` is null exactly for the business-wide `super_admin` role — the
+ * same invariant the database checks.
+ */
+export interface Assignment {
+  id: string
+  role: AppRole
+  outletId: string | null
+  startedOn: string
+  endedOn: string | null
+}
+
+/** The live ones, which are the only ones that confer anything. */
+export function liveAssignments(assignments: readonly Assignment[]): Assignment[] {
+  return assignments.filter((a) => a.endedOn === null)
+}
+
+/**
+ * Seniority, for choosing which shell to land somebody in. **Not a hierarchy
+ * of permissions** — a Franchise Admin assignment at Kalyani confers nothing at
+ * Kanchrapara however senior it is (the role-hierarchy idea was rejected on
+ * 2026-07-28). This orders shells, and nothing else.
+ */
+const ROLE_SENIORITY: Record<AppRole, number> = {
+  super_admin: 4,
+  franchise_admin: 3,
+  biller: 2,
+  employee: 1,
+}
+
+/** The highest role a person holds live, or null if they hold none. */
+export function highestRole(assignments: readonly Assignment[]): AppRole | null {
+  return liveAssignments(assignments).reduce<AppRole | null>(
+    (best, a) => (best === null || ROLE_SENIORITY[a.role] > ROLE_SENIORITY[best] ? a.role : best),
+    null,
+  )
+}
+
+/** The outlets this person holds a live assignment at, in the given role. */
+export function outletsForRole(assignments: readonly Assignment[], role: AppRole): string[] {
+  return [
+    ...new Set(
+      liveAssignments(assignments)
+        .filter((a) => a.role === role && a.outletId !== null)
+        .map((a) => a.outletId as string),
+    ),
+  ]
+}
+
+/** Every outlet this person works at, in any role. */
+export function assignedOutlets(assignments: readonly Assignment[]): string[] {
+  return [
+    ...new Set(
+      liveAssignments(assignments)
+        .filter((a) => a.outletId !== null)
+        .map((a) => a.outletId as string),
+    ),
+  ]
+}
+
+/**
+ * One person on the People surface: the account, its invite state, its job
+ * title, and the assignments that place it. There is exactly one record per
+ * person; a login and a staff-list membership are the same thing, and working
+ * at two outlets does not make a second of either.
  */
 export interface AccountSummary {
   id: string
@@ -159,24 +216,21 @@ export interface AccountSummary {
    */
   email: string | null
   phone: string | null
-  role: AppRole
-  outletId: string | null
   isActive: boolean
-  /**
-   * The per-outlet display code (`KAL-7KQ2`), issued by the database for
-   * person roles. Null for the Super Admin and counter devices — absence, not
-   * blankness.
-   */
-  staffCode: string | null
   /** Free-text job label ("Griller"), distinct from the app-capability role. */
   roleTitle: string | null
-  joinedOn: string | null
   /**
-   * Null means current staff. Set, the person is off the staff lists and new
-   * attendance days while every recorded row survives. Independent of
-   * `isActive` by design — "access cut but still works here" is a real state.
+   * Where this person works and as what — every assignment, live and ended.
+   * Ended ones are kept because the rows they produced have to stay
+   * explicable, and because the People surface shows "left this outlet in
+   * March" rather than nothing at all.
+   *
+   * A caller sees only the assignments their own authority reaches: a manager
+   * gets the ones at outlets they manage, and **not** the other outlet's
+   * assignment of somebody who works at both — that row is the other outlet's
+   * data.
    */
-  leftOn: string | null
+  assignments: Assignment[]
   /**
    * The outstanding invite, if there is one. Never carries the code — the
    * hash column is not readable by any client (see the account_invites
@@ -186,6 +240,12 @@ export interface AccountSummary {
   invite: { expiresAt: string } | null
 }
 
+/**
+ * A new person, and the one place they start working. Creating somebody is
+ * still one act — it writes the account and their first assignment together,
+ * and an account that reached the list with neither would be a person who
+ * exists and works nowhere.
+ */
 export interface NewAccount {
   fullName: string
   email: string
@@ -193,26 +253,19 @@ export interface NewAccount {
   role: AppRole
   outletId: string | null
   roleTitle?: string | null
+  /** The assignment's start date, not a fact about the person. */
   joinedOn?: string | null
 }
 
 /**
  * The staff facts an admin edits as their own session under Row-Level
- * Security — unlike every other account write, which is privileged. Identity
- * and access (role, outlet, active state, email) are deliberately absent.
+ * Security — unlike every other account write, which is privileged. Access
+ * (active state, email) and placement (assignments) are deliberately absent:
+ * each has its own boundary.
  */
 export type StaffFactsPatch = Partial<{
   fullName: string
   roleTitle: string | null
-  joinedOn: string | null
-  leftOn: string | null
-  /**
-   * **Only a Super Admin may send this, and the database is what enforces
-   * that** — the `staff_code_guard` trigger, not this type and not the form
-   * control. Send it only when the value actually changed; writing the same
-   * code back is not a change and does not trip the guard.
-   */
-  staffCode: string
 }>
 
 /**
@@ -224,10 +277,21 @@ export function isPlaceholderAddress(email: string | null): boolean {
   return email !== null && email.toLowerCase().endsWith('@placeholder.invalid')
 }
 
-/** The roles that are people at an outlet — on staff lists and attendance days. */
-export function isOutletPerson(account: Pick<AccountSummary, 'role' | 'outletId'>): boolean {
-  return (
-    account.outletId !== null && (account.role === 'employee' || account.role === 'franchise_admin')
+/**
+ * The roles that are people at an outlet — on staff lists and attendance days.
+ * A person qualifies if any live assignment does, so somebody who manages one
+ * outlet and grills at another is an outlet person at both.
+ */
+export function isOutletPerson(account: Pick<AccountSummary, 'assignments'>): boolean {
+  return liveAssignments(account.assignments).some(
+    (a) => a.outletId !== null && (a.role === 'employee' || a.role === 'franchise_admin'),
+  )
+}
+
+/** Is this person an outlet person *at this outlet* specifically? */
+export function worksAt(account: Pick<AccountSummary, 'assignments'>, outletId: string): boolean {
+  return liveAssignments(account.assignments).some(
+    (a) => a.outletId === outletId && (a.role === 'employee' || a.role === 'franchise_admin'),
   )
 }
 
@@ -257,12 +321,35 @@ export class AccountActionError extends DataActionError {
  * roster edits always were.
  */
 export interface AccountsAdapter {
-  /** People the caller may see: all outlets for the Super Admin, one for a Franchise Admin. */
+  /**
+   * People the caller may see: everybody for the Super Admin, and for a
+   * Franchise Admin the people live at an outlet they manage.
+   */
   listAccounts(): Promise<AccountSummary[]>
-  /** One step creates a working person: account, staff-list membership, issued code. */
+  /** One step creates a working person: account, first assignment, issued code. */
   provision(account: NewAccount): Promise<IssuedCode>
   reissue(profileId: string): Promise<IssuedCode>
   setActive(profileId: string, isActive: boolean): Promise<void>
+  /**
+   * Place a person at an outlet. The privileged path, because authority is
+   * re-derived from the caller's token — a manager may place somebody only at
+   * an outlet they manage, and only as a Biller or Employee.
+   *
+   * **Self-assignment is refused except for one narrow case**: a Super Admin
+   * may place themselves at an outlet, and nobody may ever grant themselves
+   * the owner role. The database enforces both; this is the seam in front.
+   */
+  grantAssignment(input: {
+    personId: string
+    role: AppRole
+    outletId: string | null
+  }): Promise<void>
+  /**
+   * End a placement. Never a delete — the assignment stays, with its end date,
+   * because the rows it produced have to remain explicable. Refused for the
+   * last live Super Admin assignment.
+   */
+  endAssignment(assignmentId: string): Promise<void>
   /**
    * Correct the address an account signs in with. Any outstanding one-time
    * code survives — it is bound to the account, not the address, so it starts
@@ -340,8 +427,13 @@ export interface AttendanceOverride {
 export interface AttendanceRecord {
   id: string
   outletId: string
+  /**
+   * Named on the row since multi-outlet-people: a person may work a morning at
+   * one outlet and an evening at another, so "which outlet was this day?" is a
+   * question their own attendance list has to answer rather than assume.
+   */
+  outletName: string | null
   personId: string
-  staffCode: string | null
   personName: string
   businessDate: string
   status: AttendanceStatus
@@ -399,12 +491,14 @@ export class AttendanceActionError extends DataActionError {
 
 export interface AttendanceAdapter {
   /**
-   * One person's record for a business date, or null if they have not
-   * started. The person id is explicit rather than implied by the session:
-   * a query should mean one thing, and RLS should be the second line of
-   * defence rather than the only thing that makes it correct.
+   * One person's record for a business date **at one outlet**, or null if they
+   * have not started there. The person and the outlet are both explicit rather
+   * than implied by the session: a query should mean one thing, and RLS should
+   * be the second line of defence rather than the only thing that makes it
+   * correct. The outlet became a parameter with multi-outlet-people, because a
+   * person may hold a row at each of two outlets on one business date.
    */
-  getDay(personId: string, businessDate: string): Promise<AttendanceRecord | null>
+  getDay(personId: string, businessDate: string, outletId: string): Promise<AttendanceRecord | null>
   /** One person's history, most recent business date first. */
   listHistory(personId: string, limit?: number): Promise<AttendanceRecord[]>
   /** One outlet's day, for a manager. */

@@ -7,16 +7,16 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
-create function pg_temp.impersonate(p_sub uuid, p_role text, p_outlet uuid)
+-- Claims carry `sub` and nothing about authority (multi-outlet-people): scope
+-- is resolved from the seeded `assignments` rows, exactly as a real session's
+-- is.
+create function pg_temp.impersonate(p_sub uuid)
 returns void language plpgsql as $$
 begin
   execute 'reset role';
   perform set_config(
     'request.jwt.claims',
-    json_build_object(
-      'sub', p_sub, 'role', 'authenticated',
-      'app_role', p_role, 'app_outlet_id', p_outlet
-    )::text,
+    json_build_object('sub', p_sub, 'role', 'authenticated')::text,
     true);
   execute 'set local role authenticated';
 end;
@@ -25,8 +25,7 @@ $$;
 -- ---------------------------------------------------------------------------
 -- Ledger → cache.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 -- Seeded Kalyani chicken: 20 − 6.5 − 0.5 − 1 = 12.
 select is(
@@ -124,8 +123,7 @@ select is(
 -- ---------------------------------------------------------------------------
 -- Day close.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 -- D-1 at Kalyani: no cash bills (the 00:20 bill belongs to D-2), one cash
 -- expense of 50000, no withdrawals.
@@ -154,8 +152,7 @@ select throws_ok($q$
     '00000000-0000-4000-a000-000000000002', current_date - 1, 100000, 100000, null)
 $q$, 'P0001', null, 'closing another outlet''s day is refused');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
-  'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select throws_ok($q$
   select public.close_business_day(
@@ -163,8 +160,7 @@ select throws_ok($q$
 $q$, 'P0001', null, 'even the super admin cannot close a day — deliberately');
 
 -- A late bill against the closed D-1 does not rewrite the snapshot.
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 select lives_ok($q$
   insert into public.bills (id, outlet_id, business_date, biller_profile_id, counter_device_id,
@@ -176,8 +172,7 @@ select lives_ok($q$
           ((current_date - 1) + time '22:00') at time zone 'Asia/Kolkata')
 $q$, 'a late offline bill lands with its true business date');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select is(
   (select cash_sales_paise from public.daily_cash_records
@@ -185,6 +180,90 @@ select is(
       and business_date = current_date - 1),
   0::bigint,
   'the closed record is a snapshot: the late bill changed nothing');
+
+-- ---------------------------------------------------------------------------
+-- The owner's bounded remote writes (multi-outlet-people, design D8).
+--
+-- The Super Admin records into an outlet they hold NO assignment at. Two
+-- entries are available and everything cash is not — and "not" is the
+-- database's word, not a form's. `correction` rather than every movement type
+-- because "the count is wrong" is the entry that genuinely needs to be
+-- possible from a distance; receiving and consuming stock is done standing in
+-- the shop.
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
+
+select lives_ok($q$
+  insert into public.inventory_movements
+    (outlet_id, inventory_item_id, movement_type, quantity_delta, note, recorded_by, business_date)
+  values ('00000000-0000-4000-a000-000000000002', '60000000-0000-4000-a000-000000000011',
+          'correction', -2, 'Owner audit (synthetic)',
+          '10000000-0000-4000-a000-000000000001', current_date)
+$q$, 'the owner records a stock correction at an outlet they are not assigned to');
+
+select is(
+  (select current_quantity from public.inventory_items
+    where id = '60000000-0000-4000-a000-000000000011'),
+  (select sum(quantity_delta)::numeric from public.inventory_movements
+    where inventory_item_id = '60000000-0000-4000-a000-000000000011'),
+  'and the ledger still reconciles exactly to the cache after it');
+
+select is(
+  (select recorded_by from public.inventory_movements
+    where inventory_item_id = '60000000-0000-4000-a000-000000000011'
+      and note = 'Owner audit (synthetic)'),
+  '10000000-0000-4000-a000-000000000001'::uuid,
+  'the row is visibly the owner''s wherever it is read');
+
+select throws_ok($q$
+  insert into public.inventory_movements
+    (outlet_id, inventory_item_id, movement_type, quantity_delta, unit_cost_paise, recorded_by, business_date)
+  values ('00000000-0000-4000-a000-000000000002', '60000000-0000-4000-a000-000000000011',
+          'added', 5, 21500, '10000000-0000-4000-a000-000000000001', current_date)
+$q$, '42501', null, 'but not a stock receipt — that is done standing in the shop');
+
+select throws_ok($q$
+  insert into public.inventory_movements
+    (outlet_id, inventory_item_id, movement_type, quantity_delta, recorded_by, business_date)
+  values ('00000000-0000-4000-a000-000000000002', '60000000-0000-4000-a000-000000000011',
+          'used', -1, '10000000-0000-4000-a000-000000000001', current_date)
+$q$, '42501', null, 'nor a consumption');
+
+select lives_ok($q$
+  insert into public.expenses
+    (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
+  values ('00000000-0000-4000-a000-000000000002', current_date, 'other', 62000, 'upi',
+          '10000000-0000-4000-a000-000000000001')
+$q$, 'the owner records a NON-CASH expense remotely');
+
+select throws_ok($q$
+  insert into public.expenses
+    (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
+  values ('00000000-0000-4000-a000-000000000002', current_date, 'other', 62000, 'cash',
+          '10000000-0000-4000-a000-000000000001')
+$q$, '42501', null, 'and a CASH expense from that path is refused by the database');
+
+select throws_ok($q$
+  insert into public.cash_withdrawals
+    (outlet_id, business_date, amount_paise, withdrawn_by, recorded_by)
+  values ('00000000-0000-4000-a000-000000000002', current_date, 5000, 'Synthetic Owner',
+          '10000000-0000-4000-a000-000000000001')
+$q$, '42501', null, 'the drawer is not reachable from the owner''s remote path at all');
+
+select throws_ok($q$
+  select public.close_business_day('00000000-0000-4000-a000-000000000002', current_date, 0, 0)
+$q$, 'P0001', null, 'nor is the day close — it stays that outlet''s manager''s');
+
+-- The whole point of the non-cash bound: an owner's remote entry is
+-- mathematically incapable of moving a drawer, because the cash sum filters on
+-- payment method.
+select is(
+  (select coalesce(sum(amount_paise), 0)::bigint from public.expenses
+    where outlet_id = '00000000-0000-4000-a000-000000000002'
+      and business_date = current_date
+      and payment_method = 'cash'),
+  0::bigint,
+  'so the outlet''s cash expenses for the day are untouched by anything the owner did');
 
 reset role;
 

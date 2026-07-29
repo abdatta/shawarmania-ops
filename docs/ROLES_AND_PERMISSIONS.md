@@ -4,14 +4,55 @@
 
 Four roles. The governing rule: **a role's scope is enforced by Row-Level Security in Postgres, and the UI merely reflects it.** If the two ever disagree, the database is right and the UI is a bug.
 
+## Authority is an assignment
+
+Since `multi-outlet-people` (#22) a person's authority is not a pair of columns
+on their account. It is a set of **assignments** — one row per person per role
+per outlet — and every policy answers by membership in that set: *does this
+person hold the right assignment at this row's outlet?*
+
+Three consequences, and each is load-bearing:
+
+- **One person, one login, however many outlets.** A staffer splitting shifts
+  across Kalyani and Kanchrapara holds two assignments and signs in once.
+  Account-per-outlet stays rejected (owner, 2026-07-28).
+- **Nothing about authority is in the token** (owner, 2026-07-29). There are no
+  role claims to reissue, so granting or ending an assignment bites at the next
+  request — the way deactivation already does.
+- **Nothing is session-scoped.** No active role, no "acting as", no switcher.
+  The owner rejected that sketch on 2026-07-29 as needless complexity for
+  people who are not technical. Where a screen needs one outlet, it asks on the
+  screen; that selection carries no authority and does not outlive the surface.
+
+An assignment is **ended by a date, never deleted**, because rows written under
+it have to stay explicable. Leaving one outlet is therefore not leaving the
+business: a person has left when they hold no live assignment anywhere, which
+is derived rather than stored.
+
 ## The roles
 
 | Role | Scope | Device | Primary job |
 |---|---|---|---|
 | **Super Admin** | All outlets | Own phone | Runs the business; compares outlets; manages outlets and admins |
-| **Franchise Admin** | Exactly one outlet | Own phone | Runs one shop; menu, stock, expenses, cash, staff |
-| **Biller** | Exactly one outlet | Shared counter tablet | Rings up customers |
+| **Franchise Admin** | An outlet they are assigned to | Own phone | Runs one shop; menu, stock, expenses, cash, staff |
+| **Biller** | An outlet they are assigned to | Shared counter tablet | Rings up customers |
 | **Employee** | Own records only | Own phone | Marks attendance |
+
+A person may hold more than one of these, at different outlets. They land in
+the shell of the highest role they hold, and their navigation is the union of
+what those assignments entitle them to — nothing to switch between.
+
+**The owner who runs a shop** is simply assigned as its Franchise Admin, and
+writes there like any manager. That authority comes from the assignment rather
+than from being the owner, which is exactly why it stops at that outlet.
+
+**Self-assignment** is refused, with one deliberate carve-out: a Super Admin
+may place *themselves* at an outlet. It is a convenience rather than a
+necessity — self-granting an outlet role cannot widen what an owner may already
+do, and cannot reach the owner role itself.
+**Nobody, ever, may grant themselves the `super_admin` role** — the only
+self-grant that widens what a person can do — and the last live Super Admin
+assignment cannot be ended by anyone, including its holder.
 
 ## Capability matrix
 
@@ -23,13 +64,13 @@ Four roles. The governing rule: **a role's scope is enforced by Row-Level Securi
 | View outlet list | ✓ all | R own | — | — |
 | Create / edit / deactivate outlet | ✓ | — | — | — |
 | Delete an outlet | ✓ closed, and only while nothing references it | — | — | — |
-| Change a staff code | ✓ | — read-only | — | — |
-| Switch active outlet | ✓ | — | — | — |
 | **People** |
 | Manage Franchise Admins | ✓ | — | — | — |
-| Manage Billers and Employees | ✓ | ✓ own outlet | — | — |
-| Edit staff facts (role title, dates; the code is owner-only) | ✓ any outlet | ✓ own outlet | — | R own row |
-| Mark a person departed / returned | ✓ any outlet | ✓ own outlet | — | — |
+| Manage Billers and Employees | ✓ | ✓ own outlets, and only people who work nowhere else | — | — |
+| Assign a person to an outlet | ✓ any outlet, any role | ✓ own outlets, Biller/Employee only | — | — |
+| Assign **themselves** to an outlet | ✓ outlet roles only — never the owner role | — | — | — |
+| End an assignment | ✓ | ✓ own outlets | — | — |
+| Edit staff facts (name, job title) | ✓ any outlet | ✓ own outlets | — | R own row |
 | Enrol / revoke counter device | ✓ | ✓ own outlet | — | — |
 | **Menu** |
 | View menu | R all | ✓ own outlet | R own outlet | — |
@@ -77,7 +118,7 @@ Accounts are **admin-provisioned**: an admin creates the person's record with th
 
 **Sessions are long-lived** — access tokens last an hour and refresh silently, with no inactivity timeout. A delivery employee who opens the app fortnightly should not be re-authenticating, and there is no self-service reset to rescue them if they are. Ending a session early is an administrative act, not a timer: deactivate the account.
 
-**Deactivation and reassignment bite immediately.** A deactivated account cannot read even its own profile row, because every policy is gated on the active check — and the client uses exactly that as its signal, ending the open session within five minutes (sooner if the tab is returned to) rather than waiting an hour for the token. A role or outlet change makes the token's claims stale; the client refreshes once, and signs out with an explanation if the mismatch survives, because rendering an admin's shell on an employee's claims would show empty screens that look like data loss.
+**Deactivation bites immediately, and an assignment change needs nothing to bite at all.** A deactivated account cannot read even its own profile row, because every policy is gated on the active check — and the client uses exactly that as its signal, ending the open session within five minutes (sooner if the tab is returned to) rather than waiting an hour for the token. An assignment granted or ended is different in kind since `multi-outlet-people`: nothing about authority is carried in the token, so the database honours it at the next request and the open client picks it up on the same revalidation cycle. Nothing is reissued, and nobody is signed out for having been moved.
 
 Password reset in v1 is admin-initiated: the admin issues a new one-time code. Self-service reset was considered and deliberately not shipped, and neither was changing a password you still know — both are recorded in [`openspec/todos/`](../openspec/todos/README.md). Google sign-in mapped to the same email address is a possible later convenience, not a commitment.
 
@@ -108,9 +149,8 @@ code is broken" and nothing contradicts it.
 
 Nobody manages their own account. Locking the only Super Admin out has no in-app recovery, and re-issuing your own code is meaningless while you are signed in.
 
-**Editing a person's staff facts** is a different kind of write and is governed differently. Since `staff-as-accounts` (#21) the person *is* the account: there is no roster table and no link step, and a griller who never touches the app is simply an account on a placeholder address that cannot be signed in with. Staff facts — role title, joining and leaving dates, the issued staff code — are an **ordinary column-scoped write under Row-Level Security**, made by the admin's own session rather than by the privileged function: the column grant plus `profiles_update_staff` allow the Super Admin any outlet and a Franchise Admin their own, while identity and access columns (role, outlet, active, the sign-in address) stay reachable only through the privileged function. Three rules are enforced by the database, not the form:
+**Editing a person's staff facts** is a different kind of write and is governed differently. Since `staff-as-accounts` (#21) the person *is* the account: there is no roster table and no link step, and a griller who never touches the app is simply an account on a placeholder address that cannot be signed in with. What is left of the staff facts since `multi-outlet-people` — the name and the job title — is an **ordinary column-scoped write under Row-Level Security**, made by the admin's own session rather than by the privileged function: the column grant plus `profiles_update_staff` allow the Super Admin anyone and a Franchise Admin the people at outlets they manage. Access (active state, the sign-in address) stays reachable only through the privileged function, and placement is an assignment with its own policy. Two rules are enforced by the database, not the form:
 
-- only the Super Admin may change an issued staff code (`staff_code_guard`), and an issued code can never be blanked;
 - `left_on` cannot precede `joined_on`; and
 - **departure and deactivation are independent facts** — marking someone departed does not end their sessions, and deactivating them does not remove them from the staff record. The People surface offers both together at departure so neither is forgotten.
 
@@ -143,9 +183,10 @@ Every attendance row stores the captured coordinates, the GPS accuracy, the comp
 
 ## Implementation notes
 
-- `app_role` and `app_outlet_id` are injected into the JWT by a custom access-token hook. Policies read the claims; they do not sub-query `profiles` (see the RLS recursion trap in [Architecture](ARCHITECTURE.md)).
+- **No authority is carried in the access token.** The custom access-token hook and both claim helpers were dropped by `multi-outlet-people`. Policies resolve scope from `public.assignments` through stable `security definer` helpers — `app_is_owner()`, `app_outlets_for(role)`, `app_has_role_at(role, outlet)` — whose definer rights are what keep a policy on `assignments` from recursing into itself (see the RLS recursion trap in [Architecture](ARCHITECTURE.md)). `app_outlets_for` is set-returning on purpose: `outlet_id in (select public.app_outlets_for('franchise_admin'))` is non-correlated, so Postgres hoists it to one lookup per query rather than the per-row profile sub-query the old claims existed to avoid.
 - Outstanding invitations are outlet-scoped rows with their own policy and isolation cases, written only by the privileged function and readable only by the two roles that issue codes.
 - Issuing and redeeming a code are each a **single database function**, so "supersede then insert" and "check then consume" happen in one transaction. Doing that across several round trips from an Edge Function would leave a race, and the race is the attack.
-- Claims refresh with the token, so a role change takes effect at next refresh. Anything needing immediate effect — deactivating an account, revoking a device — is a status check inside the policy, not a claim.
+- Everything needing immediate effect — an assignment change, deactivating an account, revoking a device — is a lookup inside the policy. Nothing waits for a token.
+- **Self-assignment and the last owner** are the two rules a row policy cannot state, so they live in triggers on `assignments`: `assignments_self_grant_guard` refuses a self-granted `super_admin` from anybody and any self-grant from a non-owner; `assignments_guard` refuses ending the last live `super_admin` row, and freezes an assignment's identity so moving somebody is ending one and granting another.
 - Role checks in Edge Functions re-derive the caller's role from their JWT. Being an Edge Function is not authorisation.
 - Every outlet-scoped table gets read and write policies in the migration that creates it, plus a case in the isolation test suite. See [Testing](TESTING.md).

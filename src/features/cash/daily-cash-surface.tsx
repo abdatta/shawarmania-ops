@@ -22,7 +22,7 @@ import {
   rupeesToPaise,
   shiftBusinessDate,
 } from '@/domain'
-import { useSession } from '@/session/context'
+import { useOutletScope } from '@/features/outlet-scope'
 
 /**
  * Daily cash — the screen this business was commissioned to get right.
@@ -51,7 +51,6 @@ const DIFFERENCE_WORDS = {
 } as const
 
 export function DailyCashSurface() {
-  const session = useSession()
   const { dailyCash: adapter, outlets } = useAdapters()
 
   const [today, setToday] = useState<string | null>(null)
@@ -65,7 +64,11 @@ export function DailyCashSurface() {
   const [withdrawalOpen, setWithdrawalOpen] = useState(false)
   const [withdrawal, setWithdrawal] = useState({ amount: '', withdrawnBy: '', reason: '' })
 
-  const outletId = session.outletId
+  // Which outlet this surface is about. One for nearly everybody; a
+  // per-surface choice for somebody who manages more than one, which
+  // confers nothing — the database decides every write from the
+  // assignment (multi-outlet-people, design D6).
+  const { outletId, managed, selector: outletSelector } = useOutletScope()
 
   useEffect(() => {
     if (!outletId) return
@@ -166,6 +169,7 @@ export function DailyCashSurface() {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader
+        scope={outletSelector}
         title="Cash"
         subtitle={
           businessDate
@@ -326,29 +330,47 @@ export function DailyCashSurface() {
                 />
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="phone"
-                  disabled={busy || !countedIsUsable}
-                  data-testid="close-day-button"
-                  onClick={() => setConfirming(true)}
+              {/*
+                The drawer is the outlet manager's alone, always
+                (multi-outlet-people, design D8): closing the day and taking
+                cash out are refused by the database for anyone else, the owner
+                included. Reading it is not — an owner who cannot see the day
+                cannot oversee it — so the figures stay and only the two writes
+                go, with the reason said rather than left to be discovered.
+              */}
+              {managed ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="phone"
+                    disabled={busy || !countedIsUsable}
+                    data-testid="close-day-button"
+                    onClick={() => setConfirming(true)}
+                  >
+                    Close the day
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="phone"
+                    disabled={busy}
+                    data-testid="add-withdrawal"
+                    onClick={() => {
+                      setError(null)
+                      setWithdrawalOpen(true)
+                    }}
+                  >
+                    <Banknote aria-hidden size={16} />
+                    Record a withdrawal
+                  </Button>
+                </div>
+              ) : (
+                <p
+                  data-testid="drawer-not-yours"
+                  className="rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted"
                 >
-                  Close the day
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="phone"
-                  disabled={busy}
-                  data-testid="add-withdrawal"
-                  onClick={() => {
-                    setError(null)
-                    setWithdrawalOpen(true)
-                  }}
-                >
-                  <Banknote aria-hidden size={16} />
-                  Record a withdrawal
-                </Button>
-              </div>
+                  The drawer belongs to this outlet&rsquo;s manager. You can read the day; closing
+                  it and taking cash out are theirs.
+                </p>
+              )}
             </Card>
           )}
         </div>

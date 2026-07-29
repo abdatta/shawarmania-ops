@@ -273,12 +273,40 @@ export function isRenderable(state: GateState, mode: SessionMode): boolean {
 }
 
 /**
- * The navigation for one role's shell in one mode, in declared order.
+ * The navigation for a session in one mode.
+ *
+ * Takes the roles the person actually holds, most senior first, and returns
+ * the **union** of their surfaces — because since multi-outlet-people one
+ * person may manage an outlet and work at another, and the proposal ruled out
+ * anything they would have to switch. Entries keep their own role, so a link
+ * can be built against that role's path segment.
+ *
+ * Deduplicated by navigation label: `admin-people` and `owner-people` are the
+ * same door with the same word on it, and two tabs reading "People" is a
+ * question nobody should have to answer. The more senior role's entry wins,
+ * because it is the one whose surface reaches further.
+ *
  * Surfaces without nav metadata (sub-surfaces reached from elsewhere) are
  * excluded regardless of state.
  */
-export function visibleSurfaces(role: Role, mode: SessionMode): Surface[] {
-  return surfaces
-    .filter((surface) => surface.role === role && surface.nav && isRenderable(surface.state, mode))
-    .sort((a, b) => (a.nav?.order ?? 0) - (b.nav?.order ?? 0))
+export function visibleSurfaces(roles: readonly Role[], mode: SessionMode): Surface[] {
+  const seen = new Set<string>()
+  const out: Surface[] = []
+
+  for (const role of roles) {
+    const forRole = surfaces
+      .filter(
+        (surface) => surface.role === role && surface.nav && isRenderable(surface.state, mode),
+      )
+      .sort((a, b) => (a.nav?.order ?? 0) - (b.nav?.order ?? 0))
+
+    for (const surface of forRole) {
+      const label = surface.nav?.label ?? surface.id
+      if (seen.has(label)) continue
+      seen.add(label)
+      out.push(surface)
+    }
+  }
+
+  return out
 }

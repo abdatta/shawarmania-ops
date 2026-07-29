@@ -38,12 +38,6 @@ function toColumns(patch: OutletPatch): TablesUpdate<'outlets'> {
     ...(patch.code !== undefined && { code: patch.code.trim() }),
     ...(patch.name !== undefined && { name: patch.name.trim() }),
     ...(patch.locationLabel !== undefined && { location_label: patch.locationLabel.trim() }),
-    // Uppercased here rather than trusted from the form, because it is half of
-    // an identifier the database enforces the shape of. Omitted when absent, so
-    // `issue_outlet_prefix` derives one.
-    ...(patch.staffCodePrefix !== undefined && {
-      staff_code_prefix: patch.staffCodePrefix.trim().toUpperCase(),
-    }),
     ...(patch.addressLine1 !== undefined && { address_line1: trimmed(patch.addressLine1) }),
     ...(patch.addressLine2 !== undefined && { address_line2: trimmed(patch.addressLine2) }),
     ...(patch.city !== undefined && { city: trimmed(patch.city) }),
@@ -62,32 +56,11 @@ function toColumns(patch: OutletPatch): TablesUpdate<'outlets'> {
  * raw message names a constraint rather than the mistake.
  *
  * A foreign-key violation is the other: it is what a populated outlet's
- * deletion looks like arriving from Postgres, and `profiles_outlet_id_fkey`
+ * deletion looks like arriving from Postgres, and `assignments_outlet_id_fkey`
  * is not a sentence. The surface follows this with the actual counts; this
  * message is what stands alone if that lookup fails too.
  */
 function asOutletError(error: { message: string; code?: string }): unknown {
-  // Checked before the generic `23505` below, which would otherwise report a
-  // duplicate staff-code prefix as a duplicate outlet code and send the owner
-  // to correct the wrong field.
-  if (error.message.includes('outlets_staff_code_prefix_unique')) {
-    return new DataActionError(
-      'prefix_taken',
-      'Another outlet already uses that staff code prefix. Pick three different characters.',
-    )
-  }
-  if (error.message.includes('outlets_staff_code_prefix_shape')) {
-    return new DataActionError(
-      'prefix_invalid',
-      'A staff code prefix is exactly three letters or digits, like KAL.',
-    )
-  }
-  if (error.message.includes('staff codes have already been issued')) {
-    return new DataActionError(
-      'prefix_frozen',
-      'Staff codes have already been issued from this prefix, so it cannot change now.',
-    )
-  }
   if (error.code === '23505' || error.message.includes('outlets_code_key')) {
     return new DataActionError(
       'code_taken',

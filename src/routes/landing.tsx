@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router'
 import { useRealSession } from '@/auth/use-real-session'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
-import { ROLE_SEGMENTS } from '@/session/session'
+import { heldRoles, ROLE_SEGMENTS } from '@/session/session'
 
 /**
  * The root. A signed-in visitor is simply taken to their own shell — landing
@@ -25,7 +25,10 @@ export function Landing() {
   const { state } = useRealSession()
 
   if (state.status === 'ready') {
-    return <Navigate to={`/${ROLE_SEGMENTS[state.session.role]}`} replace />
+    // The most senior role they hold. Somebody assigned nowhere has none, and
+    // the role root is where that gets said rather than here.
+    const [primary] = heldRoles(state.session)
+    return <Navigate to={primary ? `/${ROLE_SEGMENTS[primary]}` : '/staff'} replace />
   }
 
   return (

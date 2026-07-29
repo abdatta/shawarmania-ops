@@ -17,7 +17,7 @@ import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
   FAILED_ACTIVATION_NOTICE,
-  isOutletPerson,
+  liveAssignments,
   isPlaceholderAddress,
   type AccountSummary,
   type AppRole,
@@ -25,7 +25,7 @@ import {
 } from '@/data-access/adapters'
 import { activationLink } from '@/lib/activation-link'
 import { useSession } from '@/session/context'
-import { ROLE_LABELS } from '@/session/session'
+import { holdsRole, ROLE_LABELS } from '@/session/session'
 
 /**
  * People — every person, for the Super Admin across all outlets and for a
@@ -61,7 +61,7 @@ export function AccountsSurface() {
   const session = useSession()
   const { accounts: adapter, outlets: outletsAdapter } = useAdapters()
 
-  const isOwner = session.role === 'super_admin'
+  const isOwner = holdsRole(session, 'super_admin')
   const assignableRoles = useMemo<AppRole[]>(
     () => (isOwner ? ROLE_ORDER : ['biller', 'employee']),
     [isOwner],
@@ -76,6 +76,7 @@ export function AccountsSurface() {
   const [correcting, setCorrecting] = useState<AccountSummary | null>(null)
   const [editing, setEditing] = useState<AccountSummary | null>(null)
   const [departing, setDeparting] = useState<AccountSummary | null>(null)
+  const [assigning, setAssigning] = useState<AccountSummary | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pendingDeactivation, setPendingDeactivation] = useState<AccountSummary | null>(null)
@@ -213,8 +214,12 @@ export function AccountsSurface() {
   }
 
   const list = accounts ?? []
-  const departedCount = list.filter((row) => row.leftOn !== null).length
-  const visible = showDeparted ? list : list.filter((row) => row.leftOn === null)
+  // "Departed" is derived since multi-outlet-people: somebody has left the
+  // business when they hold no live assignment anywhere. There is no column
+  // saying so, because leaving ONE outlet is not leaving.
+  const hasLeft = (row: AccountSummary) => liveAssignments(row.assignments).length === 0
+  const departedCount = list.filter(hasLeft).length
+  const visible = showDeparted ? list : list.filter((row) => !hasLeft(row))
 
   const columns: DataTableColumn<AccountSummary>[] = [
     {
@@ -226,12 +231,8 @@ export function AccountsSurface() {
             {row.fullName}
             {row.id === session.userId && <span className="text-content-muted"> (you)</span>}
           </span>
-          {(row.staffCode || row.roleTitle) && (
-            <span className="block text-xs text-content-muted">
-              {row.staffCode}
-              {row.staffCode && row.roleTitle ? ' · ' : ''}
-              {row.roleTitle}
-            </span>
+          {row.roleTitle && (
+            <span className="block text-xs text-content-muted">{row.roleTitle}</span>
           )}
           {/*
             Read back on the list because it is otherwise typed once and never
@@ -257,24 +258,44 @@ export function AccountsSurface() {
         </span>
       ),
     },
-    { id: 'role', header: 'Role', cell: (row) => ROLE_LABELS[row.role] },
-    ...(isOwner
-      ? [
-          {
-            id: 'outlet',
-            header: 'Outlet',
-            cell: (row: AccountSummary) => outletName(row.outletId),
-          },
-        ]
-      : []),
+    {
+      // One column rather than two, because a person no longer has "a role" and
+      // "an outlet" — they have a set of places they work and what they do at
+      // each. A manager sees only the assignments at outlets they manage; the
+      // other outlet's row is the other outlet's data.
+      id: 'assignments',
+      header: 'Works at',
+      cell: (row) => {
+        const live = liveAssignments(row.assignments)
+        if (live.length === 0) {
+          return (
+            <span data-testid={`unassigned-${row.id}`} className="text-content-muted">
+              No outlet
+            </span>
+          )
+        }
+        return (
+          <span className="flex flex-col gap-0.5" data-testid={`assignments-${row.id}`}>
+            {live.map((assignment) => (
+              <span key={assignment.id} className="text-sm">
+                <span className="font-semibold text-content">
+                  {outletName(assignment.outletId)}
+                </span>
+                <span className="text-content-muted"> · {ROLE_LABELS[assignment.role]}</span>
+              </span>
+            ))}
+          </span>
+        )
+      },
+    },
     {
       id: 'status',
       header: 'Status',
       cell: (row) => (
         <span>
-          {row.leftOn !== null ? (
+          {hasLeft(row) ? (
             <span data-testid={`departed-${row.id}`} className="font-semibold text-content-muted">
-              Left {new Date(row.leftOn).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
+              Not assigned to any outlet
             </span>
           ) : !row.isActive ? (
             <span className="font-semibold text-danger">Deactivated</span>
@@ -321,22 +342,18 @@ export function AccountsSurface() {
                   disabled: busy,
                   onSelect: () => setEditing(row),
                 },
-                ...(isOutletPerson(row)
+                {
+                  label: 'Assign to an outlet',
+                  disabled: busy,
+                  onSelect: () => setAssigning(row),
+                },
+                ...(liveAssignments(row.assignments).length > 0
                   ? [
-                      row.leftOn === null
-                        ? {
-                            label: 'Mark as left',
-                            disabled: busy,
-                            onSelect: () => setDeparting(row),
-                          }
-                        : {
-                            label: 'Mark as returned',
-                            disabled: busy,
-                            onSelect: () =>
-                              void run(async () => {
-                                await adapter.updateStaffFacts(row.id, { leftOn: null })
-                              }),
-                          },
+                      {
+                        label: 'End an assignment',
+                        disabled: busy,
+                        onSelect: () => setDeparting(row),
+                      },
                     ]
                   : []),
                 row.isActive
@@ -574,7 +591,6 @@ export function AccountsSurface() {
       <EditPersonSheet
         key={editing?.id ?? 'no-edit'}
         account={editing}
-        isOwner={isOwner}
         busy={busy}
         onClose={() => setEditing(null)}
         onSubmit={(patch) => {
@@ -587,21 +603,42 @@ export function AccountsSurface() {
         }}
       />
 
-      {/* Keyed so the date and the deactivation offer reset per person. */}
-      <MarkLeftSheet
+      {/* Keyed so the choice and the deactivation offer reset per person. */}
+      <EndAssignmentSheet
         key={departing?.id ?? 'no-departure'}
         account={departing}
         busy={busy}
+        outletName={outletName}
         onClose={() => setDeparting(null)}
-        onSubmit={(leftOn, alsoDeactivate) => {
+        onSubmit={(assignmentId, alsoDeactivate) => {
           const target = departing
           if (!target) return
           void run(async () => {
-            await adapter.updateStaffFacts(target.id, { leftOn })
+            await adapter.endAssignment(assignmentId)
+            // Only offered, and only meaningful, when this was their last
+            // place: cutting sign-in for somebody who still works at the other
+            // outlet would be the panic button, not a departure.
             if (alsoDeactivate && target.isActive) {
               await adapter.setActive(target.id, false)
             }
             setDeparting(null)
+          })
+        }}
+      />
+
+      <AssignSheet
+        key={assigning?.id ?? 'no-assignment'}
+        account={assigning}
+        busy={busy}
+        outlets={outlets}
+        isOwner={isOwner}
+        onClose={() => setAssigning(null)}
+        onSubmit={(role, outletId) => {
+          const target = assigning
+          if (!target) return
+          void run(async () => {
+            await adapter.grantAssignment({ personId: target.id, role, outletId })
+            setAssigning(null)
           })
         }}
       />
@@ -713,52 +750,31 @@ function ChangeEmailSheet({
 }
 
 /**
- * The staff facts, edited as this session under Row-Level Security. The staff
- * code is shown and inert for anyone but the owner — the `staff_code_guard`
- * trigger is the boundary, and the disabled field is how the surface avoids
- * having it discovered by attempting it.
+ * The staff facts, edited as this session under Row-Level Security. What is
+ * left of them since multi-outlet-people: who the person is and what they do.
+ * Where they work is an assignment, with its own action and its own authority.
  */
 function EditPersonSheet({
   account,
-  isOwner,
   busy,
   onClose,
   onSubmit,
 }: {
   account: AccountSummary | null
-  isOwner: boolean
   busy: boolean
   onClose: () => void
-  onSubmit: (patch: {
-    fullName?: string
-    roleTitle?: string | null
-    joinedOn?: string | null
-    staffCode?: string
-  }) => void
+  onSubmit: (patch: { fullName?: string; roleTitle?: string | null }) => void
 }) {
   const [fullName, setFullName] = useState(account?.fullName ?? '')
   const [roleTitle, setRoleTitle] = useState(account?.roleTitle ?? '')
-  const [joinedOn, setJoinedOn] = useState(account?.joinedOn ?? '')
-  const [staffCode, setStaffCode] = useState(account?.staffCode ?? '')
-
-  const person = account !== null && isOutletPerson(account)
 
   function submit(event: FormEvent) {
     event.preventDefault()
     if (!account || !fullName.trim()) return
-    onSubmit({
-      fullName: fullName.trim(),
-      ...(person && {
-        roleTitle: roleTitle.trim() || null,
-        joinedOn: joinedOn || null,
-        // Sent only when it actually changed: writing a code back unchanged is
-        // not a change, but sending it on every ordinary edit invites the
-        // owner-only refusal for no reason.
-        ...(isOwner && staffCode.trim() && staffCode.trim() !== account.staffCode
-          ? { staffCode: staffCode.trim() }
-          : {}),
-      }),
-    })
+    // What is left of a person's editable facts once placement moved to its
+    // own relation: who they are, and what they do. Where they work is an
+    // assignment, with its own action and its own authority.
+    onSubmit({ fullName: fullName.trim(), roleTitle: roleTitle.trim() || null })
   }
 
   return (
@@ -787,40 +803,106 @@ function EditPersonSheet({
           />
         </Field>
 
-        {person && (
-          <>
-            <Field label="Staff code" id="edit-staff-code">
-              <Input
-                id="edit-staff-code"
-                value={staffCode}
-                disabled={!isOwner}
-                onChange={(event) => setStaffCode(event.target.value)}
-              />
-              {!isOwner && (
-                <p className="text-xs text-content-muted">
-                  Only the owner can change a staff code — it identifies this person’s records.
-                </p>
-              )}
-            </Field>
+        <Field label="Job title (optional)" id="edit-role-title">
+          <Input
+            id="edit-role-title"
+            placeholder="Grill, counter, prep…"
+            value={roleTitle}
+            onChange={(event) => setRoleTitle(event.target.value)}
+          />
+        </Field>
+      </form>
+    </FormSheet>
+  )
+}
 
-            <Field label="Job title (optional)" id="edit-role-title">
-              <Input
-                id="edit-role-title"
-                placeholder="Grill, counter, prep…"
-                value={roleTitle}
-                onChange={(event) => setRoleTitle(event.target.value)}
-              />
-            </Field>
+/**
+ * Ending one assignment.
+ *
+ * Which one has to be asked now, because a person may hold several and
+ * "leaving" one outlet is not leaving the business — that distinction is the
+ * whole of per-outlet departure. Their sign-in is only offered up when this is
+ * their LAST place: cutting access for somebody who still works at the other
+ * outlet would be the panic button wearing a departure's clothes, and the two
+ * are independent by design.
+ */
+function EndAssignmentSheet({
+  account,
+  busy,
+  outletName,
+  onClose,
+  onSubmit,
+}: {
+  account: AccountSummary | null
+  busy: boolean
+  outletName: (id: string | null) => string
+  onClose: () => void
+  onSubmit: (assignmentId: string, alsoDeactivate: boolean) => void
+}) {
+  const live = account ? liveAssignments(account.assignments) : []
+  const [assignmentId, setAssignmentId] = useState(live[0]?.id ?? '')
+  const [alsoDeactivate, setAlsoDeactivate] = useState(true)
 
-            <Field label="Joined on (optional)" id="edit-joined-on">
-              <Input
-                id="edit-joined-on"
-                type="date"
-                value={joinedOn}
-                onChange={(event) => setJoinedOn(event.target.value)}
-              />
-            </Field>
-          </>
+  const isLast = live.length === 1
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    if (assignmentId) onSubmit(assignmentId, isLast && alsoDeactivate)
+  }
+
+  return (
+    <FormSheet
+      open={account !== null}
+      onClose={onClose}
+      title={account ? `${account.fullName} is leaving` : 'End an assignment'}
+      footer={
+        <button
+          type="submit"
+          form="end-assignment"
+          disabled={busy || !assignmentId}
+          className={`${buttonVariants({ size: 'phone' })} w-full`}
+        >
+          {busy ? 'Saving…' : 'End this assignment'}
+        </button>
+      }
+    >
+      <form id="end-assignment" onSubmit={submit} className="space-y-4" noValidate>
+        <p className="text-sm text-content-muted">
+          They leave that outlet’s staff list and its new attendance days. Every day they worked
+          stays on the record — nothing is deleted, and they can be assigned there again later.
+        </p>
+
+        <Field label="Which outlet" id="end-assignment-outlet">
+          <Select
+            id="end-assignment-outlet"
+            required
+            value={assignmentId}
+            onChange={(event) => setAssignmentId(event.target.value)}
+          >
+            {live.map((assignment) => (
+              <option key={assignment.id} value={assignment.id}>
+                {outletName(assignment.outletId)} · {ROLE_LABELS[assignment.role]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        {isLast && account?.isActive && (
+          <label className="flex items-center gap-2 text-sm text-content">
+            <input
+              type="checkbox"
+              checked={alsoDeactivate}
+              onChange={(event) => setAlsoDeactivate(event.target.checked)}
+            />
+            This is their last outlet — also deactivate their sign-in (recommended)
+          </label>
+        )}
+
+        {!isLast && (
+          <p data-testid="still-works-elsewhere" className="text-sm text-content-muted">
+            They still work at {live.length - 1} other outlet
+            {live.length - 1 === 1 ? '' : 's'}, so their sign-in is left alone.
+          </p>
         )}
       </form>
     </FormSheet>
@@ -828,72 +910,103 @@ function EditPersonSheet({
 }
 
 /**
- * Departure. Two facts are offered in one confirmation — the person leaves
- * the staff list (every recorded day survives), and their sign-in is cut —
- * because the common case wants both and forgetting the second leaves an
- * ex-employee with a working login. The deactivation is pre-selected but
- * declinable: the two facts are independent by design.
+ * Placing somebody at an outlet.
+ *
+ * Only what the caller may actually grant is offered — a manager sees their
+ * own outlets and the two roles below their own — but the offer is a
+ * convenience, not the boundary: the database refuses anything else whatever
+ * this form sends.
  */
-function MarkLeftSheet({
+function AssignSheet({
   account,
   busy,
+  outlets,
+  isOwner,
   onClose,
   onSubmit,
 }: {
   account: AccountSummary | null
   busy: boolean
+  outlets: Tables<'outlets'>[]
+  isOwner: boolean
   onClose: () => void
-  onSubmit: (leftOn: string, alsoDeactivate: boolean) => void
+  onSubmit: (role: AppRole, outletId: string | null) => void
 }) {
-  const [leftOn, setLeftOn] = useState(() => new Date().toISOString().slice(0, 10))
-  const [alsoDeactivate, setAlsoDeactivate] = useState(true)
+  const takenOutlets = new Set(
+    (account ? liveAssignments(account.assignments) : []).map((a) => a.outletId),
+  )
+  const available = outlets.filter((outlet) => !takenOutlets.has(outlet.id))
+
+  const roles: AppRole[] = isOwner
+    ? ['franchise_admin', 'biller', 'employee']
+    : ['biller', 'employee']
+
+  const [role, setRole] = useState<AppRole>('employee')
+  const [outletId, setOutletId] = useState(available[0]?.id ?? '')
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (leftOn) onSubmit(leftOn, alsoDeactivate)
+    if (outletId) onSubmit(role, outletId)
   }
 
   return (
     <FormSheet
       open={account !== null}
       onClose={onClose}
-      title={account ? `${account.fullName} is leaving` : 'Mark as left'}
+      title={account ? `Assign ${account.fullName}` : 'Assign to an outlet'}
       footer={
         <button
           type="submit"
-          form="mark-left"
-          disabled={busy || !leftOn}
+          form="assign-person"
+          disabled={busy || !outletId}
           className={`${buttonVariants({ size: 'phone' })} w-full`}
         >
-          {busy ? 'Saving…' : 'Mark as left'}
+          {busy ? 'Saving…' : 'Assign'}
         </button>
       }
     >
-      <form id="mark-left" onSubmit={submit} className="space-y-4" noValidate>
-        <p className="text-sm text-content-muted">
-          They leave the staff list and new attendance days. Every day they worked stays on the
-          record — nothing is deleted, and they can be marked as returned later.
-        </p>
+      <form id="assign-person" onSubmit={submit} className="space-y-4" noValidate>
+        {available.length === 0 ? (
+          <p data-testid="nowhere-left" className="text-sm text-content-muted">
+            They already work at every outlet you manage. Nothing to add.
+          </p>
+        ) : (
+          <>
+            <p className="text-sm text-content-muted">
+              They keep everything they already have. One login, however many outlets — nothing to
+              switch and nothing for them to learn.
+            </p>
 
-        <Field label="Last day" id="left-on">
-          <Input
-            id="left-on"
-            type="date"
-            required
-            value={leftOn}
-            onChange={(event) => setLeftOn(event.target.value)}
-          />
-        </Field>
+            <Field label="Outlet" id="assign-outlet">
+              <Select
+                id="assign-outlet"
+                required
+                value={outletId}
+                onChange={(event) => setOutletId(event.target.value)}
+              >
+                {available.map((outlet) => (
+                  <option key={outlet.id} value={outlet.id}>
+                    {outlet.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
-        {account?.isActive && (
-          <label className="flex items-center gap-2 text-sm text-content">
-            <input
-              type="checkbox"
-              checked={alsoDeactivate}
-              onChange={(event) => setAlsoDeactivate(event.target.checked)}
-            />
-            Also deactivate their sign-in (recommended)
-          </label>
+            <Field label="Role there" id="assign-role">
+              <Select
+                id="assign-role"
+                required
+                value={role}
+                onChange={(event) => setRole(event.target.value as AppRole)}
+              >
+                {roles.map((option) => (
+                  <option key={option} value={option}>
+                    {ROLE_LABELS[option]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </>
         )}
       </form>
     </FormSheet>

@@ -14,6 +14,7 @@ import {
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { ShiftUnlock } from './shift-unlock'
 
@@ -26,8 +27,8 @@ import { ShiftUnlock } from './shift-unlock'
 const billerSession: Session = {
   mode: 'demo',
   userId: personaFixtures.biller.profile.id,
-  role: 'biller',
-  outletId: personaFixtures.biller.profile.outlet_id,
+  assignments: personaFixtures.biller.assignments,
+  ...deriveSessionScope(personaFixtures.biller.assignments),
   displayName: personaFixtures.biller.profile.full_name,
   persona: personaFixtures.biller,
 }

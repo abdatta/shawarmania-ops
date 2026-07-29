@@ -5,14 +5,20 @@ import { describe, expect, it } from 'vitest'
 
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
-import { createMockAdapters, OUTLET_KALYANI_ID } from '@/data-access/mock'
+import { createMockAdapters, OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock'
 import { expenseSeeds } from '@/data-access/mock/fixtures/operations'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
-import { formatPaise } from '@/domain'
+import { formatPaise, resolveBusinessDate } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { ExpensesSurface } from './expenses-surface'
+
+/** The business date the surfaces resolve to, under the seeded 04:00 cutover. */
+function todayBusinessDate() {
+  return resolveBusinessDate(new Date(), '04:00:00')
+}
 
 /** Today's expenses at the persona's outlet, straight from the seeds. */
 function todaysExpenses() {
@@ -24,8 +30,8 @@ function todaysExpenses() {
 const managerSession: Session = {
   mode: 'demo',
   userId: personaFixtures.franchise_admin.profile.id,
-  role: 'franchise_admin',
-  outletId: personaFixtures.franchise_admin.profile.outlet_id,
+  assignments: personaFixtures.franchise_admin.assignments,
+  ...deriveSessionScope(personaFixtures.franchise_admin.assignments),
   displayName: personaFixtures.franchise_admin.profile.full_name,
   persona: personaFixtures.franchise_admin,
 }
@@ -134,5 +140,106 @@ describe('ExpensesSurface', () => {
     // Yesterday's list: the electricity bill is on it and today's packaging is not.
     expect(await screen.findByText('Monthly bill')).toBeInTheDocument()
     expect(screen.queryByText('Boxes and napkins')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * The owner recording into an outlet they do not run.
+ *
+ * The bound is the database's — `expenses_insert` refuses `cash` from the
+ * owner's branch — and what is asserted here is that the form never offers the
+ * thing that would be refused. The refusal itself is proved in pgTAP and the
+ * REST probes.
+ */
+describe('the owner, on an outlet they do not manage', () => {
+  const ownerSession: Session = {
+    mode: 'demo',
+    userId: personaFixtures.super_admin.profile.id,
+    assignments: personaFixtures.super_admin.assignments,
+    ...deriveSessionScope(personaFixtures.super_admin.assignments),
+    displayName: personaFixtures.super_admin.profile.full_name,
+    persona: personaFixtures.super_admin,
+  }
+
+  function renderAsOwner() {
+    const adapters = createMockAdapters('super_admin')
+    return {
+      adapters,
+      ...render(
+        <MemoryRouter>
+          <SessionContext.Provider value={ownerSession}>
+            <AdaptersContext.Provider value={adapters}>
+              <ExpensesSurface />
+            </AdaptersContext.Provider>
+          </SessionContext.Provider>
+        </MemoryRouter>,
+      ),
+    }
+  }
+
+  it('opens on the outlet they run, and can reach the other one', async () => {
+    const user = userEvent.setup()
+    renderAsOwner()
+
+    // The demo owner manages Kalyani, so that is where they land — not on
+    // somebody else's books.
+    const selector = await screen.findByTestId('surface-outlet')
+    expect(selector).toHaveValue(OUTLET_KALYANI_ID)
+
+    const options = within(selector)
+      .getAllByRole('option')
+      .map((o) => o.textContent)
+    expect(options).toContain('Shawarmania Kanchrapara')
+    await user.selectOptions(selector, OUTLET_KANCHRAPARA_ID)
+    expect(selector).toHaveValue(OUTLET_KANCHRAPARA_ID)
+  })
+
+  it('offers no cash there, and says why', async () => {
+    const user = userEvent.setup()
+    renderAsOwner()
+
+    await user.selectOptions(await screen.findByTestId('surface-outlet'), OUTLET_KANCHRAPARA_ID)
+    await user.click(await screen.findByTestId('add-expense'))
+
+    expect(await screen.findByTestId('remote-entry-note')).toHaveTextContent(
+      /cannot touch its drawer/i,
+    )
+    const methods = within(screen.getByLabelText('Paid with'))
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(methods).not.toContain('Cash')
+    expect(methods).toContain('UPI')
+  })
+
+  it('still offers cash at the outlet they do run', async () => {
+    const user = userEvent.setup()
+    renderAsOwner()
+
+    await screen.findByTestId('surface-outlet')
+    await user.click(await screen.findByTestId('add-expense'))
+
+    // Kalyani is theirs to run, so nothing is narrowed: that authority comes
+    // from the assignment rather than from being the owner.
+    expect(screen.queryByTestId('remote-entry-note')).not.toBeInTheDocument()
+    const methods = within(screen.getByLabelText('Paid with'))
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(methods).toContain('Cash')
+  })
+
+  it('records the entry as the owner, at the outlet they chose', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderAsOwner()
+
+    await user.selectOptions(await screen.findByTestId('surface-outlet'), OUTLET_KANCHRAPARA_ID)
+    await user.click(await screen.findByTestId('add-expense'))
+    await user.type(screen.getByLabelText('Amount (₹)'), '620')
+    await user.type(screen.getByLabelText(/Description/), 'Aggregator platform fee')
+    await user.click(screen.getByRole('button', { name: /Record/ }))
+
+    await waitFor(async () => {
+      const rows = await adapters.expenses.listExpenses(OUTLET_KANCHRAPARA_ID, todayBusinessDate())
+      expect(rows.some((row) => row.description === 'Aggregator platform fee')).toBe(true)
+    })
   })
 })

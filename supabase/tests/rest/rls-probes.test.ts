@@ -53,6 +53,12 @@ const PERSONAS = {
     email: 'revoked.tablet.kalyani@example.com',
     sub: '10000000-0000-4000-a000-000000000009',
   },
+  // One login, live assignments at BOTH outlets — the case that did not exist
+  // before multi-outlet-people.
+  splitShift: {
+    email: 'split.shift@example.com',
+    sub: '10000000-0000-4000-a000-00000000000e',
+  },
 } as const
 
 type Client = SupabaseClient<Database>
@@ -79,19 +85,77 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 describe('token claims', () => {
-  it('a real GoTrue sign-in carries app_role and app_outlet_id claims', async () => {
+  // Since multi-outlet-people nothing about authority is in the token, and this
+  // is the probe that says so against a real GoTrue sign-in rather than against
+  // the migration set. A token that carried a role again would be a regression
+  // nothing else here would notice — every policy would keep passing, because
+  // they stopped reading it.
+  it('a real GoTrue sign-in carries no authority claim at all', async () => {
     const { accessToken } = await signIn(PERSONAS.faKalyani.email)
     const claims = decodeJwtPayload(accessToken)
-    expect(claims['app_role']).toBe('franchise_admin')
-    expect(claims['app_outlet_id']).toBe(OUTLETS.kalyani)
+    expect(claims['app_role']).toBeUndefined()
+    expect(claims['app_outlet_id']).toBeUndefined()
     expect(claims['sub']).toBe(PERSONAS.faKalyani.sub)
   })
 
-  it('the super admin claim set is outlet-less', async () => {
-    const { accessToken } = await signIn(PERSONAS.superAdmin.email)
-    const claims = decodeJwtPayload(accessToken)
-    expect(claims['app_role']).toBe('super_admin')
-    expect(claims['app_outlet_id']).toBeNull()
+  it('so authority is resolved from assignments, not from the session', async () => {
+    const { client } = await signIn(PERSONAS.faKalyani.email)
+    const { data, error } = await client
+      .from('assignments')
+      .select('role, outlet_id')
+      .eq('person_id', PERSONAS.faKalyani.sub)
+      .is('ended_on', null)
+    expect(error).toBeNull()
+    expect(data).toEqual([{ role: 'franchise_admin', outlet_id: OUTLETS.kalyani }])
+  })
+})
+
+describe('a person assigned to two outlets', () => {
+  let split: Client
+
+  beforeAll(async () => {
+    split = (await signIn(PERSONAS.splitShift.email)).client
+  })
+
+  it('reads their own attendance at both outlets, from one login', async () => {
+    const { data, error } = await split.from('attendance').select('outlet_id, person_id')
+    expect(error).toBeNull()
+    expect(new Set(data?.map((row) => row.outlet_id))).toEqual(
+      new Set([OUTLETS.kalyani, OUTLETS.kanchrapara]),
+    )
+    expect(data?.every((row) => row.person_id === PERSONAS.splitShift.sub)).toBe(true)
+  })
+
+  it('sees both outlet rows, because the fence has to judge them at either', async () => {
+    const { data, error } = await split.from('outlets').select('id')
+    expect(error).toBeNull()
+    expect(new Set(data?.map((row) => row.id))).toEqual(
+      new Set([OUTLETS.kalyani, OUTLETS.kanchrapara]),
+    )
+  })
+
+  it('sees both of their own assignments and nobody else’s', async () => {
+    const { data, error } = await split.from('assignments').select('person_id, outlet_id')
+    expect(error).toBeNull()
+    expect(data).toHaveLength(2)
+    expect(data?.every((row) => row.person_id === PERSONAS.splitShift.sub)).toBe(true)
+  })
+
+  it('is still only an Employee at each, so no manager surface opens anywhere', async () => {
+    for (const table of ['expenses', 'inventory_items', 'daily_cash_records'] as const) {
+      const { data, error } = await split.from(table).select('id')
+      expect(error).toBeNull()
+      expect(data).toEqual([])
+    }
+  })
+
+  it('reads no colleague’s attendance at either outlet', async () => {
+    const { data, error } = await split
+      .from('attendance')
+      .select('id')
+      .neq('person_id', PERSONAS.splitShift.sub)
+    expect(error).toBeNull()
+    expect(data).toEqual([])
   })
 })
 
@@ -102,7 +166,7 @@ describe('a Franchise Admin session, hand-crafting requests for the other outlet
     fa = (await signIn(PERSONAS.faKalyani.email)).client
   })
 
-  it.each(['bills', 'menu_items', 'expenses', 'profiles', 'attendance', 'shifts'] as const)(
+  it.each(['bills', 'menu_items', 'expenses', 'assignments', 'attendance', 'shifts'] as const)(
     'an explicit other-outlet filter on %s returns zero rows',
     async (table) => {
       const { data, error } = await fa.from(table).select('id').eq('outlet_id', OUTLETS.kanchrapara)
@@ -288,7 +352,12 @@ describe('an Employee session', () => {
       .from('attendance')
       .update({ status: 'half_day' })
       .eq('person_id', PERSONAS.employeeKalyani.sub)
-    expect(error?.message).toContain('cannot change their own attendance status')
+    // The rule was always about who may ATTEST, not about which role you are:
+    // the old wording named `employee` and so silently exempted a biller
+    // updating their own row (multi-outlet-people).
+    expect(error?.message).toContain(
+      'only an admin for this outlet may change an attendance status',
+    )
   })
 
   it('cannot erase the evidence its verdict was derived from', async () => {
@@ -404,21 +473,23 @@ describe('the anonymous role', () => {
 describe('account invitations', () => {
   // Selected columns, never `select('*')`: code_hash is withheld by
   // column-level grant, so a whole-row read is refused on purpose.
-  const SAFE_COLUMNS = 'id, profile_id, outlet_id, expires_at, consumed_at, attempts'
+  const SAFE_COLUMNS = 'id, profile_id, expires_at, consumed_at, attempts'
 
-  it('a Franchise Admin sees their own outlet’s invite and not the other’s', async () => {
+  it('a Franchise Admin sees the invite of a person they manage, and not the other’s', async () => {
     const fa = (await signIn(PERSONAS.faKalyani.email)).client
     const { data, error } = await fa.from('account_invites').select(SAFE_COLUMNS)
     expect(error).toBeNull()
     // A property, not a population count: the account-flows suite provisions
     // real Kalyani accounts against this same database.
     expect(data?.length).toBeGreaterThan(0)
-    expect(data?.every((row) => row.outlet_id === OUTLETS.kalyani)).toBe(true)
 
+    // Since multi-outlet-people an invite carries no outlet of its own — it is
+    // about a person, so the scoping question is who may manage them. The other
+    // outlet's pending staff member is the row that must not appear.
     const { data: other } = await fa
       .from('account_invites')
       .select(SAFE_COLUMNS)
-      .eq('outlet_id', OUTLETS.kanchrapara)
+      .eq('profile_id', '10000000-0000-4000-a000-00000000000d')
     expect(other).toEqual([])
   })
 
@@ -446,7 +517,6 @@ describe('account invitations', () => {
 
     const { error: inserted } = await fa.from('account_invites').insert({
       profile_id: PERSONAS.employeeKalyani.sub,
-      outlet_id: OUTLETS.kalyani,
       code_hash: 'forged',
       issued_by: PERSONAS.faKalyani.sub,
       expires_at: new Date(Date.now() + 86_400_000).toISOString(),
@@ -456,13 +526,13 @@ describe('account invitations', () => {
     const { error: updated } = await fa
       .from('account_invites')
       .update({ expires_at: new Date(Date.now() + 99 * 86_400_000).toISOString() })
-      .eq('outlet_id', OUTLETS.kalyani)
+      .eq('profile_id', PERSONAS.employeeKalyani.sub)
     expect(updated?.code).toBe('42501')
 
     const { error: deleted } = await fa
       .from('account_invites')
       .delete()
-      .eq('outlet_id', OUTLETS.kalyani)
+      .eq('profile_id', PERSONAS.employeeKalyani.sub)
     expect(deleted?.code).toBe('42501')
   })
 })

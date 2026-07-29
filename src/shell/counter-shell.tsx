@@ -7,6 +7,7 @@ import { ShiftStatus, SyncIndicator } from '@/features/billing/counter-status'
 import { visibleSurfaces } from '@/gates/registry'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
+import { heldRoles } from '@/session/session'
 import { ROLE_SEGMENTS } from '@/session/session'
 
 /**
@@ -50,7 +51,7 @@ export function CounterShell({
 
   const base =
     session.mode === 'demo' ? `/demo/${ROLE_SEGMENTS.biller}` : `/${ROLE_SEGMENTS.biller}`
-  const items = visibleSurfaces(session.role, session.mode)
+  const items = visibleSurfaces(heldRoles(session), session.mode)
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-canvas text-content">

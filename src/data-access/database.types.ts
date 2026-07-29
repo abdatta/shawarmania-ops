@@ -43,7 +43,6 @@ export type Database = {
           id: string
           issued_at: string
           issued_by: string
-          outlet_id: string | null
           profile_id: string
           superseded_at: string | null
         }
@@ -55,7 +54,6 @@ export type Database = {
           id?: string
           issued_at?: string
           issued_by: string
-          outlet_id?: string | null
           profile_id: string
           superseded_at?: string | null
         }
@@ -67,7 +65,6 @@ export type Database = {
           id?: string
           issued_at?: string
           issued_by?: string
-          outlet_id?: string | null
           profile_id?: string
           superseded_at?: string | null
         }
@@ -77,13 +74,6 @@ export type Database = {
             columns: ["issued_by"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "account_invites_outlet_id_fkey"
-            columns: ["outlet_id"]
-            isOneToOne: false
-            referencedRelation: "outlets"
             referencedColumns: ["id"]
           },
           {
@@ -179,6 +169,51 @@ export type Database = {
           {
             foreignKeyName: "alerts_raised_by_fkey"
             columns: ["raised_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assignments: {
+        Row: {
+          created_at: string
+          ended_on: string | null
+          id: string
+          outlet_id: string | null
+          person_id: string
+          role: Database["public"]["Enums"]["app_role"]
+          started_on: string
+        }
+        Insert: {
+          created_at?: string
+          ended_on?: string | null
+          id?: string
+          outlet_id?: string | null
+          person_id: string
+          role: Database["public"]["Enums"]["app_role"]
+          started_on?: string
+        }
+        Update: {
+          created_at?: string
+          ended_on?: string | null
+          id?: string
+          outlet_id?: string | null
+          person_id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          started_on?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignments_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_person_id_fkey"
+            columns: ["person_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -984,7 +1019,6 @@ export type Database = {
           name: string
           phone: string | null
           pincode: string | null
-          staff_code_prefix: string
         }
         Insert: {
           address_line1?: string | null
@@ -1005,7 +1039,6 @@ export type Database = {
           name: string
           phone?: string | null
           pincode?: string | null
-          staff_code_prefix?: string
         }
         Update: {
           address_line1?: string | null
@@ -1026,7 +1059,6 @@ export type Database = {
           name?: string
           phone?: string | null
           pincode?: string | null
-          staff_code_prefix?: string
         }
         Relationships: []
       }
@@ -1036,49 +1068,26 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
-          joined_on: string | null
-          left_on: string | null
-          outlet_id: string | null
           phone: string | null
-          role: Database["public"]["Enums"]["app_role"]
           role_title: string | null
-          staff_code: string | null
         }
         Insert: {
           created_at?: string
           full_name: string
           id: string
           is_active?: boolean
-          joined_on?: string | null
-          left_on?: string | null
-          outlet_id?: string | null
           phone?: string | null
-          role: Database["public"]["Enums"]["app_role"]
           role_title?: string | null
-          staff_code?: string | null
         }
         Update: {
           created_at?: string
           full_name?: string
           id?: string
           is_active?: boolean
-          joined_on?: string | null
-          left_on?: string | null
-          outlet_id?: string | null
           phone?: string | null
-          role?: Database["public"]["Enums"]["app_role"]
           role_title?: string | null
-          staff_code?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "profiles_outlet_id_fkey"
-            columns: ["outlet_id"]
-            isOneToOne: false
-            referencedRelation: "outlets"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       shifts: {
         Row: {
@@ -1147,8 +1156,24 @@ export type Database = {
         Args: { lat1: number; lat2: number; lng1: number; lng2: number }
         Returns: number
       }
-      app_outlet_id: { Args: never; Returns: string }
-      app_person_outlet: { Args: { person: string }; Returns: string }
+      app_has_role_at: {
+        Args: {
+          outlet: string
+          required: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: boolean
+      }
+      app_is_owner: { Args: never; Returns: boolean }
+      app_may_manage_person: { Args: { person: string }; Returns: boolean }
+      app_may_see_person: { Args: { person: string }; Returns: boolean }
+      app_outlets_for: {
+        Args: { required: Database["public"]["Enums"]["app_role"] }
+        Returns: string[]
+      }
+      app_person_assigned_at: {
+        Args: { outlet: string; person: string }
+        Returns: boolean
+      }
       app_profile_has: {
         Args: {
           outlet: string
@@ -1156,10 +1181,6 @@ export type Database = {
           required: Database["public"]["Enums"]["app_role"]
         }
         Returns: boolean
-      }
-      app_role: {
-        Args: never
-        Returns: Database["public"]["Enums"]["app_role"]
       }
       close_business_day: {
         Args: {
@@ -1192,7 +1213,6 @@ export type Database = {
         }
       }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
-      derive_staff_code_prefix: { Args: { p_code: string }; Returns: string }
       invite_attempts_exceeded: {
         Args: {
           p_global?: number
@@ -1226,7 +1246,6 @@ export type Database = {
           status: string
         }[]
       }
-      random_staff_suffix: { Args: never; Returns: string }
       record_invite_failure: {
         Args: { p_ip_hash: string; p_window?: string }
         Returns: undefined

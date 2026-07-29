@@ -9,7 +9,7 @@ import { NotFound } from '@/routes/not-found'
 import { CounterShell } from '@/shell/counter-shell'
 import { PhoneShell } from '@/shell/phone-shell'
 import { SessionContext } from '@/session/context'
-import { roleFromSegment, ROLE_SEGMENTS } from '@/session/session'
+import { heldRoles, roleFromSegment, ROLE_SEGMENTS } from '@/session/session'
 
 import { AccountMenu } from './account-menu'
 import { useRealSession } from './use-real-session'
@@ -19,11 +19,12 @@ import { useRealSession } from './use-real-session'
  * (design D2). It constructs only Supabase adapters, exactly as DemoRoot
  * constructs only mock ones; there is still no factory that takes a mode.
  *
- * The role in the path is *checked*, never trusted: a real session's role
- * comes from its own token claim, and a typed URL naming another role is a
- * redirect, not a decision. Row-Level Security is the actual boundary — this
- * only stops the UI from rendering something the database would refuse to
- * fill.
+ * The role in the path is *checked*, never trusted: since multi-outlet-people
+ * a session's roles come from its own assignments, and a typed URL naming a
+ * role it does not hold is a redirect rather than a decision. A role it DOES
+ * hold is served — one person may manage an outlet and work at another, and
+ * both shells are theirs. Row-Level Security is the actual boundary; this only
+ * stops the UI from rendering something the database would refuse to fill.
  */
 export function RealRoot() {
   const { roleSegment } = useParams()
@@ -95,13 +96,22 @@ export function RealRoot() {
   // ever were, saying so beats rendering a shell whose every read would throw.
   if (!adapters) return <NotFound />
 
-  const ownSegment = ROLE_SEGMENTS[session.role]
+  const held = heldRoles(session)
+  const [primary] = held
 
-  // Someone else's role path: go to your own rather than render theirs. RLS
-  // would have refused to fill it anyway; this only stops the shell lying.
-  if (roleSegment !== ownSegment) return <Navigate to={`/${ownSegment}`} replace />
+  // Nothing to be in: a person with no live assignment is signed in and placed
+  // nowhere. A real state — hired, not yet placed — and one to say rather than
+  // render an empty shell around.
+  if (!primary) return <Unplaced onSignOut={endSession} />
 
-  const Shell = session.role === 'biller' ? CounterShell : PhoneShell
+  const homeSegment = ROLE_SEGMENTS[primary]
+  const asked = roleFromSegment(roleSegment)
+
+  // A role they do not hold: go to their own rather than render it. RLS would
+  // have refused to fill it anyway; this only stops the shell lying.
+  if (!asked || !held.includes(asked)) return <Navigate to={`/${homeSegment}`} replace />
+
+  const Shell = asked === 'biller' ? CounterShell : PhoneShell
 
   return (
     <SessionContext.Provider value={session}>
@@ -109,5 +119,37 @@ export function RealRoot() {
         <Shell accountMenu={<AccountMenu onSignOut={endSession} />} />
       </AdaptersContext.Provider>
     </SessionContext.Provider>
+  )
+}
+
+/**
+ * Signed in, assigned nowhere.
+ *
+ * A real state since multi-outlet-people, and one worth naming: a person is
+ * hired before they are placed, and somebody whose last assignment ends keeps
+ * their account until an admin deactivates it. Neither is an error, and
+ * neither is a reason to end the session — so the screen says what is true and
+ * offers the one thing they can do about it.
+ */
+function Unplaced({ onSignOut }: { onSignOut: () => Promise<void> }) {
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-canvas p-4 text-content">
+      <Card className="max-w-md">
+        <CardTitle>You are not assigned to an outlet</CardTitle>
+        <CardBody className="space-y-4">
+          <p>
+            Your account works, but nobody has placed you at an outlet yet — so there is nothing
+            here to show you. Ask your manager to add you, then reopen the app.
+          </p>
+          <button
+            type="button"
+            onClick={() => void onSignOut()}
+            className={buttonVariants({ size: 'phone', variant: 'secondary' })}
+          >
+            Sign out
+          </button>
+        </CardBody>
+      </Card>
+    </div>
   )
 }

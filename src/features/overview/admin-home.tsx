@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { useAdapters, type Tables } from '@/data-access'
-import { useSession } from '@/session/context'
+import { useOutletScope } from '@/features/outlet-scope'
 
 /**
  * The Franchise Admin home: the outlet at a glance.
@@ -17,10 +17,13 @@ import { useSession } from '@/session/context'
  * (#11, #13).
  */
 export function AdminHome() {
-  const session = useSession()
   const { outlets } = useAdapters()
   const [fetched, setFetched] = useState<Tables<'outlets'> | null>()
-  const outletId = session.outletId
+  // Which outlet this surface is about. One for nearly everybody; a
+  // per-surface choice for somebody who manages more than one, which
+  // confers nothing — the database decides every write from the
+  // assignment (multi-outlet-people, design D6).
+  const { outletId, selector: outletSelector } = useOutletScope()
 
   useEffect(() => {
     if (!outletId) return
@@ -39,7 +42,11 @@ export function AdminHome() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <PageHeader title={outlet?.name ?? 'Your outlet'} subtitle={outlet?.location_label} />
+      <PageHeader
+        title={outlet?.name ?? 'Your outlet'}
+        subtitle={outlet?.location_label}
+        scope={outletSelector}
+      />
       {outlet && (
         <Card>
           <CardTitle>Outlet details</CardTitle>

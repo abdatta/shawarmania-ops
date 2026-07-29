@@ -3,7 +3,9 @@ import {
   DEMO_GRILLER_ACCOUNT_ID,
   DEMO_PREP_COOK_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
+  DEMO_SPLIT_SHIFT_ACCOUNT_ID,
 } from './accounts'
+import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from './outlets'
 import { personaFixtures } from './personas'
 
 /**
@@ -38,6 +40,13 @@ interface EventSeed {
 
 export interface AttendanceSeed {
   personId: string
+  /**
+   * Which outlet the day was worked at. Explicit since multi-outlet-people:
+   * a person may hold assignments at several, so "their outlet" stopped being
+   * a thing a seed could look up. Absent means their only assigned outlet,
+   * which is every seed but the split shift's.
+   */
+  outletId?: string
   /** Business days back from today. 0 is today. */
   daysAgo: number
   /** The claim. The mock adjudicates it exactly as the database would. */
@@ -55,6 +64,8 @@ const AT_COUNTER = { latitude: 22.97505, longitude: 88.4346, accuracyMetres: 14 
 const NEAR_COUNTER = { latitude: 22.97488, longitude: 88.43441, accuracyMetres: 22 }
 /** Roughly 240 m out — the shape of a real GPS drift, not a different town. */
 const DOWN_THE_ROAD = { latitude: 22.9765, longitude: 88.4362, accuracyMetres: 48 }
+/** Kanchrapara's counter, from its own outlet fixture. */
+const AT_KANCHRAPARA = { latitude: 22.94508, longitude: 88.43312, accuracyMetres: 19 }
 /** Further still, and with a loose fix: the reading a manager has to judge. */
 const OFF_THE_MAP = { latitude: 22.97382, longitude: 88.43254, accuracyMetres: 65 }
 
@@ -69,6 +80,7 @@ export const attendanceSeeds: AttendanceSeed[] = [
   // A normal completed day.
   {
     personId: DEMO_STAFF_ID,
+    outletId: OUTLET_KALYANI_ID,
     daysAgo: 1,
     status: 'present',
     checkIn: { time: '09:02', ...AT_COUNTER },
@@ -78,6 +90,7 @@ export const attendanceSeeds: AttendanceSeed[] = [
   // employee sees the approver and the reason, exactly as the manager does.
   {
     personId: DEMO_STAFF_ID,
+    outletId: OUTLET_KALYANI_ID,
     daysAgo: 2,
     status: 'present',
     checkIn: { time: '09:20', ...DOWN_THE_ROAD },
@@ -90,14 +103,16 @@ export const attendanceSeeds: AttendanceSeed[] = [
   },
   {
     personId: DEMO_STAFF_ID,
+    outletId: OUTLET_KALYANI_ID,
     daysAgo: 3,
     status: 'present',
     checkIn: { time: '08:58', ...AT_COUNTER },
     checkOut: { time: '17:40', ...AT_COUNTER },
   },
-  { personId: DEMO_STAFF_ID, daysAgo: 4, status: 'leave' },
+  { personId: DEMO_STAFF_ID, outletId: OUTLET_KALYANI_ID, daysAgo: 4, status: 'leave' },
   {
     personId: DEMO_STAFF_ID,
+    outletId: OUTLET_KALYANI_ID,
     daysAgo: 5,
     status: 'present',
     checkIn: { time: '09:10', ...NEAR_COUNTER },
@@ -143,4 +158,49 @@ export const attendanceSeeds: AttendanceSeed[] = [
     },
   },
   { personId: DEMO_RUNNER_ACCOUNT_ID, daysAgo: 1, status: 'absent' },
+
+  // ── The split shift: one person, one business day, two outlets ───────────
+  //
+  // The case that did not exist before multi-outlet-people, and the one a
+  // demonstrator has to be able to walk: a morning at Kalyani, an evening at
+  // Kanchrapara, both from the same phone and the same single action, with
+  // nothing anywhere asking them which shop they were at.
+  {
+    personId: DEMO_SPLIT_SHIFT_ACCOUNT_ID,
+    outletId: OUTLET_KALYANI_ID,
+    daysAgo: 1,
+    status: 'present',
+    checkIn: { time: '08:55', ...AT_COUNTER },
+    checkOut: { time: '13:05', ...NEAR_COUNTER },
+  },
+  {
+    personId: DEMO_SPLIT_SHIFT_ACCOUNT_ID,
+    outletId: OUTLET_KANCHRAPARA_ID,
+    daysAgo: 1,
+    status: 'present',
+    checkIn: { time: '15:10', ...AT_KANCHRAPARA },
+    checkOut: { time: '21:20', ...AT_KANCHRAPARA },
+  },
+  // The Employee PERSONA's own split day — the one a demonstrator walks. Their
+  // Kalyani morning is already in their week above; this is the evening at the
+  // other shop, on the same business date, from the same phone.
+  {
+    personId: DEMO_STAFF_ID,
+    outletId: OUTLET_KANCHRAPARA_ID,
+    daysAgo: 1,
+    status: 'present',
+    checkIn: { time: '19:05', ...AT_KANCHRAPARA },
+    checkOut: { time: '22:30', ...AT_KANCHRAPARA },
+  },
+  // And today, a morning at Kalyani already finished — so their big button
+  // still offers a check-in, which the fence will resolve to wherever they
+  // actually are next.
+  {
+    personId: DEMO_SPLIT_SHIFT_ACCOUNT_ID,
+    outletId: OUTLET_KALYANI_ID,
+    daysAgo: 0,
+    status: 'present',
+    checkIn: { time: '08:50', ...AT_COUNTER },
+    checkOut: { time: '12:40', ...NEAR_COUNTER },
+  },
 ]

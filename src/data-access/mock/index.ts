@@ -70,14 +70,17 @@ export function createMockAdapters(
   const persona = personaFixtures[role]
   const session = {
     userId: persona.profile.id,
-    outletId: persona.profile.outlet_id,
+    // The persona's single outlet, which is what every mock that scopes by
+    // outlet wants. The owner has none of their own; their Kalyani manager
+    // assignment is authority over that outlet rather than a home in it.
+    outletId: persona.outlet?.id ?? null,
   }
 
   return {
     outlets: createMockOutletsAdapter(),
-    // The persona's role reaches the accounts mock so it refuses a manager's
-    // staff-code change where `staff_code_guard` will refuse it.
-    accounts: createMockAccountsAdapter(accounts, role),
+    // The persona's role and id reach the accounts mock so it refuses a
+    // manager assigning themselves exactly where the database will.
+    accounts: createMockAccountsAdapter(accounts, role, persona.profile.id),
     attendance,
     // The persona's role reaches the menu mock so it refuses a Biller's write
     // where `menu_items_write` will refuse it.
@@ -103,10 +106,14 @@ export {
 } from './fixtures/outlets'
 export {
   accountFixtures,
+  assignmentFixtures,
+  DEMO_FORMER_ACCOUNT_ID,
   DEMO_GRILLER_ACCOUNT_ID,
   DEMO_HELPER_ACCOUNT_ID,
   DEMO_PREP_COOK_ACCOUNT_ID,
+  DEMO_RETURNER_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
+  DEMO_SPLIT_SHIFT_ACCOUNT_ID,
   PENDING_ACCOUNT_ID,
 } from './fixtures/accounts'
 export {

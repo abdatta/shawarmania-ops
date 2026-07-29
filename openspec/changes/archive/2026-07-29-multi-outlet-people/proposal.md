@@ -1,6 +1,6 @@
 # Proposal: multi-outlet-people
 
-> **Model**: Opus · **Wave**: D · **Depends on**: #4, #7, #21 · **Gate**: a person assigned to two outlets checks in and out at each from their own phone — nothing to switch, nothing to learn, the fence works out where they are; every row still records exactly who; a Franchise Admin still cannot reach the other outlet's data, proved by a hand-crafted request; the owner, assigned as manager of one outlet, does that outlet's operational writes there and nowhere else; the owner records a non-cash expense and a stock correction remotely, each visibly the owner's wherever it is read, and anything cash from that path is refused by the database; ending one assignment leaves the person's other assignment and their account untouched; **no staff code exists anywhere in schema or UI**; nobody assigns themselves anything and the last Super Admin cannot lose the role; and the four-role demo walkthrough still walks.
+> **Model**: Opus · **Wave**: D · **Depends on**: #4, #7, #21 · **Gate**: a person assigned to two outlets checks in and out at each from their own phone — nothing to switch, nothing to learn, the fence works out where they are; every row still records exactly who; a Franchise Admin still cannot reach the other outlet's data, proved by a hand-crafted request; the owner, assigned as manager of one outlet, does that outlet's operational writes there and nowhere else; the owner records a non-cash expense and a stock correction remotely, each visibly the owner's wherever it is read, and anything cash from that path is refused by the database; ending one assignment leaves the person's other assignment and their account untouched; **no staff code exists anywhere in schema or UI**; nobody grants themselves the owner role and the last Super Admin cannot lose it; and the four-role demo walkthrough still walks.
 
 ## Why
 
@@ -115,11 +115,29 @@ always.
 - **The owner assigning themselves** as manager of an outlet sits next to
   "nobody manages their own account" — does the other Super Admin do it, or
   is this the one carve-out?
+  → **Settled (design D7): the carve-out**, drawn narrowly. A Super Admin may
+  grant themselves an *outlet-scoped* assignment; nobody may ever grant
+  themselves the `super_admin` role; the last live Super Admin assignment
+  cannot be ended. (The argument first given for it — that production held only
+  one Super Admin — proved false at deploy time: it holds two. The owner
+  confirmed the carve-out on its own merits instead; see design D7.)
+  The Gate line above is amended to match.
 - **Owner-entered rows and the alert stream**: does an FA get a note when the
   owner records into their books, so nothing appears by surprise?
+  → **Settled (design D8): not here.** The gate's requirement is that the row
+  is *visibly* the owner's, which existing attribution plus a badge deliver at
+  every read. A note would need the `alerts_insert` policy inverted (alerts run
+  outlet → owner today) and a new `alert_category` value — and both alert
+  surfaces are still `demo`-gated, so it would land where nobody can open it.
+  **Carried into `owner-console-live` (#13)**, which is the change that makes
+  alerts real, on the owner's condition (2026-07-29) that it rides that
+  machinery rather than justifying its own.
 - `aggregator-settlement` (todo) is the first concrete customer of the
   owner's write path — does its entry screen land here or wait for its own
   graduation? (Its own todo says: together, or this first.)
+  → **Settled (design D14): waits.** Its entry screen carries commission
+  arithmetic, and folding unreviewed money maths into a roles migration is the
+  wrong trade. The todo is unblocked by this change.
 
 ## Docs to update before archiving
 

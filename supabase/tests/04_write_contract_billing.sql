@@ -8,16 +8,16 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
-create function pg_temp.impersonate(p_sub uuid, p_role text, p_outlet uuid)
+-- Claims carry `sub` and nothing about authority (multi-outlet-people): scope
+-- is resolved from the seeded `assignments` rows, exactly as a real session's
+-- is.
+create function pg_temp.impersonate(p_sub uuid)
 returns void language plpgsql as $$
 begin
   execute 'reset role';
   perform set_config(
     'request.jwt.claims',
-    json_build_object(
-      'sub', p_sub, 'role', 'authenticated',
-      'app_role', p_role, 'app_outlet_id', p_outlet
-    )::text,
+    json_build_object('sub', p_sub, 'role', 'authenticated')::text,
     true);
   execute 'set local role authenticated';
 end;
@@ -35,8 +35,7 @@ $$;
 
 -- Seeded Kalyani bills end at number 9.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 -- ---------------------------------------------------------------------------
 -- Allocation.
@@ -162,8 +161,7 @@ $q$, 'a bill rung at 00:20 carries the previous business date and is accepted');
 -- ---------------------------------------------------------------------------
 -- Append-only and the void transition.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select lives_ok($q$
   update public.bills
@@ -209,8 +207,7 @@ select throws_ok($q$
 $q$, 'P0001', null, 'voiding under someone else''s name is refused');
 
 -- The device cannot void: its session reaches no bill via the update policy.
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 select is(
   pg_temp.rows_touched($q$

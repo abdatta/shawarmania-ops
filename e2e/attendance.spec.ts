@@ -50,7 +50,10 @@ test('a check-in from outside the fence is refused, explained, and writes nothin
 
   const blocked = page.getByTestId('attendance-blocked')
   await expect(blocked).toBeVisible()
-  await expect(blocked).toContainText('too far from the outlet')
+  // Named, because the demo Employee works at two outlets since
+  // multi-outlet-people and "the outlet" would mean nothing to them. The fence
+  // picked the nearer one, which is where the override will be asked for.
+  await expect(blocked).toContainText('too far from Shawarmania Kalyani')
   // The numbers a person needs to argue with it: distance, limit, and how
   // sure the phone was.
   await expect(blocked).toContainText('150 m')
@@ -195,4 +198,32 @@ test('the employee shell offers its attendance surfaces in navigation', async ({
   const nav = page.getByRole('navigation', { name: 'Primary' })
   await expect(nav.getByRole('link', { name: 'My attendance' })).toBeVisible()
   await expect(nav.getByRole('link', { name: 'Home' })).toBeVisible()
+})
+
+/**
+ * The gate clause this change exists for, walked rather than asserted: one
+ * person, two outlets, one phone, and nothing anywhere asking them which shop
+ * they are at.
+ */
+test('a person assigned to two outlets sees each day named, and picks no outlet', async ({
+  page,
+}) => {
+  await page.goto('demo/staff/my-attendance')
+
+  // Their own history spans both shops, and each day says which — a question
+  // that did not exist while a person had one outlet, and cannot be answered
+  // from context once they have two.
+  await expect(page.getByText('Shawarmania Kalyani').first()).toBeVisible()
+  await expect(page.getByText('Shawarmania Kanchrapara').first()).toBeVisible()
+
+  await page.goto('demo/staff')
+  await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
+  // Assigned to both, said plainly on the header rather than hidden behind a
+  // control.
+  await expect(page.getByText(/Assigned to .*Kalyani.* and .*Kanchrapara/)).toBeVisible()
+
+  // And the one big button is still the only thing to press. No switcher, no
+  // outlet select, nothing session-scoped — the fence resolves it (design D5).
+  await expect(page.getByTestId('attendance-action')).toBeVisible()
+  await expect(page.getByRole('combobox')).toHaveCount(0)
 })

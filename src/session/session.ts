@@ -1,11 +1,18 @@
+import type { Assignment } from '@/data-access/adapters'
+import {
+  assignedOutlets,
+  highestRole,
+  liveAssignments,
+  outletsForRole,
+} from '@/data-access/adapters'
 import type { Database, Tables } from '@/data-access/database.types'
 
 /**
  * The session contract both modes implement — a real Supabase session (#4)
  * or a demo session driven by the URL. Shell components and features read
- * `role`, `outletId` and `displayName` identically from either variant; the
- * only mode-specific member is the demo persona, and only demo chrome (the
- * role switcher) may reach for it.
+ * `assignments`, `displayName` and the two derived conveniences identically
+ * from either variant; the only mode-specific member is the demo persona, and
+ * only demo chrome (the role switcher) may reach for it.
  */
 
 /** Tied to the database enum so a role the schema does not know is a compile error. */
@@ -15,6 +22,7 @@ export type Role = Database['public']['Enums']['app_role']
 export interface DemoPersona {
   profile: Tables<'profiles'>
   outlet: Tables<'outlets'> | null
+  assignments: Assignment[]
 }
 
 /**
@@ -24,17 +32,63 @@ export interface DemoPersona {
  * existed in only one mode would force exactly the mode-conditional branch the
  * shell contract forbids. In demo it is the persona's id; nothing authenticates
  * against it either way.
+ *
+ * `assignments` is the authority since multi-outlet-people. `role` and
+ * `outletId` survive as **derived conveniences**, and only mean what they used
+ * to for the overwhelmingly common single-assignment person: `role` is the
+ * highest role held, `outletId` the one outlet when there is exactly one and
+ * null otherwise. A surface that must handle several reads `assignments`; one
+ * that genuinely concerns a single outlet keeps working unchanged.
  */
+interface SessionCore {
+  userId: string
+  assignments: Assignment[]
+  role: Role | null
+  outletId: string | null
+  displayName: string
+}
+
 export type Session =
-  | { mode: 'real'; userId: string; role: Role; outletId: string | null; displayName: string }
-  | {
-      mode: 'demo'
-      userId: string
-      role: Role
-      outletId: string | null
-      displayName: string
-      persona: DemoPersona
-    }
+  ({ mode: 'real' } & SessionCore) | ({ mode: 'demo'; persona: DemoPersona } & SessionCore)
+
+/**
+ * Build the derived half of a session from its assignments, so real and demo
+ * providers cannot drift on what "your role" means.
+ */
+export function deriveSessionScope(assignments: Assignment[]): {
+  role: Role | null
+  outletId: string | null
+} {
+  const outlets = assignedOutlets(assignments)
+  return {
+    role: highestRole(assignments),
+    outletId: outlets.length === 1 ? (outlets[0] ?? null) : null,
+  }
+}
+
+/** Does this session hold a live assignment in the given role, anywhere? */
+export function holdsRole(session: Session, role: Role): boolean {
+  return liveAssignments(session.assignments).some((a) => a.role === role)
+}
+
+/** Every role this session holds live, most senior first. */
+export function heldRoles(session: Session): Role[] {
+  const held = new Set(liveAssignments(session.assignments).map((a) => a.role))
+  return ROLE_ORDER.filter((role) => held.has(role))
+}
+
+/** The outlets this session may act at in the given role. */
+export function sessionOutletsFor(session: Session, role: Role): string[] {
+  return outletsForRole(session.assignments, role)
+}
+
+/** Every outlet this session works at, in any role. */
+export function sessionOutlets(session: Session): string[] {
+  return assignedOutlets(session.assignments)
+}
+
+/** Most senior first. Orders shells and navigation; confers nothing. */
+const ROLE_ORDER: Role[] = ['super_admin', 'franchise_admin', 'biller', 'employee']
 
 export type SessionMode = Session['mode']
 

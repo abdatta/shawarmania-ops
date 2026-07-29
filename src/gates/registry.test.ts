@@ -23,7 +23,7 @@ describe('gate registry', () => {
     // assertion follows it into real mode rather than being relaxed.
     for (const role of ['super_admin', 'franchise_admin', 'biller', 'employee'] as const) {
       for (const mode of ['demo', 'real'] as const) {
-        const visible = visibleSurfaces(role, mode)
+        const visible = visibleSurfaces([role], mode)
         expect(visible.length, `${role}/${mode}`).toBeGreaterThan(0)
         expect(visible[0]?.path, `${role}/${mode}`).toBe('')
         expect(visible[0]?.state, `${role}/${mode}`).toBe('live')
@@ -39,7 +39,7 @@ describe('gate registry', () => {
         .sort()
 
       expect(
-        visibleSurfaces(role, 'real')
+        visibleSurfaces([role], 'real')
           .map((surface) => surface.id)
           .sort(),
         role,
@@ -48,7 +48,7 @@ describe('gate registry', () => {
       // Nothing `hidden` leaks into either mode — the state that means absent.
       for (const mode of ['demo', 'real'] as const) {
         expect(
-          visibleSurfaces(role, mode).some((surface) => surface.state === 'hidden'),
+          visibleSurfaces([role], mode).some((surface) => surface.state === 'hidden'),
           `${role}/${mode}`,
         ).toBe(false)
       }
@@ -60,7 +60,7 @@ describe('gate registry', () => {
     // Franchise Admin, nothing for the two roles that never issue codes.
     for (const role of ['super_admin', 'franchise_admin'] as const) {
       expect(
-        visibleSurfaces(role, 'real').some((surface) => surface.path === 'people'),
+        visibleSurfaces([role], 'real').some((surface) => surface.path === 'people'),
         role,
       ).toBe(true)
     }

@@ -10,6 +10,7 @@ import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { PROFIT_BASIS_LABELS } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { ComparisonSurface } from './comparison-surface'
 import { OutletDayView } from './outlet-day-view'
@@ -26,8 +27,8 @@ import { ReportsSurface } from './reports-surface'
 const ownerSession: Session = {
   mode: 'demo',
   userId: personaFixtures.super_admin.profile.id,
-  role: 'super_admin',
-  outletId: null,
+  assignments: personaFixtures.super_admin.assignments,
+  ...deriveSessionScope(personaFixtures.super_admin.assignments),
   displayName: personaFixtures.super_admin.profile.full_name,
   persona: personaFixtures.super_admin,
 }
@@ -35,8 +36,8 @@ const ownerSession: Session = {
 const managerSession: Session = {
   mode: 'demo',
   userId: personaFixtures.franchise_admin.profile.id,
-  role: 'franchise_admin',
-  outletId: personaFixtures.franchise_admin.profile.outlet_id,
+  assignments: personaFixtures.super_admin.assignments,
+  ...deriveSessionScope(personaFixtures.super_admin.assignments),
   displayName: personaFixtures.franchise_admin.profile.full_name,
   persona: personaFixtures.franchise_admin,
 }
@@ -44,7 +45,7 @@ const managerSession: Session = {
 function renderSurface(
   ui: React.ReactNode,
   session: Session = ownerSession,
-  adapters: DataAdapters = createMockAdapters(session.role),
+  adapters: DataAdapters = createMockAdapters(session.role ?? undefined),
   entry = '/',
 ) {
   return render(

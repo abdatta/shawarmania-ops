@@ -35,11 +35,16 @@ authentication.
 - **THEN** no SMS is sent, no email is sent, and no external messaging provider
   is contacted
 
-### Requirement: Each role lands on its own shell
+### Requirement: Each role lands on a shell it holds an assignment for
 
-After sign-in a session SHALL be routed to the role shell named by its own
-role claim. A session SHALL NOT be able to render another role's shell by
-navigating to that role's path.
+After sign-in a session SHALL be routed to the shell of the highest role it
+holds a live assignment for. A session SHALL be able to reach any role shell it
+holds a live assignment for, and SHALL NOT be able to render one it does not —
+navigating there SHALL redirect it home.
+
+Navigation SHALL be the union of the surfaces every live assignment entitles
+the person to, so that a person who manages one outlet and works at another
+reaches both sets of surfaces without switching anything.
 
 #### Scenario: All four roles reach their own shell
 
@@ -48,17 +53,24 @@ navigating to that role's path.
 - **THEN** each lands on their own role's home surface with that role's
   navigation
 
-#### Scenario: A mistyped role path redirects
+#### Scenario: A mixed-role person sees both sets of surfaces
 
-- **WHEN** a signed-in session navigates to another role's path
-- **THEN** it is redirected to its own role's home rather than rendering the
-  other shell
+- **WHEN** a person holding a Franchise Admin assignment at one outlet and an
+  Employee assignment at another signs in
+- **THEN** they land on the Franchise Admin shell and their navigation includes
+  their own attendance alongside the manager surfaces, with no switcher
+
+#### Scenario: A path for an unheld role redirects
+
+- **WHEN** a signed-in session navigates to the path of a role it holds no live
+  assignment for
+- **THEN** it is redirected to its own home rather than rendering that shell
 
 #### Scenario: A signed-in visit to the landing page goes to the app
 
 - **WHEN** a signed-in session opens the application root
-- **THEN** it is taken to its own role's home rather than shown the
-  unauthenticated landing page
+- **THEN** it is taken to its own home rather than shown the unauthenticated
+  landing page
 
 ### Requirement: An unauthenticated visitor cannot reach a role shell
 
@@ -94,21 +106,31 @@ service-role credential MUST NOT be reachable from the browser.
 
 ### Requirement: Provisioning authority is re-derived from the caller's token
 
-A privileged account function SHALL determine the caller's role and outlet from
-the caller's own verified session, never from values supplied in the request. A
+A privileged account function SHALL determine the caller's assignments from the
+caller's own verified session, never from values supplied in the request. A
 Super Admin MAY provision, re-issue, and deactivate any account other than
-their own. A Franchise Admin MAY do so only for Biller and Employee accounts in
-their own outlet. Every other combination SHALL be refused.
+their own. A Franchise Admin MAY do so only for Biller and Employee accounts at
+outlets they hold a live Franchise Admin assignment at, and only where every
+outlet the target person is assigned to is one they manage. Every other
+combination SHALL be refused.
 
-#### Scenario: A Franchise Admin cannot provision outside their outlet
+#### Scenario: A Franchise Admin cannot provision outside their outlets
 
-- **WHEN** a Franchise Admin requests an account in another outlet
+- **WHEN** a Franchise Admin requests an account at an outlet they hold no live
+  assignment at
 - **THEN** the request is refused and no account is created
 
 #### Scenario: A Franchise Admin cannot create an administrator
 
 - **WHEN** a Franchise Admin requests a Super Admin or Franchise Admin account
 - **THEN** the request is refused and no account is created
+
+#### Scenario: A Franchise Admin cannot manage a person who also works elsewhere
+
+- **WHEN** a Franchise Admin attempts to deactivate or re-issue a code for a
+  person who also holds a live assignment at an outlet they do not manage
+- **THEN** the request is refused, because the account is not theirs alone to
+  act on
 
 #### Scenario: A Biller or Employee cannot provision at all
 
@@ -231,24 +253,41 @@ writes nothing regardless of what the client does.
 - **THEN** they are returned to sign-in with the deactivation message rather
   than reaching a shell
 
-### Requirement: A role or outlet reassignment ends the open session
+### Requirement: An assignment change takes effect without ending the session
 
-A client SHALL attempt one token refresh when its stored role or outlet no
-longer matches the role and outlet carried by its access token, and SHALL end
-the session with an explanation if the mismatch persists. A client MUST NOT
-render a shell for a role its token does not carry.
+An assignment granted or ended while a person's app is open SHALL take effect
+at the database immediately, and the open client SHALL reflect it within a
+bounded interval without the person signing in again — because nothing about
+authority is carried in the token, there is nothing to reissue.
 
-#### Scenario: A reassigned user is signed out rather than shown the wrong shell
+A client SHALL NOT render a shell or a surface for a role it holds no live
+assignment for. A person who loses every live assignment SHALL be returned to a
+state that offers no outlet surfaces and states why.
 
-- **WHEN** a person's role or outlet is changed while their app is open and a
-  token refresh does not resolve the mismatch
-- **THEN** the session ends with a message that their role has changed, and no
-  shell for the new role is rendered on the old token
+#### Scenario: A new assignment appears without signing out
+
+- **WHEN** a person is granted an assignment at a second outlet while their app
+  is open
+- **THEN** the second outlet becomes available to them within the revalidation
+  interval, with no sign-out and no password re-entry
+
+#### Scenario: An ended assignment stops rendering its shell
+
+- **WHEN** the assignment behind the shell a person is currently viewing is
+  ended
+- **THEN** the client stops rendering that shell within the revalidation
+  interval, and the database refuses its writes immediately regardless
+
+#### Scenario: Losing every assignment is stated, not a blank screen
+
+- **WHEN** a person's last live assignment is ended while their app is open
+- **THEN** they are shown that they are not currently assigned to any outlet,
+  rather than an empty shell
 
 #### Scenario: Reassignment invalidates outstanding codes
 
-- **WHEN** a person's role or outlet is changed while an unredeemed code exists
-  for them
+- **WHEN** a person's assignments change while an unredeemed code exists for
+  them
 - **THEN** that code is no longer redeemable
 
 ### Requirement: Sessions persist across restarts for field use
@@ -302,41 +341,42 @@ SHALL be gone, and returning to a role surface SHALL require signing in again.
 
 ### Requirement: A person is created once, as an account
 
-Creating a staff member SHALL be one act on one surface: the admin supplies
-the person's name, address, phone, role, outlet, and optionally a job title
-and joining date, and the result is a single record that is simultaneously
-their login and their staff-list membership. No separate roster write, link
-step, or second surface SHALL exist anywhere in the UI.
+Creating a staff member SHALL be one act on one surface: the admin supplies the
+person's name, address, phone, role, outlet, and optionally a job title, and
+the result is a single record that is simultaneously their login and their
+staff-list membership, together with the assignment that places them. No
+separate roster write, link step, or second surface SHALL exist anywhere in the
+UI.
 
-Staff facts (`staff_code`, `role_title`, `joined_on`, `left_on`) live on the
-account record itself. Editing them SHALL be done by the admin's own session
-under Row-Level Security — a Super Admin for any account, a Franchise Admin
-for accounts at their own outlet — while identity and access fields (role,
-outlet, active state, email) remain writable only through the privileged
-function that re-derives authority from the caller's token.
+The person's job title (`role_title`) lives on the account record; where they
+work and from when lives on the assignment. Editing the job title SHALL be done
+by the admin's own session under Row-Level Security — a Super Admin for any
+account, a Franchise Admin for people assigned to an outlet they manage — while
+identity and access fields (active state, email) and assignments themselves
+remain governed by their own boundaries.
 
 #### Scenario: One step creates a working person
 
-- **WHEN** an admin creates a person in the Employee role with a name,
-  address, and job title
-- **THEN** one create action yields an account with an issued staff code and
-  a one-time activation code, the person appears on the staff list
-  immediately, and no linking step exists or is needed before they can check
-  in once activated
+- **WHEN** an admin creates a person in the Employee role at an outlet with a
+  name, address, and job title
+- **THEN** one create action yields an account, a live assignment at that
+  outlet, and a one-time activation code; the person appears on that outlet's
+  staff list immediately, and no linking step exists or is needed before they
+  can check in once activated
 
 #### Scenario: Staff facts are edited under Row-Level Security
 
-- **WHEN** a Franchise Admin edits the job title or joining date of a person
-  at their own outlet
+- **WHEN** a Franchise Admin edits the job title of a person assigned to their
+  own outlet
 - **THEN** the write succeeds as the admin's own session, and the same write
-  against a person at another outlet is refused by the database
+  against a person assigned only to another outlet is refused by the database
 
 #### Scenario: Access fields stay out of the client's reach
 
-- **WHEN** any client session attempts to write role, outlet, or active state
-  directly on an account record
-- **THEN** the database refuses the write; those fields change only through
-  the privileged function
+- **WHEN** any client session attempts to write the active state directly on an
+  account record
+- **THEN** the database refuses the write; that field changes only through the
+  privileged function
 
 ### Requirement: An admin can see and correct the address an account signs in with
 
@@ -393,42 +433,14 @@ SHALL be refused outright rather than handed an empty result.
 - **THEN** addresses are present for their own outlet's Billers and Employees,
   and for no account outside their authority
 
-### Requirement: A staff code is never blank
-
-A person record that carries a staff code SHALL carry a non-empty one,
-enforced by the database and not only by a form. A code consisting of
-whitespace SHALL be refused, because a staff code identifies a person's
-records for years and a blank one identifies nothing. Accounts that are not
-outlet staff — the Super Admin, counter devices — carry no code at all, which
-is absence, not blankness.
-
-Absence and blankness are answered differently depending on the write. On
-insert of a staff account, a missing or blank code is a request for one to be
-issued, and the database SHALL fill it. On update, a blank or cleared code is
-a mistake rather than a request — the record already has a code — and the
-database SHALL refuse it rather than silently substituting one, so that
-clearing the field never quietly becomes renaming it.
-
-#### Scenario: A blank staff code on insert is filled, not refused
-
-- **WHEN** a staff account is created with no staff code, or one that is
-  entirely whitespace
-- **THEN** the write succeeds and the record carries an issued code
-
-#### Scenario: Blanking an existing staff code is refused
-
-- **WHEN** any caller updates a person's staff code to empty, whitespace, or
-  null
-- **THEN** the database refuses the write
-
 ### Requirement: Every people surface answers whether a person can check in
 
-The People surface SHALL show, for each person, whether they can check in,
-and where they cannot, the reason SHALL be readable on the screen — the
-account is deactivated, the person has left, or the account has never been
-activated (no usable address yet, or an invite still outstanding) — so that
-the question is answerable during a phone call without anyone opening the
-database.
+The People surface SHALL show, for each person, whether they can check in and
+where, and where they cannot, the reason SHALL be readable on the screen — the
+account is deactivated, the person holds no live assignment, or the account has
+never been activated (no usable address yet, or an invite still outstanding) —
+so that the question is answerable during a phone call without anyone opening
+the database.
 
 #### Scenario: A deactivated person reads as such
 
@@ -443,10 +455,19 @@ database.
 - **THEN** the row states what is missing and the next step, not merely that
   something is wrong
 
+#### Scenario: A person with no assignment reads as unplaced
+
+- **WHEN** the People surface lists an active, activated person holding no live
+  assignment
+- **THEN** the row states that they are not assigned to any outlet and cannot
+  check in anywhere
+
 #### Scenario: A working person reads as working
 
-- **WHEN** the People surface lists an active, activated person
-- **THEN** nothing on the row suggests a problem
+- **WHEN** the People surface lists an active, activated person with at least
+  one live assignment
+- **THEN** nothing on the row suggests a problem, and every outlet they are
+  assigned to is named
 
 ### Requirement: An activation link carries the code so nothing but a password is typed
 
@@ -647,9 +668,9 @@ database and not only by a form. A name consisting entirely of whitespace
 SHALL be refused.
 
 A name is the only field on the record that a human reads to know who the
-record is about. A staff code disambiguates two people with the same name; it
-does not identify a person with no name at all. The same reasoning that made a
-blank staff code unacceptable applies with more force to the name beside it.
+record is about — and since staff codes retired it is the only one at all.
+Two people with the same name are told apart by their job title and where
+they work; neither identifies a person with no name.
 
 The surface that writes the record SHALL refuse before writing and SHALL name
 the field that is missing, on the People surface's create and edit paths
@@ -672,129 +693,6 @@ alike.
 
 - **WHEN** an admin edits a person and clears the full name
 - **THEN** the write is refused and the row keeps the name it had
-
-### Requirement: A staff code is issued by the system, not invented by an admin
-
-No surface SHALL require a person to supply a staff code in order to create a
-staff account. When a staff account is created without one, the database
-SHALL issue it, so that a staff account can never exist without a code and no
-human is ever asked for a value the system can determine.
-
-An issued code SHALL be short and readable, because it is displayed beside a
-person's name on the staff list and on the attendance day — its only job is
-to tell two people with the same name apart. It SHALL be the outlet's own
-prefix followed by a short random suffix.
-
-The suffix SHALL be drawn from an alphabet with no visually confusable
-characters, because these codes are read aloud across a counter and dictated
-over a phone. The alphabet already used for one-time codes SHALL be reused
-rather than a second one invented.
-
-Issuing SHALL be random rather than sequential, so that no value must be read
-before one is written and two staff accounts created at one outlet at the
-same moment cannot contend. The database SHALL retry a bounded number of
-times if a generated code is already taken at that outlet, and SHALL raise a
-clear error rather than looping if every attempt is exhausted.
-
-A code supplied explicitly SHALL be honoured rather than replaced, so that
-importing or setting a code by hand remains possible.
-
-#### Scenario: Creating a person asks for no code
-
-- **WHEN** an admin creates a staff account
-- **THEN** no staff code is requested, and the account that results carries
-  one
-
-#### Scenario: The issued code names its outlet
-
-- **WHEN** a staff account is created at an outlet
-- **THEN** the issued code begins with that outlet's prefix, and its suffix
-  contains no character that could be misread for another
-
-#### Scenario: An explicitly supplied code is kept
-
-- **WHEN** a staff account is created with a staff code supplied
-- **THEN** that code is stored unchanged and no code is issued in its place
-
-#### Scenario: Two people added at once get different codes
-
-- **WHEN** two staff accounts are created at the same outlet concurrently,
-  neither supplying a code
-- **THEN** both succeed and the two codes differ
-
-#### Scenario: A code already taken at that outlet is not issued twice
-
-- **WHEN** issuing generates a code that a staff account at the same outlet
-  already carries
-- **THEN** another is generated instead, and the insert succeeds
-
-### Requirement: An outlet's staff-code prefix is unique and fixed once used
-
-Every outlet SHALL carry a short staff-code prefix, unique across all
-outlets, because a prefix truncated from an outlet's name can collide — a
-future Kalimpong would otherwise share Kalyani's. The database SHALL refuse a
-prefix another outlet already holds.
-
-The prefix SHALL be proposed automatically when an outlet is created, and
-SHALL remain correctable while no staff code has been issued at that outlet.
-Once any staff code has been issued at an outlet, its prefix SHALL be fixed,
-because every code already issued reads from it and changing it would leave
-those codes naming an outlet prefix that no longer exists.
-
-#### Scenario: A new outlet is proposed a prefix
-
-- **WHEN** an admin creates an outlet
-- **THEN** a prefix is proposed from the outlet's own code, shown on the
-  form, and stored with the outlet
-
-#### Scenario: A prefix another outlet holds is refused
-
-- **WHEN** an outlet is created or edited with a staff-code prefix that
-  another outlet already carries
-- **THEN** the database refuses the write and the surface says the prefix is
-  taken
-
-#### Scenario: The prefix is correctable before any code is issued
-
-- **WHEN** an admin changes the staff-code prefix of an outlet where no
-  staff code has been issued
-- **THEN** the change is accepted
-
-#### Scenario: The prefix is fixed once a staff code exists
-
-- **WHEN** an admin attempts to change the staff-code prefix of an outlet
-  where at least one staff account carries a code
-- **THEN** the database refuses the change, and the surface explains that
-  codes have already been issued from it
-
-### Requirement: Only the owner changes a staff code, and the database is the boundary
-
-A staff code SHALL be changeable after it is issued, and only by a Super
-Admin. A Franchise Admin SHALL be able to edit every other staff fact on an
-account they manage and SHALL NOT be able to change its staff code. The
-refusal SHALL be made by the database, not only by the form, because staff
-facts are written by the admin's own session under Row-Level Security and a
-policy that permits the row permits every column on it.
-
-The surface SHALL reflect this: the field is editable for a Super Admin and
-inert for anyone else, so the refusal is not discovered by attempting it.
-
-#### Scenario: A Franchise Admin cannot change a staff code
-
-- **WHEN** a Franchise Admin attempts to change the staff code on an account
-  in their own outlet, by any path including a hand-crafted request
-- **THEN** the database refuses the write, and the record keeps its code
-
-#### Scenario: A Franchise Admin still edits the rest of the record
-
-- **WHEN** a Franchise Admin changes a person's name, job title, joining
-  date or departure date
-- **THEN** the write succeeds
-
-#### Scenario: The owner changes a staff code
-
-- **WHEN** a Super Admin sets a new staff code on a staff account
-- **THEN** the write succeeds and the People surface shows the new code
 
 ### Requirement: An account with recorded history cannot be deleted
 
@@ -828,34 +726,37 @@ never deletion.
 ### Requirement: Departure and access are two independent facts
 
 The people model SHALL keep whether an account may sign in (`is_active`) and
-whether the person still works here (`left_on`) as two columns with no
-database coupling,
-because one bit cannot express "access cut but still employed" — the state
-the emergency lever produces.
+where the person still works (their live assignments) as independent facts with
+no database coupling, because one bit cannot express "access cut but still
+employed" — the state the emergency lever produces.
 
 Deactivating an account SHALL end its open session immediately and SHALL NOT
-remove the person from the staff list or the day's attendance surface.
-Marking a person departed SHALL remove them from staff lists while leaving
-every recorded row in place. The departure flow SHALL offer deactivation in
-the same confirmation, so the common case lands in both states in one act.
+end any assignment, remove the person from any staff list, or remove them from
+the day's attendance surface. Ending an assignment SHALL remove the person from
+that outlet's staff list and its new attendance days while leaving every
+recorded row in place, and SHALL leave their account and their other
+assignments untouched.
+
+A person has left the business when they hold no live assignment at all; that
+state SHALL be derived rather than stored as a separate column.
 
 #### Scenario: The panic button does not falsify the day
 
 - **WHEN** an admin deactivates the account of someone currently at work
 - **THEN** the account's session ends immediately, and the person remains on
-  the staff list and the day's attendance surface
+  every staff list they were on and on the day's attendance surface
 
 #### Scenario: A departed person leaves the lists, not the record
 
-- **WHEN** an admin marks a person as having left
-- **THEN** they no longer appear on the staff list or new attendance days,
-  and every attendance row and recorded action of theirs remains readable
+- **WHEN** an admin ends every live assignment a person holds
+- **THEN** they no longer appear on any staff list or new attendance day, and
+  every attendance row and recorded action of theirs remains readable
 
-#### Scenario: Departing offers the access cut
+#### Scenario: Departure from one outlet is not departure from the business
 
-- **WHEN** an admin opens the departure confirmation
-- **THEN** it offers to also deactivate the account, pre-selected, and
-  confirms both consequences in one act
+- **WHEN** an admin ends one of a person's two assignments
+- **THEN** the person is still current staff at the other outlet and is not
+  shown as having left
 
 ### Requirement: The people model carries no payroll data
 
@@ -884,3 +785,106 @@ account until an admin has replaced it.
 - **THEN** the row is marked as needing an address before the person can be
   invited, and correcting it then issuing a code makes the account usable
 
+### Requirement: One person has one login, however many outlets they work at
+
+A person SHALL have exactly one account regardless of how many outlets they
+work at or how many roles they hold. No surface, function, or migration SHALL
+create a second login for a second outlet.
+
+Where a person works, and as what, SHALL be an explicit assignment per outlet.
+Holding a role at one outlet SHALL confer nothing at any other outlet.
+
+#### Scenario: A person working at two outlets signs in once
+
+- **WHEN** a person assigned to two outlets signs in
+- **THEN** one account and one password serve both, and nothing asks them to
+  choose, switch, or identify which outlet they are for
+
+#### Scenario: A role at one outlet confers nothing at another
+
+- **WHEN** a person who is a Franchise Admin at one outlet and an Employee at
+  another attempts a manager write at the outlet where they are an Employee
+- **THEN** the database refuses it
+
+### Requirement: Assignments are managed on the People surface
+
+An admin SHALL be able to grant a person an assignment at an outlet, and to end
+one, from the People surface — a Super Admin for any outlet, a Franchise Admin
+only for outlets they manage and only for Biller and Employee assignments.
+The surface SHALL show every person's live assignments, each naming its outlet
+and role.
+
+Ending a person's last live assignment SHALL offer to deactivate the account in
+the same confirmation, and SHALL state that ending an assignment removes them
+from that outlet's lists while leaving every recorded row in place.
+
+#### Scenario: A person is assigned to a second outlet
+
+- **WHEN** an admin grants an existing person an assignment at a second outlet
+- **THEN** the person appears on that outlet's staff list, may check in there,
+  and keeps everything they had at the first outlet
+
+#### Scenario: A manager cannot assign beyond their authority
+
+- **WHEN** a Franchise Admin opens the assignment control
+- **THEN** only outlets they manage are offered, only Biller and Employee roles
+  are offered, and the database refuses anything else regardless of the request
+
+#### Scenario: Ending one assignment leaves the person working elsewhere
+
+- **WHEN** an admin ends a person's assignment at one of the two outlets they
+  work at
+- **THEN** that outlet's staff list no longer shows them, the other outlet's
+  still does, their account still signs in, and every attendance row at both
+  outlets remains
+
+#### Scenario: Ending the last assignment offers the access cut
+
+- **WHEN** an admin ends a person's only remaining assignment
+- **THEN** the confirmation offers to deactivate the account as well, and
+  states that recorded rows are unaffected either way
+
+### Requirement: The owner records non-cash entries at any outlet, and never cash
+
+A Super Admin SHALL be able to record a non-cash expense and an inventory
+correction at any outlet without being assigned to it. Every such row SHALL
+carry the owner as the recording person and SHALL be shown as the owner's
+wherever it is read.
+
+The database SHALL refuse a cash expense, a cash withdrawal, and a day close
+from this path, so that nothing touching a drawer can be recorded remotely. The
+drawer SHALL remain the responsibility of the person assigned as that outlet's
+Franchise Admin.
+
+A Super Admin who additionally holds a Franchise Admin assignment at an outlet
+SHALL be able to perform that outlet's full operational writes there — cash
+included — and at no other outlet, because that authority comes from the
+assignment rather than from being the owner.
+
+#### Scenario: The owner records a non-cash expense remotely
+
+- **WHEN** a Super Admin records an expense paid by UPI at an outlet they hold
+  no assignment at
+- **THEN** the expense is recorded, attributed to them, and reads as the
+  owner's entry on that outlet's expenses surface
+
+#### Scenario: The owner records a stock correction remotely
+
+- **WHEN** a Super Admin records an inventory correction with a note at an
+  outlet they hold no assignment at
+- **THEN** the movement is recorded, attributed to them, and the item's
+  quantity moves by exactly that correction
+
+#### Scenario: Cash from the remote path is refused by the database
+
+- **WHEN** a Super Admin holding no assignment at an outlet attempts, by any
+  path including a hand-crafted request, to record a cash expense, a cash
+  withdrawal, or a day close at that outlet
+- **THEN** the database refuses the write
+
+#### Scenario: The owner assigned as a manager runs that outlet
+
+- **WHEN** a Super Admin who also holds a Franchise Admin assignment at one
+  outlet closes that outlet's business day
+- **THEN** the close succeeds, and the same close attempted at an outlet they
+  hold no assignment at is refused

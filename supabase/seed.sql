@@ -25,24 +25,19 @@
 -- both states of the owner's outlet screen — surveyed on site, and never
 -- captured — exist locally without anyone travelling.
 
--- `staff_code_prefix` is supplied rather than derived: seeding runs after the
--- migrations against an empty table, so the backfill in
--- `20260728000003_generated_staff_codes.sql` has nothing to act on here. These
--- are the same two prefixes production carries, so a seeded code and a real one
--- read alike.
 insert into public.outlets
-  (id, code, name, location_label, staff_code_prefix,
+  (id, code, name, location_label,
    address_line1, city, district, pincode, phone,
    latitude, longitude, geofence_radius_m, business_day_cutover,
    location_accuracy_m, location_captured_at)
 values
   ('00000000-0000-4000-a000-000000000001', 'kalyani', 'Shawarmania Kalyani',
-   'Kalyani — Central Park', 'KAL', 'Ward 10, B-9 Diagonal Road, Near Central Park Ground',
+   'Kalyani — Central Park', 'Ward 10, B-9 Diagonal Road, Near Central Park Ground',
    'Kalyani', 'Nadia', '741235', '+91 89815 24778',
    22.9750, 88.4345, 150, time '04:00',
    9, now() - interval '3 days'),
   ('00000000-0000-4000-a000-000000000002', 'kanchrapara', 'Shawarmania Kanchrapara',
-   'Kanchrapara', 'KAN', '281, K G Path (N), Near Joramandir Bus Stand',
+   'Kanchrapara', '281, K G Path (N), Near Joramandir Bus Stand',
    'Kanchrapara', 'North 24 Parganas', '743145', '+91 89815 24778',
    22.9450, 88.4330, 150, time '04:00',
    null, null);
@@ -85,7 +80,13 @@ begin
       -- ids, exactly what the merge preserves.
       ('20000000-0000-4000-a000-000000000002'::uuid,
        '20000000-0000-4000-a000-000000000002@placeholder.invalid'),
-      ('20000000-0000-4000-a000-000000000004'::uuid, 'griller.kanchrapara@example.com')
+      ('20000000-0000-4000-a000-000000000004'::uuid, 'griller.kanchrapara@example.com'),
+      -- The split-shift person: one login, live assignments at BOTH outlets.
+      -- Multi-outlet is the case that has to be seeded rather than assumed —
+      -- every isolation persona below is single-outlet, and a model that only
+      -- ever sees single-outlet people is a model whose second outlet is
+      -- untested (multi-outlet-people).
+      ('10000000-0000-4000-a000-00000000000e'::uuid, 'split.shift@example.com')
     ) as p (id, email)
   loop
     insert into auth.users
@@ -113,34 +114,66 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- Profiles. The person record: role + outlet + active flag, and — since
--- staff-as-accounts — the staff facts (code, job title, joining date,
--- departure date). Codes are supplied rather than left to the issue trigger
--- so tests can name them; person roles carry one, the owner and the counter
--- devices carry none. `KPA-` codes at the `KAN`-prefix outlet are historical
--- supplied values, which the schema honours — only *issued* codes read from
--- the outlet prefix.
+-- Profiles. The person record: who they are, whether they may sign in, and
+-- their job title. Since multi-outlet-people, WHERE they work and AS WHAT is
+-- not here — it is one row per place in `public.assignments` below, because a
+-- person may work at more than one outlet and a single column cannot say so.
+-- Staff codes are gone entirely (owner, 2026-07-29).
 
 insert into public.profiles
-  (id, full_name, phone, role, outlet_id, is_active,
-   staff_code, role_title, joined_on, left_on)
+  (id, full_name, phone, is_active, role_title)
 values
-  ('10000000-0000-4000-a000-000000000001', 'Synthetic Owner',        '911111111001', 'super_admin',     null,                                        true,  null,       null,            null,               null),
-  ('10000000-0000-4000-a000-000000000002', 'Synthetic Admin Kal',    '911111111002', 'franchise_admin', '00000000-0000-4000-a000-000000000001', true,  'KAL-ADM',  'Manager',       current_date - 500, null),
-  ('10000000-0000-4000-a000-000000000003', 'Synthetic Admin Kpa',    '911111111003', 'franchise_admin', '00000000-0000-4000-a000-000000000002', true,  'KAN-ADM',  'Manager',       current_date - 450, null),
-  ('10000000-0000-4000-a000-000000000004', 'Counter Tablet Kal',     '911111111004', 'biller',          '00000000-0000-4000-a000-000000000001', true,  null,       null,            null,               null),
-  ('10000000-0000-4000-a000-000000000005', 'Counter Tablet Kpa',     '911111111005', 'biller',          '00000000-0000-4000-a000-000000000002', true,  null,       null,            null,               null),
-  ('10000000-0000-4000-a000-000000000006', 'Synthetic Staff Kal',    '911111111006', 'employee',        '00000000-0000-4000-a000-000000000001', true,  'KAL-E1',   'Counter staff', current_date - 200, null),
-  ('10000000-0000-4000-a000-000000000007', 'Synthetic Staff Kpa',    '911111111007', 'employee',        '00000000-0000-4000-a000-000000000002', true,  'KPA-E1',   'Counter staff', current_date - 150, null),
-  ('10000000-0000-4000-a000-000000000008', 'Deactivated Admin Kal',  '911111111008', 'franchise_admin', '00000000-0000-4000-a000-000000000001', false, 'KAL-ADM2', 'Manager',       current_date - 400, null),
-  ('10000000-0000-4000-a000-000000000009', 'Revoked Tablet Kal',     '911111111009', 'biller',          '00000000-0000-4000-a000-000000000001', true,  null,       null,            null,               null),
-  ('10000000-0000-4000-a000-00000000000a', 'Synthetic Biller Kal',   '911111111010', 'biller',          '00000000-0000-4000-a000-000000000001', true,  null,       null,            null,               null),
-  ('10000000-0000-4000-a000-00000000000b', 'Synthetic Biller Kpa',   '911111111011', 'biller',          '00000000-0000-4000-a000-000000000002', true,  null,       null,            null,               null),
-  ('10000000-0000-4000-a000-00000000000c', 'Pending Staff Kal',      '911111111014', 'employee',        '00000000-0000-4000-a000-000000000001', true,  'KAL-E3',   'Prep',          current_date - 10,  null),
-  ('10000000-0000-4000-a000-00000000000d', 'Pending Staff Kpa',      '911111111015', 'employee',        '00000000-0000-4000-a000-000000000002', true,  'KPA-E3',   'Prep',          current_date - 10,  null),
+  ('10000000-0000-4000-a000-000000000001', 'Synthetic Owner',        '911111111001', true,  null),
+  ('10000000-0000-4000-a000-000000000002', 'Synthetic Admin Kal',    '911111111002', true,  'Manager'),
+  ('10000000-0000-4000-a000-000000000003', 'Synthetic Admin Kpa',    '911111111003', true,  'Manager'),
+  ('10000000-0000-4000-a000-000000000004', 'Counter Tablet Kal',     '911111111004', true,  null),
+  ('10000000-0000-4000-a000-000000000005', 'Counter Tablet Kpa',     '911111111005', true,  null),
+  ('10000000-0000-4000-a000-000000000006', 'Synthetic Staff Kal',    '911111111006', true,  'Counter staff'),
+  ('10000000-0000-4000-a000-000000000007', 'Synthetic Staff Kpa',    '911111111007', true,  'Counter staff'),
+  ('10000000-0000-4000-a000-000000000008', 'Deactivated Admin Kal',  '911111111008', false, 'Manager'),
+  ('10000000-0000-4000-a000-000000000009', 'Revoked Tablet Kal',     '911111111009', true,  null),
+  ('10000000-0000-4000-a000-00000000000a', 'Synthetic Biller Kal',   '911111111010', true,  null),
+  ('10000000-0000-4000-a000-00000000000b', 'Synthetic Biller Kpa',   '911111111011', true,  null),
+  ('10000000-0000-4000-a000-00000000000c', 'Pending Staff Kal',      '911111111014', true,  'Prep'),
+  ('10000000-0000-4000-a000-00000000000d', 'Pending Staff Kpa',      '911111111015', true,  'Prep'),
+  ('10000000-0000-4000-a000-00000000000e', 'Synthetic Split Shift',  '911111111016', true,  'Counter staff'),
   -- The grillers: staff accounts carrying the facts their roster rows held.
-  ('20000000-0000-4000-a000-000000000002', 'Synthetic Griller Kal',  '911111111012', 'employee',        '00000000-0000-4000-a000-000000000001', true,  'KAL-E2',   'Grill',         current_date - 400, null),
-  ('20000000-0000-4000-a000-000000000004', 'Synthetic Griller Kpa',  '911111111013', 'employee',        '00000000-0000-4000-a000-000000000002', true,  'KPA-E2',   'Grill',         current_date - 300, null);
+  ('20000000-0000-4000-a000-000000000002', 'Synthetic Griller Kal',  '911111111012', true,  'Grill'),
+  ('20000000-0000-4000-a000-000000000004', 'Synthetic Griller Kpa',  '911111111013', true,  'Grill');
+
+-- ---------------------------------------------------------------------------
+-- Assignments: person × role × outlet. One live row per person per outlet.
+--
+-- Every isolation persona below is deliberately single-outlet, so the sweeps
+-- keep meaning what they meant. `Synthetic Split Shift` is the exception and
+-- the point: one login, an Employee assignment at each outlet, and a day
+-- worked at each — the case that did not exist before this change.
+--
+-- The owner is seeded outlet-less. Owner-as-manager is proved in
+-- 14_assignments.sql by granting the assignment inside the test, so the
+-- isolation sweeps are not quietly weakened by an owner who also passes every
+-- manager branch.
+
+insert into public.assignments (person_id, role, outlet_id, started_on)
+values
+  ('10000000-0000-4000-a000-000000000001', 'super_admin',     null,                                   current_date - 600),
+  ('10000000-0000-4000-a000-000000000002', 'franchise_admin', '00000000-0000-4000-a000-000000000001', current_date - 500),
+  ('10000000-0000-4000-a000-000000000003', 'franchise_admin', '00000000-0000-4000-a000-000000000002', current_date - 450),
+  ('10000000-0000-4000-a000-000000000004', 'biller',          '00000000-0000-4000-a000-000000000001', current_date - 400),
+  ('10000000-0000-4000-a000-000000000005', 'biller',          '00000000-0000-4000-a000-000000000002', current_date - 400),
+  ('10000000-0000-4000-a000-000000000006', 'employee',        '00000000-0000-4000-a000-000000000001', current_date - 200),
+  ('10000000-0000-4000-a000-000000000007', 'employee',        '00000000-0000-4000-a000-000000000002', current_date - 150),
+  ('10000000-0000-4000-a000-000000000008', 'franchise_admin', '00000000-0000-4000-a000-000000000001', current_date - 400),
+  ('10000000-0000-4000-a000-000000000009', 'biller',          '00000000-0000-4000-a000-000000000001', current_date - 90),
+  ('10000000-0000-4000-a000-00000000000a', 'biller',          '00000000-0000-4000-a000-000000000001', current_date - 300),
+  ('10000000-0000-4000-a000-00000000000b', 'biller',          '00000000-0000-4000-a000-000000000002', current_date - 300),
+  ('10000000-0000-4000-a000-00000000000c', 'employee',        '00000000-0000-4000-a000-000000000001', current_date - 10),
+  ('10000000-0000-4000-a000-00000000000d', 'employee',        '00000000-0000-4000-a000-000000000002', current_date - 10),
+  -- One person, two outlets.
+  ('10000000-0000-4000-a000-00000000000e', 'employee',        '00000000-0000-4000-a000-000000000001', current_date - 60),
+  ('10000000-0000-4000-a000-00000000000e', 'employee',        '00000000-0000-4000-a000-000000000002', current_date - 30),
+  ('20000000-0000-4000-a000-000000000002', 'employee',        '00000000-0000-4000-a000-000000000001', current_date - 400),
+  ('20000000-0000-4000-a000-000000000004', 'employee',        '00000000-0000-4000-a000-000000000002', current_date - 300);
 
 -- ---------------------------------------------------------------------------
 -- Outstanding one-time codes, one per outlet. Stored as a hash exactly as the
@@ -152,14 +185,14 @@ values
 -- the same rule redeem-invite applies to what a person types.
 
 insert into public.account_invites
-  (id, profile_id, outlet_id, code_hash, issued_by, issued_at, expires_at)
+  (id, profile_id, code_hash, issued_by, issued_at, expires_at)
 values
   ('80000000-0000-4000-a000-000000000001',
-   '10000000-0000-4000-a000-00000000000c', '00000000-0000-4000-a000-000000000001',
+   '10000000-0000-4000-a000-00000000000c',
    encode(extensions.digest('ABCDEFGHJK', 'sha256'), 'hex'),
    '10000000-0000-4000-a000-000000000002', now(), now() + interval '7 days'),
   ('80000000-0000-4000-a000-000000000002',
-   '10000000-0000-4000-a000-00000000000d', '00000000-0000-4000-a000-000000000002',
+   '10000000-0000-4000-a000-00000000000d',
    encode(extensions.digest('KMNPQRSTVW', 'sha256'), 'hex'),
    '10000000-0000-4000-a000-000000000003', now(), now() + interval '7 days');
 
@@ -270,7 +303,14 @@ values
   ('00000000-0000-4000-a000-000000000002', '60000000-0000-4000-a000-000000000012',
    'added', 20, 4500, null, '10000000-0000-4000-a000-000000000003', current_date - 2),
   ('00000000-0000-4000-a000-000000000002', '60000000-0000-4000-a000-000000000013',
-   'added', 4, 18000, null, '10000000-0000-4000-a000-000000000003', current_date - 2);
+   'added', 4, 18000, null, '10000000-0000-4000-a000-000000000003', current_date - 2),
+  -- The owner's remote correction: recorded by the Super Admin at an outlet
+  -- they hold no assignment at. `correction` is the only movement type that
+  -- branch permits — receiving and consuming stock is done standing in the
+  -- shop (multi-outlet-people, design D8).
+  ('00000000-0000-4000-a000-000000000002', '60000000-0000-4000-a000-000000000011',
+   'correction', -0.5, null, 'Owner audit: half a kilo unaccounted (synthetic)',
+   '10000000-0000-4000-a000-000000000001', current_date - 1);
 
 -- ---------------------------------------------------------------------------
 -- Shifts and bills. D-2 is a fully traded, reconciled day at both outlets;
@@ -447,7 +487,14 @@ values
   ('00000000-0000-4000-a000-000000000001', current_date - 1, 'salaries',
    'Advance to staff (synthetic)', 50000, 'cash', '10000000-0000-4000-a000-000000000002'),
   ('00000000-0000-4000-a000-000000000002', current_date - 2, 'raw_materials',
-   'Pita and packaging (synthetic)', 10000, 'cash', '10000000-0000-4000-a000-000000000003');
+   'Pita and packaging (synthetic)', 10000, 'cash', '10000000-0000-4000-a000-000000000003'),
+  -- The owner's remote entry: recorded by the Super Admin, at an outlet they
+  -- hold no assignment at, non-cash by necessity — `expenses_insert` refuses
+  -- `cash` from that branch, so this row cannot move Kanchrapara's drawer
+  -- (multi-outlet-people, design D8).
+  ('00000000-0000-4000-a000-000000000002', current_date - 1, 'other',
+   'Aggregator platform fee, paid centrally (synthetic)', 62000, 'upi',
+   '10000000-0000-4000-a000-000000000001');
 
 insert into public.cash_withdrawals
   (outlet_id, business_date, amount_paise, reason, withdrawn_by, recorded_by)
@@ -503,6 +550,21 @@ values
    current_date - 1, 'absent',
    ((current_date - 1) + time '09:40') at time zone 'Asia/Kolkata', 22.94120, 88.42880, 28, null, 'phone',
    null, null, null, null, null, null,
+   null, null, null),
+  -- The split day: ONE person, ONE business date, TWO outlets. Morning at
+  -- Kalyani, evening at Kanchrapara, each check-in inside its own fence and
+  -- neither aware of the other. This pair is exactly what the old
+  -- `(person_id, business_date)` uniqueness made impossible, and what
+  -- `(person_id, outlet_id, business_date)` exists to allow.
+  ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000e',
+   current_date - 1, 'present',
+   ((current_date - 1) + time '08:55') at time zone 'Asia/Kolkata', 22.97495, 88.43443, 15, 8, 'phone',
+   ((current_date - 1) + time '13:05') at time zone 'Asia/Kolkata', 22.97502, 88.43455, 17, 11, 'phone',
+   null, null, null),
+  ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-00000000000e',
+   current_date - 1, 'present',
+   ((current_date - 1) + time '15:10') at time zone 'Asia/Kolkata', 22.94508, 88.43312, 19, 14, 'phone',
+   ((current_date - 1) + time '21:20') at time zone 'Asia/Kolkata', 22.94494, 88.43289, 24, 17, 'phone',
    null, null, null);
 
 -- ---------------------------------------------------------------------------

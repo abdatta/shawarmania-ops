@@ -14,16 +14,16 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
-create function pg_temp.impersonate(p_sub uuid, p_role text, p_outlet uuid)
+-- Claims carry `sub` and nothing about authority (multi-outlet-people): scope
+-- is resolved from the seeded `assignments` rows, exactly as a real session's
+-- is.
+create function pg_temp.impersonate(p_sub uuid)
 returns void language plpgsql as $$
 begin
   execute 'reset role';
   perform set_config(
     'request.jwt.claims',
-    json_build_object(
-      'sub', p_sub, 'role', 'authenticated',
-      'app_role', p_role, 'app_outlet_id', p_outlet
-    )::text,
+    json_build_object('sub', p_sub, 'role', 'authenticated')::text,
     true);
   execute 'set local role authenticated';
 end;
@@ -66,8 +66,7 @@ alter table public.attendance enable trigger attendance_no_delete;
 -- ---------------------------------------------------------------------------
 -- Creating an outlet is the Super Admin's, and nobody else's.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select throws_ok($q$
   insert into public.outlets (code, name, location_label)
@@ -83,8 +82,7 @@ select is((select name from public.outlets
             where id = '00000000-0000-4000-a000-000000000001'),
   'Shawarmania Kalyani', 'and the name is unchanged');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
-  'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select lives_ok($q$
   insert into public.outlets
@@ -125,8 +123,7 @@ select lives_ok($q$
    where id = '00000000-0000-4000-a000-000000000001'
 $q$, 'the super admin deactivates Kalyani');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 select throws_ok($q$
   insert into public.attendance
@@ -140,8 +137,7 @@ $q$, '23514', 'outlet is not trading',
 
 -- Someone mid-shift when the shop closed must still be able to close their day.
 -- The seeded griller checked in yesterday and never checked out.
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select lives_ok($q$
   update public.attendance
@@ -162,26 +158,26 @@ select isnt((select check_out_at from public.attendance
 -- "deactivation destroyed nothing", and a bare count would also be answering
 -- "what else has written to this database today", which is a different question
 -- with a different answer on every run.
-select is((select count(*) from public.profiles
+select is((select count(*) from public.assignments
             where outlet_id = '00000000-0000-4000-a000-000000000001'
-              and staff_code in ('KAL-E1', 'KAL-E2')), 2::bigint,
+              and ended_on is null
+              and person_id in ('10000000-0000-4000-a000-000000000006',
+                                '20000000-0000-4000-a000-000000000002')), 2::bigint,
   'deactivation leaves the staff list intact');
 
 select is((select count(*) from public.attendance
             where outlet_id = '00000000-0000-4000-a000-000000000001'
-              and business_date in (current_date - 1, current_date - 2)), 3::bigint,
+              and business_date in (current_date - 1, current_date - 2)), 4::bigint,
   'and every recorded day still exists');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
-  'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select lives_ok($q$
   update public.outlets set is_active = true
    where id = '00000000-0000-4000-a000-000000000001'
 $q$, 'the super admin reactivates Kalyani');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 select lives_ok($q$
   insert into public.attendance
@@ -216,8 +212,25 @@ select is((select count(*)
               and c.confrelid = 'public.profiles'::regclass
               and c.confdeltype = 'c'
               and ns.nspname = 'public'
-              and cl.relname <> 'account_invites'), 0::bigint,
-  'no foreign key onto profiles cascades, except the recorded invite exception');
+              and cl.relname not in ('account_invites', 'assignments')), 0::bigint,
+  'no foreign key onto profiles cascades, except the two recorded exceptions');
+
+-- The two exceptions, named so that adding a third has to argue for itself
+-- here. Both are PLUMBING rather than history: an invite is a code waiting to
+-- be redeemed, an assignment is the record that somebody works somewhere.
+-- Neither is evidence of anything that happened, which is what the
+-- no-deletion rule protects — and every table that IS evidence still refuses,
+-- which the two deletes above prove.
+select is((select string_agg(cl.relname, ', ' order by cl.relname)
+             from pg_catalog.pg_constraint c
+             join pg_catalog.pg_class cl on cl.oid = c.conrelid
+             join pg_catalog.pg_namespace ns on ns.oid = cl.relnamespace
+            where c.contype = 'f'
+              and c.confrelid = 'public.profiles'::regclass
+              and c.confdeltype = 'c'
+              and ns.nspname = 'public'),
+  'account_invites, assignments',
+  'and the cascading keys are exactly the two that are plumberage, not history');
 
 select throws_ok($q$
   delete from public.profiles where id = '10000000-0000-4000-a000-000000000006'
@@ -244,9 +257,11 @@ values
    '{"provider": "email", "providers": ["email"]}'::jsonb, '{}'::jsonb,
    now(), now(), '', '', '', '', '', '', '', '', false);
 
-insert into public.profiles (id, full_name, role, outlet_id)
-values ('10000000-0000-4000-a000-0000000000fe', 'Synthetic Fresh Hire',
-        'employee', '00000000-0000-4000-a000-000000000001');
+insert into public.profiles (id, full_name)
+values ('10000000-0000-4000-a000-0000000000fe', 'Synthetic Fresh Hire');
+insert into public.assignments (person_id, role, outlet_id)
+values ('10000000-0000-4000-a000-0000000000fe', 'employee',
+        '00000000-0000-4000-a000-000000000001');
 
 select lives_ok($q$
   delete from auth.users where id = '10000000-0000-4000-a000-0000000000fe'
@@ -259,36 +274,69 @@ select is((select count(*) from public.profiles
 -- ---------------------------------------------------------------------------
 -- Departure and access are two independent facts, and neither erases a day.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
+-- Departure is per-outlet since multi-outlet-people: it ends the assignment
+-- at this outlet, not a column on the person.
 select lives_ok($q$
-  update public.profiles set left_on = current_date
-   where id = '20000000-0000-4000-a000-000000000002'
-$q$, 'a franchise admin marks their outlet''s griller as departed');
+  update public.assignments set ended_on = current_date
+   where person_id = '20000000-0000-4000-a000-000000000002'
+     and outlet_id = '00000000-0000-4000-a000-000000000001'
+     and ended_on is null
+$q$, 'a franchise admin ends their outlet''s griller''s assignment');
 
 select is((select count(*) from public.attendance
             where person_id = '20000000-0000-4000-a000-000000000002'), 2::bigint,
   'every day the departed person worked is still on the record');
 
 select lives_ok($q$
-  update public.profiles set left_on = null
-   where id = '20000000-0000-4000-a000-000000000002'
-$q$, 'and departure is reversible — people do come back');
+  insert into public.assignments (person_id, role, outlet_id)
+  values ('20000000-0000-4000-a000-000000000002', 'employee',
+          '00000000-0000-4000-a000-000000000001')
+$q$, 'and departure is reversible — people do come back, as a fresh assignment');
 
--- The panic-button state: access cut while left_on stays null. The seeded
--- deactivated admin holds it; what matters is that the person still exists
+-- The panic-button state: access cut while the assignment stays live. The
+-- seeded deactivated admin holds it; what matters is that the person is still
 -- on the staff list — deactivation is about sign-in, not existence.
-select is((select count(*) from public.profiles
-            where id = '10000000-0000-4000-a000-000000000008'
-              and is_active = false and left_on is null), 1::bigint,
+select is((select count(*) from public.profiles p
+            join public.assignments a on a.person_id = p.id and a.ended_on is null
+           where p.id = '10000000-0000-4000-a000-000000000008'
+             and p.is_active = false), 1::bigint,
   'access cut with no departure is a real, stored state');
 
 select throws_ok($q$
-  update public.profiles
-     set left_on = joined_on - 1
-   where id = '20000000-0000-4000-a000-000000000002'
-$q$, '23514', null, 'a departure before the joining date is refused');
+  update public.assignments
+     set ended_on = started_on - 1
+   where person_id = '20000000-0000-4000-a000-000000000002'
+     and ended_on is null
+$q$, '23514', null, 'an assignment ending before it started is refused');
+
+-- Ending one assignment leaves the person's other one, and their account,
+-- exactly as they were — the gate clause, at the database.
+select lives_ok($q$
+  update public.assignments set ended_on = current_date
+   where person_id = '10000000-0000-4000-a000-00000000000e'
+     and outlet_id = '00000000-0000-4000-a000-000000000001'
+     and ended_on is null
+$q$, 'the split-shift person''s Kalyani assignment is ended');
+
+-- Read the consequences as the owner: a Kalyani manager is — correctly — no
+-- longer able to see this person at all, which is the isolation working rather
+-- than the account having gone anywhere.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
+
+select is((select count(*) from public.assignments
+            where person_id = '10000000-0000-4000-a000-00000000000e'
+              and ended_on is null), 1::bigint,
+  'their Kanchrapara assignment is untouched');
+
+select is((select is_active from public.profiles
+            where id = '10000000-0000-4000-a000-00000000000e'), true,
+  'and their account still signs in');
+
+select is((select count(*) from public.attendance
+            where person_id = '10000000-0000-4000-a000-00000000000e'), 2::bigint,
+  'and every day they worked at either outlet is still on the record');
 
 reset role;
 

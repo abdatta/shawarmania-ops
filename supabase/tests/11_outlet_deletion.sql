@@ -18,16 +18,16 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
-create function pg_temp.impersonate(p_sub uuid, p_role text, p_outlet uuid)
+-- Claims carry `sub` and nothing about authority (multi-outlet-people): scope
+-- is resolved from the seeded `assignments` rows, exactly as a real session's
+-- is.
+create function pg_temp.impersonate(p_sub uuid)
 returns void language plpgsql as $$
 begin
   execute 'reset role';
   perform set_config(
     'request.jwt.claims',
-    json_build_object(
-      'sub', p_sub, 'role', 'authenticated',
-      'app_role', p_role, 'app_outlet_id', p_outlet
-    )::text,
+    json_build_object('sub', p_sub, 'role', 'authenticated')::text,
     true);
   execute 'set local role authenticated';
 end;
@@ -45,31 +45,42 @@ insert into public.outlets (id, code, name, location_label) values
   ('00000000-0000-4000-a000-0000000000f7', 'del-denied',  'Denied Outlet',  'Nowhere');
 
 -- People, accounts and devices are moved rather than invented: a profile's id
--- is an auth user's id, and this file has no business creating those. Staff
--- are accounts now, so "a staff member at f2" and "an account at f3" are the
--- same kind of row wearing different roles — both are asserted anyway,
--- because each was once a separate table and each has its own count below.
-update public.profiles set outlet_id = '00000000-0000-4000-a000-0000000000f2'
- where id = '10000000-0000-4000-a000-00000000000c';
+-- is an auth user's id, and this file has no business creating those. Since
+-- multi-outlet-people, moving a person means moving their ASSIGNMENT — that is
+-- the row that references the outlet now, and therefore the row that has to
+-- refuse the outlet's deletion.
+-- An assignment's identity is immutable by design — moving somebody is ending
+-- one and granting another. Here the old row is removed outright rather than
+-- ended, because an ended row still references its outlet and would block the
+-- very deletion this file is about; as the database owner that is available,
+-- and it is fixture setup rather than anything a client can do.
+delete from public.assignments
+ where person_id in ('10000000-0000-4000-a000-00000000000c',
+                     '10000000-0000-4000-a000-00000000000d',
+                     '10000000-0000-4000-a000-000000000003',
+                     '10000000-0000-4000-a000-000000000008');
 
-update public.profiles set outlet_id = '00000000-0000-4000-a000-0000000000f6'
- where id = '10000000-0000-4000-a000-00000000000d';
-
-update public.profiles set outlet_id = '00000000-0000-4000-a000-0000000000f3'
- where id = '10000000-0000-4000-a000-000000000003';
+insert into public.assignments (person_id, role, outlet_id) values
+  ('10000000-0000-4000-a000-00000000000c', 'employee',        '00000000-0000-4000-a000-0000000000f2'),
+  ('10000000-0000-4000-a000-00000000000d', 'employee',        '00000000-0000-4000-a000-0000000000f6'),
+  ('10000000-0000-4000-a000-000000000003', 'franchise_admin', '00000000-0000-4000-a000-0000000000f3');
 
 update public.counter_devices set outlet_id = '00000000-0000-4000-a000-0000000000f4'
  where id = '10000000-0000-4000-a000-000000000005';
 
--- f5's only reference is an account somebody has already switched off.
-update public.profiles
-   set outlet_id = '00000000-0000-4000-a000-0000000000f5', is_active = false
+-- f5's only reference is the assignment of an account somebody has already
+-- switched off — a deactivated person still holds their place, and that place
+-- still blocks the delete.
+insert into public.assignments (person_id, role, outlet_id)
+values ('10000000-0000-4000-a000-000000000008', 'franchise_admin',
+        '00000000-0000-4000-a000-0000000000f5');
+update public.profiles set is_active = false
  where id = '10000000-0000-4000-a000-000000000008';
 
 -- ---------------------------------------------------------------------------
 -- The owner deletes an outlet nothing references.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid, 'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 delete from public.outlets where id = '00000000-0000-4000-a000-0000000000f1';
 
@@ -86,9 +97,9 @@ $q$, '23503', null, 'an outlet with a staff member cannot be deleted');
 
 reset role;
 
-select is((select count(*) from public.profiles
+select is((select count(*) from public.assignments
             where outlet_id = '00000000-0000-4000-a000-0000000000f2'), 1::bigint,
-  'and the person is still there — the refusal removed nothing');
+  'and the person is still placed there — the refusal removed nothing');
 
 select is((select count(*) from public.outlets
             where id = '00000000-0000-4000-a000-0000000000f2'), 1::bigint,
@@ -96,7 +107,7 @@ select is((select count(*) from public.outlets
 
 -- The two whose absence would be least obvious: an app account, and a tablet.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid, 'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select throws_ok($q$
   delete from public.outlets where id = '00000000-0000-4000-a000-0000000000f3'
@@ -108,9 +119,9 @@ $q$, '23503', null, 'nor one with a counter device enrolled against it');
 
 reset role;
 
-select is((select count(*) from public.profiles
+select is((select count(*) from public.assignments
             where outlet_id = '00000000-0000-4000-a000-0000000000f3'), 1::bigint,
-  'the account survives its outlet''s refused deletion');
+  'the account''s assignment survives its outlet''s refused deletion');
 
 select is((select count(*) from public.counter_devices
             where outlet_id = '00000000-0000-4000-a000-0000000000f4'), 1::bigint,
@@ -119,7 +130,7 @@ select is((select count(*) from public.counter_devices
 -- A deactivated account still blocks: "nothing references it" stays literally
 -- true, with no exception to explain in the refusal (design D5).
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid, 'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select throws_ok($q$
   delete from public.outlets where id = '00000000-0000-4000-a000-0000000000f5'
@@ -132,10 +143,13 @@ $q$, '23503', null,
 -- shape of closing a shop that still employs somebody.
 
 reset role;
-update public.profiles set outlet_id = '00000000-0000-4000-a000-000000000002'
- where id = '10000000-0000-4000-a000-00000000000d';
+delete from public.assignments
+ where person_id = '10000000-0000-4000-a000-00000000000d';
+insert into public.assignments (person_id, role, outlet_id)
+values ('10000000-0000-4000-a000-00000000000d', 'employee',
+        '00000000-0000-4000-a000-000000000002');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid, 'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 delete from public.outlets where id = '00000000-0000-4000-a000-0000000000f6';
 
@@ -157,8 +171,7 @@ select is((select count(*) from public.outlets
 -- pass whether or not the delete worked, which makes it worse than no
 -- assertion at all.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 delete from public.outlets where id = '00000000-0000-4000-a000-0000000000f7';
 delete from public.outlets where id = '00000000-0000-4000-a000-000000000001';
@@ -169,8 +182,7 @@ select is((select count(*) from public.outlets
                          '00000000-0000-4000-a000-000000000001')), 2::bigint,
   'a franchise admin deletes no outlet — not a bare one, and not their own');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 delete from public.outlets where id = '00000000-0000-4000-a000-0000000000f7';
 
@@ -179,8 +191,7 @@ select is((select count(*) from public.outlets
             where id = '00000000-0000-4000-a000-0000000000f7'), 1::bigint,
   'nor does a biller on the counter tablet');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 delete from public.outlets where id = '00000000-0000-4000-a000-0000000000f7';
 
@@ -194,7 +205,7 @@ select is((select count(*) from public.outlets
 update public.profiles set is_active = false
  where id = '10000000-0000-4000-a000-000000000001';
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid, 'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 delete from public.outlets where id = '00000000-0000-4000-a000-0000000000f7';
 
@@ -209,12 +220,12 @@ update public.profiles set is_active = true
 -- ---------------------------------------------------------------------------
 -- What is still attached, in words the surface can render.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid, 'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select is(
   (select string_agg(table_name || '=' || row_count, ', ' order by table_name)
      from public.outlet_reference_counts('00000000-0000-4000-a000-0000000000f2')),
-  'profiles=1',
+  'assignments=1',
   'a populated outlet reports what is attached and how much of it');
 
 select is(
@@ -252,7 +263,7 @@ create table public.outlet_widgets (
 insert into public.outlet_widgets (outlet_id)
 values ('00000000-0000-4000-a000-0000000000f7');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid, 'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select is(
   (select string_agg(table_name, ', ' order by table_name)
@@ -271,15 +282,13 @@ drop table public.outlet_widgets;
 -- grant, so a widened grant cannot quietly turn it into a census of the
 -- business for whoever holds a token.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select throws_ok($q$
   select * from public.outlet_reference_counts('00000000-0000-4000-a000-000000000001')
 $q$, '42501', null, 'a franchise admin cannot ask what is attached to an outlet');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 select throws_ok($q$
   select * from public.outlet_reference_counts('00000000-0000-4000-a000-000000000001')

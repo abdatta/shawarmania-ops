@@ -17,6 +17,7 @@ import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { roundQuantity } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { InventorySurface } from './inventory-surface'
 import { MovementLedger } from './movement-ledger'
@@ -42,8 +43,8 @@ function movementsFor(itemId: string) {
 const managerSession: Session = {
   mode: 'demo',
   userId: personaFixtures.franchise_admin.profile.id,
-  role: 'franchise_admin',
-  outletId: personaFixtures.franchise_admin.profile.outlet_id,
+  assignments: personaFixtures.franchise_admin.assignments,
+  ...deriveSessionScope(personaFixtures.franchise_admin.assignments),
   displayName: personaFixtures.franchise_admin.profile.full_name,
   persona: personaFixtures.franchise_admin,
 }

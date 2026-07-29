@@ -10,6 +10,7 @@ import { MENU_ITEM_CLASSIC_ID, MENU_ITEM_STUFFED_ID } from '@/data-access/mock/f
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Role, Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { MenuSurface } from './menu-surface'
 
@@ -24,8 +25,8 @@ function sessionFor(role: Role): Session {
   return {
     mode: 'demo',
     userId: persona.profile.id,
-    role,
-    outletId: persona.profile.outlet_id,
+    assignments: persona.assignments,
+    ...deriveSessionScope(persona.assignments),
     displayName: persona.profile.full_name,
     persona,
   }

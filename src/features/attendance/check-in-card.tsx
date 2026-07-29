@@ -14,7 +14,13 @@ import { Card, CardTitle } from '@/components/ui/card'
 import type { AttendanceRecord } from '@/data-access/adapters'
 import { useAdapters, type Tables } from '@/data-access'
 import { AttendanceActionError } from '@/data-access/adapters'
-import { evaluateFence, formatMetres, resolveBusinessDate, type FenceVerdict } from '@/domain'
+import {
+  distanceMetres,
+  evaluateFence,
+  formatMetres,
+  resolveBusinessDate,
+  type FenceVerdict,
+} from '@/domain'
 import { readPosition, type GeolocationFailureKind, type PositionReading } from '@/lib/geolocation'
 
 import { dayPhase } from './attendance-record'
@@ -58,20 +64,76 @@ type Attempt =
       kind: 'blocked'
       verdict: Extract<FenceVerdict, { kind: 'outside' }>
       reading: PositionReading
+      /** The outlet the blocked attempt would be recorded against. */
+      outlet: Tables<'outlets'>
     }
   | { kind: 'unlocatable'; failure: GeolocationFailureKind }
+  /**
+   * No position at all, and more than one outlet to choose between. The one
+   * place a multi-outlet person is ever stopped (design D5) — nothing can
+   * honestly resolve where they are, so they are handed to a human rather than
+   * to a control they would have to understand.
+   */
+  | { kind: 'unresolvable' }
   | { kind: 'error'; message: string }
+
+/**
+ * Which of the outlets this person works at are they standing at?
+ *
+ * The fence decides, never the person. Inside one, that one; inside several,
+ * the nearest; inside none, still the nearest — so a blocked attempt always has
+ * an outlet to be blocked *at*, and a manager there to clear it.
+ *
+ * An unsurveyed outlet has no position to compare against and cannot win on
+ * distance; it is used only when it is the sole candidate, which is exactly how
+ * a single-outlet person's unsurveyed shop behaves today.
+ */
+export function resolveOutlet(
+  outlets: readonly Tables<'outlets'>[],
+  reading: PositionReading,
+): Tables<'outlets'> | null {
+  const [only] = outlets
+  if (outlets.length <= 1) return only ?? null
+
+  let best: { outlet: Tables<'outlets'>; distance: number } | null = null
+  for (const outlet of outlets) {
+    if (outlet.latitude === null || outlet.longitude === null) continue
+    const distance = distanceMetres(
+      { latitude: outlet.latitude, longitude: outlet.longitude },
+      { latitude: reading.latitude, longitude: reading.longitude },
+    )
+    if (best === null || distance < best.distance) best = { outlet, distance }
+  }
+  return best?.outlet ?? only ?? null
+}
 
 export function CheckInCard({
   personId,
+  outlets,
   outlet,
   record,
+  canStartElsewhere = false,
   onChange,
 }: {
   /** Whose day this is — the signed-in session's own account id. */
   personId: string
+  /**
+   * Every outlet they are assigned to. The fence picks one of these at
+   * check-in; nothing on this screen asks them to (multi-outlet-people).
+   */
+  outlets: readonly Tables<'outlets'>[]
+  /**
+   * The outlet the card is currently *about* — the one with an open day, or
+   * the only one they work at. What today's status is rendered against.
+   */
   outlet: Tables<'outlets'>
   record: AttendanceRecord | null
+  /**
+   * Is there another outlet they work at with nothing recorded today? A
+   * completed day usually ends the screen; for somebody who works at two it
+   * does not, because the evening shift is at the other shop.
+   */
+  canStartElsewhere?: boolean
   onChange: (record: AttendanceRecord) => void
 }) {
   const { attendance } = useAdapters()
@@ -103,16 +165,18 @@ export function CheckInCard({
   )
 
   const submitCheckIn = useCallback(
-    (reading: PositionReading | null) =>
+    (target: Tables<'outlets'>, reading: PositionReading | null) =>
       write(() =>
         attendance.checkIn({
           personId,
-          outletId: outlet.id,
-          businessDate: businessDateOf(record, outlet),
+          outletId: target.id,
+          // The resolved outlet's own cutover, not the card's: the business
+          // day is the day at the shop they are standing in.
+          businessDate: businessDateOf(record, target),
           reading,
         }),
       ),
-    [attendance, personId, outlet, record, write],
+    [attendance, personId, record, write],
   )
 
   async function onCheckIn() {
@@ -120,23 +184,36 @@ export function CheckInCard({
     const result = await readPosition()
 
     if (!result.ok) {
+      // With one outlet there is nothing to resolve, so a missing position is
+      // the state it always was: the row is written, the fence declines to
+      // judge it, and a manager clears it. With several, nothing can honestly
+      // choose — and guessing would put somebody's day at the wrong shop.
+      if (outlets.length > 1) {
+        setAttempt({ kind: 'unresolvable' })
+        return
+      }
       setAttempt({ kind: 'unlocatable', failure: result.kind })
       return
     }
 
+    const target = resolveOutlet(outlets, result.reading) ?? outlet
     const verdict = evaluateFence(
-      { latitude: outlet.latitude, longitude: outlet.longitude, radiusMetres: radius },
+      {
+        latitude: target.latitude,
+        longitude: target.longitude,
+        radiusMetres: target.geofence_radius_m,
+      },
       result.reading,
     )
 
     if (verdict.kind === 'outside') {
       // Nothing is written. The fence refused, and asking for an override is
       // the person's decision to make, not a consequence of having tried.
-      setAttempt({ kind: 'blocked', verdict, reading: result.reading })
+      setAttempt({ kind: 'blocked', verdict, reading: result.reading, outlet: target })
       return
     }
 
-    await submitCheckIn(result.reading)
+    await submitCheckIn(target, result.reading)
   }
 
   async function onCheckOut() {
@@ -181,9 +258,10 @@ export function CheckInCard({
         <BlockedState
           verdict={attempt.verdict}
           reading={attempt.reading}
-          radiusMetres={radius}
+          radiusMetres={attempt.outlet.geofence_radius_m}
+          outletName={outlets.length > 1 ? attempt.outlet.name : null}
           busy={busy}
-          onRequest={() => void submitCheckIn(attempt.reading)}
+          onRequest={() => void submitCheckIn(attempt.outlet, attempt.reading)}
           onDismiss={() => setAttempt({ kind: 'idle' })}
         />
       )}
@@ -192,9 +270,29 @@ export function CheckInCard({
         <UnlocatableState
           failure={attempt.failure}
           busy={busy}
-          onRequest={() => void submitCheckIn(null)}
+          onRequest={() => void submitCheckIn(outlet, null)}
           onRetry={() => void onCheckIn()}
         />
+      )}
+
+      {attempt.kind === 'unresolvable' && (
+        <div
+          role="alert"
+          data-testid="attendance-unresolvable"
+          className="space-y-2 rounded-lg border border-warning bg-surface-raised p-3"
+        >
+          <p className="text-sm font-semibold text-content">
+            We could not work out which shop you are at
+          </p>
+          <p className="text-sm text-content-muted">
+            You work at more than one, and without a position there is no way to tell them apart —
+            so nothing has been recorded. Try again outside, or ask your manager to record today for
+            you.
+          </p>
+          <Button size="phone" variant="secondary" onClick={() => void onCheckIn()}>
+            Try again
+          </Button>
+        </div>
       )}
 
       {attempt.kind === 'error' && (
@@ -211,7 +309,12 @@ export function CheckInCard({
         phase={phase}
         locating={attempt.kind === 'locating'}
         busy={busy}
-        blocked={attempt.kind === 'blocked' || attempt.kind === 'unlocatable'}
+        blocked={
+          attempt.kind === 'blocked' ||
+          attempt.kind === 'unlocatable' ||
+          attempt.kind === 'unresolvable'
+        }
+        canStartElsewhere={canStartElsewhere}
         onCheckIn={() => void onCheckIn()}
         onCheckOut={() => void onCheckOut()}
       />
@@ -228,6 +331,7 @@ function PrimaryAction({
   locating,
   busy,
   blocked,
+  canStartElsewhere = false,
   onCheckIn,
   onCheckOut,
 }: {
@@ -235,6 +339,7 @@ function PrimaryAction({
   locating: boolean
   busy: boolean
   blocked: boolean
+  canStartElsewhere?: boolean
   onCheckIn: () => void
   onCheckOut: () => void
 }) {
@@ -249,13 +354,33 @@ function PrimaryAction({
 
   if (phase === 'complete') {
     return (
-      <p
-        data-testid="attendance-complete"
-        className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised px-4 py-3 text-sm font-semibold text-content"
-      >
-        <Clock aria-hidden size={16} />
-        Your day is recorded. Nothing more to do.
-      </p>
+      <div className="space-y-3">
+        <p
+          data-testid="attendance-complete"
+          className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised px-4 py-3 text-sm font-semibold text-content"
+        >
+          <Clock aria-hidden size={16} />
+          Your day is recorded
+          {canStartElsewhere ? ' here.' : '. Nothing more to do.'}
+        </p>
+        {/*
+          A completed day is the end of it for somebody who works at one shop.
+          For somebody who works at two it is not: the evening shift is at the
+          other one, and the fence will resolve which when they press this
+          (multi-outlet-people, design D5).
+        */}
+        {canStartElsewhere && (
+          <Button
+            size="phone"
+            data-testid="attendance-action"
+            onClick={onCheckIn}
+            disabled={blocked}
+          >
+            <LogIn aria-hidden size={20} />
+            Check in at another outlet
+          </Button>
+        )}
+      </div>
     )
   }
 
@@ -301,6 +426,7 @@ function BlockedState({
   verdict,
   reading,
   radiusMetres,
+  outletName,
   busy,
   onRequest,
   onDismiss,
@@ -308,6 +434,12 @@ function BlockedState({
   verdict: Extract<FenceVerdict, { kind: 'outside' }>
   reading: PositionReading
   radiusMetres: number
+  /**
+   * Which outlet the attempt would land at — named only for somebody who works
+   * at more than one, where "the outlet" is otherwise ambiguous. The fence
+   * chose it (the nearest they are assigned to); this says which.
+   */
+  outletName: string | null
   busy: boolean
   onRequest: () => void
   onDismiss: () => void
@@ -319,7 +451,9 @@ function BlockedState({
     >
       <p className="flex items-center gap-2 font-semibold text-content">
         <TriangleAlert aria-hidden size={18} className="text-warning" />
-        You are too far from the outlet to check in
+        {outletName
+          ? `You are too far from ${outletName} to check in`
+          : 'You are too far from the outlet to check in'}
       </p>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
         <dt className="text-content-muted">Your distance</dt>

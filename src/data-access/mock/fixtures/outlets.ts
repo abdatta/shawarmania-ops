@@ -30,7 +30,6 @@ export const outletFixtures: Tables<'outlets'>[] = [
     code: 'kalyani',
     name: 'Shawarmania Kalyani',
     location_label: 'Kalyani — Central Park',
-    staff_code_prefix: 'KAL',
     address_line1: 'Ward 10, B-9 Diagonal Road, Near Central Park Ground',
     address_line2: null,
     city: 'Kalyani',
@@ -51,7 +50,6 @@ export const outletFixtures: Tables<'outlets'>[] = [
     code: 'kanchrapara',
     name: 'Shawarmania Kanchrapara',
     location_label: 'Kanchrapara',
-    staff_code_prefix: 'KAN',
     address_line1: '281, K G Path (N), Near Joramandir Bus Stand',
     address_line2: null,
     city: 'Kanchrapara',
@@ -78,7 +76,6 @@ export const outletFixtures: Tables<'outlets'>[] = [
     // land every Staff walkthrough on an empty roster.
     name: 'Test outlet (created by mistake)',
     location_label: 'Not a real shop',
-    staff_code_prefix: 'TST',
     address_line1: null,
     address_line2: null,
     city: null,

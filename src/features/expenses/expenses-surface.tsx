@@ -18,7 +18,7 @@ import {
   type PaymentMethod,
 } from '@/data-access/adapters'
 import { formatBusinessDate, resolveBusinessDate, rupeesToPaise, shiftBusinessDate } from '@/domain'
-import { useSession } from '@/session/context'
+import { useOutletScope } from '@/features/outlet-scope'
 
 /**
  * Expenses — one business day at a time.
@@ -48,6 +48,10 @@ const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
   { value: 'marketing', label: 'Marketing' },
   { value: 'other', label: 'Other' },
 ]
+
+/** Said once, on both surfaces the owner's remote path reaches. */
+const REMOTE_ENTRY_NOTE =
+  'Recording into an outlet you do not run. Only entries that cannot touch its drawer are available, and this will be recorded as yours.'
 
 const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'cash', label: 'Cash' },
@@ -85,7 +89,6 @@ const EMPTY_DRAFT: Draft = {
 }
 
 export function ExpensesSurface() {
-  const session = useSession()
   const { expenses: adapter, outlets } = useAdapters()
 
   // `today` is the anchor the day picker offers a week back from; `businessDate`
@@ -100,7 +103,18 @@ export function ExpensesSurface() {
   const [formOpen, setFormOpen] = useState(false)
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
 
-  const outletId = session.outletId
+  // Which outlet this surface is about. One for nearly everybody; a
+  // per-surface choice for somebody who manages more than one, which
+  // confers nothing — the database decides every write from the
+  // assignment (multi-outlet-people, design D6).
+  const { outletId, managed, selector: outletSelector } = useOutletScope()
+
+  // At an outlet the caller does not run — which is only ever the owner — the
+  // form offers what the database will accept and nothing else: a non-cash
+  // entry, because `expenses_insert` refuses `cash` from that branch. The
+  // policy is the boundary; this is how the bound is read rather than
+  // discovered by being refused (multi-outlet-people, design D8).
+  const methods = managed ? METHODS : METHODS.filter((method) => method.value !== 'cash')
 
   useEffect(() => {
     if (!outletId) return
@@ -186,7 +200,7 @@ export function ExpensesSurface() {
       data-testid="add-expense"
       onClick={() => {
         setError(null)
-        setDraft(EMPTY_DRAFT)
+        setDraft(managed ? EMPTY_DRAFT : { ...EMPTY_DRAFT, paymentMethod: 'upi' })
         setFormOpen(true)
       }}
     />
@@ -200,6 +214,7 @@ export function ExpensesSurface() {
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
+        scope={outletSelector}
         title="Expenses"
         subtitle={
           businessDate
@@ -347,6 +362,15 @@ export function ExpensesSurface() {
             />
           </Field>
 
+          {!managed && (
+            <p
+              data-testid="remote-entry-note"
+              className="rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted"
+            >
+              {REMOTE_ENTRY_NOTE}
+            </p>
+          )}
+
           <Field label="Paid with" id="expense-method">
             <Select
               id="expense-method"
@@ -355,7 +379,7 @@ export function ExpensesSurface() {
                 setDraft({ ...draft, paymentMethod: event.target.value as PaymentMethod })
               }
             >
-              {METHODS.map((method) => (
+              {methods.map((method) => (
                 <option key={method.value} value={method.value}>
                   {method.label}
                 </option>

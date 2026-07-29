@@ -13,17 +13,21 @@ select * from no_plan();
 -- ---------------------------------------------------------------------------
 -- Impersonation: exactly what PostgREST does — the authenticated role plus
 -- request.jwt.claims.
+--
+-- The claims carry `sub` and NOTHING ELSE about authority (multi-outlet-people).
+-- Until this change they also carried a fabricated `app_role` and
+-- `app_outlet_id`, which meant the suite was proving the policies against an
+-- identity it invented rather than against the one the database would resolve.
+-- Scope now comes from the seeded `assignments` rows, so every sweep below
+-- exercises the same lookup a real session does.
 
-create function pg_temp.impersonate(p_sub uuid, p_role text, p_outlet uuid)
+create function pg_temp.impersonate(p_sub uuid)
 returns void language plpgsql as $$
 begin
   execute 'reset role';
   perform set_config(
     'request.jwt.claims',
-    json_build_object(
-      'sub', p_sub, 'role', 'authenticated',
-      'app_role', p_role, 'app_outlet_id', p_outlet
-    )::text,
+    json_build_object('sub', p_sub, 'role', 'authenticated')::text,
     true);
   execute 'set local role authenticated';
 end;
@@ -61,14 +65,14 @@ end;
 $$;
 
 create function pg_temp.isolation_sweep(
-  persona text, p_sub uuid, p_role text, p_outlet uuid, other_outlet uuid
+  persona text, p_sub uuid, other_outlet uuid
 )
 returns setof text language plpgsql as $$
 declare
   t record;
   n bigint;
 begin
-  perform pg_temp.impersonate(p_sub, p_role, p_outlet);
+  perform pg_temp.impersonate(p_sub);
   for t in
     select c.relname as tbl
       from pg_class c
@@ -93,20 +97,16 @@ $$;
 
 -- Every scoped role, both directions for the admins.
 select * from pg_temp.isolation_sweep('fa_kalyani',
-  '10000000-0000-4000-a000-000000000002', 'franchise_admin',
-  '00000000-0000-4000-a000-000000000001', '00000000-0000-4000-a000-000000000002');
+  '10000000-0000-4000-a000-000000000002', '00000000-0000-4000-a000-000000000002');
 
 select * from pg_temp.isolation_sweep('fa_kanchrapara',
-  '10000000-0000-4000-a000-000000000003', 'franchise_admin',
-  '00000000-0000-4000-a000-000000000002', '00000000-0000-4000-a000-000000000001');
+  '10000000-0000-4000-a000-000000000003', '00000000-0000-4000-a000-000000000001');
 
 select * from pg_temp.isolation_sweep('device_kalyani',
-  '10000000-0000-4000-a000-000000000004', 'biller',
-  '00000000-0000-4000-a000-000000000001', '00000000-0000-4000-a000-000000000002');
+  '10000000-0000-4000-a000-000000000004', '00000000-0000-4000-a000-000000000002');
 
 select * from pg_temp.isolation_sweep('employee_kalyani',
-  '10000000-0000-4000-a000-000000000006', 'employee',
-  '00000000-0000-4000-a000-000000000001', '00000000-0000-4000-a000-000000000002');
+  '10000000-0000-4000-a000-000000000006', '00000000-0000-4000-a000-000000000002');
 
 -- ---------------------------------------------------------------------------
 -- Super Admin reads across: for every outlet-scoped table the Super Admin
@@ -132,7 +132,7 @@ begin
   loop
     execute 'reset role';
     execute format('select count(*) from public.%I', t.tbl) into n_owner;
-    perform pg_temp.impersonate(p_sub, 'super_admin', null);
+    perform pg_temp.impersonate(p_sub);
     begin
       execute format('select count(*) from public.%I', t.tbl) into n_super;
       return next is(
@@ -153,39 +153,76 @@ select * from pg_temp.superadmin_sweep('10000000-0000-4000-a000-000000000001');
 -- Positive controls: isolation must not be satisfied by deny-all. Each
 -- scoped role actually sees its own outlet's data.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select is((select count(*) from public.menu_items), 7::bigint,
   'fa_kalyani sees the full 7-item Kalyani menu');
 select is((select count(*) from public.bills), 9::bigint,
   'fa_kalyani sees all 9 Kalyani bills');
--- Scoped to the seeded codes rather than counted outright. The claim is "a
+-- Scoped to the seeded people rather than counted outright. The claim is "a
 -- Kalyani admin sees Kalyani's staff", and a bare count also answers "what
 -- else has written to this database today" — which after an `npm run
 -- test:e2e:auth` is a real person created through the real app, and a
--- different question with a different answer on every run.
+-- different question with a different answer on every run. (Named by id since
+-- multi-outlet-people: staff codes are gone.)
 select is((select count(*) from public.profiles
-            where staff_code in ('KAL-E1', 'KAL-E2')), 2::bigint,
+            where id in ('10000000-0000-4000-a000-000000000006',
+                         '20000000-0000-4000-a000-000000000002')), 2::bigint,
   'fa_kalyani sees both seeded Kalyani staff accounts');
+-- The split-shift person works at Kalyani too, so their profile is visible —
+-- but only their KALYANI assignment is. Seeing that they also work elsewhere
+-- would be the other outlet's data.
+select is((select count(*) from public.profiles
+            where id = '10000000-0000-4000-a000-00000000000e'), 1::bigint,
+  'fa_kalyani sees the split-shift person, who works at their outlet');
+select is((select count(*) from public.assignments
+            where person_id = '10000000-0000-4000-a000-00000000000e'), 1::bigint,
+  'fa_kalyani sees only the split-shift person''s own-outlet assignment');
+select is((select count(*) from public.attendance
+            where person_id = '10000000-0000-4000-a000-00000000000e'), 1::bigint,
+  'fa_kalyani sees only the day the split-shift person worked at Kalyani');
 select is((select count(*) from public.daily_cash_records), 1::bigint,
   'fa_kalyani sees the Kalyani closed day');
 select is((select count(*) from public.outlets), 1::bigint,
   'fa_kalyani sees exactly their own outlet row');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 select is((select count(*) from public.menu_items), 7::bigint,
   'device_kalyani reads the Kalyani menu');
 select is((select count(*) from public.outlets), 1::bigint,
   'device_kalyani reads its own outlet row (cutover, geofence)');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
-  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 select ok((select count(*) from public.attendance) >= 1,
   'employee_kalyani sees their own attendance');
+
+-- ---------------------------------------------------------------------------
+-- The multi-outlet person: the case that did not exist before this change.
+--
+-- Isolation for somebody assigned to two outlets is not "zero cross-outlet
+-- rows" — both outlets are theirs. What must hold instead is that they see
+-- exactly their OWN rows at each, and nothing of anybody else's at either.
+
+select pg_temp.impersonate('10000000-0000-4000-a000-00000000000e'::uuid);
+
+select is((select count(distinct outlet_id) from public.attendance), 2::bigint,
+  'split_shift sees their own attendance at both assigned outlets');
+select is((select count(*) from public.attendance), 2::bigint,
+  'split_shift sees only their own rows — no colleague at either outlet');
+select is((select count(*) from public.attendance
+            where person_id <> '10000000-0000-4000-a000-00000000000e'), 0::bigint,
+  'split_shift reads no colleague''s attendance by naming them explicitly');
+select is((select count(*) from public.outlets), 2::bigint,
+  'split_shift reads both outlet rows, because they work at both');
+select is((select count(*) from public.assignments), 2::bigint,
+  'split_shift sees both of their own assignments and nobody else''s');
+-- Still an Employee at both: no manager surface opens anywhere.
+select is((select count(*) from public.expenses), 0::bigint,
+  'split_shift reads no expenses at either outlet');
+select is((select count(*) from public.inventory_items), 0::bigint,
+  'split_shift reads no stock at either outlet');
 
 reset role;
 
@@ -193,8 +230,7 @@ reset role;
 -- Hand-crafted cross-outlet INSERT payloads: a valid outlet-A session naming
 -- outlet B in the row itself. Every one must be refused by policy (42501).
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select throws_ok($q$
   insert into public.expenses (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
@@ -258,8 +294,7 @@ select throws_ok($q$
           '10000000-0000-4000-a000-000000000003')
 $q$, '42501', null, 'fa_kalyani cannot record an expense as someone else');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 select throws_ok($q$
   insert into public.bills (id, outlet_id, business_date, biller_profile_id, counter_device_id,

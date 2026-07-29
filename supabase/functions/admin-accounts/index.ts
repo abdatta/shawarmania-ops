@@ -5,6 +5,7 @@ import {
   callerFrom,
   loadAccount,
   managesAnyone,
+  mayAssign,
   mayManage,
   mayProvision,
   serviceClient,
@@ -65,11 +66,11 @@ async function provision(
   // it would create an account the caller did not ask for. mayProvision judges
   // the shape; this endpoint does not guess.
   const outletId = str(body['outletId']) ?? null
-  // Staff facts, carried since staff-as-accounts: creating a person is one
-  // act, and the staff-list membership is the same row. The staff code is
-  // deliberately not accepted here — the database issues it on insert.
+  // The job title is a fact about the person and lives on the account. Where
+  // they work and from when is the ASSIGNMENT written below — creating a person
+  // is still one act, it simply writes two rows now.
   const roleTitle = str(body['roleTitle']) ?? null
-  const joinedOn = str(body['joinedOn']) ?? null
+  const startedOn = str(body['joinedOn']) ?? null
 
   if (!fullName || !email || !role || !APP_ROLES.includes(role)) {
     return json({ error: 'invalid_request' }, 400)
@@ -89,17 +90,28 @@ async function provision(
     id: created.user.id,
     full_name: fullName,
     phone,
-    role,
-    outlet_id: outletId,
     is_active: true,
     role_title: roleTitle,
-    joined_on: joinedOn,
   })
   if (profileError) {
     // Never leave an auth user with no profile behind: it would be invisible to
     // every admin surface and would still hold the email address.
     await service.auth.admin.deleteUser(created.user.id)
     return json({ error: 'profile_rejected' }, 400)
+  }
+
+  // The assignment is what places them. An account with none is a person who
+  // exists and works nowhere — a real state, but never the one a create
+  // produces, so a failure here rolls the whole act back.
+  const { error: assignmentError } = await service.from('assignments').insert({
+    person_id: created.user.id,
+    role,
+    outlet_id: outletId,
+    ...(startedOn ? { started_on: startedOn } : {}),
+  })
+  if (assignmentError) {
+    await service.auth.admin.deleteUser(created.user.id)
+    return json({ error: 'assignment_rejected' }, 400)
   }
 
   const issued = await issueCodeFor(service, created.user.id, caller.id)
@@ -221,6 +233,81 @@ async function setEmail(
   return json({ profileId: target.id, email }, 200)
 }
 
+/**
+ * Place a person at an outlet, or end their placement there.
+ *
+ * These are the two writes that make somebody a multi-outlet person, and they
+ * go through the privileged path for the same reason provisioning does: the
+ * authority is re-derived from the caller's own token. The database enforces
+ * the identical rule underneath (`assignments_insert` and its guards), so this
+ * is a legible refusal rather than the boundary.
+ */
+async function assign(
+  service: SupabaseClient,
+  caller: Caller,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const personId = str(body['personId'])
+  const role = str(body['role']) as AppRole | undefined
+  const outletId = str(body['outletId']) ?? null
+  if (!personId || !role || !APP_ROLES.includes(role)) {
+    return json({ error: 'invalid_request' }, 400)
+  }
+
+  const target = await loadAccount(service, personId)
+  if (!target) return json({ error: 'not_found' }, 404)
+  if (!mayAssign(caller, personId, role, outletId)) return json({ error: 'forbidden' }, 403)
+
+  const { data, error } = await service
+    .from('assignments')
+    .insert({ person_id: personId, role, outlet_id: outletId })
+    .select('id')
+    .maybeSingle()
+  // A live assignment already exists at that outlet — the partial unique index
+  // talking. Reported as a conflict rather than a failure, because the state
+  // the caller wanted is the state that already holds.
+  if (error) return json({ error: 'already_assigned' }, 409)
+
+  return json({ assignmentId: data?.id ?? null }, 201)
+}
+
+async function endAssignment(
+  service: SupabaseClient,
+  caller: Caller,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const assignmentId = str(body['assignmentId'])
+  if (!assignmentId) return json({ error: 'invalid_request' }, 400)
+
+  const { data: existing } = await service
+    .from('assignments')
+    .select('id, person_id, role, outlet_id, ended_on')
+    .eq('id', assignmentId)
+    .maybeSingle()
+  if (!existing || existing.ended_on !== null) return json({ error: 'not_found' }, 404)
+
+  if (
+    !mayAssign(
+      caller,
+      existing.person_id as string,
+      existing.role as AppRole,
+      (existing.outlet_id as string | null) ?? null,
+    )
+  ) {
+    return json({ error: 'forbidden' }, 403)
+  }
+
+  const { error } = await service
+    .from('assignments')
+    .update({ ended_on: new Date().toISOString().slice(0, 10) })
+    .eq('id', assignmentId)
+  // The last-owner guard is the one refusal that is not about the caller, so
+  // it gets its own name: "you may do this, but not to the only one left".
+  if (error) return json({ error: 'last_super_admin' }, 409)
+
+  return json({ assignmentId }, 200)
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return preflight()
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
@@ -243,6 +330,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return await emails(service, caller)
     case 'set-email':
       return await setEmail(service, caller, body)
+    case 'assign':
+      return await assign(service, caller, body)
+    case 'end-assignment':
+      return await endAssignment(service, caller, body)
     default:
       return json({ error: 'unknown_action' }, 400)
   }

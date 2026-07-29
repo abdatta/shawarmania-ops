@@ -76,12 +76,19 @@ enable_confirmations = false
 enable_signup = false
 enable_confirmations = false
 
-# Injects app_role and app_outlet_id into every access token so RLS policies
-# read claims instead of sub-querying profiles (the recursion trap in
-# docs/ARCHITECTURE.md). The function ships in the migration set.
-[auth.hook.custom_access_token]
-enabled = true
-uri = "pg-functions://postgres/public/custom_access_token_hook"
+# No access-token hook, deliberately (multi-outlet-people, owner 2026-07-29).
+#
+# The FUNCTION still exists in the schema as an inert no-op, on purpose: a
+# deployed project registers its hook in its own auth settings rather than
+# here, and dropping the function while that registration stood would fail
+# every token issue — locking everybody out, including whoever would go and
+# turn it off. Disable it in Authentication -> Hooks, then a one-line
+# migration may drop the stub.
+# Nothing about what a person may do is carried in their token: policies read
+# `public.assignments` through stable security-definer helpers, so granting or
+# ending an assignment bites at the next request with nothing to reissue. The
+# helpers are set-returning, so a policy still makes one lookup per query
+# rather than the per-row profile sub-query the old claims existed to avoid.
 
 [analytics]
 enabled = false

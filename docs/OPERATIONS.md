@@ -98,12 +98,12 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
 
 > ⚠ **Steps 4, 5 and 7 are not built yet** and are marked below. Everything else is done in the app — no SQL console, at any step. **Order matters**: an outlet has to exist before anybody can be assigned to it.
 
-1. **Create the outlet** (Super Admin → Outlets → *Add outlet*): short code, name, location label, staff code prefix, address, phone, business-day cutover. The prefix arrives filled in from the short code — correct it now if you want something else, because it cannot change once anybody is on this outlet's staff list. Use **Find the address** to fill the address block from a search rather than typing five fields — it fills the District from the PIN code, which is the part nobody remembers. Check what it filled before saving; OpenStreetMap data is contributed rather than surveyed, and this address is what a GST invoice will carry. If it finds nothing, type it: the search is a shortcut and never a step. On a brand-new installation this is the only thing there is to do, and the empty screen says so.
+1. **Create the outlet** (Super Admin → Outlets → *Add outlet*): short code, name, location label, address, phone, business-day cutover. Use **Find the address** to fill the address block from a search rather than typing five fields — it fills the District from the PIN code, which is the part nobody remembers. Check what it filled before saving; OpenStreetMap data is contributed rather than surveyed, and this address is what a GST invoice will carry. If it finds nothing, type it: the search is a shortcut and never a step. On a brand-new installation this is the only thing there is to do, and the empty screen says so.
 2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → *Capture position here*). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the Outlets screen shows it as unsurveyed.
 3. **Create the Franchise Admin** (Super Admin → People) and send them their activation link. Needs the outlet to exist first — the form has no outlet to assign anyone to otherwise, and says so rather than showing an empty dropdown.
 4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ. *(Not built — demo only until #10.)*
 5. **Enrol the counter tablet**: sign in on the device, enrol it to this outlet, confirm it appears under Devices. *(Not built — #9.)* Until then a Biller signs in with their own email on the tablet; shift PINs arrive with enrolment.
-6. **Add employees and billers** (People), sending each their activation link. Creating a person is one step — name, email, role, role title, joining date — and the account *is* the staff record: the app issues the staff code, and the person appears on the attendance day the moment they exist. Someone whose address you do not have yet can be added anyway and shows **Needs an address** until you set a real one — they appear on attendance but cannot sign in until then, so it is worth reading down the list once before you finish.
+6. **Add employees and billers** (People), sending each their activation link. Creating a person is one step — name, email, role, outlet, job title — and the account *is* the staff record: creating them writes the account and the **assignment** that places them together, and the person appears on that outlet's attendance day the moment they exist. Somebody who works at a second outlet is not a second account: open them on People, choose *Assign to an outlet*, and they keep everything they already had. Ending an assignment removes them from that outlet only — if it was their last, the confirmation offers to cut their sign-in too. Someone whose address you do not have yet can be added anyway and shows **Needs an address** until you set a real one — they appear on attendance but cannot sign in until then, so it is worth reading down the list once before you finish.
 7. **Set the opening cash float** for the first business day. *(Not built — #12.)*
 8. **Verify isolation before going live** — sign in as the new Franchise Admin and confirm no other outlet is visible anywhere. This is a real step, not a formality: it is the last point at which a misconfiguration is cheap to fix.
 
@@ -138,19 +138,28 @@ linking this repo to it would run these migrations into someone else's data.
    ```
 
    This carries the settings that make the whole permission model work:
-   signup disabled, email confirmations off, and — the one that silently
-   breaks everything if missed — the **custom access token hook**. Without it
-   tokens carry no `app_role` or `app_outlet_id`, every policy denies, and a
-   perfectly valid user sees a working app with nothing in it.
+   signup disabled and email confirmations off.
+
+   **The access-token hook is finished with.** `multi-outlet-people` (#22)
+   dropped both claim helpers: authority is resolved from
+   `public.assignments` on every request, so a token carries nothing about what
+   a person may do.
+
+   The function itself is **deliberately left in place as a no-op** rather than
+   dropped, so that applying the migration cannot break sign-in on a project
+   whose auth settings still register it — dropping it while the registration
+   stood would fail every token issue and lock everybody out, including whoever
+   would go and turn it off. Order of operations, therefore:
+
+   1. apply the migration (`db push`) — sign-in keeps working throughout;
+   2. then disable the hook in Authentication → Hooks, at leisure;
+   3. a later one-line migration may drop the stub once no project registers it.
 
    Then correct one thing by hand: `config.toml` carries a localhost
    `site_url`, which is right for development and wrong for production. Set
    Site URL to the deployed URL in Authentication → URL Configuration. Nothing
    in v1 sends a link, so it is tidiness rather than function — until the first
    feature that does.
-
-   Confirm in Authentication → Hooks that the access token hook is enabled and
-   points at `public.custom_access_token_hook`.
 
 4. **Deploy the Edge Functions** — after the migration, never before; they read
    tables and functions it creates.

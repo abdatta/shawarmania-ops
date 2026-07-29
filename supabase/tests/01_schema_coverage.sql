@@ -25,8 +25,9 @@ select is(
 
 -- ---------------------------------------------------------------------------
 -- 2. Every table is classified. Outlet-scoped tables are discovered from the
--- catalog (they carry outlet_id); the two child tables scope through their
--- parent FK; outlets is the tenancy root itself. Anything else is a failure.
+-- catalog (they carry outlet_id); child tables scope through their parent FK;
+-- person-scoped tables scope through the person's assignments; outlets is the
+-- tenancy root itself. Anything else is a failure.
 
 with tables as (
   select c.relname as tbl, c.oid
@@ -42,6 +43,13 @@ classified as (
          where a.attrelid = oid and a.attname = 'outlet_id' and not a.attisdropped
       ) then 'outlet-scoped'
       when tbl in ('bill_items', 'alert_responses') then 'child-scoped'
+      -- Person-scoped: no outlet_id of its own, because the row is about a
+      -- PERSON and a person may be at several outlets (multi-outlet-people).
+      -- Reach is decided by the person's assignments — `app_may_see_person`
+      -- and `app_may_manage_person` — rather than by a column on the row.
+      -- Listed by name for the same reason 'tenant-less' is: the next table
+      -- with no outlet_id has to be argued for here, not slip through.
+      when tbl in ('profiles', 'account_invites') then 'person-scoped'
       when tbl = 'outlets' then 'tenancy-root'
       -- Tenant-less: belongs to no outlet at all, because the thing it counts
       -- happens before anybody has an outlet. Listed by name rather than

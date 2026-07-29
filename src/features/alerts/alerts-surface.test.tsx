@@ -9,6 +9,7 @@ import { createMockAdapters } from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Role, Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { AlertsSurface } from './alerts-surface'
 
@@ -23,8 +24,8 @@ function sessionFor(role: Role): Session {
   return {
     mode: 'demo',
     userId: persona.profile.id,
-    role,
-    outletId: persona.profile.outlet_id,
+    assignments: persona.assignments,
+    ...deriveSessionScope(persona.assignments),
     displayName: persona.profile.full_name,
     persona,
   }

@@ -31,6 +31,7 @@ const SUPABASE_ANON_KEY =
 const PASSWORD = 'shawarmania-local'
 const OUTLET_KALYANI = '00000000-0000-4000-a000-000000000001'
 // Staff are accounts: attendance keys on the person's own profile id.
+const KALYANI = '00000000-0000-4000-a000-000000000001'
 const STAFF_KAL = '10000000-0000-4000-a000-000000000006'
 // Pending Staff Kal: nothing else in any suite writes attendance for them,
 // which is what makes the manual-entry test's re-run check sufficient.
@@ -75,12 +76,15 @@ describe('the attendance adapter', () => {
     // with no `profiles` key at all if the relationship name were wrong, and
     // the surfaces would render blank names.
     expect(own?.personName).toBe('Synthetic Staff Kal')
-    expect(own?.staffCode).toBe('KAL-E1')
+    // The outlet is named on the row too, and by the same embedded select: a
+    // person may work a morning at one outlet and an evening at another, so
+    // their own history has to say which day was where.
+    expect(own?.outletName).toBe('Shawarmania Kalyani')
   })
 
   it('maps the evidence the database computed, not what a client claimed', async () => {
     const attendance = createSupabaseAttendanceAdapter(employeeClient)
-    const day = await attendance.getDay(STAFF_KAL, yesterday())
+    const day = await attendance.getDay(STAFF_KAL, yesterday(), KALYANI)
 
     expect(day?.checkIn).not.toBeNull()
     // The seed claimed 12 m; the trigger stored what the coordinates imply.
@@ -109,7 +113,7 @@ describe('the attendance adapter', () => {
     expect(outlet).not.toBeNull()
 
     const today = new Date().toISOString().slice(0, 10)
-    const existing = await attendance.getDay(STAFF_KAL, today)
+    const existing = await attendance.getDay(STAFF_KAL, today, KALYANI)
 
     const record =
       existing ??
@@ -138,7 +142,7 @@ describe('the attendance adapter', () => {
 
     // Survives a re-run against the same reset: the manual check-in is read
     // back rather than made twice.
-    const existing = await attendance.getDay(PENDING_STAFF_KAL, today)
+    const existing = await attendance.getDay(PENDING_STAFF_KAL, today, KALYANI)
     const record =
       existing?.checkIn?.source === 'manual'
         ? existing
@@ -172,7 +176,7 @@ describe('the attendance adapter', () => {
     // An employee attempting to approve their own day: the guard raises, and
     // the adapter must not surface a raw Postgres message.
     const attendance = createSupabaseAttendanceAdapter(employeeClient)
-    const day = await attendance.getDay(STAFF_KAL, yesterday())
+    const day = await attendance.getDay(STAFF_KAL, yesterday(), KALYANI)
 
     await expect(
       attendance.approveOverride(day!.id, 'self approved', STAFF_KAL),

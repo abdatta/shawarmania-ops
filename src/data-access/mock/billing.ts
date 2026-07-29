@@ -10,7 +10,19 @@ import {
   type QueuedBill,
 } from '../adapters'
 import type { Tables } from '../database.types'
-import { accountFixtures } from './fixtures/accounts'
+import { liveAssignments } from '../adapters'
+import { accountFixtures, assignmentFixtures } from './fixtures/accounts'
+
+/**
+ * Can this person hold a shift at this counter? A live `biller` assignment at
+ * this outlet, which since multi-outlet-people is the question the database
+ * asks too — `app_profile_has(biller_profile_id, 'biller', outlet_id)`.
+ */
+function billsAt(personId: string, outletId: string): boolean {
+  return liveAssignments(assignmentFixtures[personId] ?? []).some(
+    (assignment) => assignment.role === 'biller' && assignment.outletId === outletId,
+  )
+}
 import { DEMO_BILLER_PIN, DEMO_COUNTER_DEVICE_ID } from './fixtures/billing'
 import type { DemoStore } from './store'
 
@@ -288,10 +300,7 @@ export function createMockBillingAdapter(store: DemoStore): BillingAdapter {
 
     async listBillers(outletId: string): Promise<CounterBiller[]> {
       return accountFixtures
-        .filter(
-          (account) =>
-            account.role === 'biller' && account.outlet_id === outletId && account.is_active,
-        )
+        .filter((account) => account.is_active && billsAt(account.id, outletId))
         .map((account) => ({ profileId: account.id, fullName: account.full_name }))
         .sort((a, b) => a.fullName.localeCompare(b.fullName))
     },
@@ -299,10 +308,7 @@ export function createMockBillingAdapter(store: DemoStore): BillingAdapter {
     async openShift({ outletId, billerProfileId, pin }) {
       const biller = accountFixtures.find(
         (account) =>
-          account.id === billerProfileId &&
-          account.role === 'biller' &&
-          account.outlet_id === outletId &&
-          account.is_active,
+          account.id === billerProfileId && account.is_active && billsAt(account.id, outletId),
       )
 
       // One refusal for both failures, deliberately. Telling a wrong PIN apart

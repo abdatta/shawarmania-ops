@@ -12,6 +12,7 @@ import { createSupabaseInsightsAdapter } from '@/data-access/supabase-adapters/o
 import { formatPaise } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { OwnerHome } from './owner-home'
 
@@ -25,8 +26,8 @@ import { OwnerHome } from './owner-home'
 const ownerSession: Session = {
   mode: 'demo',
   userId: personaFixtures.super_admin.profile.id,
-  role: 'super_admin',
-  outletId: null,
+  assignments: personaFixtures.super_admin.assignments,
+  ...deriveSessionScope(personaFixtures.super_admin.assignments),
   displayName: personaFixtures.super_admin.profile.full_name,
   persona: personaFixtures.super_admin,
 }

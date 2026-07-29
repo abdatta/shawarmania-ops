@@ -15,6 +15,7 @@ Two consequences follow from that sentence, and they outrank convenience everywh
 ### Tenancy
 
 - Outlet isolation is a **database boundary, not a UI concern**. Every outlet-scoped table carries `outlet_id` and ships its Row-Level Security policy in the same change that creates the table.
+- **Authority is an assignment, and nothing about it is in the access token.** A person holds rows in `public.assignments` (person × role × outlet); policies resolve scope by membership through `app_is_owner()`, `app_outlets_for(role)` and `app_has_role_at(role, outlet)`. There are no role claims — a change bites at the next request. One person has one login however many outlets they work at, and nothing is session-scoped: no active role, no switcher, no "acting as".
 - A Franchise Admin, Biller, or Employee MUST NOT be able to read or write another outlet's rows — including via a hand-crafted API request with a valid session.
 - Only the Super Admin reads across outlets, and only through surfaces explicitly designed as cross-outlet.
 - Never add an outlet-scoped table without an RLS policy. A table without a policy is a data leak, not a to-do.

@@ -16,6 +16,7 @@ import { useAdapters, type Tables } from '@/data-access'
 import { DataActionError, type MenuCategoryWithItems } from '@/data-access/adapters'
 import { paiseToRupees, rupeesToPaise } from '@/domain'
 import { useSession } from '@/session/context'
+import { useOutletScope } from '@/features/outlet-scope'
 
 /**
  * Menu — what this outlet sells, and for how much.
@@ -65,7 +66,11 @@ export function MenuSurface() {
    * about staff codes.
    */
   const canEdit = session.role === 'super_admin' || session.role === 'franchise_admin'
-  const outletId = session.outletId
+  // Which outlet this surface is about. One for nearly everybody; a
+  // per-surface choice for somebody who manages more than one, which
+  // confers nothing — the database decides every write from the
+  // assignment (multi-outlet-people, design D6).
+  const { outletId, selector: outletSelector } = useOutletScope()
 
   const [menu, setMenu] = useState<MenuCategoryWithItems[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -227,6 +232,7 @@ export function MenuSurface() {
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
+        scope={outletSelector}
         title="Menu"
         subtitle={
           canEdit

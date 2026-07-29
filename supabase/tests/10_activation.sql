@@ -11,16 +11,16 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
-create function pg_temp.impersonate(p_sub uuid, p_role text, p_outlet uuid)
+-- Claims carry `sub` and nothing about authority (multi-outlet-people): scope
+-- is resolved from the seeded `assignments` rows, exactly as a real session's
+-- is.
+create function pg_temp.impersonate(p_sub uuid)
 returns void language plpgsql as $$
 begin
   execute 'reset role';
   perform set_config(
     'request.jwt.claims',
-    json_build_object(
-      'sub', p_sub, 'role', 'authenticated',
-      'app_role', p_role, 'app_outlet_id', p_outlet
-    )::text,
+    json_build_object('sub', p_sub, 'role', 'authenticated')::text,
     true);
   execute 'set local role authenticated';
 end;
@@ -53,9 +53,8 @@ select is((select count(*) from pg_catalog.pg_proc p
 
 select throws_ok($q$
   insert into public.account_invites
-    (profile_id, outlet_id, code_hash, issued_by, expires_at)
+    (profile_id, code_hash, issued_by, expires_at)
   values ('10000000-0000-4000-a000-000000000006',
-          '00000000-0000-4000-a000-000000000001',
           encode(extensions.digest('ABCDEFGHJK', 'sha256'), 'hex'),
           '10000000-0000-4000-a000-000000000002', now() + interval '7 days')
 $q$, '23505', null,
@@ -181,8 +180,7 @@ select ok(not public.invite_attempts_exceeded('ip-c'),
 -- What an admin may see of it. The pressure function refuses on role rather
 -- than on grant, so even the owner of the table has to hold a token to ask.
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
-  'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select is(public.invite_failure_pressure(), 0,
   'the pressure an admin sees is the window, not all history');
@@ -192,20 +190,17 @@ delete from public.invite_redemption_attempts;
 insert into public.invite_redemption_attempts (ip_hash)
 select 'ip-e' from generate_series(1, 7);
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
-  'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select is(public.invite_failure_pressure(), 7,
   'the super admin is told how many failures the window holds');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
-  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select throws_ok($q$ select public.invite_failure_pressure() $q$,
   '42501', null, 'a franchise admin is refused the count');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
-  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 select throws_ok($q$ select public.invite_failure_pressure() $q$,
   '42501', null, 'and so is a biller on the shared counter tablet');
@@ -215,8 +210,7 @@ select throws_ok($q$ select public.invite_failure_pressure() $q$,
 select throws_ok($q$ select * from public.invite_redemption_attempts $q$,
   '42501', null, 'the attempts table is unreadable even by a signed-in caller');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
-  'super_admin', null);
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select throws_ok($q$ select * from public.invite_redemption_attempts $q$,
   '42501', null, 'including by the super admin, who gets the count and nothing else');

@@ -75,11 +75,11 @@ test('creating a person is one act that ends in a working handover', async ({ pa
   await expect(panel).toBeVisible()
   await expect(panel).toContainText('Shown once')
 
-  // And the person is on the staff list at once, wearing an issued code —
+  // And the person is on the staff list at once, already placed at an outlet —
   // there is no second surface where they still have to be added or linked.
   const row = page.getByRole('row', { name: /Demo Newcomer/ })
   await expect(row).toBeVisible()
-  await expect(row).toContainText(/KAL-[0-9A-HJKMNP-TV-Z]{4}/)
+  await expect(row).toContainText('Shawarmania Kalyani')
 })
 
 test('the people states each say what is wrong and what to do', async ({ page }) => {
@@ -99,11 +99,21 @@ test('the people states each say what is wrong and what to do', async ({ page })
   // Access cut without leaving: still on the list, plainly marked.
   await expect(page.getByRole('row', { name: /Demo Prep Cook/ })).toContainText('Deactivated')
 
-  // Departed people are off the working list, and one tap away with their
-  // leaving date — records kept, clutter gone.
+  // Somebody who works nowhere is off the working list, and one tap away —
+  // records kept, clutter gone. "Departed" is derived since
+  // multi-outlet-people: it means holding no live assignment anywhere, because
+  // leaving ONE outlet is not leaving the business.
   await expect(page.getByText('Demo Former Staff')).toHaveCount(0)
   await page.getByTestId('toggle-departed').click()
-  await expect(page.getByRole('row', { name: /Demo Former Staff/ })).toContainText('Left')
+  await expect(page.getByRole('row', { name: /Demo Former Staff/ })).toContainText(
+    'Not assigned to any outlet',
+  )
+
+  // And the person who left one outlet is still on the working list, because
+  // they still work at the other.
+  await expect(page.getByRole('row', { name: /Demo Returner/ })).toContainText(
+    'Shawarmania Kalyani',
+  )
 })
 
 test('the whole setup walk stays inside the app origin', async ({ page, baseURL }) => {

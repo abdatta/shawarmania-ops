@@ -1,3 +1,4 @@
+import type { Assignment } from './adapters'
 import type { Tables } from './database.types'
 import { getSupabaseClient } from './supabase'
 
@@ -20,12 +21,6 @@ export type Profile = Tables<'profiles'>
 export interface AuthedUser {
   userId: string
   email: string | null
-}
-
-/** What the access token actually claims — the scope RLS will enforce. */
-export interface TokenClaims {
-  role: string | null
-  outletId: string | null
 }
 
 /** A sign-in refusal the screen can phrase for a person. */
@@ -100,41 +95,33 @@ export async function loadOwnProfile(userId: string): Promise<Profile | null> {
   return data
 }
 
-function decodeClaims(accessToken: string): TokenClaims | null {
-  const payload = accessToken.split('.')[1]
-  if (!payload) return null
-  try {
-    const json = JSON.parse(
-      new TextDecoder().decode(
-        Uint8Array.from(atob(payload.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
-          c.charCodeAt(0),
-        ),
-      ),
-    ) as Record<string, unknown>
-    return {
-      role: typeof json['app_role'] === 'string' ? json['app_role'] : null,
-      outletId: typeof json['app_outlet_id'] === 'string' ? json['app_outlet_id'] : null,
-    }
-  } catch {
-    return null
-  }
-}
-
-/** The claims on the token currently in hand, or null when there is no session. */
-export async function currentClaims(): Promise<TokenClaims | null> {
-  const { data } = await getSupabaseClient().auth.getSession()
-  return data.session ? decodeClaims(data.session.access_token) : null
-}
-
 /**
- * Force a new access token, re-running the database's access-token hook. The
- * one move that resolves a stale role or outlet claim after a reassignment
- * (design D7). Returns the claims on the new token, or null if it failed.
+ * The person's own assignments — where they work and as what.
+ *
+ * Read from the table on every revalidation rather than decoded from the
+ * token, because since multi-outlet-people the token carries nothing about
+ * authority (owner, 2026-07-29). That is what makes a granted or ended
+ * assignment bite at the next request with nothing to reissue — and it is why
+ * `refreshClaims` and the claim-comparison it served are gone.
+ *
+ * Both live and ended rows come back: the client decides what is live, and
+ * "you stopped working at Kanchrapara in March" is a thing a person's own
+ * screen may want to say.
  */
-export async function refreshClaims(): Promise<TokenClaims | null> {
-  const { data, error } = await getSupabaseClient().auth.refreshSession()
-  if (error || !data.session) return null
-  return decodeClaims(data.session.access_token)
+export async function loadOwnAssignments(userId: string): Promise<Assignment[]> {
+  const { data, error } = await getSupabaseClient()
+    .from('assignments')
+    .select('id, role, outlet_id, started_on, ended_on')
+    .eq('person_id', userId)
+    .order('started_on', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    role: row.role,
+    outletId: row.outlet_id,
+    startedOn: row.started_on,
+    endedOn: row.ended_on,
+  }))
 }
 
 /** Fires whenever supabase-js gains or loses a session in this tab. */

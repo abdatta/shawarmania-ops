@@ -20,9 +20,9 @@
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  Supabase                                                                   │
 │  ┌────────────┐  ┌──────────────────────┐  ┌──────────────────────────────┐ │
-│  │  Auth      │→ │ Access-token hook    │  │ Edge Functions               │ │
-│  │            │  │ injects role,        │  │ (service-role only, never    │ │
-│  │            │  │ outlet_id claims     │  │  exposed to the browser):    │ │
+│  │  Auth      │  │ assignments          │  │ Edge Functions               │ │
+│  │  (no       │  │ person × role ×      │  │ (service-role only, never    │ │
+│  │   claims)  │  │ outlet — the truth   │  │  exposed to the browser):    │ │
 │  └────────────┘  └──────────┬───────────┘  │  · provision staff account   │ │
 │                             │              │  · enrol / revoke device     │ │
 │  ┌──────────────────────────▼─────────────┐│                              │ │
@@ -105,19 +105,21 @@ The biller is never blocked on the network at any step. Detail and failure modes
 
 ## How permissions are evaluated
 
-A Supabase **custom access token hook** injects `app_role` and `app_outlet_id` into the user's JWT at issue time. RLS policies read those claims directly:
+**Nothing about authority is carried in the access token** (owner, 2026-07-29). A person's roles and outlets are rows in `public.assignments`, and RLS policies resolve scope by membership:
 
 ```sql
 create policy outlet_isolation_read on bills for select
   using (
-    (auth.jwt() ->> 'app_role') = 'super_admin'
-    or outlet_id = (auth.jwt() ->> 'app_outlet_id')::uuid
+    (select public.app_is_owner())
+    or outlet_id in (select public.app_outlets_for('franchise_admin'))
   );
 ```
 
-Reading the claim rather than sub-querying `profiles` matters for two reasons. It avoids a per-row lookup on every query, and — more importantly — it avoids the **RLS recursion trap**: a policy on `profiles` that queries `profiles` to determine access recurses infinitely. Any policy that genuinely needs a table lookup must go through a `SECURITY DEFINER` function that bypasses RLS for that specific check.
+The helpers are `stable security definer`, which is what avoids the **RLS recursion trap**: a policy on `assignments` that queried `assignments` to determine access would recurse infinitely, and definer rights bypass RLS for that one lookup. Any policy needing a table lookup goes through such a function; none reads a table directly.
 
-Claims are refreshed on token refresh, so a role or outlet reassignment takes effect at the next refresh rather than instantly. Changes that must take effect immediately (revoking a counter device, deactivating an account) are enforced by a status check in the policy, not by the claim alone.
+The per-row cost the old JWT claims existed to avoid is avoided differently. `app_outlets_for` is **set-returning**, so `outlet_id in (select public.app_outlets_for('franchise_admin'))` is a non-correlated subquery Postgres hoists to a hashed SubPlan — one lookup per query, not per row. `app_is_owner()` takes no argument, so `(select public.app_is_owner())` becomes an InitPlan for the same reason.
+
+Because the policies read the table, **an assignment granted or ended bites at the very next request** — nothing is reissued and nobody is signed out. The same is true of everything else that must be immediate: revoking a counter device and deactivating an account are status checks inside the policy, exactly as they always were. There is no longer any category of change that waits for a token.
 
 ## Privileged operations
 

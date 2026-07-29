@@ -102,8 +102,8 @@ rollback to reissue;
 
 savepoint two_live;
 select throws_ok($q$
-  insert into public.account_invites (profile_id, outlet_id, code_hash, issued_by, expires_at)
-  values ('10000000-0000-4000-a000-00000000000c', '00000000-0000-4000-a000-000000000001',
+  insert into public.account_invites (profile_id, code_hash, issued_by, expires_at)
+  values ('10000000-0000-4000-a000-00000000000c',
           'second', '10000000-0000-4000-a000-000000000002', now() + interval '7 days')
 $q$, '23505', null, 'a second live invite for the same profile is rejected by the index');
 rollback to two_live;
@@ -116,30 +116,37 @@ select throws_ok($q$
 $q$, 'P0002', null, 'issuing against a profile that does not exist fails loudly');
 rollback to no_profile;
 
-savepoint invite_outlet;
+-- An invite carries no outlet since multi-outlet-people: it is about a person,
+-- and a person may be at several outlets. Who may read it is answered by
+-- `app_may_manage_person` instead, which 03_status_and_scope.sql proves.
+savepoint invite_no_outlet;
 select is(
-  (select outlet_id from public.account_invites where profile_id = :KAL),
-  '00000000-0000-4000-a000-000000000001'::uuid,
-  'the invite carries the invited profile''s outlet, for the isolation policy');
-rollback to invite_outlet;
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name = 'account_invites'
+      and column_name = 'outlet_id'),
+  0::bigint,
+  'an invite carries no outlet of its own');
+rollback to invite_no_outlet;
 
 -- ---------------------------------------------------------------------------
--- Reassignment kills outstanding codes, whoever performs the move.
+-- Reassignment kills outstanding codes, whoever performs the move — and
+-- reassignment is now an assignment write, in both directions.
 
 savepoint reassign_outlet;
-update public.profiles set outlet_id = '00000000-0000-4000-a000-000000000002'
- where id = :KAL;
+insert into public.assignments (person_id, role, outlet_id)
+values (:KAL, 'employee', '00000000-0000-4000-a000-000000000002');
 select is(pg_temp.live_invite(:KAL::uuid), 0::bigint,
-  'moving someone to another outlet supersedes their outstanding code');
+  'placing someone at another outlet supersedes their outstanding code');
 select is(pg_temp.redeem('ABCDEFGHJK'), 'invalid',
   'a code issued before the move no longer redeems');
 rollback to reassign_outlet;
 
-savepoint reassign_role;
-update public.profiles set role = 'biller' where id = :KAL;
+savepoint reassign_end;
+update public.assignments set ended_on = current_date
+ where person_id = :KAL and ended_on is null;
 select is(pg_temp.live_invite(:KAL::uuid), 0::bigint,
-  'changing someone''s role supersedes their outstanding code');
-rollback to reassign_role;
+  'ending someone''s assignment supersedes their outstanding code');
+rollback to reassign_end;
 
 savepoint touch_profile;
 update public.profiles set full_name = full_name || ' (edited)' where id = :KAL;

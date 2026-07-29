@@ -10,9 +10,10 @@ import { Input } from '@/components/ui/input'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { useAdapters, type Tables } from '@/data-access'
 import type { AccountSummary, AttendanceRecord } from '@/data-access/adapters'
-import { AttendanceActionError, isOutletPerson } from '@/data-access/adapters'
+import { AttendanceActionError, worksAt } from '@/data-access/adapters'
 import { formatBusinessDate, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { useSession } from '@/session/context'
+import { useOutletScope } from '@/features/outlet-scope'
 
 import { isAwaitingOverride } from './attendance-record'
 import { DayVerdict, EventEvidence, OverrideNote } from './evidence'
@@ -43,7 +44,11 @@ export function OutletAttendance() {
     event: 'check-in' | 'check-out'
   } | null>(null)
 
-  const outletId = session.outletId
+  // Which outlet this surface is about. One for nearly everybody; a
+  // per-surface choice for somebody who manages more than one, which
+  // confers nothing — the database decides every write from the
+  // assignment (multi-outlet-people, design D6).
+  const { outletId, selector: outletSelector } = useOutletScope()
 
   // The outlet and its people: fetched once, independent of which day is shown.
   useEffect(() => {
@@ -55,7 +60,10 @@ export function OutletAttendance() {
         setOutlet(found)
         setPeople(
           list
-            .filter((account) => account.outletId === outletId && isOutletPerson(account))
+            // Everybody live at THIS outlet, whether or not they also work at
+            // another. Their other outlet's assignment is not visible here, and
+            // should not be — it is the other outlet's business.
+            .filter((account) => worksAt(account, outletId))
             .sort((a, b) => a.fullName.localeCompare(b.fullName)),
         )
         setBusinessDate(resolveBusinessDate(new Date(), found.business_day_cutover))
@@ -160,17 +168,16 @@ export function OutletAttendance() {
   // Manual entries belong to the current business day — the database refuses
   // anything else, so a past day simply does not offer the action.
   const manualDay = businessDate !== null && businessDate === today
-  const rows = people
-    .filter((person) => person.leftOn === null)
-    .map((person) => ({
-      person,
-      record: records.find((record) => record.personId === person.id) ?? null,
-    }))
+  const rows = people.map((person) => ({
+    person,
+    record: records.find((record) => record.personId === person.id) ?? null,
+  }))
   const awaiting = rows.filter((row) => row.record && isAwaitingOverride(row.record, radius)).length
 
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader
+        scope={outletSelector}
         title="Attendance"
         subtitle={outlet ? `${outlet.name} — who was here, and where they were.` : undefined}
       />
@@ -332,7 +339,7 @@ function PersonDay({
         <h2 className="text-sm font-bold text-content">
           {person.fullName}{' '}
           <span className="font-normal text-content-muted">
-            {person.staffCode}
+            {person.roleTitle}
             {person.isActive ? '' : ' · account deactivated'}
           </span>
         </h2>

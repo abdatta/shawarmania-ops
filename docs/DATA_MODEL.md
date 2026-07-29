@@ -19,22 +19,45 @@ Applied everywhere, without exception:
 ## Tenancy and identity
 
 **`outlets`** — the isolation unit.
-`id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `staff_code_prefix`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `is_active`, `created_at`.
+`id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `is_active`, `created_at`.
 
 Coordinates and radius exist for attendance verification. The cutover time is what makes cross-midnight trade reconcile correctly.
 
-`staff_code_prefix` is the three characters every staff code at this outlet begins with — `KAL`, `KAN` — unique across outlets and enforced as such. It is stored rather than derived from `code` at read time, because a derivation can collide retroactively: `kalyani` and a future `kalimpong` both truncate to `KAL`, and by then `KAL-` codes belong to somebody. When an outlet is created without one the database derives it (first three alphanumerics of the code, uppercased, numeric suffix if taken), so the form pre-fills a proposal rather than asking a question. **It freezes the moment any staff code has been issued at that outlet**, enforced by `outlet_prefix_guard`: every code already issued reads from it, and re-pointing it would leave them naming something that no longer exists.
 
 **The one table a client may delete from.** `outlets_delete` lets the Super Admin remove an outlet, and sixteen foreign keys — not one of which cascades — mean the delete succeeds only while nothing anywhere references it. There is no bookkeeping column and no maintained list: the check *is* the live referential state, so an outlet whose staff and stock have been moved elsewhere becomes deletable on its own with nothing to re-mark. A deactivated account still counts as a reference. `public.outlet_reference_counts(uuid)` reads the foreign-key set from the catalog and reports what is still attached, so a table added later is covered without anyone editing it.
 
 `is_active` remains the answer for an outlet that traded — its staff, attendance and bills are history the business keeps. Deletion is for an outlet that should never have existed, and the app offers it only once the outlet is already marked closed.
 
 **`profiles`** — one row per person, `id` matching `auth.users.id`.
-`id`, `full_name`, `phone`, `role` (`super_admin` | `franchise_admin` | `biller` | `employee`), `outlet_id` (null only for `super_admin`), `is_active`, `staff_code` (issued — see below), `role_title`, `joined_on`, `left_on`, `created_at`.
+`id`, `full_name`, `phone`, `is_active`, `role_title`, `created_at`.
+
+Since `multi-outlet-people` (#22) the account carries **who somebody is and
+whether they may sign in, and nothing about where they work.** Role, outlet and
+the dates are on the assignment below, because a person may work at more than
+one place and a column cannot say so.
+
+**`assignments`** — who may do what, where. One row per person per role per
+outlet.
+`id`, `person_id`, `role` (`super_admin` | `franchise_admin` | `biller` | `employee`), `outlet_id` (null exactly for `super_admin`), `started_on`, `ended_on`, `created_at`.
+
+A live row has `ended_on` null; **ending is a date, never a delete**, because
+rows written under an assignment have to stay explicable. Two partial unique
+indexes enforce one live assignment per person per outlet, and one live
+`super_admin` row per person (two indexes rather than one, because null outlet
+ids do not collide in a plain unique index). `person_id` cascades — the second
+key in this schema permitted to, after `account_invites.profile_id` — because
+an assignment is *placement* rather than history, and without it a
+half-provisioned account could never be cleaned up. Every table that genuinely
+is history still points at `profiles(id)` with NO ACTION, and any one of them
+aborts the delete.
+
+Every policy in the schema resolves scope from this table. Nothing about
+authority is carried in an access token, so a grant or an ending bites at the
+next request — see [Roles And Permissions](ROLES_AND_PERMISSIONS.md).
 
 Mirrored into JWT claims by the access-token hook. `is_active` is checked in policies directly so deactivation takes effect immediately rather than at next token refresh.
 
-**The person is the account** (`staff-as-accounts`, #21): there is no separate roster table and no link step. A person who never opens the app still exists as an account, provisioned on a placeholder address under the reserved `.invalid` TLD — it cannot be signed in with, and the People surface shows it as *Needs an address* rather than passing it off as real. `is_active` and `left_on` are **two independent facts**: deactivation is the session lever and bites immediately; a `left_on` date is staff-list membership — it removes the person from lists and today's attendance surface while every recorded day stays. No payroll column exists anywhere, by owner decision. **Deleting a person with recorded history is refused by the foreign keys themselves**: every FK onto `profiles(id)` is NO ACTION except the invite cascade, and a migration-time self-check aborts a deploy that ever introduces another cascade.
+**The person is the account** (`staff-as-accounts`, #21): there is no separate roster table and no link step. A person who never opens the app still exists as an account, provisioned on a placeholder address under the reserved `.invalid` TLD — it cannot be signed in with, and the People surface shows it as *Needs an address* rather than passing it off as real. `is_active` and an assignment's `ended_on` are **two independent facts**: deactivation is the session lever and bites immediately; ending an assignment is staff-list membership at *one* outlet — it removes the person from that outlet's lists and new attendance days while every recorded day stays, and leaves their other assignments and their account alone. Having left the business is holding no live assignment anywhere, and is derived rather than stored. No payroll column exists anywhere, by owner decision. **Deleting a person with recorded history is refused by the foreign keys themselves**: every FK onto `profiles(id)` is NO ACTION except two that are plumbing rather than history — the invite cascade and the assignment cascade — and a migration-time self-check aborts a deploy that ever introduces another.
 
 **`counter_devices`** — enrolled tablets.
 `id`, `outlet_id`, `label`, `enrolled_by`, `enrolled_at`, `revoked_at`, `last_seen_at`.
@@ -95,18 +118,25 @@ Only expenses with `payment_method = 'cash'` affect the daily cash record.
 
 ## Staff facts and attendance
 
-Staff facts live on `profiles` — there is no employees table since #21. The columns are `staff_code`, `role_title`, `joined_on` and `left_on`, updatable as an ordinary column-scoped RLS write (`profiles_update_staff`: the Super Admin at any outlet, a Franchise Admin at their own); identity and access columns stay reachable only through the privileged function.
+Staff facts live on `profiles` — there is no employees table since #21, and no staff code since #22. What remains is `full_name` and `role_title`, updatable as an ordinary column-scoped RLS write (`profiles_update_staff`: the Super Admin for anyone, a Franchise Admin for people at outlets they manage). Access columns stay reachable only through the privileged function, and placement is an assignment with its own policy.
 
-**`staff_code` is issued by the database, never asked for.** A trigger fills a blank or absent code — for person roles with an outlet, on insert — with the outlet's `staff_code_prefix`, a hyphen, and four characters of Crockford base32 — `KAL-7KQ2`. The alphabet drops `I`, `L`, `O` and `U` because these codes are read aloud across a counter and dictated down a phone. A code that *was* supplied is stored unchanged, so an import arriving with its own numbering keeps working. Blank and absent mean the same thing on insert (*issue me one*) and different things on update, where `profiles_staff_code_not_blank` still refuses a blank outright — the row already has a code, so clearing it is a mistake rather than a request. `unique (outlet_id, staff_code)`.
-
-The column is **display-only**: nothing keys on it. `attendance.person_id` references the account's UUID, there is no foreign key on `staff_code`, and no query looks a person up by it. Its whole job is telling two people with the same name apart in lists. **Only the Super Admin may change one**, enforced by `staff_code_guard` rather than by the form — `profiles_update_staff` is a row policy, and a row policy permits every granted column on a row it permits, so a restriction living in the UI would be decoration.
+Staff codes were retired by `multi-outlet-people` (#22, owner decision
+2026-07-29). #18 recorded that their only job was telling two same-named people
+apart in lists, and explicitly kept them meaningless; role title and joining
+date do that without a second identifier for anybody to maintain, read aloud,
+or get wrong. Nothing ever keyed on one. If a real staff numbering scheme
+arrives, re-adding it is one migration and #18's archived design is the recipe.
+(One-time **activation codes** are unrelated and unaffected.)
 
 **`attendance`** — `id`, `outlet_id`, `person_id` (→ `profiles(id)`, no cascade), `business_date`, `status` (`present` | `absent` | `half_day` | `leave`),
 check-in: `check_in_at`, `check_in_lat`, `check_in_lng`, `check_in_accuracy_m`, `check_in_distance_m`, `check_in_source` (`phone` | `counter_tablet` | `manual`), `check_in_entered_by`, `check_in_entered_by_name`,
 check-out: the same seven fields prefixed `check_out_`,
 override: `override_by`, `override_reason`, `override_at`.
 
-`unique (person_id, business_date)`.
+`unique (person_id, outlet_id, business_date)` — per outlet since
+`multi-outlet-people` (#22). A morning at Kalyani and an evening at
+Kanchrapara on one business date are two rows, which is what they are; two rows
+at the *same* outlet on one date are still refused.
 
 **A `manual` event is an admin recording attendance on someone's behalf** — the escape hatch for a phone that cannot check in, the kiosk having been rejected. The `entered_by` / `entered_by_name` pair is stamped by the guard trigger from the acting session, never accepted from the client; constraints tie the pair to the `manual` source and forbid coordinates on manual events, so the geofence never judges them. Times must be in the past, on the outlet's current business day. A Franchise Admin enters for their own outlet, the Super Admin for any; an Employee or Biller session is refused.
 

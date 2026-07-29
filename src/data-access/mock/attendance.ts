@@ -7,8 +7,8 @@ import type {
   AttendanceRecord,
   AttendanceStatus,
 } from '../adapters'
-import { AttendanceActionError } from '../adapters'
-import { accountFixtures } from './fixtures/accounts'
+import { AttendanceActionError, assignedOutlets } from '../adapters'
+import { accountFixtures, assignmentFixtures } from './fixtures/accounts'
 import { attendanceSeeds, type AttendanceSeed } from './fixtures/attendance'
 import { OUTLET_KALYANI_ID, outletFixtures } from './fixtures/outlets'
 import { personaFixtures } from './fixtures/personas'
@@ -151,18 +151,34 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
     }
   }
 
+  /**
+   * The one outlet a person is assigned to. A seed that does not name an outlet
+   * is a person who only works at one — which is every seed but the split
+   * shift's, and asking here keeps that assumption from spreading silently.
+   */
+  const soleOutletFor = (personId: string): string => {
+    const outlets = assignedOutlets(assignmentFixtures[personId] ?? [])
+    const [only] = outlets
+    if (outlets.length !== 1 || !only) {
+      throw new Error(
+        `Demo person ${personId} is assigned to ${outlets.length} outlets; the seed must name one`,
+      )
+    }
+    return only
+  }
+
   const materialise = (seed: AttendanceSeed, index: number): AttendanceRecord => {
     const person = personFor(seed.personId)
-    if (!person.outlet_id) throw new Error(`Demo person has no outlet: ${seed.personId}`)
+    const outletId = seed.outletId ?? soleOutletFor(seed.personId)
     const businessDate = shiftBusinessDate(today, -seed.daysAgo)
-    const checkIn = eventFrom(businessDate, person.outlet_id, seed.checkIn)
-    const outlet = outletFor(person.outlet_id)
+    const checkIn = eventFrom(businessDate, outletId, seed.checkIn)
+    const outlet = outletFor(outletId)
 
     return {
       id: `d3000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
-      outletId: person.outlet_id,
+      outletId,
+      outletName: outlet.name,
       personId: person.id,
-      staffCode: person.staff_code,
       personName: person.full_name,
       businessDate,
       status: adjudicate(
@@ -176,7 +192,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         Boolean(seed.override),
       ),
       checkIn,
-      checkOut: eventFrom(businessDate, person.outlet_id, seed.checkOut),
+      checkOut: eventFrom(businessDate, outletId, seed.checkOut),
       override: seed.override
         ? {
             by: personaFixtures.franchise_admin.profile.id,
@@ -201,9 +217,12 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
   const clone = (record: AttendanceRecord) => structuredClone(record)
 
   return {
-    async getDay(personId, businessDate) {
+    async getDay(personId, businessDate, outletId) {
       const record = records.find(
-        (candidate) => candidate.personId === personId && candidate.businessDate === businessDate,
+        (candidate) =>
+          candidate.personId === personId &&
+          candidate.businessDate === businessDate &&
+          candidate.outletId === outletId,
       )
       return record ? clone(record) : null
     },
@@ -241,8 +260,8 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       const record: AttendanceRecord = {
         id: `d3000000-0000-4000-a000-${String(nextId++).padStart(12, '0')}`,
         outletId,
+        outletName: outletFor(outletId).name,
         personId,
-        staffCode: person.staff_code,
         personName: person.full_name,
         businessDate,
         status: adjudicate(
@@ -321,8 +340,8 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         const record: AttendanceRecord = existing ?? {
           id: `d3000000-0000-4000-a000-${String(nextId++).padStart(12, '0')}`,
           outletId,
+          outletName: outletFor(outletId).name,
           personId,
-          staffCode: person.staff_code,
           personName: person.full_name,
           businessDate,
           status: 'present',

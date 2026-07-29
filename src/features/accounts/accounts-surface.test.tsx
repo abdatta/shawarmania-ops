@@ -5,10 +5,19 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
 import type { DataAdapters } from '@/data-access/adapters'
-import { createMockAdapters, DEMO_HELPER_ACCOUNT_ID, OUTLET_KALYANI_ID } from '@/data-access/mock'
+import {
+  createMockAdapters,
+  DEMO_GRILLER_ACCOUNT_ID,
+  DEMO_HELPER_ACCOUNT_ID,
+  DEMO_RETURNER_ACCOUNT_ID,
+  DEMO_SPLIT_SHIFT_ACCOUNT_ID,
+  OUTLET_KALYANI_ID,
+  OUTLET_KANCHRAPARA_ID,
+} from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Role, Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { AccountsSurface } from './accounts-surface'
 
@@ -27,8 +36,8 @@ function sessionFor(role: Role): Session {
   return {
     mode: 'demo',
     userId: persona.profile.id,
-    role,
-    outletId: persona.profile.outlet_id,
+    assignments: persona.assignments,
+    ...deriveSessionScope(persona.assignments),
     displayName: persona.profile.full_name,
     persona,
   }
@@ -66,21 +75,29 @@ describe('the People surface', () => {
     expect(screen.getByText(/This outlet’s people/)).toBeInTheDocument()
   })
 
-  it('shows the outlet column only where more than one outlet is in scope', async () => {
-    const { unmount } = renderSurface('super_admin')
-    expect(await screen.findByRole('columnheader', { name: 'Outlet' })).toBeInTheDocument()
-    unmount()
+  it('names where each person works, and as what', async () => {
+    renderSurface('super_admin')
 
-    renderSurface('franchise_admin')
-    await screen.findByRole('heading', { name: 'People' })
-    expect(screen.queryByRole('columnheader', { name: 'Outlet' })).not.toBeInTheDocument()
+    const row = (await screen.findByText('Demo Griller')).closest('tr')!
+    const assignments = within(row).getByTestId(`assignments-${DEMO_GRILLER_ACCOUNT_ID}`)
+    expect(assignments).toHaveTextContent('Shawarmania Kalyani')
+    expect(assignments).toHaveTextContent('Staff')
   })
 
-  it('shows the staff facts on the list — code and job title beside the name', async () => {
+  it('shows both outlets for somebody who works at both', async () => {
+    renderSurface('super_admin')
+
+    const row = (await screen.findByText('Demo Split Shift')).closest('tr')!
+    const assignments = within(row).getByTestId(`assignments-${DEMO_SPLIT_SHIFT_ACCOUNT_ID}`)
+    expect(assignments).toHaveTextContent('Shawarmania Kalyani')
+    expect(assignments).toHaveTextContent('Shawarmania Kanchrapara')
+  })
+
+  it('shows the job title beside the name', async () => {
     renderSurface('franchise_admin')
 
     const row = (await screen.findByText('Demo Griller')).closest('tr')!
-    expect(within(row).getByText('KAL-02 · Grill')).toBeInTheDocument()
+    expect(within(row).getByText('Grill')).toBeInTheDocument()
   })
 
   it('offers a Franchise Admin no role beyond Biller and Employee', async () => {
@@ -166,10 +183,10 @@ describe('the People surface', () => {
     )
     expect(await screen.findByTestId('issued-code')).toBeInTheDocument()
 
-    // One act: the person is on the list at once, carrying an issued code —
+    // One act: the person is on the list at once, already placed at an outlet —
     // no second surface, no linking step, nothing left to finish.
     const row = (await screen.findByText('Demo Newcomer')).closest('tr')!
-    expect(within(row).getByText(/KAL-[0-9A-HJKMNP-TV-Z]{4}/)).toBeInTheDocument()
+    expect(within(row).getByText('Shawarmania Kalyani')).toBeInTheDocument()
   })
 
   it('shows a newly issued code once, and says it cannot be looked up again', async () => {
@@ -387,7 +404,7 @@ describe('the people states', () => {
     expect(within(row).getByRole('button', { name: 'Change email' })).toBeEnabled()
   })
 
-  it('keeps departed people off the list until asked, then shows them with their leaving date', async () => {
+  it('keeps people with no live assignment off the list until asked', async () => {
     const user = userEvent.setup()
     renderSurface('franchise_admin')
 
@@ -396,7 +413,20 @@ describe('the people states', () => {
 
     await user.click(screen.getByTestId('toggle-departed'))
     const row = (await screen.findByText('Demo Former Staff')).closest('tr')!
-    expect(within(row).getByText(/^Left /)).toBeInTheDocument()
+    expect(within(row).getByText('Not assigned to any outlet')).toBeInTheDocument()
+  })
+
+  it('keeps somebody who left ONE outlet on the list, because they still work', async () => {
+    renderSurface('super_admin')
+
+    // Their Kanchrapara assignment ended in the spring; Kalyani did not.
+    // Leaving an outlet is not leaving the business, and the list says so by
+    // simply still having them on it.
+    const row = (await screen.findByText('Demo Returner')).closest('tr')!
+    expect(within(row).queryByText('Not assigned to any outlet')).not.toBeInTheDocument()
+    expect(within(row).getByTestId(`assignments-${DEMO_RETURNER_ACCOUNT_ID}`)).toHaveTextContent(
+      'Shawarmania Kalyani',
+    )
   })
 
   it('shows the invite still outstanding, and the deactivated person still present', async () => {
@@ -441,105 +471,117 @@ describe('editing a person', () => {
     expect(await screen.findByText('Demo Griller Renamed')).toBeInTheDocument()
   })
 
-  it('shows the staff code inert to a manager, and never sends it unchanged', async () => {
-    const user = userEvent.setup()
-    const adapters = createMockAdapters('franchise_admin')
-    const update = vi.spyOn(adapters.accounts, 'updateStaffFacts')
-    renderSurface('franchise_admin', adapters)
-
-    const row = (await screen.findByText('Demo Griller')).closest('tr')!
-    await openRowActions(user, row)
-    await user.click(within(row).getByRole('button', { name: 'Edit person' }))
-
-    const code = screen.getByLabelText('Staff code')
-    expect(code).toBeDisabled()
-    expect(screen.getByText(/Only the owner can change a staff code/)).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(update).toHaveBeenCalled())
-    // Writing a code back unchanged is not a change — sending it on every
-    // ordinary edit would invite the owner-only refusal for no reason.
-    expect(update).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.not.objectContaining({ staffCode: expect.anything() }),
-    )
-  })
-
-  it('lets the owner change a staff code', async () => {
+  it('assigns somebody to a second outlet, keeping everything they had', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters('super_admin')
-    const update = vi.spyOn(adapters.accounts, 'updateStaffFacts')
+    const grant = vi.spyOn(adapters.accounts, 'grantAssignment')
     renderSurface('super_admin', adapters)
 
     const row = (await screen.findByText('Demo Griller')).closest('tr')!
     await openRowActions(user, row)
-    await user.click(within(row).getByRole('button', { name: 'Edit person' }))
+    await user.click(within(row).getByRole('button', { name: 'Assign to an outlet' }))
 
-    const code = screen.getByLabelText('Staff code')
-    expect(code).toBeEnabled()
-    await user.clear(code)
-    await user.type(code, 'KAL-OWNR')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    // Only outlets they do not already work at are offered — assigning
+    // somebody where they already are is not a thing to offer.
+    const outlets = within(screen.getByLabelText('Outlet'))
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(outlets).toEqual(['Shawarmania Kanchrapara'])
+
+    await user.click(screen.getByRole('button', { name: 'Assign' }))
 
     await waitFor(() =>
-      expect(update).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ staffCode: 'KAL-OWNR' }),
+      expect(grant).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'employee', outletId: OUTLET_KANCHRAPARA_ID }),
       ),
     )
+
+    // Both outlets now, and the first one untouched.
+    const updated = (await screen.findByText('Demo Griller')).closest('tr')!
+    const assignments = within(updated).getByTestId(`assignments-${DEMO_GRILLER_ACCOUNT_ID}`)
+    await waitFor(() => expect(assignments).toHaveTextContent('Shawarmania Kanchrapara'))
+    expect(assignments).toHaveTextContent('Shawarmania Kalyani')
   })
 
-  it('marks a person as left, offering the access cut in the same act', async () => {
+  it('offers a Franchise Admin no role beyond Biller and Employee when assigning', async () => {
+    const user = userEvent.setup()
+    renderSurface('franchise_admin')
+
+    const row = (await screen.findByText('Demo Griller')).closest('tr')!
+    await openRowActions(user, row)
+    await user.click(within(row).getByRole('button', { name: 'Assign to an outlet' }))
+
+    const roles = within(screen.getByLabelText('Role there'))
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(roles).toEqual(['Biller', 'Staff'])
+  })
+
+  it('ends one assignment and offers the access cut, because it was their last', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters('franchise_admin')
-    const update = vi.spyOn(adapters.accounts, 'updateStaffFacts')
+    const end = vi.spyOn(adapters.accounts, 'endAssignment')
     const setActive = vi.spyOn(adapters.accounts, 'setActive')
     renderSurface('franchise_admin', adapters)
 
     const row = (await screen.findByText('Demo Griller')).closest('tr')!
     await openRowActions(user, row)
-    await user.click(within(row).getByRole('button', { name: 'Mark as left' }))
+    await user.click(within(row).getByRole('button', { name: 'End an assignment' }))
 
-    const sheet = await screen.findByText(/is leaving/)
-    expect(sheet).toBeInTheDocument()
+    expect(await screen.findByText(/is leaving/)).toBeInTheDocument()
     expect(screen.getByText(/Every day they worked stays on the record/)).toBeInTheDocument()
-    // The access cut is offered and pre-selected, not silently bundled.
-    expect(screen.getByLabelText(/Also deactivate/)).toBeChecked()
+    // The access cut is offered and pre-selected, not silently bundled — and
+    // only because this is the last place they work.
+    expect(screen.getByLabelText(/also deactivate their sign-in/i)).toBeChecked()
 
-    await user.click(screen.getByRole('button', { name: 'Mark as left' }))
+    await user.click(screen.getByRole('button', { name: 'End this assignment' }))
 
-    await waitFor(() =>
-      expect(update).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ leftOn: expect.any(String) }),
-      ),
-    )
+    await waitFor(() => expect(end).toHaveBeenCalledWith(expect.any(String)))
     expect(setActive).toHaveBeenCalledWith(expect.any(String), false)
 
-    // Off the default list — and reversible from the departed view.
     await waitFor(() => expect(screen.queryByText('Demo Griller')).not.toBeInTheDocument())
-    await user.click(screen.getByTestId('toggle-departed'))
-    const departed = (await screen.findByText('Demo Griller')).closest('tr')!
-    await openRowActions(user, departed)
-    expect(within(departed).getByRole('button', { name: 'Mark as returned' })).toBeInTheDocument()
   })
 
-  it('departs without the access cut when the offer is declined', async () => {
+  it('leaves the sign-in alone when the person still works somewhere else', async () => {
     const user = userEvent.setup()
-    const adapters = createMockAdapters('franchise_admin')
+    const adapters = createMockAdapters('super_admin')
     const setActive = vi.spyOn(adapters.accounts, 'setActive')
-    renderSurface('franchise_admin', adapters)
+    renderSurface('super_admin', adapters)
 
-    const row = (await screen.findByText('Demo Griller')).closest('tr')!
+    const row = (await screen.findByText('Demo Split Shift')).closest('tr')!
     await openRowActions(user, row)
-    await user.click(within(row).getByRole('button', { name: 'Mark as left' }))
+    await user.click(within(row).getByRole('button', { name: 'End an assignment' }))
 
-    await user.click(await screen.findByLabelText(/Also deactivate/))
-    await user.click(screen.getByRole('button', { name: 'Mark as left' }))
+    // Two live assignments, so there is a choice to make and no deactivation
+    // to offer: cutting sign-in for somebody still working the other outlet
+    // would be the panic button wearing a departure's clothes.
+    expect(await screen.findByTestId('still-works-elsewhere')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/also deactivate/i)).not.toBeInTheDocument()
 
-    await waitFor(() => expect(screen.queryByText('Demo Griller')).not.toBeInTheDocument())
-    // The two facts are independent by design; declining one writes only the other.
+    await user.click(screen.getByRole('button', { name: 'End this assignment' }))
+
+    // Still on the list, still signed-in-able, still working the other outlet.
+    const updated = (await screen.findByText('Demo Split Shift')).closest('tr')!
+    await waitFor(() =>
+      expect(within(updated).queryByText('Not assigned to any outlet')).not.toBeInTheDocument(),
+    )
     expect(setActive).not.toHaveBeenCalled()
+  })
+
+  it('refuses a manager assigning themselves, exactly as the database does', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    renderSurface('franchise_admin', adapters)
+    await screen.findByRole('heading', { name: 'People' })
+
+    // The surface offers no row actions on your own row at all, so this is the
+    // adapter refusing the write the way the policy would.
+    await expect(
+      adapters.accounts.grantAssignment({
+        personId: personaFixtures.franchise_admin.profile.id,
+        role: 'employee',
+        outletId: OUTLET_KANCHRAPARA_ID,
+      }),
+    ).rejects.toMatchObject({ code: 'forbidden' })
   })
 })
 

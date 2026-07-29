@@ -5,7 +5,7 @@ import { ThemeToggle } from '@/components/theme-toggle'
 import { visibleSurfaces, type Surface } from '@/gates/registry'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
-import { ROLE_SEGMENTS } from '@/session/session'
+import { heldRoles, ROLE_SEGMENTS, type Role } from '@/session/session'
 
 /**
  * The shell for the phone-first roles — Super Admin, Franchise Admin,
@@ -24,11 +24,20 @@ export function PhoneShell({
   accountMenu?: ReactNode
 }) {
   const session = useSession()
-  const items = visibleSurfaces(session.role, session.mode)
-  const segment = ROLE_SEGMENTS[session.role]
-  const base = session.mode === 'demo' ? `/demo/${segment}` : `/${segment}`
+  // Every role the person holds, not just the one whose shell they are in: a
+  // manager who also grills at the other outlet reaches both sets of surfaces
+  // without switching anything (multi-outlet-people, design D6).
+  const items = visibleSurfaces(heldRoles(session), session.mode)
 
-  const linkFor = (surface: Surface) => (surface.path === '' ? base : `${base}/${surface.path}`)
+  const baseFor = (role: Role) => {
+    const segment = ROLE_SEGMENTS[role]
+    return session.mode === 'demo' ? `/demo/${segment}` : `/${segment}`
+  }
+
+  const linkFor = (surface: Surface) => {
+    const base = baseFor(surface.role)
+    return surface.path === '' ? base : `${base}/${surface.path}`
+  }
 
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-content">
@@ -82,7 +91,7 @@ export function PhoneShell({
 
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 flex border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="fixed inset-x-0 bottom-0 flex overflow-x-auto border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         {items.map((surface) => {
           const Icon = surface.nav?.icon
@@ -93,7 +102,7 @@ export function PhoneShell({
               end={surface.path === ''}
               className={({ isActive }) =>
                 cn(
-                  'flex h-16 flex-1 flex-col items-center justify-center gap-1 text-xs font-semibold',
+                  'flex h-16 min-w-[4.5rem] flex-1 shrink-0 flex-col items-center justify-center gap-1 px-1 text-center text-xs font-semibold',
                   'focus-visible:focus-ring',
                   isActive ? 'text-accent-text' : 'text-content-muted',
                 )

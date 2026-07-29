@@ -1,20 +1,27 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { Profile, TokenClaims } from '@/data-access/auth'
+import type { Assignment } from '@/data-access/adapters'
+import type { Profile } from '@/data-access/auth'
 
 import { useRealSession } from './use-real-session'
 
 /**
- * The session provider's job is to notice two things quickly and one thing
- * never: deactivation, reassignment, and — never — a flaky network.
+ * The session provider's job is to notice one thing quickly, reflect one thing
+ * promptly, and never do the third: deactivation, an assignment change, and —
+ * never — sign anybody out because the network blinked.
+ *
+ * Reassignment used to end a session, because role and outlet were baked into
+ * the access token and a stale token could not be reconciled. Since
+ * multi-outlet-people nothing about authority is in the token, so an
+ * assignment change is simply picked up on the next revalidation — which is
+ * what the tests below assert instead.
  */
 
 const auth = vi.hoisted(() => ({
   currentUser: vi.fn(),
   loadOwnProfile: vi.fn(),
-  currentClaims: vi.fn(),
-  refreshClaims: vi.fn(),
+  loadOwnAssignments: vi.fn(),
   signOut: vi.fn(),
   onAuthChange: vi.fn(),
 }))
@@ -25,17 +32,29 @@ const PROFILE: Profile = {
   id: 'u-1',
   full_name: 'Synthetic Admin Kal',
   phone: null,
-  role: 'franchise_admin',
-  outlet_id: 'outlet-kalyani',
   is_active: true,
-  staff_code: 'KAL-A1',
   role_title: 'Manager',
-  joined_on: null,
-  left_on: null,
   created_at: '2026-07-26T00:00:00+00:00',
 }
 
-const MATCHING_CLAIMS: TokenClaims = { role: 'franchise_admin', outletId: 'outlet-kalyani' }
+const KALYANI = 'outlet-kalyani'
+const KANCHRAPARA = 'outlet-kanchrapara'
+
+const MANAGES_KALYANI: Assignment = {
+  id: 'a-1',
+  role: 'franchise_admin',
+  outletId: KALYANI,
+  startedOn: '2025-08-01',
+  endedOn: null,
+}
+
+const WORKS_AT_KANCHRAPARA: Assignment = {
+  id: 'a-2',
+  role: 'employee',
+  outletId: KANCHRAPARA,
+  startedOn: '2026-07-01',
+  endedOn: null,
+}
 
 function becomeVisible() {
   document.dispatchEvent(new Event('visibilitychange'))
@@ -47,8 +66,7 @@ beforeEach(() => {
   auth.signOut.mockResolvedValue(undefined)
   auth.currentUser.mockResolvedValue({ userId: 'u-1', email: 'admin.kalyani@example.com' })
   auth.loadOwnProfile.mockResolvedValue(PROFILE)
-  auth.currentClaims.mockResolvedValue(MATCHING_CLAIMS)
-  auth.refreshClaims.mockResolvedValue(MATCHING_CLAIMS)
+  auth.loadOwnAssignments.mockResolvedValue([MANAGES_KALYANI])
 })
 
 describe('useRealSession', () => {
@@ -59,7 +77,7 @@ describe('useRealSession', () => {
     expect(auth.signOut).not.toHaveBeenCalled()
   })
 
-  it('builds the session from the profile, not from the token', async () => {
+  it('builds the session from the profile and the assignments', async () => {
     const { result } = renderHook(() => useRealSession())
     await waitFor(() => expect(result.current.state.status).toBe('ready'))
 
@@ -68,11 +86,42 @@ describe('useRealSession', () => {
       session: {
         mode: 'real',
         userId: 'u-1',
+        assignments: [MANAGES_KALYANI],
         role: 'franchise_admin',
-        outletId: 'outlet-kalyani',
+        outletId: KALYANI,
         displayName: 'Synthetic Admin Kal',
       },
     })
+  })
+
+  it('derives the highest role, and no single outlet, for somebody at two', async () => {
+    auth.loadOwnAssignments.mockResolvedValue([MANAGES_KALYANI, WORKS_AT_KANCHRAPARA])
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('ready'))
+
+    const state = result.current.state
+    if (state.status !== 'ready') throw new Error('expected a ready session')
+    expect(state.session.role).toBe('franchise_admin')
+    // Two outlets, so there is no "their outlet" to derive. A surface that
+    // needs one asks; a surface that needs all of them reads `assignments`.
+    expect(state.session.outletId).toBeNull()
+    expect(state.session.assignments).toHaveLength(2)
+  })
+
+  it('ignores an assignment that has ended', async () => {
+    auth.loadOwnAssignments.mockResolvedValue([
+      MANAGES_KALYANI,
+      { ...WORKS_AT_KANCHRAPARA, endedOn: '2026-07-20' },
+    ])
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('ready'))
+
+    const state = result.current.state
+    if (state.status !== 'ready') throw new Error('expected a ready session')
+    // Back to one live outlet, so the derived one is that outlet again.
+    expect(state.session.outletId).toBe(KALYANI)
   })
 
   it('treats an empty own-profile read as deactivation and ends the session', async () => {
@@ -99,42 +148,38 @@ describe('useRealSession', () => {
     )
   })
 
-  it('refreshes once when the claims disagree with the profile, and carries on', async () => {
-    auth.currentClaims.mockResolvedValue({ role: 'employee', outletId: 'outlet-kalyani' })
-    auth.refreshClaims.mockResolvedValue(MATCHING_CLAIMS)
-
+  it('picks up a new assignment without signing anybody out', async () => {
     const { result } = renderHook(() => useRealSession())
     await waitFor(() => expect(result.current.state.status).toBe('ready'))
 
-    expect(auth.refreshClaims).toHaveBeenCalledTimes(1)
+    auth.loadOwnAssignments.mockResolvedValue([MANAGES_KALYANI, WORKS_AT_KANCHRAPARA])
+    act(() => becomeVisible())
+
+    await waitFor(() => {
+      const state = result.current.state
+      if (state.status !== 'ready') throw new Error('expected a ready session')
+      expect(state.session.assignments).toHaveLength(2)
+    })
+    // The whole point of taking authority out of the token: nothing had to be
+    // reissued, and nobody had to sign in again.
     expect(auth.signOut).not.toHaveBeenCalled()
   })
 
-  it('ends the session when a refresh does not resolve the mismatch', async () => {
-    auth.currentClaims.mockResolvedValue({ role: 'employee', outletId: 'outlet-kalyani' })
-    auth.refreshClaims.mockResolvedValue({ role: 'employee', outletId: 'outlet-kalyani' })
-
+  it('keeps the session when the last assignment ends, with nothing held', async () => {
     const { result } = renderHook(() => useRealSession())
-    await waitFor(() =>
-      expect(result.current.state).toEqual({ status: 'anonymous', reason: 'role-changed' }),
-    )
-    expect(auth.signOut).toHaveBeenCalled()
-  })
+    await waitFor(() => expect(result.current.state.status).toBe('ready'))
 
-  it('treats a changed outlet as a mismatch too, not only a changed role', async () => {
-    auth.currentClaims.mockResolvedValue({
-      role: 'franchise_admin',
-      outletId: 'outlet-kanchrapara',
-    })
-    auth.refreshClaims.mockResolvedValue({
-      role: 'franchise_admin',
-      outletId: 'outlet-kanchrapara',
-    })
+    auth.loadOwnAssignments.mockResolvedValue([{ ...MANAGES_KALYANI, endedOn: '2026-07-29' }])
+    act(() => becomeVisible())
 
-    const { result } = renderHook(() => useRealSession())
-    await waitFor(() =>
-      expect(result.current.state).toEqual({ status: 'anonymous', reason: 'role-changed' }),
-    )
+    await waitFor(() => {
+      const state = result.current.state
+      if (state.status !== 'ready') throw new Error('expected a ready session')
+      expect(state.session.role).toBeNull()
+    })
+    // Placed nowhere is not signed out: the account still exists and still
+    // works. What to show them is the role root's problem, not this hook's.
+    expect(auth.signOut).not.toHaveBeenCalled()
   })
 
   it('does not sign anyone out because the network failed', async () => {

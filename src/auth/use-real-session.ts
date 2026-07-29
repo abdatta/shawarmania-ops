@@ -1,38 +1,39 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import type { Assignment } from '@/data-access/adapters'
 import {
-  currentClaims,
   currentUser,
+  loadOwnAssignments,
   loadOwnProfile,
   onAuthChange,
-  refreshClaims,
   signOut,
   type Profile,
-  type TokenClaims,
 } from '@/data-access/auth'
-import type { Session } from '@/session/session'
+import { deriveSessionScope, type Session } from '@/session/session'
 
 /**
  * The real session, kept honest while the app is open.
  *
- * Two things can invalidate a session without the token expiring, and both are
- * detected here rather than being waited out (design D6, D7):
+ * **Deactivation** is still detected here rather than waited out (design D6):
+ * every policy in the schema is gated on `app_account_active()`, so a
+ * deactivated account cannot read its own profile row. A successful read that
+ * returns nothing IS the signal — no separate endpoint, no second mechanism to
+ * keep correct.
  *
- *  - **Deactivation.** Every policy in the schema is gated on
- *    `app_account_active()`, so a deactivated account cannot read its own
- *    profile row. A successful read that returns nothing IS the signal — no
- *    separate endpoint, no second mechanism to keep correct.
- *  - **Reassignment.** Role and outlet are baked into the access token at
- *    issue. If the profile disagrees with the token, one refresh normally
- *    settles it; if it does not, the session ends rather than rendering a
- *    shell the token cannot serve.
+ * **Reassignment no longer ends a session** (multi-outlet-people). Role and
+ * outlet used to be baked into the access token, so a changed profile and a
+ * stale token had to be reconciled or the session dropped. Nothing about
+ * authority is in the token now: the assignments are re-read on the same cycle
+ * as the profile, and a grant or an ending simply shows up. The database
+ * refuses the writes immediately regardless, which is the boundary that
+ * matters — the client is catching up, not enforcing.
  *
- * A failed *request* is not either of those. Losing the network must never
- * sign anyone out, so a throw leaves the current state exactly as it was and
- * the next revalidation tries again.
+ * A failed *request* is neither of those. Losing the network must never sign
+ * anyone out, so a throw leaves the current state exactly as it was and the
+ * next revalidation tries again.
  */
 
-export type SessionEndReason = 'deactivated' | 'role-changed'
+export type SessionEndReason = 'deactivated'
 
 export type RealSessionState =
   | { status: 'loading' }
@@ -51,17 +52,12 @@ type Resolution =
   /** Nothing could be determined: change nothing at all. */
   | { kind: 'indeterminate' }
 
-function claimsMatch(claims: TokenClaims | null, profile: Profile): boolean {
-  if (!claims) return false
-  return claims.role === profile.role && (claims.outletId ?? null) === profile.outlet_id
-}
-
-function sessionFrom(profile: Profile): Session {
+function sessionFrom(profile: Profile, assignments: Assignment[]): Session {
   return {
     mode: 'real',
     userId: profile.id,
-    role: profile.role,
-    outletId: profile.outlet_id,
+    assignments,
+    ...deriveSessionScope(assignments),
     displayName: profile.full_name,
   }
 }
@@ -76,23 +72,25 @@ async function resolveSession(): Promise<Resolution> {
   if (!user) return { kind: 'anonymous' }
 
   let profile: Profile | null
+  let assignments: Assignment[]
   try {
-    profile = await loadOwnProfile(user.userId)
+    // Together rather than in sequence: they are read on every revalidation and
+    // a session that had one without the other would render a shell for
+    // authority it could not name.
+    ;[profile, assignments] = await Promise.all([
+      loadOwnProfile(user.userId),
+      loadOwnAssignments(user.userId),
+    ])
   } catch {
     return { kind: 'indeterminate' }
   }
   if (!profile) return { kind: 'ended', reason: 'deactivated' }
 
-  let claims: TokenClaims | null
-  try {
-    claims = await currentClaims()
-    if (!claimsMatch(claims, profile)) claims = await refreshClaims()
-  } catch {
-    return { kind: 'indeterminate' }
-  }
-  if (!claimsMatch(claims, profile)) return { kind: 'ended', reason: 'role-changed' }
-
-  return { kind: 'session', session: sessionFrom(profile) }
+  // No assignment is a real state — hired and not yet placed, or placed
+  // nowhere any more — and it is NOT a reason to end the session. The person
+  // is still signed in and still themselves; there is simply nothing for them
+  // to do, which the shell says rather than an empty screen implying.
+  return { kind: 'session', session: sessionFrom(profile, assignments) }
 }
 
 export interface RealSession {

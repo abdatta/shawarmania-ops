@@ -6,9 +6,13 @@ import type {
   NewAccount,
   StaffFactsPatch,
 } from '../adapters'
-import { AccountActionError, isOutletPerson } from '../adapters'
-import { accountFixtures, DEMO_HELPER_ACCOUNT_ID, PENDING_ACCOUNT_ID } from './fixtures/accounts'
-import { outletFixtures } from './fixtures/outlets'
+import { AccountActionError, liveAssignments } from '../adapters'
+import {
+  accountFixtures,
+  assignmentFixtures,
+  DEMO_HELPER_ACCOUNT_ID,
+  PENDING_ACCOUNT_ID,
+} from './fixtures/accounts'
 
 /**
  * The mock accounts adapter. Fixtures in, promises out, no I/O anywhere — the
@@ -43,6 +47,10 @@ function inSevenDays(): string {
   return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
 }
 
+function today(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
 /**
  * A demo address from a demo name. `example.com` is reserved for exactly this
  * (RFC 2606) and can never reach a real inbox — fixtures never carry anything
@@ -69,13 +77,9 @@ export function createDemoAccounts(): AccountSummary[] {
         ? `${profile.id}@placeholder.invalid`
         : demoEmail(profile.full_name),
     phone: profile.phone,
-    role: profile.role,
-    outletId: profile.outlet_id,
     isActive: profile.is_active,
-    staffCode: profile.staff_code,
     roleTitle: profile.role_title,
-    joinedOn: profile.joined_on,
-    leftOn: profile.left_on,
+    assignments: structuredClone(assignmentFixtures[profile.id] ?? []),
     invite: profile.id === PENDING_ACCOUNT_ID ? { expiresAt: inSevenDays() } : null,
   }))
 }
@@ -83,13 +87,18 @@ export function createDemoAccounts(): AccountSummary[] {
 export function createMockAccountsAdapter(
   accounts: AccountSummary[],
   /**
-   * Who is looking. The staff-code rule is owner-only and the demo must
-   * refuse a manager the same way `staff_code_guard` does — a demo that let
-   * one through would teach a product this one is not. Defaults to the owner,
+   * Who is looking. The self-assignment carve-out is owner-only and the demo
+   * must refuse a manager the same way the database does — a demo that let one
+   * through would teach a product this one is not. Defaults to the owner,
    * which is the unrestricted case and what a test wants unless it says
    * otherwise.
    */
   role: AppRole = 'super_admin',
+  /**
+   * Which row is the viewer's own. The carve-out is a rule about *yourself*,
+   * so the mock has to know which person that is.
+   */
+  viewerId: string | null = null,
 ): AccountsAdapter {
   const find = (profileId: string): AccountSummary => {
     const account = accounts.find((candidate) => candidate.id === profileId)
@@ -98,45 +107,10 @@ export function createMockAccountsAdapter(
   }
 
   let nextId = 1
+  let nextAssignmentId = 1
 
-  /**
-   * Deterministic, like the roster mock's generator before it: same codes
-   * every run, right shape, no flaking snapshots. The stride is a prime so
-   * consecutive codes do not read as a serial.
-   */
-  let suffixSeed = 0
-  function nextSuffix(): string {
-    suffixSeed += 1
-    let n = (suffixSeed * 7919) % 32 ** 4
-    let out = ''
-    for (let i = 0; i < 4; i += 1) {
-      out = ALPHABET[n % 32] + out
-      n = Math.floor(n / 32)
-    }
-    return out
-  }
-
-  /** `KAL-7KQ2` — the outlet's own prefix, never a hardcoded one. */
-  function issueCode(outletId: string): string {
-    const prefix = outletFixtures.find((outlet) => outlet.id === outletId)?.staff_code_prefix
-    if (!prefix) throw new Error(`No demo outlet: ${outletId}`)
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      const candidate = `${prefix}-${nextSuffix()}`
-      if (!accounts.some((row) => row.outletId === outletId && row.staffCode === candidate)) {
-        return candidate
-      }
-    }
-    throw new Error(`Could not issue a staff code for outlet ${outletId}`)
-  }
-
-  function refuseTakenCode(outletId: string | null, code: string, exceptId?: string) {
-    if (
-      accounts.some(
-        (other) => other.id !== exceptId && other.outletId === outletId && other.staffCode === code,
-      )
-    ) {
-      throw new AccountActionError('code_taken', 'That staff code is already used at this outlet.')
-    }
+  function newAssignmentId(): string {
+    return `da000000-0000-4000-b000-${String(nextAssignmentId++).padStart(12, '0')}`
   }
 
   return {
@@ -148,24 +122,92 @@ export function createMockAccountsAdapter(
       const id = `d1000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`
       const expiresAt = inSevenDays()
       refuseTakenEmail(account.email)
-      const person = isOutletPerson({ role: account.role, outletId: account.outletId })
       accounts.push({
         id,
         fullName: account.fullName,
         email: account.email.trim().toLowerCase(),
         phone: account.phone ?? null,
-        role: account.role,
-        outletId: account.outletId,
         isActive: true,
-        // One step creates a working person: the staff facts land with the
-        // account, and the code is issued exactly as the insert trigger would.
-        staffCode: person && account.outletId ? issueCode(account.outletId) : null,
-        roleTitle: person ? (account.roleTitle ?? null) : null,
-        joinedOn: person ? (account.joinedOn ?? null) : null,
-        leftOn: null,
+        roleTitle: account.roleTitle ?? null,
+        // One act, two rows: the account, and the assignment that places it.
+        assignments: [
+          {
+            id: newAssignmentId(),
+            role: account.role,
+            outletId: account.outletId,
+            startedOn: account.joinedOn ?? today(),
+            endedOn: null,
+          },
+        ],
         invite: { expiresAt },
       })
       return { profileId: id, code: demoCode(), expiresAt }
+    },
+
+    /**
+     * Placing somebody, refusing what the database refuses: a second live
+     * assignment at an outlet they already work at, and both halves of the
+     * self-assignment rule (design D7).
+     */
+    async grantAssignment(input) {
+      const account = find(input.personId)
+
+      if (viewerId !== null && input.personId === viewerId) {
+        if (input.role === 'super_admin') {
+          throw new AccountActionError('forbidden', 'Nobody can give themselves the owner role.')
+        }
+        if (role !== 'super_admin') {
+          throw new AccountActionError(
+            'forbidden',
+            'Only the owner can assign themselves to an outlet.',
+          )
+        }
+      }
+
+      if (
+        liveAssignments(account.assignments).some(
+          (existing) => existing.outletId === input.outletId,
+        )
+      ) {
+        throw new AccountActionError(
+          'already_assigned',
+          'This person already works at that outlet.',
+        )
+      }
+
+      account.assignments.push({
+        id: newAssignmentId(),
+        role: input.role,
+        outletId: input.outletId,
+        startedOn: today(),
+        endedOn: null,
+      })
+    },
+
+    /** Ending a placement: a date, never a removal, and never the last owner. */
+    async endAssignment(assignmentId: string) {
+      for (const account of accounts) {
+        const assignment = account.assignments.find((candidate) => candidate.id === assignmentId)
+        if (!assignment || assignment.endedOn !== null) continue
+
+        if (assignment.role === 'super_admin') {
+          const anotherOwnerExists = accounts.some((other) =>
+            liveAssignments(other.assignments).some(
+              (live) => live.role === 'super_admin' && live.id !== assignmentId,
+            ),
+          )
+          if (!anotherOwnerExists) {
+            throw new AccountActionError(
+              'last_super_admin',
+              'There has to be an owner. Appoint another one before removing this.',
+            )
+          }
+        }
+
+        assignment.endedOn = today()
+        return
+      }
+      throw new AccountActionError('not_found', 'That assignment no longer exists.')
     },
 
     async reissue(profileId: string): Promise<IssuedCode> {
@@ -189,42 +231,18 @@ export function createMockAccountsAdapter(
     },
 
     /**
-     * The staff-fact edit, refusing what the database refuses: a non-owner
-     * changing a code, the blanking of an issued one, a duplicate at the
-     * outlet, a departure before the joining date.
+     * The staff-fact edit — what is left of it now that placement has its own
+     * relation: a person's name, and what they do. The database refuses a
+     * blank name, and so does this.
      */
     async updateStaffFacts(profileId: string, patch: StaffFactsPatch) {
       const account = find(profileId)
-
-      if (patch.staffCode !== undefined && patch.staffCode !== account.staffCode) {
-        if (role !== 'super_admin') {
-          throw new AccountActionError('code_not_yours', 'Only the owner can change a staff code.')
-        }
-        const next = patch.staffCode.trim()
-        if (!next) {
-          throw new AccountActionError(
-            'code_required',
-            'A staff code is needed — it is how this person’s records are identified.',
-          )
-        }
-        refuseTakenCode(account.outletId, next, profileId)
+      if (patch.fullName !== undefined && patch.fullName.trim() === '') {
+        throw new AccountActionError('name_required', 'A person needs a name.')
       }
-
-      const joinedOn = patch.joinedOn !== undefined ? patch.joinedOn : account.joinedOn
-      const leftOn = patch.leftOn !== undefined ? patch.leftOn : account.leftOn
-      if (joinedOn && leftOn && leftOn < joinedOn) {
-        throw new AccountActionError(
-          'left_before_joining',
-          'A departure date cannot be before the joining date.',
-        )
-      }
-
       Object.assign(account, {
         ...(patch.fullName !== undefined && { fullName: patch.fullName }),
         ...(patch.roleTitle !== undefined && { roleTitle: patch.roleTitle }),
-        ...(patch.joinedOn !== undefined && { joinedOn: patch.joinedOn }),
-        ...(patch.leftOn !== undefined && { leftOn: patch.leftOn }),
-        ...(patch.staffCode !== undefined && { staffCode: patch.staffCode.trim() }),
       })
       return structuredClone(account)
     },

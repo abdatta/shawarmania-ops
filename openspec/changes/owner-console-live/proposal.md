@@ -22,6 +22,23 @@ The active basis is stated on screen, always. Neither is more correct in general
 
 **Alerts** — real persistence for raise, respond, and the status transitions.
 
+**A note when the owner records into an outlet's books** — folded in here from
+`multi-outlet-people` (#22), because this is the change that makes alerts real
+and the machinery would otherwise have to be built twice. Since #22 the owner
+records non-cash expenses and stock corrections at outlets they do not run;
+those rows are attributed and badged as theirs wherever they are read, which
+was judged sufficient at the time (#22 design D8) precisely *because* the alert
+surfaces were still demo-gated and a note would have landed where nobody could
+open it.
+
+Two things have to change for it, and neither is large once alerts are real:
+the `alerts_insert` policy is Franchise-Admin-only today — alerts run outlet →
+owner, and this is the first case running the other way — and the
+`alert_category` enum has no value for it. The owner asked for it as a
+nice-to-have (2026-07-29) on the explicit condition that it rides existing
+machinery rather than justifying its own; if it turns out to need more than a
+policy branch and an enum value, drop it rather than growing this change.
+
 ## Non-goals
 
 - The Super Admin still cannot create bills. Billing is tied to an enrolled device and a shift; letting the owner ring a sale from their phone would corrupt attribution and cash reconciliation.

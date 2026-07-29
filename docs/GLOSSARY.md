@@ -6,6 +6,23 @@ Domain terms, defined once. When code, specs, or UI copy use these words, they m
 
 One physical Shawarmania counter — currently Kalyani or Kanchrapara. The unit of data isolation: nearly every table carries `outlet_id`, and nearly every permission question reduces to "which outlet?". A franchise is an outlet with an external owner; the software makes no structural distinction.
 
+### Assignment
+
+**Where a person works, and as what.** One row per person per role per outlet —
+the thing that replaced a role-and-outlet pair on the account when
+`multi-outlet-people` (#22) landed, because a person may work at more than one
+place and a pair cannot say so.
+
+A *live* assignment is one with no end date. Every permission question in the
+database reduces to membership in this set: *does this person hold the right
+assignment at this row's outlet?* Nothing about an assignment is carried in a
+sign-in token, so granting or ending one takes effect at the very next request.
+
+Ending an assignment is recording an end date, never deleting the row. Somebody
+who has left **one** outlet still works at the others; somebody who holds no
+live assignment anywhere has left the business, which is derived rather than
+stored.
+
 ### Business date
 
 **The trading day a record belongs to — not the calendar date of its timestamp.**

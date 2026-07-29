@@ -196,10 +196,11 @@ test.describe('provisioning, end to end', () => {
     await expect(panel.getByRole('img', { name: new RegExp(person.name) })).toBeVisible()
 
     // The new person is listed, honestly described as not yet activated, and
-    // already wearing the staff code the database issued as the row landed.
+    // already placed at the outlet the one act assigned them to — an account
+    // with no assignment would be a person who exists and works nowhere.
     const newRow = page.getByRole('row', { name: person.name })
     await expect(newRow).toContainText('Awaiting activation')
-    await expect(newRow).toContainText(/KAL-[0-9A-HJKMNP-TV-Z]{4}/)
+    await expect(newRow).toContainText('Shawarmania Kalyani')
 
     // The code is gone the moment it is dismissed — there is nowhere to look
     // it up, because only a hash was ever stored.

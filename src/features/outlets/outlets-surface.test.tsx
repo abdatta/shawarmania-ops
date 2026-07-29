@@ -9,6 +9,7 @@ import { createMockAdapters } from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
+import { deriveSessionScope } from '@/session/session'
 
 import { OutletsSurface } from './outlets-surface'
 
@@ -50,8 +51,8 @@ afterEach(() => {
 const ownerSession: Session = {
   mode: 'demo',
   userId: personaFixtures.super_admin.profile.id,
-  role: 'super_admin',
-  outletId: null,
+  assignments: personaFixtures.super_admin.assignments,
+  ...deriveSessionScope(personaFixtures.super_admin.assignments),
   displayName: personaFixtures.super_admin.profile.full_name,
   persona: personaFixtures.super_admin,
 }
@@ -813,75 +814,3 @@ describe('placeholders on the outlet form', () => {
  * so it arrives filled in rather than asked for — and stops being editable the
  * moment a code has been issued from it.
  */
-describe('the staff code prefix on the outlet form', () => {
-  it('fills itself in from the short code as it is typed', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
-
-    await user.click(await screen.findByTestId('add-outlet'))
-    await user.type(screen.getByLabelText('Short code'), 'barrackpore')
-
-    // Pre-filled, editable, never a blank box.
-    expect(screen.getByLabelText('Staff code prefix')).toHaveValue('BAR')
-  })
-
-  it('stops following the code once somebody has typed their own', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
-
-    await user.click(await screen.findByTestId('add-outlet'))
-    await user.type(screen.getByLabelText('Short code'), 'barrack')
-
-    const prefix = screen.getByLabelText('Staff code prefix')
-    await user.clear(prefix)
-    await user.type(prefix, 'BKP')
-
-    // A field that silently rewrites what you entered is worse than one that
-    // was never filled in.
-    await user.type(screen.getByLabelText('Short code'), 'pore')
-    expect(prefix).toHaveValue('BKP')
-  })
-
-  it('creates the outlet with the prefix that was shown', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    const adapters = createMockAdapters()
-    const create = vi.spyOn(adapters.outlets, 'createOutlet')
-    renderOutlets(adapters)
-
-    await user.click(await screen.findByTestId('add-outlet'))
-    await user.type(screen.getByLabelText('Name'), 'Shawarmania Barrackpore')
-    await user.type(screen.getByLabelText('Short code'), 'barrackpore')
-    await user.type(screen.getByLabelText('Location label'), 'Barrackpore')
-    await user.click(screen.getByRole('button', { name: 'Create outlet' }))
-
-    await waitFor(() =>
-      expect(create).toHaveBeenCalledWith(expect.objectContaining({ staffCodePrefix: 'BAR' })),
-    )
-  })
-
-  it('goes inert once codes have been issued from it, and says why', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
-
-    // Kalyani has a roster, so its prefix is spent. The owner must not discover
-    // that by being refused after typing (design D4).
-    const card = await screen.findByTestId('outlet-kalyani')
-    await user.click(within(card).getByRole('button', { name: 'Edit' }))
-
-    await waitFor(() => expect(screen.getByLabelText('Staff code prefix')).toBeDisabled())
-    expect(screen.getByText(/already been issued from this prefix/i)).toBeInTheDocument()
-  })
-
-  it('stays editable on an outlet nobody has been hired into', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    renderOutlets()
-
-    // The mis-created outlet has no roster, so changing its prefix is free —
-    // which is exactly when an owner notices they would rather have something
-    // else.
-    const card = await screen.findByTestId('outlet-demo-mistake')
-    await user.click(within(card).getByRole('button', { name: 'Edit' }))
-
-    await waitFor(() => expect(screen.getByLabelText('Staff code prefix')).toBeEnabled())
-  })
-})

@@ -114,24 +114,8 @@ select lives_ok($$
    where id = '00000000-0000-4000-a000-0000000000b1'
 $$, 'a name with surrounding whitespace but real content is accepted');
 
--- ── profiles.staff_code ──────────────────────────────────────────────────────
---
--- Absence and blankness are answered differently by design: on insert a blank
--- code means "issue me one" and the trigger fills it (proved in
--- 13_generated_staff_codes.sql), while on update the row already has a code
--- and the guard refuses the clearing outright — before the check constraint
--- can even see it, which is why the expected error here is the guard's P0001
--- rather than 23514. The constraint remains underneath as the backstop.
-
-select throws_ok($$
-  update public.profiles set staff_code = '   '
-   where id = '20000000-0000-4000-a000-000000000002'
-$$, 'P0001', null, 'an issued staff code cannot be blanked with spaces');
-
-select throws_ok($$
-  update public.profiles set staff_code = null
-   where id = '20000000-0000-4000-a000-000000000002'
-$$, 'P0001', null, 'an issued staff code cannot be cleared to null either');
+-- profiles.staff_code is gone (multi-outlet-people): staff codes retired
+-- entirely, so there is no longer a column here to keep non-blank.
 
 -- ── profiles.full_name ───────────────────────────────────────────────────────
 --
@@ -152,21 +136,18 @@ values
    now(), now(), '', '', '', '', '', '', '', '', false);
 
 select throws_ok($$
-  insert into public.profiles (id, full_name, role, outlet_id)
-  values ('10000000-0000-4000-a000-0000000000b1', '', 'franchise_admin',
-          '00000000-0000-4000-a000-000000000001')
+  insert into public.profiles (id, full_name)
+  values ('10000000-0000-4000-a000-0000000000b1', '')
 $$, '23514', null, 'an account cannot be inserted with an empty full name');
 
 select throws_ok($$
-  insert into public.profiles (id, full_name, role, outlet_id)
-  values ('10000000-0000-4000-a000-0000000000b1', '   ', 'franchise_admin',
-          '00000000-0000-4000-a000-000000000001')
+  insert into public.profiles (id, full_name)
+  values ('10000000-0000-4000-a000-0000000000b1', '   ')
 $$, '23514', null, 'an account cannot be inserted with a whitespace-only full name');
 
 select lives_ok($$
-  insert into public.profiles (id, full_name, role, outlet_id)
-  values ('10000000-0000-4000-a000-0000000000b1', 'Ordinary Account',
-          'franchise_admin', '00000000-0000-4000-a000-000000000001')
+  insert into public.profiles (id, full_name)
+  values ('10000000-0000-4000-a000-0000000000b1', 'Ordinary Account')
 $$, 'an account with a real name still inserts');
 
 select throws_ok($$
@@ -286,7 +267,6 @@ $$, $$ values
   ('outlets_code_not_blank'),
   ('outlets_location_label_not_blank'),
   ('profiles_full_name_not_blank'),
-  ('profiles_staff_code_not_blank'),
   ('menu_categories_name_not_blank'),
   ('menu_items_name_not_blank'),
   ('inventory_items_name_not_blank'),

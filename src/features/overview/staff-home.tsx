@@ -7,6 +7,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { CheckInCard } from '@/features/attendance/check-in-card'
 import { useOwnAttendance } from '@/features/attendance/use-own-attendance'
 import { useSession } from '@/session/context'
+import { sessionOutlets } from '@/session/session'
 
 /**
  * The Employee home: one large check-in or check-out action, today's status,
@@ -14,13 +15,19 @@ import { useSession } from '@/session/context'
  */
 export function StaffHome() {
   const session = useSession()
-  const own = useOwnAttendance(session.userId, session.outletId)
+  // Every outlet they work at. The fence decides which one they are standing
+  // at when they check in; nothing here asks them (multi-outlet-people, D5).
+  const own = useOwnAttendance(session.userId, sessionOutlets(session))
 
   return (
     <div className="mx-auto max-w-md">
       <PageHeader
         title={`Hello, ${session.displayName}`}
-        subtitle={own.status === 'ready' ? `Assigned to ${own.outlet.name}` : undefined}
+        subtitle={
+          own.status === 'ready'
+            ? `Assigned to ${own.days.map((day) => day.outlet.name).join(' and ')}`
+            : undefined
+        }
         action={
           own.status === 'ready' ? (
             <Link
@@ -51,9 +58,14 @@ export function StaffHome() {
       {own.status === 'ready' && (
         <CheckInCard
           personId={session.userId}
-          outlet={own.outlet}
-          record={own.today}
-          onChange={own.setToday}
+          outlets={own.days.map((day) => day.outlet)}
+          // The day in progress, if there is one; otherwise their first
+          // outlet, which is what today's status is rendered against until the
+          // fence picks one.
+          outlet={(own.current ?? own.days[0])!.outlet}
+          record={own.current?.record ?? null}
+          canStartElsewhere={own.canStartElsewhere}
+          onChange={own.setRecord}
         />
       )}
     </div>

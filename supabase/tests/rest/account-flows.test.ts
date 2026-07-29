@@ -152,12 +152,26 @@ describe('provisioning an account end to end', () => {
     const session = await anonClient().auth.signInWithPassword({ email, password: NEW_PASSWORD })
     expect(session.error).toBeNull()
 
-    // And the session carries the claims the policies read.
+    // And the session reads its own authority from the table rather than from
+    // the token, which since multi-outlet-people carries none of it.
     const claims = JSON.parse(
       Buffer.from(session.data.session!.access_token.split('.')[1]!, 'base64url').toString('utf8'),
     ) as Record<string, unknown>
-    expect(claims['app_role']).toBe('employee')
-    expect(claims['app_outlet_id']).toBe(OUTLETS.kalyani)
+    expect(claims['app_role']).toBeUndefined()
+    expect(claims['app_outlet_id']).toBeUndefined()
+
+    const { data: mine } = (await session.data.session!.user)
+      ? await createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+          auth: { persistSession: false, autoRefreshToken: false },
+          global: {
+            headers: { Authorization: `Bearer ${session.data.session!.access_token}` },
+          },
+        })
+          .from('assignments')
+          .select('role, outlet_id, ended_on')
+          .eq('person_id', result.body.profileId)
+      : { data: null }
+    expect(mine).toEqual([{ role: 'employee', outlet_id: OUTLETS.kalyani, ended_on: null }])
   })
 
   it('accepts a code however sloppily it was retyped', async () => {
@@ -451,18 +465,19 @@ describe('an outstanding invite over REST', () => {
       })
     }
 
+    // An invite carries no outlet since multi-outlet-people — it is about a
+    // person — so what scopes it is who may manage that person.
     const kalyani = await clientFor(PERSONAS.faKalyani)
     const { data: own } = await kalyani
       .from('account_invites')
-      .select('id, profile_id, outlet_id')
+      .select('id, profile_id')
       .eq('profile_id', result.body.profileId)
     expect(own).toHaveLength(1)
-    expect(own?.[0]?.outlet_id).toBe(OUTLETS.kalyani)
 
     const kanchrapara = await clientFor(PERSONAS.faKanchrapara)
     const { data: theirs } = await kanchrapara
       .from('account_invites')
-      .select('id, profile_id, outlet_id')
+      .select('id, profile_id')
       .eq('profile_id', result.body.profileId)
     expect(theirs).toEqual([])
 

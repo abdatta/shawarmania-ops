@@ -8,7 +8,7 @@ import { NotFound } from '@/routes/not-found'
 import { CounterShell } from '@/shell/counter-shell'
 import { PhoneShell } from '@/shell/phone-shell'
 import { SessionContext } from '@/session/context'
-import { roleFromSegment, type Session } from '@/session/session'
+import { deriveSessionScope, roleFromSegment, type Session } from '@/session/session'
 
 import { DemoBanner } from './demo-banner'
 import { DemoResetContext } from './demo-reset'
@@ -52,8 +52,8 @@ export function DemoRoot() {
     return {
       mode: 'demo',
       userId: persona.profile.id,
-      role,
-      outletId: persona.profile.outlet_id,
+      assignments: persona.assignments,
+      ...deriveSessionScope(persona.assignments),
       displayName: persona.profile.full_name,
       persona,
     }

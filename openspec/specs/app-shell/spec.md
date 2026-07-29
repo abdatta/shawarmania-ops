@@ -14,6 +14,11 @@ bottom tab navigation on phone widths; the Biller shell SHALL be
 tablet-first with fixed chrome in which the primary action region never
 scrolls out of view. All four SHALL be usable on a desktop browser.
 
+A person SHALL be placed in the shell of the highest role they hold a live
+assignment for, and SHALL be able to reach any other shell they hold a live
+assignment for. One person SHALL never require more than one login to reach
+every shell their assignments entitle them to.
+
 #### Scenario: Phone roles get bottom tabs
 
 - **WHEN** the Super Admin, Franchise Admin, or Employee shell renders on a
@@ -31,11 +36,21 @@ scrolls out of view. All four SHALL be usable on a desktop browser.
 - **WHEN** any role shell renders on a desktop viewport
 - **THEN** it is fully usable, with navigation adapted to the wider layout
 
-### Requirement: Navigation derives from the gate registry
+#### Scenario: The highest held role chooses the shell
+
+- **WHEN** a person holding both a Franchise Admin and an Employee assignment
+  signs in
+- **THEN** they land on the Franchise Admin shell
+
+### Requirement: Navigation derives from the gate registry and the session's assignments
 
 Each shell's navigation SHALL be derived from the surface registry and the
-current session, never hand-maintained per shell. Surfaces whose state
-excludes them from the current mode SHALL produce no navigation entry.
+current session, never hand-maintained per shell. Surfaces whose state excludes
+them from the current mode SHALL produce no navigation entry.
+
+Navigation SHALL be the union of the surfaces every live assignment entitles
+the person to, so that a person who manages one outlet and works at another
+reaches both sets of surfaces without any switching step.
 
 #### Scenario: A registry change moves the navigation
 
@@ -44,19 +59,33 @@ excludes them from the current mode SHALL produce no navigation entry.
 - **THEN** that role's navigation shows it with no navigation-specific code
   change
 
+#### Scenario: Navigation unions the roles a person holds
+
+- **WHEN** a person holds a Franchise Admin assignment at one outlet and an
+  Employee assignment at another
+- **THEN** their navigation contains the manager surfaces and their own
+  attendance together, with no switcher and no duplicate entries
+
 ### Requirement: A uniform session context serves real and demo modes
 
-Shell components and features SHALL read the current role, outlet, and
-display name from a single session interface that both the real and the demo
-session providers implement, so that the same shell components serve both
-modes unchanged.
+Shell components and features SHALL read the current assignments, display name,
+and the conveniences derived from them — the highest live role, and the single
+outlet when there is exactly one — from a single session interface that both
+the real and the demo session providers implement, so that the same shell
+components serve both modes unchanged.
 
 #### Scenario: The same shell serves both providers
 
 - **WHEN** a shell component renders under the demo session provider or a
   real session provider
-- **THEN** the component reads role, outlet, and display name identically,
-  with no mode-conditional branches inside shell or feature code
+- **THEN** the component reads assignments, role, outlet, and display name
+  identically, with no mode-conditional branches inside shell or feature code
+
+#### Scenario: A single-assignment session reads as it did
+
+- **WHEN** a session holds exactly one live assignment
+- **THEN** the derived role and outlet are that assignment's, so surfaces
+  written against a single outlet keep working unchanged
 
 ### Requirement: The theme toggle is reachable from every screen
 
@@ -143,3 +172,34 @@ to decide what the slot contains.
   demo provider stack
 - **THEN** the account menu is present in the first case and absent in the
   second, with no mode test inside the shell
+
+### Requirement: An outlet-scoped surface picks its outlet on the surface, never in the session
+
+A surface that operates on one outlet SHALL take that outlet from a selector on
+the surface itself, defaulted to the person's single such outlet and rendered
+only when they hold assignments at more than one.
+
+That selection SHALL be scoped to the surface: it SHALL NOT persist into any
+other surface, SHALL NOT survive as session state, and SHALL NOT change what
+any write is permitted to do — the database decides that from the assignment,
+regardless of what is selected. No "acting as", active role, or session-level
+outlet mode SHALL exist.
+
+#### Scenario: A single-outlet manager sees no selector
+
+- **WHEN** a Franchise Admin holding one assignment opens an outlet-scoped
+  surface
+- **THEN** the surface shows their outlet with no selector to operate
+
+#### Scenario: A two-outlet manager picks per surface
+
+- **WHEN** a Franchise Admin holding assignments at two outlets opens two
+  different outlet-scoped surfaces
+- **THEN** each surface offers its own outlet selector, and choosing on one
+  does not change the other
+
+#### Scenario: The selector confers no authority
+
+- **WHEN** a request is crafted naming an outlet the person holds no live
+  assignment at, whatever the surface selector shows
+- **THEN** the database refuses it
