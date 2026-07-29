@@ -20,7 +20,8 @@ test('an admin is handed a link, a scannable code, and the code itself', async (
   await page.getByRole('button', { name: 'Add person' }).click()
   await page.getByLabel('Full name').fill('Demo Fresh Hire')
   await page.getByLabel('Email', { exact: true }).fill('demo.fresh.hire@example.com')
-  await page.getByLabel('Outlet', { exact: true }).selectOption({ label: 'Shawarmania Kalyani' })
+  await page.getByRole('checkbox', { name: 'Shawarmania Kalyani' }).check()
+  await page.getByRole('checkbox', { name: 'Shawarmania Kanchrapara' }).check()
   await expect(page.getByLabel('Staff code')).toHaveCount(0)
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
@@ -46,6 +47,10 @@ test('an admin is handed a link, a scannable code, and the code itself', async (
   expect(await qr.evaluate((node) => node.tagName.toLowerCase())).toBe('svg')
   expect(await qr.evaluate((node) => node.querySelectorAll('path').length)).toBeGreaterThan(0)
 
+  const row = page.getByRole('row', { name: /Demo Fresh Hire/ })
+  await expect(row).toContainText('Shawarmania Kalyani')
+  await expect(row).toContainText('Shawarmania Kanchrapara')
+
   await expect(panel.getByRole('button', { name: 'Copy link' })).toBeVisible()
 })
 
@@ -60,7 +65,8 @@ test('producing the handover leaves the app origin alone', async ({ page, baseUR
   await page.getByRole('button', { name: 'Add person' }).click()
   await page.getByLabel('Full name').fill('Demo Second Starter')
   await page.getByLabel('Email', { exact: true }).fill('demo.second.starter@example.com')
-  await page.getByLabel('Outlet', { exact: true }).selectOption({ label: 'Shawarmania Kalyani' })
+  await page.getByRole('checkbox', { name: 'Shawarmania Kalyani' }).check()
+  await page.getByRole('checkbox', { name: 'Shawarmania Kanchrapara' }).check()
   await expect(page.getByLabel('Staff code')).toHaveCount(0)
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
 

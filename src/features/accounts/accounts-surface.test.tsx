@@ -13,6 +13,7 @@ import {
   DEMO_SPLIT_SHIFT_ACCOUNT_ID,
   OUTLET_KALYANI_ID,
   OUTLET_KANCHRAPARA_ID,
+  PENDING_ACCOUNT_ID,
 } from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
@@ -48,12 +49,16 @@ async function openRowActions(user: ReturnType<typeof userEvent.setup>, row: HTM
   await user.click(within(row).getByRole('button', { name: /^Actions for /i }))
 }
 
-function renderSurface(role: Role, adapters: DataAdapters = createMockAdapters(role)) {
+function renderSurface(
+  role: Role,
+  adapters: DataAdapters = createMockAdapters(role),
+  session: Session = sessionFor(role),
+) {
   return {
     adapters,
     ...render(
       <MemoryRouter>
-        <SessionContext.Provider value={sessionFor(role)}>
+        <SessionContext.Provider value={session}>
           <AdaptersContext.Provider value={adapters}>
             <AccountsSurface />
           </AdaptersContext.Provider>
@@ -125,6 +130,35 @@ describe('the People surface', () => {
     expect(within(outlet).getAllByRole('option')).toHaveLength(2) // placeholder + own outlet
   })
 
+  it('offers only management outlets when the caller also works elsewhere in another role', async () => {
+    const user = userEvent.setup()
+    const base = sessionFor('franchise_admin')
+    const assignments = [
+      ...base.assignments,
+      {
+        id: 'da000000-0000-4000-a000-000000000099',
+        role: 'employee' as const,
+        outletId: OUTLET_KANCHRAPARA_ID,
+        startedOn: '2026-07-01',
+        endedOn: null,
+      },
+    ]
+    const mixedSession: Session = {
+      ...base,
+      assignments,
+      ...deriveSessionScope(assignments),
+    }
+    renderSurface('franchise_admin', createMockAdapters('franchise_admin'), mixedSession)
+    await screen.findByRole('heading', { name: 'People' })
+
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
+    const outlet = screen.getByLabelText('Outlet') as HTMLSelectElement
+    expect(outlet).toBeDisabled()
+    expect(outlet.value).toBe(OUTLET_KALYANI_ID)
+    expect(within(outlet).queryByText('Shawarmania Kanchrapara')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('account-outlet-options')).not.toBeInTheDocument()
+  })
+
   it('lets the owner choose any role, and drops the outlet for an owner account', async () => {
     const user = userEvent.setup()
     renderSurface('super_admin')
@@ -176,7 +210,7 @@ describe('the People surface', () => {
         expect.objectContaining({
           fullName: 'Demo Newcomer',
           role: 'employee',
-          outletId: OUTLET_KALYANI_ID,
+          outletIds: [OUTLET_KALYANI_ID],
           roleTitle: 'Grill',
         }),
       ),
@@ -189,6 +223,59 @@ describe('the People surface', () => {
     expect(within(row).getByText('Shawarmania Kalyani')).toBeInTheDocument()
   })
 
+  it('creates one person at two outlets and issues one code after both placements', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('super_admin')
+    const provision = vi.spyOn(adapters.accounts, 'provision')
+    renderSurface('super_admin', adapters)
+    await screen.findByRole('heading', { name: 'People' })
+
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
+    expect(
+      screen.getByText('Choose one or more. They will have the same role at each.'),
+    ).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Full name'), 'Demo Two Outlets')
+    await user.type(screen.getByLabelText('Email'), 'two.outlets@example.com')
+    await user.click(screen.getByRole('checkbox', { name: 'Shawarmania Kalyani' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Shawarmania Kanchrapara' }))
+    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
+
+    await waitFor(() =>
+      expect(provision).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fullName: 'Demo Two Outlets',
+          role: 'employee',
+          outletIds: [OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID],
+        }),
+      ),
+    )
+    expect(await screen.findByTestId('issued-code')).toBeInTheDocument()
+
+    const row = (await screen.findByText('Demo Two Outlets')).closest('tr')!
+    const assignments = within(row).getByTestId(/assignments-/)
+    expect(assignments).toHaveTextContent('Shawarmania Kalyani')
+    expect(assignments).toHaveTextContent('Shawarmania Kanchrapara')
+  })
+
+  it('refuses an outlet-scoped owner hire until at least one outlet is selected', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('super_admin')
+    const provision = vi.spyOn(adapters.accounts, 'provision')
+    renderSurface('super_admin', adapters)
+    await screen.findByRole('heading', { name: 'People' })
+
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
+    await user.type(screen.getByLabelText('Full name'), 'Demo Nowhere')
+    await user.type(screen.getByLabelText('Email'), 'nowhere@example.com')
+    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
+
+    expect(
+      await screen.findAllByText('Choose at least one outlet for this person.'),
+    ).not.toHaveLength(0)
+    expect(provision).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
+  })
+
   it('shows a newly issued code once, and says it cannot be looked up again', async () => {
     const user = userEvent.setup()
     renderSurface('super_admin')
@@ -197,7 +284,7 @@ describe('the People surface', () => {
     await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'New Starter')
     await user.type(screen.getByLabelText('Email'), 'new.starter@example.com')
-    await user.selectOptions(screen.getByLabelText('Outlet'), OUTLET_KALYANI_ID)
+    await user.click(screen.getByRole('checkbox', { name: 'Shawarmania Kalyani' }))
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     const panel = await screen.findByTestId('issued-code')
@@ -219,7 +306,7 @@ describe('the People surface', () => {
     await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'New Starter')
     await user.type(screen.getByLabelText('Email'), 'new.starter@example.com')
-    await user.selectOptions(screen.getByLabelText('Outlet'), OUTLET_KALYANI_ID)
+    await user.click(screen.getByRole('checkbox', { name: 'Shawarmania Kalyani' }))
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     const panel = await screen.findByTestId('issued-code')
@@ -503,6 +590,33 @@ describe('editing a person', () => {
     expect(assignments).toHaveTextContent('Shawarmania Kalyani')
   })
 
+  it('replaces and shows a pending activation link when granting an assignment', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('super_admin')
+    renderSurface('super_admin', adapters)
+
+    const row = (await screen.findByText('Demo New Starter')).closest('tr')!
+    await openRowActions(user, row)
+    await user.click(within(row).getByRole('button', { name: 'Assign to an outlet' }))
+
+    expect(screen.getByTestId('assign-reissues-code')).toHaveTextContent(
+      'Saving replaces it and shows you the new link',
+    )
+    await user.click(screen.getByRole('button', { name: 'Assign' }))
+
+    const panel = await screen.findByTestId('issued-code')
+    expect(panel).toHaveTextContent('Activation link for Demo New Starter')
+    expect(within(panel).getByTestId('issued-code-link')).toHaveTextContent(
+      /\/activate\?code=[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/,
+    )
+
+    const account = (await adapters.accounts.listAccounts()).find(
+      (candidate) => candidate.id === PENDING_ACCOUNT_ID,
+    )!
+    expect(account.assignments.filter((assignment) => assignment.endedOn === null)).toHaveLength(2)
+    expect(account.invite).not.toBeNull()
+  })
+
   it('offers a Franchise Admin no role beyond Biller and Employee when assigning', async () => {
     const user = userEvent.setup()
     renderSurface('franchise_admin')
@@ -540,6 +654,27 @@ describe('editing a person', () => {
     expect(setActive).toHaveBeenCalledWith(expect.any(String), false)
 
     await waitFor(() => expect(screen.queryByText('Demo Griller')).not.toBeInTheDocument())
+  })
+
+  it('replaces and shows a pending link after ending, and names deactivation', async () => {
+    const user = userEvent.setup()
+    renderSurface('super_admin')
+
+    const row = (await screen.findByText('Demo New Starter')).closest('tr')!
+    await openRowActions(user, row)
+    await user.click(within(row).getByRole('button', { name: 'End an assignment' }))
+
+    expect(screen.getByTestId('end-reissues-code')).toHaveTextContent(
+      'Saving replaces it and shows you the new link',
+    )
+    expect(screen.getByText(/new link will work only after you reactivate it/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'End this assignment' }))
+
+    const panel = await screen.findByTestId('issued-code')
+    expect(panel).toHaveTextContent('Activation link for Demo New Starter')
+    expect(within(panel).getByTestId('issued-code-inactive')).toHaveTextContent(
+      'Reactivate it before this link is used',
+    )
   })
 
   it('leaves the sign-in alone when the person still works somewhere else', async () => {

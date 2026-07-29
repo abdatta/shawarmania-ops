@@ -15,6 +15,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import type { Database } from '../../../src/data-access/database.types'
+import { resolveBusinessDate } from '../../../src/domain/datetime'
 
 const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
 // The Supabase CLI's well-known local demo anon key — public by design,
@@ -194,7 +195,7 @@ describe('a Franchise Admin session, hand-crafting requests for the other outlet
   it('an insert carrying the other outlet id is rejected by the database', async () => {
     const { error } = await fa.from('expenses').insert({
       outlet_id: OUTLETS.kanchrapara,
-      business_date: new Date().toISOString().slice(0, 10),
+      business_date: resolveBusinessDate(new Date(), '04:00'),
       category: 'other',
       amount_paise: 1000,
       payment_method: 'cash',
@@ -282,7 +283,7 @@ describe('a deactivated account with a still-valid session', () => {
   it('cannot write, even inside its own outlet', async () => {
     const { error } = await deactivated.from('expenses').insert({
       outlet_id: OUTLETS.kalyani,
-      business_date: new Date().toISOString().slice(0, 10),
+      business_date: resolveBusinessDate(new Date(), '04:00'),
       category: 'other',
       amount_paise: 1000,
       payment_method: 'cash',
@@ -311,7 +312,7 @@ describe('a revoked counter device with a still-valid session', () => {
     const { error } = await revoked.from('bills').insert({
       id: crypto.randomUUID(),
       outlet_id: OUTLETS.kalyani,
-      business_date: new Date().toISOString().slice(0, 10),
+      business_date: resolveBusinessDate(new Date(), '04:00'),
       biller_profile_id: '10000000-0000-4000-a000-00000000000a',
       counter_device_id: PERSONAS.revokedDevice.sub,
       shift_id: '40000000-0000-4000-a000-000000000002',
@@ -389,7 +390,7 @@ describe('an Employee session', () => {
     const employee = (await signIn(PERSONAS.employeeKalyani.email)).client
 
     // Today as the outlet reckons days: IST wall clock, 04:00 cutover.
-    const businessDate = new Date(Date.now() + (5.5 - 4) * 3_600_000).toISOString().slice(0, 10)
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
     const { error } = await employee.from('attendance').insert({
       outlet_id: OUTLETS.kalyani,
       person_id: PERSONAS.employeeKalyani.sub,
@@ -406,7 +407,7 @@ describe('an Employee session', () => {
   it('nor can the counter tablet', async () => {
     const device = (await signIn(PERSONAS.deviceKalyani.email)).client
 
-    const businessDate = new Date(Date.now() + (5.5 - 4) * 3_600_000).toISOString().slice(0, 10)
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
     const { error } = await device.from('attendance').insert({
       outlet_id: OUTLETS.kalyani,
       person_id: '20000000-0000-4000-a000-000000000002',

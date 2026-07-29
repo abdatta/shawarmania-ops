@@ -25,7 +25,7 @@ import {
 } from '@/data-access/adapters'
 import { activationLink } from '@/lib/activation-link'
 import { useSession } from '@/session/context'
-import { holdsRole, ROLE_LABELS } from '@/session/session'
+import { holdsRole, ROLE_LABELS, sessionOutletsFor } from '@/session/session'
 
 /**
  * People — every person, for the Super Admin across all outlets and for a
@@ -52,7 +52,7 @@ interface Draft {
   email: string
   phone: string
   role: AppRole
-  outletId: string
+  outletIds: string[]
   roleTitle: string
   joinedOn: string
 }
@@ -71,7 +71,7 @@ export function AccountsSurface() {
   const [outlets, setOutlets] = useState<Tables<'outlets'>[]>([])
   const [error, setError] = useState<string | null>(null)
   const [issued, setIssued] = useState<
-    (IssuedCode & { name: string; email: string | null }) | null
+    (IssuedCode & { name: string; email: string | null; inactive?: boolean }) | null
   >(null)
   const [correcting, setCorrecting] = useState<AccountSummary | null>(null)
   const [editing, setEditing] = useState<AccountSummary | null>(null)
@@ -88,10 +88,28 @@ export function AccountsSurface() {
     email: '',
     phone: '',
     role: 'employee',
-    outletId: session.outletId ?? '',
+    outletIds: !isOwner && session.outletId ? [session.outletId] : [],
     roleTitle: '',
     joinedOn: '',
   })
+
+  const managedOutletIds = useMemo(
+    () => new Set(sessionOutletsFor(session, 'franchise_admin')),
+    [session],
+  )
+  const provisionableOutlets = useMemo(
+    () => (isOwner ? outlets : outlets.filter((outlet) => managedOutletIds.has(outlet.id))),
+    [isOwner, managedOutletIds, outlets],
+  )
+  // The allowed set arrives asynchronously with the outlet list. Derive the
+  // usable selection instead of synchronising another state update from an
+  // effect: one option is always the simple default, while stale choices from
+  // an authority refresh are inert immediately.
+  const effectiveOutletIds = useMemo(() => {
+    if (provisionableOutlets.length === 1) return [provisionableOutlets[0]!.id]
+    const allowed = new Set(provisionableOutlets.map((outlet) => outlet.id))
+    return draft.outletIds.filter((outletId) => allowed.has(outletId))
+  }, [draft.outletIds, provisionableOutlets])
 
   const refresh = useCallback(async () => {
     const list = await adapter.listAccounts()
@@ -163,7 +181,7 @@ export function AccountsSurface() {
   /** One act creates a working person: account, staff facts, issued code. */
   async function onProvision(event: FormEvent) {
     event.preventDefault()
-    const outletId = draft.role === 'super_admin' ? null : draft.outletId || null
+    const outletIds = draft.role === 'super_admin' ? [] : effectiveOutletIds
     const isPerson = draft.role === 'employee' || draft.role === 'franchise_admin'
 
     // Both fields carry attributes that look like they validate and do not:
@@ -179,6 +197,11 @@ export function AccountsSurface() {
       return
     }
 
+    if (draft.role !== 'super_admin' && outletIds.length === 0) {
+      setError('Choose at least one outlet for this person.')
+      return
+    }
+
     setBusy(true)
     setError(null)
     try {
@@ -187,7 +210,7 @@ export function AccountsSurface() {
         email: draft.email,
         phone: draft.phone.trim() || null,
         role: draft.role,
-        outletId,
+        outletIds,
         roleTitle: isPerson ? draft.roleTitle.trim() || null : null,
         joinedOn: isPerson ? draft.joinedOn || null : null,
       })
@@ -198,6 +221,7 @@ export function AccountsSurface() {
         fullName: '',
         email: '',
         phone: '',
+        outletIds: provisionableOutlets.length === 1 ? [provisionableOutlets[0]!.id] : [],
         roleTitle: '',
         joinedOn: '',
       }))
@@ -509,8 +533,11 @@ export function AccountsSurface() {
           </Field>
 
           {draft.role !== 'super_admin' && (
-            <Field label="Outlet" id="account-outlet">
-              {outlets.length === 0 ? (
+            <Field
+              label={provisionableOutlets.length > 1 ? 'Outlets' : 'Outlet'}
+              id="account-outlet"
+            >
+              {provisionableOutlets.length === 0 ? (
                 // The state a brand-new business is genuinely in. An empty
                 // dropdown here reads as a bug; the actual problem is one
                 // screen away (design D2).
@@ -521,23 +548,58 @@ export function AccountsSurface() {
                   There are no outlets yet, and every account except an owner has to belong to one.
                   Create the outlet first — Outlets, then <em>Add outlet</em>.
                 </p>
-              ) : (
+              ) : provisionableOutlets.length === 1 ? (
                 <Select
                   id="account-outlet"
-                  value={draft.outletId}
-                  disabled={!isOwner}
-                  onChange={(event) => setDraft({ ...draft, outletId: event.target.value })}
+                  value={effectiveOutletIds[0] ?? ''}
+                  disabled
+                  onChange={() => undefined}
                 >
                   <option value="">Choose an outlet</option>
-                  {(isOwner
-                    ? outlets
-                    : outlets.filter((outlet) => outlet.id === session.outletId)
-                  ).map((outlet) => (
+                  {provisionableOutlets.map((outlet) => (
                     <option key={outlet.id} value={outlet.id}>
                       {outlet.name}
                     </option>
                   ))}
                 </Select>
+              ) : (
+                <fieldset
+                  aria-labelledby="account-outlet-label"
+                  aria-describedby="account-outlets-help"
+                >
+                  <p id="account-outlets-help" className="mb-2 text-xs text-content-muted">
+                    Choose one or more. They will have the same role at each.
+                  </p>
+                  <div
+                    data-testid="account-outlet-options"
+                    className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-border bg-surface p-1"
+                  >
+                    {provisionableOutlets.map((outlet) => {
+                      const checked = effectiveOutletIds.includes(outlet.id)
+                      return (
+                        <label
+                          key={outlet.id}
+                          className="flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-content hover:bg-surface-raised"
+                        >
+                          <input
+                            type="checkbox"
+                            className="size-5 shrink-0 accent-primary"
+                            checked={checked}
+                            onChange={(event) =>
+                              setDraft({
+                                ...draft,
+                                outletIds: event.target.checked
+                                  ? [...effectiveOutletIds, outlet.id]
+                                  : effectiveOutletIds.filter((id) => id !== outlet.id),
+                              })
+                            }
+                          />
+                          {outlet.name}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </fieldset>
               )}
             </Field>
           )}
@@ -614,14 +676,30 @@ export function AccountsSurface() {
           const target = departing
           if (!target) return
           void run(async () => {
-            await adapter.endAssignment(assignmentId)
+            const replacement = await adapter.endAssignment(assignmentId)
+            setDeparting(null)
+            if (replacement) {
+              setIssued({
+                ...replacement,
+                name: target.fullName,
+                email: target.email,
+                inactive: false,
+              })
+            }
             // Only offered, and only meaningful, when this was their last
             // place: cutting sign-in for somebody who still works at the other
             // outlet would be the panic button, not a departure.
             if (alsoDeactivate && target.isActive) {
               await adapter.setActive(target.id, false)
+              if (replacement) {
+                setIssued({
+                  ...replacement,
+                  name: target.fullName,
+                  email: target.email,
+                  inactive: true,
+                })
+              }
             }
-            setDeparting(null)
           })
         }}
       />
@@ -637,8 +715,19 @@ export function AccountsSurface() {
           const target = assigning
           if (!target) return
           void run(async () => {
-            await adapter.grantAssignment({ personId: target.id, role, outletId })
+            const replacement = await adapter.grantAssignment({
+              personId: target.id,
+              role,
+              outletId,
+            })
             setAssigning(null)
+            if (replacement) {
+              setIssued({
+                ...replacement,
+                name: target.fullName,
+                email: target.email,
+              })
+            }
           })
         }}
       />
@@ -667,7 +756,7 @@ export function AccountsSurface() {
 function Field({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <label htmlFor={id} className="block text-sm font-semibold">
+      <label id={`${id}-label`} htmlFor={id} className="block text-sm font-semibold">
         {label}
       </label>
       {children}
@@ -872,6 +961,13 @@ function EndAssignmentSheet({
           stays on the record — nothing is deleted, and they can be assigned there again later.
         </p>
 
+        {account?.invite && (
+          <p data-testid="end-reissues-code" className="text-sm font-semibold text-content">
+            Their current activation link will stop working. Saving replaces it and shows you the
+            new link straight away.
+          </p>
+        )}
+
         <Field label="Which outlet" id="end-assignment-outlet">
           <Select
             id="end-assignment-outlet"
@@ -896,6 +992,11 @@ function EndAssignmentSheet({
             />
             This is their last outlet — also deactivate their sign-in (recommended)
           </label>
+        )}
+        {isLast && account?.isActive && account.invite && (
+          <p className="text-xs text-content-muted">
+            If you also deactivate the account, the new link will work only after you reactivate it.
+          </p>
         )}
 
         {!isLast && (
@@ -977,6 +1078,13 @@ function AssignSheet({
               switch and nothing for them to learn.
             </p>
 
+            {account?.invite && (
+              <p data-testid="assign-reissues-code" className="text-sm font-semibold text-content">
+                Their current activation link will stop working. Saving replaces it and shows you
+                the new link straight away.
+              </p>
+            )}
+
             <Field label="Outlet" id="assign-outlet">
               <Select
                 id="assign-outlet"
@@ -1049,7 +1157,7 @@ function IssuedCodePanel({
   issued,
   onDismiss,
 }: {
-  issued: IssuedCode & { name: string; email: string | null }
+  issued: IssuedCode & { name: string; email: string | null; inactive?: boolean }
   onDismiss: () => void
 }) {
   const link = activationLink(issued.code)
@@ -1068,6 +1176,14 @@ function IssuedCodePanel({
       {issued.email && (
         <p data-testid="issued-code-email" className="break-all text-sm text-content-muted">
           Signs in as <strong className="text-content">{issued.email}</strong> — check this.
+        </p>
+      )}
+      {issued.inactive && (
+        <p
+          data-testid="issued-code-inactive"
+          className="mt-2 rounded-lg border border-warning bg-surface p-2 text-sm font-semibold text-content"
+        >
+          This account is deactivated. Reactivate it before this link is used.
         </p>
       )}
 

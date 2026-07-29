@@ -47,6 +47,20 @@ begin
 end;
 $$;
 
+-- A past instant guaranteed to remain inside the outlet's current business
+-- day, even when the suite runs just after the 04:00 cutover. Subtracting a
+-- fixed number of hours made this fixture change days depending on wall time.
+create function pg_temp.current_business_instant()
+returns timestamptz language sql stable as $$
+  with boundary as (
+    select (
+      public.app_business_date(now(), time '04:00') + time '04:00'
+    ) at time zone 'Asia/Kolkata' as started_at
+  )
+  select started_at + ((now() - started_at) / 2)
+    from boundary
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Attendance.
 
@@ -181,8 +195,8 @@ select throws_ok($q$
     (outlet_id, person_id, business_date, status,
      check_in_at, check_in_lat, check_in_lng, check_in_source)
   values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000c',
-          public.app_business_date(now(), time '04:00'), 'present',
-          now() - interval '3 hours', 22.9750, 88.4345, 'manual')
+          public.app_business_date(pg_temp.current_business_instant(), time '04:00'), 'present',
+          pg_temp.current_business_instant(), 22.9750, 88.4345, 'manual')
 $q$, '23514', null, 'a manual entry carries no coordinates — the admin was not standing there');
 
 -- The entry itself: a past time on today's business day. The forged enterer
@@ -192,29 +206,32 @@ select lives_ok($q$
     (outlet_id, person_id, business_date, status, check_in_at, check_in_source,
      check_in_entered_by, check_in_entered_by_name)
   values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000c',
-          public.app_business_date(now(), time '04:00'), 'present',
-          now() - interval '3 hours', 'manual',
+          public.app_business_date(pg_temp.current_business_instant(), time '04:00'), 'present',
+          pg_temp.current_business_instant(), 'manual',
           '10000000-0000-4000-a000-000000000001', 'Forged Enterer')
 $q$, 'a franchise admin records a past-time manual check-in for someone else');
 
 select is(
   (select check_in_entered_by from public.attendance
     where person_id = '10000000-0000-4000-a000-00000000000c'
-      and business_date = public.app_business_date(now(), time '04:00')),
+      and business_date = public.app_business_date(
+        pg_temp.current_business_instant(), time '04:00')),
   '10000000-0000-4000-a000-000000000002'::uuid,
   'the enterer stamp is the writing session, not what the payload claimed');
 
 select is(
   (select check_in_entered_by_name from public.attendance
     where person_id = '10000000-0000-4000-a000-00000000000c'
-      and business_date = public.app_business_date(now(), time '04:00')),
+      and business_date = public.app_business_date(
+        pg_temp.current_business_instant(), time '04:00')),
   'Synthetic Admin Kal',
   'the enterer''s name is snapshotted beside the event');
 
 select is(
   (select status from public.attendance
     where person_id = '10000000-0000-4000-a000-00000000000c'
-      and business_date = public.app_business_date(now(), time '04:00')),
+      and business_date = public.app_business_date(
+        pg_temp.current_business_instant(), time '04:00')),
   'present'::public.attendance_status,
   'the geofence does not judge a manual entry — no evidence, no denial');
 
@@ -225,7 +242,8 @@ select throws_ok($q$
          check_out_entered_by = '10000000-0000-4000-a000-000000000002',
          check_out_entered_by_name = 'Synthetic Admin Kal'
    where person_id = '10000000-0000-4000-a000-00000000000c'
-     and business_date = public.app_business_date(now(), time '04:00')
+     and business_date = public.app_business_date(
+       pg_temp.current_business_instant(), time '04:00')
 $q$, 'P0001', null, 'an enterer stamp on a non-manual event is refused');
 
 -- The Super Admin has the same capability at any outlet.
@@ -235,14 +253,15 @@ select lives_ok($q$
   insert into public.attendance
     (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
   values ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-00000000000d',
-          public.app_business_date(now(), time '04:00'), 'present',
-          now() - interval '2 hours', 'manual')
+          public.app_business_date(pg_temp.current_business_instant(), time '04:00'), 'present',
+          pg_temp.current_business_instant(), 'manual')
 $q$, 'the super admin records a manual entry at any outlet');
 
 select is(
   (select check_in_entered_by_name from public.attendance
     where person_id = '10000000-0000-4000-a000-00000000000d'
-      and business_date = public.app_business_date(now(), time '04:00')),
+      and business_date = public.app_business_date(
+        pg_temp.current_business_instant(), time '04:00')),
   'Synthetic Owner',
   'the super admin''s manual entry is stamped too');
 
@@ -256,7 +275,8 @@ select throws_ok($q$
   update public.attendance
      set check_out_at = now(), check_out_source = 'manual'
    where person_id = '10000000-0000-4000-a000-00000000000c'
-     and business_date = public.app_business_date(now(), time '04:00')
+     and business_date = public.app_business_date(
+       pg_temp.current_business_instant(), time '04:00')
 $q$, 'P0001', null, 'an employee cannot hand-craft a manual event, even on their own row');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);

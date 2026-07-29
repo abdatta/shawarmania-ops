@@ -122,6 +122,14 @@ export function createMockAccountsAdapter(
       const id = `d1000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`
       const expiresAt = inSevenDays()
       refuseTakenEmail(account.email)
+      const outletIds = account.role === 'super_admin' ? [null] : account.outletIds
+      if (
+        (account.role === 'super_admin' && account.outletIds.length > 0) ||
+        (account.role !== 'super_admin' &&
+          (outletIds.length === 0 || new Set(outletIds).size !== outletIds.length))
+      ) {
+        throw new AccountActionError('invalid_request', 'Choose at least one valid outlet.')
+      }
       accounts.push({
         id,
         fullName: account.fullName,
@@ -129,16 +137,14 @@ export function createMockAccountsAdapter(
         phone: account.phone ?? null,
         isActive: true,
         roleTitle: account.roleTitle ?? null,
-        // One act, two rows: the account, and the assignment that places it.
-        assignments: [
-          {
-            id: newAssignmentId(),
-            role: account.role,
-            outletId: account.outletId,
-            startedOn: account.joinedOn ?? today(),
-            endedOn: null,
-          },
-        ],
+        // One act: account, every placement, then the one code returned below.
+        assignments: outletIds.map((outletId) => ({
+          id: newAssignmentId(),
+          role: account.role,
+          outletId,
+          startedOn: account.joinedOn ?? today(),
+          endedOn: null,
+        })),
         invite: { expiresAt },
       })
       return { profileId: id, code: demoCode(), expiresAt }
@@ -151,6 +157,7 @@ export function createMockAccountsAdapter(
      */
     async grantAssignment(input) {
       const account = find(input.personId)
+      const hadInvite = account.invite !== null
 
       if (viewerId !== null && input.personId === viewerId) {
         if (input.role === 'super_admin') {
@@ -182,6 +189,7 @@ export function createMockAccountsAdapter(
         startedOn: today(),
         endedOn: null,
       })
+      return hadInvite ? replaceInvite(account) : null
     },
 
     /** Ending a placement: a date, never a removal, and never the last owner. */
@@ -189,6 +197,7 @@ export function createMockAccountsAdapter(
       for (const account of accounts) {
         const assignment = account.assignments.find((candidate) => candidate.id === assignmentId)
         if (!assignment || assignment.endedOn !== null) continue
+        const hadInvite = account.invite !== null
 
         if (assignment.role === 'super_admin') {
           const anotherOwnerExists = accounts.some((other) =>
@@ -205,16 +214,14 @@ export function createMockAccountsAdapter(
         }
 
         assignment.endedOn = today()
-        return
+        return hadInvite ? replaceInvite(account) : null
       }
       throw new AccountActionError('not_found', 'That assignment no longer exists.')
     },
 
     async reissue(profileId: string): Promise<IssuedCode> {
       const account = find(profileId)
-      const expiresAt = inSevenDays()
-      account.invite = { expiresAt }
-      return { profileId, code: demoCode(), expiresAt }
+      return replaceInvite(account)
     },
 
     async setActive(profileId: string, isActive: boolean) {
@@ -265,5 +272,11 @@ export function createMockAccountsAdapter(
         'That email address already has an account.',
       )
     }
+  }
+
+  function replaceInvite(account: AccountSummary): IssuedCode {
+    const expiresAt = inSevenDays()
+    account.invite = { expiresAt }
+    return { profileId: account.id, code: demoCode(), expiresAt }
   }
 }

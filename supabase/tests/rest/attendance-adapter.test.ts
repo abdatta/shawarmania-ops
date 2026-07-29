@@ -22,6 +22,7 @@ import { AttendanceActionError } from '../../../src/data-access/adapters'
 import type { Database } from '../../../src/data-access/database.types'
 import { createSupabaseAttendanceAdapter } from '../../../src/data-access/supabase-adapters/attendance'
 import { createSupabaseOutletsAdapter } from '../../../src/data-access/supabase-adapters/outlets'
+import { resolveBusinessDate } from '../../../src/domain/datetime'
 
 const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
 const SUPABASE_ANON_KEY =
@@ -112,7 +113,7 @@ describe('the attendance adapter', () => {
     const outlet = await outlets.getOutlet(OUTLET_KALYANI)
     expect(outlet).not.toBeNull()
 
-    const today = new Date().toISOString().slice(0, 10)
+    const today = resolveBusinessDate(new Date(), outlet!.business_day_cutover)
     const existing = await attendance.getDay(STAFF_KAL, today, KALYANI)
 
     const record =
@@ -138,7 +139,7 @@ describe('the attendance adapter', () => {
 
   it('records a manual entry as the manager, and the database stamps the enterer', async () => {
     const attendance = createSupabaseAttendanceAdapter(managerClient)
-    const today = new Date(Date.now() + (5.5 - 4) * 3_600_000).toISOString().slice(0, 10)
+    const today = resolveBusinessDate(new Date(), '04:00')
 
     // Survives a re-run against the same reset: the manual check-in is read
     // back rather than made twice.

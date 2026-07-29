@@ -1212,6 +1212,35 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      end_assignment_with_invite: {
+        Args: {
+          p_assignment_id: string
+          p_code_hash: string
+          p_issued_by: string
+          p_valid_for: string
+        }
+        Returns: {
+          assignment_id: string
+          invite_expires_at: string
+          invite_id: string
+          person_id: string
+        }[]
+      }
+      grant_assignment_with_invite: {
+        Args: {
+          p_code_hash: string
+          p_issued_by: string
+          p_outlet_id: string
+          p_person_id: string
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_valid_for: string
+        }
+        Returns: {
+          assignment_id: string
+          invite_expires_at: string
+          invite_id: string
+        }[]
+      }
       invite_attempts_exceeded: {
         Args: {
           p_global?: number

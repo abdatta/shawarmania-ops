@@ -15,6 +15,8 @@ import {
 import { json, preflight, readJson, str } from '../_shared/http.ts'
 import { generateCode, hashCode, INVITE_VALID_FOR, normaliseCode } from '../_shared/invite-code.ts'
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 /**
  * The admin half of account management: create an account, re-issue its code,
  * turn it off and on again. Every action requires a real admin session, and
@@ -65,17 +67,28 @@ async function provision(
   // Super Admin *and* an outlet is contradictory, and quietly dropping half of
   // it would create an account the caller did not ask for. mayProvision judges
   // the shape; this endpoint does not guess.
-  const outletId = str(body['outletId']) ?? null
+  const rawOutletIds = body['outletIds']
+  const outletIds = Array.isArray(rawOutletIds) ? rawOutletIds.map(str) : null
   // The job title is a fact about the person and lives on the account. Where
   // they work and from when is the ASSIGNMENT written below — creating a person
   // is still one act, it simply writes two rows now.
   const roleTitle = str(body['roleTitle']) ?? null
   const startedOn = str(body['joinedOn']) ?? null
 
-  if (!fullName || !email || !role || !APP_ROLES.includes(role)) {
+  if (
+    !fullName ||
+    !email ||
+    !role ||
+    !APP_ROLES.includes(role) ||
+    outletIds === null ||
+    outletIds.some((outletId) => outletId === undefined || !UUID.test(outletId))
+  ) {
     return json({ error: 'invalid_request' }, 400)
   }
-  if (!mayProvision(caller, role, outletId)) return json({ error: 'forbidden' }, 403)
+  const requestedOutletIds = outletIds as string[]
+  if (!mayProvision(caller, role, requestedOutletIds)) {
+    return json({ error: 'forbidden' }, 403)
+  }
 
   // A password nobody has ever seen: the account is unusable until the code is
   // redeemed, without depending on how the auth service treats a null one.
@@ -103,12 +116,13 @@ async function provision(
   // The assignment is what places them. An account with none is a person who
   // exists and works nowhere — a real state, but never the one a create
   // produces, so a failure here rolls the whole act back.
-  const { error: assignmentError } = await service.from('assignments').insert({
+  const assignments = (role === 'super_admin' ? [null] : requestedOutletIds).map((outletId) => ({
     person_id: created.user.id,
     role,
     outlet_id: outletId,
     ...(startedOn ? { started_on: startedOn } : {}),
-  })
+  }))
+  const { error: assignmentError } = await service.from('assignments').insert(assignments)
   if (assignmentError) {
     await service.auth.admin.deleteUser(created.user.id)
     return json({ error: 'assignment_rejected' }, 400)
@@ -258,17 +272,43 @@ async function assign(
   if (!target) return json({ error: 'not_found' }, 404)
   if (!mayAssign(caller, personId, role, outletId)) return json({ error: 'forbidden' }, 403)
 
-  const { data, error } = await service
-    .from('assignments')
-    .insert({ person_id: personId, role, outlet_id: outletId })
-    .select('id')
-    .maybeSingle()
+  // Generate before the transaction so Postgres can decide atomically whether
+  // it needs the hash. With no pending invite the candidate is discarded.
+  const code = generateCode()
+  const { data, error } = await service.rpc('grant_assignment_with_invite', {
+    p_person_id: personId,
+    p_role: role,
+    p_outlet_id: outletId,
+    p_issued_by: caller.id,
+    p_code_hash: await hashCode(normaliseCode(code)),
+    p_valid_for: INVITE_VALID_FOR,
+  })
   // A live assignment already exists at that outlet — the partial unique index
   // talking. Reported as a conflict rather than a failure, because the state
   // the caller wanted is the state that already holds.
-  if (error) return json({ error: 'already_assigned' }, 409)
+  if (error?.code === '23505') return json({ error: 'already_assigned' }, 409)
+  if (error) return json({ error: 'assignment_rejected' }, 400)
 
-  return json({ assignmentId: data?.id ?? null }, 201)
+  const row = (
+    data as
+      | {
+          assignment_id: string
+          invite_id: string | null
+          invite_expires_at: string | null
+        }[]
+      | null
+  )?.[0]
+  if (!row) return json({ error: 'assignment_rejected' }, 500)
+
+  return json(
+    {
+      assignmentId: row.assignment_id,
+      issuedCode: row.invite_id
+        ? { profileId: personId, code, expiresAt: row.invite_expires_at ?? '' }
+        : null,
+    },
+    201,
+  )
 }
 
 async function endAssignment(
@@ -297,15 +337,42 @@ async function endAssignment(
     return json({ error: 'forbidden' }, 403)
   }
 
-  const { error } = await service
-    .from('assignments')
-    .update({ ended_on: new Date().toISOString().slice(0, 10) })
-    .eq('id', assignmentId)
+  const code = generateCode()
+  const { data, error } = await service.rpc('end_assignment_with_invite', {
+    p_assignment_id: assignmentId,
+    p_issued_by: caller.id,
+    p_code_hash: await hashCode(normaliseCode(code)),
+    p_valid_for: INVITE_VALID_FOR,
+  })
   // The last-owner guard is the one refusal that is not about the caller, so
   // it gets its own name: "you may do this, but not to the only one left".
-  if (error) return json({ error: 'last_super_admin' }, 409)
+  if (error?.code === 'P0002') return json({ error: 'not_found' }, 404)
+  if (error?.message.includes('last super admin assignment')) {
+    return json({ error: 'last_super_admin' }, 409)
+  }
+  if (error) return json({ error: 'assignment_rejected' }, 400)
 
-  return json({ assignmentId }, 200)
+  const row = (
+    data as
+      | {
+          assignment_id: string
+          invite_id: string | null
+          invite_expires_at: string | null
+          person_id: string
+        }[]
+      | null
+  )?.[0]
+  if (!row) return json({ error: 'not_found' }, 404)
+
+  return json(
+    {
+      assignmentId: row.assignment_id,
+      issuedCode: row.invite_id
+        ? { profileId: row.person_id, code, expiresAt: row.invite_expires_at ?? '' }
+        : null,
+    },
+    200,
+  )
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {

@@ -89,7 +89,7 @@ async function provision(): Promise<{ email: string; code: string; profileId: st
       fullName: 'Probe Activation',
       email,
       role: 'employee',
-      outletId: OUTLET_KALYANI,
+      outletIds: [OUTLET_KALYANI],
     }),
   })
   expect(response.status).toBe(201)

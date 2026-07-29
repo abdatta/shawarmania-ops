@@ -251,7 +251,8 @@ export interface NewAccount {
   email: string
   phone?: string | null
   role: AppRole
-  outletId: string | null
+  /** Empty exactly for `super_admin`; every scoped role needs one or more. */
+  outletIds: string[]
   roleTitle?: string | null
   /** The assignment's start date, not a fact about the person. */
   joinedOn?: string | null
@@ -326,7 +327,7 @@ export interface AccountsAdapter {
    * Franchise Admin the people live at an outlet they manage.
    */
   listAccounts(): Promise<AccountSummary[]>
-  /** One step creates a working person: account, first assignment, issued code. */
+  /** One step creates a working person: account, every assignment, issued code. */
   provision(account: NewAccount): Promise<IssuedCode>
   reissue(profileId: string): Promise<IssuedCode>
   setActive(profileId: string, isActive: boolean): Promise<void>
@@ -343,13 +344,13 @@ export interface AccountsAdapter {
     personId: string
     role: AppRole
     outletId: string | null
-  }): Promise<void>
+  }): Promise<IssuedCode | null>
   /**
    * End a placement. Never a delete — the assignment stays, with its end date,
    * because the rows it produced have to remain explicable. Refused for the
    * last live Super Admin assignment.
    */
-  endAssignment(assignmentId: string): Promise<void>
+  endAssignment(assignmentId: string): Promise<IssuedCode | null>
   /**
    * Correct the address an account signs in with. Any outstanding one-time
    * code survives — it is bound to the account, not the address, so it starts

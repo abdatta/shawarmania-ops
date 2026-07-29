@@ -90,7 +90,7 @@ describe('demo mode safety', () => {
       fullName: 'Demo Someone',
       email: 'demo.someone@example.com',
       role: 'employee',
-      outletId: OUTLET_KALYANI_ID,
+      outletIds: [OUTLET_KALYANI_ID],
     })
     await adapters.accounts.reissue(provisioned.profileId)
     await adapters.accounts.setActive(provisioned.profileId, false)

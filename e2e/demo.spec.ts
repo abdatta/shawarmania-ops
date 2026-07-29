@@ -42,6 +42,14 @@ test('walking all four demo role shells makes no request beyond the app origin',
   await switcher.getByRole('link', { name: 'Owner' }).click()
   await expect(page.getByRole('heading', { name: 'All outlets' })).toBeVisible()
 
+  // The new owner control is part of this same network-safety walk: opening
+  // it must stay as permanently demo-only as the four shells around it.
+  await page.goto('demo/owner/people')
+  await page.getByRole('button', { name: 'Add person' }).click()
+  await expect(page.getByTestId('account-outlet-options')).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: 'Shawarmania Kalyani' })).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: 'Shawarmania Kanchrapara' })).toBeVisible()
+
   expect(violations).toEqual([])
 })
 
