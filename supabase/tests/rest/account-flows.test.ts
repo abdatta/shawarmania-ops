@@ -58,6 +58,13 @@ function anonClient(): Client {
   })
 }
 
+function clientWithToken(token: string): Client {
+  return createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  })
+}
+
 async function tokenFor(email: string, password = SEED_PASSWORD): Promise<string> {
   const { data, error } = await anonClient().auth.signInWithPassword({ email, password })
   if (error || !data.session) {
@@ -91,7 +98,12 @@ async function adminAccounts<T = Record<string, unknown>>(
 async function redeem(payload: Record<string, unknown>): Promise<FnResult> {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/redeem-invite`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      // TEST-NET-2: isolate this suite's deliberate bad-code attempts from
+      // other REST files exercising the endpoint's per-address limiter.
+      'x-forwarded-for': '198.51.100.23',
+    },
     body: JSON.stringify(payload),
   })
   const text = await response.text()
@@ -107,6 +119,11 @@ interface Provisioned {
   expiresAt: string
 }
 
+interface AssignmentChanged {
+  assignmentId: string
+  issuedCode: Provisioned | null
+}
+
 async function provisionAs(
   token: string,
   overrides: Record<string, unknown> = {},
@@ -117,7 +134,7 @@ async function provisionAs(
     fullName: 'Probe Staff',
     email,
     role: 'employee',
-    outletId: OUTLETS.kalyani,
+    outletIds: [OUTLETS.kalyani],
     ...overrides,
   })
   return { email, result }
@@ -181,13 +198,45 @@ describe('provisioning an account end to end', () => {
     expect((await redeem({ code: mangled, password: NEW_PASSWORD })).status).toBe(204)
   })
 
+  it('creates one person at two outlets, then the one returned code activates', async () => {
+    const { email, result } = await provisionAs(superAdminToken, {
+      outletIds: [OUTLETS.kalyani, OUTLETS.kanchrapara],
+      fullName: 'Probe Two Outlets',
+    })
+    expect(result.status).toBe(201)
+    expect(result.body.code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
+
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(204)
+    const signedIn = await anonClient().auth.signInWithPassword({
+      email,
+      password: NEW_PASSWORD,
+    })
+    expect(signedIn.error).toBeNull()
+
+    const client = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: {
+        headers: { Authorization: `Bearer ${signedIn.data.session!.access_token}` },
+      },
+    })
+    const { data: assignments } = await client
+      .from('assignments')
+      .select('role, outlet_id, ended_on')
+      .eq('person_id', result.body.profileId)
+      .order('outlet_id')
+    expect(assignments).toEqual([
+      { role: 'employee', outlet_id: OUTLETS.kalyani, ended_on: null },
+      { role: 'employee', outlet_id: OUTLETS.kanchrapara, ended_on: null },
+    ])
+  })
+
   it('refuses a duplicate email address without creating anything', async () => {
     const duplicate = await adminAccounts(superAdminToken, {
       action: 'provision',
       fullName: 'Impostor',
       email: PERSONAS.employeeKalyani,
       role: 'employee',
-      outletId: OUTLETS.kalyani,
+      outletIds: [OUTLETS.kalyani],
     })
     expect(duplicate.status).toBe(409)
 
@@ -215,9 +264,43 @@ describe('the authority matrix is enforced, not documented', () => {
     expect(result.status).toBe(403)
   })
 
-  it('refuses a Franchise Admin reaching into the other outlet', async () => {
-    const { result } = await provisionAs(faKalyaniToken, { outletId: OUTLETS.kanchrapara })
+  it('refuses a Franchise Admin reaching into the other outlet before creating anything', async () => {
+    const { email, result } = await provisionAs(faKalyaniToken, {
+      outletIds: [OUTLETS.kalyani, OUTLETS.kanchrapara],
+    })
     expect(result.status).toBe(403)
+
+    // The same address remains available to the owner, proving the refused
+    // mixed-authority request did not even create an auth user to reserve it.
+    const retried = await adminAccounts<Provisioned>(superAdminToken, {
+      action: 'provision',
+      fullName: 'Owner Retry',
+      email,
+      role: 'employee',
+      outletIds: [OUTLETS.kanchrapara],
+    })
+    expect(retried.status).toBe(201)
+  })
+
+  it('rejects a malformed outlet set before reserving the address', async () => {
+    const email = freshEmail('malformed-outlet')
+    const refused = await adminAccounts(superAdminToken, {
+      action: 'provision',
+      fullName: 'Malformed Outlet',
+      email,
+      role: 'employee',
+      outletIds: ['not-an-outlet-id'],
+    })
+    expect(refused.status).toBe(400)
+
+    const retried = await adminAccounts<Provisioned>(superAdminToken, {
+      action: 'provision',
+      fullName: 'Valid Retry',
+      email,
+      role: 'employee',
+      outletIds: [OUTLETS.kalyani],
+    })
+    expect(retried.status).toBe(201)
   })
 
   it.each(['super_admin', 'franchise_admin'] as const)(
@@ -225,30 +308,34 @@ describe('the authority matrix is enforced, not documented', () => {
     async (role) => {
       const { result } = await provisionAs(faKalyaniToken, {
         role,
-        outletId: role === 'super_admin' ? null : OUTLETS.kalyani,
+        outletIds: role === 'super_admin' ? [] : [OUTLETS.kalyani],
       })
       expect(result.status).toBe(403)
     },
   )
 
   it('refuses an outlet-scoped role with no outlet, and a Super Admin with one', async () => {
-    expect((await provisionAs(superAdminToken, { outletId: null })).result.status).toBe(403)
+    expect((await provisionAs(superAdminToken, { outletIds: [] })).result.status).toBe(403)
     expect(
-      (await provisionAs(superAdminToken, { role: 'super_admin', outletId: OUTLETS.kalyani }))
-        .result.status,
+      (
+        await provisionAs(superAdminToken, {
+          role: 'super_admin',
+          outletIds: [OUTLETS.kalyani],
+        })
+      ).result.status,
     ).toBe(403)
   })
 
   it('lets the Super Admin provision into either outlet', async () => {
     for (const outletId of [OUTLETS.kalyani, OUTLETS.kanchrapara]) {
-      const { result } = await provisionAs(superAdminToken, { outletId })
+      const { result } = await provisionAs(superAdminToken, { outletIds: [outletId] })
       expect(result.status).toBe(201)
     }
   })
 
   it('refuses a Franchise Admin managing another outlet’s account', async () => {
     const { result: theirs } = await provisionAs(superAdminToken, {
-      outletId: OUTLETS.kanchrapara,
+      outletIds: [OUTLETS.kanchrapara],
     })
     expect(theirs.status).toBe(201)
 
@@ -364,6 +451,97 @@ describe('the one-time code over the wire', () => {
     // The code survived the fumble, and so did the person's allowance: a
     // password checked before anything is looked up records no failure.
     expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(204)
+  })
+})
+
+describe('assignment changes and outstanding activation links', () => {
+  it('grants, replaces the pending code in the same action, and returns the replacement', async () => {
+    const { email, result } = await provisionAs(superAdminToken)
+
+    const changed = await adminAccounts<AssignmentChanged>(superAdminToken, {
+      action: 'assign',
+      personId: result.body.profileId,
+      role: 'employee',
+      outletId: OUTLETS.kanchrapara,
+    })
+    expect(changed.status).toBe(201)
+    expect(changed.body.assignmentId).toBeTruthy()
+    expect(changed.body.issuedCode?.profileId).toBe(result.body.profileId)
+    expect(changed.body.issuedCode?.code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
+    expect(changed.body.issuedCode?.code).not.toBe(result.body.code)
+
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(400)
+    expect(
+      await redeem({
+        code: changed.body.issuedCode!.code,
+        password: NEW_PASSWORD,
+      }),
+    ).toMatchObject({ status: 204 })
+
+    const signedIn = await anonClient().auth.signInWithPassword({
+      email,
+      password: NEW_PASSWORD,
+    })
+    const { data: assignments } = await clientWithToken(signedIn.data.session!.access_token)
+      .from('assignments')
+      .select('outlet_id, ended_on')
+      .eq('person_id', result.body.profileId)
+      .order('outlet_id')
+    expect(assignments).toEqual([
+      { outlet_id: OUTLETS.kalyani, ended_on: null },
+      { outlet_id: OUTLETS.kanchrapara, ended_on: null },
+    ])
+  })
+
+  it('ends, replaces the pending code in the same action, and returns the replacement', async () => {
+    const { result } = await provisionAs(superAdminToken, {
+      outletIds: [OUTLETS.kalyani, OUTLETS.kanchrapara],
+    })
+    const owner = clientWithToken(superAdminToken)
+    const { data: rows } = await owner
+      .from('assignments')
+      .select('id')
+      .eq('person_id', result.body.profileId)
+      .eq('outlet_id', OUTLETS.kanchrapara)
+      .is('ended_on', null)
+    expect(rows).toHaveLength(1)
+
+    const changed = await adminAccounts<AssignmentChanged>(superAdminToken, {
+      action: 'end-assignment',
+      assignmentId: rows![0]!.id,
+    })
+    expect(changed.status).toBe(200)
+    expect(changed.body.issuedCode?.profileId).toBe(result.body.profileId)
+    expect(changed.body.issuedCode?.code).not.toBe(result.body.code)
+
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(400)
+    expect(
+      await redeem({
+        code: changed.body.issuedCode!.code,
+        password: NEW_PASSWORD,
+      }),
+    ).toMatchObject({ status: 204 })
+
+    const { data: ended } = await owner
+      .from('assignments')
+      .select('ended_on')
+      .eq('id', rows![0]!.id)
+      .single()
+    expect(ended?.ended_on).not.toBeNull()
+  })
+
+  it('changes an activated person without manufacturing a reset code', async () => {
+    const { result } = await provisionAs(superAdminToken)
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(204)
+
+    const changed = await adminAccounts<AssignmentChanged>(superAdminToken, {
+      action: 'assign',
+      personId: result.body.profileId,
+      role: 'employee',
+      outletId: OUTLETS.kanchrapara,
+    })
+    expect(changed.status).toBe(201)
+    expect(changed.body.issuedCode).toBeNull()
   })
 })
 
@@ -551,7 +729,7 @@ describe('email addresses, and who may see them', () => {
       fullName: 'Probe Mistyped',
       email: typo,
       role: 'employee',
-      outletId: OUTLETS.kalyani,
+      outletIds: [OUTLETS.kalyani],
     })
     expect(provisioned.status).toBe(201)
 
@@ -594,7 +772,7 @@ describe('email addresses, and who may see them', () => {
 
   it('refuses a correction across the outlet boundary', async () => {
     const kanchrapara = await provisionAs(superAdminToken, {
-      outletId: OUTLETS.kanchrapara,
+      outletIds: [OUTLETS.kanchrapara],
       fullName: 'Probe Other Outlet',
     })
 

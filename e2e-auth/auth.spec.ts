@@ -162,19 +162,21 @@ test.describe('signing in', () => {
 })
 
 test.describe('provisioning, end to end', () => {
-  test('an admin creates an account, hands over the code, and the person signs in', async ({
+  test('the owner creates one two-outlet account, hands over one code, and the person signs in', async ({
     page,
     browser,
   }) => {
     const person = freshPerson('starter')
 
-    await signIn(page, PERSONAS.admin.email)
-    await page.goto('admin/people')
+    await signIn(page, PERSONAS.owner.email)
+    await page.goto('owner/people')
     await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Add person' }).click()
     await page.getByLabel('Full name').fill(person.name)
     await page.getByLabel('Email', { exact: true }).fill(person.email)
+    await page.getByRole('checkbox', { name: 'Shawarmania Kalyani' }).check()
+    await page.getByRole('checkbox', { name: 'Shawarmania Kanchrapara' }).check()
 
     // One act creates the person: the account IS the staff-list membership,
     // and a `before insert` trigger issues their staff code from the outlet's
@@ -201,6 +203,7 @@ test.describe('provisioning, end to end', () => {
     const newRow = page.getByRole('row', { name: person.name })
     await expect(newRow).toContainText('Awaiting activation')
     await expect(newRow).toContainText('Shawarmania Kalyani')
+    await expect(newRow).toContainText('Shawarmania Kanchrapara')
 
     // The code is gone the moment it is dismissed — there is nowhere to look
     // it up, because only a hash was ever stored.
@@ -274,7 +277,7 @@ test.describe('deactivation', () => {
     await page.getByRole('button', { name: 'Add person' }).click()
     await page.getByLabel('Full name').fill(person.name)
     await page.getByLabel('Email', { exact: true }).fill(person.email)
-    await page.getByLabel('Outlet', { exact: true }).selectOption({ label: 'Shawarmania Kalyani' })
+    await page.getByRole('checkbox', { name: 'Shawarmania Kalyani' }).check()
     await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
     const link = (await page.getByTestId('issued-code-link').innerText()).trim()

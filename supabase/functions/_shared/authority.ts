@@ -110,27 +110,31 @@ export async function loadAccount(
 }
 
 /**
- * May this caller create an account with this role in this outlet?
+ * May this caller create an account with this role at these outlets?
  *
  * Super Admin: anyone, anywhere. Franchise Admin: Billers and Employees, in
- * their own outlet, and nothing else — they cannot mint a peer, they cannot
+ * their managed outlets, and nothing else — they cannot mint a peer, they cannot
  * mint an owner, and they cannot reach across the boundary. Billers and
  * Employees have no provisioning capability at all.
  */
 export function mayProvision(
   caller: Caller,
   targetRole: AppRole,
-  targetOutletId: string | null,
+  targetOutletIds: readonly string[],
 ): boolean {
-  // The schema constraint restated at the edge, so a bad request is a 400 here
-  // rather than a constraint violation three statements later.
+  // An owner is outlet-less; every scoped role needs a non-empty SET, not an
+  // array with duplicate assignment attempts waiting to fail after account
+  // creation.
   const outletShapeValid =
-    targetRole === 'super_admin' ? targetOutletId === null : targetOutletId !== null
+    targetRole === 'super_admin'
+      ? targetOutletIds.length === 0
+      : targetOutletIds.length > 0 && new Set(targetOutletIds).size === targetOutletIds.length
   if (!outletShapeValid) return false
 
   if (isOwner(caller)) return true
   if (targetRole !== 'biller' && targetRole !== 'employee') return false
-  return targetOutletId !== null && outletsFor(caller, 'franchise_admin').includes(targetOutletId)
+  const managed = new Set(outletsFor(caller, 'franchise_admin'))
+  return targetOutletIds.every((outletId) => managed.has(outletId))
 }
 
 /**

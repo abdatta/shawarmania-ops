@@ -26,6 +26,7 @@ import type { Database } from '../../../src/data-access/database.types'
 import { createSupabaseAccountsAdapter } from '../../../src/data-access/supabase-adapters/accounts'
 import { createSupabaseAttendanceAdapter } from '../../../src/data-access/supabase-adapters/attendance'
 import { createSupabaseOutletsAdapter } from '../../../src/data-access/supabase-adapters/outlets'
+import { resolveBusinessDate } from '../../../src/domain/datetime'
 
 const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
 const SUPABASE_ANON_KEY =
@@ -86,7 +87,7 @@ async function onboard(
     fullName,
     email,
     role,
-    outletId,
+    outletIds: [outletId],
     ...extras,
   })
   expect(provisioned.status).toBe(201)
@@ -151,7 +152,7 @@ beforeAll(async () => {
   employee = employeeAccount.client
   employeeProfileId = employeeAccount.profileId
 
-  businessDate = new Date().toISOString().slice(0, 10)
+  businessDate = resolveBusinessDate(new Date(), '04:00')
 }, 120_000)
 
 describe('creating an outlet', () => {

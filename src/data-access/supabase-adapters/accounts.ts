@@ -80,6 +80,11 @@ const MESSAGES: Record<string, string> = {
   unauthorised: 'Your session is no longer valid. Sign in again.',
 }
 
+interface AssignmentChangeResponse {
+  assignmentId: string
+  issuedCode: IssuedCode | null
+}
+
 async function callAdmin<T>(
   client: SupabaseClient<Database>,
   body: Record<string, unknown>,
@@ -148,7 +153,7 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
         email: account.email,
         phone: account.phone ?? null,
         role: account.role,
-        outletId: account.outletId,
+        outletIds: account.outletIds,
         roleTitle: account.roleTitle ?? null,
         joinedOn: account.joinedOn ?? null,
       })
@@ -176,17 +181,22 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       personId: string
       role: AppRole
       outletId: string | null
-    }): Promise<void> {
-      await callAdmin(client, {
+    }): Promise<IssuedCode | null> {
+      const result = await callAdmin<AssignmentChangeResponse>(client, {
         action: 'assign',
         personId: input.personId,
         role: input.role,
         outletId: input.outletId,
       })
+      return result.issuedCode
     },
 
-    async endAssignment(assignmentId: string): Promise<void> {
-      await callAdmin(client, { action: 'end-assignment', assignmentId })
+    async endAssignment(assignmentId: string): Promise<IssuedCode | null> {
+      const result = await callAdmin<AssignmentChangeResponse>(client, {
+        action: 'end-assignment',
+        assignmentId,
+      })
+      return result.issuedCode
     },
 
     /**
