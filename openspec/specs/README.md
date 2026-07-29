@@ -59,8 +59,14 @@ Domain capabilities landed with `data-model-and-tenancy`. These are **schema-lev
 - [`daily-cash-reconciliation`](daily-cash-reconciliation/spec.md) — day close computed and snapshotted by the database, never recomputed, arithmetic held by constraints.
 - [`attendance-and-location`](attendance-and-location/spec.md) — location evidence stored beside the verdict, one row per employee per business day.
 
+Owner-facing capabilities landed with `ui-owner-console-and-demo`. These are **surface contracts against a mocked seam**: the behaviour is required now, and `owner-console-live` (#13) makes the figures real without changing what is required of the screens.
+
+- [`cross-outlet-oversight`](cross-outlet-oversight/spec.md) — every outlet on one screen, figures derived from recorded rows, closed days read from their snapshots, a switcher that never widens, and no export of demonstration figures.
+- [`profit-estimates`](profit-estimates/spec.md) — two named bases, the basis always stated, raw materials counted exactly once, integer paise.
+- [`outlet-alerts`](outlet-alerts/spec.md) — categorised and prioritised alerts with a response thread, a one-step-at-a-time status ending terminal, and a cross-outlet inbox only the owner reads.
+
 ## Expected capabilities
 
 The remaining domain capabilities, derived from the roadmap; each arrives as its change archives:
 
-`staff-authentication` · `counter-device-trust` · `menu-catalogue` · `offline-settlement` · `expense-tracking` · `profit-estimates` · `outlet-alerts` · `cross-outlet-oversight`
+`staff-authentication` · `counter-device-trust` · `menu-catalogue` · `offline-settlement` · `expense-tracking`
