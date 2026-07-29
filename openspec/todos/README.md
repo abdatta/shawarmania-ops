@@ -7,7 +7,7 @@ Keep entries behavior-focused:
 - Describe the user-visible expectation, the observed behaviour, and the constraint that makes it non-trivial.
 - Avoid naming implementation files, functions, or database internals unless they are part of the behaviour contract.
 - Never include real customer names, phone numbers, employee data, or production figures. Use synthetic examples.
-- When an item is ready to build, graduate it into `openspec/changes/<change-id>/` via `/opsx:propose` and add it to the inventory table in [`../changes/ROADMAP.md`](../changes/ROADMAP.md).
+- When an item is ready to build, graduate it into `openspec/changes/<change-id>/` via `/opsx:propose` and add it to the inventory table in [`../changes/ROADMAP.md`](../changes/ROADMAP.md), inserted at its correct position in the table's topological (dependency) order — not appended at the bottom. See the note under "Change Inventory" there.
 
 ## Items
 

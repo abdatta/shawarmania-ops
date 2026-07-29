@@ -20,9 +20,13 @@
 // The leading icon cell and the Status word cell are always written from the
 // same derivation, so they cannot drift from each other. If an inventory row is
 // missing the leading icon cell (e.g. a freshly hand-added row), it is inserted;
-// rows that already have it keep their column count. Rows are never inserted or
-// removed, and no other cell (wave, model, deps, checkpoint) is touched — the
-// Wave column in particular is authored, not derived, so it is left alone. The
+// rows that already have it keep their column count. Rows are never inserted,
+// removed, or reordered, and no other cell (wave, model, deps, checkpoint) is
+// touched — the Wave column in particular is authored, not derived, so it is
+// left alone. Row ORDER is likewise authored, not derived: the inventory is
+// kept in topological (dependency) order by hand — see the note under "Change
+// Inventory" in ROADMAP.md — and whoever adds a row must place it there, since
+// this script only rewrites status cells in place and never moves a row. The
 // table header and separator rows carry no change number, so they are left as
 // authored.
 
