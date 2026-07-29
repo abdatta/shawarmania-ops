@@ -17,8 +17,6 @@ Keep entries behavior-focused:
 | [Bill GST Breakup](./bill-gst-breakup.md) | Feature | Anticipated | Billing | The business registers for GST or a customer requires a tax invoice |
 | [Bill Digital Share](./bill-digital-share.md) | Feature | Anticipated | Billing | The owner wants digital receipts, or paper is being skipped anyway |
 | [Aggregator Settlement](./aggregator-settlement.md) | Feature | Anticipated | Reporting | Aggregator volume grows enough to distort a decision |
-| [Owner Break-Glass Writes](./owner-break-glass-writes.md) | Feature | Decided in principle | Roles | The owner first needs to record or fix something remotely — or Aggregator Settlement graduates |
-| [Role Grants: One Login, Many Hats](./role-grants-one-login-many-hats.md) | Feature | Direction settled | Roles | The first real person needing a second role or outlet — after `staff-as-accounts` (#21) |
 | [Shared Menu Catalogue](./shared-menu-catalogue.md) | Feature | Anticipated | Menu | Per-outlet menu drift becomes a brand consistency problem |
 | [Cross-Outlet Customer Identity](./cross-outlet-customer-identity.md) | Feature | **Parked** | Customers | A loyalty feature with real value — and the design question settled first |
 | [Audit Log](./audit-log.md) | Feature | Anticipated | Security | The first franchise dispute, or headcount outgrowing "a small trusted team" |
@@ -29,7 +27,6 @@ Keep entries behavior-focused:
 | [Unreachable Backend Blames The Password](./unreachable-backend-blames-the-password.md) | **Defect** | Open | Auth | Anyone signs in on a bad connection — so, any shift |
 | [Attendance Gate: Two Clauses Never Walked](./attendance-gate-unwalked-clauses.md) | Verification gap | Accepted at archive | Attendance | The first real staff member checks in at a live outlet |
 | [Outlet Deletion: The Populated Refusal Never Walked](./outlet-deletion-refusal-unwalked-in-production.md) | Verification gap | Accepted at archive | Outlets | The first real staff member is added to a live outlet |
-| [Two Ways To Draw A Dropdown](./select-primitive-not-adopted-everywhere.md) | Tech debt | Open | Design system | The next change touching Access or Staff, or the first restyle of the control |
 
 The three billing items are grouped deliberately: v1 ships bills as **record-only**, and all three extensions were anticipated in the schema so none of them requires migrating historical bills. See [Limitations](../../docs/LIMITATIONS.md#bills-are-record-only) for exactly which columns exist ahead of need, and why.
 
@@ -43,3 +40,6 @@ Two entries carry a status worth reading before the trigger column:
 | Former item | Where it went |
 | --- | --- |
 | PWA Brand Icons | Absorbed into `project-foundations`. The real mark from the Shawarmania site is committed as `assets/brand/shawarmania-mark-512.png` and the whole icon set is derived from it, so the placeholders it was raised against no longer exist. |
+| Role Grants: One Login, Many Hats | Graduated into `multi-outlet-people` (#22) on 2026-07-29 — the trigger fired on both counts at once: a staffer splitting shifts across the outlets, and the owner day-running one. The same day the owner simplified the design: plain per-outlet **assignments** checked by membership, no session hats or switching. One login per person and no role hierarchy stay rejected exactly as recorded here. |
+| Owner Break-Glass Writes | Folded into `multi-outlet-people` (#22) by owner decision on 2026-07-29 — the two todos were one feature seen from two ends. The boundary carries over intact: non-cash only, always visibly the owner's, the drawer stays the Franchise Admin's alone. |
+| Two Ways To Draw A Dropdown | Completed by `staff-as-accounts` (#21): the People surface adopted the `Select` primitive and the roster surface was deleted, so the primitive is now the only `<select>` in the app. |

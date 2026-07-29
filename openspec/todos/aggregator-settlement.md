@@ -27,7 +27,7 @@ The failure mode to watch is not the inaccuracy itself, which is documented, but
 ## Decided since (owner, 2026-07-28)
 
 - **Manual settlement entry first** — confirmed; integration only if volume ever justifies it.
-- **The owner enters it, from anywhere.** Settlement and commission figures live in the owner's aggregator dashboard; no Franchise Admin can see or verify them, so making an FA transcribe them would be worse attribution, not better. The general principle set that day: *record money where the knowledge lives.* This makes the todo a customer of `owner-break-glass-writes.md` (Super Admin non-cash writes) — the two should graduate together or in that order.
+- **The owner enters it, from anywhere.** Settlement and commission figures live in the owner's aggregator dashboard; no Franchise Admin can see or verify them, so making an FA transcribe them would be worse attribution, not better. The general principle set that day: *record money where the knowledge lives.* This makes the todo a customer of the owner's non-cash write path, folded into `multi-outlet-people` (#22) on 2026-07-29 — which must land first.
 - **Settlement entries never touch drawer math.** They are non-cash by nature, and the day-close arithmetic only counts cash — so this capability is drawer-safe by construction, no new enforcement needed.
 
 ## Open questions
