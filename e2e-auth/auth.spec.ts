@@ -14,11 +14,33 @@ import { expect, test, type Page } from '@playwright/test'
 const PASSWORD = 'shawarmania-local'
 const NEW_PASSWORD = 'a-genuinely-set-password'
 
+/**
+ * `lands` is a locator rather than a string because one of these shells now
+ * renders its anchor text twice — the owner console's "All outlets" is its
+ * heading and an option in its outlet switcher — and a bare text match goes
+ * ambiguous the moment a surface grows a control that repeats its own title.
+ */
 const PERSONAS = {
-  owner: { email: 'owner@example.com', segment: 'owner', lands: 'All outlets' },
-  admin: { email: 'admin.kalyani@example.com', segment: 'admin', lands: 'Outlet details' },
-  biller: { email: 'biller.kalyani@example.com', segment: 'biller', lands: 'No shift open' },
-  staff: { email: 'staff.kalyani@example.com', segment: 'staff', lands: 'Hello, Synthetic Staff' },
+  owner: {
+    email: 'owner@example.com',
+    segment: 'owner',
+    lands: (page: Page) => page.getByRole('heading', { name: 'All outlets' }),
+  },
+  admin: {
+    email: 'admin.kalyani@example.com',
+    segment: 'admin',
+    lands: (page: Page) => page.getByText('Outlet details'),
+  },
+  biller: {
+    email: 'biller.kalyani@example.com',
+    segment: 'biller',
+    lands: (page: Page) => page.getByText('No shift open'),
+  },
+  staff: {
+    email: 'staff.kalyani@example.com',
+    segment: 'staff',
+    lands: (page: Page) => page.getByText('Hello, Synthetic Staff'),
+  },
 } as const
 
 /**
@@ -73,7 +95,9 @@ test.describe('signing in', () => {
       await signIn(page, persona.email)
 
       await expect(page).toHaveURL(new RegExp(`/${persona.segment}$`))
-      await expect(page.getByText(persona.lands)).toBeVisible()
+      // Matched by role: the owner console's "All outlets" is both its heading
+      // and an option in its outlet switcher, so a bare text match is ambiguous.
+      await expect(persona.lands(page)).toBeVisible()
       // Signed in, and it says who: the account menu is in every shell's chrome.
       await expect(page.getByTestId('account-menu')).toBeVisible()
       // And demo chrome is nowhere near a real session.
@@ -101,7 +125,7 @@ test.describe('signing in', () => {
 
     await page.goto('owner')
     await expect(page).toHaveURL(/\/staff$/)
-    await expect(page.getByText(PERSONAS.staff.lands)).toBeVisible()
+    await expect(PERSONAS.staff.lands(page)).toBeVisible()
 
     // And the owner's surfaces are not reachable by naming them either.
     await page.goto('staff/people')
@@ -125,7 +149,7 @@ test.describe('signing in', () => {
     await expect(page).toHaveURL(/\/admin$/)
 
     await page.reload()
-    await expect(page.getByText(PERSONAS.admin.lands)).toBeVisible()
+    await expect(PERSONAS.admin.lands(page)).toBeVisible()
 
     // The landing page does not detain someone who is already signed in.
     await page.goto('.')

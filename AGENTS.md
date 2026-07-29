@@ -128,9 +128,21 @@ Commands:
 
 ## Verification
 
-- **Any change**: `npm test` and `npm run lint` green, `npm run typecheck` clean, `npm run build` clean, `npm run format:check` clean. **Formatting is a CI gate too** — it is listed here because leaving it off this list is exactly how it went red unnoticed across two changes; `npm run format` fixes it.
-- **Auth-touching changes**: `npm run test:e2e:auth` against the local stack — four roles signing in, provisioning end to end, deactivation ending an open session.
-- **Tenancy-touching changes**: the RLS isolation test suite must pass. It asserts that a session scoped to one outlet cannot read another's rows for *every* outlet-scoped table — a new table without a matching test is an incomplete change.
+**This list mirrors `.github/workflows/ci.yml`, and is meant to stay that way.** A gate that CI runs and this list omits is a gate nobody runs before pushing — which is exactly how `format:check` stayed red across two changes before anybody noticed. If you add a CI step, add it here in the same commit.
+
+CI runs three jobs. The first two need nothing but the repo:
+
+- **Any change**: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` — then `npm run test:e2e`, which builds for production and drives it. `npm run format` fixes formatting.
+
+The third job needs Docker, which is why it is the easy one to skip and the one worth being strict about:
+
+```
+npm run db:start && npm run db:reset
+npm run test:db && npm run test:rls && npm run test:e2e:auth
+```
+
+- **`test:db` / `test:rls` — tenancy.** A session scoped to one outlet cannot read another's rows, for *every* outlet-scoped table; a new table without a matching test is an incomplete change. Run these whenever a migration, a policy or a table changes.
+- **`test:e2e:auth` — the four roles against a real backend.** Signing in, provisioning end to end, deactivation ending an open session. **Run it for far more than changes to sign-in.** It asserts on what each role *lands on* and on the chrome around it, so anything under `src/auth/`, any shell, any account menu, and **any surface that is a role's index** is inside its blast radius. `ui-owner-console-and-demo` rewrote the owner's index and broke this suite while every other gate stayed green; "it does not touch auth" was the wrong question.
 - **Billing or offline changes**: exercise the offline path — go offline, ring up bills, come back online, confirm exactly-once settlement with no duplicates.
 - **UI changes**: run the app and look at it, on a phone viewport and a tablet viewport, in both light and dark themes.
 - **Theme changes**: run the contrast validator, in both themes. AA is the floor, not the goal.
