@@ -17,6 +17,8 @@ Keep entries behavior-focused:
 | [Bill GST Breakup](./bill-gst-breakup.md) | Feature | Anticipated | Billing | The business registers for GST or a customer requires a tax invoice |
 | [Bill Digital Share](./bill-digital-share.md) | Feature | Anticipated | Billing | The owner wants digital receipts, or paper is being skipped anyway |
 | [Aggregator Settlement](./aggregator-settlement.md) | Feature | Anticipated | Reporting | Aggregator volume grows enough to distort a decision |
+| [Owner Break-Glass Writes](./owner-break-glass-writes.md) | Feature | Decided in principle | Roles | The owner first needs to record or fix something remotely — or Aggregator Settlement graduates |
+| [Role Grants: One Login, Many Hats](./role-grants-one-login-many-hats.md) | Feature | Direction settled | Roles | The first real person needing a second role or outlet — after `staff-as-accounts` (#21) |
 | [Shared Menu Catalogue](./shared-menu-catalogue.md) | Feature | Anticipated | Menu | Per-outlet menu drift becomes a brand consistency problem |
 | [Cross-Outlet Customer Identity](./cross-outlet-customer-identity.md) | Feature | **Parked** | Customers | A loyalty feature with real value — and the design question settled first |
 | [Audit Log](./audit-log.md) | Feature | Anticipated | Security | The first franchise dispute, or headcount outgrowing "a small trusted team" |

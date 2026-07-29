@@ -24,9 +24,15 @@ The failure mode to watch is not the inaccuracy itself, which is documented, but
 - **Bills are append-only with line-item snapshots.** A settlement record attaches alongside a bill rather than rewriting it, so reconciling a payout never mutates the sale.
 - The P&L already states which basis it is showing, so adding a gross/net distinction extends an existing habit rather than introducing one.
 
+## Decided since (owner, 2026-07-28)
+
+- **Manual settlement entry first** — confirmed; integration only if volume ever justifies it.
+- **The owner enters it, from anywhere.** Settlement and commission figures live in the owner's aggregator dashboard; no Franchise Admin can see or verify them, so making an FA transcribe them would be worse attribution, not better. The general principle set that day: *record money where the knowledge lives.* This makes the todo a customer of `owner-break-glass-writes.md` (Super Admin non-cash writes) — the two should graduate together or in that order.
+- **Settlement entries never touch drawer math.** They are non-cash by nature, and the day-close arithmetic only counts cash — so this capability is drawer-safe by construction, no new enforcement needed.
+
 ## Open questions
 
-- Manual settlement entry, or an aggregator integration? Manual is far cheaper, needs no partner approval, and is probably right first. Integration is the only version that scales.
+- Manual entry's exact home: an expense with a category, or a deduction on the revenue side? It changes what the P&L's "sales" line means.
 - Is settlement reconciled per order or per payout batch? Payouts are understood to batch across several days, which does not line up with the business-date model everything else uses — this needs confirming against a real settlement statement before any design.
 - Does the P&L show gross and net, or only net? Showing only net loses the item-level sales picture that made recording aggregator orders as bills worthwhile in the first place.
 - Commission rates differ by platform and change with contract terms. Is the rate per outlet, and does it need to be effective-dated so a historical period recomputes on the rate that applied then?

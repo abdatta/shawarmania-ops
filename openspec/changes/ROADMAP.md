@@ -48,7 +48,7 @@ Promoting a surface from `demo` to `live` is the visible outcome of every `*-liv
 | ✅ | 6 | C | `ui-billing-counter` | Opus | **archived 2026-07-28** | #3 | a full order can be rung and settled in demo mode on a tablet viewport; whole menu visible without scrolling; optional customer fields never block settling |
 | ✅ | 7 | C | `ui-outlet-operations` | Opus | **archived 2026-07-28** | #3 | menu, inventory, expenses and a full day-close all walkable in demo mode — including a low-stock warning and a deliberate cash mismatch |
 | ✅ | 8 | C | `ui-owner-console-and-demo` | Opus | **archived 2026-07-28** | #5, #6, #7 | **a single uninterrupted walkthrough of all four roles** on a deployed URL, with internally consistent mock data — a busy trading day whose bills, stock movements, cash close and alert all reconcile with each other |
-|  | 9 | D | `counter-devices-and-offline` | **Fable** | seeded | #4, #5 | an enrolled tablet reaches only its own outlet and revoke is immediate; offline → 20 bills → online → exactly 20 rows, zero duplicates; queue survives restart; a replayed UUID inserts once; an employee with no GPS fix checks in on the tablet |
+|  | 9 | D | `counter-devices-and-offline` | **Fable** | seeded | #4, #21 | an enrolled tablet reaches only its own outlet and revoke is immediate; offline → 20 bills → online → exactly 20 rows, zero duplicates; queue survives restart; a replayed UUID inserts once |
 |  | 10 | D | `billing-live` | **Fable** | seeded | #6, #7, #9 | a real order settles online and offline; totals match the domain tests; per-outlet bill numbers server-assigned with no gaps or collisions across two devices; a 00:20 bill carries the previous business date; a void never mutates the original |
 |  | 11 | E | `expenses-and-inventory-live` | Opus | seeded | #4, #7 | a cash expense moves the day's cash figures and a UPI expense does not; the movements ledger reconciles exactly to current quantity; a correction is a movement with a note; low-stock fires at threshold |
 |  | 12 | E | `daily-cash-live` | **Fable** | seeded | #10, #11 | expected closing matches the invariant from snapshotted inputs; the difference shows with the correct sign; **a bill syncing after close raises a reconciliation exception instead of rewriting a signed-off day** |
@@ -60,6 +60,7 @@ Promoting a surface from `demo` to `live` is the visible outcome of every `*-liv
 | ✅ | 18 | B | `generated-staff-codes` | Opus | **archived 2026-07-28** | #15 | an admin adds a person to the staff list **without being asked to invent anything**, the roster shows a readable code the app chose, and a Franchise Admin's attempt to change one is **refused by the database rather than by the form** |
 | ✅ | 19 | B | `blank-is-not-a-value` | Opus | **archived 2026-07-28** | #15, **#20** | **a blank or whitespace-only value cannot be written into any required field from any form in the app**, and the database refuses it too — proved by a hand-crafted request, not by the form refusing; and no placeholder can be mistaken for a value already filled in |
 | ✅ | 20 | B | `outlet-deletion` | Opus | **archived 2026-07-28** | #15 | **an outlet with nothing attached to it is deleted from the app by the owner**, and one with anything attached refuses with a sentence naming what is still there — the refusal proved by a hand-crafted request, not by a disabled button |
+|  | 21 | D | `staff-as-accounts` | **Fable** | seeded | #4, #5, #15 | **staff exist only as accounts** — a person is created once, with no separate roster row or linking step anywhere in the UI; every pre-merge attendance row survives, attributed to the same person; deactivating an account ends its session without removing the person from today's attendance surface; a departed person disappears from staff lists while every record stays; deleting an account with history is **refused by the database**, proved by a hand-crafted request; no salary or payroll field exists in schema or UI; an FA records a past-time check-in for someone else and the row shows who entered it; and **the four-role demo walkthrough still walks end to end** with staff restated as accounts and the trading day still reconciling |
 
 **Wave column** — which [execution wave](#execution-waves) the change belongs to. The same letter appears in the change's own proposal banner (`> **Model**: … · **Wave**: …`), and the validator checks the two agree. Unlike the status cells this one is **authored, not derived**: `npm run roadmap:sync` never touches it, so a row added later must carry its own letter — and it may well be an *earlier* letter than its neighbours, since new work is numbered by arrival, not by wave. Waves are readability; **the dependency cells are law**. Where they permit more parallelism than the letters suggest, the wave notes below say so.
 
@@ -98,8 +99,11 @@ graph TD
     C5 --> C8[8 ui-owner-console-and-demo]
     C6 --> C8
     C7 --> C8
+    C4 --> C21[21 staff-as-accounts]
+    C5 --> C21
+    C15 --> C21
     C4 --> C9[9 counter-devices-and-offline]
-    C5 --> C9
+    C21 --> C9
     C6 --> C10[10 billing-live]
     C7 --> C10
     C9 --> C10
@@ -126,7 +130,7 @@ Changes within a wave can run in any order or in parallel; a wave starts when it
 
 - **Wave C — the full experience, demo-gated (#6–#8)**: `ui-billing-counter` and `ui-outlet-operations` are **fully parallel** — each builds on the shell from #3 and touches no shared state, and since they depend only on #3 they **may run alongside Wave B** if bandwidth allows. `ui-owner-console-and-demo` follows, because the scenario dataset it builds must reconcile across every surface. Its dependency on #5 is about the attendance *surfaces and fixtures*, not the production rollout — #8 may start while #5's only open items are the 🧍 live-verification gates. **This wave ends with the demo milestone**: a deployed URL where the entire four-role experience walks through coherently.
 
-- **Wave D — the counter takes money (#9–#10)**: `counter-devices-and-offline`, then `billing-live`. #9 must land first: billing is offline-first by specification, so building settlement online-first and retrofitting a queue would mean rewriting the path the whole product depends on. #9 depends on #5 because it adds the attendance kiosk — the tablet path only makes sense once attendance itself exists.
+- **Wave D — the counter takes money (#21, #9, #10)**: `staff-as-accounts`, then `counter-devices-and-offline`, then `billing-live`. **#21 opens the wave**: it collapses the staff roster into accounts (owner decisions of 2026-07-28, recorded in its proposal), and #9's shift attribution must be designed against the merged people model rather than a table scheduled to die. It also lands while production staff data is still at baseline — the cheapest this migration will ever be. #9 before #10: billing is offline-first by specification, so building settlement online-first and retrofitting a queue would mean rewriting the path the whole product depends on. (#9's former dependency on #5 was the attendance kiosk, which the owner rejected on 2026-07-28 — the fallback for a phone that cannot check in is manager-entered attendance, built in #21.)
 
 - **Wave E — operations and insight go live (#11–#13)**: `expenses-and-inventory-live`, `daily-cash-live`, `owner-console-live`. **#12 is the payoff of the whole billing chain** — the screen that answers "is the drawer right?" — and needs both real bills and real cash expenses to mean anything. #11 depends only on #4 and #7, so it **may start alongside Wave D**.
 
@@ -141,8 +145,8 @@ Every live capability needs configuration rows before it does anything, and **a 
 | Outlet row (code, name, cutover) | everything | **#15** |
 | Outlet position and geofence | #5 check-in | #5 (capture screen) |
 | App accounts, one-time codes | everything | #4 |
-| Employee roster rows | #5 attendance | #5 |
-| **Account ↔ roster link** | #5 check-in | **#15** |
+| Employee roster rows | #5 attendance | #5 — **merged into accounts by #21**, which replaces this row and the next with a one-step People flow |
+| **Account ↔ roster link** | #5 check-in | **#15** — **removed by #21**: the account *is* the staff record |
 | Menu categories and items | #10 billing | #7 demo → **#10 makes it real** |
 | Inventory items and thresholds | #11 | #7 demo → #11 makes it real |
 | Counter device enrolment | #9, #10 | #9 |
