@@ -16,7 +16,7 @@ import type { DemoStore } from './store'
  * It enforces the permission boundary the database will, rather than relying on
  * the surface to hide a button. `menu_items` and `menu_categories` are writable
  * by the outlet's Franchise Admin and the Super Admin and by nobody else; a
- * Biller reads. The employees mock already takes the persona's role for exactly
+ * Biller reads. The accounts mock already takes the persona's role for exactly
  * this reason — a demo that let the wrong person write teaches a product this
  * one is not.
  *

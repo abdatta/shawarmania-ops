@@ -9,7 +9,9 @@
 -- rows without discovery queries:
 --   00000000-…  outlets
 --   10000000-…  auth users / profiles / counter devices
---   20000000-…  employees
+--   20000000-…  staff accounts that arrived via the roster merge (the ids the
+--               dead employees table used; kept so attendance history reads
+--               the same before and after staff-as-accounts)
 --   30000000-…  menu categories     31/32000000-…  menu items (kal / kpa)
 --   40000000-…  shifts              50000000-…     bills
 --   60000000-…  inventory           70000000-…     alerts
@@ -74,7 +76,16 @@ begin
       -- something to redeem. Nothing else signs in as these, so a test that
       -- redeems one and changes its password disturbs no other test.
       ('10000000-0000-4000-a000-00000000000c'::uuid, 'pending.kalyani@example.com'),
-      ('10000000-0000-4000-a000-00000000000d'::uuid, 'pending.kanchrapara@example.com')
+      ('10000000-0000-4000-a000-00000000000d'::uuid, 'pending.kanchrapara@example.com'),
+      -- The grillers, formerly unlinked roster rows. Staff are accounts now,
+      -- so they are accounts — Kalyani's still carrying the placeholder
+      -- address the roster merge would have minted (the state an admin must
+      -- notice and fix before a code can be issued), Kanchrapara's already
+      -- corrected to a real one. Their 20000000-… ids are the old roster
+      -- ids, exactly what the merge preserves.
+      ('20000000-0000-4000-a000-000000000002'::uuid,
+       '20000000-0000-4000-a000-000000000002@placeholder.invalid'),
+      ('20000000-0000-4000-a000-000000000004'::uuid, 'griller.kanchrapara@example.com')
     ) as p (id, email)
   loop
     insert into auth.users
@@ -102,23 +113,34 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- Profiles. The auth mirror: role + outlet + active flag.
+-- Profiles. The person record: role + outlet + active flag, and — since
+-- staff-as-accounts — the staff facts (code, job title, joining date,
+-- departure date). Codes are supplied rather than left to the issue trigger
+-- so tests can name them; person roles carry one, the owner and the counter
+-- devices carry none. `KPA-` codes at the `KAN`-prefix outlet are historical
+-- supplied values, which the schema honours — only *issued* codes read from
+-- the outlet prefix.
 
-insert into public.profiles (id, full_name, phone, role, outlet_id, is_active)
+insert into public.profiles
+  (id, full_name, phone, role, outlet_id, is_active,
+   staff_code, role_title, joined_on, left_on)
 values
-  ('10000000-0000-4000-a000-000000000001', 'Synthetic Owner',        '911111111001', 'super_admin',     null,                                        true),
-  ('10000000-0000-4000-a000-000000000002', 'Synthetic Admin Kal',    '911111111002', 'franchise_admin', '00000000-0000-4000-a000-000000000001', true),
-  ('10000000-0000-4000-a000-000000000003', 'Synthetic Admin Kpa',    '911111111003', 'franchise_admin', '00000000-0000-4000-a000-000000000002', true),
-  ('10000000-0000-4000-a000-000000000004', 'Counter Tablet Kal',     '911111111004', 'biller',          '00000000-0000-4000-a000-000000000001', true),
-  ('10000000-0000-4000-a000-000000000005', 'Counter Tablet Kpa',     '911111111005', 'biller',          '00000000-0000-4000-a000-000000000002', true),
-  ('10000000-0000-4000-a000-000000000006', 'Synthetic Staff Kal',    '911111111006', 'employee',        '00000000-0000-4000-a000-000000000001', true),
-  ('10000000-0000-4000-a000-000000000007', 'Synthetic Staff Kpa',    '911111111007', 'employee',        '00000000-0000-4000-a000-000000000002', true),
-  ('10000000-0000-4000-a000-000000000008', 'Deactivated Admin Kal',  '911111111008', 'franchise_admin', '00000000-0000-4000-a000-000000000001', false),
-  ('10000000-0000-4000-a000-000000000009', 'Revoked Tablet Kal',     '911111111009', 'biller',          '00000000-0000-4000-a000-000000000001', true),
-  ('10000000-0000-4000-a000-00000000000a', 'Synthetic Biller Kal',   '911111111010', 'biller',          '00000000-0000-4000-a000-000000000001', true),
-  ('10000000-0000-4000-a000-00000000000b', 'Synthetic Biller Kpa',   '911111111011', 'biller',          '00000000-0000-4000-a000-000000000002', true),
-  ('10000000-0000-4000-a000-00000000000c', 'Pending Staff Kal',      '911111111014', 'employee',        '00000000-0000-4000-a000-000000000001', true),
-  ('10000000-0000-4000-a000-00000000000d', 'Pending Staff Kpa',      '911111111015', 'employee',        '00000000-0000-4000-a000-000000000002', true);
+  ('10000000-0000-4000-a000-000000000001', 'Synthetic Owner',        '911111111001', 'super_admin',     null,                                        true,  null,       null,            null,               null),
+  ('10000000-0000-4000-a000-000000000002', 'Synthetic Admin Kal',    '911111111002', 'franchise_admin', '00000000-0000-4000-a000-000000000001', true,  'KAL-ADM',  'Manager',       current_date - 500, null),
+  ('10000000-0000-4000-a000-000000000003', 'Synthetic Admin Kpa',    '911111111003', 'franchise_admin', '00000000-0000-4000-a000-000000000002', true,  'KAN-ADM',  'Manager',       current_date - 450, null),
+  ('10000000-0000-4000-a000-000000000004', 'Counter Tablet Kal',     '911111111004', 'biller',          '00000000-0000-4000-a000-000000000001', true,  null,       null,            null,               null),
+  ('10000000-0000-4000-a000-000000000005', 'Counter Tablet Kpa',     '911111111005', 'biller',          '00000000-0000-4000-a000-000000000002', true,  null,       null,            null,               null),
+  ('10000000-0000-4000-a000-000000000006', 'Synthetic Staff Kal',    '911111111006', 'employee',        '00000000-0000-4000-a000-000000000001', true,  'KAL-E1',   'Counter staff', current_date - 200, null),
+  ('10000000-0000-4000-a000-000000000007', 'Synthetic Staff Kpa',    '911111111007', 'employee',        '00000000-0000-4000-a000-000000000002', true,  'KPA-E1',   'Counter staff', current_date - 150, null),
+  ('10000000-0000-4000-a000-000000000008', 'Deactivated Admin Kal',  '911111111008', 'franchise_admin', '00000000-0000-4000-a000-000000000001', false, 'KAL-ADM2', 'Manager',       current_date - 400, null),
+  ('10000000-0000-4000-a000-000000000009', 'Revoked Tablet Kal',     '911111111009', 'biller',          '00000000-0000-4000-a000-000000000001', true,  null,       null,            null,               null),
+  ('10000000-0000-4000-a000-00000000000a', 'Synthetic Biller Kal',   '911111111010', 'biller',          '00000000-0000-4000-a000-000000000001', true,  null,       null,            null,               null),
+  ('10000000-0000-4000-a000-00000000000b', 'Synthetic Biller Kpa',   '911111111011', 'biller',          '00000000-0000-4000-a000-000000000002', true,  null,       null,            null,               null),
+  ('10000000-0000-4000-a000-00000000000c', 'Pending Staff Kal',      '911111111014', 'employee',        '00000000-0000-4000-a000-000000000001', true,  'KAL-E3',   'Prep',          current_date - 10,  null),
+  ('10000000-0000-4000-a000-00000000000d', 'Pending Staff Kpa',      '911111111015', 'employee',        '00000000-0000-4000-a000-000000000002', true,  'KPA-E3',   'Prep',          current_date - 10,  null),
+  -- The grillers: staff accounts carrying the facts their roster rows held.
+  ('20000000-0000-4000-a000-000000000002', 'Synthetic Griller Kal',  '911111111012', 'employee',        '00000000-0000-4000-a000-000000000001', true,  'KAL-E2',   'Grill',         current_date - 400, null),
+  ('20000000-0000-4000-a000-000000000004', 'Synthetic Griller Kpa',  '911111111013', 'employee',        '00000000-0000-4000-a000-000000000002', true,  'KPA-E2',   'Grill',         current_date - 300, null);
 
 -- ---------------------------------------------------------------------------
 -- Outstanding one-time codes, one per outlet. Stored as a hash exactly as the
@@ -156,26 +178,6 @@ values
   ('10000000-0000-4000-a000-000000000009', '00000000-0000-4000-a000-000000000001',
    'Kalyani old tablet (revoked)', '10000000-0000-4000-a000-000000000002',
    now() - interval '90 days', now() - interval '7 days', now() - interval '8 days');
-
--- ---------------------------------------------------------------------------
--- Employee roster. Two per outlet; one of each pair has an app login.
-
-insert into public.employees
-  (id, outlet_id, profile_id, employee_code, full_name, phone, salary_paise,
-   role_title, employment_status, joined_on)
-values
-  ('20000000-0000-4000-a000-000000000001', '00000000-0000-4000-a000-000000000001',
-   '10000000-0000-4000-a000-000000000006', 'KAL-E1', 'Synthetic Staff Kal',
-   '911111111006', 1200000, 'Counter staff', 'active', current_date - 200),
-  ('20000000-0000-4000-a000-000000000002', '00000000-0000-4000-a000-000000000001',
-   null, 'KAL-E2', 'Synthetic Griller Kal', '911111111012', 1400000,
-   'Grill', 'active', current_date - 400),
-  ('20000000-0000-4000-a000-000000000003', '00000000-0000-4000-a000-000000000002',
-   '10000000-0000-4000-a000-000000000007', 'KPA-E1', 'Synthetic Staff Kpa',
-   '911111111007', 1200000, 'Counter staff', 'active', current_date - 150),
-  ('20000000-0000-4000-a000-000000000004', '00000000-0000-4000-a000-000000000002',
-   null, 'KPA-E2', 'Synthetic Griller Kpa', '911111111013', 1400000,
-   'Grill', 'active', current_date - 300);
 
 -- ---------------------------------------------------------------------------
 -- Menu. The real live menu (business facts), per outlet. All items are
@@ -455,16 +457,22 @@ values
 
 -- ---------------------------------------------------------------------------
 -- Attendance. Coordinates are synthetic offsets around the placeholder
--- outlet positions; the inputs sit beside the verdict on every row.
+-- outlet positions; the inputs sit beside the verdict on every row. Rows key
+-- on the person's account (person_id) since staff-as-accounts; the
+-- 20000000-… people keep the ids their roster rows had, so history reads
+-- the same before and after the merge. The griller's day is deliberately
+-- never checked out — 09_outlet_and_staff_setup.sql closes it to prove a
+-- check-out survives outlet deactivation; manual entries are exercised live
+-- in 06_write_contract_attendance_alerts.sql rather than seeded.
 
 insert into public.attendance
-  (outlet_id, employee_id, business_date, status,
+  (outlet_id, person_id, business_date, status,
    check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_distance_m, check_in_source,
    check_out_at, check_out_lat, check_out_lng, check_out_accuracy_m, check_out_distance_m, check_out_source,
    override_by, override_reason, override_at)
 values
   -- Kalyani staff, phone check-in inside the fence, full day
-  ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000001',
+  ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
    current_date - 1, 'present',
    ((current_date - 1) + time '09:05') at time zone 'Asia/Kolkata', 22.97505, 88.43460, 18, 12, 'phone',
    ((current_date - 1) + time '18:10') at time zone 'Asia/Kolkata', 22.97498, 88.43452, 22, 9, 'phone',
@@ -482,7 +490,7 @@ values
    null, null, null, null, null, null,
    null, null, null),
   -- Kanchrapara staff, out-of-fence check-in cleared by manager override
-  ('00000000-0000-4000-a000-000000000002', '20000000-0000-4000-a000-000000000003',
+  ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-000000000007',
    current_date - 1, 'present',
    ((current_date - 1) + time '09:10') at time zone 'Asia/Kolkata', 22.94680, 88.43510, 35, 220, 'phone',
    null, null, null, null, null, null,

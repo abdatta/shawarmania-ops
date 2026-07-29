@@ -178,8 +178,8 @@ describe('the employee home', () => {
 
   it('offers nothing further once the day is complete', async () => {
     const adapters = createMockAdapters()
-    const employee = await adapters.employees.getOwnEmployee()
-    const history = await adapters.attendance.listHistory(employee!.id)
+    // Staff are accounts: the employee's history is keyed by their own id.
+    const history = await adapters.attendance.listHistory(personaFixtures.employee.profile.id)
     // Yesterday is the completed day in the fixtures.
     const complete = history.find((record) => record.checkOut !== null)!
     vi.spyOn(adapters.attendance, 'getDay').mockResolvedValue(complete)
@@ -198,15 +198,5 @@ describe('the employee home', () => {
 
     // The no-background-tracking rule, asserted rather than trusted.
     expect(getCurrentPosition).not.toHaveBeenCalled()
-  })
-
-  it('says so when the employee is not on the roster', async () => {
-    const adapters = createMockAdapters()
-    vi.spyOn(adapters.employees, 'getOwnEmployee').mockResolvedValue(null)
-
-    renderHome(adapters)
-
-    expect(await screen.findByText(/not on .* staff list yet/)).toBeInTheDocument()
-    expect(screen.queryByTestId('attendance-action')).not.toBeInTheDocument()
   })
 })

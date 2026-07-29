@@ -1,4 +1,4 @@
-import { CheckCircle2, MapPin, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { CheckCircle2, MapPin, PencilLine, ShieldCheck, TriangleAlert } from 'lucide-react'
 
 import type { AttendanceEvent, AttendanceRecord } from '@/data-access/adapters'
 import { formatMetres, formatTime } from '@/domain'
@@ -39,6 +39,25 @@ export function EventEvidence({
   }
 
   const outside = isOutOfFence(event, radiusMetres)
+
+  // A manual entry has no evidence to show — the admin typed it in, and the
+  // enterer stamp is the accountability in evidence's place. It must read as
+  // visibly not a self check-in wherever attendance is rendered.
+  if (event.source === 'manual') {
+    return (
+      <div className="text-sm">
+        <span className="font-semibold text-content">{label}</span>{' '}
+        <span className="text-content">{formatTime(event.at)}</span>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-content-muted">
+          <span data-testid="entered-by" className="inline-flex items-center gap-1 font-semibold">
+            <PencilLine aria-hidden size={12} />
+            Entered by {event.enteredByName ?? 'a manager'}
+          </span>
+          <span>manual entry</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="text-sm">

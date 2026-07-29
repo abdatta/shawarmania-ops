@@ -4,7 +4,6 @@ import { createAddressLookupAdapter } from './address-lookup'
 import { createSupabaseAccountsAdapter } from './accounts'
 import { createSupabaseAttendanceAdapter } from './attendance'
 import { createSupabaseBillingAdapter } from './billing'
-import { createSupabaseEmployeesAdapter } from './employees'
 import { createSupabaseMenuAdapter } from './menu'
 import {
   createSupabaseDailyCashAdapter,
@@ -25,7 +24,6 @@ export function createSupabaseAdapters(): DataAdapters {
     outlets: createSupabaseOutletsAdapter(client),
     accounts: createSupabaseAccountsAdapter(client),
     attendance: createSupabaseAttendanceAdapter(client),
-    employees: createSupabaseEmployeesAdapter(client),
     // Not connected yet, and says so: the menu surfaces are `demo`-gated and
     // #10/#11 replace this. See supabase-adapters/menu.ts.
     menu: createSupabaseMenuAdapter(),

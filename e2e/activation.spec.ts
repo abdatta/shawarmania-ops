@@ -17,7 +17,7 @@ test('an admin is handed a link, a scannable code, and the code itself', async (
   await page.goto('demo/owner/people')
   await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Add account' }).click()
+  await page.getByRole('button', { name: 'Add person' }).click()
   await page.getByLabel('Full name').fill('Demo Fresh Hire')
   await page.getByLabel('Email', { exact: true }).fill('demo.fresh.hire@example.com')
   await page.getByLabel('Outlet', { exact: true }).selectOption({ label: 'Shawarmania Kalyani' })
@@ -57,7 +57,7 @@ test('producing the handover leaves the app origin alone', async ({ page, baseUR
   })
 
   await page.goto('demo/owner/people')
-  await page.getByRole('button', { name: 'Add account' }).click()
+  await page.getByRole('button', { name: 'Add person' }).click()
   await page.getByLabel('Full name').fill('Demo Second Starter')
   await page.getByLabel('Email', { exact: true }).fill('demo.second.starter@example.com')
   await page.getByLabel('Outlet', { exact: true }).selectOption({ label: 'Shawarmania Kalyani' })

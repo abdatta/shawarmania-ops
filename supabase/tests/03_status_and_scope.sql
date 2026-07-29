@@ -100,18 +100,18 @@ select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
 
 select is(
   (select count(*) from public.attendance
-    where employee_id <> '20000000-0000-4000-a000-000000000001'),
+    where person_id <> '10000000-0000-4000-a000-000000000006'),
   0::bigint,
   'employee sees no colleague''s attendance, same outlet included');
 
 select ok(
   (select count(*) from public.attendance
-    where employee_id = '20000000-0000-4000-a000-000000000001') >= 1,
+    where person_id = '10000000-0000-4000-a000-000000000006') >= 1,
   'employee sees their own attendance');
 
 select is(
-  (select count(*) from public.employees), 1::bigint,
-  'employee sees exactly their own roster row');
+  (select count(*) from public.profiles), 1::bigint,
+  'employee sees exactly their own person record');
 
 select is((select count(*) from public.bills), 0::bigint,
   'employee reads no bills');
@@ -153,10 +153,45 @@ select throws_ok($q$
           '00000000-0000-4000-a000-000000000001')
 $q$, '42501', null, 'no client can insert a profile');
 
+-- Since staff-as-accounts the profile row splits in two along the column
+-- axis: staff facts (name, code, title, dates) are the admin's own RLS
+-- write, identity and access (role, outlet, is_active) remain privileged.
+-- The column-level grant is the boundary between them.
+
 select throws_ok($q$
   update public.profiles set is_active = false
    where id = '10000000-0000-4000-a000-000000000006'
-$q$, '42501', null, 'no client can update a profile');
+$q$, '42501', null, 'no client can touch is_active — the panic lever stays privileged');
+
+select throws_ok($q$
+  update public.profiles set role = 'franchise_admin'
+   where id = '10000000-0000-4000-a000-000000000006'
+$q$, '42501', null, 'no client can change a role');
+
+select throws_ok($q$
+  update public.profiles set outlet_id = '00000000-0000-4000-a000-000000000002'
+   where id = '10000000-0000-4000-a000-000000000006'
+$q$, '42501', null, 'no client can move a person between outlets');
+
+select is(
+  pg_temp.rows_touched($q$
+    update public.profiles set role_title = 'Senior Griller'
+     where id = '20000000-0000-4000-a000-000000000002' $q$),
+  1::bigint,
+  'a franchise admin edits the staff facts of their own outlet''s person');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
+  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+
+select is(
+  pg_temp.rows_touched($q$
+    update public.profiles set full_name = 'Self Renamed'
+     where id = '10000000-0000-4000-a000-000000000006' $q$),
+  0::bigint,
+  'an employee cannot edit their own staff facts — the row is an admin''s to maintain');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
+  'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
 
 select throws_ok($q$
   update public.counter_devices set revoked_at = null

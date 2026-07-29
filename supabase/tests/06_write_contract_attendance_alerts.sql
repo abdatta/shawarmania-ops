@@ -1,4 +1,4 @@
--- Attendance evidence and guards, and the alert thread's narrow write paths.
+﻿-- Attendance evidence and guards, and the alert thread's narrow write paths.
 
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -56,9 +56,9 @@ select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
 -- An employee checks themselves in from their phone, evidence attached.
 select lives_ok($q$
   insert into public.attendance
-    (outlet_id, employee_id, business_date, status,
+    (outlet_id, person_id, business_date, status,
      check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_distance_m, check_in_source)
-  values ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000001',
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
           public.app_business_date(now(), time '04:00'), 'present',
           now(), 22.97502, 88.43455, 15, 8, 'phone')
 $q$, 'an employee checks in with coordinates, accuracy, distance and source stored');
@@ -70,13 +70,13 @@ select lives_ok($q$
          check_out_lat = 22.97501, check_out_lng = 88.43457,
          check_out_accuracy_m = 20, check_out_distance_m = 10,
          check_out_source = 'phone'
-   where employee_id = '20000000-0000-4000-a000-000000000001'
+   where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
 $q$, 'the employee records their own check-out');
 
 -- Not for a colleague, though.
 select throws_ok($q$
-  insert into public.attendance (outlet_id, employee_id, business_date, status, check_in_at, check_in_source)
+  insert into public.attendance (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
   values ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000002',
           public.app_business_date(now(), time '04:00'), 'present', now(), 'phone')
 $q$, '42501', null, 'an employee cannot check a colleague in');
@@ -84,10 +84,10 @@ $q$, '42501', null, 'an employee cannot check a colleague in');
 -- And not twice.
 select throws_ok($q$
   insert into public.attendance
-    (outlet_id, employee_id, business_date, status, check_in_at, check_in_source)
-  values ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000001',
+    (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
           public.app_business_date(now(), time '04:00'), 'present', now(), 'phone')
-$q$, '23505', null, 'one attendance row per employee per business day');
+$q$, '23505', null, 'one attendance row per person per business day');
 
 -- An employee cannot bless their own out-of-fence check-in.
 select throws_ok($q$
@@ -95,7 +95,7 @@ select throws_ok($q$
      set override_by = '10000000-0000-4000-a000-000000000006',
          override_reason = 'self-approved',
          override_at = now()
-   where employee_id = '20000000-0000-4000-a000-000000000001'
+   where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
 $q$, 'P0001', null, 'an employee cannot record an override');
 
@@ -105,7 +105,7 @@ select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
 
 select lives_ok($q$
   insert into public.attendance
-    (outlet_id, employee_id, business_date, status, check_in_at, check_in_source)
+    (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
   values ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000002',
           public.app_business_date(now(), time '04:00'), 'present', now(), 'counter_tablet')
 $q$, 'the counter tablet checks an employee in');
@@ -113,7 +113,7 @@ $q$, 'the counter tablet checks an employee in');
 -- The tablet cannot masquerade as a phone check-in.
 select throws_ok($q$
   insert into public.attendance
-    (outlet_id, employee_id, business_date, status, check_in_at, check_in_source)
+    (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
   values ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000004',
           public.app_business_date(now(), time '04:00'), 'present', now(), 'phone')
 $q$, '42501', null, 'the tablet cannot record a phone-sourced check-in (and not for another outlet''s employee)');
@@ -128,7 +128,7 @@ select lives_ok($q$
      set override_by = '10000000-0000-4000-a000-000000000002',
          override_reason = 'GPS drift, staff present (synthetic test)',
          override_at = now()
-   where employee_id = '20000000-0000-4000-a000-000000000001'
+   where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = current_date - 1
 $q$, 'the franchise admin records an override with attribution');
 
@@ -137,7 +137,7 @@ select throws_ok($q$
      set override_by = '10000000-0000-4000-a000-000000000001',
          override_reason = 'forged attribution',
          override_at = now()
-   where employee_id = '20000000-0000-4000-a000-000000000002'
+   where person_id = '20000000-0000-4000-a000-000000000002'
      and business_date = current_date - 1
 $q$, 'P0001', null, 'an override under someone else''s name is refused');
 
@@ -145,21 +145,142 @@ $q$, 'P0001', null, 'an override under someone else''s name is refused');
 select throws_ok($q$
   update public.attendance
      set business_date = current_date - 3
-   where employee_id = '20000000-0000-4000-a000-000000000001'
+   where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = current_date - 1
 $q$, 'P0001', null, 'attendance identity is immutable');
 
 select throws_ok($q$
   insert into public.attendance
-    (outlet_id, employee_id, business_date, status, check_in_at, check_in_source)
-  values ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000001',
+    (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
           current_date - 10, 'present', now(), 'phone')
 $q$, 'P0001', null, 'a business date contradicting the check-in time is refused');
+
+-- ---------------------------------------------------------------------------
+-- Manual entry: the admin records the event, the row records the admin.
+-- Still impersonating the Kalyani franchise admin. Pending Staff Kal
+-- (…000c) has no attendance anywhere, which makes it the clean target.
+
+-- The refusals first, so no row lands before the one that should.
+
+select throws_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000c',
+          public.app_business_date(now() + interval '2 hours', time '04:00'), 'present',
+          now() + interval '2 hours', 'manual')
+$q$, 'P0001', null, 'a manual entry cannot be recorded for the future');
+
+select throws_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000c',
+          current_date - 1,'present',
+          ((current_date - 1) + time '10:00') at time zone 'Asia/Kolkata', 'manual')
+$q$, 'P0001', null, 'a manual entry belongs to the current business day, not a past one');
+
+select throws_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status,
+     check_in_at, check_in_lat, check_in_lng, check_in_source)
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000c',
+          public.app_business_date(now(), time '04:00'), 'present',
+          now() - interval '3 hours', 22.9750, 88.4345, 'manual')
+$q$, '23514', null, 'a manual entry carries no coordinates — the admin was not standing there');
+
+-- The entry itself: a past time on today's business day. The forged enterer
+-- in the payload is overwritten by the stamp, not honoured.
+select lives_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status, check_in_at, check_in_source,
+     check_in_entered_by, check_in_entered_by_name)
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000c',
+          public.app_business_date(now(), time '04:00'), 'present',
+          now() - interval '3 hours', 'manual',
+          '10000000-0000-4000-a000-000000000001', 'Forged Enterer')
+$q$, 'a franchise admin records a past-time manual check-in for someone else');
+
+select is(
+  (select check_in_entered_by from public.attendance
+    where person_id = '10000000-0000-4000-a000-00000000000c'
+      and business_date = public.app_business_date(now(), time '04:00')),
+  '10000000-0000-4000-a000-000000000002'::uuid,
+  'the enterer stamp is the writing session, not what the payload claimed');
+
+select is(
+  (select check_in_entered_by_name from public.attendance
+    where person_id = '10000000-0000-4000-a000-00000000000c'
+      and business_date = public.app_business_date(now(), time '04:00')),
+  'Synthetic Admin Kal',
+  'the enterer''s name is snapshotted beside the event');
+
+select is(
+  (select status from public.attendance
+    where person_id = '10000000-0000-4000-a000-00000000000c'
+      and business_date = public.app_business_date(now(), time '04:00')),
+  'present'::public.attendance_status,
+  'the geofence does not judge a manual entry — no evidence, no denial');
+
+-- An enterer stamp on a non-manual event is refused by name.
+select throws_ok($q$
+  update public.attendance
+     set check_out_at = now(), check_out_source = 'counter_tablet',
+         check_out_entered_by = '10000000-0000-4000-a000-000000000002',
+         check_out_entered_by_name = 'Synthetic Admin Kal'
+   where person_id = '10000000-0000-4000-a000-00000000000c'
+     and business_date = public.app_business_date(now(), time '04:00')
+$q$, 'P0001', null, 'an enterer stamp on a non-manual event is refused');
+
+-- The Super Admin has the same capability at any outlet.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid,
+  'super_admin', null);
+
+select lives_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
+  values ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-00000000000d',
+          public.app_business_date(now(), time '04:00'), 'present',
+          now() - interval '2 hours', 'manual')
+$q$, 'the super admin records a manual entry at any outlet');
+
+select is(
+  (select check_in_entered_by_name from public.attendance
+    where person_id = '10000000-0000-4000-a000-00000000000d'
+      and business_date = public.app_business_date(now(), time '04:00')),
+  'Synthetic Owner',
+  'the super admin''s manual entry is stamped too');
+
+-- Neither non-admin role can fabricate one, by any path. The person the
+-- manual check-in was recorded for updates their own row — the update policy
+-- permits the row, so what refuses the manual check-out is the guard's role
+-- gate, not an accident of policy branch shapes.
+select pg_temp.impersonate('10000000-0000-4000-a000-00000000000c'::uuid,
+  'employee', '00000000-0000-4000-a000-000000000001'::uuid);
+
+select throws_ok($q$
+  update public.attendance
+     set check_out_at = now(), check_out_source = 'manual'
+   where person_id = '10000000-0000-4000-a000-00000000000c'
+     and business_date = public.app_business_date(now(), time '04:00')
+$q$, 'P0001', null, 'an employee cannot hand-craft a manual event, even on their own row');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
+  'biller', '00000000-0000-4000-a000-000000000001'::uuid);
+
+-- The guard answers before the policy can (BEFORE triggers run ahead of the
+-- WITH CHECK), so the refusal arrives as the guard's named error rather than
+-- a bare 42501 — and either boundary alone would refuse this.
+select throws_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000c',
+          public.app_business_date(now(), time '04:00'), 'present', now(), 'manual')
+$q$, 'P0001', null, 'the counter tablet cannot record a manual entry');
 
 reset role;
 
 select throws_ok($q$
-  delete from public.attendance where employee_id = '20000000-0000-4000-a000-000000000001'
+  delete from public.attendance where person_id = '10000000-0000-4000-a000-000000000006'
 $q$, 'P0001', null, 'attendance rows cannot be deleted, even by the owner');
 
 -- ---------------------------------------------------------------------------

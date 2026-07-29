@@ -93,25 +93,25 @@ select is(public.app_distance_m(22.9750, 88.4345, 22.9750, null), null,
 -- was recomputed on insert.
 
 select is(round((select check_in_distance_m from public.attendance
-                  where employee_id = '20000000-0000-4000-a000-000000000001'
+                  where person_id = '10000000-0000-4000-a000-000000000006'
                     and business_date = current_date - 1)::numeric, 2),
   11.65::numeric,
   'a seeded in-fence check-in stores the computed distance, not the claimed one');
 
 select is(round((select check_in_distance_m from public.attendance
-                  where employee_id = '20000000-0000-4000-a000-000000000003'
+                  where person_id = '10000000-0000-4000-a000-000000000007'
                     and business_date = current_date - 1)::numeric, 2),
   293.77::numeric,
   'the seeded row claiming 220 m stores the 293.77 m its own coordinates imply');
 
 select is((select status::text from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000004'
+            where person_id = '20000000-0000-4000-a000-000000000004'
               and business_date = current_date - 1),
   'absent',
   'a seeded out-of-fence check-in with no override is not counted present');
 
 select is((select check_in_distance_m from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000002'
+            where person_id = '20000000-0000-4000-a000-000000000002'
               and business_date = current_date - 1),
   null,
   'a counter-tablet check-in with no coordinates stores no distance');
@@ -124,21 +124,21 @@ select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
 
 select lives_ok($q$
   insert into public.attendance
-    (outlet_id, employee_id, business_date, status,
+    (outlet_id, person_id, business_date, status,
      check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_distance_m, check_in_source)
-  values ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000001',
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
           public.app_business_date(now(), time '04:00'), 'present',
           now(), 22.9840, 88.4345, 20, 3, 'phone')
 $q$, 'the write itself is allowed — the policy is not what refuses this');
 
 select is((select status::text from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000001'
+            where person_id = '10000000-0000-4000-a000-000000000006'
               and business_date = public.app_business_date(now(), time '04:00')),
   'absent',
   'a present claim from a kilometre away is stored as absent');
 
 select is(round((select check_in_distance_m from public.attendance
-                  where employee_id = '20000000-0000-4000-a000-000000000001'
+                  where person_id = '10000000-0000-4000-a000-000000000006'
                     and business_date = public.app_business_date(now(), time '04:00'))::numeric, 2),
   1000.75::numeric,
   'and the claimed 3 m is replaced by the 1000.75 m its coordinates imply');
@@ -150,14 +150,14 @@ select is(round((select check_in_distance_m from public.attendance
 -- validate_business_date trigger checks that the two agree.
 select lives_ok($q$
   insert into public.attendance
-    (outlet_id, employee_id, business_date, status, check_in_at, check_in_source)
-  values ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000001',
+    (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
           public.app_business_date(now() - interval '5 days', time '04:00'), 'present',
           now() - interval '5 days', 'phone')
 $q$, 'a phone check-in with no position is accepted as a record');
 
 select is((select status::text from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000001'
+            where person_id = '10000000-0000-4000-a000-000000000006'
               and business_date = public.app_business_date(now() - interval '5 days', time '04:00')),
   'absent',
   'but a phone check-in with no coordinates is not counted present');
@@ -169,7 +169,7 @@ select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid,
 
 select lives_ok($q$
   insert into public.attendance
-    (outlet_id, employee_id, business_date, status, check_in_at, check_in_source)
+    (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
   values ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000002',
           public.app_business_date(now(), time '04:00'), 'present', now(), 'counter_tablet')
 $q$, 'the counter tablet checks someone in without coordinates');
@@ -180,7 +180,7 @@ select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid,
   'franchise_admin', '00000000-0000-4000-a000-000000000001'::uuid);
 
 select is((select status::text from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000002'
+            where person_id = '20000000-0000-4000-a000-000000000002'
               and business_date = public.app_business_date(now(), time '04:00')),
   'present',
   'and that stays present — the tablet is the trusted device, not the fence');
@@ -202,21 +202,21 @@ select pg_temp.impersonate('10000000-0000-4000-a000-000000000007'::uuid,
 
 select lives_ok($q$
   insert into public.attendance
-    (outlet_id, employee_id, business_date, status,
+    (outlet_id, person_id, business_date, status,
      check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
-  values ('00000000-0000-4000-a000-000000000002', '20000000-0000-4000-a000-000000000003',
+  values ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-000000000007',
           public.app_business_date(now(), time '04:00'), 'present',
           now(), 28.6139, 77.2090, 20, 'phone')
 $q$, 'an employee checks in at an unsurveyed outlet');
 
 select is((select status::text from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000003'
+            where person_id = '10000000-0000-4000-a000-000000000007'
               and business_date = public.app_business_date(now(), time '04:00')),
   'present',
   'and is counted present, however far away, because there is nothing to judge against');
 
 select is((select check_in_distance_m from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000003'
+            where person_id = '10000000-0000-4000-a000-000000000007'
               and business_date = public.app_business_date(now(), time '04:00')),
   null,
   'with the distance stored as unknown rather than guessed at');
@@ -228,13 +228,13 @@ select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid,
 select throws_ok($q$
   update public.attendance
      set check_in_lat = null, check_in_lng = null
-   where employee_id = '20000000-0000-4000-a000-000000000001'
+   where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
 $q$, 'P0001', null, 'captured check-in evidence cannot be erased');
 
 select throws_ok($q$
   update public.attendance set status = 'present'
-   where employee_id = '20000000-0000-4000-a000-000000000001'
+   where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
 $q$, 'P0001', null, 'an employee cannot set their own attendance status');
 
@@ -243,12 +243,12 @@ select lives_ok($q$
   update public.attendance
      set check_out_at = now(), check_out_lat = 28.6139, check_out_lng = 77.2090,
          check_out_accuracy_m = 30, check_out_distance_m = 5, check_out_source = 'phone'
-   where employee_id = '20000000-0000-4000-a000-000000000001'
+   where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
 $q$, 'a distant check-out is recorded rather than blocked (design D3)');
 
 select is(round((select check_out_distance_m from public.attendance
-                  where employee_id = '20000000-0000-4000-a000-000000000001'
+                  where person_id = '10000000-0000-4000-a000-000000000006'
                     and business_date = public.app_business_date(now(), time '04:00'))::numeric, 0),
   1285955::numeric,
   'and its distance is computed too, so the manager sees the flag');
@@ -265,7 +265,7 @@ select throws_ok($q$
          override_reason = '   ',
          override_at = now(),
          status = 'present'
-   where employee_id = '20000000-0000-4000-a000-000000000001'
+   where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
 $q$, '23514', null, 'an override with a blank reason is not a recorded decision');
 
@@ -275,18 +275,18 @@ select lives_ok($q$
          override_reason = 'Delivery run, confirmed by phone (synthetic test)',
          override_at = now(),
          status = 'present'
-   where employee_id = '20000000-0000-4000-a000-000000000001'
+   where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
 $q$, 'a manager clears the block with a reason, and the row becomes present');
 
 select is((select status::text from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000001'
+            where person_id = '10000000-0000-4000-a000-000000000006'
               and business_date = public.app_business_date(now(), time '04:00')),
   'present',
   'the overridden row stays present — the fence does not re-deny it');
 
 select is((select override_by_name from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000001'
+            where person_id = '10000000-0000-4000-a000-000000000006'
               and business_date = public.app_business_date(now(), time '04:00')),
   'Synthetic Admin Kal',
   'the approver''s name is snapshot onto the row, so the employee can read it too');
@@ -296,12 +296,12 @@ select lives_ok($q$
   update public.attendance
      set override_reason = 'Reworded, still the same approver (synthetic test)',
          override_by_name = 'Somebody Else Entirely'
-   where employee_id = '20000000-0000-4000-a000-000000000001'
+   where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
 $q$, 'an override reason may be amended by the approving manager');
 
 select is((select override_by_name from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000001'
+            where person_id = '10000000-0000-4000-a000-000000000006'
               and business_date = public.app_business_date(now(), time '04:00')),
   'Synthetic Admin Kal',
   'and a client-supplied approver name does not survive');
@@ -309,12 +309,12 @@ select is((select override_by_name from public.attendance
 -- The fence denies a present claim; it never imposes one.
 select lives_ok($q$
   update public.attendance set status = 'half_day'
-   where employee_id = '20000000-0000-4000-a000-000000000002'
+   where person_id = '20000000-0000-4000-a000-000000000002'
      and business_date = current_date - 1
 $q$, 'a manager marks an in-fence day half_day');
 
 select is((select status::text from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000002'
+            where person_id = '20000000-0000-4000-a000-000000000002'
               and business_date = current_date - 1),
   'half_day',
   'and the geofence does not overrule it back to present');
@@ -367,18 +367,18 @@ select lives_ok($q$
   update public.attendance
      set check_out_at = now(), check_out_lat = 22.94690, check_out_lng = 88.43500,
          check_out_accuracy_m = 25, check_out_source = 'phone'
-   where employee_id = '20000000-0000-4000-a000-000000000003'
+   where person_id = '10000000-0000-4000-a000-000000000007'
      and business_date = current_date - 1
 $q$, 'a check-out is added to a settled row after the outlet moved');
 
 select is(round((select check_in_distance_m from public.attendance
-                  where employee_id = '20000000-0000-4000-a000-000000000003'
+                  where person_id = '10000000-0000-4000-a000-000000000007'
                     and business_date = current_date - 1)::numeric, 2),
   293.77::numeric,
   'moving an outlet does not retroactively rewrite a settled check-in distance');
 
 select is((select status::text from public.attendance
-            where employee_id = '20000000-0000-4000-a000-000000000003'
+            where person_id = '10000000-0000-4000-a000-000000000007'
               and business_date = current_date - 1),
   'present',
   'nor does it retroactively un-present a day a manager already blessed');

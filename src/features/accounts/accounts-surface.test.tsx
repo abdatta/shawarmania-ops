@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
 import type { DataAdapters } from '@/data-access/adapters'
-import { createMockAdapters, OUTLET_KALYANI_ID } from '@/data-access/mock'
+import { createMockAdapters, DEMO_HELPER_ACCOUNT_ID, OUTLET_KALYANI_ID } from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Role, Session } from '@/session/session'
@@ -13,10 +13,13 @@ import type { Role, Session } from '@/session/session'
 import { AccountsSurface } from './accounts-surface'
 
 /**
- * People and Access are the same component seen through two different
- * authorities. What is asserted here is that the *form* never offers a
- * Franchise Admin something the server would refuse — the server refusing it
- * anyway is proved in supabase/tests/rest/account-flows.test.ts.
+ * People is one component seen through two authorities — the owner across all
+ * outlets, a Franchise Admin their own. What is asserted here is that the
+ * *form* never offers a Franchise Admin something the server would refuse —
+ * the server refusing it anyway is proved in the REST suite.
+ *
+ * Staff exist only as accounts: creating a person is one act, the staff facts
+ * live on the row, and there is no roster choice and no linking step.
  */
 
 function sessionFor(role: Role): Session {
@@ -36,7 +39,7 @@ async function openRowActions(user: ReturnType<typeof userEvent.setup>, row: HTM
   await user.click(within(row).getByRole('button', { name: /^Actions for /i }))
 }
 
-function renderSurface(role: Role, adapters: DataAdapters = createMockAdapters()) {
+function renderSurface(role: Role, adapters: DataAdapters = createMockAdapters(role)) {
   return {
     adapters,
     ...render(
@@ -51,14 +54,16 @@ function renderSurface(role: Role, adapters: DataAdapters = createMockAdapters()
   }
 }
 
-describe('the account surface', () => {
-  it('is People for the owner and Access for a manager', async () => {
+describe('the People surface', () => {
+  it('is People for both authorities — the scope differs, not the name', async () => {
     const { unmount } = renderSurface('super_admin')
     expect(await screen.findByRole('heading', { name: 'People' })).toBeInTheDocument()
+    expect(screen.getByText(/across all outlets/)).toBeInTheDocument()
     unmount()
 
     renderSurface('franchise_admin')
-    expect(await screen.findByRole('heading', { name: 'Access' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'People' })).toBeInTheDocument()
+    expect(screen.getByText(/This outlet’s people/)).toBeInTheDocument()
   })
 
   it('shows the outlet column only where more than one outlet is in scope', async () => {
@@ -67,16 +72,23 @@ describe('the account surface', () => {
     unmount()
 
     renderSurface('franchise_admin')
-    await screen.findByRole('heading', { name: 'Access' })
+    await screen.findByRole('heading', { name: 'People' })
     expect(screen.queryByRole('columnheader', { name: 'Outlet' })).not.toBeInTheDocument()
+  })
+
+  it('shows the staff facts on the list — code and job title beside the name', async () => {
+    renderSurface('franchise_admin')
+
+    const row = (await screen.findByText('Demo Griller')).closest('tr')!
+    expect(within(row).getByText('KAL-02 · Grill')).toBeInTheDocument()
   })
 
   it('offers a Franchise Admin no role beyond Biller and Employee', async () => {
     const user = userEvent.setup()
     renderSurface('franchise_admin')
-    await screen.findByRole('heading', { name: 'Access' })
+    await screen.findByRole('heading', { name: 'People' })
 
-    await user.click(screen.getByRole('button', { name: 'Add account' }))
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
     const roles = within(screen.getByLabelText('Role'))
       .getAllByRole('option')
       .map((option) => option.textContent)
@@ -86,9 +98,9 @@ describe('the account surface', () => {
   it('pins a Franchise Admin to their own outlet', async () => {
     const user = userEvent.setup()
     renderSurface('franchise_admin')
-    await screen.findByRole('heading', { name: 'Access' })
+    await screen.findByRole('heading', { name: 'People' })
 
-    await user.click(screen.getByRole('button', { name: 'Add account' }))
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
     const outlet = screen.getByLabelText('Outlet') as HTMLSelectElement
     expect(outlet).toBeDisabled()
     expect(outlet.value).toBe(OUTLET_KALYANI_ID)
@@ -101,7 +113,7 @@ describe('the account surface', () => {
     renderSurface('super_admin')
     await screen.findByRole('heading', { name: 'People' })
 
-    await user.click(screen.getByRole('button', { name: 'Add account' }))
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
     const roles = within(screen.getByLabelText('Role'))
       .getAllByRole('option')
       .map((option) => option.textContent)
@@ -113,17 +125,62 @@ describe('the account surface', () => {
     expect(screen.queryByLabelText('Outlet')).not.toBeInTheDocument()
   })
 
+  it('asks for the staff facts where the person is staff, and not where they are a device', async () => {
+    const user = userEvent.setup()
+    renderSurface('franchise_admin')
+    await screen.findByRole('heading', { name: 'People' })
+
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
+    expect(screen.getByLabelText('Job title (optional)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Joined on (optional)')).toBeInTheDocument()
+    // And never a staff code: the database issues it.
+    expect(screen.queryByLabelText(/Staff code/)).not.toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Role'), 'biller')
+    expect(screen.queryByLabelText('Job title (optional)')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Joined on (optional)')).not.toBeInTheDocument()
+  })
+
+  it('creates a person in one act, staff facts and all', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const provision = vi.spyOn(adapters.accounts, 'provision')
+    renderSurface('franchise_admin', adapters)
+    await screen.findByRole('heading', { name: 'People' })
+
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
+    await user.type(screen.getByLabelText('Full name'), 'Demo Newcomer')
+    await user.type(screen.getByLabelText('Email'), 'newcomer@example.com')
+    await user.type(screen.getByLabelText('Job title (optional)'), 'Grill')
+    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
+
+    await waitFor(() =>
+      expect(provision).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fullName: 'Demo Newcomer',
+          role: 'employee',
+          outletId: OUTLET_KALYANI_ID,
+          roleTitle: 'Grill',
+        }),
+      ),
+    )
+    expect(await screen.findByTestId('issued-code')).toBeInTheDocument()
+
+    // One act: the person is on the list at once, carrying an issued code —
+    // no second surface, no linking step, nothing left to finish.
+    const row = (await screen.findByText('Demo Newcomer')).closest('tr')!
+    expect(within(row).getByText(/KAL-[0-9A-HJKMNP-TV-Z]{4}/)).toBeInTheDocument()
+  })
+
   it('shows a newly issued code once, and says it cannot be looked up again', async () => {
     const user = userEvent.setup()
     renderSurface('super_admin')
     await screen.findByRole('heading', { name: 'People' })
 
-    await user.click(screen.getByRole('button', { name: 'Add account' }))
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'New Starter')
     await user.type(screen.getByLabelText('Email'), 'new.starter@example.com')
     await user.selectOptions(screen.getByLabelText('Outlet'), OUTLET_KALYANI_ID)
-    // Provisioning an Employee also answers the staff-list question, and
-    // "add them to it" needs a code (outlet-and-staff-setup).
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     const panel = await screen.findByTestId('issued-code')
@@ -142,7 +199,7 @@ describe('the account surface', () => {
     renderSurface('super_admin')
     await screen.findByRole('heading', { name: 'People' })
 
-    await user.click(screen.getByRole('button', { name: 'Add account' }))
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'New Starter')
     await user.type(screen.getByLabelText('Email'), 'new.starter@example.com')
     await user.selectOptions(screen.getByLabelText('Outlet'), OUTLET_KALYANI_ID)
@@ -168,6 +225,62 @@ describe('the account surface', () => {
     expect(within(panel).queryByText(code)).not.toBeInTheDocument()
   })
 
+  it('writes nothing at all when the name is missing', async () => {
+    // `required` on the input is inert: this form carries `noValidate`, like
+    // every other form in the app. The guard refuses, and
+    // `profiles_full_name_not_blank` refuses the write.
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const provision = vi.spyOn(adapters.accounts, 'provision')
+    renderSurface('franchise_admin', adapters)
+    await screen.findByRole('heading', { name: 'People' })
+
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
+    await user.type(screen.getByLabelText('Email'), 'nameless@example.com')
+    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
+
+    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('needs a name')
+    expect(provision).not.toHaveBeenCalled()
+    // No code is issued for an account that was never created. An admin left
+    // holding a code for nobody is the failure this ordering exists to avoid.
+    expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
+  })
+
+  it('treats a name of only spaces as no name at all', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const provision = vi.spyOn(adapters.accounts, 'provision')
+    renderSurface('franchise_admin', adapters)
+    await screen.findByRole('heading', { name: 'People' })
+
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
+    await user.type(screen.getByLabelText('Full name'), '   ')
+    await user.type(screen.getByLabelText('Email'), 'spaces@example.com')
+    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
+
+    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('needs a name')
+    expect(provision).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
+  })
+
+  it('writes nothing at all when the email address is missing', async () => {
+    // `type="email"` is inert for exactly the same reason `required` is, and a
+    // blank address provisions an account nobody can ever sign in to.
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const provision = vi.spyOn(adapters.accounts, 'provision')
+    renderSurface('franchise_admin', adapters)
+    await screen.findByRole('heading', { name: 'People' })
+
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
+    await user.type(screen.getByLabelText('Full name'), 'Demo Unreachable')
+    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
+
+    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('email address is needed')
+    expect(provision).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
+  })
+
   it('says nothing about failed activations on a quiet day', async () => {
     renderSurface('super_admin')
     await screen.findByRole('heading', { name: 'People' })
@@ -185,11 +298,11 @@ describe('the account surface', () => {
   })
 
   it('never even asks on a manager’s behalf, since the answer is always a refusal', async () => {
-    const adapters = createMockAdapters()
+    const adapters = createMockAdapters('franchise_admin')
     const asked = vi.spyOn(adapters.accounts, 'failedActivations').mockResolvedValue(47)
 
     renderSurface('franchise_admin', adapters)
-    await screen.findByRole('heading', { name: 'Access' })
+    await screen.findByRole('heading', { name: 'People' })
 
     // Mocked high on purpose: if the request were made, the banner would show.
     // The database refuses this role, so making it would only leave a standing
@@ -220,6 +333,8 @@ describe('the account surface', () => {
 
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('stops being able to read or write anything immediately')
+    // Deactivation is not departure, and the confirmation says so.
+    expect(dialog).toHaveTextContent('They stay on the staff list')
     expect(setActive).not.toHaveBeenCalled()
 
     await user.click(within(dialog).getByRole('button', { name: 'Deactivate' }))
@@ -251,208 +366,180 @@ describe('the account surface', () => {
 })
 
 /**
- * Provisioning an Employee and the staff roster. The account is one write and
- * the roster row is another, made by this session under RLS — so the interesting
- * cases are the choice itself and what happens when only the first one lands.
+ * The people states an admin has to recognise and repair, each stating its
+ * own reason and next step on the list itself.
  */
-describe('the staff list, while provisioning', () => {
-  async function openEmployeeForm(role: Role, adapters?: DataAdapters) {
+describe('the people states', () => {
+  it('marks a placeholder address as the thing to fix, and will not issue a code past it', async () => {
     const user = userEvent.setup()
-    const rendered = adapters ? renderSurface(role, adapters) : renderSurface(role)
-    await screen.findByRole('heading', { name: role === 'super_admin' ? 'People' : 'Access' })
-    await user.click(screen.getByRole('button', { name: 'Add account' }))
-    if (role === 'super_admin') {
-      await user.selectOptions(screen.getByLabelText('Outlet'), OUTLET_KALYANI_ID)
-    }
-    return { user, ...rendered }
-  }
-
-  it('asks about the roster rather than deciding silently', async () => {
-    await openEmployeeForm('franchise_admin')
-
-    expect(screen.getByRole('group', { name: 'Staff list' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Add them to the staff list')).toBeChecked()
-    expect(screen.getByLabelText('Not on the staff list')).toBeInTheDocument()
-  })
-
-  it('offers no roster choice for a role that is not an Employee', async () => {
-    const { user } = await openEmployeeForm('franchise_admin')
-
-    await user.selectOptions(screen.getByLabelText('Role'), 'biller')
-    expect(screen.queryByRole('group', { name: 'Staff list' })).not.toBeInTheDocument()
-  })
-
-  it('creates the account and the roster row together', async () => {
-    const adapters = createMockAdapters()
-    const create = vi.spyOn(adapters.employees, 'createEmployee')
-    const { user } = await openEmployeeForm('franchise_admin', adapters)
-
-    await user.type(screen.getByLabelText('Full name'), 'Demo Newcomer')
-    await user.type(screen.getByLabelText('Email'), 'newcomer@example.com')
-    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
-
-    await waitFor(() =>
-      expect(create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          fullName: 'Demo Newcomer',
-          profileId: expect.any(String),
-        }),
-      ),
-    )
-    // The one write still carries no code: the database issues it. Asserting a
-    // literal here would be asserting the app's own arithmetic.
-    expect(create).toHaveBeenCalledWith(
-      expect.not.objectContaining({ employeeCode: expect.anything() }),
-    )
-    expect(await screen.findByTestId('issued-code')).toBeInTheDocument()
-  })
-
-  it('never asks for a staff code, and provisions anyway', async () => {
-    // This replaces an assertion that provisioning was *refused* without a
-    // staff code. The claim it protected — an incomplete answer must not
-    // half-configure somebody — is unchanged and still covered by the
-    // “link to someone without saying who” test below. What has gone is the
-    // question itself: there is no field left to leave unanswered.
-    const adapters = createMockAdapters()
-    const provision = vi.spyOn(adapters.accounts, 'provision')
-    const create = vi.spyOn(adapters.employees, 'createEmployee')
-    const { user } = await openEmployeeForm('franchise_admin', adapters)
-
-    expect(screen.queryByLabelText('Staff code')).not.toBeInTheDocument()
-
-    await user.type(screen.getByLabelText('Full name'), 'Demo Newcomer')
-    await user.type(screen.getByLabelText('Email'), 'newcomer@example.com')
-    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
-
-    expect(await screen.findByTestId('issued-code')).toBeInTheDocument()
-    expect(provision).toHaveBeenCalled()
-    expect(create).toHaveBeenCalledWith(
-      expect.not.objectContaining({ employeeCode: expect.anything() }),
-    )
-  })
-
-  it('writes nothing at all when the name is missing', async () => {
-    // `required` on the input is inert: this form carries `noValidate`, like
-    // every other form in the app. The guard refuses, and
-    // `profiles_full_name_not_blank` refuses the write.
-    const adapters = createMockAdapters()
-    const provision = vi.spyOn(adapters.accounts, 'provision')
-    const create = vi.spyOn(adapters.employees, 'createEmployee')
-    const { user } = await openEmployeeForm('franchise_admin', adapters)
-
-    await user.type(screen.getByLabelText('Email'), 'nameless@example.com')
-    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
-
-    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('needs a name')
-    expect(provision).not.toHaveBeenCalled()
-    expect(create).not.toHaveBeenCalled()
-    // No code is issued for an account that was never created. An admin left
-    // holding a code for nobody is the failure this ordering exists to avoid.
-    expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
-  })
-
-  it('treats a name of only spaces as no name at all', async () => {
-    const adapters = createMockAdapters()
-    const provision = vi.spyOn(adapters.accounts, 'provision')
-    const { user } = await openEmployeeForm('franchise_admin', adapters)
-
-    await user.type(screen.getByLabelText('Full name'), '   ')
-    await user.type(screen.getByLabelText('Email'), 'spaces@example.com')
-    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
-
-    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('needs a name')
-    expect(provision).not.toHaveBeenCalled()
-    expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
-  })
-
-  it('writes nothing at all when the email address is missing', async () => {
-    // `type="email"` is inert for exactly the same reason `required` is, and a
-    // blank address provisions an account nobody can ever sign in to.
-    const adapters = createMockAdapters()
-    const provision = vi.spyOn(adapters.accounts, 'provision')
-    const create = vi.spyOn(adapters.employees, 'createEmployee')
-    const { user } = await openEmployeeForm('franchise_admin', adapters)
-
-    await user.type(screen.getByLabelText('Full name'), 'Demo Unreachable')
-    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
-
-    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('email address is needed')
-    expect(provision).not.toHaveBeenCalled()
-    expect(create).not.toHaveBeenCalled()
-    expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
-  })
-
-  it('refuses to link without saying to whom', async () => {
-    const adapters = createMockAdapters()
-    const provision = vi.spyOn(adapters.accounts, 'provision')
-    const { user } = await openEmployeeForm('franchise_admin', adapters)
-
-    await user.type(screen.getByLabelText('Full name'), 'Demo Vague')
-    await user.type(screen.getByLabelText('Email'), 'vague@example.com')
-    await user.click(screen.getByLabelText('They are already on the staff list'))
-    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
-
-    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('Choose who they already')
-    expect(provision).not.toHaveBeenCalled()
-  })
-
-  it('links to somebody already on the list instead of inventing a second row', async () => {
-    const adapters = createMockAdapters()
-    const link = vi.spyOn(adapters.employees, 'linkAccount')
-    const { user } = await openEmployeeForm('franchise_admin', adapters)
-
-    await user.type(screen.getByLabelText('Full name'), 'Demo Griller')
-    await user.type(screen.getByLabelText('Email'), 'griller@example.com')
-    await user.click(screen.getByLabelText('They are already on the staff list'))
-    await user.selectOptions(screen.getByLabelText('Person on the staff list'), [
-      'Demo Griller · KAL-02',
-    ])
-    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
-
-    await waitFor(() => expect(link).toHaveBeenCalled())
-  })
-
-  it('writes no roster row when told not to', async () => {
-    const adapters = createMockAdapters()
-    const create = vi.spyOn(adapters.employees, 'createEmployee')
-    const link = vi.spyOn(adapters.employees, 'linkAccount')
-    const { user } = await openEmployeeForm('franchise_admin', adapters)
-
-    await user.type(screen.getByLabelText('Full name'), 'Demo Contractor')
-    await user.type(screen.getByLabelText('Email'), 'contractor@example.com')
-    await user.click(screen.getByLabelText('Not on the staff list'))
-    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
-
-    await screen.findByTestId('issued-code')
-    expect(create).not.toHaveBeenCalled()
-    expect(link).not.toHaveBeenCalled()
-  })
-
-  it('still hands over the code when only the roster write fails', async () => {
-    const adapters = createMockAdapters()
-    vi.spyOn(adapters.employees, 'createEmployee').mockRejectedValue(new Error('nope'))
-    const { user } = await openEmployeeForm('franchise_admin', adapters)
-
-    await user.type(screen.getByLabelText('Full name'), 'Demo Half Done')
-    await user.type(screen.getByLabelText('Email'), 'half.done@example.com')
-    await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
-
-    // The account exists and the code is valid — saying "that failed" would
-    // send an admin off to create a second account for the same person.
-    expect(await screen.findByTestId('issued-code')).toBeInTheDocument()
-    const error = await screen.findByTestId('accounts-error')
-    expect(error).toHaveTextContent('has an account and the code below works')
-    expect(error).toHaveTextContent('not on the staff list yet')
-    expect(error).toHaveTextContent('Finish it on Staff')
-  })
-
-  it('says on the list who cannot check in', async () => {
     renderSurface('franchise_admin')
 
-    // `Demo New Starter` is provisioned and on no roster.
-    expect(
-      await screen.findByTestId('off-roster-d1000000-0000-4000-a000-000000000008'),
-    ).toHaveTextContent('Not on the staff list — cannot check in')
+    const row = (await screen.findByText('Demo Helper')).closest('tr')!
+    expect(within(row).getByTestId(`placeholder-${DEMO_HELPER_ACCOUNT_ID}`)).toHaveTextContent(
+      'Placeholder address',
+    )
+    expect(within(row).getByText('Needs an address')).toBeInTheDocument()
+
+    // A code for a placeholder address would show the person an address that
+    // is not theirs at activation — the fix is the address, then the code.
+    await openRowActions(user, row)
+    expect(within(row).getByRole('button', { name: 'New code' })).toBeDisabled()
+    expect(within(row).getByRole('button', { name: 'Change email' })).toBeEnabled()
+  })
+
+  it('keeps departed people off the list until asked, then shows them with their leaving date', async () => {
+    const user = userEvent.setup()
+    renderSurface('franchise_admin')
+
+    await screen.findByText('Demo Griller')
+    expect(screen.queryByText('Demo Former Staff')).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId('toggle-departed'))
+    const row = (await screen.findByText('Demo Former Staff')).closest('tr')!
+    expect(within(row).getByText(/^Left /)).toBeInTheDocument()
+  })
+
+  it('shows the invite still outstanding, and the deactivated person still present', async () => {
+    renderSurface('franchise_admin')
+
+    const pending = (await screen.findByText('Demo New Starter')).closest('tr')!
+    expect(within(pending).getByText('Awaiting activation')).toBeInTheDocument()
+
+    // Access cut, not departed: still on the list — the panic button does not
+    // erase a person.
+    const cut = (await screen.findByText('Demo Prep Cook')).closest('tr')!
+    expect(within(cut).getByText('Deactivated')).toBeInTheDocument()
+  })
+})
+
+/**
+ * The staff facts are the admin's own RLS write; the departure flow sets the
+ * two independent facts in one confirmation.
+ */
+describe('editing a person', () => {
+  it('renames and retitles through the staff-facts sheet', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const update = vi.spyOn(adapters.accounts, 'updateStaffFacts')
+    renderSurface('franchise_admin', adapters)
+
+    const row = (await screen.findByText('Demo Griller')).closest('tr')!
+    await openRowActions(user, row)
+    await user.click(within(row).getByRole('button', { name: 'Edit person' }))
+
+    const name = screen.getByLabelText('Full name')
+    await user.clear(name)
+    await user.type(name, 'Demo Griller Renamed')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ fullName: 'Demo Griller Renamed' }),
+      ),
+    )
+    expect(await screen.findByText('Demo Griller Renamed')).toBeInTheDocument()
+  })
+
+  it('shows the staff code inert to a manager, and never sends it unchanged', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const update = vi.spyOn(adapters.accounts, 'updateStaffFacts')
+    renderSurface('franchise_admin', adapters)
+
+    const row = (await screen.findByText('Demo Griller')).closest('tr')!
+    await openRowActions(user, row)
+    await user.click(within(row).getByRole('button', { name: 'Edit person' }))
+
+    const code = screen.getByLabelText('Staff code')
+    expect(code).toBeDisabled()
+    expect(screen.getByText(/Only the owner can change a staff code/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    // Writing a code back unchanged is not a change — sending it on every
+    // ordinary edit would invite the owner-only refusal for no reason.
+    expect(update).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.not.objectContaining({ staffCode: expect.anything() }),
+    )
+  })
+
+  it('lets the owner change a staff code', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('super_admin')
+    const update = vi.spyOn(adapters.accounts, 'updateStaffFacts')
+    renderSurface('super_admin', adapters)
+
+    const row = (await screen.findByText('Demo Griller')).closest('tr')!
+    await openRowActions(user, row)
+    await user.click(within(row).getByRole('button', { name: 'Edit person' }))
+
+    const code = screen.getByLabelText('Staff code')
+    expect(code).toBeEnabled()
+    await user.clear(code)
+    await user.type(code, 'KAL-OWNR')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ staffCode: 'KAL-OWNR' }),
+      ),
+    )
+  })
+
+  it('marks a person as left, offering the access cut in the same act', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const update = vi.spyOn(adapters.accounts, 'updateStaffFacts')
+    const setActive = vi.spyOn(adapters.accounts, 'setActive')
+    renderSurface('franchise_admin', adapters)
+
+    const row = (await screen.findByText('Demo Griller')).closest('tr')!
+    await openRowActions(user, row)
+    await user.click(within(row).getByRole('button', { name: 'Mark as left' }))
+
+    const sheet = await screen.findByText(/is leaving/)
+    expect(sheet).toBeInTheDocument()
+    expect(screen.getByText(/Every day they worked stays on the record/)).toBeInTheDocument()
+    // The access cut is offered and pre-selected, not silently bundled.
+    expect(screen.getByLabelText(/Also deactivate/)).toBeChecked()
+
+    await user.click(screen.getByRole('button', { name: 'Mark as left' }))
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ leftOn: expect.any(String) }),
+      ),
+    )
+    expect(setActive).toHaveBeenCalledWith(expect.any(String), false)
+
+    // Off the default list — and reversible from the departed view.
+    await waitFor(() => expect(screen.queryByText('Demo Griller')).not.toBeInTheDocument())
+    await user.click(screen.getByTestId('toggle-departed'))
+    const departed = (await screen.findByText('Demo Griller')).closest('tr')!
+    await openRowActions(user, departed)
+    expect(within(departed).getByRole('button', { name: 'Mark as returned' })).toBeInTheDocument()
+  })
+
+  it('departs without the access cut when the offer is declined', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const setActive = vi.spyOn(adapters.accounts, 'setActive')
+    renderSurface('franchise_admin', adapters)
+
+    const row = (await screen.findByText('Demo Griller')).closest('tr')!
+    await openRowActions(user, row)
+    await user.click(within(row).getByRole('button', { name: 'Mark as left' }))
+
+    await user.click(await screen.findByLabelText(/Also deactivate/))
+    await user.click(screen.getByRole('button', { name: 'Mark as left' }))
+
+    await waitFor(() => expect(screen.queryByText('Demo Griller')).not.toBeInTheDocument())
+    // The two facts are independent by design; declining one writes only the other.
+    expect(setActive).not.toHaveBeenCalled()
   })
 })
 
@@ -472,9 +559,9 @@ describe('the email address an account signs in with', () => {
   it('is read back beside a freshly issued code', async () => {
     const user = userEvent.setup()
     renderSurface('franchise_admin')
-    await screen.findByRole('heading', { name: 'Access' })
+    await screen.findByRole('heading', { name: 'People' })
 
-    await user.click(screen.getByRole('button', { name: 'Add account' }))
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'Demo Newcomer')
     await user.type(screen.getByLabelText('Email'), 'Demo.Newcomer@Example.com')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
@@ -546,6 +633,17 @@ describe('the email address an account signs in with', () => {
     expect(await screen.findByTestId('accounts-error')).toHaveTextContent('already has an account')
   })
 
+  it('starts the correction blank for a placeholder address — there is nothing worth keeping', async () => {
+    const user = userEvent.setup()
+    renderSurface('franchise_admin')
+
+    const row = (await screen.findByText('Demo Helper')).closest('tr')!
+    await openRowActions(user, row)
+    await user.click(within(row).getByRole('button', { name: 'Change email' }))
+
+    expect(screen.getByLabelText('Email')).toHaveValue('')
+  })
+
   it('renders the list as names when the address lookup is refused', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()
@@ -566,7 +664,7 @@ describe('the email address an account signs in with', () => {
   })
 })
 
-describe('the account form before any outlet exists', () => {
+describe('the person form before any outlet exists', () => {
   it('names the real problem instead of showing an empty dropdown', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()
@@ -574,7 +672,7 @@ describe('the account form before any outlet exists', () => {
     renderSurface('super_admin', adapters)
 
     await screen.findByRole('heading', { name: 'People' })
-    await user.click(screen.getByRole('button', { name: 'Add account' }))
+    await user.click(screen.getByRole('button', { name: 'Add person' }))
 
     expect(screen.getByTestId('no-outlets')).toHaveTextContent(
       'every account except an owner has to belong to one',

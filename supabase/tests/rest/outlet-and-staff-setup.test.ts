@@ -3,14 +3,13 @@
  *
  * This is the test the project did not have, and its absence is why attendance
  * shipped unreachable: every other suite starts from a business that is already
- * configured — `seed.sql` inserts the outlets, the fixtures hard-code
- * `profile_id`, the REST attendance suite signs in as a seeded employee whose
- * link was written by SQL. None of them ever asked how a configured world comes
- * to exist, so none of them noticed that the app could not produce one.
+ * configured. None of them ever asked how a configured world comes to exist, so
+ * none of them noticed that the app could not produce one.
  *
- * So this file creates its own outlet, its own manager, its own employee and
- * its own link, and only then checks somebody in. If any link in that chain
- * needs SQL, this fails.
+ * Staff exist only as accounts, so the chain is shorter than it used to be:
+ * an outlet, a manager for it, an employee provisioned by that manager — and
+ * the moment the employee activates, they can check in. There is no roster row
+ * to create and no link to write, which is the point of staff-as-accounts.
  *
  * Requires the local stack: `npm run db:start && npm run db:reset`, then
  * `npm run test:rls`.
@@ -18,10 +17,14 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { AttendanceActionError, DataActionError } from '../../../src/data-access/adapters'
+import {
+  AccountActionError,
+  AttendanceActionError,
+  DataActionError,
+} from '../../../src/data-access/adapters'
 import type { Database } from '../../../src/data-access/database.types'
+import { createSupabaseAccountsAdapter } from '../../../src/data-access/supabase-adapters/accounts'
 import { createSupabaseAttendanceAdapter } from '../../../src/data-access/supabase-adapters/attendance'
-import { createSupabaseEmployeesAdapter } from '../../../src/data-access/supabase-adapters/employees'
 import { createSupabaseOutletsAdapter } from '../../../src/data-access/supabase-adapters/outlets'
 
 const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
@@ -31,7 +34,7 @@ const SUPABASE_ANON_KEY =
 
 const SEED_PASSWORD = 'shawarmania-local'
 const NEW_PASSWORD = 'a-genuinely-set-password'
-/** A Kalyani account, for the cross-outlet link this suite must be refused. */
+/** A Kalyani person, for the cross-outlet edit this suite must be refused. */
 const KALYANI_EMPLOYEE_PROFILE = '10000000-0000-4000-a000-000000000006'
 
 type Client = SupabaseClient<Database>
@@ -68,12 +71,13 @@ async function call(path: string, token: string | null, payload: Record<string, 
   return { status: response.status, body: (text ? JSON.parse(text) : {}) as Record<string, string> }
 }
 
-/** Provision, redeem, sign in — the three steps that make a usable account. */
+/** Provision, redeem, sign in — the three steps that make a usable person. */
 async function onboard(
   token: string,
   role: string,
   outletId: string,
   fullName: string,
+  extras: Record<string, unknown> = {},
 ): Promise<{ client: Client; profileId: string }> {
   const email = freshEmail(role)
   const provisioned = await call('admin-accounts', token, {
@@ -82,6 +86,7 @@ async function onboard(
     email,
     role,
     outletId,
+    ...extras,
   })
   expect(provisioned.status).toBe(201)
 
@@ -105,7 +110,6 @@ let manager: Client
 let managerToken: string
 let employee: Client
 let employeeProfileId: string
-let employeeId: string
 let businessDate: string
 
 /**
@@ -136,18 +140,13 @@ beforeAll(async () => {
   manager = managerAccount.client
   managerToken = (await manager.auth.getSession()).data.session!.access_token
 
-  // 3. A person on the roster, with no login.
-  const roster = createSupabaseEmployeesAdapter(manager)
-  const person = await roster.createEmployee({
-    outletId,
-    employeeCode: 'PRB-E1',
-    fullName: 'Probe Griller',
+  // 3. An Employee, provisioned by their own manager — one act, staff facts
+  //    included. There is no roster row and no link: the account is the
+  //    person, and the database issues their staff code as the row lands.
+  const employeeAccount = await onboard(managerToken, 'employee', outletId, 'Probe Griller', {
     roleTitle: 'Grill',
+    joinedOn: '2026-07-01',
   })
-  employeeId = person.id
-
-  // 4. An Employee account for them, provisioned by their own manager.
-  const employeeAccount = await onboard(managerToken, 'employee', outletId, 'Probe Griller')
   employee = employeeAccount.client
   employeeProfileId = employeeAccount.profileId
 
@@ -197,60 +196,59 @@ describe('creating an outlet', () => {
   })
 })
 
-describe('linking an account to a roster row', () => {
-  it('is invisible to the person until it exists', async () => {
-    const own = await createSupabaseEmployeesAdapter(employee).getOwnEmployee()
-    expect(own).toBeNull()
+describe('the person the one act created', () => {
+  it('carries an issued staff code and the staff facts the form sent', async () => {
+    const people = await createSupabaseAccountsAdapter(manager).listAccounts()
+    const person = people.find((row) => row.id === employeeProfileId)
+
+    expect(person).toBeDefined()
+    // The database issued the code from the probe outlet's own prefix; the
+    // shape is the contract, the value is the database's to pick.
+    expect(person?.staffCode).toMatch(/^[A-Z0-9]{3}-[0-9A-HJKMNP-TV-Z]{4}$/)
+    expect(person?.roleTitle).toBe('Grill')
+    expect(person?.joinedOn).toBe('2026-07-01')
+    expect(person?.leftOn).toBeNull()
   })
 
-  it('refuses an account from another outlet', async () => {
+  it('can read their own person record the moment they activate', async () => {
+    const { data, error } = await employee
+      .from('profiles')
+      .select('id, full_name, staff_code, role_title')
+      .eq('id', employeeProfileId)
+      .single()
+
+    expect(error).toBeNull()
+    expect(data?.full_name).toBe('Probe Griller')
+    expect(data?.staff_code).toBeTruthy()
+  })
+
+  it('has staff facts their manager can edit, under RLS', async () => {
+    const accounts = createSupabaseAccountsAdapter(manager)
+    const updated = await accounts.updateStaffFacts(employeeProfileId, {
+      roleTitle: 'Senior Grill',
+    })
+    expect(updated.roleTitle).toBe('Senior Grill')
+  })
+
+  it('whose staff code the manager cannot change — the database refuses by name', async () => {
+    const accounts = createSupabaseAccountsAdapter(manager)
     await expect(
-      createSupabaseEmployeesAdapter(manager).linkAccount(employeeId, KALYANI_EMPLOYEE_PROFILE),
-    ).rejects.toBeInstanceOf(DataActionError)
+      accounts.updateStaffFacts(employeeProfileId, { staffCode: 'PRB-HACK' }),
+    ).rejects.toMatchObject({ code: 'code_not_yours' })
   })
 
-  it('joins the two, and the person can then find themselves', async () => {
-    const roster = createSupabaseEmployeesAdapter(manager)
-    const linked = await roster.linkAccount(employeeId, employeeProfileId)
-    expect(linked.profileId).toBe(employeeProfileId)
-    // The embedded select is the fragile part: a wrong relationship name gives
-    // a row with no `profiles` key at all, and every screen would render the
-    // person as having no account.
-    expect(linked.linkedAccount).toEqual({
-      id: employeeProfileId,
-      fullName: 'Probe Griller',
-      isActive: true,
-    })
-
-    const own = await createSupabaseEmployeesAdapter(employee).getOwnEmployee()
-    expect(own?.id).toBe(employeeId)
-    expect(own?.employeeCode).toBe('PRB-E1')
-    // And the embed resolves for the employee too, whose only readable profile
-    // is their own — which is the one their roster row points at.
-    expect(own?.linkedAccount?.fullName).toBe('Probe Griller')
+  it('and a person at another outlet is out of the manager’s reach entirely', async () => {
+    const accounts = createSupabaseAccountsAdapter(manager)
+    await expect(
+      accounts.updateStaffFacts(KALYANI_EMPLOYEE_PROFILE, { roleTitle: 'Smuggled' }),
+    ).rejects.toBeInstanceOf(AccountActionError)
   })
 
-  it('refuses to hand the same account to a second person', async () => {
-    const roster = createSupabaseEmployeesAdapter(manager)
-    const second = await roster.createEmployee({
-      outletId,
-      employeeCode: 'PRB-E2',
-      fullName: 'Probe Helper',
-    })
-
-    await expect(roster.linkAccount(second.id, employeeProfileId)).rejects.toBeInstanceOf(
-      DataActionError,
-    )
-    expect(second.linkedAccount).toBeNull()
-  })
-
-  it('shows the manager who can and cannot check in', async () => {
-    const list = await createSupabaseEmployeesAdapter(manager).listEmployees(outletId)
-
-    expect(list.find((row) => row.employeeCode === 'PRB-E1')?.linkedAccount?.fullName).toBe(
-      'Probe Griller',
-    )
-    expect(list.find((row) => row.employeeCode === 'PRB-E2')?.linkedAccount).toBeNull()
+  it('cannot be deleted over REST by anybody', async () => {
+    // Clients hold no delete grant on profiles at all; the FK boundary behind
+    // it is proved in pgTAP with hand-crafted deletes at the auth layer too.
+    const { error } = await manager.from('profiles').delete().eq('id', employeeProfileId)
+    expect(error?.code).toBe('42501')
   })
 })
 
@@ -260,7 +258,7 @@ describe('the check-in the whole chain existed for', () => {
 
     const attendance = createSupabaseAttendanceAdapter(employee)
     const refusal = attendance.checkIn({
-      employeeId,
+      personId: employeeProfileId,
       outletId,
       businessDate,
       reading: {
@@ -280,7 +278,7 @@ describe('the check-in the whole chain existed for', () => {
 
     const attendance = createSupabaseAttendanceAdapter(employee)
     const record = await attendance.checkIn({
-      employeeId,
+      personId: employeeProfileId,
       outletId,
       businessDate,
       reading: {
@@ -301,7 +299,7 @@ describe('the check-in the whole chain existed for', () => {
     await createSupabaseOutletsAdapter(owner).updateOutlet(outletId, { isActive: false })
 
     const attendance = createSupabaseAttendanceAdapter(employee)
-    const day = await attendance.getDay(employeeId, businessDate)
+    const day = await attendance.getDay(employeeProfileId, businessDate)
     const closed = await attendance.checkOut({
       attendanceId: day!.id,
       reading: {
@@ -317,26 +315,34 @@ describe('the check-in the whole chain existed for', () => {
     await createSupabaseOutletsAdapter(owner).updateOutlet(outletId, { isActive: true })
   })
 
-  it('stops at unlinking, and keeps the day that was worked', async () => {
-    const roster = createSupabaseEmployeesAdapter(manager)
-    await roster.unlinkAccount(employeeId)
+  it('survives the person leaving — the days were worked', async () => {
+    const accounts = createSupabaseAccountsAdapter(manager)
+    await accounts.updateStaffFacts(employeeProfileId, { leftOn: businessDate })
 
-    // The person cannot find themselves, nor read the day.
-    expect(await createSupabaseEmployeesAdapter(employee).getOwnEmployee()).toBeNull()
-    expect(await createSupabaseAttendanceAdapter(employee).listHistory(employeeId)).toEqual([])
-
-    // The manager still sees it, because it happened.
-    const day = await createSupabaseAttendanceAdapter(manager).getDay(employeeId, businessDate)
+    // The record is not erased by the departure; the manager still reads it,
+    // and so does the person — it is their own history.
+    const day = await createSupabaseAttendanceAdapter(manager).getDay(
+      employeeProfileId,
+      businessDate,
+    )
     expect(day?.checkIn).not.toBeNull()
     expect(day?.checkOut).not.toBeNull()
+
+    const ownHistory =
+      await createSupabaseAttendanceAdapter(employee).listHistory(employeeProfileId)
+    expect(ownHistory.length).toBeGreaterThan(0)
+
+    // And departure is reversible — people come back.
+    const returned = await accounts.updateStaffFacts(employeeProfileId, { leftOn: null })
+    expect(returned.leftOn).toBeNull()
   })
 })
 
 /**
- * Outlets are not deletable, by design, and this suite makes a real one on every
- * run. Left trading it would clutter the local app's outlet list and every
- * assignment dropdown for whoever opens the app next — so the probe shop is
- * marked closed, which is exactly what "this shop is not trading" is for.
+ * Outlets are not deletable while anything references them, and this suite
+ * makes a real one with real people on every run. Left trading it would
+ * clutter the local app's outlet list — so the probe shop is marked closed,
+ * which is exactly what "this shop is not trading" is for.
  */
 afterAll(async () => {
   if (!outletId) return

@@ -28,6 +28,10 @@ const PROFILE: Profile = {
   role: 'franchise_admin',
   outlet_id: 'outlet-kalyani',
   is_active: true,
+  staff_code: 'KAL-A1',
+  role_title: 'Manager',
+  joined_on: null,
+  left_on: null,
   created_at: '2026-07-26T00:00:00+00:00',
 }
 

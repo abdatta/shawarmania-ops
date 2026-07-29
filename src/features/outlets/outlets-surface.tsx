@@ -127,8 +127,7 @@ function outletHandle(outlet: Tables<'outlets'>): string {
  * both (design D6).
  */
 const REFERENCE_WORDS: Record<string, string> = {
-  employees: 'staff on the roster',
-  profiles: 'app accounts',
+  profiles: 'people',
   counter_devices: 'counter tablets',
   attendance: 'recorded attendance days',
   bills: 'bills',
@@ -633,7 +632,10 @@ function OutletFormSheet({
       .outletReferences(editing.id)
       .then((references) => {
         if (active) {
-          setPrefixFrozen(references.some((reference) => reference.table === 'employees'))
+          // People at the outlet stand in for "a staff code has been issued
+          // here" — a close proxy, not the rule itself. The trigger is the
+          // boundary; this only decides whether the field looks editable.
+          setPrefixFrozen(references.some((reference) => reference.table === 'profiles'))
         }
       })
       .catch(() => {

@@ -82,7 +82,7 @@ export type OutletPatch = Partial<
 
 /**
  * One thing still attached to an outlet, and how much of it. `table` is a
- * database identifier — `employees`, `counter_devices` — because the set is
+ * database identifier — `profiles`, `counter_devices` — because the set is
  * read from the schema's own foreign keys rather than from a list somebody
  * maintains, and a table added later has no English phrase waiting for it. The
  * surface translates the ones it knows and shows the rest as they are: falling
@@ -138,7 +138,12 @@ export interface OutletsAdapter {
 
 export type AppRole = Tables<'profiles'>['role']
 
-/** One row of the People / Access surfaces: the account and its invite state. */
+/**
+ * One person on the People surface: the account, its invite state, and — since
+ * staff-as-accounts — the staff facts that used to live on a roster row. There
+ * is exactly one record per person; a login and a staff-list membership are
+ * the same thing.
+ */
 export interface AccountSummary {
   id: string
   fullName: string
@@ -158,6 +163,21 @@ export interface AccountSummary {
   outletId: string | null
   isActive: boolean
   /**
+   * The per-outlet display code (`KAL-7KQ2`), issued by the database for
+   * person roles. Null for the Super Admin and counter devices — absence, not
+   * blankness.
+   */
+  staffCode: string | null
+  /** Free-text job label ("Griller"), distinct from the app-capability role. */
+  roleTitle: string | null
+  joinedOn: string | null
+  /**
+   * Null means current staff. Set, the person is off the staff lists and new
+   * attendance days while every recorded row survives. Independent of
+   * `isActive` by design — "access cut but still works here" is a real state.
+   */
+  leftOn: string | null
+  /**
    * The outstanding invite, if there is one. Never carries the code — the
    * hash column is not readable by any client (see the account_invites
    * migration), and the code itself exists only in the response that issued
@@ -172,6 +192,43 @@ export interface NewAccount {
   phone?: string | null
   role: AppRole
   outletId: string | null
+  roleTitle?: string | null
+  joinedOn?: string | null
+}
+
+/**
+ * The staff facts an admin edits as their own session under Row-Level
+ * Security — unlike every other account write, which is privileged. Identity
+ * and access (role, outlet, active state, email) are deliberately absent.
+ */
+export type StaffFactsPatch = Partial<{
+  fullName: string
+  roleTitle: string | null
+  joinedOn: string | null
+  leftOn: string | null
+  /**
+   * **Only a Super Admin may send this, and the database is what enforces
+   * that** — the `staff_code_guard` trigger, not this type and not the form
+   * control. Send it only when the value actually changed; writing the same
+   * code back is not a change and does not trip the guard.
+   */
+  staffCode: string
+}>
+
+/**
+ * The reserved domain the roster-merge migration minted addresses on. Mail to
+ * `.invalid` cannot route (RFC 2606), and no code is ever issued for such an
+ * account — the People surface marks these as needing a real address first.
+ */
+export function isPlaceholderAddress(email: string | null): boolean {
+  return email !== null && email.toLowerCase().endsWith('@placeholder.invalid')
+}
+
+/** The roles that are people at an outlet — on staff lists and attendance days. */
+export function isOutletPerson(account: Pick<AccountSummary, 'role' | 'outletId'>): boolean {
+  return (
+    account.outletId !== null && (account.role === 'employee' || account.role === 'franchise_admin')
+  )
 }
 
 /** The one-time code, returned once and never retrievable again. */
@@ -193,13 +250,16 @@ export class AccountActionError extends DataActionError {
 }
 
 /**
- * Account management as the admin surfaces need it. Every write here is a
- * privileged operation that runs server-side with the service-role key — the
- * adapter is the seam in front of it, not the thing doing it.
+ * People management as the admin surfaces need it. Identity and access writes
+ * are privileged operations that run server-side with the service-role key —
+ * the adapter is the seam in front of them, not the thing doing them. Staff
+ * facts are the exception: they are the admin's own RLS write, exactly as
+ * roster edits always were.
  */
 export interface AccountsAdapter {
-  /** Accounts the caller may see: all outlets for the Super Admin, one for a Franchise Admin. */
+  /** People the caller may see: all outlets for the Super Admin, one for a Franchise Admin. */
   listAccounts(): Promise<AccountSummary[]>
+  /** One step creates a working person: account, staff-list membership, issued code. */
   provision(account: NewAccount): Promise<IssuedCode>
   reissue(profileId: string): Promise<IssuedCode>
   setActive(profileId: string, isActive: boolean): Promise<void>
@@ -209,6 +269,12 @@ export interface AccountsAdapter {
    * working the moment the address is right (design D13).
    */
   changeEmail(profileId: string, email: string): Promise<void>
+  /**
+   * Edit the staff facts — the admin's own session under RLS, not the
+   * privileged function. The database refuses a cross-outlet edit, a
+   * non-owner changing a staff code, and the blanking of an issued one.
+   */
+  updateStaffFacts(profileId: string, patch: StaffFactsPatch): Promise<AccountSummary>
   /**
    * Failed activation attempts across the whole endpoint in the current
    * window. Null when the caller may not ask — which is every role but the
@@ -225,20 +291,24 @@ export interface AccountsAdapter {
 export const FAILED_ACTIVATION_NOTICE = 25
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Attendance and the roster.
+// Attendance.
 
 export type AttendanceStatus = Tables<'attendance'>['status']
 export type CheckInSource = Tables<'attendance'>['check_in_source']
-export type EmploymentStatus = Tables<'employees'>['employment_status']
 
 /**
- * One captured location event — a check-in or a check-out.
+ * One captured attendance event — a check-in or a check-out.
  *
  * `distanceMetres` is the database's answer, not the client's: it is recomputed
  * from the coordinates on every write, so a row cannot show a distance its own
  * coordinates contradict. It is null when the fence could not be evaluated at
  * all — no coordinates were supplied, or the outlet has never been surveyed —
  * and that is reported as unknown rather than guessed at.
+ *
+ * A `manual` event carries an enterer instead of evidence: the admin who
+ * typed it in, stamped by the database and snapshotted by name so the person
+ * the entry is about can read it too. Wherever attendance is rendered, that
+ * stamp is what makes a manual event visibly not a self check-in.
  */
 export interface AttendanceEvent {
   at: string
@@ -247,6 +317,8 @@ export interface AttendanceEvent {
   accuracyMetres: number | null
   distanceMetres: number | null
   source: CheckInSource | null
+  enteredBy: string | null
+  enteredByName: string | null
 }
 
 /** Who cleared a blocked check-in, when, and why. */
@@ -259,17 +331,18 @@ export interface AttendanceOverride {
 }
 
 /**
- * One employee's day. Deliberately one shape for both the manager's day view
+ * One person's day. Deliberately one shape for both the manager's day view
  * and the employee's own history: the proposal's insistence that an employee
  * sees exactly what their manager sees is easiest to keep true when there is
- * only one thing to render.
+ * only one thing to render. Rows key on the person's account — staff are
+ * accounts, and `personId` is a `profiles` id.
  */
 export interface AttendanceRecord {
   id: string
   outletId: string
-  employeeId: string
-  employeeCode: string
-  employeeName: string
+  personId: string
+  staffCode: string | null
+  personName: string
   businessDate: string
   status: AttendanceStatus
   checkIn: AttendanceEvent | null
@@ -278,7 +351,7 @@ export interface AttendanceRecord {
 }
 
 export interface CheckInInput {
-  employeeId: string
+  personId: string
   outletId: string
   businessDate: string
   /**
@@ -287,6 +360,27 @@ export interface CheckInInput {
    * point at; the database declines to count it present until a manager does.
    */
   reading: PositionReading | null
+}
+
+/**
+ * An admin recording an event on somebody's behalf — the escape hatch that
+ * keeps hard geofence blocking humane. Past times only, on the outlet's
+ * current business day; the database refuses a future time and stamps the
+ * enterer itself.
+ */
+export interface ManualEntryInput {
+  personId: string
+  outletId: string
+  businessDate: string
+  event: 'check-in' | 'check-out'
+  /** The moment the event actually happened, as an ISO instant. */
+  at: string
+  /**
+   * The recording session's own id. A convenience for the caller, never a
+   * trust boundary — the database overwrites it with the writing session
+   * regardless (the same contract as `approveOverride`'s `approverId`).
+   */
+  enteredBy: string
 }
 
 export interface CheckOutInput {
@@ -305,14 +399,14 @@ export class AttendanceActionError extends DataActionError {
 
 export interface AttendanceAdapter {
   /**
-   * One employee's record for a business date, or null if they have not
-   * started. The employee id is explicit rather than implied by the session:
+   * One person's record for a business date, or null if they have not
+   * started. The person id is explicit rather than implied by the session:
    * a query should mean one thing, and RLS should be the second line of
    * defence rather than the only thing that makes it correct.
    */
-  getDay(employeeId: string, businessDate: string): Promise<AttendanceRecord | null>
-  /** One employee's history, most recent business date first. */
-  listHistory(employeeId: string, limit?: number): Promise<AttendanceRecord[]>
+  getDay(personId: string, businessDate: string): Promise<AttendanceRecord | null>
+  /** One person's history, most recent business date first. */
+  listHistory(personId: string, limit?: number): Promise<AttendanceRecord[]>
   /** One outlet's day, for a manager. */
   listOutletDay(outletId: string, businessDate: string): Promise<AttendanceRecord[]>
   /**
@@ -323,6 +417,13 @@ export interface AttendanceAdapter {
   checkIn(input: CheckInInput): Promise<AttendanceRecord>
   checkOut(input: CheckOutInput): Promise<AttendanceRecord>
   /**
+   * Record a check-in or check-out on somebody's behalf, at a past time on
+   * the current business day. Admin only, and the row permanently shows who
+   * entered it — the database stamps the enterer and refuses the write from
+   * anyone else.
+   */
+  recordManualEntry(input: ManualEntryInput): Promise<AttendanceRecord>
+  /**
    * Clear a blocked check-in. `approverId` must be the calling session's own
    * id — the database refuses anything else, so this argument is a convenience
    * for the caller, never a trust boundary.
@@ -332,97 +433,6 @@ export interface AttendanceAdapter {
     reason: string,
     approverId: string,
   ): Promise<AttendanceRecord>
-}
-
-/**
- * The app account linked to a roster row, resolved alongside it.
- *
- * Carried on the summary rather than joined in a screen because
- * `getOwnEmployee` needs it too, and an Employee has no permission to list
- * accounts (design D7). Its absence is the answer to "why can this person not
- * check in?", so it is never merely omitted — it is null, and the screens say
- * what null means.
- */
-export interface LinkedAccount {
-  id: string
-  fullName: string
-  isActive: boolean
-}
-
-/** One roster row. Distinct from an app account: an employee may have no login. */
-export interface EmployeeSummary {
-  id: string
-  outletId: string
-  profileId: string | null
-  linkedAccount: LinkedAccount | null
-  employeeCode: string
-  fullName: string
-  phone: string | null
-  roleTitle: string | null
-  employmentStatus: EmploymentStatus
-  joinedOn: string | null
-}
-
-export interface NewEmployee {
-  outletId: string
-  /**
-   * Optional, and normally omitted: **the database issues it**.
-   *
-   * A `before insert` trigger fills a blank or absent code with the outlet's
-   * `staff_code_prefix` and four Crockford base32 characters — `KAL-7KQ2`.
-   * Nothing at this call site reveals that, which is the price of making "a
-   * roster row always has a sensible code" a property of the table rather than
-   * a habit of one caller.
-   *
-   * Supplying one still wins, unchanged, so an import that arrives with its own
-   * numbering scheme keeps working.
-   */
-  employeeCode?: string
-  fullName: string
-  phone?: string | null
-  roleTitle?: string | null
-  joinedOn?: string | null
-  /**
-   * Link the row to an app account as it is created — one write rather than
-   * two, which is what provisioning-with-a-roster-row does.
-   */
-  profileId?: string | null
-}
-
-export type EmployeePatch = Partial<
-  Pick<EmployeeSummary, 'fullName' | 'phone' | 'roleTitle' | 'employmentStatus' | 'joinedOn'> & {
-    /**
-     * **Only a Super Admin may send this, and the database is what enforces
-     * that** — an `employee_code_guard` trigger, not this type and not the form
-     * control. `employees_update` is a row policy, and a row policy permits
-     * every column on a row it permits, so a Franchise Admin can otherwise
-     * change a code freely. Send it only when the value actually changed;
-     * writing the same code back is not a change and does not trip the guard,
-     * but sending it on every ordinary edit invites one.
-     */
-    employeeCode: string
-  }
->
-
-export interface EmployeesAdapter {
-  /** The outlet's roster. */
-  listEmployees(outletId: string): Promise<EmployeeSummary[]>
-  /** The caller's own roster row, or null if they are not on one. */
-  getOwnEmployee(): Promise<EmployeeSummary | null>
-  createEmployee(employee: NewEmployee): Promise<EmployeeSummary>
-  updateEmployee(id: string, patch: EmployeePatch): Promise<EmployeeSummary>
-  /**
-   * Join an app account to a roster row. The database refuses a cross-outlet
-   * link and a second link to the same account; the caller's authority over
-   * the roster row is the `employees_update` policy's business, not this
-   * method's.
-   */
-  linkAccount(employeeId: string, profileId: string): Promise<EmployeeSummary>
-  /**
-   * Separate them again. Attendance already recorded against the roster row
-   * stays exactly where it is — the days were worked.
-   */
-  unlinkAccount(employeeId: string): Promise<EmployeeSummary>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1038,7 +1048,6 @@ export interface DataAdapters {
   outlets: OutletsAdapter
   accounts: AccountsAdapter
   attendance: AttendanceAdapter
-  employees: EmployeesAdapter
   menu: MenuAdapter
   billing: BillingAdapter
   inventory: InventoryAdapter

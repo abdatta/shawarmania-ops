@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import {
   AccountActionError,
@@ -7,6 +7,7 @@ import {
   type AppRole,
   type IssuedCode,
   type NewAccount,
+  type StaffFactsPatch,
 } from '../adapters'
 import { failureCode } from '../auth'
 import type { Database } from '../database.types'
@@ -16,10 +17,62 @@ import type { Database } from '../database.types'
  *
  * Reads come straight from the tables under RLS — the Super Admin's query and
  * the Franchise Admin's are literally the same query, and the database returns
- * different rows. Writes go to the `admin-accounts` Edge Function, because
- * creating an auth user needs the service-role key and that key never reaches
- * a browser.
+ * different rows. Identity and access writes go to the `admin-accounts` Edge
+ * Function, because creating an auth user needs the service-role key and that
+ * key never reaches a browser. Staff facts are the exception: they are the
+ * admin's own RLS write, exactly as roster edits were before the merge.
  */
+
+const PROFILE_COLUMNS =
+  'id, full_name, phone, role, outlet_id, is_active, staff_code, role_title, joined_on, left_on'
+
+interface ProfileRow {
+  id: string
+  full_name: string
+  phone: string | null
+  role: AppRole
+  outlet_id: string | null
+  is_active: boolean
+  staff_code: string | null
+  role_title: string | null
+  joined_on: string | null
+  left_on: string | null
+}
+
+/**
+ * Turn a Postgres refusal into something worth reading. The trigger and
+ * constraint names are the contract — they are what the schema chose to call
+ * these rules, and matching on them beats matching on prose.
+ */
+function toStaffFactsError(error: PostgrestError): AccountActionError {
+  const detail = `${error.message} ${error.details ?? ''}`
+
+  if (detail.includes('only the owner may change a staff code')) {
+    return new AccountActionError('code_not_yours', 'Only the owner can change a staff code.')
+  }
+  if (detail.includes('a staff code cannot be removed once issued')) {
+    return new AccountActionError(
+      'code_required',
+      'A staff code is needed — it is how this person’s records are identified.',
+    )
+  }
+  if (detail.includes('profiles_staff_code_unique_per_outlet')) {
+    return new AccountActionError('code_taken', 'That staff code is already used at this outlet.')
+  }
+  if (detail.includes('profiles_full_name_not_blank')) {
+    return new AccountActionError('name_required', 'A person needs a name.')
+  }
+  if (detail.includes('profiles_left_after_joining')) {
+    return new AccountActionError(
+      'left_before_joining',
+      'A departure date cannot be before the joining date.',
+    )
+  }
+  if (error.code === '42501') {
+    return new AccountActionError('forbidden', 'You are not allowed to do that for this account.')
+  }
+  return new AccountActionError('failed', 'That did not work. Try again in a moment.')
+}
 
 // Never `select('*')`: the invite table withholds code_hash by column grant,
 // so a whole-row read is refused by design. Naming columns is the contract.
@@ -46,14 +99,30 @@ async function callAdmin<T>(
 }
 
 export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>): AccountsAdapter {
+  const toSummary = (
+    profile: ProfileRow,
+    email: string | null,
+    invite: { expiresAt: string } | null,
+  ): AccountSummary => ({
+    id: profile.id,
+    fullName: profile.full_name,
+    email,
+    phone: profile.phone,
+    role: profile.role,
+    outletId: profile.outlet_id,
+    isActive: profile.is_active,
+    staffCode: profile.staff_code,
+    roleTitle: profile.role_title,
+    joinedOn: profile.joined_on,
+    leftOn: profile.left_on,
+    invite,
+  })
+
   return {
     async listAccounts(): Promise<AccountSummary[]> {
       const [{ data: profiles, error }, { data: invites, error: inviteError }, addresses] =
         await Promise.all([
-          client
-            .from('profiles')
-            .select('id, full_name, phone, role, outlet_id, is_active')
-            .order('full_name'),
+          client.from('profiles').select(PROFILE_COLUMNS).order('full_name'),
           client.from('account_invites').select(INVITE_COLUMNS),
           // The one field RLS cannot serve: the address lives in `auth.users`,
           // deliberately not mirrored onto `profiles` where a Biller could read
@@ -72,16 +141,9 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
           .map((invite) => [invite.profile_id, { expiresAt: invite.expires_at }]),
       )
 
-      return (profiles ?? []).map((profile) => ({
-        id: profile.id,
-        fullName: profile.full_name,
-        email: addresses[profile.id] ?? null,
-        phone: profile.phone,
-        role: profile.role as AppRole,
-        outletId: profile.outlet_id,
-        isActive: profile.is_active,
-        invite: outstanding.get(profile.id) ?? null,
-      }))
+      return ((profiles ?? []) as ProfileRow[]).map((profile) =>
+        toSummary(profile, addresses[profile.id] ?? null, outstanding.get(profile.id) ?? null),
+      )
     },
 
     async provision(account: NewAccount): Promise<IssuedCode> {
@@ -92,6 +154,8 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
         phone: account.phone ?? null,
         role: account.role,
         outletId: account.outletId,
+        roleTitle: account.roleTitle ?? null,
+        joinedOn: account.joinedOn ?? null,
       })
     },
 
@@ -105,6 +169,36 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
 
     async changeEmail(profileId: string, email: string): Promise<void> {
       await callAdmin(client, { action: 'set-email', profileId, email: email.trim() })
+    },
+
+    /**
+     * The one account write that is not privileged: staff facts belong to the
+     * admin's own session under RLS, exactly as roster edits always did. The
+     * database is the boundary for every rule here — cross-outlet reach, the
+     * owner-only staff code, the not-blank checks.
+     */
+    async updateStaffFacts(profileId: string, patch: StaffFactsPatch): Promise<AccountSummary> {
+      const { data, error } = await client
+        .from('profiles')
+        .update({
+          ...(patch.fullName !== undefined && { full_name: patch.fullName }),
+          ...(patch.roleTitle !== undefined && { role_title: patch.roleTitle }),
+          ...(patch.joinedOn !== undefined && { joined_on: patch.joinedOn }),
+          ...(patch.leftOn !== undefined && { left_on: patch.leftOn }),
+          ...(patch.staffCode !== undefined && { staff_code: patch.staffCode }),
+        })
+        .eq('id', profileId)
+        .select(PROFILE_COLUMNS)
+        .maybeSingle()
+      if (error) throw toStaffFactsError(error)
+      if (!data) {
+        // Zero rows back is what "RLS filtered it out" looks like from here.
+        throw new AccountActionError(
+          'forbidden',
+          'You are not allowed to do that for this account.',
+        )
+      }
+      return toSummary(data as ProfileRow, null, null)
     },
 
     /**

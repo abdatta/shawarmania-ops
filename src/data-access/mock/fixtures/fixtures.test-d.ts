@@ -5,7 +5,7 @@ import type {
 } from '@/domain'
 
 import type { Tables } from '../../database.types'
-import { employeeFixtures } from './employees'
+import { accountFixtures } from './accounts'
 import { menuItemFixtures } from './menu'
 import { outletFixtures } from './outlets'
 
@@ -42,18 +42,30 @@ export const inventedRole: Pick<Tables<'profiles'>, 'role'> = {
   role: 'intern',
 }
 
-// The same proof for the roster fixtures attendance added.
-const validEmployee = employeeFixtures[0] as Tables<'employees'>
+// The same proof for the people fixtures — staff are accounts, and the staff
+// facts live on profiles.
+const validAccount = accountFixtures[0] as Tables<'profiles'>
 
-export const employeeColumnTheSchemaLacks: Tables<'employees'> = {
-  ...validEmployee,
-  // @ts-expect-error — `nickname` is not a column of employees.
+export const accountColumnTheSchemaLacks: Tables<'profiles'> = {
+  ...validAccount,
+  // @ts-expect-error — `nickname` is not a column of profiles.
   nickname: 'chef',
 }
 
-export const inventedEmploymentStatus: Pick<Tables<'employees'>, 'employment_status'> = {
-  // @ts-expect-error — 'on_leave' is not an employment_status.
-  employment_status: 'on_leave',
+// The merged staff facts must exist with the types the adapters assume.
+export const staffFactsShape: Pick<
+  Tables<'profiles'>,
+  'staff_code' | 'role_title' | 'joined_on' | 'left_on'
+> = {
+  staff_code: 'KAL-01',
+  role_title: 'Counter staff',
+  joined_on: '2026-01-12',
+  left_on: null,
+}
+
+// @ts-expect-error — `salary_paise` was dropped, not moved: no payroll here.
+export const payrollStaysOutside: Pick<Tables<'profiles'>, 'salary_paise'> = {
+  salary_paise: 0,
 }
 
 // The evidence columns attendance relies on must exist with the types the
@@ -61,17 +73,31 @@ export const inventedEmploymentStatus: Pick<Tables<'employees'>, 'employment_sta
 // would fail here rather than at runtime in front of an employee.
 export const attendanceEvidenceShape: Pick<
   Tables<'attendance'>,
-  'check_in_distance_m' | 'check_in_accuracy_m' | 'check_in_source' | 'override_by_name'
+  | 'check_in_distance_m'
+  | 'check_in_accuracy_m'
+  | 'check_in_source'
+  | 'override_by_name'
+  | 'person_id'
+  | 'check_in_entered_by'
+  | 'check_in_entered_by_name'
 > = {
   check_in_distance_m: 11.6,
   check_in_accuracy_m: 14,
   check_in_source: 'phone',
   override_by_name: 'Demo Manager',
+  person_id: 'd1000000-0000-4000-a000-000000000004',
+  check_in_entered_by: null,
+  check_in_entered_by_name: null,
 }
 
 export const inventedCheckInSource: Pick<Tables<'attendance'>, 'check_in_source'> = {
   // @ts-expect-error — 'smartwatch' is not a check_in_source.
   check_in_source: 'smartwatch',
+}
+
+// 'manual' is: an admin typed the event in, and the row says who.
+export const manualCheckInSource: Pick<Tables<'attendance'>, 'check_in_source'> = {
+  check_in_source: 'manual',
 }
 
 // The outlet capture evidence added by this change.

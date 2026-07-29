@@ -5,7 +5,6 @@ import { createMockAlertsAdapter } from './alerts'
 import { createMockAttendanceAdapter } from './attendance'
 import { createMockBillingAdapter } from './billing'
 import { createMockDailyCashAdapter } from './daily-cash'
-import { createMockEmployeesAdapter } from './employees'
 import { createMockExpensesAdapter } from './expenses'
 import { createMockInsightsAdapter } from './insights'
 import { createMockInventoryAdapter } from './inventory'
@@ -31,7 +30,7 @@ import { createDemoStore } from './store'
  * (ui-owner-console-and-demo, design D10).
  */
 export interface DemoData {
-  /** One account list, two adapters — accounts and the roster are one set of people. */
+  /** The one list of people — staff are accounts, and every surface reads it. */
   accounts: ReturnType<typeof createDemoAccounts>
   /**
    * One trading day described from several angles. Figures that contradict each
@@ -76,9 +75,10 @@ export function createMockAdapters(
 
   return {
     outlets: createMockOutletsAdapter(),
-    accounts: createMockAccountsAdapter(accounts),
+    // The persona's role reaches the accounts mock so it refuses a manager's
+    // staff-code change where `staff_code_guard` will refuse it.
+    accounts: createMockAccountsAdapter(accounts, role),
     attendance,
-    employees: createMockEmployeesAdapter(accounts, role),
     // The persona's role reaches the menu mock so it refuses a Biller's write
     // where `menu_items_write` will refuse it.
     menu: createMockMenuAdapter(store, role),
@@ -101,7 +101,14 @@ export {
   OUTLET_MISTAKE_ID,
   outletFixtures,
 } from './fixtures/outlets'
-export { employeeFixtures } from './fixtures/employees'
+export {
+  accountFixtures,
+  DEMO_GRILLER_ACCOUNT_ID,
+  DEMO_HELPER_ACCOUNT_ID,
+  DEMO_PREP_COOK_ACCOUNT_ID,
+  DEMO_RUNNER_ACCOUNT_ID,
+  PENDING_ACCOUNT_ID,
+} from './fixtures/accounts'
 export {
   MENU_ITEM_CLASSIC_ID,
   MENU_ITEM_MAYO_ID,

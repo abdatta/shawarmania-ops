@@ -1,18 +1,26 @@
 import type { AttendanceStatus } from '../../adapters'
 import {
-  DEMO_BLOCKED_EMPLOYEE_ID,
-  DEMO_GRILLER_EMPLOYEE_ID,
-  DEMO_STAFF_EMPLOYEE_ID,
-} from './employees'
+  DEMO_GRILLER_ACCOUNT_ID,
+  DEMO_PREP_COOK_ACCOUNT_ID,
+  DEMO_RUNNER_ACCOUNT_ID,
+} from './accounts'
+import { personaFixtures } from './personas'
 
 /**
  * The demo attendance days, as intent rather than as rows.
+ *
+ * Rows key on the person's account — staff are accounts, and the ids here are
+ * profile ids from the accounts fixture.
  *
  * Coordinates are given; distances are not. The mock adapter computes them with
  * the same domain function the database's trigger mirrors, and applies the same
  * rule — an out-of-fence check-in with no override is not counted present. A
  * mock that hard-coded its distances could show a demo that the real system
  * could never produce, which is the one thing a demo must not do.
+ *
+ * A `manual` event carries an enterer instead of coordinates, exactly as the
+ * database stores one: the admin typed it in, and the row says so wherever it
+ * is read.
  *
  * Offsets are in business days back from today, so a walkthrough always shows a
  * plausible recent week rather than a date from whenever these were written.
@@ -21,13 +29,15 @@ import {
 interface EventSeed {
   /** IST wall-clock time on the business day, `HH:MM`. */
   time: string
-  latitude: number
-  longitude: number
-  accuracyMetres: number
+  latitude?: number
+  longitude?: number
+  accuracyMetres?: number
+  /** Present on a manually entered event; coordinates must then be absent. */
+  manual?: { byId: string; byName: string }
 }
 
 export interface AttendanceSeed {
-  employeeId: string
+  personId: string
   /** Business days back from today. 0 is today. */
   daysAgo: number
   /** The claim. The mock adjudicates it exactly as the database would. */
@@ -36,6 +46,9 @@ export interface AttendanceSeed {
   checkOut?: EventSeed
   override?: { byName: string; reason: string; time: string }
 }
+
+const DEMO_STAFF_ID = personaFixtures.employee.profile.id
+const DEMO_MANAGER = personaFixtures.franchise_admin.profile
 
 /** Kalyani's counter, from the outlet fixture. */
 const AT_COUNTER = { latitude: 22.97505, longitude: 88.4346, accuracyMetres: 14 }
@@ -55,7 +68,7 @@ export const attendanceSeeds: AttendanceSeed[] = [
   //
   // A normal completed day.
   {
-    employeeId: DEMO_STAFF_EMPLOYEE_ID,
+    personId: DEMO_STAFF_ID,
     daysAgo: 1,
     status: 'present',
     checkIn: { time: '09:02', ...AT_COUNTER },
@@ -64,7 +77,7 @@ export const attendanceSeeds: AttendanceSeed[] = [
   // A day that started outside the fence and was cleared by the manager — the
   // employee sees the approver and the reason, exactly as the manager does.
   {
-    employeeId: DEMO_STAFF_EMPLOYEE_ID,
+    personId: DEMO_STAFF_ID,
     daysAgo: 2,
     status: 'present',
     checkIn: { time: '09:20', ...DOWN_THE_ROAD },
@@ -76,15 +89,15 @@ export const attendanceSeeds: AttendanceSeed[] = [
     },
   },
   {
-    employeeId: DEMO_STAFF_EMPLOYEE_ID,
+    personId: DEMO_STAFF_ID,
     daysAgo: 3,
     status: 'present',
     checkIn: { time: '08:58', ...AT_COUNTER },
     checkOut: { time: '17:40', ...AT_COUNTER },
   },
-  { employeeId: DEMO_STAFF_EMPLOYEE_ID, daysAgo: 4, status: 'leave' },
+  { personId: DEMO_STAFF_ID, daysAgo: 4, status: 'leave' },
   {
-    employeeId: DEMO_STAFF_EMPLOYEE_ID,
+    personId: DEMO_STAFF_ID,
     daysAgo: 5,
     status: 'present',
     checkIn: { time: '09:10', ...NEAR_COUNTER },
@@ -92,27 +105,42 @@ export const attendanceSeeds: AttendanceSeed[] = [
     checkOut: { time: '18:30', ...DOWN_THE_ROAD },
   },
 
-  // ── The manager's day: three colleagues, three different situations ──────
+  // ── The manager's day: colleagues in different situations ────────────────
   {
-    employeeId: DEMO_GRILLER_EMPLOYEE_ID,
+    personId: DEMO_GRILLER_ACCOUNT_ID,
     daysAgo: 0,
     status: 'present',
     checkIn: { time: '08:47', ...AT_COUNTER },
   },
+  // Access was cut at lunchtime — the panic button — but the morning was
+  // worked and the day view still shows the person (deactivation is about
+  // sign-in, not existence).
+  {
+    personId: DEMO_PREP_COOK_ACCOUNT_ID,
+    daysAgo: 0,
+    status: 'present',
+    checkIn: { time: '08:55', ...NEAR_COUNTER },
+  },
   // Awaiting a decision. Claimed present; the fence says otherwise and nobody
   // has blessed it, so it sits as absent until a manager acts.
   {
-    employeeId: DEMO_BLOCKED_EMPLOYEE_ID,
+    personId: DEMO_RUNNER_ACCOUNT_ID,
     daysAgo: 0,
     status: 'present',
     checkIn: { time: '09:33', ...OFF_THE_MAP },
   },
+  // Yesterday the griller's phone died mid-shift, so the manager typed the
+  // check-out in: a manual entry, visibly not a self check-in, with the
+  // enterer stamped where the GPS evidence would be.
   {
-    employeeId: DEMO_GRILLER_EMPLOYEE_ID,
+    personId: DEMO_GRILLER_ACCOUNT_ID,
     daysAgo: 1,
     status: 'present',
     checkIn: { time: '08:52', ...AT_COUNTER },
-    checkOut: { time: '18:20', ...AT_COUNTER },
+    checkOut: {
+      time: '18:20',
+      manual: { byId: DEMO_MANAGER.id, byName: DEMO_MANAGER.full_name },
+    },
   },
-  { employeeId: DEMO_BLOCKED_EMPLOYEE_ID, daysAgo: 1, status: 'absent' },
+  { personId: DEMO_RUNNER_ACCOUNT_ID, daysAgo: 1, status: 'absent' },
 ]

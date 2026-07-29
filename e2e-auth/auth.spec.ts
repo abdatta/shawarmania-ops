@@ -141,7 +141,7 @@ test.describe('signing in', () => {
     await page.getByRole('button', { name: 'Sign in' }).click()
 
     await expect(page).toHaveURL(/\/admin\/people$/)
-    await expect(page.getByRole('heading', { name: 'Access' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
   })
 
   test('the session survives a reload, and sign-out ends it', async ({ page }) => {
@@ -170,18 +170,18 @@ test.describe('provisioning, end to end', () => {
 
     await signIn(page, PERSONAS.admin.email)
     await page.goto('admin/people')
-    await expect(page.getByRole('heading', { name: 'Access' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Add account' }).click()
+    await page.getByRole('button', { name: 'Add person' }).click()
     await page.getByLabel('Full name').fill(person.name)
     await page.getByLabel('Email', { exact: true }).fill(person.email)
 
-    // Provisioning an Employee still writes a roster row — that is what makes
-    // this account a person who can actually check in, and it is why the walk
-    // goes through this form against the real database. What it no longer does
-    // is ask for a staff code: a `before insert` trigger issues one from the
-    // outlet's prefix. This used to be where the walk answered that question.
+    // One act creates the person: the account IS the staff-list membership,
+    // and a `before insert` trigger issues their staff code from the outlet's
+    // prefix — so the form never asks for one, and there is no roster step
+    // left to finish anywhere.
     await expect(page.getByLabel('Staff code')).toHaveCount(0)
+    await page.getByLabel('Job title (optional)').fill('Grill')
     await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
     const panel = page.getByTestId('issued-code')
@@ -195,8 +195,11 @@ test.describe('provisioning, end to end', () => {
     await expect(panel).toContainText('Shown once')
     await expect(panel.getByRole('img', { name: new RegExp(person.name) })).toBeVisible()
 
-    // The new account is listed, and honestly described as not yet activated.
-    await expect(page.getByRole('row', { name: person.name })).toContainText('Awaiting activation')
+    // The new person is listed, honestly described as not yet activated, and
+    // already wearing the staff code the database issued as the row landed.
+    const newRow = page.getByRole('row', { name: person.name })
+    await expect(newRow).toContainText('Awaiting activation')
+    await expect(newRow).toContainText(/KAL-[0-9A-HJKMNP-TV-Z]{4}/)
 
     // The code is gone the moment it is dismissed — there is nowhere to look
     // it up, because only a hash was ever stored.
@@ -224,13 +227,11 @@ test.describe('provisioning, end to end', () => {
     await expect(theirPhone).toHaveURL(/\/staff$/)
     await expect(theirPhone.getByText(`Hello, ${person.name}`)).toBeVisible()
 
-    // The whole point of the chain: an account provisioned minutes ago, on a
-    // roster row created in the same breath, arrives at a working check-in
-    // rather than at "you are not on the staff list". That sentence is what a
-    // real employee saw before outlet-and-staff-setup, and it is the one thing
-    // no earlier test could have caught — the fixtures were always pre-linked.
+    // The whole point of the chain: a person provisioned minutes ago arrives
+    // at a working check-in. There is no roster row and no link that could
+    // have been missed — the account is the person, which is what
+    // staff-as-accounts exists to make true.
     await expect(theirPhone.getByTestId('attendance-action')).toBeVisible()
-    await expect(theirPhone.getByText(/not on .* staff list/)).toHaveCount(0)
 
     // The code is spent: a second person forwarded the same message gets
     // nowhere — and is told so on arrival, before typing anything, because the
@@ -249,7 +250,7 @@ test.describe('provisioning, end to end', () => {
     await signIn(page, PERSONAS.admin.email)
     await page.goto('admin/people')
 
-    await page.getByRole('button', { name: 'Add account' }).click()
+    await page.getByRole('button', { name: 'Add person' }).click()
     await expect(page.getByLabel('Role').locator('option')).toHaveText(['Biller', 'Staff'])
     await expect(page.getByLabel('Outlet', { exact: true })).toBeDisabled()
 
@@ -269,15 +270,10 @@ test.describe('deactivation', () => {
     // The owner provisions someone…
     await signIn(page, PERSONAS.owner.email)
     await page.goto('owner/people')
-    await page.getByRole('button', { name: 'Add account' }).click()
+    await page.getByRole('button', { name: 'Add person' }).click()
     await page.getByLabel('Full name').fill(person.name)
     await page.getByLabel('Email', { exact: true }).fill(person.email)
     await page.getByLabel('Outlet', { exact: true }).selectOption({ label: 'Shawarmania Kalyani' })
-    // A login, not a payroll employee — which is a real answer to the staff-list
-    // question and the one this test wants, since deactivation is about the
-    // session and nothing else. It also means the third option is exercised
-    // against the real database somewhere.
-    await page.getByLabel('Not on the staff list').check()
     await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
     const link = (await page.getByTestId('issued-code-link').innerText()).trim()

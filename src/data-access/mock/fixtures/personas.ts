@@ -21,6 +21,10 @@ const profileFixtures = {
     role: 'super_admin',
     outlet_id: null,
     is_active: true,
+    staff_code: null,
+    role_title: null,
+    joined_on: null,
+    left_on: null,
     created_at: FIXTURE_CREATED_AT,
   },
   franchise_admin: {
@@ -30,6 +34,10 @@ const profileFixtures = {
     role: 'franchise_admin',
     outlet_id: OUTLET_KALYANI_ID,
     is_active: true,
+    staff_code: 'KAL-05',
+    role_title: 'Manager',
+    joined_on: '2025-08-01',
+    left_on: null,
     created_at: FIXTURE_CREATED_AT,
   },
   biller: {
@@ -39,6 +47,11 @@ const profileFixtures = {
     role: 'biller',
     outlet_id: OUTLET_KALYANI_ID,
     is_active: true,
+    // A counter tablet is a device, not a person: no staff facts, ever.
+    staff_code: null,
+    role_title: null,
+    joined_on: null,
+    left_on: null,
     created_at: FIXTURE_CREATED_AT,
   },
   employee: {
@@ -48,6 +61,10 @@ const profileFixtures = {
     role: 'employee',
     outlet_id: OUTLET_KALYANI_ID,
     is_active: true,
+    staff_code: 'KAL-01',
+    role_title: 'Counter staff',
+    joined_on: '2026-01-12',
+    left_on: null,
     created_at: FIXTURE_CREATED_AT,
   },
 } satisfies Record<Role, Tables<'profiles'>>

@@ -3,19 +3,20 @@
  *
  * `13_generated_staff_codes.sql` proves the triggers in SQL and the component
  * tests prove the screens. The seam between them is where this change is most
- * fragile, for one specific reason: **`asRosterError` recognises the owner-only
- * refusal by matching the trigger's message text.** There is no constraint name
- * to match and no SQLSTATE that distinguishes it from any other
- * `insufficient_privilege`, so if PostgREST reformats, truncates or wraps that
- * message, the match silently fails and a manager gets "That did not work. Try
- * again in a moment." instead of being told the owner has to do it. Nothing
- * below the adapter can catch that, because in SQL the message is exactly what
- * the trigger raised.
+ * fragile, for one specific reason: **`toStaffFactsError` recognises the
+ * owner-only refusal by matching the trigger's message text.** There is no
+ * constraint name to match and no SQLSTATE that distinguishes it from any
+ * other `insufficient_privilege`, so if PostgREST reformats, truncates or
+ * wraps that message, the match silently fails and a manager gets "That did
+ * not work. Try again in a moment." instead of being told the owner has to do
+ * it. Nothing below the adapter can catch that, because in SQL the message is
+ * exactly what the trigger raised.
  *
- * The other half is issuing itself: the app omits `employee_code` from the
- * insert entirely, and a trigger fills it. If the column were ever sent as an
- * empty string, or the grant did not permit omitting it, this is the only place
- * that shows.
+ * Issuing itself is proved where creation happens: the provision path in
+ * outlet-and-staff-setup.test.ts, whose one act yields a person already
+ * carrying a code. What remains here is who may change one afterwards —
+ * asserted against the seeded Kalyani staff, and always restored, because the
+ * pgTAP positive controls key on the seeded codes.
  *
  * Requires the local stack: `npm run db:start && npm run db:reset`, then
  * `npm run test:rls`.
@@ -23,9 +24,9 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { beforeAll, describe, expect, it } from 'vitest'
 
-import { DataActionError } from '../../../src/data-access/adapters'
+import { AccountActionError } from '../../../src/data-access/adapters'
 import type { Database } from '../../../src/data-access/database.types'
-import { createSupabaseEmployeesAdapter } from '../../../src/data-access/supabase-adapters/employees'
+import { createSupabaseAccountsAdapter } from '../../../src/data-access/supabase-adapters/accounts'
 import { createSupabaseOutletsAdapter } from '../../../src/data-access/supabase-adapters/outlets'
 
 const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
@@ -35,6 +36,8 @@ const SUPABASE_ANON_KEY =
 
 const SEED_PASSWORD = 'shawarmania-local'
 const KALYANI = '00000000-0000-4000-a000-000000000001'
+/** Synthetic Staff Kal — seeded with staff code KAL-E1, which must survive. */
+const STAFF_KAL = '10000000-0000-4000-a000-000000000006'
 
 /** Unique per run, so the suite is re-runnable without a database reset. */
 const RUN = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
@@ -51,103 +54,69 @@ async function signIn(email: string): Promise<Client> {
   return client
 }
 
-let ownerRoster: ReturnType<typeof createSupabaseEmployeesAdapter>
-let managerRoster: ReturnType<typeof createSupabaseEmployeesAdapter>
+let ownerPeople: ReturnType<typeof createSupabaseAccountsAdapter>
+let managerPeople: ReturnType<typeof createSupabaseAccountsAdapter>
 let ownerOutlets: ReturnType<typeof createSupabaseOutletsAdapter>
 
 beforeAll(async () => {
   const owner = await signIn('owner@example.com')
   const manager = await signIn('admin.kalyani@example.com')
-  ownerRoster = createSupabaseEmployeesAdapter(owner)
-  managerRoster = createSupabaseEmployeesAdapter(manager)
+  ownerPeople = createSupabaseAccountsAdapter(owner)
+  managerPeople = createSupabaseAccountsAdapter(manager)
   ownerOutlets = createSupabaseOutletsAdapter(owner)
-})
-
-describe('issuing a staff code over REST', () => {
-  it('issues one when the app sends no code at all', async () => {
-    // Exactly what the Staff form does now: name and done.
-    const created = await managerRoster.createEmployee({
-      outletId: KALYANI,
-      fullName: `REST Issued ${RUN}-${seq++}`,
-    })
-
-    // Shape, never a literal. The database picks it.
-    expect(created.employeeCode).toMatch(/^KAL-[0-9A-HJKMNP-TV-Z]{4}$/)
-  })
-
-  it('gives two people at one outlet two different codes', async () => {
-    const a = await managerRoster.createEmployee({
-      outletId: KALYANI,
-      fullName: `REST Twin A ${RUN}-${seq++}`,
-    })
-    const b = await managerRoster.createEmployee({
-      outletId: KALYANI,
-      fullName: `REST Twin B ${RUN}-${seq++}`,
-    })
-    expect(a.employeeCode).not.toBe(b.employeeCode)
-  })
-
-  it('keeps a code that was actually supplied', async () => {
-    // Carries RUN so the suite is genuinely re-runnable against the same
-    // database: `employees_code_unique_per_outlet` is what a fixed literal
-    // would collide with on the second run.
-    const explicit = `KAL-X${RUN}${seq++}`.toUpperCase()
-    const created = await managerRoster.createEmployee({
-      outletId: KALYANI,
-      fullName: `REST Explicit ${RUN}`,
-      employeeCode: explicit,
-    })
-    expect(created.employeeCode).toBe(explicit)
-  })
 })
 
 describe('changing a staff code over REST', () => {
   it('refuses a manager, as a sentence rather than a raw trigger message', async () => {
-    // The case this file exists for. `asRosterError` matches the trigger's
-    // message text — there is no constraint name and no distinguishing
-    // SQLSTATE — so this is the only place that proves the match survives the
-    // trip through PostgREST.
-    const row = await managerRoster.createEmployee({
-      outletId: KALYANI,
-      fullName: `REST Manager Edit ${RUN}-${seq++}`,
-    })
-
+    // The case this file exists for. `toStaffFactsError` matches the
+    // trigger's message text — there is no constraint name and no
+    // distinguishing SQLSTATE — so this is the only place that proves the
+    // match survives the trip through PostgREST.
     await expect(
-      managerRoster.updateEmployee(row.id, { employeeCode: 'KAL-ZZZ9' }),
-    ).rejects.toBeInstanceOf(DataActionError)
+      managerPeople.updateStaffFacts(STAFF_KAL, { staffCode: 'KAL-ZZZ9' }),
+    ).rejects.toBeInstanceOf(AccountActionError)
     await expect(
-      managerRoster.updateEmployee(row.id, { employeeCode: 'KAL-ZZZ9' }),
+      managerPeople.updateStaffFacts(STAFF_KAL, { staffCode: 'KAL-ZZZ9' }),
     ).rejects.toMatchObject({ code: 'code_not_yours' })
 
     // And the code did not move.
-    const after = await managerRoster.listEmployees(KALYANI)
-    expect(after.find((candidate) => candidate.id === row.id)?.employeeCode).toBe(row.employeeCode)
+    const after = await managerPeople.listAccounts()
+    expect(after.find((candidate) => candidate.id === STAFF_KAL)?.staffCode).toBe('KAL-E1')
   })
 
-  it('lets a manager edit everything else on the same row', async () => {
-    // The guard is about one column, not the row. A manager still runs the
-    // roster, and a change that broke that would be far worse than the one it
-    // was meant to prevent.
-    const row = await managerRoster.createEmployee({
-      outletId: KALYANI,
-      fullName: `REST Manager Rename ${RUN}-${seq++}`,
+  it('lets a manager edit everything else on the same record', async () => {
+    // The guard is about one column, not the row. A manager still maintains
+    // the staff facts, and a change that broke that would be far worse than
+    // the one it was meant to prevent.
+    const renamed = await managerPeople.updateStaffFacts(STAFF_KAL, {
+      roleTitle: `Shift lead ${RUN}`,
     })
-    const updated = await managerRoster.updateEmployee(row.id, {
-      fullName: `REST Renamed ${RUN}`,
-      roleTitle: 'Shift lead',
-    })
-    expect(updated.fullName).toBe(`REST Renamed ${RUN}`)
-    expect(updated.employeeCode).toBe(row.employeeCode)
+    expect(renamed.roleTitle).toBe(`Shift lead ${RUN}`)
+    expect(renamed.staffCode).toBe('KAL-E1')
+
+    // Put the seeded fact back; this suite leaves the world as it found it.
+    await managerPeople.updateStaffFacts(STAFF_KAL, { roleTitle: 'Counter staff' })
   })
 
-  it('lets the owner change one', async () => {
-    const row = await managerRoster.createEmployee({
-      outletId: KALYANI,
-      fullName: `REST Owner Edit ${RUN}-${seq++}`,
-    })
-    const next = `KAL-O${RUN}${seq++}`.toUpperCase()
-    const updated = await ownerRoster.updateEmployee(row.id, { employeeCode: next })
-    expect(updated.employeeCode).toBe(next)
+  it('lets the owner change one — and restores it, because the seeds key on it', async () => {
+    const next = `KAL-O${RUN}${seq++}`.toUpperCase().slice(0, 12)
+    const updated = await ownerPeople.updateStaffFacts(STAFF_KAL, { staffCode: next })
+    expect(updated.staffCode).toBe(next)
+
+    const restored = await ownerPeople.updateStaffFacts(STAFF_KAL, { staffCode: 'KAL-E1' })
+    expect(restored.staffCode).toBe('KAL-E1')
+  })
+
+  it('refuses blanking an issued code, even for the owner, legibly', async () => {
+    await expect(
+      ownerPeople.updateStaffFacts(STAFF_KAL, { staffCode: '   ' }),
+    ).rejects.toMatchObject({ code: 'code_required' })
+  })
+
+  it('refuses a code already worn at the same outlet, legibly', async () => {
+    await expect(
+      ownerPeople.updateStaffFacts(STAFF_KAL, { staffCode: 'KAL-E2' }),
+    ).rejects.toMatchObject({ code: 'code_taken' })
   })
 })
 
@@ -215,14 +184,11 @@ describe('the outlet prefix over REST', () => {
   })
 
   it('freezes the prefix once a code has been issued from it', async () => {
-    // Asserted against Kalyani, which already has a roster, rather than by
-    // hiring somebody into a throwaway outlet.
-    //
-    // That alternative writes a roster row this suite could never remove:
-    // `employees` has no client delete path, so the row would survive, pin its
-    // outlet as permanently undeletable, and hold its three-character prefix
-    // out of a very small space — leaking one more on every run and failing the
-    // second one. This version writes nothing and cleans up nothing.
+    // Asserted against Kalyani, whose seeded people already carry KAL- codes,
+    // rather than by provisioning somebody into a throwaway outlet: people
+    // are not deletable, so that outlet could never be cleaned up, and it
+    // would hold a three-character prefix out of a very small space on every
+    // run. This version writes nothing and cleans up nothing.
     await expect(
       ownerOutlets.updateOutlet(KALYANI, { staffCodePrefix: 'ZR9' }),
     ).rejects.toMatchObject({ code: 'prefix_frozen' })

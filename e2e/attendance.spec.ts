@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { DEMO_BLOCKED_EMPLOYEE_ID } from '../src/data-access/mock/fixtures/employees'
+import { DEMO_RUNNER_ACCOUNT_ID } from '../src/data-access/mock/fixtures/accounts'
 
 /**
  * The attendance walk, against a production build and a real browser.
@@ -83,13 +83,46 @@ test('a manager sees the outlet day, approves an override, and the reason sticks
   await expect(day).toBeVisible()
   await expect(page.getByTestId('awaiting-count')).toContainText('waiting for your decision')
 
-  await page.getByTestId(`approve-${DEMO_BLOCKED_EMPLOYEE_ID}`).click()
+  await page.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`).click()
   await page.getByLabel('Why are you approving this?').fill('At the counter, phone signal poor')
   await page.getByRole('button', { name: /Approve and record my reason/ }).click()
 
   await expect(page.getByTestId('awaiting-count')).toHaveCount(0)
   await expect(page.getByText(/Approved by Demo Manager/)).toBeVisible()
   await expect(page.getByText(/At the counter, phone signal poor/)).toBeVisible()
+})
+
+test('a manager records a manual entry, and the row names who typed it in', async ({ page }) => {
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  // Demo Staff has nothing recorded today, so the offered event is a
+  // check-in. 04:00 is the earliest moment of any business day — the one
+  // time guaranteed not to be in the future while that day is current.
+  const staffId = 'd1000000-0000-4000-a000-000000000004'
+  await page.getByTestId(`manual-${staffId}`).click()
+  await expect(page.getByText(/permanently show that you entered it/)).toBeVisible()
+  await page.getByLabel('When did it happen?').fill('04:00')
+  await page.getByRole('button', { name: 'Record it under my name' }).click()
+
+  const card = page.getByTestId(`day-${staffId}`)
+  await expect(card.getByTestId('entered-by')).toContainText('Entered by Demo Manager')
+  await expect(card.getByText('manual entry')).toBeVisible()
+})
+
+test('a seeded manual check-out is visibly not a self check-in, on both sides', async ({
+  page,
+}) => {
+  // The griller's phone died yesterday and the manager typed the check-out
+  // in; the day view renders the enterer where the GPS evidence would be.
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+  await page.getByRole('button', { name: 'Previous day' }).click()
+
+  const grillerId = 'd1000000-0000-4000-a000-000000000006'
+  const card = page.getByTestId(`day-${grillerId}`)
+  await expect(card.getByTestId('entered-by')).toContainText('Entered by Demo Manager')
+  await expect(card.getByText('manual entry')).toBeVisible()
 })
 
 test('an employee’s own history shows the override and its reason', async ({ page }) => {
@@ -146,7 +179,7 @@ test('the attendance walk makes no request beyond the app origin', async ({ page
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
 
-  await page.goto('demo/admin/employees')
+  await page.goto('demo/admin/people')
   await expect(page.getByText('Demo Griller')).toBeVisible()
 
   await page.goto('demo/owner/outlets')

@@ -255,7 +255,7 @@ export function OutletDayView() {
               <ul className="space-y-1 text-xs">
                 {roster.map((record) => (
                   <li key={record.id} className="flex items-baseline justify-between gap-3">
-                    <span className="text-content">{record.employeeName}</span>
+                    <span className="text-content">{record.personName}</span>
                     <span className="text-content-muted">
                       {record.status === 'present' ? 'present' : 'awaiting a decision'}
                     </span>

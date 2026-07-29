@@ -44,15 +44,17 @@ insert into public.outlets (id, code, name, location_label) values
   ('00000000-0000-4000-a000-0000000000f6', 'del-emptied', 'Emptied Outlet', 'Nowhere'),
   ('00000000-0000-4000-a000-0000000000f7', 'del-denied',  'Denied Outlet',  'Nowhere');
 
--- A roster row on f2, and another on f6 that will be taken away again.
-insert into public.employees (id, outlet_id, employee_code, full_name) values
-  ('20000000-0000-4000-a000-0000000000f2', '00000000-0000-4000-a000-0000000000f2',
-   'DEL-01', 'Synthetic Attached'),
-  ('20000000-0000-4000-a000-0000000000f6', '00000000-0000-4000-a000-0000000000f6',
-   'DEL-02', 'Synthetic Leaving');
+-- People, accounts and devices are moved rather than invented: a profile's id
+-- is an auth user's id, and this file has no business creating those. Staff
+-- are accounts now, so "a staff member at f2" and "an account at f3" are the
+-- same kind of row wearing different roles — both are asserted anyway,
+-- because each was once a separate table and each has its own count below.
+update public.profiles set outlet_id = '00000000-0000-4000-a000-0000000000f2'
+ where id = '10000000-0000-4000-a000-00000000000c';
 
--- Accounts and devices are moved rather than invented: a profile's id is an
--- auth user's id, and this file has no business creating those.
+update public.profiles set outlet_id = '00000000-0000-4000-a000-0000000000f6'
+ where id = '10000000-0000-4000-a000-00000000000d';
+
 update public.profiles set outlet_id = '00000000-0000-4000-a000-0000000000f3'
  where id = '10000000-0000-4000-a000-000000000003';
 
@@ -80,13 +82,13 @@ select is((select count(*) from public.outlets
 
 select throws_ok($q$
   delete from public.outlets where id = '00000000-0000-4000-a000-0000000000f2'
-$q$, '23503', null, 'an outlet with a roster row cannot be deleted');
+$q$, '23503', null, 'an outlet with a staff member cannot be deleted');
 
 reset role;
 
-select is((select count(*) from public.employees
+select is((select count(*) from public.profiles
             where outlet_id = '00000000-0000-4000-a000-0000000000f2'), 1::bigint,
-  'and the roster row is still there — the refusal removed nothing');
+  'and the person is still there — the refusal removed nothing');
 
 select is((select count(*) from public.outlets
             where id = '00000000-0000-4000-a000-0000000000f2'), 1::bigint,
@@ -125,10 +127,13 @@ $q$, '23503', null,
   'an outlet whose only reference is a deactivated account is still refused');
 
 -- ---------------------------------------------------------------------------
--- Emptying an outlet makes it deletable, with nothing else to re-mark.
+-- Emptying an outlet makes it deletable, with nothing else to re-mark. People
+-- are not deletable, so emptying means reassigning them — which is the honest
+-- shape of closing a shop that still employs somebody.
 
 reset role;
-delete from public.employees where id = '20000000-0000-4000-a000-0000000000f6';
+update public.profiles set outlet_id = '00000000-0000-4000-a000-000000000002'
+ where id = '10000000-0000-4000-a000-00000000000d';
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid, 'super_admin', null);
 
@@ -136,7 +141,7 @@ delete from public.outlets where id = '00000000-0000-4000-a000-0000000000f6';
 
 select is((select count(*) from public.outlets
             where id = '00000000-0000-4000-a000-0000000000f6'), 0::bigint,
-  'removing the last referencing row is the only step — no flag to update');
+  'reassigning the last person is the only step — no flag to update');
 
 -- ---------------------------------------------------------------------------
 -- Every other role, by hand-crafted statement rather than by a missing button.
@@ -209,7 +214,7 @@ select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid, 'super_
 select is(
   (select string_agg(table_name || '=' || row_count, ', ' order by table_name)
      from public.outlet_reference_counts('00000000-0000-4000-a000-0000000000f2')),
-  'employees=1',
+  'profiles=1',
   'a populated outlet reports what is attached and how much of it');
 
 select is(

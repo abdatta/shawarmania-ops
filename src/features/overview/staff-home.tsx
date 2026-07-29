@@ -1,4 +1,4 @@
-import { CalendarCheck, UserRoundX } from 'lucide-react'
+import { CalendarCheck } from 'lucide-react'
 import { Link } from 'react-router'
 
 import { EmptyState } from '@/components/layout/empty-state'
@@ -14,7 +14,7 @@ import { useSession } from '@/session/context'
  */
 export function StaffHome() {
   const session = useSession()
-  const own = useOwnAttendance(session.outletId)
+  const own = useOwnAttendance(session.userId, session.outletId)
 
   return (
     <div className="mx-auto max-w-md">
@@ -48,16 +48,9 @@ export function StaffHome() {
         />
       )}
 
-      {own.status === 'no-roster' && (
-        <EmptyState
-          icon={UserRoundX}
-          title={`You are not on ${own.outlet.name}’s staff list yet, so there is nothing to check in to. Ask your manager to add you.`}
-        />
-      )}
-
       {own.status === 'ready' && (
         <CheckInCard
-          employee={own.employee}
+          personId={session.userId}
           outlet={own.outlet}
           record={own.today}
           onChange={own.setToday}

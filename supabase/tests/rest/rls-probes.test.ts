@@ -102,10 +102,10 @@ describe('a Franchise Admin session, hand-crafting requests for the other outlet
     fa = (await signIn(PERSONAS.faKalyani.email)).client
   })
 
-  it.each(['bills', 'menu_items', 'expenses', 'employees', 'attendance', 'shifts'] as const)(
+  it.each(['bills', 'menu_items', 'expenses', 'profiles', 'attendance', 'shifts'] as const)(
     'an explicit other-outlet filter on %s returns zero rows',
     async (table) => {
-      const { data, error } = await fa.from(table).select('*').eq('outlet_id', OUTLETS.kanchrapara)
+      const { data, error } = await fa.from(table).select('id').eq('outlet_id', OUTLETS.kanchrapara)
       expect(error).toBeNull()
       expect(data).toEqual([])
     },
@@ -263,12 +263,11 @@ describe('an Employee session', () => {
   it('sees only their own attendance, and no billing surface', async () => {
     const employee = (await signIn(PERSONAS.employeeKalyani.email)).client
 
-    const { data: attendance, error } = await employee.from('attendance').select('employee_id')
+    // Staff are accounts: attendance keys on the person's own profile id.
+    const { data: attendance, error } = await employee.from('attendance').select('person_id')
     expect(error).toBeNull()
     expect(attendance?.length).toBeGreaterThan(0)
-    expect(
-      attendance?.every((row) => row.employee_id === '20000000-0000-4000-a000-000000000001'),
-    ).toBe(true)
+    expect(attendance?.every((row) => row.person_id === PERSONAS.employeeKalyani.sub)).toBe(true)
 
     const { data: bills } = await employee.from('bills').select('*')
     expect(bills).toEqual([])
@@ -284,30 +283,27 @@ describe('an Employee session', () => {
    */
   it('cannot rewrite the verdict on its own attendance row', async () => {
     const employee = (await signIn(PERSONAS.employeeKalyani.email)).client
-    const own = '20000000-0000-4000-a000-000000000001'
 
     const { error } = await employee
       .from('attendance')
       .update({ status: 'half_day' })
-      .eq('employee_id', own)
+      .eq('person_id', PERSONAS.employeeKalyani.sub)
     expect(error?.message).toContain('cannot change their own attendance status')
   })
 
   it('cannot erase the evidence its verdict was derived from', async () => {
     const employee = (await signIn(PERSONAS.employeeKalyani.email)).client
-    const own = '20000000-0000-4000-a000-000000000001'
 
     const { error } = await employee
       .from('attendance')
       .update({ check_in_lat: null, check_in_lng: null })
-      .eq('employee_id', own)
+      .eq('person_id', PERSONAS.employeeKalyani.sub)
       .not('check_in_at', 'is', null)
     expect(error?.message).toContain('captured check-in evidence is immutable')
   })
 
   it('cannot approve its own blocked check-in', async () => {
     const employee = (await signIn(PERSONAS.employeeKalyani.email)).client
-    const own = '20000000-0000-4000-a000-000000000001'
 
     const { error } = await employee
       .from('attendance')
@@ -316,8 +312,43 @@ describe('an Employee session', () => {
         override_reason: 'self-approved',
         override_at: new Date().toISOString(),
       })
-      .eq('employee_id', own)
+      .eq('person_id', PERSONAS.employeeKalyani.sub)
     expect(error?.message).toContain('only a franchise admin or super admin may record an override')
+  })
+
+  it('cannot fabricate a manual entry over HTTP', async () => {
+    const employee = (await signIn(PERSONAS.employeeKalyani.email)).client
+
+    // Today as the outlet reckons days: IST wall clock, 04:00 cutover.
+    const businessDate = new Date(Date.now() + (5.5 - 4) * 3_600_000).toISOString().slice(0, 10)
+    const { error } = await employee.from('attendance').insert({
+      outlet_id: OUTLETS.kalyani,
+      person_id: PERSONAS.employeeKalyani.sub,
+      business_date: businessDate,
+      status: 'present',
+      check_in_at: new Date().toISOString(),
+      check_in_source: 'manual',
+    })
+    expect(error?.message).toContain(
+      'only a franchise admin or super admin may record a manual entry',
+    )
+  })
+
+  it('nor can the counter tablet', async () => {
+    const device = (await signIn(PERSONAS.deviceKalyani.email)).client
+
+    const businessDate = new Date(Date.now() + (5.5 - 4) * 3_600_000).toISOString().slice(0, 10)
+    const { error } = await device.from('attendance').insert({
+      outlet_id: OUTLETS.kalyani,
+      person_id: '20000000-0000-4000-a000-000000000002',
+      business_date: businessDate,
+      status: 'present',
+      check_in_at: new Date().toISOString(),
+      check_in_source: 'manual',
+    })
+    expect(error?.message).toContain(
+      'only a franchise admin or super admin may record a manual entry',
+    )
   })
 })
 

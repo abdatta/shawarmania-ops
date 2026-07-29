@@ -1,6 +1,6 @@
 -- A required text field cannot be blank, and the database is what says so.
 --
--- Twelve columns across eight tables, each `not null` and each carrying a new
+-- Thirteen columns across eight tables, each carrying a
 -- `<table>_<column>_not_blank` check. This file asserts the boundary itself —
 -- every statement here is hand-crafted and runs with RLS out of the way,
 -- because the claim under test is that the *database* refuses a blank, not
@@ -114,37 +114,24 @@ select lives_ok($$
    where id = '00000000-0000-4000-a000-0000000000b1'
 $$, 'a name with surrounding whitespace but real content is accepted');
 
--- ── employees.full_name ──────────────────────────────────────────────────────
+-- ── profiles.staff_code ──────────────────────────────────────────────────────
 --
--- outlet_id and employee_code are supplied and valid throughout, so the check
--- constraint is the only thing that can fail. A test that let the foreign key
--- fire first would assert 23503 and prove nothing about blankness.
+-- Absence and blankness are answered differently by design: on insert a blank
+-- code means "issue me one" and the trigger fills it (proved in
+-- 13_generated_staff_codes.sql), while on update the row already has a code
+-- and the guard refuses the clearing outright — before the check constraint
+-- can even see it, which is why the expected error here is the guard's P0001
+-- rather than 23514. The constraint remains underneath as the backstop.
 
 select throws_ok($$
-  insert into public.employees (outlet_id, employee_code, full_name)
-  values ('00000000-0000-4000-a000-000000000001', 'BLANK-1', '')
-$$, '23514', null, 'a roster row cannot be inserted with an empty full name');
+  update public.profiles set staff_code = '   '
+   where id = '20000000-0000-4000-a000-000000000002'
+$$, 'P0001', null, 'an issued staff code cannot be blanked with spaces');
 
 select throws_ok($$
-  insert into public.employees (outlet_id, employee_code, full_name)
-  values ('00000000-0000-4000-a000-000000000001', 'BLANK-2', '   ')
-$$, '23514', null, 'a roster row cannot be inserted with a whitespace-only full name');
-
-select lives_ok($$
-  insert into public.employees (id, outlet_id, employee_code, full_name)
-  values ('20000000-0000-4000-a000-0000000000b1',
-          '00000000-0000-4000-a000-000000000001', 'BLANK-OK', 'Ordinary Person')
-$$, 'a roster row with a real name still inserts');
-
-select throws_ok($$
-  update public.employees set full_name = ''
-   where id = '20000000-0000-4000-a000-0000000000b1'
-$$, '23514', null, 'an existing roster row cannot have its full name cleared');
-
-select throws_ok($$
-  update public.employees set full_name = '   '
-   where id = '20000000-0000-4000-a000-0000000000b1'
-$$, '23514', null, 'an existing roster row cannot have its full name blanked with spaces');
+  update public.profiles set staff_code = null
+   where id = '20000000-0000-4000-a000-000000000002'
+$$, 'P0001', null, 'an issued staff code cannot be cleared to null either');
 
 -- ── profiles.full_name ───────────────────────────────────────────────────────
 --
@@ -294,13 +281,12 @@ select bag_eq($$
    where conname like '%\_not\_blank'
      and connamespace = 'public'::regnamespace
 $$, $$ values
-  ('employees_code_not_blank'),
   ('attendance_override_reason_not_blank'),
   ('outlets_name_not_blank'),
   ('outlets_code_not_blank'),
   ('outlets_location_label_not_blank'),
-  ('employees_full_name_not_blank'),
   ('profiles_full_name_not_blank'),
+  ('profiles_staff_code_not_blank'),
   ('menu_categories_name_not_blank'),
   ('menu_items_name_not_blank'),
   ('inventory_items_name_not_blank'),

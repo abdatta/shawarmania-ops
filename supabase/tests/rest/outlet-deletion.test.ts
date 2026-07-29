@@ -83,7 +83,8 @@ describe('deleting an outlet over REST', () => {
 
     expect(references.length).toBeGreaterThan(0)
     // Identifiers the surface can map to words, and counts it can render.
-    expect(references.map((reference) => reference.table)).toContain('employees')
+    // Staff are accounts, so the people attached to an outlet are `profiles`.
+    expect(references.map((reference) => reference.table)).toContain('profiles')
     for (const reference of references) {
       expect(reference.count).toBeGreaterThan(0)
       expect(Number.isInteger(reference.count)).toBe(true)

@@ -74,7 +74,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     code: 'demo-mistake',
     // Named so it sorts after both real shops. The owner's roster picker
     // defaults to the first outlet of a name-sorted list that includes closed
-    // ones (employee-roster.tsx), so a demo outlet sorting first would quietly
+    // ones, so a demo outlet sorting first would quietly
     // land every Staff walkthrough on an empty roster.
     name: 'Test outlet (created by mistake)',
     location_label: 'Not a real shop',

@@ -407,7 +407,7 @@ describe('closing and reopening an outlet', () => {
  *
  * Two things carry these tests. Closing comes first, so an active outlet must
  * offer no way to delete at all; and a refused delete must say what is still
- * attached rather than reporting an error, because "employees_outlet_id_fkey"
+ * attached rather than reporting an error, because "profiles_outlet_id_fkey"
  * is not something anybody can act on.
  */
 describe('deleting an outlet', () => {
@@ -493,8 +493,9 @@ describe('deleting an outlet', () => {
     )
 
     const refusal = await screen.findByTestId('delete-blocked-kanchrapara')
-    expect(refusal).toHaveTextContent('staff on the roster')
-    expect(refusal).toHaveTextContent('app accounts')
+    // Staff are accounts, so what an outlet holds is people — one word for
+    // one kind of row, with the count beside it.
+    expect(refusal).toHaveTextContent(/people — \d+/)
     // A constraint name is not a sentence, and must not reach the screen.
     expect(refusal).not.toHaveTextContent('fkey')
     expect(screen.getByTestId('outlet-kanchrapara')).toBeInTheDocument()

@@ -23,7 +23,7 @@ import type { Database, TablesInsert, TablesUpdate } from '../database.types'
  * than removed, and the grants migration says so. The exception is justified
  * by the precondition the database enforces: an outlet can only go while
  * nothing references it, and an outlet nothing references has no history to
- * protect. Anyone reaching for `delete` on employees, bills or attendance is
+ * protect. Anyone reaching for `delete` on profiles, bills or attendance is
  * looking for a schema change, not a missing method.
  */
 
@@ -62,7 +62,7 @@ function toColumns(patch: OutletPatch): TablesUpdate<'outlets'> {
  * raw message names a constraint rather than the mistake.
  *
  * A foreign-key violation is the other: it is what a populated outlet's
- * deletion looks like arriving from Postgres, and `employees_outlet_id_fkey`
+ * deletion looks like arriving from Postgres, and `profiles_outlet_id_fkey`
  * is not a sentence. The surface follows this with the actual counts; this
  * message is what stands alone if that lookup fails too.
  */

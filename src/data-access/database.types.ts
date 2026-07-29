@@ -191,25 +191,29 @@ export type Database = {
           check_in_accuracy_m: number | null
           check_in_at: string | null
           check_in_distance_m: number | null
+          check_in_entered_by: string | null
+          check_in_entered_by_name: string | null
           check_in_lat: number | null
           check_in_lng: number | null
           check_in_source: Database["public"]["Enums"]["check_in_source"] | null
           check_out_accuracy_m: number | null
           check_out_at: string | null
           check_out_distance_m: number | null
+          check_out_entered_by: string | null
+          check_out_entered_by_name: string | null
           check_out_lat: number | null
           check_out_lng: number | null
           check_out_source:
             | Database["public"]["Enums"]["check_in_source"]
             | null
           created_at: string
-          employee_id: string
           id: string
           outlet_id: string
           override_at: string | null
           override_by: string | null
           override_by_name: string | null
           override_reason: string | null
+          person_id: string
           status: Database["public"]["Enums"]["attendance_status"]
         }
         Insert: {
@@ -217,6 +221,8 @@ export type Database = {
           check_in_accuracy_m?: number | null
           check_in_at?: string | null
           check_in_distance_m?: number | null
+          check_in_entered_by?: string | null
+          check_in_entered_by_name?: string | null
           check_in_lat?: number | null
           check_in_lng?: number | null
           check_in_source?:
@@ -225,19 +231,21 @@ export type Database = {
           check_out_accuracy_m?: number | null
           check_out_at?: string | null
           check_out_distance_m?: number | null
+          check_out_entered_by?: string | null
+          check_out_entered_by_name?: string | null
           check_out_lat?: number | null
           check_out_lng?: number | null
           check_out_source?:
             | Database["public"]["Enums"]["check_in_source"]
             | null
           created_at?: string
-          employee_id: string
           id?: string
           outlet_id: string
           override_at?: string | null
           override_by?: string | null
           override_by_name?: string | null
           override_reason?: string | null
+          person_id: string
           status: Database["public"]["Enums"]["attendance_status"]
         }
         Update: {
@@ -245,6 +253,8 @@ export type Database = {
           check_in_accuracy_m?: number | null
           check_in_at?: string | null
           check_in_distance_m?: number | null
+          check_in_entered_by?: string | null
+          check_in_entered_by_name?: string | null
           check_in_lat?: number | null
           check_in_lng?: number | null
           check_in_source?:
@@ -253,27 +263,36 @@ export type Database = {
           check_out_accuracy_m?: number | null
           check_out_at?: string | null
           check_out_distance_m?: number | null
+          check_out_entered_by?: string | null
+          check_out_entered_by_name?: string | null
           check_out_lat?: number | null
           check_out_lng?: number | null
           check_out_source?:
             | Database["public"]["Enums"]["check_in_source"]
             | null
           created_at?: string
-          employee_id?: string
           id?: string
           outlet_id?: string
           override_at?: string | null
           override_by?: string | null
           override_by_name?: string | null
           override_reason?: string | null
+          person_id?: string
           status?: Database["public"]["Enums"]["attendance_status"]
         }
         Relationships: [
           {
-            foreignKeyName: "attendance_employee_id_fkey"
-            columns: ["employee_id"]
+            foreignKeyName: "attendance_check_in_entered_by_fkey"
+            columns: ["check_in_entered_by"]
             isOneToOne: false
-            referencedRelation: "employees"
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_check_out_entered_by_fkey"
+            columns: ["check_out_entered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -286,6 +305,13 @@ export type Database = {
           {
             foreignKeyName: "attendance_override_by_fkey"
             columns: ["override_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_person_id_fkey"
+            columns: ["person_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -675,63 +701,6 @@ export type Database = {
           },
         ]
       }
-      employees: {
-        Row: {
-          address: string | null
-          employee_code: string
-          employment_status: Database["public"]["Enums"]["employment_status"]
-          full_name: string
-          id: string
-          joined_on: string | null
-          outlet_id: string
-          phone: string | null
-          profile_id: string | null
-          role_title: string | null
-          salary_paise: number
-        }
-        Insert: {
-          address?: string | null
-          employee_code?: string
-          employment_status?: Database["public"]["Enums"]["employment_status"]
-          full_name: string
-          id?: string
-          joined_on?: string | null
-          outlet_id: string
-          phone?: string | null
-          profile_id?: string | null
-          role_title?: string | null
-          salary_paise?: number
-        }
-        Update: {
-          address?: string | null
-          employee_code?: string
-          employment_status?: Database["public"]["Enums"]["employment_status"]
-          full_name?: string
-          id?: string
-          joined_on?: string | null
-          outlet_id?: string
-          phone?: string | null
-          profile_id?: string | null
-          role_title?: string | null
-          salary_paise?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "employees_outlet_id_fkey"
-            columns: ["outlet_id"]
-            isOneToOne: false
-            referencedRelation: "outlets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "employees_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       expenses: {
         Row: {
           amount_paise: number
@@ -1067,27 +1036,39 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
+          joined_on: string | null
+          left_on: string | null
           outlet_id: string | null
           phone: string | null
           role: Database["public"]["Enums"]["app_role"]
+          role_title: string | null
+          staff_code: string | null
         }
         Insert: {
           created_at?: string
           full_name: string
           id: string
           is_active?: boolean
+          joined_on?: string | null
+          left_on?: string | null
           outlet_id?: string | null
           phone?: string | null
           role: Database["public"]["Enums"]["app_role"]
+          role_title?: string | null
+          staff_code?: string | null
         }
         Update: {
           created_at?: string
           full_name?: string
           id?: string
           is_active?: boolean
+          joined_on?: string | null
+          left_on?: string | null
           outlet_id?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["app_role"]
+          role_title?: string | null
+          staff_code?: string | null
         }
         Relationships: [
           {
@@ -1166,8 +1147,8 @@ export type Database = {
         Args: { lat1: number; lat2: number; lng1: number; lng2: number }
         Returns: number
       }
-      app_employee_outlet: { Args: { emp: string }; Returns: string }
       app_outlet_id: { Args: never; Returns: string }
+      app_person_outlet: { Args: { person: string }; Returns: string }
       app_profile_has: {
         Args: {
           outlet: string
@@ -1271,8 +1252,7 @@ export type Database = {
       app_role: "super_admin" | "franchise_admin" | "biller" | "employee"
       attendance_status: "present" | "absent" | "half_day" | "leave"
       bill_status: "settled" | "void"
-      check_in_source: "phone" | "counter_tablet"
-      employment_status: "active" | "inactive" | "terminated"
+      check_in_source: "phone" | "counter_tablet" | "manual"
       expense_category:
         | "raw_materials"
         | "salaries"
@@ -1429,8 +1409,7 @@ export const Constants = {
       app_role: ["super_admin", "franchise_admin", "biller", "employee"],
       attendance_status: ["present", "absent", "half_day", "leave"],
       bill_status: ["settled", "void"],
-      check_in_source: ["phone", "counter_tablet"],
-      employment_status: ["active", "inactive", "terminated"],
+      check_in_source: ["phone", "counter_tablet", "manual"],
       expense_category: [
         "raw_materials",
         "salaries",

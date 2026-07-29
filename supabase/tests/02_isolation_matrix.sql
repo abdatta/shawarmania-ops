@@ -161,13 +161,13 @@ select is((select count(*) from public.menu_items), 7::bigint,
 select is((select count(*) from public.bills), 9::bigint,
   'fa_kalyani sees all 9 Kalyani bills');
 -- Scoped to the seeded codes rather than counted outright. The claim is "a
--- Kalyani admin sees Kalyani's roster", and a bare count also answers "what
+-- Kalyani admin sees Kalyani's staff", and a bare count also answers "what
 -- else has written to this database today" — which after an `npm run
--- test:e2e:auth` is a real roster row created through the real app, and a
+-- test:e2e:auth` is a real person created through the real app, and a
 -- different question with a different answer on every run.
-select is((select count(*) from public.employees
-            where employee_code in ('KAL-E1', 'KAL-E2')), 2::bigint,
-  'fa_kalyani sees both Kalyani roster rows');
+select is((select count(*) from public.profiles
+            where staff_code in ('KAL-E1', 'KAL-E2')), 2::bigint,
+  'fa_kalyani sees both seeded Kalyani staff accounts');
 select is((select count(*) from public.daily_cash_records), 1::bigint,
   'fa_kalyani sees the Kalyani closed day');
 select is((select count(*) from public.outlets), 1::bigint,
@@ -226,14 +226,28 @@ select throws_ok($q$
           'x', 'x', 'other')
 $q$, '42501', null, 'fa_kalyani cannot raise an alert for the other outlet');
 
-select throws_ok($q$
-  insert into public.employees (outlet_id, employee_code, full_name)
-  values ('00000000-0000-4000-a000-000000000002', 'X-1', 'Smuggled Employee')
-$q$, '42501', null, 'fa_kalyani cannot add an employee to the other outlet');
+-- Staff facts live on profiles now, written by the admin's own session — so
+-- the cross-outlet write to refuse is an update naming the other outlet's
+-- person. Zero rows reachable is the policy doing its job.
+create function pg_temp.rows_touched(q text)
+returns bigint language plpgsql as $$
+declare n bigint;
+begin
+  execute q;
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+select is(pg_temp.rows_touched($q$
+  update public.profiles set role_title = 'Smuggled Title'
+   where id = '10000000-0000-4000-a000-000000000007'
+$q$), 0::bigint,
+  'fa_kalyani cannot edit the staff facts of the other outlet''s person');
 
 select throws_ok($q$
-  insert into public.attendance (outlet_id, employee_id, business_date, status)
-  values ('00000000-0000-4000-a000-000000000002', '20000000-0000-4000-a000-000000000003',
+  insert into public.attendance (outlet_id, person_id, business_date, status)
+  values ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-000000000007',
           current_date, 'present')
 $q$, '42501', null, 'fa_kalyani cannot write attendance at the other outlet');
 

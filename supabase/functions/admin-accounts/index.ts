@@ -65,6 +65,11 @@ async function provision(
   // it would create an account the caller did not ask for. mayProvision judges
   // the shape; this endpoint does not guess.
   const outletId = str(body['outletId']) ?? null
+  // Staff facts, carried since staff-as-accounts: creating a person is one
+  // act, and the staff-list membership is the same row. The staff code is
+  // deliberately not accepted here — the database issues it on insert.
+  const roleTitle = str(body['roleTitle']) ?? null
+  const joinedOn = str(body['joinedOn']) ?? null
 
   if (!fullName || !email || !role || !APP_ROLES.includes(role)) {
     return json({ error: 'invalid_request' }, 400)
@@ -87,6 +92,8 @@ async function provision(
     role,
     outlet_id: outletId,
     is_active: true,
+    role_title: roleTitle,
+    joined_on: joinedOn,
   })
   if (profileError) {
     // Never leave an auth user with no profile behind: it would be invisible to

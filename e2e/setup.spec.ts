@@ -1,17 +1,17 @@
 import { expect, test, type Page } from '@playwright/test'
-import {
-  DEMO_GRILLER_EMPLOYEE_ID,
-  DEMO_STAFF_EMPLOYEE_ID,
-} from '../src/data-access/mock/fixtures/employees'
+import { DEMO_HELPER_ACCOUNT_ID } from '../src/data-access/mock/fixtures/accounts'
 
 /**
- * The setup walk: creating an outlet, and joining an app account to the person
- * it belongs to — through a real browser, against a production build.
+ * The setup walk: creating an outlet, and creating a person — through a real
+ * browser, against a production build.
  *
- * These two steps are what stood between a deployed attendance feature and a
+ * These steps are what stood between a deployed attendance feature and a
  * reachable one, and neither had ever been exercised anywhere: the fixtures
  * describe a business that is already configured, so every earlier test started
  * from a world nothing in the app could have produced.
+ *
+ * Staff exist only as accounts, so creating a person is one act on one
+ * surface: no roster row, no linking step, nothing left to finish elsewhere.
  *
  * baseURL carries the deployment sub-path, so every goto is relative.
  */
@@ -56,63 +56,59 @@ test('an outlet marked closed keeps everything and can be reopened', async ({ pa
   await expect(page.getByTestId('closed-kalyani')).toHaveCount(0)
 })
 
-test('an account and a person on the roster are joined, and the join is legible', async ({
-  page,
-}) => {
-  await page.goto('demo/admin/employees')
-
-  // The demo ships both halves of the unfinished state on purpose.
-  await expect(page.getByTestId(`unlinked-${DEMO_GRILLER_EMPLOYEE_ID}`)).toContainText(
-    'No app account',
-  )
-  await expect(page.getByTestId(`linked-${DEMO_STAFF_EMPLOYEE_ID}`)).toContainText('Demo Staff')
-
-  const row = page.getByTestId(`unlinked-${DEMO_GRILLER_EMPLOYEE_ID}`).locator('xpath=ancestor::tr')
-  await row.getByRole('button', { name: 'Edit' }).click()
-  await page.getByLabel('App account').selectOption({ label: 'Demo Griller' })
-  await page.getByRole('button', { name: 'Save changes' }).click()
-
-  await expect(page.getByTestId(`linked-${DEMO_GRILLER_EMPLOYEE_ID}`)).toContainText('Demo Griller')
-  await expect(page.getByTestId(`unlinked-${DEMO_GRILLER_EMPLOYEE_ID}`)).toHaveCount(0)
-})
-
-test('unlinking says what it costs and what it keeps', async ({ page }) => {
-  await page.goto('demo/admin/employees')
-
-  const row = page.getByTestId(`linked-${DEMO_STAFF_EMPLOYEE_ID}`).locator('xpath=ancestor::tr')
-  await row.getByRole('button', { name: 'Unlink' }).click()
-
-  const dialog = page.getByRole('dialog')
-  await expect(dialog).toContainText('stops being able to check in')
-  await expect(dialog).toContainText('those days were worked')
-  await dialog.getByRole('button', { name: 'Unlink' }).click()
-
-  await expect(page.getByTestId(`unlinked-${DEMO_STAFF_EMPLOYEE_ID}`)).toContainText(
-    'No app account',
-  )
-})
-
-test('provisioning an Employee asks about the staff list rather than deciding', async ({
-  page,
-}) => {
+test('creating a person is one act that ends in a working handover', async ({ page }) => {
   await page.goto('demo/admin/people')
-  await page.getByRole('button', { name: 'Add account' }).click()
+  await page.getByRole('button', { name: 'Add person' }).click()
 
-  const choice = page.getByRole('group', { name: 'Staff list' })
-  await expect(choice).toBeVisible()
-  await expect(page.getByLabel('Add them to the staff list')).toBeChecked()
-  await expect(page.getByLabel('Not on the staff list')).toBeVisible()
+  // One form: the account fields and the staff facts together, and never a
+  // staff code — the database issues it.
+  await expect(page.getByLabel('Job title (optional)')).toBeVisible()
+  await expect(page.getByLabel(/Staff code/)).toHaveCount(0)
 
-  // And an account already provisioned onto no roster says so on the list.
-  await page.getByRole('button', { name: 'Close' }).click()
-  await expect(page.getByTestId('off-roster-d1000000-0000-4000-a000-000000000008')).toContainText(
-    'cannot check in',
+  await page.getByLabel('Full name').fill('Demo Newcomer')
+  await page.getByLabel('Email').fill('demo.newcomer@example.com')
+  await page.getByLabel('Job title (optional)').fill('Grill')
+  await page.getByRole('button', { name: 'Create and issue a code' }).click()
+
+  // The handover, once: link and code image.
+  const panel = page.getByTestId('issued-code')
+  await expect(panel).toBeVisible()
+  await expect(panel).toContainText('Shown once')
+
+  // And the person is on the staff list at once, wearing an issued code —
+  // there is no second surface where they still have to be added or linked.
+  const row = page.getByRole('row', { name: /Demo Newcomer/ })
+  await expect(row).toBeVisible()
+  await expect(row).toContainText(/KAL-[0-9A-HJKMNP-TV-Z]{4}/)
+})
+
+test('the people states each say what is wrong and what to do', async ({ page }) => {
+  await page.goto('demo/admin/people')
+
+  // The roster merge's leftover: a placeholder address, named as the fix.
+  await expect(page.getByTestId(`placeholder-${DEMO_HELPER_ACCOUNT_ID}`)).toContainText(
+    'Placeholder address',
   )
+  await expect(page.getByRole('row', { name: /Demo Helper/ })).toContainText('Needs an address')
+
+  // Provisioned, activated by nobody yet.
+  await expect(page.getByRole('row', { name: /Demo New Starter/ })).toContainText(
+    'Awaiting activation',
+  )
+
+  // Access cut without leaving: still on the list, plainly marked.
+  await expect(page.getByRole('row', { name: /Demo Prep Cook/ })).toContainText('Deactivated')
+
+  // Departed people are off the working list, and one tap away with their
+  // leaving date — records kept, clutter gone.
+  await expect(page.getByText('Demo Former Staff')).toHaveCount(0)
+  await page.getByTestId('toggle-departed').click()
+  await expect(page.getByRole('row', { name: /Demo Former Staff/ })).toContainText('Left')
 })
 
 test('the whole setup walk stays inside the app origin', async ({ page, baseURL }) => {
-  // The demo tree is structurally incapable of reaching a backend, and the two
-  // writes this change adds must not be the exception that proves otherwise.
+  // The demo tree is structurally incapable of reaching a backend, and the
+  // writes this change makes must not be the exception that proves otherwise.
   const origin = new URL(baseURL ?? 'http://127.0.0.1:4173/').origin
   const foreign: string[] = []
   page.on('request', (request) => {
@@ -127,12 +123,12 @@ test('the whole setup walk stays inside the app origin', async ({ page, baseURL 
   await page.getByRole('button', { name: 'Create outlet' }).click()
   await expect(page.getByTestId('outlet-barrackpore')).toBeVisible()
 
-  await page.goto('demo/admin/employees')
-  const row = page.getByTestId(`unlinked-${DEMO_GRILLER_EMPLOYEE_ID}`).locator('xpath=ancestor::tr')
-  await row.getByRole('button', { name: 'Edit' }).click()
-  await page.getByLabel('App account').selectOption({ label: 'Demo Griller' })
-  await page.getByRole('button', { name: 'Save changes' }).click()
-  await expect(page.getByTestId(`linked-${DEMO_GRILLER_EMPLOYEE_ID}`)).toBeVisible()
+  await page.goto('demo/admin/people')
+  await page.getByRole('button', { name: 'Add person' }).click()
+  await page.getByLabel('Full name').fill('Demo Origin Probe')
+  await page.getByLabel('Email').fill('demo.origin.probe@example.com')
+  await page.getByRole('button', { name: 'Create and issue a code' }).click()
+  await expect(page.getByTestId('issued-code')).toBeVisible()
 
   expect(foreign).toEqual([])
 })

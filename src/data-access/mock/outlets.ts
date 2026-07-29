@@ -6,7 +6,6 @@ import {
   type OutletsAdapter,
 } from '../adapters'
 import { accountFixtures } from './fixtures/accounts'
-import { employeeFixtures } from './fixtures/employees'
 import { outletFixtures } from './fixtures/outlets'
 
 /**
@@ -35,7 +34,6 @@ import { outletFixtures } from './fixtures/outlets'
  */
 function referencesTo(outletId: string): OutletReference[] {
   const counts: OutletReference[] = [
-    { table: 'employees', count: employeeFixtures.filter((e) => e.outlet_id === outletId).length },
     { table: 'profiles', count: accountFixtures.filter((a) => a.outlet_id === outletId).length },
   ]
   // Only what is actually attached, matching outlet_reference_counts.
@@ -159,8 +157,9 @@ export function createMockOutletsAdapter(): OutletsAdapter {
           // prefix, and re-pointing it would leave every code already issued
           // reading from something that no longer exists. The real stack
           // enforces this in `outlet_prefix_guard`; the demo must not teach a
-          // product where it is merely discouraged.
-          if (referencesTo(id).some((reference) => reference.table === 'employees')) {
+          // product where it is merely discouraged. People at the outlet
+          // stand in for "a code has been issued here", as the surface does.
+          if (referencesTo(id).some((reference) => reference.table === 'profiles')) {
             throw new DataActionError(
               'prefix_frozen',
               'Staff codes have already been issued from this prefix, so it cannot change now.',

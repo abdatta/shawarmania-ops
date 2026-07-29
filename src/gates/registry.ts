@@ -65,23 +65,15 @@ const defs = {
     nav: { label: 'Outlets', icon: Store, order: 2 },
     state: 'live',
   },
+  /**
+   * Every person, across all outlets. Staff exist only as accounts
+   * (staff-as-accounts), so this one surface is the account list *and* the
+   * staff list — there is no separate roster page and no linking step.
+   */
   'owner-people': {
     role: 'super_admin',
     path: 'people',
     nav: { label: 'People', icon: Users, order: 3 },
-    state: 'live',
-  },
-  /**
-   * The owner's own way into an outlet's roster. The Super Admin is outlet-less
-   * by constraint, so without an outlet picker here the one person who can
-   * create an outlet could not then put anyone on its staff list — and "why can
-   * this person not check in?" is a question asked by phone, to the owner
-   * (outlet-and-staff-setup, design D6).
-   */
-  'owner-employees': {
-    role: 'super_admin',
-    path: 'employees',
-    nav: { label: 'Staff', icon: ClipboardList, order: 4 },
     state: 'live',
   },
   'owner-comparison': {
@@ -157,12 +149,6 @@ const defs = {
     nav: { label: 'Attendance', icon: CalendarCheck, order: 6 },
     state: 'live',
   },
-  'admin-employees': {
-    role: 'franchise_admin',
-    path: 'employees',
-    nav: { label: 'Staff', icon: Users, order: 7 },
-    state: 'live',
-  },
   'admin-pnl': {
     role: 'franchise_admin',
     path: 'pnl',
@@ -182,16 +168,14 @@ const defs = {
     state: 'hidden',
   },
   /**
-   * App access for this outlet — create an account, issue a code, deactivate.
-   * Distinct from `admin-employees`, which is the HR roster (employment
-   * status, role, joining date) and belongs with the operations surfaces.
-   * Having a login and being on the payroll are different facts about a
-   * person, and one can be true without the other.
+   * This outlet's people — accounts and staff list in one surface, because
+   * staff exist only as accounts (staff-as-accounts). Creating a person here
+   * is one act: login, staff-list membership, issued code.
    */
   'admin-people': {
     role: 'franchise_admin',
     path: 'people',
-    nav: { label: 'Access', icon: KeyRound, order: 11 },
+    nav: { label: 'People', icon: Users, order: 7 },
     state: 'live',
   },
 
@@ -237,12 +221,9 @@ const defs = {
     nav: { label: 'My shift', icon: ClipboardList, order: 4 },
     state: 'hidden',
   },
-  'counter-attendance-kiosk': {
-    role: 'biller',
-    path: 'kiosk',
-    nav: { label: 'Check-in', icon: CalendarCheck, order: 5 },
-    state: 'hidden',
-  },
+  // The attendance kiosk is gone, not hidden: the owner rejected it (one
+  // shared device, usually busy billing), and a manager's manual entry on the
+  // attendance day is the escape hatch instead (staff-as-accounts).
 
   // ── Employee — a phone, and almost nothing else ──────────────────────────
   'staff-home': {

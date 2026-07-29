@@ -11,7 +11,7 @@ import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
-import type { AttendanceRecord, EmployeeSummary } from '@/data-access/adapters'
+import type { AttendanceRecord } from '@/data-access/adapters'
 import { useAdapters, type Tables } from '@/data-access'
 import { AttendanceActionError } from '@/data-access/adapters'
 import { evaluateFence, formatMetres, resolveBusinessDate, type FenceVerdict } from '@/domain'
@@ -63,12 +63,13 @@ type Attempt =
   | { kind: 'error'; message: string }
 
 export function CheckInCard({
-  employee,
+  personId,
   outlet,
   record,
   onChange,
 }: {
-  employee: EmployeeSummary
+  /** Whose day this is — the signed-in session's own account id. */
+  personId: string
   outlet: Tables<'outlets'>
   record: AttendanceRecord | null
   onChange: (record: AttendanceRecord) => void
@@ -105,13 +106,13 @@ export function CheckInCard({
     (reading: PositionReading | null) =>
       write(() =>
         attendance.checkIn({
-          employeeId: employee.id,
+          personId,
           outletId: outlet.id,
           businessDate: businessDateOf(record, outlet),
           reading,
         }),
       ),
-    [attendance, employee.id, outlet, record, write],
+    [attendance, personId, outlet, record, write],
   )
 
   async function onCheckIn() {

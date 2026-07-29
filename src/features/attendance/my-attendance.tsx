@@ -24,17 +24,17 @@ import { useOwnAttendance } from './use-own-attendance'
 export function MyAttendance() {
   const session = useSession()
   const { attendance } = useAdapters()
-  const own = useOwnAttendance(session.outletId)
+  const own = useOwnAttendance(session.userId, session.outletId)
   const [history, setHistory] = useState<AttendanceRecord[] | null>(null)
   const [failed, setFailed] = useState(false)
 
-  const employeeId = own.status === 'ready' ? own.employee.id : null
+  const personId = own.status === 'ready' ? session.userId : null
 
   useEffect(() => {
-    if (!employeeId) return
+    if (!personId) return
     let active = true
     void attendance
-      .listHistory(employeeId)
+      .listHistory(personId)
       .then((rows) => {
         if (active) setHistory(rows)
       })
@@ -44,7 +44,7 @@ export function MyAttendance() {
     return () => {
       active = false
     }
-  }, [attendance, employeeId])
+  }, [attendance, personId])
 
   const radius = own.status === 'ready' ? own.outlet.geofence_radius_m : 0
 
@@ -68,13 +68,6 @@ export function MyAttendance() {
 
       {own.status === 'no-outlet' && (
         <EmptyState icon={CalendarCheck} title="Your account is not assigned to an outlet yet." />
-      )}
-
-      {own.status === 'no-roster' && (
-        <EmptyState
-          icon={CalendarCheck}
-          title="You are not on the staff list yet, so there is nothing recorded. Ask your manager to add you."
-        />
       )}
 
       {own.status === 'ready' && history !== null && (
