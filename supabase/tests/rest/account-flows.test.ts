@@ -158,6 +158,22 @@ async function emailSignIn(
   }
 }
 
+async function deploymentReadiness(): Promise<FnResult<{ ready?: boolean }>> {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/email-sign-in`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ action: 'deployment-readiness' }),
+  })
+  const text = await response.text()
+  return {
+    status: response.status,
+    body: (text ? JSON.parse(text) : {}) as { ready?: boolean },
+  }
+}
+
 interface Provisioned {
   profileId: string
   username: string
@@ -192,6 +208,15 @@ let faKalyaniToken: string
 beforeAll(async () => {
   superAdminToken = await tokenFor(PERSONAS.superAdmin)
   faKalyaniToken = await tokenFor(PERSONAS.faKalyani)
+})
+
+describe('production deployment readiness', () => {
+  it('exposes only a positive readiness boolean for the canonical local state', async () => {
+    expect(await deploymentReadiness()).toEqual({
+      status: 200,
+      body: { ready: true },
+    })
+  })
 })
 
 describe('permanent associated-email sign-in', () => {

@@ -33,6 +33,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Require production auth readiness
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: npm run auth:readiness
+
       - name: Build
         # Project sites serve from /<repo>/. On a custom domain this becomes
         # BASE_PATH: / and nothing else changes.
@@ -45,17 +51,13 @@ jobs:
         # every bundle is not a secret, and pretending otherwise makes the
         # real secret — the service-role key — look equally routine.
         #
-        # With both unset the build still succeeds and deploys a DEMO-ONLY
-        # site: the demo tree needs no backend, and sign-in reports that it
-        # cannot reach the server rather than crashing. That is the intended
-        # state until a Supabase project exists.
+        # The readiness step above fails closed when either value is absent or
+        # the #24 backend/data rollout is incomplete. A permanent username UI
+        # must never publish ahead of the identity state it requires.
         env:
           BASE_PATH: /
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          # Short-lived #24 rollout valve. It is intentionally a public build
-          # variable, not a secret, and is deleted after username postflight.
-          VITE_AUTH_CUTOVER_MODE: ${{ vars.VITE_AUTH_CUTOVER_MODE }}
         run: npm run build
 
       - uses: actions/configure-pages@v5

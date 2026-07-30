@@ -782,6 +782,85 @@ grant execute on function public.resolve_owner_recovery(
   text, text, interval, integer, integer, integer
 ) to service_role;
 
+-- ---------------------------------------------------------------------------
+-- Deployment readiness.
+--
+-- GitHub Pages is static: once a bundle is published it cannot wait for a
+-- database migration or an Edge Function to catch up. The deployment workflow
+-- therefore calls email-sign-in before it uploads the permanent username UI.
+-- Only the service-role function behind that endpoint may inspect these
+-- invariants, and it returns one boolean rather than counts or identifiers.
+
+create or replace function public.username_rollout_ready()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select
+    -- At least one active live Super Admin remains able to operate the system.
+    exists (
+      select 1
+        from public.assignments a
+        join public.profiles p on p.id = a.person_id
+        join public.account_emails e on e.profile_id = a.person_id
+       where a.role = 'super_admin'
+         and a.ended_on is null
+         and p.is_active
+    )
+    -- Every non-deleted Auth account is the same human profile, carries a
+    -- canonical reserved alias, and has a matching email-provider identity.
+    and not exists (
+      select 1
+        from auth.users u
+        left join public.profiles p on p.id = u.id
+       where u.deleted_at is null
+         and (
+           p.id is null
+           or public.app_username_from_auth_alias(u.email) is null
+           or not exists (
+             select 1
+               from auth.identities i
+              where i.user_id = u.id
+                and i.provider = 'email'
+                and i.email = u.email
+           )
+         )
+    )
+    -- No application profile was orphaned from its Auth identity.
+    and not exists (
+      select 1
+        from public.profiles p
+        left join auth.users u
+          on u.id = p.id
+         and u.deleted_at is null
+       where u.id is null
+          or public.app_username_from_auth_alias(u.email) is null
+    )
+    -- The deferred write constraint protects new transactions; this explicit
+    -- read protects an existing production state at the release boundary.
+    and not exists (
+      select 1
+        from public.assignments a
+        join public.profiles p on p.id = a.person_id
+       where a.role = 'super_admin'
+         and a.ended_on is null
+         and (
+           not p.is_active
+           or not exists (
+             select 1
+               from public.account_emails e
+              where e.profile_id = a.person_id
+           )
+         )
+    )
+$$;
+
+revoke execute on function public.username_rollout_ready()
+  from public, anon, authenticated;
+grant execute on function public.username_rollout_ready() to service_role;
+
 comment on table public.account_emails is
   'Optional private alternate sign-in email; required for every live Super '
   'Admin. No client role has table privileges or an RLS policy.';

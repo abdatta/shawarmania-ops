@@ -205,6 +205,43 @@ account-email data when the change completes.
   and production identity state, not in a tracked source, test, fixture,
   document, or commit message
 
+### Requirement: Permanent frontend deployment waits for identity readiness
+
+The static production frontend SHALL NOT build or upload unless an
+already-deployed backend probe confirms the username rollout is ready. The
+probe SHALL fail closed when its Edge Function or private database invariant is
+missing or unavailable, the request times out, the response is malformed, or
+either public Supabase build variable is absent.
+
+Readiness SHALL require at least one active live Super Admin with private
+account email; a canonical reserved Auth alias, matching email-provider
+identity, and matching profile for every non-deleted Auth user; no profile
+orphaned from Auth; and configured production recovery-hook secret, provider
+key, sender, and exact canonical callback URL. The database invariant SHALL be
+service-role-only. The public response SHALL expose only a boolean and no
+failed condition, count, username, provider alias, email, or profile ID.
+
+#### Scenario: A frontend push races the account migration
+
+- **WHEN** any live Auth account still uses a legacy identifier or lacks its
+  matching profile or email-provider identity
+- **THEN** the readiness probe returns false and GitHub Pages retains the
+  previously published artifact
+
+#### Scenario: Recovery configuration is incomplete
+
+- **WHEN** the schema and aliases are ready but a required hosted recovery-mail
+  runtime value is absent or the callback is not the canonical production URL
+- **THEN** the readiness probe returns false and no permanent username bundle
+  is uploaded
+
+#### Scenario: Production identity is ready
+
+- **WHEN** every private database invariant and required Edge runtime value is
+  satisfied
+- **THEN** the probe returns exactly a positive readiness boolean and the Pages
+  workflow may continue to build and upload
+
 ### Requirement: Credential forms expose password-manager semantics without promising browser UI
 
 The ordinary sign-in form SHALL mark its identifier as `username` and its

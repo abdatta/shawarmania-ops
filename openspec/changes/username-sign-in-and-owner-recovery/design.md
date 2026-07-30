@@ -418,17 +418,21 @@ Rollout order:
 1. Rehearse the mapping and migration against a production-shaped local backup.
 2. Configure and test sender DNS, Resend, the signed Send Email Hook, canonical
    callback URL, and recovery rate limits.
-3. Deploy schema/functions plus permanent email-or-username sign-in.
+3. Deploy the schema and five identity functions while the safe cutover
+   frontend remains published.
 4. Generate, owner-review, and apply the production username mapping.
-5. Run account, invite, RLS, and all-role authenticated probes; hand every
+5. Require the production readiness endpoint to pass, then push the permanent
+   email-or-username frontend. The Pages workflow repeats that check before it
+   can build or upload.
+6. Run account, invite, RLS, and all-role authenticated probes; hand every
    active person their approved username.
-6. Test owner recovery from an unauthenticated phone.
-7. Verify username sign-in and associated-email sign-in reach the same account
+7. Test owner recovery from an unauthenticated phone.
+8. Verify username sign-in and associated-email sign-in reach the same account
    without exposing the private mapping.
-8. Verify no unapproved or placeholder email data remains, then close the
+9. Verify no unapproved or placeholder email data remains, then close the
    rollback window and destroy the sensitive mapping copy.
 
-Before step 8, rollback uses the reviewed mapping to restore Auth addresses via
+Before step 9, rollback uses the reviewed mapping to restore Auth addresses via
 the Admin API. Permanent dual-identifier sign-in requires no application
 rollback. The active schema still requires one private account-email row for
 every live Super Admin, so rollback retains those rows; it never recreates an
@@ -436,6 +440,38 @@ ordinary staff email requirement. User IDs, hashes, and sessions still are not
 recreated. After the mapping copy is destroyed and unapproved staff email is
 intentionally gone, rollback is forward-only: repair usernames or email
 association without attempting to resurrect deleted PII.
+
+### D12. Static publication proves backend readiness first
+
+GitHub Pages cannot atomically publish a frontend and migrate Supabase. The
+deployment workflow therefore calls a dedicated action on the already-deployed
+`email-sign-in` function before build or artifact upload. A missing function,
+unavailable RPC, non-success response, malformed response, timeout, or absent
+public Supabase build variables stops the workflow and leaves the previously
+published artifact untouched.
+
+The Edge Function combines two boundaries:
+
+1. a service-role-only, security-definer database function returns one boolean
+   after checking that at least one active live Super Admin has private account
+   email; every non-deleted Auth user has a canonical reserved alias, matching
+   email-provider identity, and matching profile; and no profile is orphaned
+   from Auth;
+2. the Edge runtime checks that the production hook secret, Resend key, sender,
+   and exact canonical recovery redirect are configured.
+
+The unauthenticated response is only `{ "ready": true }` or
+`{ "ready": false }`; it returns no failed invariant, row count, identifier,
+address, alias, or provider detail. The direct database function remains
+unexecutable by `anon` and `authenticated`. Local Supabase treats its committed
+Mailpit/hook configuration as ready so the same HTTP contract is exercised by
+the REST suite.
+
+Hook registration and sender-domain verification remain supervised operational
+steps because neither can be proven through a public runtime probe without
+introducing a privileged management credential or sending mail during every
+deployment. The first production recovery is therefore still a deliberate
+functional test after publication; later production verification is read-only.
 
 ## Risks / Trade-offs
 
@@ -466,6 +502,10 @@ association without attempting to resurrect deleted PII.
   window]** → Permanent email-or-username behavior works on both sides of each
   per-user update, the tool checkpoints by user ID, and existing sessions stay
   alive.
+- **[The static frontend can publish before Supabase is ready]** → Keep the
+  existing safe artifact live while schema/functions/data are rolled forward,
+  and make the Pages workflow call the fail-closed, non-sensitive readiness
+  endpoint before build or upload.
 - **[Generated migration usernames can surprise staff]** → Suggestions are
   never applied automatically; the owner approves the full mapping and
   resolves every collision before `--apply`.

@@ -80,6 +80,12 @@ carry the temporary personal Biller login forward.
   and are never committed. User IDs, password hashes,
   refresh sessions, profiles, assignments, attendance, and outstanding invites
   are not recreated.
+- The GitHub Pages workflow fails closed before build/upload until a public
+  readiness probe confirms, without returning identifiers or counts, that the
+  #24 schema and function are deployed, every live Auth account has its
+  canonical username identity and matching profile, every live Super Admin is
+  active with private account email, and the hosted recovery-mail runtime is
+  configured.
 - The `Needs an address` account state disappears. A person without an
   outstanding invite is sign-in-capable once an authorized admin issues one;
   nobody needs an email address merely to exist on People or Attendance.
@@ -139,8 +145,8 @@ system.
   fixtures, create/edit/code panels, account states, and demo safety.
 - **Operations**: canonical `https://ops.shawarmania.in` recovery redirects,
   production email delivery, sender-domain configuration, secrets, rate limits,
-  abuse handling, owner-recovery runbook, and a reversible live-account
-  migration.
+  abuse handling, owner-recovery runbook, a reversible live-account migration,
+  and a pre-publication backend/data readiness gate.
 - **Verification**: component and auth-screen tests, REST and pgTAP identity
   tests, RLS impersonation probes, authenticated Playwright for all four roles,
   demo walkthroughs, migration rehearsal, and phone/tablet light/dark review.

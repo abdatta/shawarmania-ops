@@ -156,6 +156,14 @@ async function main() {
   assert(migratedOwnerUsername, 'The owner lost their approved username.')
   assert(migratedPendingUsername, 'The pending account lost its approved username.')
 
+  const firstReadiness = await functionCall('email-sign-in', {
+    action: 'deployment-readiness',
+  })
+  assert(
+    firstReadiness.status === 200 && firstReadiness.body.ready === true,
+    'Static publication did not open after the complete username migration.',
+  )
+
   const passwordSession = await anonymous().auth.signInWithPassword({
     email: usernameToAuthAlias(migratedOwnerUsername),
     password: SEED_PASSWORD,
@@ -223,12 +231,26 @@ async function main() {
     password: SEED_PASSWORD,
   })
   assert(!rolledBack.error, 'The reviewed rollback did not restore legacy sign-in.')
+  const rollbackReadiness = await functionCall('email-sign-in', {
+    action: 'deployment-readiness',
+  })
+  assert(
+    rollbackReadiness.status === 503 && rollbackReadiness.body.ready === false,
+    'Static publication remained open after identity rollback.',
+  )
 
   migration(['--apply'])
   migration(['--postflight'])
+  const repairedReadiness = await functionCall('email-sign-in', {
+    action: 'deployment-readiness',
+  })
+  assert(
+    repairedReadiness.status === 200 && repairedReadiness.body.ready === true,
+    'Static publication did not reopen after forward username repair.',
+  )
   migration(['--destroy-mapping'])
   console.log(
-    'Local rehearsal passed: interruption/resume, username and email sign-in, password and session survival, pending invite, postflight, rollback, and forward repair.',
+    'Local rehearsal passed: interruption/resume, username and email sign-in, password and session survival, pending invite, postflight, rollback, forward repair, and fail-closed publication readiness.',
   )
 }
 

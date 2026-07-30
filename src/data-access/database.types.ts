@@ -1408,6 +1408,7 @@ export type Database = {
         Args: { p_email: string; p_profile_id: string }
         Returns: undefined
       }
+      username_rollout_ready: { Args: never; Returns: boolean }
     }
     Enums: {
       alert_category:

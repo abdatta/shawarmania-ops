@@ -47,20 +47,29 @@ OWNER_RECOVERY_REDIRECT_URL=https://ops.shawarmania.in/recover
 `SEND_EMAIL_HOOK_SECRET` is the same independently generated Standard Webhooks
 secret registered in Supabase Auth. `RECOVERY_EMAIL_FROM` must use a
 Resend-verified sender domain. None belongs in GitHub variables, Vite config,
-logs, or the migration mapping.
+logs, or the migration mapping. The production deployment readiness endpoint
+checks that all four runtime values are present, that the hook/key have their
+expected provider prefixes, and that the redirect is exactly the canonical
+URL. That check does not replace verifying sender DNS or matching the hook
+secret in the Supabase Auth dashboard.
 
 Local development needs the Supabase CLI and Docker. `supabase start` brings the stack up from the committed `supabase/config.toml` and prints the local anon key to paste into `.env`. It prints a service-role key too — that one never leaves the terminal.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request, in two jobs:
+`.github/workflows/ci.yml` runs on every push and pull request, in three jobs:
 
 | Job | Steps |
 |---|---|
 | `verify` | lint → format check → typecheck → unit tests → contrast validator → production build |
 | `e2e` | Playwright, including the offline app-shell suite; uploads its report on failure |
+| `db` | fresh local Supabase stack, pgTAP, REST/RLS, authenticated Playwright, and generated-type drift |
 
 `.github/workflows/deploy.yml` publishes to GitHub Pages on push to `main` — see below.
+
+That deploy first asks the already-deployed production identity backend for its
+narrow readiness result. A negative or unavailable result stops before build
+or upload and leaves the current Pages artifact live.
 
 Both checkouts use `fetch-depth: 0` because the build stamps the short commit SHA into the UI.
 
@@ -73,6 +82,21 @@ npm run build
 ```
 
 Hosting is **GitHub Pages**, published by `.github/workflows/deploy.yml` on every push to `main`. Hostinger holds the `shawarmania.in` DNS zone; the `ops` CNAME points to `abdatta.github.io`, while GitHub Pages terminates TLS and serves the deployment. Cloudflare Pages or Vercel remain later alternatives if the repository becomes private or the hosting requirements outgrow Pages.
+
+Before the workflow builds or uploads, `npm run auth:readiness` posts one
+non-sensitive action to the hosted `email-sign-in` function. It permits
+publication only when the #24 database invariant confirms canonical
+Auth/profile/email-identity alignment, an active live Super Admin with private
+account email, and complete recovery-mail runtime configuration. A missing
+function or migration, timeout, non-success, malformed response, absent public
+build variable, or negative boolean stops the job before artifact upload, so
+the previous Pages deployment remains live. The public endpoint reveals only
+`ready`; direct database execution is service-role-only.
+
+This is deliberately not an outbound recovery test. The readiness probe cannot
+prove Resend DNS or the Auth dashboard's hook registration without either a
+management credential or sending mail on every deployment. Verify those during
+the supervised rollout, once; later deploys remain read-only.
 
 One prerequisite, and it is not optional: **the repo is public.** Pages from a private repo requires a paid GitHub plan.
 
@@ -301,11 +325,11 @@ never prints account emails. Do not run it in CI.
    redirect allowed, and the signed Send Email Hook registered. A Super Admin
    must not lose the only independent recovery path during an identifier move.
 
-3. **Apply the schema and deploy the permanent dual-sign-in frontend plus all
-   five functions.** Email-or-username is the steady-state contract, not a
+3. **Apply the schema and deploy all five functions while retaining the current
+   safe frontend.** Email-or-username is the steady-state contract, not a
    temporary compatibility mode. Before an Auth alias is migrated, the current
    email still signs in directly; afterwards an approved associated email
-   signs in through `email-sign-in`.
+   signs in through `email-sign-in`. Do not push the permanent frontend yet.
 
    ```powershell
    npx supabase db push
@@ -349,7 +373,19 @@ never prints account emails. Do not run it in CI.
    refuses before its first write if a user appeared, disappeared, or drifted
    after review. It checkpoints after each user and is idempotent.
 
-6. **Prove the live migration.** Confirm each
+6. **Open the static publication gate.** Run the same probe locally with the
+   hosted public URL/key in the shell, then push the permanent frontend:
+
+   ```powershell
+   npm run auth:readiness
+   ```
+
+   GitHub repeats the probe before build/upload. Do not bypass it by publishing
+   `dist` manually. Once the permanent build is live, delete the obsolete
+   `VITE_AUTH_CUTOVER_MODE` repository variable; the final frontend has no
+   compatibility branch.
+
+7. **Prove the live migration.** Confirm each
    existing password works with its approved username, an already-open session
    still reads and refreshes, every pending invite previews the approved
    username, and assignments/attendance counts match the preflight. Confirm
@@ -357,7 +393,7 @@ never prints account emails. Do not run it in CI.
    Hand each active person their username. Complete one Super Admin recovery
    from an unauthenticated phone during this supervised functional window.
 
-7. **Close the rollback window.** Verify the permanent username-or-email form
+8. **Close the rollback window.** Verify the permanent username-or-email form
    plus production health using read-only actions. Keep the reviewed mapping
    only for the agreed short rollback window; then run:
 

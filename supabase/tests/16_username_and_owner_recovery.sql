@@ -234,6 +234,30 @@ select ok(
   ),
   'a browser cannot invoke the private owner resolver'
 );
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.username_rollout_ready()',
+    'execute'
+  ),
+  'an anonymous browser cannot invoke the rollout invariant directly'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.username_rollout_ready()',
+    'execute'
+  ),
+  'an authenticated browser cannot invoke the rollout invariant directly'
+);
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.username_rollout_ready()',
+    'execute'
+  ),
+  'the service role can run the rollout invariant for the Edge Function'
+);
 
 -- ---------------------------------------------------------------------------
 -- Resolution is private, rate-limited, and stores no raw email or IP.
@@ -302,6 +326,91 @@ select is(
   public.resolve_owner_recovery('owner.account@example.com', 'ip-4'),
   null,
   'the per-address recovery limit refuses the fourth request in the window'
+);
+
+-- ---------------------------------------------------------------------------
+-- Static frontend publication fails closed until live identity is coherent.
+
+select is(
+  public.username_rollout_ready(),
+  true,
+  'the canonical seeded identity state is ready for username deployment'
+);
+
+create function pg_temp.readiness_with_legacy_alias(p_profile_id uuid)
+returns boolean language plpgsql as $$
+declare
+  v_original text;
+  v_ready boolean;
+begin
+  select email into v_original from auth.users where id = p_profile_id;
+  update auth.users set email = 'legacy.owner@example.com' where id = p_profile_id;
+  v_ready := public.username_rollout_ready();
+  update auth.users set email = v_original where id = p_profile_id;
+  return v_ready;
+end;
+$$;
+
+select is(
+  pg_temp.readiness_with_legacy_alias(:OWNER),
+  false,
+  'one legacy Auth identifier makes the rollout unready'
+);
+
+create function pg_temp.readiness_with_identity_mismatch(p_profile_id uuid)
+returns boolean language plpgsql as $$
+declare
+  v_original jsonb;
+  v_ready boolean;
+begin
+  select identity_data
+    into v_original
+    from auth.identities
+   where user_id = p_profile_id
+     and provider = 'email';
+  update auth.identities
+     set identity_data = jsonb_set(
+       identity_data,
+       '{email}',
+       to_jsonb('different@login.shawarmania.invalid'::text)
+     )
+   where user_id = p_profile_id
+     and provider = 'email';
+  v_ready := public.username_rollout_ready();
+  update auth.identities
+     set identity_data = v_original
+   where user_id = p_profile_id
+     and provider = 'email';
+  return v_ready;
+end;
+$$;
+
+select is(
+  pg_temp.readiness_with_identity_mismatch(:OWNER),
+  false,
+  'a mismatched email-provider identity makes the rollout unready'
+);
+
+create function pg_temp.readiness_without_owner_email(p_profile_id uuid)
+returns boolean language plpgsql as $$
+declare
+  v_email text;
+  v_ready boolean;
+begin
+  delete from public.account_emails
+   where profile_id = p_profile_id
+   returning email into v_email;
+  v_ready := public.username_rollout_ready();
+  insert into public.account_emails (profile_id, email)
+  values (p_profile_id, v_email);
+  return v_ready;
+end;
+$$;
+
+select is(
+  pg_temp.readiness_without_owner_email(:OWNER),
+  false,
+  'a live Super Admin without private account email makes rollout unready'
 );
 
 select * from finish();

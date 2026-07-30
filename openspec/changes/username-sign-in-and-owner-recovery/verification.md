@@ -18,6 +18,9 @@ production database or Auth state has been changed.
   Admin authority immediately before delivery.
 - The permanent sign-in form accepts username or associated email. There is no
   temporary cutover mode and no later username-only phase.
+- Static publication fails closed before build/upload until the hosted
+  `email-sign-in` readiness action confirms the schema, canonical Auth/profile
+  state, live-owner email, and recovery runtime configuration.
 
 ## Automated gates
 
@@ -26,16 +29,17 @@ production database or Auth state has been changed.
 | `npm run lint` | Passed; one pre-existing attendance fast-refresh warning only |
 | `npm run format:check` | Passed |
 | `npm run typecheck` | Passed |
-| `npm test` | 57 files, 589 tests passed |
+| `npm test` | 59 files, 602 tests passed |
 | `npm run contrast` | 50 light/dark token pairs passed |
 | `npm run build` | Passed |
 | `npm run test:e2e` | 160 browser tests passed |
 | `npm run db:reset` | Fresh local reset passed |
-| `npm run test:db` | 596 pgTAP assertions passed |
-| `npm run test:rls` | 121 RLS assertions passed |
+| `npm run test:db` | 603 pgTAP assertions passed |
+| `npm run test:rls` | 122 RLS/real-HTTP assertions passed |
 | `npm run test:e2e:auth` | 15 real-backend browser tests passed |
 | `npm run db:types` | Generated declarations refreshed from the reset database |
-| `npm run auth:usernames:rehearse` | Interruption/resume, username and email sign-in to one account, password and refresh-session survival, pending invite, postflight, rollback, forward repair, and private-artifact destruction passed |
+| `npm run auth:readiness` | Passed against the real local Edge Function/database boundary; an invalid public key failed closed with the generic result |
+| `npm run auth:usernames:rehearse` | Interruption/resume, username and email sign-in to one account, password and refresh-session survival, pending invite, postflight, rollback, forward repair, publication close/reopen, and private-artifact destruction passed |
 | `npx openspec validate username-sign-in-and-owner-recovery --strict` | Change is valid |
 | `npm run roadmap:sync` | Roadmap already in sync; 0 rows updated |
 
@@ -48,6 +52,15 @@ address, and ordinary staff. Email-sign-in tests prove that an associated email
 and username reach the same account and that unknown-email and wrong-password
 failures are indistinguishable. Database tests prove normalized private lookup
 and separate hashed abuse limits.
+
+The publication guard has three independent test layers. Tooling tests refuse
+missing build variables, a missing endpoint, negative or malformed responses,
+timeouts/network errors, and response-detail leakage. Pure runtime tests refuse
+every missing or malformed hosted recovery value and a non-canonical redirect.
+pgTAP proves the database function is service-role-only and flips false for a
+legacy Auth address, mismatched email identity, or missing live-owner email;
+the REST suite proves the public Edge action returns only `{ "ready": true }`
+for canonical local state.
 
 ## Browser and password-manager contract
 
@@ -129,7 +142,9 @@ Before production rollout can complete, the operator must:
 3. deploy the schema and five Edge Functions;
 4. apply the ignored mapping, run postflight, and verify both sign-in
    identifiers reach each account;
-5. run one supervised Super Admin recovery, then perform only read-only
+5. require the public readiness action locally, then push; the Pages workflow
+   repeats the check before it can build or upload the permanent frontend;
+6. run one supervised Super Admin recovery, then perform only read-only
    production verification.
 
 The final prerequisite check will be repeated immediately before rollout.

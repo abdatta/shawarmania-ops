@@ -20,6 +20,7 @@ npm run db:start  # bring up the local Supabase stack (Docker)
 npm run db:reset  # apply every migration and the seed to a fresh database
 npm run db:types  # regenerate src/data-access/database.types.ts (CI fails on drift)
 npm run auth:usernames:rehearse # local-only migration, interruption, rollback, forward repair
+npm run auth:readiness # hosted read-only pre-publication identity readiness probe
 ```
 
 `test:db`, `test:rls` and `test:e2e:auth` need the local stack running with the seed applied (`db:start`, then `db:reset`). They are excluded from plain `npm test` so unit feedback stays instant; CI runs them in their own job against a fresh stack.
@@ -38,7 +39,7 @@ npm run auth:usernames:rehearse # local-only migration, interruption, rollback, 
 |---|---|---|
 | Domain unit tests | Vitest | Money maths, expected cash, business-date resolution, P&L, geofence distance |
 | Database policy tests | pgTAP (`supabase/tests/`) + REST probes | RLS isolation and the write contract, on every outlet-scoped table |
-| Identity migration/tooling | Vitest + local rehearsal | Canonical namespace, private approval seal, permanent dual sign-in, drift refusal, password/session/history preservation, rollback |
+| Identity migration/tooling | Vitest + local rehearsal + deployment probe | Canonical namespace, private approval seal, permanent dual sign-in, drift refusal, password/session/history preservation, rollback, fail-closed publication |
 | Component tests | Vitest + Testing Library | Interactive components, especially the billing surface |
 | End-to-end | Playwright | The critical paths, including username activation/recovery and offline billing |
 | Design-system checks | Node scripts | Contrast in both themes; no hex literal outside the brand layer |
@@ -112,7 +113,9 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
   activation, admin reset, alias-rename/session-survival, hand-crafted
   email-change refusal, Super Admin recovery, uniform-enumeration and all-role
   browser paths. A migration release additionally runs the local
-  `auth:usernames:rehearse` sequence and records the production postflight.
+  `auth:usernames:rehearse` sequence, proves the readiness invariant refuses
+  legacy/misaligned identity states and missing owner email, records the
+  production postflight, and requires `auth:readiness` before static upload.
 - **Password-manager behavior**: inspect the real forms in a normal Chrome
   profile with password saving enabled. DOM names/autocomplete tokens,
   submission and navigation are acceptance evidence; Chrome's optional native
