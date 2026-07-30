@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Git Commit'
+  short_description: "Commit with Shawarmania's narrative style"
+  default_prompt: "Use $git-commit to review, stage, and commit the intended changes with the repository's narrative message style and correct model attribution."
