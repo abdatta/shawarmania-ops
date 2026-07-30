@@ -1,8 +1,9 @@
 # Verification evidence
 
-Evidence is being collected on 2026-07-30 against the local Supabase stack and
-production-shaped fixtures. Production discovery has been read-only; no
-production database or Auth state has been changed.
+Evidence was collected on 2026-07-30 against the local Supabase stack,
+production-shaped fixtures, and the guarded production rollout. Production
+identity writes ended before the permanent frontend was published; every final
+production verification below was read-only.
 
 ## Product contract
 
@@ -40,6 +41,10 @@ production database or Auth state has been changed.
 | `npm run db:types` | Generated declarations refreshed from the reset database |
 | `npm run auth:readiness` | Passed against the real local Edge Function/database boundary; an invalid public key failed closed with the generic result |
 | `npm run auth:usernames:rehearse` | Interruption/resume, username and email sign-in to one account, password and refresh-session survival, pending invite, postflight, rollback, forward repair, publication close/reopen, and private-artifact destruction passed |
+| Production username apply/postflight | Migrated 2 approved accounts in place; postflight found 2 live owners, 2 private account emails, 0 live pending invites, and 0 findings |
+| Production `npm run auth:readiness` | Passed through the deployed public `email-sign-in` action after the SQL invariant independently returned true |
+| GitHub Pages run `30544249328` | Readiness, build, artifact upload, and production deployment passed |
+| GitHub CI run `30544249439` | All three jobs passed, including normal E2E, the full local database/RLS suite, auth E2E, and generated-type drift |
 | `npx openspec validate username-sign-in-and-owner-recovery --strict` | Change is valid |
 | `npm run roadmap:sync` | Roadmap already in sync; 0 rows updated |
 
@@ -107,39 +112,47 @@ excluded and remain byte-for-byte untouched.
 
 ## Production-data boundary
 
-The approved production usernames exist only in
-`supabase/.username-migration/mapping.json`, beneath a gitignored,
-operator-private directory. A tracked-diff scan for both approved values
-returns no match. The values are not copied into a proposal, task, test,
-fixture, seed, command transcript, or verification artifact.
+The approved production usernames existed only in the gitignored
+`supabase/.username-migration/mapping.json` operator artifact until the
+production migration completed. An added-line scan across every commit in this
+change found no approved username, and Git confirmed the mapping was never
+tracked. The values were not copied into a proposal, task, test, fixture, seed,
+command transcript, or verification artifact.
 
-The production migration will read that ignored mapping and run through
-`npx supabase`; it will not add a production-data file to the repository.
-Postflight is forward repair only. After the rollback/repair decision is closed,
-the operator destroys the local mapping and any private copies.
+After production postflight, readiness, guarded publication, live read-only UI
+inspection, and green CI, the operator ran `--destroy-mapping`. The mapping,
+checkpoint, postflight, and rollback artifacts no longer exist locally.
+Production repair is now forward-only through the supported privileged paths.
 
 ## Production rollout gate
 
-Read-only discovery found two live Super Admin accounts, both still using their
-legacy Auth emails, with no username aliases or #24 schema. The repository
-change defines one supervised in-place data migration; that is rollout work,
-not a temporary authentication phase. The final application permanently
-supports both username and associated-email sign-in.
+The supervised production rollout completed in place:
 
-Before production rollout can complete, the operator must:
+1. Hosted public signup, anonymous access, and manual linking remained disabled;
+   email confirmation was enabled; Secure Email Change and double confirmation
+   remained enabled; no Send Email Hook was registered.
+2. Migration `20260730000003` and the three identity Edge Functions were
+   deployed before the permanent frontend. Function-list inspection confirmed
+   the new active versions; this caught and repaired a deployment-control-plane
+   collision before publication.
+3. The sealed private mapping migrated both existing Auth users without
+   replacing their user IDs. Postflight found 2 users, 2 live Super Admins, 2
+   required private emails, no live pending invites, and no findings.
+4. The SQL invariant returned true and the hosted readiness action passed. The
+   Pages workflow repeated that check before building or uploading.
+5. Production served build `d0415e4`. Read-only browser inspection confirmed
+   “Username or email”, `autocomplete="username"`,
+   `autocomplete="current-password"`, admin-issued reset guidance, and a
+   not-found response for `/recover`.
+6. The obsolete `VITE_AUTH_CUTOVER_MODE` repository variable was deleted only
+   after the permanent build was live. The ignored migration artifacts were
+   then destroyed.
 
-1. regenerate and seal the ignored mapping with both approved usernames and
-   explicitly approved account emails;
-2. confirm hosted Secure Email Change and double confirmation are enabled;
-3. deploy the schema and three Edge Functions;
-4. apply the ignored mapping, run postflight, and verify both sign-in
-   identifiers reach each account;
-5. require the public readiness action locally, then push; the Pages workflow
-   repeats the check before it can build or upload the permanent frontend;
-6. confirm one Super Admin can issue another a reset link before the final
-   read-only production verification.
-
-The final prerequisite check will be repeated immediately before rollout.
+No production password, reset link, assignment, attendance row, or session was
+read or changed for verification. Password/session preservation and the
+admin-issued reset flow are covered by the local production-shaped rehearsal
+and 14 real-backend auth browser tests; the live migration changed only the
+existing Auth email aliases and private account-email rows.
 
 ### Earlier access-repair deployment
 
@@ -148,6 +161,6 @@ two live Auth users still had legacy email identifiers. Commit `c2b283c`
 restored access through a temporary static compatibility build without changing
 production Auth or database state.
 
-This change removes that build-time branch. Once the permanent dual-sign-in
-implementation is deployed, the temporary GitHub variable is inert and will be
-deleted.
+This change removed that build-time branch, deployed permanent dual sign-in,
+and deleted the temporary GitHub variable after the guarded production
+deployment passed.
