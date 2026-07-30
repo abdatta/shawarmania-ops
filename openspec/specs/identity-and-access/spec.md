@@ -3,37 +3,302 @@
 ## Purpose
 
 Guarantees that the four roles exist in practice: every person signs in with an
-admin-provisioned email account and lands on their own role's shell, accounts
-are created and reset by an admin handing over a single-use one-time code with
-no external messaging service involved, and an account that is deactivated or
-reassigned stops working immediately rather than at token expiry.
+admin-provisioned username account and lands on a shell for a role they
+currently hold, an associated private email is an alternate sign-in identifier
+when present and is required for every Super Admin, accounts are created and
+reset by an admin handing over a single-use one-time link with no external
+messaging service involved, and an account that is deactivated or reassigned
+stops working immediately rather than at token expiry.
 ## Requirements
-### Requirement: Staff sign in with email and password
 
-The application SHALL authenticate people with an email address and a password.
-Phone numbers SHALL NOT be used as a credential or as a sign-in identifier. No
-SMS provider and no outbound mail SHALL be required for any part of
-authentication.
+### Requirement: Usernames are canonical and unique across the business
+
+Every human account SHALL have one canonical username shared by all of that
+person's roles and outlet assignments. Input SHALL be trimmed and lowercased
+before validation. The canonical username SHALL be 3–30 ASCII characters drawn
+only from `a`–`z`, `0`–`9`, period, and underscore. It SHALL NOT begin or end
+with a period or contain consecutive periods. An `@` prefix, internal
+whitespace, hyphen, or any other character SHALL be refused at the privileged
+identity boundary.
+
+Username uniqueness SHALL be case-insensitive and business-wide. The system
+MAY suggest and lowercase a username before submission, but it SHALL NOT
+silently choose a different available value after the admin submits.
+
+#### Scenario: An Instagram-style handle without the at sign is accepted
+
+- **WHEN** an authorized admin submits `rahul.k_2` for a new account
+- **THEN** the username passes shape validation and is checked against the one
+  business-wide namespace
+
+#### Scenario: An at-prefixed spelling is refused
+
+- **WHEN** an admin submits `@rahul` as the username
+- **THEN** the request is refused and no account, profile, assignment,
+  account-email row, or invite is created
+
+#### Scenario: Case cannot create a second account
+
+- **WHEN** one account already uses `rahul.k` and an admin submits `Rahul.K`
+- **THEN** the request is refused as unavailable rather than creating a
+  case-variant account
+
+#### Scenario: A collision is returned for the admin to resolve
+
+- **WHEN** the requested canonical username is already held
+- **THEN** the form states that the username is unavailable and the system does
+  not substitute a suffix or another username
+
+### Requirement: Account email is private, optional by default, and required for Super Admin
+
+Every person with a live Super Admin assignment SHALL have exactly one
+normalized account email. A person with no live Super Admin assignment MAY have
+zero or one account email. The Super Admin requirement SHALL be enforced after
+the complete database transaction, including against hand-crafted assignment
+writes.
+
+Account email SHALL be private account data, SHALL be a permanent alternate
+sign-in identifier for that same account, and SHALL NOT be stored on
+`public.profiles`.
+Only a Super Admin management path may read or change another Super Admin's
+account email. A Super Admin MAY see their own address read-only until a
+later self-service settings surface exists.
+
+#### Scenario: Creating a Super Admin requires account email
+
+- **WHEN** an authorized Super Admin creates another Super Admin without an
+  account email
+- **THEN** the complete request is refused and no partial account is created
+
+#### Scenario: Ordinary creation does not require account email
+
+- **WHEN** an authorized admin creates an Employee, Biller, or Franchise Admin
+  through the People form
+- **THEN** no email is requested and no account-email row is required
+
+#### Scenario: A future ordinary-role email remains compatible
+
+- **WHEN** an authorized future account-email path associates an email with a
+  person who has no Super Admin assignment
+- **THEN** the private row is valid and that email becomes an alternate sign-in
+  identifier without granting recovery or role authority
+
+#### Scenario: Granting Super Admin and its account email is atomic
+
+- **WHEN** a Super Admin grants a person a live Super Admin assignment
+- **THEN** a valid account email is required and the assignment plus private
+  email either both commit or neither commits
+
+#### Scenario: Ending the final Super Admin assignment keeps the associated email
+
+- **WHEN** a person's final live Super Admin assignment is ended while another
+  live Super Admin remains
+- **THEN** the assignment ends but the private account email remains an
+  alternate sign-in identifier until separately removed
+
+### Requirement: Auth aliases are provider plumbing and never product data
+
+The authentication provider SHALL encode a canonical username in a
+non-deliverable reserved-domain alias so that its native password and session
+machinery remains in use. That alias SHALL never be displayed, exported, used
+as a deliverable address, or accepted from a product form. No authentication
+message SHALL be delivered to it.
+
+An authenticated person SHALL NOT be able to change that alias through a
+hand-crafted provider request. Only the privileged username-management path may
+change it, while preserving the existing Auth user ID, password, and sessions.
+
+#### Scenario: A session contains the provider alias
+
+- **WHEN** the authentication provider returns its internal identifier in a
+  session payload
+- **THEN** application UI exposes only the parsed canonical username and never
+  renders the reserved-domain alias
+
+#### Scenario: A user tries to change the alias directly
+
+- **WHEN** an authenticated user hand-crafts an Auth email-change request
+- **THEN** the change cannot complete and their canonical username is unchanged
+
+#### Scenario: Ordinary authentication sends no mail
+
+- **WHEN** a person signs in, is provisioned, activates, receives an
+  admin-issued reset, or has their username corrected
+- **THEN** no email or SMS is sent and no message is addressed to the provider
+  alias
+
+### Requirement: Username migration preserves every account in place
+
+Moving existing accounts from email sign-in to usernames SHALL update each
+existing Auth user rather than create a replacement. The migration SHALL
+preserve user ID, password hash, refresh sessions, profile, assignment and
+invite rows, attendance and operational history, active state, and role
+authority.
+
+The owner SHALL review a complete proposed username mapping before it is
+applied. Collisions and malformed suggestions SHALL stop the migration rather
+than receive an automatic suffix. A real email SHALL be retained as private
+account email only when explicitly approved, and every live Super Admin SHALL
+have one. Every placeholder address SHALL be absent from live identity or
+account-email data when the change completes.
+
+#### Scenario: An activated Employee crosses the migration
+
+- **WHEN** an existing Employee with a password, open refresh session,
+  assignments, and attendance history receives an approved username
+- **THEN** the same account and history remain, the open session remains
+  authorized by its assignments, and the new username works with the existing
+  password
+
+#### Scenario: A pending invite crosses the migration
+
+- **WHEN** an existing account has an unconsumed one-time code during migration
+- **THEN** the same code remains live and its preview shows the owner-approved
+  username
+
+#### Scenario: A placeholder account is mapped deliberately
+
+- **WHEN** an existing account uses a migration placeholder address
+- **THEN** the migration stops until the owner approves a valid unique username
+  and no placeholder survives the completed migration
+
+#### Scenario: The completed migration retains only approved account email
+
+- **WHEN** post-migration invariants inspect every human account
+- **THEN** every Auth primary identity is a canonical provider alias, every live
+  Super Admin has private account email, every other retained account email was
+  explicitly approved, and no placeholder email remains
+
+#### Scenario: Production mappings never enter source control
+
+- **WHEN** the owner-approved production mapping is prepared and applied
+- **THEN** its usernames and emails exist only in the gitignored operator file
+  and production identity state, not in a tracked source, test, fixture,
+  document, or commit message
+
+### Requirement: Permanent frontend deployment waits for identity readiness
+
+The static production frontend SHALL NOT build or upload unless an
+already-deployed backend probe confirms the username rollout is ready. The
+probe SHALL fail closed when its Edge Function or private database invariant is
+missing or unavailable, the request times out, the response is malformed, or
+either public Supabase build variable is absent.
+
+Readiness SHALL require at least one active live Super Admin with private
+account email; a canonical reserved Auth alias, matching email-provider
+identity, and matching profile for every non-deleted Auth user; and no profile
+orphaned from Auth. The database invariant SHALL be service-role-only. The
+public response SHALL expose only a boolean and no failed condition, count,
+username, provider alias, email, or profile ID.
+
+#### Scenario: A frontend push races the account migration
+
+- **WHEN** any live Auth account still uses a legacy identifier or lacks its
+  matching profile or email-provider identity
+- **THEN** the readiness probe returns false and GitHub Pages retains the
+  previously published artifact
+
+#### Scenario: Production identity is ready
+
+- **WHEN** every private database invariant is satisfied
+- **THEN** the probe returns exactly a positive readiness boolean and the Pages
+  workflow may continue to build and upload
+
+### Requirement: Credential forms expose password-manager semantics without promising browser UI
+
+The ordinary sign-in form SHALL mark its identifier as `username` and its
+password as `current-password`. Activation and admin-issued reset forms SHALL
+mark their identifier as `username` and both new-password entries as
+`new-password`. Every control SHALL have a stable name and belong to a
+submittable form.
+
+A successful credential submission SHALL establish or continue a session and
+perform client-side navigation that removes the submitted form. The
+application SHALL NOT promise that Chrome or another browser will display a
+save prompt, because that decision remains under browser and user policy.
+
+#### Scenario: Sign-in is recognizable to a password manager
+
+- **WHEN** the ordinary sign-in form is inspected
+- **THEN** one username field and one current-password field belong to the same
+  submittable form
+
+#### Scenario: Activation is recognizable as setting a credential
+
+- **WHEN** the activation form is inspected
+- **THEN** its username and two new-password fields belong to the same
+  submittable form
+
+#### Scenario: Successful activation leaves the credential page
+
+- **WHEN** activation sets the password and signs the person in
+- **THEN** route navigation removes the credential form instead of merely
+  hiding it in place
+
+### Requirement: Every account signs in with username, and associated email is an alternate
+
+The application SHALL authenticate every human role with a canonical username
+and password. The person SHALL type the username without an `@`. If the account
+has an associated private email, the same password SHALL also authenticate that
+same account when the person enters the email. Phone numbers SHALL NOT be
+accepted as sign-in identifiers.
+
+Username password authentication SHALL call the authentication provider
+directly. Email authentication SHALL use a narrowly scoped server bridge that
+privately resolves the current Auth alias and delegates password verification
+and session minting to the provider with its public client credential. The
+bridge SHALL NOT verify or retain passwords, mint a custom session, expose the
+email-to-username mapping, or log raw email, password, alias, access token, or
+refresh token.
+
+Unknown username, unknown email, unassociated email, inactive account, malformed
+identifier, rate-limited email, and wrong password SHALL remain
+indistinguishable in the product.
 
 #### Scenario: A provisioned account signs in
 
-- **WHEN** a person with an active account enters their email address and
+- **WHEN** a person with an active account enters their canonical username and
   correct password on the sign-in screen
-- **THEN** a session is established and they are taken to their own role's home
-  surface
+- **THEN** a session is established and they are taken to a shell for a role
+  they currently hold
 
-#### Scenario: A wrong password is refused
+#### Scenario: An associated email signs in to the same account
 
-- **WHEN** a sign-in is attempted with an incorrect password
-- **THEN** no session is established and the screen states that the email or
-  password is wrong, without revealing which
+- **WHEN** a person whose account has an associated email enters that email and
+  the correct password
+- **THEN** the provider establishes a normal session for the same Auth user ID
+  reached by their username
 
-#### Scenario: Sign-in requires no external messaging service
+#### Scenario: An account without email still signs in
 
-- **WHEN** any authentication flow runs — sign-in, provisioning, activation, or
-  password reset
-- **THEN** no SMS is sent, no email is sent, and no external messaging provider
-  is contacted
+- **WHEN** an Employee has no associated email
+- **THEN** their canonical username and password work and no email is required
+
+#### Scenario: Email resolution remains private
+
+- **WHEN** email sign-in is attempted with an unknown address, an inactive
+  account address, and a real address plus wrong password
+- **THEN** every attempt returns the same credential refusal and no username,
+  alias, user ID, or resolution result is disclosed
+
+#### Scenario: An at-prefixed username is refused
+
+- **WHEN** a person enters `@rahul` on the sign-in screen
+- **THEN** no session is established and the screen explains that usernames
+  do not include the at sign
+
+#### Scenario: A wrong password is refused uniformly
+
+- **WHEN** sign-in is attempted with an unknown username, and separately with a
+  wrong password for a real username
+- **THEN** both attempts produce the same username-or-password refusal
+
+#### Scenario: A former unassociated email does not sign in
+
+- **WHEN** a former address that was not retained in `account_emails` is
+  submitted after migration
+- **THEN** no session is established and the standard credential refusal is
+  returned
 
 ### Requirement: Each role lands on a shell it holds an assignment for
 
@@ -86,30 +351,40 @@ person SHALL arrive at the surface they originally asked for.
 ### Requirement: Accounts are provisioned by an admin, never self-registered
 
 Account creation SHALL be an administrative action performed through a
-privileged server-side function that holds the service-role credential. Self-
-service registration SHALL be disabled. The created account SHALL have its
-email address pre-confirmed, so no confirmation message is ever sent. The
-service-role credential MUST NOT be reachable from the browser.
+privileged server-side function that holds the service-role credential.
+Self-service registration SHALL be disabled and the service-role credential
+MUST NOT be reachable from the browser.
 
 For every outlet-scoped role, provisioning SHALL accept one or more outlets
 and SHALL create one live assignment for the selected role at each outlet
 before issuing one activation code. A Super Admin account SHALL accept no
-outlet because that role is business-wide and singular.
+outlet because that role is business-wide.
 
-#### Scenario: An admin creates an account at several outlets
+The admin SHALL supply name, canonical username, and role. Outlet selection
+SHALL be required for every outlet-scoped role, and account email SHALL be
+required only for Super Admin. Phone, job title, and joined date SHALL remain
+optional.
 
-- **WHEN** an admin submits a name, email, role, and one or more outlets for a
-  new person
-- **THEN** one account is created with the email pre-confirmed, one profile
-  exists, a live assignment for that role exists at every selected outlet, and
-  one one-time code is returned to the admin after all assignments exist
+#### Scenario: An admin creates an ordinary account at several outlets
 
-#### Scenario: A Super Admin request carrying outlets is contradictory
+- **WHEN** an authorized admin submits a name, username, Employee role, and
+  several permitted outlets without an email
+- **THEN** one Auth account and profile are created, one live Employee
+  assignment exists at every selected outlet, and one activation link is
+  returned after all assignments exist
 
-- **WHEN** an admin requests a Super Admin account and also names one or more
-  outlets
-- **THEN** the request is refused and no account, profile, assignment, or code
-  is created
+#### Scenario: An admin creates a Super Admin
+
+- **WHEN** an authorized Super Admin submits a name, unique username, Super
+  Admin role, no outlets, and a unique account email
+- **THEN** one account, live Super Admin assignment, private account email,
+  and activation link are created as one account-creation act
+
+#### Scenario: A contradictory Super Admin request is refused
+
+- **WHEN** a Super Admin provisioning request carries any outlet
+- **THEN** no account, profile, assignment, account email, or invite is
+  created
 
 #### Scenario: Self-registration is refused
 
@@ -213,52 +488,64 @@ guarantee that a live code identifies exactly one invite.
   outstanding one
 - **THEN** the previous code is no longer redeemable and only the new one works
 
-### Requirement: Redeeming a code sets a password and reveals nothing
+### Requirement: Redeeming a code sets a password and reveals nothing beyond its username
 
-Redemption SHALL accept a code and a new password, SHALL derive the account from
-the code, and SHALL require no existing session and no email address. It SHALL
-enforce a minimum password length. Every code-related failure mode — unknown
-code, expired code, already-redeemed code, superseded code, inactive account —
-SHALL produce an identical response, so that no request can distinguish a real
-account from an absent one. Redemption SHALL NOT return a session; the person
-signs in afterwards with the password they just set.
+Redemption SHALL accept a code, the canonical username displayed by that code,
+and a new password. It SHALL derive the account from the code, require no
+existing session, enforce the minimum password length, and consume the code
+only if the supplied username matches the account's current username.
+
+Unknown, expired, already-redeemed, superseded, and inactive-account codes
+SHALL produce an identical response. A canonical username mismatch SHALL
+produce a specific correction response and SHALL NOT consume the code.
+Ordinary redemption SHALL NOT return a session; the client signs in afterwards
+through the everyday username/password path.
 
 #### Scenario: First-run activation
 
-- **WHEN** a newly provisioned person opens their activation link, confirms the
-  address, and chooses a password
-- **THEN** the password is set, the code is consumed, and they can sign in with
-  it
+- **WHEN** a newly provisioned person types the displayed username and matching
+  valid new passwords
+- **THEN** the password is set, the code is consumed, and the client signs in
+  through the ordinary username path
 
-#### Scenario: Failures are indistinguishable
+#### Scenario: Dead-code failures are indistinguishable
 
 - **WHEN** redemption is attempted with an unknown code, and separately with an
   expired one
 - **THEN** both attempts produce the same response
 
-#### Scenario: A too-short password is refused before anything is consumed
+#### Scenario: A username typo preserves the link
+
+- **WHEN** a live code is submitted with a canonical username other than the
+  one it currently identifies
+- **THEN** the response names the username mismatch and the same code remains
+  redeemable
+
+#### Scenario: A too-short password is refused before consumption
 
 - **WHEN** redemption is attempted with a password below the minimum length
-- **THEN** it is refused, the refusal names the password as the problem, and the
-  code remains redeemable
+- **THEN** the password refusal is specific and the code remains redeemable
 
-#### Scenario: An address is neither required nor accepted as a key
+### Requirement: An admin-issued code is every role's password reset path
 
-- **WHEN** redemption is attempted
-- **THEN** no email address is required, and the account acted on is the one the
-  code identifies
+For Franchise Admins, Billers, Employees, and Super Admins, password reset SHALL
+be admin-initiated: an authorized admin issues a new one-time link and the
+person redeems it with the displayed username and a new password typed twice.
+One Super Admin MAY issue the link for another Super Admin. This change SHALL
+NOT offer self-service forgotten-password recovery or send authentication mail.
 
-### Requirement: An admin-issued code is the password reset path
+#### Scenario: A staff member who forgot their password gets admin help
 
-Password reset SHALL be admin-initiated: an admin issues a new one-time code
-for the account, and the person redeems it exactly as at first run. Self-
-service password reset SHALL NOT be offered.
+- **WHEN** an authorized admin reissues a link for an existing Employee and the
+  person redeems it with their username and matching new passwords
+- **THEN** the new password works, the previous password does not, and no mail
+  or SMS is sent
 
-#### Scenario: A person who forgot their password is reset by an admin
+#### Scenario: Sign-in offers no email-recovery control
 
-- **WHEN** an admin re-issues a code for an existing account and the person
-  redeems it with a new password
-- **THEN** the new password works and the previous password does not
+- **WHEN** any role opens sign-in help after forgetting a password
+- **THEN** they are told to ask an authorized admin and no recovery-address
+  field is offered
 
 ### Requirement: A deactivated account loses its open session immediately
 
@@ -294,51 +581,55 @@ When a permitted assignment grant or end affects a person with an unconsumed,
 unsuperseded activation code, the assignment change and replacement invite
 SHALL complete in one database transaction: the existing code SHALL be
 superseded, a new code SHALL be issued after the changed assignment set exists,
-and the admin SHALL be shown the new code in the same action. The reassignment
-trigger SHALL remain enabled. An assignment change for a person without an
-outstanding code SHALL NOT create one.
+and the admin SHALL be shown the new link in the same action. An assignment
+change for a person without an outstanding code SHALL NOT create one.
+
+Granting a Super Admin assignment SHALL require and atomically write an account
+email. Ending a person's final live Super Admin assignment SHALL retain that
+private email as an alternate sign-in identifier, and the existing
+last-Super-Admin guard SHALL remain.
 
 #### Scenario: A new assignment appears without signing out
 
 - **WHEN** a person is granted an assignment at a second outlet while their app
   is open
-- **THEN** the second outlet becomes available to them within the revalidation
-  interval, with no sign-out and no password re-entry
+- **THEN** the second outlet becomes available within the revalidation interval
+  without sign-out or password re-entry
 
 #### Scenario: An ended assignment stops rendering its shell
 
-- **WHEN** the assignment behind the shell a person is currently viewing is
-  ended
+- **WHEN** the assignment behind the current shell is ended
 - **THEN** the client stops rendering that shell within the revalidation
-  interval, and the database refuses its writes immediately regardless
+  interval and the database refuses its writes immediately
 
-#### Scenario: Losing every assignment is stated, not a blank screen
+#### Scenario: Losing every assignment is stated
 
 - **WHEN** a person's last live assignment is ended while their app is open
-- **THEN** they are shown that they are not currently assigned to any outlet,
-  rather than an empty shell
+- **THEN** the app states that they are not currently assigned to any outlet
+  rather than showing an empty shell
 
-#### Scenario: A grant replaces and reveals an outstanding code
+#### Scenario: A grant replaces an outstanding link
 
-- **WHEN** an admin grants an assignment to a person who has an outstanding
-  activation code
-- **THEN** the old code is no longer redeemable, the changed assignment set
-  exists before a replacement code is issued, and the replacement is shown to
-  the admin in the completed grant action
+- **WHEN** an admin grants an assignment to a person with an outstanding code
+- **THEN** the old code is superseded, the changed assignment set exists first,
+  and one replacement activation link is shown
 
-#### Scenario: Ending an assignment replaces and reveals an outstanding code
+#### Scenario: Ending an assignment replaces an outstanding link
 
-- **WHEN** an admin ends an assignment for a person who has an outstanding
-  activation code
-- **THEN** the old code is no longer redeemable, the changed assignment set
-  exists before a replacement code is issued, and the replacement is shown to
-  the admin in the completed end action
+- **WHEN** an admin ends an assignment for a person with an outstanding code
+- **THEN** the old code is superseded, the changed assignment set exists first,
+  and one replacement activation link is shown
 
-#### Scenario: An activated person gets no unsolicited reset code
+#### Scenario: An activated person gets no unsolicited reset
 
-- **WHEN** an admin grants or ends an assignment for a person with no
-  outstanding activation code
-- **THEN** the assignment changes and no new code is issued
+- **WHEN** an admin changes an assignment for a person with no outstanding code
+- **THEN** the assignment changes and no invite or email is issued
+
+#### Scenario: The Super Admin account-email requirement cannot be bypassed
+
+- **WHEN** a Super Admin assignment is inserted through a hand-crafted database
+  request for a person without an account-email row
+- **THEN** the transaction is refused
 
 ### Requirement: Sessions persist across restarts for field use
 
@@ -354,24 +645,36 @@ valid. No inactivity timeout SHALL force routine re-authentication.
 
 ### Requirement: Admins manage accounts from a surface scoped to their authority
 
-The Super Admin SHALL have a surface listing accounts across all outlets, and
-the Franchise Admin SHALL have one listing accounts in their own outlet only.
-Both SHALL support creating an account, re-issuing a code, and deactivating or
-reactivating an account, within the authority limits of the caller's role. A
-newly issued code SHALL be displayed once for the admin to pass on, and SHALL
-NOT be retrievable afterwards.
+The Super Admin SHALL have a People surface listing accounts across all
+outlets, and the Franchise Admin SHALL have one listing accounts in outlets
+within their authority only. Both SHALL support creating an account, reissuing
+a code, changing another person's username, and deactivating or reactivating an
+account within the authority limits of the caller's role.
 
-#### Scenario: The Franchise Admin's list is outlet-scoped
+A newly issued code SHALL be presented once as the activation link, QR image,
+and copy action for the admin to pass on, and SHALL NOT be retrievable
+afterwards. Username SHALL be visible wherever the admin must identify or
+support an account. Account email SHALL appear only under the private owner
+rules.
 
-- **WHEN** a Franchise Admin opens the account surface
-- **THEN** only their own outlet's accounts are listed, and no control offers a
-  role or outlet outside their authority
+#### Scenario: The Franchise Admin list is authority-scoped
 
-#### Scenario: The code is shown once
+- **WHEN** a Franchise Admin opens People
+- **THEN** only people wholly within their management authority are actionable,
+  and no control offers a role, outlet, username change, or account email
+  outside that authority
 
-- **WHEN** an admin provisions an account or re-issues a code
-- **THEN** the code is displayed for them to copy, and revisiting the surface
-  does not show it again
+#### Scenario: The handover is shown once
+
+- **WHEN** an admin provisions an account or reissues a code
+- **THEN** the activation link is offered for copying and scanning, and
+  revisiting the surface does not reveal it again
+
+#### Scenario: Username is available during a support call
+
+- **WHEN** an authorized admin opens a person's People detail
+- **THEN** the current canonical username is visible without exposing a
+  provider alias or private account email outside the owner rule
 
 ### Requirement: Signing out is reachable from every shell
 
@@ -392,33 +695,31 @@ SHALL be gone, and returning to a role surface SHALL require signing in again.
 ### Requirement: A person is created once, as an account
 
 Creating a staff member SHALL be one act on one surface: the admin supplies the
-person's name, address, phone, one role, one or more outlets, and optionally a
-job title, and the result is a single record that is simultaneously their
-login and their staff-list membership, together with an assignment at every
-selected outlet. No separate roster write, link step, or second surface SHALL
-exist anywhere in the UI.
+person's name, username, one role, one or more role-appropriate outlets, and
+optional staff facts, and the result is a single record that is simultaneously
+their login and staff-list membership, together with an assignment at every
+selected outlet. No separate roster write, linking step, or second surface
+SHALL exist.
 
 The person's job title (`role_title`) lives on the account record; where they
 work and from when lives on each assignment. One optional joined date supplied
-at creation SHALL apply to every assignment created in that action. Editing the
-job title SHALL be done by the admin's own session under Row-Level Security — a
-Super Admin for any account, a Franchise Admin for people assigned to an outlet
-they manage — while identity and access fields (active state, email) and
-assignments themselves remain governed by their own boundaries.
+at creation SHALL apply to every assignment created in that action. Editing
+staff facts SHALL remain the admin's own session under RLS, while username,
+active state, account email, and assignments remain governed by their
+identity and authority boundaries.
 
-The create form SHALL keep the role as one selection. It SHALL offer a
-phone-usable multi-select only when the caller may provision at more than one
-outlet. A Franchise Admin who manages exactly one outlet SHALL continue to see
-that outlet preselected in the unchanged singular disabled control.
+The create form SHALL keep role as one selection. It SHALL offer a phone-usable
+outlet multi-select only when the caller may provision at more than one outlet.
+A Franchise Admin who manages exactly one outlet SHALL continue to see that
+outlet preselected in the singular disabled control.
 
 #### Scenario: One step creates a person working at several outlets
 
-- **WHEN** an admin creates a person in the Employee role at several outlets
-  with a name, address, and job title
+- **WHEN** an admin creates an Employee with a name, username, optional job
+  title, and several permitted outlets
 - **THEN** one create action yields one account, one live Employee assignment
-  at every selected outlet, and one activation code; the person appears on
-  every selected outlet's staff list immediately, and no linking step exists
-  or is needed before they can check in once activated
+  at every selected outlet, and one activation link without requiring email or
+  a later roster-linking step
 
 #### Scenario: A one-outlet manager's form stays simple
 
@@ -429,241 +730,214 @@ that outlet preselected in the unchanged singular disabled control.
 
 #### Scenario: A Biller may be created at several outlets
 
-- **WHEN** an authorized admin selects the Biller role and several outlets
+- **WHEN** an authorized admin selects Biller and several outlets
 - **THEN** one Biller account receives one assignment at every selected outlet;
-  physical tablet-to-outlet scope remains the responsibility of device
-  enrollment
+  future physical tablet scope remains device enrollment's responsibility
 
-#### Scenario: Staff facts are edited under Row-Level Security
+#### Scenario: Access fields stay out of direct client writes
 
-- **WHEN** a Franchise Admin edits the job title of a person assigned to their
-  own outlet
-- **THEN** the write succeeds as the admin's own session, and the same write
-  against a person assigned only to another outlet is refused by the database
+- **WHEN** any client session attempts to write username, active state, or
+  account email directly
+- **THEN** the database/provider boundary refuses it and only the authorized
+  privileged path can complete the change
 
-#### Scenario: Access fields stay out of the client's reach
+### Requirement: An admin can see and correct the username an account signs in with
 
-- **WHEN** any client session attempts to write the active state directly on an
-  account record
-- **THEN** the database refuses the write; that field changes only through the
-  privileged function
+The current canonical username SHALL be visible to admins who may manage the
+account and correctable by them. A newly issued activation link SHALL be
+presented beside the username it belongs to.
 
-### Requirement: An admin can see and correct the address an account signs in with
+Correcting a username SHALL preserve the account UUID, password, sessions,
+profile, assignments, history, and outstanding one-time code. A code is bound
+to the account, and preview after the correction SHALL show the current
+username. An admin SHALL NOT use this path to change their own username.
 
-The email address an account signs in with SHALL be visible to the admins who
-may manage that account, and correctable by them. A newly issued code SHALL be
-presented alongside the address it belongs to, so that a typo is read at the
-moment the code is about to be passed on.
+#### Scenario: Username is read back before handover
 
-Correcting an address SHALL NOT invalidate an outstanding one-time code: the
-code is bound to the account, not to the address, and reissuing would cancel a
-message the admin has already sent.
+- **WHEN** an admin provisions an account or reissues a code
+- **THEN** the canonical username is shown beside the activation link
 
-This exists because a mistyped address is otherwise unrecoverable. Redemption
-and sign-in both refuse an unknown address with the same uniform message they
-give a wrong password — deliberately, to prevent enumeration — so a typo
-presents as "the code does not work", with nothing on any screen to contradict
-it.
+#### Scenario: A mistyped username is corrected in place
 
-#### Scenario: The address is read back before the code is handed over
+- **WHEN** an authorized admin corrects another account's username
+- **THEN** the new username works, the old one does not, and the existing
+  outstanding code still works with the new username
 
-- **WHEN** an admin provisions an account or re-issues a code
-- **THEN** the address the account will sign in with is shown beside the code
+#### Scenario: A username already in use is refused
 
-#### Scenario: A mistyped address is corrected in the app
+- **WHEN** an admin requests a username held by another account
+- **THEN** the change is refused as unavailable and the old username remains
+  unchanged
 
-- **WHEN** an admin corrects the address on an account they may manage
-- **THEN** the account signs in with the new address, and the one-time code
-  already issued for it still works
+### Requirement: Login identifiers and account emails stay off the counter tablet
 
-#### Scenario: An address already in use is refused
+Usernames, provider aliases, and account email SHALL NOT be stored on
+`public.profiles`, which a Biller may read for their own outlet. The identifier
+response SHALL be served only by the privileged account function, per caller,
+for accounts that caller may support. Account email SHALL be narrower still:
+only an authorized Super Admin path may receive it.
 
-- **WHEN** an admin sets an address that another account already holds
-- **THEN** the change is refused and the surface says the address is taken
+A caller with no management authority SHALL be refused outright rather than
+handed an empty identifier response.
 
-### Requirement: Staff email addresses are not readable from the counter tablet
+#### Scenario: A Biller asks for identifiers
 
-Email addresses SHALL NOT be stored on `public.profiles`, which a Biller may
-read for their own outlet — a Biller is a shared counter tablet, and colleagues'
-contact details must not become ambient on a device anyone can pick up.
+- **WHEN** a Biller session calls the privileged account function for usernames
+  or account emails
+- **THEN** the request is refused and neither value is returned by any other
+  client-readable path
 
-The address SHALL be served only by the privileged function, per caller, for
-the accounts that caller may manage. A caller with no management authority
-SHALL be refused outright rather than handed an empty result.
+#### Scenario: A Franchise Admin sees only supported usernames
 
-#### Scenario: A Biller asks for addresses
+- **WHEN** a Franchise Admin loads People
+- **THEN** usernames are present only for people wholly within their management
+  authority and no account email is present
 
-- **WHEN** a Biller's session calls the privileged account function for email
-  addresses
-- **THEN** the request is refused, and no address is returned by any other path
+#### Scenario: A Super Admin sees another Super Admin's account email narrowly
 
-#### Scenario: A Franchise Admin sees only their own outlet's addresses
-
-- **WHEN** a Franchise Admin loads the account surface
-- **THEN** addresses are present for their own outlet's Billers and Employees,
-  and for no account outside their authority
+- **WHEN** a Super Admin manages another live Super Admin
+- **THEN** that target's account email is available for correction without
+  exposing it to any outlet-scoped role
 
 ### Requirement: Every people surface answers whether a person can check in
 
-The People surface SHALL show, for each person, whether they can check in and
-where, and where they cannot, the reason SHALL be readable on the screen — the
-account is deactivated, the person holds no live assignment, or the account has
-never been activated (no usable address yet, or an invite still outstanding) —
-so that the question is answerable during a phone call without anyone opening
-the database.
+People SHALL show, for each person, whether they can check in and where. Where
+they cannot, the screen SHALL name the reason: the account is deactivated, the
+person has no live assignment, or an activation link is outstanding. A missing
+personal email or placeholder address SHALL never be an account state.
 
 #### Scenario: A deactivated person reads as such
 
-- **WHEN** the People surface lists a person whose account is deactivated
-- **THEN** the row states the account is deactivated and cannot sign in or
-  check in
+- **WHEN** People lists a person whose account is deactivated
+- **THEN** the row states that they cannot sign in or check in
 
-#### Scenario: An unactivated person shows what is missing
+#### Scenario: An unactivated person shows the next step
 
-- **WHEN** the People surface lists a person who has never activated — a
-  placeholder address or an outstanding invite
-- **THEN** the row states what is missing and the next step, not merely that
-  something is wrong
+- **WHEN** People lists a person with an outstanding activation link
+- **THEN** the row states that activation is pending and offers the authorized
+  admin action rather than asking for an email address
 
 #### Scenario: A person with no assignment reads as unplaced
 
-- **WHEN** the People surface lists an active, activated person holding no live
-  assignment
-- **THEN** the row states that they are not assigned to any outlet and cannot
-  check in anywhere
+- **WHEN** People lists an active person with no live assignment
+- **THEN** the row states that they cannot check in anywhere
 
 #### Scenario: A working person reads as working
 
-- **WHEN** the People surface lists an active, activated person with at least
-  one live assignment
-- **THEN** nothing on the row suggests a problem, and every outlet they are
-  assigned to is named
+- **WHEN** People lists an active, activated person with live assignments
+- **THEN** no problem is suggested and every assigned outlet is named
 
-### Requirement: An activation link carries the code so nothing but a password is typed
+### Requirement: An activation link carries the code and asks for username plus a new password
 
-The surface that issues a one-time code SHALL offer an activation link
-containing that code, suitable for sending over an ordinary messaging app, and
-SHALL offer it as the **only** handover: a scannable image of the link, the link
-itself, and one action to copy it. The raw code SHALL NOT be displayed as a
-separate thing to pass on, so that there is one way to hand access over rather
-than a choice between several.
+The issuing surface SHALL offer an origin-relative activation link containing
+the code as the only handover: a scannable image, the link itself, and one copy
+action. The raw code SHALL NOT be separately displayed, and the URL SHALL carry
+no username, provider alias, account email, or other personal detail.
 
-The link SHALL be built from the running deployment's own origin and base path,
-so it is correct under a sub-path deployment and under a custom domain without a
-code change. The link SHALL NOT contain the email address or any other personal
-detail.
+Opening a live link SHALL resolve and display the current username, then ask
+the person to type that username, a new password, and the repeated new password.
+The code itself SHALL NOT be typed.
 
-Opening the link SHALL carry the code into activation, so the only thing the
-person types is a password.
+#### Scenario: Issuing a code produces one link handover
 
-#### Scenario: Issuing a code produces a link that carries it
+- **WHEN** an admin provisions or reissues
+- **THEN** the panel offers the QR image, link, and copy action without exposing
+  a separate raw code
 
-- **WHEN** an admin provisions an account or re-issues a code
-- **THEN** the panel offers a scannable image of the activation link, the link
-  itself, and a way to copy it
-
-#### Scenario: The code is not offered as a separate handover
-
-- **WHEN** an admin views a freshly issued handover
-- **THEN** the one-time code is not presented on its own to be dictated or
-  copied apart from the link
-
-#### Scenario: The scannable image can be enlarged for another camera
+#### Scenario: The image can be enlarged
 
 - **WHEN** an admin taps the scannable image
-- **THEN** it is shown at a size another phone can read across a counter, and
-  can be dismissed back to the panel
+- **THEN** it enlarges for another phone camera and can be dismissed
 
-#### Scenario: The link contains no address
+#### Scenario: The link contains no identity data
 
-- **WHEN** an activation link is generated for any account
-- **THEN** the URL carries the code and carries no email address
+- **WHEN** an activation link is generated
+- **THEN** its URL carries the code and no username, alias, or account email
 
-#### Scenario: Opening the link asks only for a password
+#### Scenario: Opening the link presents three credential fields
 
 - **WHEN** a person opens a valid activation link
-- **THEN** activation proceeds without asking for an email address or a code,
-  and a password is the only field they complete
+- **THEN** the current username is shown and the form contains username, new
+  password, and repeated new password
 
-### Requirement: A code resolves to its address only for whoever holds that code
+### Requirement: A code resolves to its username only for whoever holds that code
 
-Activation SHALL offer a lookup that resolves a one-time code to the email
-address the account will sign in with, requiring no session. The lookup SHALL
-NOT consume the code, SHALL NOT change any account, and SHALL return the same
-refusal as redemption for every code that is not live — unknown, expired,
-already redeemed, superseded, or belonging to a deactivated account.
+Activation SHALL offer a no-session lookup that resolves a live one-time code
+to the current canonical username. The lookup SHALL NOT consume the code or
+change the account, and SHALL return the same refusal for unknown, expired,
+redeemed, superseded, and inactive-account codes.
 
-This discloses nothing beyond what the caller already holds: possession of a
-live single-use code for that specific account is required before any address is
-returned.
+The lookup SHALL return no provider alias, account email, role, outlet, name,
+or account ID.
 
-#### Scenario: A live code resolves to its address
+#### Scenario: A live code resolves to current username
 
-- **WHEN** a lookup is made with a live, unexpired, unredeemed code
-- **THEN** the address that account will sign in with is returned
+- **WHEN** a lookup is made with a live code
+- **THEN** the account's current canonical username is returned
 
 #### Scenario: A lookup leaves the code redeemable
 
-- **WHEN** a lookup is made with a live code and the code is afterwards redeemed
-- **THEN** redemption succeeds, because the lookup consumed nothing
+- **WHEN** a live code is previewed and then redeemed correctly
+- **THEN** redemption succeeds because preview consumed nothing
 
-#### Scenario: A code that is not live discloses nothing
+#### Scenario: A dead code discloses nothing
 
-- **WHEN** a lookup is made with an unknown, expired, superseded or
-  already-redeemed code
-- **THEN** the same refusal is returned in every case and no address is disclosed
+- **WHEN** an unknown, expired, superseded, or redeemed code is previewed
+- **THEN** the same refusal is returned and no identifier is disclosed
 
-### Requirement: Activation confirms the address before a password is set
+### Requirement: Activation shows and verifies the username before setting a password
 
-Before accepting a password, activation SHALL show the address the account will
-sign in with and SHALL require an explicit affirmative confirmation from the
-person. The screen SHALL offer an equally reachable way to say the address is
-not theirs, and that path SHALL tell them what to do — ask the admin who issued
-the code, who can correct it.
+Before accepting a password, activation SHALL show the current username and
+instruct the person to type it into the username field. It SHALL NOT ask
+whether the username is an email address or whether it belongs to them. An
+equally reachable help path SHALL tell a person who does not recognize it to
+ask the admin who issued the link to correct it.
 
-Activation SHALL NOT ask the person to retype the address.
+#### Scenario: Typing the displayed username permits submission
 
-#### Scenario: Confirming the address reveals the password field
+- **WHEN** a person opens a valid link and types the displayed canonical
+  username with matching valid passwords
+- **THEN** the form may submit redemption
 
-- **WHEN** a person opens a valid activation link and confirms the address shown
-  is theirs
-- **THEN** the password field is presented
+#### Scenario: A different username explains what to do
 
-#### Scenario: Denying the address explains what to do next
+- **WHEN** a person submits a username different from the displayed current
+  username
+- **THEN** no code is consumed and the screen asks them to type the shown
+  username or contact the issuing admin
 
-- **WHEN** a person opens a valid activation link and states the address is not
-  theirs
-- **THEN** no password field is presented and they are told to ask their manager
-  to correct the address and issue a new code
+#### Scenario: An unrecognized username has a help path
 
-#### Scenario: A dead link fails before anything is typed
+- **WHEN** the person says the displayed username is not the one they were
+  given
+- **THEN** they are told to ask the issuing admin for correction and no password
+  is set
 
-- **WHEN** a person opens an activation link whose code is expired, already
-  redeemed, superseded or unknown
-- **THEN** the screen says the link is not usable and offers no password field,
-  without the person having typed anything
+#### Scenario: A dead link fails before credential submission
+
+- **WHEN** an expired, redeemed, superseded, or unknown link is opened
+- **THEN** the screen offers no credential form and uses the uniform dead-link
+  response
 
 ### Requirement: A new password is typed twice
 
-Activation SHALL require the new password to be entered twice and SHALL refuse
-to proceed unless the two entries match. The refusal SHALL name the mismatch,
-and SHALL be decided by the client before any request is made — so a mistyped
-repeat costs neither a rate-limit allowance nor the one-time code.
+Activation and admin-issued reset SHALL require the new password to be entered
+twice and SHALL refuse to proceed unless the entries match. The client SHALL
+decide a mismatch before any redemption or password-update request, so a
+mistyped repeat consumes neither a code nor a rate-limit allowance.
 
-The password is typed blind, once, with no way back: a typo sets a password
-nobody knows, spends the code proving it, and leaves the person needing a new
-one from an admin before they can try again.
+#### Scenario: Mismatched entries are local
 
-#### Scenario: Mismatched entries are refused without consuming anything
-
-- **WHEN** a person enters two different passwords and submits
-- **THEN** they are told the two do not match, no request is made, and the code
-  remains redeemable
+- **WHEN** a person submits two different new passwords
+- **THEN** the mismatch is named, no network request is made, and the invite
+  remains usable
 
 #### Scenario: Matching entries activate the account
 
-- **WHEN** a person enters the same password in both fields and submits
-- **THEN** the password is set and they are signed in
+- **WHEN** activation receives the displayed username and matching valid
+  passwords
+- **THEN** the password is set and the client signs in through the ordinary
+  username path
 
 ### Requirement: Redemption is rate-limited at the endpoint, and says so when it refuses
 
@@ -720,16 +994,25 @@ it crosses a notice threshold. It SHALL NOT be readable by any other role.
   count
 - **THEN** the request is refused
 
-### Requirement: Sign-in names where the address came from
+### Requirement: Sign-in asks for username or associated email
 
-The sign-in screen SHALL tell the person which address to use, in terms they can
-act on — the address they gave the admin who created their account.
+The sign-in screen SHALL identify the field as the username given by the
+person's manager or the email associated with their account, SHALL show a
+username example without an `@`, and SHALL route forgotten-password help
+to an authorized Franchise Admin or Super Admin for every role.
 
-#### Scenario: The email field says which address is meant
+#### Scenario: The identifier field explains what to enter
 
-- **WHEN** a person opens the sign-in screen
-- **THEN** the email field is accompanied by guidance naming it as the address
-  they gave their manager
+- **WHEN** a person opens sign-in
+- **THEN** the identifier field asks for username or email, remains a text
+  control with `autocomplete="username"`, and explains that email works only
+  when associated with the account
+
+#### Scenario: Help names the human reset path
+
+- **WHEN** a person needs a password reset
+- **THEN** sign-in help tells them to contact their Franchise Admin or Super
+  Admin
 
 ### Requirement: A person's name is never blank
 
@@ -839,21 +1122,6 @@ expense when the owner wants it in the books.
 
 - **WHEN** the schema and every people surface are inspected
 - **THEN** no salary or payroll field exists on any table or form
-
-### Requirement: A placeholder address is visible, not silent
-
-An account whose address is a migration placeholder SHALL be visibly marked
-on the People surface as needing a real address — a placeholder being one
-that cannot receive anything — and the fix SHALL be the existing
-address-correction path followed by issuing a code. Nothing SHALL send
-anything to a placeholder address, because no code exists for such an
-account until an admin has replaced it.
-
-#### Scenario: A migrated person's address asks to be fixed
-
-- **WHEN** the People surface lists an account carrying a placeholder address
-- **THEN** the row is marked as needing an address before the person can be
-  invited, and correcting it then issuing a code makes the account usable
 
 ### Requirement: One person has one login, however many outlets they work at
 
