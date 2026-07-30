@@ -25,12 +25,11 @@ password and mint the normal session. The change must preserve current user
 IDs, password hashes, refresh sessions, assignments, attendance history, and
 outstanding invites during migration.
 
-Super Admin recovery is deliberately different from staff activation and
-admin-issued resets. It is the only flow in this change that sends mail, and it
-must remain available when no second administrator can help. The Super Admin's
-private account email is both a permanent alternate sign-in identifier and the
-self-recovery destination. Another role may gain an associated email later,
-but that alone never grants self-recovery or authority.
+The Super Admin's private account email is a permanent alternate sign-in
+identifier and a foundation for later recovery or security features. Another
+role may gain an associated email later without changing authentication or
+authority. This change deliberately sends no authentication mail: forgotten
+passwords for every role use the existing admin-issued one-time-link path.
 
 The browser-password-manager goal is semantic, not a promise about Chrome UI.
 The page can provide the field names, autocomplete tokens, form submission, and
@@ -50,7 +49,8 @@ incognito mode, and its own heuristics.
   the whole business.
 - Make activation and admin-issued reset ask for the displayed username plus
   the same new password twice, without weakening code secrecy or rate limits.
-- Give only active Super Admins an enumeration-safe email recovery path.
+- Require a private account email for every live Super Admin while keeping
+  admin-issued reset available for every role.
 - Make Chrome and other conforming password managers able to recognize the
   submitted username/password credential, while never claiming that a save
   prompt is guaranteed.
@@ -68,6 +68,8 @@ incognito mode, and its own heuristics.
   email bridge delegates password verification and session minting to
   Supabase Auth.
 - Self-service username changes or known-password changes.
+- Automated email recovery, transactional-email delivery, or an Auth Send Email
+  Hook. That capability is deferred to a late roadmap todo.
 - Any change to assignment-derived authority, tenancy policy, role shells,
   offline billing, money storage, business dates, or counter-device enrollment.
 - Sending activation or admin-reset links automatically.
@@ -179,8 +181,8 @@ Alternatives rejected:
 - `email text not null`, normalized to lowercase and bounded in length;
 - timestamps for operational audit.
 
-The normalized email is unique so one recovery request resolves to at most one
-account. The table is not outlet-scoped because its subject may hold the
+The normalized email is unique so one alternate-email sign-in resolves to at
+most one account. The table is not outlet-scoped because its subject may hold the
 business-wide role, but it is private: RLS is enabled, `anon`,
 `authenticated`, and `public` receive no table privileges or policies, and
 only narrowly scoped security-definer functions plus service-role Edge
@@ -297,61 +299,38 @@ update fails after database consumption, the existing explicit
 issue another. Password-manager behavior does not justify weakening the
 consume-before-password-update security boundary.
 
-### D7. Admin-issued reset remains the staff recovery path
+### D7. Admin-issued reset remains the recovery path for every role
 
 Reissuing an invite remains the complete forgotten-password flow for Franchise
-Admins, Billers, and Employees. It also remains available to one Super Admin
-acting for another. `mayManage` continues to require a Franchise Admin to
-manage every live outlet assignment held by the target; cross-outlet people and
-Super Admins require an owner.
+Admins, Billers, Employees, and Super Admins. One Super Admin can issue a reset
+for another. `mayManage` continues to require a Franchise Admin to manage every
+live outlet assignment held by the target; cross-outlet people and Super Admins
+require an owner.
 
 The reset link is the same link and the reset screen is the same
 username-plus-two-password form as first activation. Assignment changes still
 replace an outstanding invite transactionally after the new assignment set
 exists. Nothing in this path sends mail.
 
-### D8. Super Admin self-recovery uses Supabase recovery plus a Send Email Hook
+### D8. Automated email recovery is deliberately deferred
 
-The public recovery form accepts the Super Admin's account email and always returns the same
-accepted response. A new `owner-recovery` Edge Function:
+This change does not expose a public recovery form, mint a Supabase recovery
+session, register a Send Email Hook, select a transactional-email provider, or
+send authentication mail. The required Super Admin account email remains useful
+now as an alternate sign-in and leaves the data seam needed for a later,
+separately designed recovery capability.
 
-1. normalizes the address and hashes the client IP;
-2. calls an attempt-limited database function that resolves only an active
-   profile with a live Super Admin assignment and matching account email;
-3. derives that user's Auth alias server-side and asks Supabase Auth to begin a
-   password recovery to the canonical production callback;
-4. returns the same response whether the address resolved, was rate-limited,
-   was inactive, or did not exist.
+Supabase Secure Email Change and double confirmation remain enabled. A signed-in
+user therefore cannot silently replace the reserved Auth alias: completing an
+email change requires confirmation through the existing non-deliverable alias,
+so the only working alias-change path remains the privileged account-management
+function.
 
-The Supabase Send Email Hook verifies its Standard Webhooks signature and
-accepts only a `recovery` action. It re-derives the user's active profile and
-live Super Admin assignment at send time, reads the private account email,
-and sends the token link there through Resend. It never sends to the hidden
-Auth alias. Every other Auth mail action fails closed, which also prevents
-user-initiated alias changes. Sender DNS, `RESEND_API_KEY`,
-`SEND_EMAIL_HOOK_SECRET`, redirect allow-list, and hook enablement are
-deployment prerequisites, not browser configuration.
-
-The callback verifies the Supabase recovery token, reads the username from the
-session's reserved Auth alias, and presents the same username/new
-password/repeat-password form. Username mismatch does not update the password.
-On success, Supabase updates the password and the recovery session continues
-into the ordinary app. A stale link whose user has been deactivated or lost the
-Super Admin role is stopped by the callback's fresh profile/assignment check
-before password update.
-
-This is the only additional session-mint path: it is Supabase's native,
-single-use recovery session, available only to an active Super Admin. Ordinary
-activation still returns no session.
-
-Alternatives rejected:
-
-- Sending custom invite codes directly would require inventing a parallel mail
-  token lifecycle and provider retry contract.
-- Making account email the Auth primary email would remove direct username
-  sign-in and still leave a dual-identifier problem.
-- Using Supabase SMTP without a hook would send to the non-deliverable Auth
-  alias and could not enforce the live-owner check at delivery time.
+The future todo must choose and configure a provider, sender domain, callback
+allow-list, enumeration-safe request boundary, rate limits, live-role checks,
+delivery monitoring, and all-owner lockout fallback before self-service recovery
+can ship. Deferral keeps those operational dependencies out of the username
+cutover without weakening the current admin-issued reset path.
 
 ### D9. Browser password-manager semantics are explicit and testable
 
@@ -416,9 +395,8 @@ identifier claim in a token.
 Rollout order:
 
 1. Rehearse the mapping and migration against a production-shaped local backup.
-2. Configure and test sender DNS, Resend, the signed Send Email Hook, canonical
-   callback URL, and recovery rate limits.
-3. Deploy the schema and five identity functions while the safe cutover
+2. Confirm hosted Secure Email Change and double confirmation are enabled.
+3. Deploy the schema and three identity functions while the safe cutover
    frontend remains published.
 4. Generate, owner-review, and apply the production username mapping.
 5. Require the production readiness endpoint to pass, then push the permanent
@@ -426,9 +404,9 @@ Rollout order:
    can build or upload.
 6. Run account, invite, RLS, and all-role authenticated probes; hand every
    active person their approved username.
-7. Test owner recovery from an unauthenticated phone.
-8. Verify username sign-in and associated-email sign-in reach the same account
+7. Verify username sign-in and associated-email sign-in reach the same account
    without exposing the private mapping.
+8. Verify an authorized Super Admin can issue another Super Admin a reset link.
 9. Verify no unapproved or placeholder email data remains, then close the
    rollback window and destroy the sensitive mapping copy.
 
@@ -450,28 +428,17 @@ unavailable RPC, non-success response, malformed response, timeout, or absent
 public Supabase build variables stops the workflow and leaves the previously
 published artifact untouched.
 
-The Edge Function combines two boundaries:
-
-1. a service-role-only, security-definer database function returns one boolean
-   after checking that at least one active live Super Admin has private account
-   email; every non-deleted Auth user has a canonical reserved alias, matching
-   email-provider identity, and matching profile; and no profile is orphaned
-   from Auth;
-2. the Edge runtime checks that the production hook secret, Resend key, sender,
-   and exact canonical recovery redirect are configured.
+The Edge Function calls a service-role-only, security-definer database function
+that returns one boolean after checking that at least one active live Super
+Admin has private account email; every non-deleted Auth user has a canonical
+reserved alias, matching email-provider identity, and matching profile; and no
+profile is orphaned from Auth.
 
 The unauthenticated response is only `{ "ready": true }` or
 `{ "ready": false }`; it returns no failed invariant, row count, identifier,
 address, alias, or provider detail. The direct database function remains
-unexecutable by `anon` and `authenticated`. Local Supabase treats its committed
-Mailpit/hook configuration as ready so the same HTTP contract is exercised by
-the REST suite.
-
-Hook registration and sender-domain verification remain supervised operational
-steps because neither can be proven through a public runtime probe without
-introducing a privileged management credential or sending mail during every
-deployment. The first production recovery is therefore still a deliberate
-functional test after publication; later production verification is read-only.
+unexecutable by `anon` and `authenticated`; the same HTTP contract is exercised
+by the REST suite.
 
 ## Risks / Trade-offs
 
@@ -480,19 +447,14 @@ functional test after publication; later production verification is read-only.
   payloads, never display it, and add a repository sweep/test that fails on
   alias leakage.
 - **[A hand-crafted Auth email update could bypass username administration]**
-  → Keep Secure Email Change enabled, make the Send Email Hook fail closed for
-  `email_change`, and add a real-backend probe proving the old/new alias does
-  not change.
+  → Keep Secure Email Change and double confirmation enabled, and add a
+  real-backend probe proving the old/new alias does not change.
 - **[Account email becomes high-value PII]** → Store it in a no-client-access
   table, never mirror or log it, reveal it only to the owner-management path,
-  and re-check role/active state at both request and send/callback.
-- **[Email sign-in or recovery requests can enumerate or harass an account]** → Uniform public
-  responses, hashed-IP/address cooldowns, Supabase recovery limits, no
-  client-visible resolution result, and monitoring without raw addresses.
-- **[The Send Email Hook is an external availability dependency]** → It affects
-  only Super Admin self-recovery; ordinary sign-in and admin-issued reset
-  remain local to Supabase and the app. Fail closed and document the owner
-  fallback through another Super Admin or an operator.
+  and re-check role/active state at the privileged management boundary.
+- **[Email sign-in requests can enumerate or harass an account]** → Uniform
+  public responses, hashed-IP/address cooldowns, no client-visible resolution
+  result, and monitoring without raw addresses.
 - **[Email sign-in passes a password through an application function]** →
   Keep username sign-in direct; isolate the email bridge per request; use the
   public anon key for the password grant; return only Supabase tokens; never
@@ -523,11 +485,10 @@ functional test after publication; later production verification is read-only.
 
 The detailed operational sequence is D10–D11. Database migrations create the
 private account-email table, one-way deferred Super Admin invariant, invite
-username comparison, email-sign-in and recovery attempt ledgers/functions, and
-hook permissions in the same change. No outlet-scoped table is added;
-nevertheless, RLS/grant tests must prove that anon, Employee, Biller, and
-Franchise Admin sessions cannot read account emails or obtain them through
-RPCs.
+username comparison, and email-sign-in attempt ledger/functions in the same
+change. No outlet-scoped table is added; nevertheless, RLS/grant tests must
+prove that anon, Employee, Biller, and Franchise Admin sessions cannot read
+account emails or obtain them through RPCs.
 
 Generated TypeScript database types are refreshed after schema changes. Demo
 fixtures migrate separately and contain invented usernames only. No production
@@ -549,8 +510,7 @@ outlet-scoped RLS policies are unchanged.
 
 ## Open Questions
 
-None. Resend is the selected first transactional provider behind the Supabase
-Send Email Hook; the hook boundary keeps a later provider swap operational
-rather than architectural. The exact production usernames remain owner input
-in the gitignored operator mapping and are not written into repository files.
-to the reviewed migration mapping, not an unresolved product decision.
+None. Automated email recovery and provider selection are deferred to the
+roadmap todo. The exact production usernames remain owner input in the
+gitignored operator mapping and are not written into repository files; they
+belong to the reviewed migration mapping, not an unresolved product decision.

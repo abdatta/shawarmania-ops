@@ -15,8 +15,8 @@ import type { SessionEndReason } from './use-real-session'
  *
  * Two deliberate silences. An unknown identifier and a wrong password produce
  * the same sentence, because telling them apart would confirm which accounts
- * exist. Staff still ask an admin for a new code; only a Super Admin may use
- * the private email recovery path.
+ * exist. Every role asks an authorized admin for a new one-time code while
+ * self-service recovery remains deferred.
  */
 
 interface SignInLocationState {
@@ -149,12 +149,7 @@ export function SignIn() {
             </Link>
           </p>
           <p className="mt-3 text-sm text-content-muted">
-            Forgot your password? Staff should ask a Franchise Admin or Super Admin for a new
-            one-time link. Super Admins can{' '}
-            <Link to="/recover" className="font-semibold text-accent-text underline">
-              recover by email
-            </Link>
-            .
+            Forgot your password? Ask a Franchise Admin or Super Admin for a new one-time link.
           </p>
         </CardBody>
       </Card>

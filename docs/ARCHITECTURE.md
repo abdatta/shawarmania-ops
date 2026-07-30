@@ -134,9 +134,6 @@ Anything requiring the service-role key runs in an Edge Function. The service-ro
 - **Sign in by associated email** — privately resolve the email to the current
   Auth alias, apply hashed abuse limits, ask Supabase Auth to verify the
   password with the public credential, and return only Supabase session tokens.
-- **Recover a Super Admin** — resolve a private account email without exposing
-  whether it matched, ask Supabase Auth to issue a recovery token, and route
-  only that signed mail action through the configured transactional provider.
 - **Enrol or revoke a counter device** — mints and invalidates the device's long-lived scoped session.
 
 Each privileged function re-derives the caller from their token and reads live
@@ -150,9 +147,11 @@ narrow Edge Function: it resolves privately, delegates the password grant to a
 request-local anon-key Supabase client, and returns the resulting access and
 refresh tokens. It never verifies or retains passwords, mints sessions, or
 returns aliases. Private account email lives in a no-client-access table and is
-required for a live Super Admin while optional for another role. The signed
-Send Email Hook permits only a live Super Admin's recovery action and refuses signup,
-invite, magic-link, and email-change mail.
+required for a live Super Admin while optional for another role. It is an
+alternate sign-in and a foundation for later recovery or security features;
+this version sends no authentication mail. Secure Email Change and double
+confirmation keep a signed-in client from silently replacing the reserved Auth
+alias.
 
 Bill numbers were originally sketched as a third Edge Function and deliberately moved **into the database**: a `before insert` trigger allocates from a per-outlet counter inside the insert transaction, which is atomic with the bill in a way a separate network call can never be — gapless on failure, race-safe under two devices, and the client's value is overwritten regardless.
 

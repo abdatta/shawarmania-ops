@@ -936,8 +936,8 @@ function AccountEmailSheet({
           />
         </Field>
         <p className="rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted">
-          This private email is an alternate sign-in for the same account and the destination for
-          Super Admin self-recovery.
+          This private email is an alternate sign-in for the same account and keeps the account
+          ready for future security features.
         </p>
       </form>
     </FormSheet>

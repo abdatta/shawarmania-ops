@@ -56,7 +56,7 @@ classified as (
       -- happens before anybody has an outlet. Listed by name rather than
       -- inferred, so the next table with no outlet_id still has to be argued
       -- for here instead of quietly slipping through.
-      when tbl in ('invite_redemption_attempts', 'email_sign_in_attempts', 'owner_recovery_attempts')
+      when tbl in ('invite_redemption_attempts', 'email_sign_in_attempts')
         then 'tenant-less'
     end as class
   from tables

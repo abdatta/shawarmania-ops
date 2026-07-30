@@ -3,8 +3,6 @@ import { expect, test, type Browser, type Page } from '@playwright/test'
 const PASSWORD = 'shawarmania-local'
 const NEW_PASSWORD = 'a-genuinely-set-password'
 const RESET_PASSWORD = 'a-second-genuine-password'
-const RECOVERED_PASSWORD = 'an-owner-recovered-password'
-const MAILPIT_API = 'http://127.0.0.1:54324/api/v1'
 
 const PERSONAS = {
   owner: {
@@ -129,34 +127,6 @@ async function provisionEmployee(
   )
   expect(link).not.toContain(person.username)
   return { link, panel }
-}
-
-async function latestRecoveryLink(recipient: string): Promise<string> {
-  const deadline = Date.now() + 15_000
-  while (Date.now() < deadline) {
-    const response = await fetch(`${MAILPIT_API}/messages`)
-    const inbox = (await response.json()) as {
-      messages?: Array<{
-        ID: string
-        To?: Array<{ Address?: string }>
-        Subject?: string
-      }>
-    }
-    const message = inbox.messages?.find(
-      (candidate) =>
-        candidate.Subject === 'Reset your Shawarmania Ops password' &&
-        candidate.To?.some((target) => target.Address === recipient),
-    )
-    if (message) {
-      const detail = (await (
-        await fetch(`${MAILPIT_API}/message/${encodeURIComponent(message.ID)}`)
-      ).json()) as { Text?: string }
-      const match = detail.Text?.match(/https:\/\/ops\.shawarmania\.in\/recover\?\S+/)
-      if (match) return match[0]
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200))
-  }
-  throw new Error(`Mailpit did not receive Super Admin recovery for ${recipient}`)
 }
 
 test.describe('username sign-in and role routing', () => {
@@ -311,7 +281,7 @@ test.describe('username sign-in and role routing', () => {
   })
 })
 
-test.describe('provisioning and staff recovery', () => {
+test.describe('provisioning and admin-issued reset', () => {
   test('one username-only hire activates at two outlets', async ({ page, browser }) => {
     const person = freshPerson('starter')
     await signIn(page, PERSONAS.owner.username)
@@ -423,60 +393,6 @@ test('deactivation ends an open username session immediately', async ({ page, br
     'Your account has been deactivated',
   )
   await activated.context.close()
-})
-
-test('a Super Admin recovers through the private test inbox', async ({
-  page,
-  browser,
-  baseURL,
-}) => {
-  const owner = freshPerson('owner')
-  const recoveryEmail = `e2e.owner.${RUN}.${sequence++}@example.com`
-  await signIn(page, PERSONAS.owner.username)
-  await page.goto('owner/people')
-
-  await page.getByRole('button', { name: 'Add person' }).click()
-  await page.getByLabel('Full name').fill(owner.name)
-  await page.getByLabel('Username', { exact: true }).fill(owner.username)
-  await page.getByLabel('Role').selectOption('super_admin')
-  await page.getByRole('textbox', { name: 'Email', exact: true }).fill(recoveryEmail)
-  await expect(page.getByLabel('Outlet', { exact: true })).toHaveCount(0)
-  await page.getByRole('button', { name: 'Create and issue a code' }).click()
-
-  const activationLink = (await page.getByTestId('issued-code-link').innerText()).trim()
-  const activated = await activate(browser, activationLink, owner.username)
-  await expect(activated.page).toHaveURL(/\/owner$/)
-  await activated.context.close()
-
-  const recoveryContext = await browser.newContext()
-  const recovery = await recoveryContext.newPage()
-  await recovery.goto(new URL('recover', baseURL).toString())
-  await recovery.getByLabel('Email', { exact: true }).fill(recoveryEmail)
-  await recovery.getByRole('button', { name: 'Send recovery link' }).click()
-  await expect(recovery.getByTestId('recovery-accepted')).toContainText(
-    'If that email is associated with an active Super Admin',
-  )
-
-  const productionLink = new URL(await latestRecoveryLink(recoveryEmail))
-  const localLink = new URL(`recover${productionLink.search}`, baseURL).toString()
-  await recovery.goto(localLink)
-  await expect(recovery.getByTestId('recovery-username')).toHaveText(owner.username)
-  const usernameField = recovery.getByLabel('Username', { exact: true })
-  const passwordField = recovery.getByLabel('New password')
-  const repeatField = recovery.getByLabel('Re-type password')
-  await expect(usernameField).toHaveAttribute('autocomplete', 'username')
-  await expect(passwordField).toHaveAttribute('autocomplete', 'new-password')
-  await expect(repeatField).toHaveAttribute('autocomplete', 'new-password')
-  await usernameField.fill(owner.username)
-  await passwordField.fill(RECOVERED_PASSWORD)
-  await repeatField.fill(RECOVERED_PASSWORD)
-  await recovery.getByRole('button', { name: 'Reset password and continue' }).click()
-  await expect(recovery).toHaveURL(/\/owner$/)
-
-  await signOut(recovery)
-  await signIn(recovery, owner.username, RECOVERED_PASSWORD)
-  await expect(recovery).toHaveURL(/\/owner$/)
-  await recoveryContext.close()
 })
 
 test('demo mode remains isolated beside a real username session', async ({ page }) => {

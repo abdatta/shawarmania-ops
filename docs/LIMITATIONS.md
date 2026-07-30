@@ -108,14 +108,15 @@ Supported, but shift overlaps are flagged for a human rather than resolved autom
 
 ## Operational gaps
 
-### Staff recovery still requires an administrator
+### Forgotten-password recovery requires an administrator
 
-Franchise Admins, Billers and Employees intentionally have no self-service
-email recovery. An associated email may become an alternate sign-in later, but
-an authorized Admin or Super Admin still regenerates a one-time link and hands
-it over. Only a Super Admin can self-recover by private email, because locking out
-the only business-wide administrator cannot depend on another administrator
-being reachable.
+Every role, including Super Admin, intentionally has no self-service email
+recovery yet. An associated email is already an alternate sign-in, but an
+authorized Franchise Admin or Super Admin still regenerates a one-time link and
+hands it over. One Super Admin can help another. If all owners are locked out,
+the operator break-glass runbook restores one existing account. Automated email
+recovery is deferred to
+[Super Admin Email Recovery](../openspec/todos/super-admin-email-recovery.md).
 
 There is also **no screen for changing a password one still knows, requesting
 a username change, or changing one's own Super Admin account email**. Those

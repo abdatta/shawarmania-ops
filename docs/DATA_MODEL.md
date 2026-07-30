@@ -46,7 +46,7 @@ indexes enforce one live assignment per person per outlet, and one live
 `super_admin` row per person (two indexes rather than one, because null outlet
 ids do not collide in a plain unique index). `person_id` cascades — one of
 three identity-plumbing references permitted to cascade, alongside the invite
-and private owner-recovery row — because
+and private account-email row — because
 an assignment is *placement* rather than history, and without it a
 half-provisioned account could never be cleaned up. Every table that genuinely
 is history still points at `profiles(id)` with NO ACTION, and any one of them
@@ -100,13 +100,12 @@ every person with a live `super_admin` assignment has one row. Another role may
 have zero or one, so a future Franchise Admin email needs no new identity
 migration. Current ordinary People creation does not collect one. The email is
 a permanent alternate sign-in identifier; for a live Super Admin it is also
-the self-recovery destination. Ending that role retains the association until
-a separately authorized operation removes it.
+the foundation for later recovery or security features. Ending that role
+retains the association until a separately authorized operation removes it.
 
-**`invite_redemption_attempts`**, **`email_sign_in_attempts`**, and
-**`owner_recovery_attempts`** are short-window abuse ledgers. They store hashes
-of caller IP and submitted identifier, never raw addresses, and have no
-client-readable policy.
+**`invite_redemption_attempts`** and **`email_sign_in_attempts`** are
+short-window abuse ledgers. They store hashes of caller IP and submitted
+identifier, never raw addresses, and have no client-readable policy.
 
 **`counter_devices`** — enrolled tablets.
 `id`, `outlet_id`, `label`, `enrolled_by`, `enrolled_at`, `revoked_at`, `last_seen_at`.

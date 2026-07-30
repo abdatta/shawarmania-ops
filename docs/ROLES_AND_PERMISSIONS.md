@@ -172,16 +172,11 @@ client uses that as its signal and ends the open session. Assignments are read
 from the database on every request, so a grant or ending applies at the next
 request without changing or reissuing a token.
 
-Password recovery has exactly two paths:
-
-- Franchise Admins, Billers and Employees ask an authorized Admin or Super
-  Admin for a new one-time link. An associated email, if one is added later,
-  is not by itself a self-recovery entitlement.
-- A live Super Admin may also request an enumeration-safe recovery message at
-  their required private account email. The public response is identical for
-  a match, unknown email, former owner, rate limit or provider failure. The
-  callback rechecks that the recovery session still belongs to a live owner
-  before allowing the displayed username and matching new passwords.
+Password recovery has one current path: every role asks an authorized
+Franchise Admin or Super Admin for a new one-time link. One Super Admin can
+help another. An associated email is an alternate sign-in and is not by itself
+a self-recovery entitlement. Automated email recovery is explicitly deferred
+to [Super Admin Email Recovery](../openspec/todos/super-admin-email-recovery.md).
 
 Changing a password one still knows and self-service username changes remain
 deferred to [Self-Service Account Settings](../openspec/todos/self-service-account-settings.md).
@@ -205,10 +200,11 @@ need operationally, while a future Biller session is a shared counter tablet.
 Neither a colleague's credential nor the owner's inbox should become ambient
 on that device.
 
-Secure Email Change remains enabled in Auth, but the signed Send Email Hook
-fails closed for `email_change`; a hand-crafted client request therefore cannot
-rewrite the hidden alias. Admin username correction through the service-role
-boundary is the only supported rename path.
+Secure Email Change and double confirmation remain enabled in Auth; completing
+a hand-crafted client email-change request would require confirmation through
+the existing non-deliverable alias, so it cannot rewrite that alias. Admin
+username correction through the service-role boundary is the only supported
+rename path.
 
 Nobody manages their own account from People. A Super Admin can see their own
 account email but changing it belongs to the later account-settings surface;

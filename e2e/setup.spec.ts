@@ -68,7 +68,7 @@ test('creating a person is one act that ends in a working handover', async ({ pa
   await page.getByLabel('Full name').fill('Demo Newcomer')
   await page.getByLabel('Username', { exact: true }).fill('demo.newcomer')
   await page.getByLabel('Role', { exact: true }).selectOption('employee')
-  await expect(page.locator('#account-recovery-email')).toHaveCount(0)
+  await expect(page.locator('#account-email')).toHaveCount(0)
   await page.getByLabel('Job title (optional)').fill('Grill')
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
@@ -139,7 +139,7 @@ test('the whole setup walk stays inside the app origin', async ({ page, baseURL 
   await page.getByLabel('Full name').fill('Demo Origin Probe')
   await page.getByLabel('Username', { exact: true }).fill('demo.origin.probe')
   await page.getByLabel('Role', { exact: true }).selectOption('employee')
-  await expect(page.locator('#account-recovery-email')).toHaveCount(0)
+  await expect(page.locator('#account-email')).toHaveCount(0)
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
   await expect(page.getByTestId('issued-code')).toBeVisible()
 

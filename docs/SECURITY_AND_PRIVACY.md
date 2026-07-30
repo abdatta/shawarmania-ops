@@ -37,11 +37,11 @@ The isolation test suite asserts this for every outlet-scoped table (see [Testin
 |---|---|---|---|
 | Name, phone | Customer | Repeat-customer records, future digital receipts | Optional at billing. Never logged, never exported casually |
 | Name, phone, staff facts (code, role title, joining/leaving dates) | Staff | The staff record on their account | Visible to their outlet's admin and the owner. Never to other staff. No salary and no home address is stored anywhere |
-| Account email | Any account when explicitly associated; required for a live Super Admin | Alternate sign-in; Super Admin self-recovery when no other administrator is reachable | Private, optional by default, required for Super Admin; no client table privilege; visible through the privileged owner-management response only |
+| Account email | Any account when explicitly associated; required for a live Super Admin | Alternate sign-in; foundation for future recovery or security features | Private, optional by default, required for Super Admin; no client table privilege; visible through the privileged owner-management response only |
 | Check-in coordinates, accuracy, distance | Employee | Attendance verification | Captured only at check-in and check-out. Never continuous |
 | Bill contents | Customer | The transaction record | Retained; identifiable only where a customer was recorded |
 | Hash of a caller's IP address | Whoever fails an activation | Bounding code guessing | Never the address itself, and only on failure. Pruned to the fifteen-minute window; readable by nobody, only counted |
-| Hash of account email and caller IP | Whoever attempts email sign-in or Super Admin recovery | Enumeration-safe abuse limits | Raw input never enters either ledger or application logs; no client may read it |
+| Hash of account email and caller IP | Whoever attempts email sign-in | Enumeration-safe abuse limits | Raw input never enters the ledger or application logs; no client may read it |
 
 **Two external lookups, and what they see.** The outlet form's address search queries `photon.komoot.io` (OpenStreetMap) and `api.postalpincode.in` (India Post). What leaves the browser is the text an admin types while looking up **their own shop's address**, and a PIN code. No customer record, no employee record, no bill and no session token is ever sent to either, and neither is contacted from any other screen. Both are keyless: there is no account, no API key to leak, and no billing relationship. Both are optional — a failure leaves a form that is typed by hand, which is what it was before.
 
@@ -81,8 +81,8 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
   `account_emails`, whose table privileges are revoked from every client role.
   A deferred database invariant prevents a live Super Admin without one;
   another role may have zero or one. Ordinary People creation does not collect
-  it. If present, it signs in to the same Auth user; for a live Super Admin it
-  also receives self-recovery mail.
+  it. If present, it signs in to the same Auth user. For a live Super Admin it
+  also provides the data foundation for a later recovery or security design.
 - **One-time provisioning codes are single-use, short-lived, and delivered out-of-band** (in practice, over WhatsApp by an admin, usually as a link that carries the code). They are not passwords and must not be reusable. As built: ten Crockford-base32 characters (50 bits), valid seven days, superseded the moment a replacement is issued, and cancelled by a role or outlet reassignment — so exactly one code per account is ever live. **A link is the same bearer credential as the code it carries**, with the same lifetime and the same single use; the expiry is what bounds its sitting in a chat thread.
 - **A code is stored only as a hash, and that column is readable by nobody.** Not by a Franchise Admin, not by the Super Admin: the invite table's column grants omit it, so a request naming it — or `select *`, which expands to it — is refused by the database. The plaintext exists only in the response that issued it, which is why the screen says it cannot be looked up again.
 - **The code is the lookup key, and the username is derived from it.**
@@ -96,16 +96,14 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
   describe the request rather than revealing whether another account exists.
 - **Guessing is bounded at the endpoint, not per invite.** A code that identifies its own invite gives a wrong guess no invite to charge, so the old per-invite attempt counter cannot advance and is retired in place. In its stead the redemption endpoint counts **failures only** — successful activations cost nothing — over a rolling fifteen minutes: 20 per client address, 500 across the endpoint. The per-address half is best-effort, because `x-forwarded-for` can be prepended to; **the global bound is the one that cannot be evaded**, and it is deliberately loose, since a tight global bound would itself be an attack on everyone's ability to activate. Attempt records hold a **hash** of the address and never the address itself.
 - **A burst of failed activations is visible to the owner**, on People, above a threshold far below the hard limit — so somebody finds out well before anybody is refused. It is the only signal a targeted guessing attempt produces. No other role can read it.
-- **Super Admin recovery is enumeration-safe at every public outcome.** Known,
-  unknown, ordinary-role, inactive/former-owner, rate-limited and provider-
-  failed requests all receive the same acknowledgement. The resolver records
-  only hashes. Supabase signs the recovery event; the Send Email Hook verifies
-  that signature, rechecks active Super Admin status and the canonical redirect, and
-  sends to the freshly read private account email. Signup, invite,
-  magic-link, email-change and every other Auth mail action fail closed.
+- **Forgotten-password recovery is admin-issued for every role.** An authorized
+  administrator hands over a fresh one-time link; one Super Admin can help
+  another. This version exposes no public email-recovery request and sends no
+  authentication mail. Automated owner recovery is a deferred roadmap item.
 - **A signed-in person cannot rewrite their hidden Auth alias.** Secure Email
-  Change stays enabled and the signed mail hook refuses `email_change`, while
-  the supported admin rename uses the service-role boundary after re-deriving
+  Change and double confirmation stay enabled: completing a client-requested
+  change would require confirmation through the current non-deliverable alias.
+  The supported admin rename uses the service-role boundary after re-deriving
   authority. The real-backend suite hand-crafts this attempt and proves the old
   alias remains.
 - **Provisioning authority is re-derived from the caller's own token** inside the privileged function, never taken from the request. A Franchise Admin cannot mint an administrator, cannot reach another outlet, and cannot deactivate themselves.
@@ -123,9 +121,9 @@ Roughly in order of likelihood:
 3. **A biller ringing bills under someone else's name.** Mitigated weakly by PINs, and properly by the fact that shifts and attribution are recorded and reviewable.
 4. **Attendance gaming** via a spoofed location. Mitigated by storing the evidence for review, and by the counter-tablet path being available and stronger.
 5. **Accidental PII exposure** through logs, exports, or an error report. Mitigated by not logging PII in the first place.
-6. **Owner-recovery harassment or enumeration.** Mitigated by uniform
-   responses, hashed per-input/IP limits, signed mail authorization, and
-   provider monitoring without raw account-email addresses.
+6. **Associated-email sign-in enumeration or credential stuffing.** Mitigated
+   by uniform failures, hashed per-input/IP limits, and delegating password
+   verification to Supabase without logging raw account-email addresses.
 
 Not in the model at this scale: sophisticated external attackers, insider database access at the hosting provider, or supply-chain attacks on dependencies. These are real, but the practical controls at a two-outlet business are the boring ones — keep the service-role key out of the browser, keep RLS on, keep secrets out of git.
 

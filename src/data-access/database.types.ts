@@ -1112,27 +1112,6 @@ export type Database = {
         }
         Relationships: []
       }
-      owner_recovery_attempts: {
-        Row: {
-          attempted_at: string
-          email_hash: string
-          id: number
-          ip_hash: string | null
-        }
-        Insert: {
-          attempted_at?: string
-          email_hash: string
-          id?: never
-          ip_hash?: string | null
-        }
-        Update: {
-          attempted_at?: string
-          email_hash?: string
-          id?: never
-          ip_hash?: string | null
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           created_at: string
@@ -1383,17 +1362,6 @@ export type Database = {
         }[]
       }
       resolve_email_sign_in: {
-        Args: {
-          p_email: string
-          p_global?: number
-          p_ip_hash: string
-          p_per_email?: number
-          p_per_ip?: number
-          p_window?: string
-        }
-        Returns: string
-      }
-      resolve_owner_recovery: {
         Args: {
           p_email: string
           p_global?: number

@@ -1,6 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
-import { recoveryRuntimeReady } from '../../../shared/auth-readiness.ts'
 import { serviceClient } from '../_shared/authority.ts'
 import { json, preflight, readJson } from '../_shared/http.ts'
 import { clientIpHash } from '../_shared/invite-code.ts'
@@ -8,27 +7,10 @@ import { clientIpHash } from '../_shared/invite-code.ts'
 const INVALID = { error: 'invalid_credentials' }
 const DUMMY_ALIAS = 'unresolved-account@login.shawarmania.invalid'
 
-function isLocalRuntime(): boolean {
-  const url = Deno.env.get('SUPABASE_URL') ?? ''
-  return url.includes('127.0.0.1') || url.includes('kong')
-}
-
-function recoveryMailConfigured(): boolean {
-  return recoveryRuntimeReady(
-    {
-      sendEmailHookSecret: Deno.env.get('SEND_EMAIL_HOOK_SECRET'),
-      resendApiKey: Deno.env.get('RESEND_API_KEY'),
-      recoveryEmailFrom: Deno.env.get('RECOVERY_EMAIL_FROM'),
-      ownerRecoveryRedirectUrl: Deno.env.get('OWNER_RECOVERY_REDIRECT_URL'),
-    },
-    { local: isLocalRuntime() },
-  )
-}
-
 async function deploymentReadiness(): Promise<Response> {
   const service = serviceClient()
   const { data, error } = await service.rpc('username_rollout_ready')
-  const ready = !error && data === true && recoveryMailConfigured()
+  const ready = !error && data === true
   return json({ ready }, ready ? 200 : 503)
 }
 

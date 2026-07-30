@@ -41,7 +41,7 @@ npm run auth:readiness # hosted read-only pre-publication identity readiness pro
 | Database policy tests | pgTAP (`supabase/tests/`) + REST probes | RLS isolation and the write contract, on every outlet-scoped table |
 | Identity migration/tooling | Vitest + local rehearsal + deployment probe | Canonical namespace, private approval seal, permanent dual sign-in, drift refusal, password/session/history preservation, rollback, fail-closed publication |
 | Component tests | Vitest + Testing Library | Interactive components, especially the billing surface |
-| End-to-end | Playwright | The critical paths, including username activation/recovery and offline billing |
+| End-to-end | Playwright | The critical paths, including username activation/reset and offline billing |
 | Design-system checks | Node scripts | Contrast in both themes; no hex literal outside the brand layer |
 | Architecture boundaries | ESLint | Only `data-access` imports Supabase; `domain` imports nothing |
 
@@ -111,8 +111,8 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
 - **Schema changes**: migrations apply cleanly to a fresh database *and* to a copy with existing data.
 - **Authentication/identity changes**: run username and associated-email sign-in, three-field
   activation, admin reset, alias-rename/session-survival, hand-crafted
-  email-change refusal, Super Admin recovery, uniform-enumeration and all-role
-  browser paths. A migration release additionally runs the local
+  email-change refusal, uniform email-sign-in failure, and all-role browser
+  paths. A migration release additionally runs the local
   `auth:usernames:rehearse` sequence, proves the readiness invariant refuses
   legacy/misaligned identity states and missing owner email, records the
   production postflight, and requires `auth:readiness` before static upload.

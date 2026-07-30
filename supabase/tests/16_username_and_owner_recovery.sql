@@ -1,7 +1,6 @@
--- Username identity and owner recovery are privileged plumbing. This suite
+-- Username identity and private account email are privileged plumbing. This suite
 -- proves the canonical namespace, required Super Admin account email,
--- enumeration-safe sign-in/recovery resolvers, and the independent privilege
--- boundary.
+-- enumeration-safe email sign-in resolver, and the independent privilege boundary.
 
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -173,13 +172,6 @@ select throws_ok(
   null,
   'a Super Admin cannot read email sign-in attempt hashes'
 );
-select throws_ok(
-  'select * from public.owner_recovery_attempts',
-  '42501',
-  null,
-  'a Super Admin cannot read recovery attempt hashes'
-);
-
 select pg_temp.impersonate(:ADMIN);
 select throws_ok(
   'select * from public.account_emails',
@@ -225,14 +217,6 @@ select ok(
     'execute'
   ),
   'a browser cannot invoke the private email sign-in resolver'
-);
-select ok(
-  not has_function_privilege(
-    'authenticated',
-    'public.resolve_owner_recovery(text,text,interval,integer,integer,integer)',
-    'execute'
-  ),
-  'a browser cannot invoke the private owner resolver'
 );
 select ok(
   not has_function_privilege(
@@ -289,43 +273,6 @@ select is(
   ),
   0::bigint,
   'the email sign-in ledger contains hashes rather than raw identifiers'
-);
-
-delete from public.owner_recovery_attempts;
-
-select is(
-  public.resolve_owner_recovery(
-    '  OWNER.ACCOUNT@EXAMPLE.COM ',
-    encode(extensions.digest('203.0.113.10', 'sha256'), 'hex')
-  ),
-  :OWNER::uuid,
-  'the normalized active-owner recovery address resolves privately'
-);
-select is(
-  public.resolve_owner_recovery(
-    'nobody@example.com',
-    encode(extensions.digest('203.0.113.11', 'sha256'), 'hex')
-  ),
-  null,
-  'an unknown recovery address resolves to no target'
-);
-select is(
-  (
-    select count(*)
-      from public.owner_recovery_attempts
-     where email_hash like '%@%'
-        or ip_hash like '%.%'
-  ),
-  0::bigint,
-  'the recovery ledger contains hashes rather than raw addresses'
-);
-
-select public.resolve_owner_recovery('owner.account@example.com', 'ip-2');
-select public.resolve_owner_recovery('owner.account@example.com', 'ip-3');
-select is(
-  public.resolve_owner_recovery('owner.account@example.com', 'ip-4'),
-  null,
-  'the per-address recovery limit refuses the fourth request in the window'
 );
 
 -- ---------------------------------------------------------------------------

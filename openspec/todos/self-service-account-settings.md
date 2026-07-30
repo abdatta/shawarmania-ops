@@ -20,10 +20,10 @@ correction.
 credential for every human role:
 
 - an authorized admin can correct another person's username from People;
-- a Franchise Admin, Biller, or Employee who forgets a password asks an
-  authorized admin for a one-time link;
-- a Super Admin can use their associated email to sign in or recover access
-  without another administrator;
+- every role that forgets a password asks an authorized admin for a one-time
+  link; one Super Admin can help another;
+- a Super Admin can use their associated email as an alternate sign-in, while
+  automated email recovery remains a separate deferred todo;
 - nobody has an in-app self-service page for changing a username or a known
   password.
 

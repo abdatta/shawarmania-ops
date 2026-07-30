@@ -1,7 +1,7 @@
 import type { Assignment } from './adapters'
 import type { Tables } from './database.types'
 import { getSupabaseClient } from './supabase'
-import { authAliasToUsername, canonicalUsername, usernameToAuthAlias } from '../../shared/username'
+import { authAliasToUsername, usernameToAuthAlias } from '../../shared/username'
 
 /**
  * Authentication, as opposed to data access.
@@ -232,54 +232,6 @@ export async function redeemInvite(
     body: { action: 'redeem', code, username, password },
   })
   if (error) throw activationFailure(await failureCode(error))
-}
-
-const RECOVERY_ACCEPTED =
-  'If that email is associated with an active Super Admin, a recovery link is on its way.'
-
-export async function requestOwnerRecovery(accountEmail: string): Promise<string> {
-  // The public response stays identical even when the resolver or provider
-  // fails, so this helper never becomes an account-enumeration oracle.
-  await getSupabaseClient().functions.invoke('owner-recovery', {
-    body: { action: 'request', email: accountEmail },
-  })
-  return RECOVERY_ACCEPTED
-}
-
-export async function startOwnerRecovery(tokenHash: string): Promise<string> {
-  const client = getSupabaseClient()
-  const { error: verifyError } = await client.auth.verifyOtp({
-    token_hash: tokenHash,
-    type: 'recovery',
-  })
-  if (verifyError) throw activationFailure('invalid_code')
-
-  const { data, error } = await client.functions.invoke<{ username?: string }>('owner-recovery', {
-    body: { action: 'status' },
-  })
-  if (error || !data?.username) throw activationFailure('invalid_code')
-  return data.username
-}
-
-export async function finishOwnerRecovery(username: string, password: string): Promise<void> {
-  const canonical = canonicalUsername(username)
-  if (!canonical) throw activationFailure('username_mismatch')
-  if (password.length < MIN_PASSWORD_LENGTH) throw activationFailure('weak_password')
-
-  const client = getSupabaseClient()
-  const { data: status, error: statusError } = await client.functions.invoke<{
-    username?: string
-  }>('owner-recovery', {
-    body: { action: 'status' },
-  })
-  if (statusError || status?.username !== canonical) {
-    throw activationFailure('invalid_code')
-  }
-
-  const { error } = await client.auth.updateUser({ password })
-  if (error) {
-    throw activationFailure(error.code === 'weak_password' ? 'weak_password' : null)
-  }
 }
 
 /**

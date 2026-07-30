@@ -4,7 +4,7 @@
 > associated email when present) and reach
 > their own assignment-derived shell: phone navigation for Super Admin,
 > Franchise Admin and Employee, and fixed tablet chrome for Biller. Sign in,
-> activation/reset, Super Admin recovery, People, Outlets, Attendance and My
+> activation/reset, People, Outlets, Attendance and My
 > attendance are built. Activation shows the current username and requires it
 > plus the same new password twice. `staff-as-accounts` (#21) collapsed the
 > former Staff and Access screens into People; `multi-outlet-hiring` (#23)
@@ -30,9 +30,8 @@ not access control.
 `autocomplete="username"` / `"current-password"`. Unknown username and wrong
 password receive the same sentence as unknown/unassociated email. An
 `@username` is refused with direct guidance because usernames are handle-shaped
-but typed without it. Staff who forgot a
-password are told to ask an Admin or Super Admin for a new one-time link; a
-Super Admin also has the private-email recovery route.
+but typed without it. Anyone who forgot a password is told to ask a Franchise
+Admin or Super Admin for a new one-time link.
 
 **Set your password** — both first activation and an admin-issued reset.
 Opening the handover link previews **“Your username is …”** and presents one
@@ -42,13 +41,6 @@ Mismatch remains on the form and consumes nothing; a dead or spent link says
 so before password fields appear. Someone handed only the code types it first
 and reaches the same form. Success sets the password, signs in through the
 ordinary username path, and navigates to the assigned shell.
-
-**Super Admin recovery** — a public request field for the owner's private
-account email. Every request receives the same acknowledgement. A valid
-emailed callback rechecks that its session still belongs to a live Super Admin,
-shows the current username, requires username plus two matching new passwords,
-then continues that recovery session into the owner shell. Ordinary staff are
-directed to an administrator instead.
 
 **Install app** — the public header and every real role shell expose one 44px
 install action when the browser has an installation path. Chromium-family
@@ -185,8 +177,8 @@ username, deactivate/reactivate, and manage assignments. Selecting Super Admin
 hides outlets and requires that owner's real account email; every other role
 omits email entirely. Only an authorized Super Admin can see another Super
 Admin's account email or correct it, and one's own remains read-only here. The
-same email is an alternate sign-in identifier and the self-recovery
-destination.
+same email is an alternate sign-in identifier and a foundation for future
+recovery or security features.
 
 The account, profile, role-required Super Admin account email, and every starting
 assignment exist before the single code is issued. A handover is shown once:

@@ -29,9 +29,6 @@ const auth = vi.hoisted(() => {
     signOut: vi.fn(),
     previewInvite: vi.fn(),
     redeemInvite: vi.fn(),
-    requestOwnerRecovery: vi.fn(),
-    startOwnerRecovery: vi.fn(),
-    finishOwnerRecovery: vi.fn(),
     currentUser: vi.fn(),
     loadOwnProfile: vi.fn(),
     currentClaims: vi.fn(),
@@ -129,16 +126,11 @@ describe('sign in', () => {
     expect(auth.signIn).toHaveBeenCalledWith('owner@example.com', 'a-real-password')
   })
 
-  it('routes only Super Admins toward private email recovery', () => {
+  it('routes every forgotten password through an authorized admin', () => {
     renderAt('/sign-in')
 
-    expect(
-      screen.getByText(/Staff should ask a Franchise Admin or Super Admin/),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'recover by email' })).toHaveAttribute(
-      'href',
-      '/recover',
-    )
+    expect(screen.getByText(/Ask a Franchise Admin or Super Admin/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /recover/i })).not.toBeInTheDocument()
   })
 })
 
@@ -251,23 +243,5 @@ describe('activation', () => {
 
     expect(await screen.findByTestId('activate-username')).toHaveTextContent('new.staff')
     expect(screen.getByLabelText('Username')).toBeInTheDocument()
-  })
-})
-
-describe('Super Admin recovery', () => {
-  it('always acknowledges a recovery-email request the same way', async () => {
-    const user = userEvent.setup()
-    auth.requestOwnerRecovery.mockResolvedValue(
-      'If that email is associated with an active Super Admin, a recovery link is on its way.',
-    )
-    renderAt('/recover')
-
-    await user.type(screen.getByLabelText('Email'), 'owner@example.com')
-    await user.click(screen.getByRole('button', { name: 'Send recovery link' }))
-
-    expect(auth.requestOwnerRecovery).toHaveBeenCalledWith('owner@example.com')
-    expect(await screen.findByTestId('recovery-accepted')).toHaveTextContent(
-      'If that email is associated with an active Super Admin',
-    )
   })
 })

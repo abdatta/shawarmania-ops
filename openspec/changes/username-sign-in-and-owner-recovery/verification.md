@@ -9,18 +9,18 @@ production database or Auth state has been changed.
 - Every human account has one canonical username and password.
 - An associated account email is optional by default and required for every
   live Super Admin. It is private account data, a permanent alternate sign-in
-  identifier, and the destination for Super Admin self-recovery.
+  identifier, and a foundation for future recovery or security features.
 - People does not ask for email when an ordinary Employee, Biller, or Franchise
   Admin is created. The schema and sign-in boundary nevertheless support an
   associated email for another role if an authorized flow is added later.
-- Staff recovery remains an admin-issued one-time link. Super Admin recovery is
-  a uniform public email request whose signed mail hook rechecks live Super
-  Admin authority immediately before delivery.
+- Forgotten-password recovery remains an admin-issued one-time link for every
+  role, including Super Admin. This change exposes no public recovery request
+  and sends no authentication mail.
 - The permanent sign-in form accepts username or associated email. There is no
   temporary cutover mode and no later username-only phase.
 - Static publication fails closed before build/upload until the hosted
   `email-sign-in` readiness action confirms the schema, canonical Auth/profile
-  state, live-owner email, and recovery runtime configuration.
+  state, and live-owner email.
 
 ## Automated gates
 
@@ -29,38 +29,34 @@ production database or Auth state has been changed.
 | `npm run lint` | Passed; one pre-existing attendance fast-refresh warning only |
 | `npm run format:check` | Passed |
 | `npm run typecheck` | Passed |
-| `npm test` | 59 files, 602 tests passed |
+| `npm test` | 57 files, 590 tests passed |
 | `npm run contrast` | 50 light/dark token pairs passed |
 | `npm run build` | Passed |
 | `npm run test:e2e` | 160 browser tests passed |
 | `npm run db:reset` | Fresh local reset passed |
-| `npm run test:db` | 603 pgTAP assertions passed |
-| `npm run test:rls` | 122 RLS/real-HTTP assertions passed |
-| `npm run test:e2e:auth` | 15 real-backend browser tests passed |
+| `npm run test:db` | 597 pgTAP assertions passed |
+| `npm run test:rls` | 117 RLS/real-HTTP assertions passed |
+| `npm run test:e2e:auth` | 14 real-backend browser tests passed |
 | `npm run db:types` | Generated declarations refreshed from the reset database |
 | `npm run auth:readiness` | Passed against the real local Edge Function/database boundary; an invalid public key failed closed with the generic result |
 | `npm run auth:usernames:rehearse` | Interruption/resume, username and email sign-in to one account, password and refresh-session survival, pending invite, postflight, rollback, forward repair, publication close/reopen, and private-artifact destruction passed |
 | `npx openspec validate username-sign-in-and-owner-recovery --strict` | Change is valid |
 | `npm run roadmap:sync` | Roadmap already in sync; 0 rows updated |
 
-The signed Send Email Hook tests cover invalid signatures, email-change denial,
-redirect allow-list refusal, active Super Admin delivery, and inactive/former
-Super Admin refusal. Transport unit tests cover provider success, provider
-failure, hosted fail-closed behavior, and local Mailpit delivery. Public
-recovery tests prove the same accepted response for a live Super Admin, unknown
-address, and ordinary staff. Email-sign-in tests prove that an associated email
-and username reach the same account and that unknown-email and wrong-password
-failures are indistinguishable. Database tests prove normalized private lookup
-and separate hashed abuse limits.
+Email-sign-in tests prove that an associated email and username reach the same
+account and that unknown-email and wrong-password failures are
+indistinguishable. Database tests prove normalized private lookup and hashed
+abuse limits. A real-backend probe hand-crafts an Auth email-change request and
+proves Secure Email Change plus double confirmation leave the reserved alias
+unchanged and the attempted alias unusable.
 
-The publication guard has three independent test layers. Tooling tests refuse
-missing build variables, a missing endpoint, negative or malformed responses,
-timeouts/network errors, and response-detail leakage. Pure runtime tests refuse
-every missing or malformed hosted recovery value and a non-canonical redirect.
-pgTAP proves the database function is service-role-only and flips false for a
-legacy Auth address, mismatched email identity, or missing live-owner email;
-the REST suite proves the public Edge action returns only `{ "ready": true }`
-for canonical local state.
+The publication guard has independent test layers. Tooling tests refuse missing
+build variables, a missing endpoint, negative or malformed responses,
+timeouts/network errors, and response-detail leakage. pgTAP proves the database
+function is service-role-only and flips false for a legacy Auth address,
+mismatched email identity, or missing live-owner email; the REST suite proves
+the public Edge action returns only `{ "ready": true }` for canonical local
+state.
 
 ## Browser and password-manager contract
 
@@ -70,9 +66,8 @@ for canonical local state.
 - Activation displays “Your username is …” and asks the person to type that
   username plus a password and re-typed password. The fields use `username` and
   `new-password` autocomplete tokens.
-- The recovery request has exactly one Email field and describes the flow as
-  Super Admin self-recovery; staff guidance points to a Franchise Admin or
-  Super Admin.
+- Forgot-password help points every role to a Franchise Admin or Super Admin
+  for a new one-time link; no recovery-address field or route exists.
 - People asks ordinary accounts for name, username, role and outlets, retaining
   the existing optional profile fields. Selecting Super Admin adds one required
   Email field.
@@ -84,7 +79,7 @@ saving is enabled; the prompt is not guaranteed when saving is disabled,
 managed by policy, or previously declined for the site.
 
 The final in-app browser inspection covered 390×844 and 1024×768 viewports in
-light and dark. Sign-in, activation, recovery, and People had no horizontal
+light and dark. Sign-in, activation/reset, and People had no horizontal
 overflow or console warning/error. The ordinary People form had no Email field;
 selecting Owner added exactly one private Email field and removed outlet/profile
 fields that do not apply to a Super Admin.
@@ -97,11 +92,10 @@ classes:
 1. **Optional private account email** — durable documentation, the active
    change, the privileged People response, typed adapters, private schema, and
    their tests. It is required only by the live Super Admin invariant.
-2. **Associated-email sign-in or Super Admin self-recovery** — the narrow
-   public Edge Functions, uniform UI copy, signed recovery hook, and abuse
-   controls.
+2. **Associated-email sign-in** — the narrow public Edge Function, uniform
+   failure copy, and abuse controls.
 3. **Provider/Auth plumbing** — the non-deliverable reserved Auth alias,
-   Supabase hook configuration, Resend/Mailpit transport, environment names,
+   Supabase Secure Email Change/double-confirmation settings, environment names,
    and security tests. No reserved alias is rendered or returned as a person's
    email.
 4. **Migration or historical baseline** — immutable database migrations,
@@ -136,16 +130,14 @@ Before production rollout can complete, the operator must:
 
 1. regenerate and seal the ignored mapping with both approved usernames and
    explicitly approved account emails;
-2. configure a verified sender plus `RESEND_API_KEY`,
-   `SEND_EMAIL_HOOK_SECRET`, `RECOVERY_EMAIL_FROM`, and
-   `OWNER_RECOVERY_REDIRECT_URL`;
-3. deploy the schema and five Edge Functions;
+2. confirm hosted Secure Email Change and double confirmation are enabled;
+3. deploy the schema and three Edge Functions;
 4. apply the ignored mapping, run postflight, and verify both sign-in
    identifiers reach each account;
 5. require the public readiness action locally, then push; the Pages workflow
    repeats the check before it can build or upload the permanent frontend;
-6. run one supervised Super Admin recovery, then perform only read-only
-   production verification.
+6. confirm one Super Admin can issue another a reset link before the final
+   read-only production verification.
 
 The final prerequisite check will be repeated immediately before rollout.
 

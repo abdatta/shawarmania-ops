@@ -85,46 +85,6 @@ later self-service settings surface exists.
 - **THEN** the assignment ends but the private account email remains an
   alternate sign-in identifier until separately removed
 
-### Requirement: A Super Admin can recover through private email without account enumeration
-
-The unauthenticated recovery surface SHALL accept the account email and SHALL
-return one identical accepted response whether the address is absent, belongs
-to a non-owner, belongs to an inactive account, or is temporarily rate-limited.
-Only a matching active account with a live Super Admin assignment SHALL cause a
-single-use recovery link to be sent.
-
-The link SHALL return to the canonical allowed application origin, SHALL stop
-working after the authentication provider's recovery token is used or expires,
-and SHALL re-check active state plus the live Super Admin assignment before a
-new password is accepted. The recovery screen SHALL show the current username
-and require username, new password, and repeated new password.
-
-#### Scenario: An active Super Admin requests recovery
-
-- **WHEN** an active Super Admin submits their private account email
-- **THEN** the public response is the standard accepted response and one
-  single-use recovery link is sent to that private address
-
-#### Scenario: An unknown address reveals nothing
-
-- **WHEN** an unknown address is submitted
-- **THEN** the response status, body, and visible timing class are the same as
-  the accepted response and no account detail is returned
-
-#### Scenario: A former owner cannot use an already-open link
-
-- **WHEN** a recovery link is opened after that person has lost their final live
-  Super Admin assignment
-- **THEN** no password is changed and the link does not enter an application
-  shell
-
-#### Scenario: Recovery verifies the username before updating the password
-
-- **WHEN** a valid recovery session submits a username different from the
-  account's current canonical username
-- **THEN** the password is not updated and the screen asks for the displayed
-  username
-
 ### Requirement: Auth aliases are provider plumbing and never product data
 
 The authentication provider SHALL encode a canonical username in a
@@ -215,11 +175,10 @@ either public Supabase build variable is absent.
 
 Readiness SHALL require at least one active live Super Admin with private
 account email; a canonical reserved Auth alias, matching email-provider
-identity, and matching profile for every non-deleted Auth user; no profile
-orphaned from Auth; and configured production recovery-hook secret, provider
-key, sender, and exact canonical callback URL. The database invariant SHALL be
-service-role-only. The public response SHALL expose only a boolean and no
-failed condition, count, username, provider alias, email, or profile ID.
+identity, and matching profile for every non-deleted Auth user; and no profile
+orphaned from Auth. The database invariant SHALL be service-role-only. The
+public response SHALL expose only a boolean and no failed condition, count,
+username, provider alias, email, or profile ID.
 
 #### Scenario: A frontend push races the account migration
 
@@ -228,24 +187,16 @@ failed condition, count, username, provider alias, email, or profile ID.
 - **THEN** the readiness probe returns false and GitHub Pages retains the
   previously published artifact
 
-#### Scenario: Recovery configuration is incomplete
-
-- **WHEN** the schema and aliases are ready but a required hosted recovery-mail
-  runtime value is absent or the callback is not the canonical production URL
-- **THEN** the readiness probe returns false and no permanent username bundle
-  is uploaded
-
 #### Scenario: Production identity is ready
 
-- **WHEN** every private database invariant and required Edge runtime value is
-  satisfied
+- **WHEN** every private database invariant is satisfied
 - **THEN** the probe returns exactly a positive readiness boolean and the Pages
   workflow may continue to build and upload
 
 ### Requirement: Credential forms expose password-manager semantics without promising browser UI
 
 The ordinary sign-in form SHALL mark its identifier as `username` and its
-password as `current-password`. Activation and Super Admin recovery forms SHALL
+password as `current-password`. Activation and admin-issued reset forms SHALL
 mark their identifier as `username` and both new-password entries as
 `new-password`. Every control SHALL have a stable name and belong to a
 submittable form.
@@ -422,16 +373,13 @@ through the everyday username/password path.
 - **WHEN** redemption is attempted with a password below the minimum length
 - **THEN** the password refusal is specific and the code remains redeemable
 
-### Requirement: An admin-issued code is the staff password reset path
+### Requirement: An admin-issued code is every role's password reset path
 
-For Franchise Admins, Billers, and Employees, password reset SHALL be
-admin-initiated: an authorized admin issues a new one-time link and the person
-redeems it with the displayed username and a new password typed twice.
-Self-service forgotten-password recovery SHALL NOT be offered to those roles.
-
-One Super Admin MAY issue the same link for another Super Admin. Separately, a
-Super Admin MAY use the private account-email recovery flow when another administrator
-is unavailable.
+For Franchise Admins, Billers, Employees, and Super Admins, password reset SHALL
+be admin-initiated: an authorized admin issues a new one-time link and the
+person redeems it with the displayed username and a new password typed twice.
+One Super Admin MAY issue the link for another Super Admin. This change SHALL
+NOT offer self-service forgotten-password recovery or send authentication mail.
 
 #### Scenario: A staff member who forgot their password gets admin help
 
@@ -440,9 +388,9 @@ is unavailable.
 - **THEN** the new password works, the previous password does not, and no mail
   or SMS is sent
 
-#### Scenario: Staff sees no email-recovery control
+#### Scenario: Sign-in offers no email-recovery control
 
-- **WHEN** a Franchise Admin, Biller, or Employee opens sign-in help
+- **WHEN** any role opens sign-in help after forgetting a password
 - **THEN** they are told to ask an authorized admin and no recovery-address
   field is offered
 
@@ -773,16 +721,16 @@ ask the admin who issued the link to correct it.
 
 ### Requirement: A new password is typed twice
 
-Activation and Super Admin recovery SHALL require the new password to be
-entered twice and SHALL refuse to proceed unless the entries match. The client
-SHALL decide a mismatch before any redemption or password-update request, so a
+Activation and admin-issued reset SHALL require the new password to be entered
+twice and SHALL refuse to proceed unless the entries match. The client SHALL
+decide a mismatch before any redemption or password-update request, so a
 mistyped repeat consumes neither a code nor a rate-limit allowance.
 
 #### Scenario: Mismatched entries are local
 
 - **WHEN** a person submits two different new passwords
-- **THEN** the mismatch is named, no network request is made, and any invite or
-  recovery session remains usable
+- **THEN** the mismatch is named, no network request is made, and the invite
+  remains usable
 
 #### Scenario: Matching entries activate the account
 
@@ -791,20 +739,12 @@ mistyped repeat consumes neither a code nor a rate-limit allowance.
 - **THEN** the password is set and the client signs in through the ordinary
   username path
 
-#### Scenario: Matching entries complete owner recovery
-
-- **WHEN** a valid active-owner recovery session receives the displayed
-  username and matching valid passwords
-- **THEN** the password is updated and the recovery session continues into the
-  app
-
 ### Requirement: Sign-in asks for username or associated email
 
 The sign-in screen SHALL identify the field as the username given by the
 person's manager or the email associated with their account, SHALL show a
 username example without an `@`, and SHALL route forgotten-password help
-according to role: admin help for staff, private email recovery for Super
-Admin.
+to an authorized Franchise Admin or Super Admin for every role.
 
 #### Scenario: The identifier field explains what to enter
 
@@ -813,9 +753,9 @@ Admin.
   control with `autocomplete="username"`, and explains that email works only
   when associated with the account
 
-#### Scenario: Staff help names the human recovery path
+#### Scenario: Help names the human reset path
 
-- **WHEN** a person who is not a Super Admin needs a password reset
+- **WHEN** a person needs a password reset
 - **THEN** sign-in help tells them to contact their Franchise Admin or Super
   Admin
 
@@ -838,7 +778,7 @@ with the existing activation-pending, deactivated, and unassigned states.
 - **FROM**: `Redeeming a code sets a password and reveals nothing`
 - **TO**: `Redeeming a code sets a password and reveals nothing beyond its username`
 - **FROM**: `An admin-issued code is the password reset path`
-- **TO**: `An admin-issued code is the staff password reset path`
+- **TO**: `An admin-issued code is every role's password reset path`
 - **FROM**: `An admin can see and correct the address an account signs in with`
 - **TO**: `An admin can see and correct the username an account signs in with`
 - **FROM**: `Staff email addresses are not readable from the counter tablet`

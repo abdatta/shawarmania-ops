@@ -1,10 +1,8 @@
 /**
- * Username activation, owner recovery, and the signed mail boundary over the
- * real local stack. The database suites prove the internals; this file proves
- * Kong, Edge Functions, GoTrue, and Mailpit agree on the wire contract.
+ * Username activation and provider-alias protection over the real local
+ * stack. The database suites prove the internals; this file proves Kong, Edge
+ * Functions, and GoTrue agree on the wire contract.
  */
-import { createHmac, randomUUID } from 'node:crypto'
-
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { beforeAll, describe, expect, it } from 'vitest'
 
@@ -17,9 +15,7 @@ const SUPABASE_ANON_KEY =
 const SEED_PASSWORD = 'shawarmania-local'
 const NEW_PASSWORD = 'a-genuinely-set-password'
 const OUTLET_KALYANI = '00000000-0000-4000-a000-000000000001'
-const OWNER_ID = '10000000-0000-4000-a000-000000000001'
 const OWNER_ALIAS = 'owner@login.shawarmania.invalid'
-const LOCAL_HOOK_SECRET = 'c2hhd2FybWFuaWEtbG9jYWwtaG9vay12MQ=='
 
 type Client = SupabaseClient<Database>
 interface Result<T = Record<string, unknown>> {
@@ -167,58 +163,8 @@ describe('opening and redeeming an activation link', () => {
   }, 60_000)
 })
 
-function signedHookHeaders(body: string): Record<string, string> {
-  const id = randomUUID()
-  const timestamp = Math.floor(Date.now() / 1000).toString()
-  const secret = Buffer.from(LOCAL_HOOK_SECRET, 'base64')
-  const signature = createHmac('sha256', secret)
-    .update(`${id}.${timestamp}.${body}`)
-    .digest('base64')
-  return {
-    'webhook-id': id,
-    'webhook-timestamp': timestamp,
-    'webhook-signature': `v1,${signature}`,
-  }
-}
-
-describe('the signed Send Email Hook', () => {
-  const recoveryPayload = {
-    user: { id: OWNER_ID, email: OWNER_ALIAS },
-    email_data: {
-      token_hash: 'integration-test-token',
-      redirect_to: 'https://ops.shawarmania.in/recover',
-      email_action_type: 'recovery',
-    },
-  }
-
-  it('rejects an invalid signature', async () => {
-    const result = await callFunction('send-email-hook', recoveryPayload, {
-      headers: {
-        'webhook-id': randomUUID(),
-        'webhook-timestamp': Math.floor(Date.now() / 1000).toString(),
-        'webhook-signature': 'v1,invalid',
-      },
-    })
-    expect(result.status).toBe(401)
-  })
-
-  it('fails closed for email changes and wrong redirects', async () => {
-    for (const emailData of [
-      { ...recoveryPayload.email_data, email_action_type: 'email_change' },
-      { ...recoveryPayload.email_data, redirect_to: 'https://attacker.invalid/recover' },
-    ]) {
-      const payload = { ...recoveryPayload, email_data: emailData }
-      const body = JSON.stringify(payload)
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/send-email-hook`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...signedHookHeaders(body) },
-        body,
-      })
-      expect(response.status).toBe(403)
-    }
-  })
-
-  it('prevents a signed-in staff member from rewriting the hidden Auth alias', async () => {
+describe('provider alias protection', () => {
+  it('requires both inaccessible alias confirmations before an email change can complete', async () => {
     const client = anonClient()
     const originalAlias = 'staff.kalyani@login.shawarmania.invalid'
     const attemptedAlias = `hijack.${RUN}@login.shawarmania.invalid`
@@ -229,7 +175,7 @@ describe('the signed Send Email Hook', () => {
     expect(signedIn.error).toBeNull()
 
     const changed = await client.auth.updateUser({ email: attemptedAlias })
-    expect(changed.error).not.toBeNull()
+    expect(changed.data.user?.email).toBe(originalAlias)
 
     const current = await client.auth.getUser()
     expect(current.data.user?.email).toBe(originalAlias)
@@ -241,60 +187,5 @@ describe('the signed Send Email Hook', () => {
         })
       ).error,
     ).not.toBeNull()
-  })
-
-  it('delivers only an active live owner recovery through the local mail sink', async () => {
-    const body = JSON.stringify(recoveryPayload)
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/send-email-hook`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...signedHookHeaders(body) },
-      body,
-    })
-    expect(response.status).toBe(200)
-
-    const formerPayload = {
-      ...recoveryPayload,
-      user: {
-        id: '10000000-0000-4000-a000-000000000008',
-        email: 'deactivated.kalyani@login.shawarmania.invalid',
-      },
-    }
-    const formerBody = JSON.stringify(formerPayload)
-    const refused = await fetch(`${SUPABASE_URL}/functions/v1/send-email-hook`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...signedHookHeaders(formerBody) },
-      body: formerBody,
-    })
-    expect(refused.status).toBe(403)
-  })
-})
-
-describe('public owner recovery', () => {
-  it('returns one response for a live owner, unknown address, and ordinary staff', async () => {
-    const responses = await Promise.all(
-      ['owner.account@example.com', 'nobody@example.com', 'staff.kalyani@example.com'].map(
-        (email, index) =>
-          callFunction(
-            'owner-recovery',
-            { action: 'request', email },
-            { ip: `198.51.100.${index + 10}` },
-          ),
-      ),
-    )
-    expect(new Set(responses.map((result) => JSON.stringify(result))).size).toBe(1)
-    expect(responses[0]).toMatchObject({ status: 202, body: { accepted: true } })
-  })
-
-  it('does not let an ordinary signed-in account use the callback status oracle', async () => {
-    const employee = await anonClient().auth.signInWithPassword({
-      email: 'staff.kalyani@login.shawarmania.invalid',
-      password: SEED_PASSWORD,
-    })
-    const result = await callFunction(
-      'owner-recovery',
-      { action: 'status' },
-      { token: employee.data.session!.access_token },
-    )
-    expect(result.status).toBe(403)
   })
 })

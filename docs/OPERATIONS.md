@@ -5,7 +5,8 @@
 > one activation link is issued. They open it, type the username shown there
 > and the same new password twice. Ordinary account creation needs no email;
 > any associated email is an alternate sign-in, and every live Super Admin
-> requires one for self-recovery. Menu, tablet enrolment
+> requires one as a future recovery/security foundation. Forgotten passwords
+> for every role use an admin-issued one-time link. Menu, tablet enrolment
 > and opening cash float are still to come, and the steps below say which.
 
 ## Environments
@@ -34,24 +35,6 @@ VITE_SUPABASE_ANON_KEY
 The anon key is designed to be public; Row-Level Security is what protects the data. **The service-role key is never in client configuration.** It lives only in Edge Function secrets.
 
 `.env.example` documents every variable. `.env` is gitignored and must stay that way.
-
-The owner-recovery Edge Functions require four hosted secrets:
-
-```
-SEND_EMAIL_HOOK_SECRET
-RESEND_API_KEY
-RECOVERY_EMAIL_FROM
-OWNER_RECOVERY_REDIRECT_URL=https://ops.shawarmania.in/recover
-```
-
-`SEND_EMAIL_HOOK_SECRET` is the same independently generated Standard Webhooks
-secret registered in Supabase Auth. `RECOVERY_EMAIL_FROM` must use a
-Resend-verified sender domain. None belongs in GitHub variables, Vite config,
-logs, or the migration mapping. The production deployment readiness endpoint
-checks that all four runtime values are present, that the hook/key have their
-expected provider prefixes, and that the redirect is exactly the canonical
-URL. That check does not replace verifying sender DNS or matching the hook
-secret in the Supabase Auth dashboard.
 
 Local development needs the Supabase CLI and Docker. `supabase start` brings the stack up from the committed `supabase/config.toml` and prints the local anon key to paste into `.env`. It prints a service-role key too — that one never leaves the terminal.
 
@@ -85,18 +68,13 @@ Hosting is **GitHub Pages**, published by `.github/workflows/deploy.yml` on ever
 
 Before the workflow builds or uploads, `npm run auth:readiness` posts one
 non-sensitive action to the hosted `email-sign-in` function. It permits
-publication only when the #24 database invariant confirms canonical
-Auth/profile/email-identity alignment, an active live Super Admin with private
-account email, and complete recovery-mail runtime configuration. A missing
-function or migration, timeout, non-success, malformed response, absent public
-build variable, or negative boolean stops the job before artifact upload, so
-the previous Pages deployment remains live. The public endpoint reveals only
-`ready`; direct database execution is service-role-only.
-
-This is deliberately not an outbound recovery test. The readiness probe cannot
-prove Resend DNS or the Auth dashboard's hook registration without either a
-management credential or sending mail on every deployment. Verify those during
-the supervised rollout, once; later deploys remain read-only.
+  publication only when the #24 database invariant confirms canonical
+  Auth/profile/email-identity alignment, an active live Super Admin with private
+  account email. A missing function or migration, timeout, non-success,
+  malformed response, absent public build variable, or negative boolean stops
+  the job before artifact upload, so the previous Pages deployment remains
+  live. The public endpoint reveals only `ready`; direct database execution is
+  service-role-only.
 
 One prerequisite, and it is not optional: **the repo is public.** Pages from a private repo requires a paid GitHub plan.
 
@@ -212,51 +190,37 @@ linking this repo to it would run these migrations into someone else's data.
 3. **Configure hosted Auth deliberately.**
 
    The committed `supabase/config.toml` is the local configuration: its
-   `site_url`, Mailpit path and Send Email Hook URI point at localhost. **Do not
-   run `supabase config push` against production from that file.** In
+   `site_url` and redirect paths point at localhost. **Do not run `supabase
+   config push` against production from that file.** In
    Authentication settings:
 
    - disable public signup; keep password/email provider support enabled
-     because Supabase's username alias uses that provider;
-   - disable confirmation mail;
+      because Supabase's username alias uses that provider;
+   - keep email confirmation enabled and every admin-created account explicitly
+     pre-confirmed;
    - set Site URL to `https://ops.shawarmania.in`;
-   - allow exactly `https://ops.shawarmania.in/recover` as the production
-     recovery redirect;
-   - keep Secure Email Change enabled;
-   - register the Send Email Hook at
-     `https://<ref>.supabase.co/functions/v1/send-email-hook` with a fresh
-     Standard Webhooks secret.
+   - keep Secure Email Change and double confirmation enabled, so a
+     client-requested alias replacement cannot complete through the current
+     non-deliverable alias;
+   - do not register a Send Email Hook. This version sends no authentication
+     mail.
 
    There is no access-token hook. Authority is resolved from
    `public.assignments` on every request, so a token carries nothing about what
    a person may do.
 
-4. **Configure mail and deploy all identity Edge Functions.** Verify the
-   Resend sender domain first, then set the four secrets from
-   [Configuration](#configuration). The hook secret set on the function must
-   exactly match the Auth Hook registration.
+4. **Deploy all identity Edge Functions.**
 
    ```
-   npx supabase secrets set SEND_EMAIL_HOOK_SECRET=... RESEND_API_KEY=... \
-     RECOVERY_EMAIL_FROM="Shawarmania Ops <access@ops.shawarmania.in>" \
-     OWNER_RECOVERY_REDIRECT_URL=https://ops.shawarmania.in/recover
    npx supabase functions deploy admin-accounts
    npx supabase functions deploy redeem-invite
    npx supabase functions deploy email-sign-in
-   npx supabase functions deploy owner-recovery
-   npx supabase functions deploy send-email-hook
    ```
 
    `redeem-invite` is declared `verify_jwt = false` in `config.toml`, because
    somebody who has never set a password has no token to present. Check it took
    effect: an unauthenticated `POST` with a wrong code must answer `400
    invalid_code`, not `401`.
-
-   Before onboarding anyone, send one recovery message to a synthetic/local
-   owner in staging and then to the intended production owner during the
-   supervised rollout. Confirm the callback origin and that signup,
-   magic-link, invite and email-change mail are refused. Never use a recovery
-   request as the later read-only production verification.
 
 5. **Create the first Super Admin.** Nothing in the app can bootstrap authority
    from an empty database — see
@@ -296,9 +260,9 @@ linking this repo to it would run these migrations into someone else's data.
    email → provision a
    username-only Franchise Admin → open the activation link in a private window
    → type the displayed username and matching passwords → that admin sees only
-   their managed outlet. Then request and complete the owner's recovery once as
-   a supervised functional test. Subsequent deployment verification is
-   read-only.
+   their managed outlet → issue another Super Admin a reset link and confirm the
+   handover uses the same three-field form. Subsequent deployment verification
+   is read-only.
 
 ## Existing-account username migration
 
@@ -320,12 +284,12 @@ never prints account emails. Do not run it in CI.
    preservation, pending-invite preview/redeem, postflight, rollback and
    forward repair. It is hard-locked to `http://127.0.0.1:54321`.
 
-2. **Finish mail configuration before touching live identity.** Resend sender
-   DNS must be verified, all four Edge secrets present, the canonical recovery
-   redirect allowed, and the signed Send Email Hook registered. A Super Admin
-   must not lose the only independent recovery path during an identifier move.
+2. **Confirm hosted Auth protects the alias.** Secure Email Change and double
+   confirmation must be enabled before touching live identity. This migration
+   does not add outbound mail or self-service recovery; one Super Admin remains
+   the password-reset path for another.
 
-3. **Apply the schema and deploy all five functions while retaining the current
+3. **Apply the schema and deploy all three functions while retaining the current
    safe frontend.** Email-or-username is the steady-state contract, not a
    temporary compatibility mode. Before an Auth alias is migrated, the current
    email still signs in directly; afterwards an approved associated email
@@ -336,8 +300,6 @@ never prints account emails. Do not run it in CI.
    npx supabase functions deploy admin-accounts
    npx supabase functions deploy redeem-invite
    npx supabase functions deploy email-sign-in
-   npx supabase functions deploy owner-recovery
-   npx supabase functions deploy send-email-hook
    ```
 
    The migration copies every current live Super Admin's real Auth email into
@@ -390,8 +352,8 @@ never prints account emails. Do not run it in CI.
    still reads and refreshes, every pending invite previews the approved
    username, and assignments/attendance counts match the preflight. Confirm
    every approved associated email reaches the same Auth user as its username.
-   Hand each active person their username. Complete one Super Admin recovery
-   from an unauthenticated phone during this supervised functional window.
+   Hand each active person their username. Confirm one authorized Super Admin
+   can issue another Super Admin a reset link without sending mail.
 
 8. **Close the rollback window.** Verify the permanent username-or-email form
    plus production health using read-only actions. Keep the reviewed mapping
@@ -417,8 +379,8 @@ or reverse a released SQL migration.
 ## Managing accounts
 
 Accounts are admin-provisioned; there is no self-service signup. Activation and
-staff reset links are handed over by the administrator rather than sent by the
-app. Only Super Admin self-recovery sends email.
+reset links for every role are handed over by the administrator rather than
+sent by the app. This version sends no authentication mail.
 
 - **Super Admin → People** manages every account across all outlets.
 - **Franchise Admin → People** manages Billers and Employees only at the outlets where that admin holds a live Franchise Admin assignment. One managed outlet stays preselected; several become a checkbox list. The limits are enforced server-side from the caller's own session, not by the form.
@@ -445,10 +407,10 @@ usable, although telling the person the correction is still necessary.
 ID, password, sessions, assignments and outstanding code remain. The old
 username stops signing in and the corrected one starts.
 
-**To reset staff passwords**: issue a new code and hand over its link. An
-associated email does not grant staff self-recovery. A Super Admin can use the
-same admin path, or
-can self-recover through **Forgot password → recover by private email**.
+**To reset a password**: issue a new code and hand over its link. This is the
+path for every role, including Super Admin; one Super Admin helps another. An
+associated email remains an alternate sign-in and does not currently grant
+self-service recovery.
 
 **To fix a Super Admin account email**: another Super Admin chooses *Change
 email*. One's own value is read-only in People; use another Super Admin or
@@ -473,12 +435,10 @@ Deliberately minimal at this scale — the useful signals are operational rather
 - **Sync backlog**: a tablet with a persistent unsynced queue is the most valuable alert in the system. It means bills exist in exactly one place.
 - **Device last-seen**: a counter device silent during trading hours means something is wrong at that outlet.
 - **Cash differences**: a consistently non-zero difference at one outlet is a business signal, and the app already computes it.
-- **Identity functions**: monitor `email-sign-in`, `owner-recovery`, and
-  `send-email-hook` non-2xx
-  rates, Supabase Auth recovery limits, Resend delivery/bounce status and sender
-  DNS. Logs may name an action/result but never a raw account email, password, Auth
-  alias, token hash or invite code. A provider outage does not affect ordinary
-  username sign-in or admin-issued staff reset.
+- **Identity functions**: monitor `admin-accounts`, `redeem-invite`, and
+  `email-sign-in` non-2xx rates plus email-sign-in abuse limits. Logs may name
+  an action/result but never a raw account email, password, Auth alias, token
+  hash or invite code.
 - Supabase's built-in error and usage dashboards cover the rest.
 
 No third-party analytics or session-recording tooling. The app handles customer PII and employee location; sending that to an analytics vendor is not a trade worth making.
@@ -489,11 +449,6 @@ Post's PIN directory) answer postal-address search. Both are keyless. They see
 only what an admin types while finding their shop; no customer, employee,
 billing or identity data reaches either. If either disappears the address
 block remains manually typeable.
-
-**Resend is the one transactional mail provider.** It receives only a freshly
-authorized live Super Admin account email and the canonical recovery link
-from the signed hook. It never receives staff activation/reset, ordinary
-usernames or outlet data.
 
 ## Runbook stubs
 
@@ -507,9 +462,9 @@ usernames or outlet data.
 they type it without `@`, or use the associated email when one exists. Sign-in
 gives one message for an unknown username/email and wrong password alike.
 Correct a typo with *Change username*; an outstanding
-link remains attached to the account. Confirm the profile is active and still
-has a live assignment. If the password is forgotten, issue a new one-time link.
-Only a Super Admin uses private-email self-recovery.
+ link remains attached to the account. Confirm the profile is active and still
+ has a live assignment. If the password is forgotten, issue a new one-time link.
+ This is also the current path for a Super Admin; one owner must help another.
 
 **An activation link will not work** → it expires after seven days, works once,
 and is cancelled when a newer one is issued. Granting or ending an assignment
@@ -519,14 +474,11 @@ correct the account or explain the spelling. Every code-state failure remains
 identical. If the latest link was lost, issue a new one. Nobody can retrieve
 the old plaintext because only its hash was stored.
 
-**A Super Admin recovery message does not arrive** → do not repeatedly submit the
-public form; its acknowledgement is intentionally uniform and rate-limited.
-Check Resend status/sender DNS, Edge Function non-2xx logs, hook secret
-agreement, canonical redirect, and that another live Super Admin sees the
-correct account email on People. Another Super Admin can issue a normal reset
-link or correct the email. If no other Super Admin is available, use a service-role
-operator repair after verifying the person's identity out of band; never
-disable the signed hook or expose the recovery table to solve a lockout.
+**Every Super Admin is locked out** → verify each person's identity out of band,
+then use the service-role operator repair to issue or restore access to one
+existing account. That owner can issue another owner an ordinary reset link.
+Do not create a replacement owner, weaken assignment policies, expose account
+email, or enable unreviewed authentication mail to solve the lockout.
 
 **"Too many activation attempts from this connection"** → the endpoint's own rate limit, not a problem with the code. It clears within fifteen minutes. A working activation never counts toward it — only failures do — so seeing this means something on that connection has been failing repeatedly.
 
