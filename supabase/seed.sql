@@ -43,11 +43,10 @@ values
    null, null);
 
 -- ---------------------------------------------------------------------------
--- Auth users. Email + password, admin-provisioned with the address
--- pre-confirmed (owner-confirmed 2026-07-26 — phone auth is not used).
--- Passwords are all 'shawarmania-local'; addresses are obviously fake
--- example.com ones. Signup is disabled — these exist only so local tests can
--- sign in through the real GoTrue password grant.
+-- Auth users. Username + password, encoded through the reserved
+-- non-deliverable Auth alias required by Supabase's native password grant.
+-- Passwords are all 'shawarmania-local'. Signup is disabled — these exist only
+-- so local tests can sign in through the real GoTrue password grant.
 
 do $$
 declare
@@ -55,38 +54,34 @@ declare
 begin
   for persona in
     select * from (values
-      ('10000000-0000-4000-a000-000000000001'::uuid, 'owner@example.com'),
-      ('10000000-0000-4000-a000-000000000002'::uuid, 'admin.kalyani@example.com'),
-      ('10000000-0000-4000-a000-000000000003'::uuid, 'admin.kanchrapara@example.com'),
-      ('10000000-0000-4000-a000-000000000004'::uuid, 'tablet.kalyani@example.com'),
-      ('10000000-0000-4000-a000-000000000005'::uuid, 'tablet.kanchrapara@example.com'),
-      ('10000000-0000-4000-a000-000000000006'::uuid, 'staff.kalyani@example.com'),
-      ('10000000-0000-4000-a000-000000000007'::uuid, 'staff.kanchrapara@example.com'),
-      ('10000000-0000-4000-a000-000000000008'::uuid, 'deactivated.kalyani@example.com'),
-      ('10000000-0000-4000-a000-000000000009'::uuid, 'revoked.tablet.kalyani@example.com'),
-      ('10000000-0000-4000-a000-00000000000a'::uuid, 'biller.kalyani@example.com'),
-      ('10000000-0000-4000-a000-00000000000b'::uuid, 'biller.kanchrapara@example.com'),
+      ('10000000-0000-4000-a000-000000000001'::uuid, 'owner@login.shawarmania.invalid'),
+      ('10000000-0000-4000-a000-000000000002'::uuid, 'admin.kalyani@login.shawarmania.invalid'),
+      ('10000000-0000-4000-a000-000000000003'::uuid, 'admin.kanchrapara@login.shawarmania.invalid'),
+      ('10000000-0000-4000-a000-000000000004'::uuid, 'tablet.kalyani@login.shawarmania.invalid'),
+      ('10000000-0000-4000-a000-000000000005'::uuid, 'tablet.kanchrapara@login.shawarmania.invalid'),
+      ('10000000-0000-4000-a000-000000000006'::uuid, 'staff.kalyani@login.shawarmania.invalid'),
+      ('10000000-0000-4000-a000-000000000007'::uuid, 'staff.kanchrapara@login.shawarmania.invalid'),
+      ('10000000-0000-4000-a000-000000000008'::uuid, 'deactivated.kalyani@login.shawarmania.invalid'),
+      ('10000000-0000-4000-a000-000000000009'::uuid, 'revoked.tablet.kalyani@login.shawarmania.invalid'),
+      ('10000000-0000-4000-a000-00000000000a'::uuid, 'biller.kalyani@login.shawarmania.invalid'),
+      ('10000000-0000-4000-a000-00000000000b'::uuid, 'biller.kanchrapara@login.shawarmania.invalid'),
       -- Two accounts that exist only to carry an outstanding one-time code, so
       -- the invite policies have rows to isolate and the activation flow has
       -- something to redeem. Nothing else signs in as these, so a test that
       -- redeems one and changes its password disturbs no other test.
-      ('10000000-0000-4000-a000-00000000000c'::uuid, 'pending.kalyani@example.com'),
-      ('10000000-0000-4000-a000-00000000000d'::uuid, 'pending.kanchrapara@example.com'),
-      -- The grillers, formerly unlinked roster rows. Staff are accounts now,
-      -- so they are accounts — Kalyani's still carrying the placeholder
-      -- address the roster merge would have minted (the state an admin must
-      -- notice and fix before a code can be issued), Kanchrapara's already
-      -- corrected to a real one. Their 20000000-… ids are the old roster
-      -- ids, exactly what the merge preserves.
-      ('20000000-0000-4000-a000-000000000002'::uuid,
-       '20000000-0000-4000-a000-000000000002@placeholder.invalid'),
-      ('20000000-0000-4000-a000-000000000004'::uuid, 'griller.kanchrapara@example.com'),
+      ('10000000-0000-4000-a000-00000000000c'::uuid, 'pending.kalyani@login.shawarmania.invalid'),
+      ('10000000-0000-4000-a000-00000000000d'::uuid, 'pending.kanchrapara@login.shawarmania.invalid'),
+      -- The grillers, formerly unlinked roster rows. Staff are accounts now;
+      -- their 20000000-… ids remain exactly the old roster ids while their
+      -- owner-approved usernames replace every placeholder identity.
+      ('20000000-0000-4000-a000-000000000002'::uuid, 'griller.kalyani@login.shawarmania.invalid'),
+      ('20000000-0000-4000-a000-000000000004'::uuid, 'griller.kanchrapara@login.shawarmania.invalid'),
       -- The split-shift person: one login, live assignments at BOTH outlets.
       -- Multi-outlet is the case that has to be seeded rather than assumed —
       -- every isolation persona below is single-outlet, and a model that only
       -- ever sees single-outlet people is a model whose second outlet is
       -- untested (multi-outlet-people).
-      ('10000000-0000-4000-a000-00000000000e'::uuid, 'split.shift@example.com')
+      ('10000000-0000-4000-a000-00000000000e'::uuid, 'split.shift@login.shawarmania.invalid')
     ) as p (id, email)
   loop
     insert into auth.users
@@ -149,14 +144,31 @@ values
 -- the point: one login, an Employee assignment at each outlet, and a day
 -- worked at each — the case that did not exist before this change.
 --
--- The owner is seeded outlet-less. Owner-as-manager is proved in
+-- The owner and private recovery contact are seeded as one transaction. The
+-- deferred invariant makes either row without the other impossible, including
+-- from a hand-crafted write.
+do $$
+begin
+  insert into public.account_recovery_contacts (profile_id, email)
+  values ('10000000-0000-4000-a000-000000000001', 'owner.recovery@example.com');
+
+  insert into public.assignments (person_id, role, outlet_id, started_on)
+  values (
+    '10000000-0000-4000-a000-000000000001',
+    'super_admin',
+    null,
+    current_date - 600
+  );
+end;
+$$;
+
+-- Owner-as-manager is proved in
 -- 14_assignments.sql by granting the assignment inside the test, so the
 -- isolation sweeps are not quietly weakened by an owner who also passes every
 -- manager branch.
 
 insert into public.assignments (person_id, role, outlet_id, started_on)
 values
-  ('10000000-0000-4000-a000-000000000001', 'super_admin',     null,                                   current_date - 600),
   ('10000000-0000-4000-a000-000000000002', 'franchise_admin', '00000000-0000-4000-a000-000000000001', current_date - 500),
   ('10000000-0000-4000-a000-000000000003', 'franchise_admin', '00000000-0000-4000-a000-000000000002', current_date - 450),
   ('10000000-0000-4000-a000-000000000004', 'biller',          '00000000-0000-4000-a000-000000000001', current_date - 400),
@@ -179,8 +191,8 @@ values
 -- Outstanding one-time codes, one per outlet. Stored as a hash exactly as the
 -- Edge Function stores them; the plaintext codes are recorded here only
 -- because this file is local-only synthetic data and the tests need them:
---   pending.kalyani@example.com      ABCDE-FGHJK
---   pending.kanchrapara@example.com  KMNPQ-RSTVW
+--   pending.kalyani      ABCDE-FGHJK
+--   pending.kanchrapara  KMNPQ-RSTVW
 -- Normalisation before hashing is "uppercase, drop everything non-alphanumeric",
 -- the same rule redeem-invite applies to what a person types.
 

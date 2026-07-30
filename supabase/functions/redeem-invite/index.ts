@@ -1,4 +1,5 @@
 import { serviceClient } from '../_shared/authority.ts'
+import { canonicalUsername } from '../../../shared/username.ts'
 import { json, noContent, preflight, readJson, str } from '../_shared/http.ts'
 import {
   clientIpHash,
@@ -54,6 +55,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const action = body['action'] === 'preview' ? 'preview' : ('redeem' as Action)
   const rawCode = str(body['code'])
+  const username = canonicalUsername(str(body['username']) ?? '')
   const password = typeof body['password'] === 'string' ? body['password'] : ''
 
   // Checked before anything is looked up, so a fumbled password never reaches
@@ -74,17 +76,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
       p_ip_hash: ipHash,
     })
     const row = (Array.isArray(data) ? data[0] : data) as
-      { status?: string; email?: string | null } | undefined
+      { status?: string; username?: string | null } | undefined
 
     if (error) return json(INVALID, 400)
     if (row?.status === 'rate_limited') return json(RATE_LIMITED, 429)
-    if (row?.status !== 'ok' || !row.email) return json(INVALID, 400)
+    if (row?.status !== 'ok' || !row.username) return json(INVALID, 400)
 
-    return json({ email: row.email })
+    return json({ username: row.username })
   }
+
+  if (!username) return json({ error: 'username_mismatch' }, 409)
 
   const { data, error } = await service.rpc('redeem_account_invite', {
     p_code_hash: codeHash,
+    p_username: username,
     p_ip_hash: ipHash,
   })
   const row = (Array.isArray(data) ? data[0] : data) as
@@ -92,6 +97,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   if (error) return json(INVALID, 400)
   if (row?.status === 'rate_limited') return json(RATE_LIMITED, 429)
+  if (row?.status === 'username_mismatch') {
+    return json({ error: 'username_mismatch' }, 409)
+  }
   if (row?.status !== 'ok' || !row.user_id) return json(INVALID, 400)
 
   const { error: passwordError } = await service.auth.admin.updateUserById(row.user_id, {
