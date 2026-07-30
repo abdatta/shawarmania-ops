@@ -16,6 +16,8 @@ interface SendEmailHookPayload {
   }
 }
 
+const LOCAL_HOOK_SECRET = 'v1,whsec_c2hhd2FybWFuaWEtbG9jYWwtaG9vay12MQ=='
+
 function recoveryRedirect(): string {
   return Deno.env.get('OWNER_RECOVERY_REDIRECT_URL') ?? 'https://ops.shawarmania.in/recover'
 }
@@ -78,7 +80,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
   const payloadText = await req.text()
-  const configuredSecret = Deno.env.get('SEND_EMAIL_HOOK_SECRET')
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+  const configuredSecret =
+    Deno.env.get('SEND_EMAIL_HOOK_SECRET') ??
+    (supabaseUrl.includes('127.0.0.1') || supabaseUrl.includes('kong') ? LOCAL_HOOK_SECRET : null)
   if (!configuredSecret) return json({ error: 'hook_not_configured' }, 500)
 
   let payload: SendEmailHookPayload

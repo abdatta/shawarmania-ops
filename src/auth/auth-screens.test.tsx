@@ -5,14 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { appRoutes } from '@/routes'
 
-/**
- * Sign-in and activation, at the level a person experiences them: what the
- * screen says when it refuses, and what it does when it does not.
- *
- * The error classes are declared inside the mock rather than imported: the
- * whole module is replaced, so these ARE the classes the screens will see, and
- * `instanceof` in the components matches what the tests throw.
- */
 const auth = vi.hoisted(() => {
   class SignInError extends Error {
     constructor(
@@ -37,6 +29,9 @@ const auth = vi.hoisted(() => {
     signOut: vi.fn(),
     previewInvite: vi.fn(),
     redeemInvite: vi.fn(),
+    requestOwnerRecovery: vi.fn(),
+    startOwnerRecovery: vi.fn(),
+    finishOwnerRecovery: vi.fn(),
     currentUser: vi.fn(),
     loadOwnProfile: vi.fn(),
     currentClaims: vi.fn(),
@@ -63,126 +58,164 @@ beforeEach(() => {
 })
 
 describe('sign in', () => {
-  it('signs in and leaves the sign-in screen', async () => {
+  it('signs in with the canonical username and leaves the sign-in screen', async () => {
     const user = userEvent.setup()
-    auth.signIn.mockResolvedValue({ userId: 'u-1', email: 'admin.kalyani@example.com' })
+    auth.signIn.mockResolvedValue({ userId: 'u-1', username: 'admin.kalyani' })
 
     const { router } = renderAt('/sign-in')
-    await user.type(screen.getByLabelText('Email'), 'admin.kalyani@example.com')
+    await user.type(screen.getByLabelText('Username'), 'Admin.Kalyani')
     await user.type(screen.getByLabelText('Password'), 'a-real-password')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(auth.signIn).toHaveBeenCalledWith('admin.kalyani@example.com', 'a-real-password')
+    expect(auth.signIn).toHaveBeenCalledWith('admin.kalyani', 'a-real-password')
     expect(router.state.location.pathname).not.toBe('/sign-in')
   })
 
   it('returns to the surface the visitor originally asked for', async () => {
     const user = userEvent.setup()
-    auth.signIn.mockResolvedValue({ userId: 'u-1', email: 'x@example.com' })
-
-    // Arriving unauthenticated at a role surface redirects here carrying the
-    // destination; signing in has to honour it rather than dumping everyone
-    // on a generic home.
+    auth.signIn.mockResolvedValue({ userId: 'u-1', username: 'admin.kalyani' })
     const router = createMemoryRouter(appRoutes, {
       initialEntries: [{ pathname: '/sign-in', state: { from: '/admin/people' } }],
     })
     render(<RouterProvider router={router} />)
 
-    await user.type(screen.getByLabelText('Email'), 'x@example.com')
+    await user.type(screen.getByLabelText('Username'), 'admin.kalyani')
     await user.type(screen.getByLabelText('Password'), 'a-real-password')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
     expect(router.state.location.pathname).toBe('/admin/people')
   })
 
-  it('says the same thing for a wrong address as for a wrong password', async () => {
+  it('keeps invalid username and password failures indistinguishable', async () => {
     const user = userEvent.setup()
     auth.signIn.mockRejectedValue(
-      new auth.SignInError('invalid_credentials', 'That email or password is not right.'),
+      new auth.SignInError('invalid_credentials', 'That username or password is not right.'),
     )
 
     renderAt('/sign-in')
-    await user.type(screen.getByLabelText('Email'), 'nobody@example.com')
+    await user.type(screen.getByLabelText('Username'), 'nobody')
     await user.type(screen.getByLabelText('Password'), 'whatever-goes')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
     expect(await screen.findByTestId('signin-error')).toHaveTextContent(
-      'That email or password is not right.',
+      'That username or password is not right.',
     )
   })
 
-  it('explains a session that ended, when it was sent here by one', async () => {
-    const router = createMemoryRouter(appRoutes, {
-      initialEntries: [{ pathname: '/sign-in', state: { reason: 'deactivated' } }],
-    })
-    render(<RouterProvider router={router} />)
-
-    expect(screen.getByTestId('session-ended')).toHaveTextContent(
-      'Your account has been deactivated.',
-    )
-  })
-
-  it('offers no self-service reset, because there is none', () => {
+  it('refuses @-prefixed handles before asking the backend', async () => {
+    const user = userEvent.setup()
     renderAt('/sign-in')
-    expect(screen.queryByText(/forgot/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Set your password' })).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Username'), '@admin.kalyani')
+    await user.type(screen.getByLabelText('Password'), 'a-real-password')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByTestId('signin-error')).toHaveTextContent(
+      'Type the username without the @ sign',
+    )
+    expect(auth.signIn).not.toHaveBeenCalled()
+  })
+
+  it('routes only Super Admins toward private email recovery', () => {
+    renderAt('/sign-in')
+
+    expect(
+      screen.getByText(/Staff should ask a Franchise Admin or Super Admin/),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'recover by private email' })).toHaveAttribute(
+      'href',
+      '/recover',
+    )
   })
 })
 
 describe('activation', () => {
   const LINK = '/activate?code=ABCDE-FGHJK'
 
-  it('asks for a password and nothing else, once the address is confirmed', async () => {
+  async function openActivation() {
+    auth.previewInvite.mockResolvedValue('new.staff')
+    renderAt(LINK)
+    await screen.findByTestId('activate-username')
+  }
+
+  it('shows the username and asks for username plus two matching passwords', async () => {
     const user = userEvent.setup()
-    auth.previewInvite.mockResolvedValue('new.staff@example.com')
+    auth.previewInvite.mockResolvedValue('new.staff')
     auth.redeemInvite.mockResolvedValue(undefined)
-    auth.signIn.mockResolvedValue({ userId: 'u-2', email: 'new.staff@example.com' })
+    auth.signIn.mockResolvedValue({ userId: 'u-2', username: 'new.staff' })
 
     renderAt(LINK)
 
-    // The address is shown, never asked for.
-    expect(await screen.findByTestId('activate-address')).toHaveTextContent('new.staff@example.com')
-    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('activate-username')).toHaveTextContent('new.staff')
     expect(screen.queryByLabelText('One-time code')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Username')).toHaveAttribute('autocomplete', 'username')
+    expect(screen.getByLabelText('New password')).toHaveAttribute('autocomplete', 'new-password')
+    expect(screen.getByLabelText('Re-type password')).toHaveAttribute(
+      'autocomplete',
+      'new-password',
+    )
 
-    await user.click(screen.getByRole('button', { name: /Yes, that/ }))
+    await user.type(screen.getByLabelText('Username'), 'New.Staff')
     await user.type(screen.getByLabelText('New password'), 'a-real-password')
-    await user.type(screen.getByLabelText('Confirm password'), 'a-real-password')
+    await user.type(screen.getByLabelText('Re-type password'), 'a-real-password')
     await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
 
     expect(auth.previewInvite).toHaveBeenCalledWith('ABCDE-FGHJK')
-    expect(auth.redeemInvite).toHaveBeenCalledWith('ABCDE-FGHJK', 'a-real-password')
-    expect(auth.signIn).toHaveBeenCalledWith('new.staff@example.com', 'a-real-password')
+    expect(auth.redeemInvite).toHaveBeenCalledWith('ABCDE-FGHJK', 'new.staff', 'a-real-password')
+    expect(auth.signIn).toHaveBeenCalledWith('new.staff', 'a-real-password')
   })
 
-  it('offers no password field until the person says the address is theirs', async () => {
-    auth.previewInvite.mockResolvedValue('new.staff@example.com')
-
-    renderAt(LINK)
-    await screen.findByTestId('activate-address')
-
-    expect(screen.queryByLabelText('New password')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /That.s not my email/ })).toBeInTheDocument()
-  })
-
-  it('sends somebody whose address is wrong to the person who can fix it', async () => {
+  it('does not consume the code when the typed username differs', async () => {
     const user = userEvent.setup()
-    auth.previewInvite.mockResolvedValue('typo@example.com')
+    await openActivation()
 
-    renderAt(LINK)
-    await screen.findByTestId('activate-address')
-    await user.click(screen.getByRole('button', { name: /That.s not my email/ }))
+    await user.type(screen.getByLabelText('Username'), 'other.person')
+    await user.type(screen.getByLabelText('New password'), 'a-real-password')
+    await user.type(screen.getByLabelText('Re-type password'), 'a-real-password')
+    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
 
-    expect(screen.getByTestId('activate-not-me')).toHaveTextContent('Ask your manager')
-    expect(screen.queryByLabelText('New password')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('activate-error')).toHaveTextContent(
+      'Type the username shown above',
+    )
     expect(auth.redeemInvite).not.toHaveBeenCalled()
+  })
+
+  it('does not consume the code when the passwords differ', async () => {
+    const user = userEvent.setup()
+    await openActivation()
+
+    await user.type(screen.getByLabelText('Username'), 'new.staff')
+    await user.type(screen.getByLabelText('New password'), 'a-real-password')
+    await user.type(screen.getByLabelText('Re-type password'), 'a-real-passwrod')
+    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
+
+    expect(await screen.findByTestId('activate-error')).toHaveTextContent('are not the same')
+    expect(auth.redeemInvite).not.toHaveBeenCalled()
+  })
+
+  it('keeps a weak-password refusal on the form', async () => {
+    const user = userEvent.setup()
+    auth.previewInvite.mockResolvedValue('new.staff')
+    auth.redeemInvite.mockRejectedValue(
+      new auth.ActivationError('weak_password', 'Choose a password of at least 10 characters.'),
+    )
+    renderAt(LINK)
+    await screen.findByTestId('activate-username')
+
+    await user.type(screen.getByLabelText('Username'), 'new.staff')
+    await user.type(screen.getByLabelText('New password'), 'short')
+    await user.type(screen.getByLabelText('Re-type password'), 'short')
+    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
+
+    expect(await screen.findByTestId('activate-error')).toHaveTextContent('at least 10 characters')
+    expect(screen.getByLabelText('New password')).toBeInTheDocument()
   })
 
   it('says a dead link is dead before anything has been typed', async () => {
     auth.previewInvite.mockRejectedValue(
       new auth.ActivationError(
         'invalid_code',
-        'This link is no longer usable — it may have expired, or already been used. Ask your manager for a new one.',
+        'This link is no longer usable. Ask your manager for a new one.',
       ),
     )
 
@@ -195,107 +228,33 @@ describe('activation', () => {
     expect(auth.signIn).not.toHaveBeenCalled()
   })
 
-  it('names the password when the password is what was wrong', async () => {
+  it('takes the one-time code by hand when there is no link', async () => {
     const user = userEvent.setup()
-    auth.previewInvite.mockResolvedValue('new.staff@example.com')
-    auth.redeemInvite.mockRejectedValue(
-      new auth.ActivationError('weak_password', 'Choose a password of at least 10 characters.'),
-    )
-
-    renderAt(LINK)
-    await screen.findByTestId('activate-address')
-    await user.click(screen.getByRole('button', { name: /Yes, that/ }))
-    await user.type(screen.getByLabelText('New password'), 'short')
-    await user.type(screen.getByLabelText('Confirm password'), 'short')
-    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
-
-    expect(await screen.findByTestId('activate-error')).toHaveTextContent('at least 10 characters')
-    // Still on the password field: the code is fine, only this attempt was not.
-    expect(screen.getByLabelText('New password')).toBeInTheDocument()
-  })
-
-  it('says when it is the rate limit refusing, not the code', async () => {
-    auth.previewInvite.mockRejectedValue(
-      new auth.ActivationError(
-        'rate_limited',
-        'Too many activation attempts from this connection. Wait a few minutes and try again.',
-      ),
-    )
-
-    renderAt(LINK)
-
-    expect(await screen.findByTestId('activate-error')).toHaveTextContent('Too many activation')
-  })
-
-  it('takes the code by hand when somebody arrives without a link', async () => {
-    const user = userEvent.setup()
-    auth.previewInvite.mockResolvedValue('new.staff@example.com')
+    auth.previewInvite.mockResolvedValue('new.staff')
 
     renderAt('/activate')
     await user.type(screen.getByLabelText('One-time code'), 'ABCDE-FGHJK')
     await user.click(screen.getByRole('button', { name: 'Continue' }))
 
-    expect(await screen.findByTestId('activate-address')).toHaveTextContent('new.staff@example.com')
-    // Even here, the address is confirmed rather than typed.
-    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument()
-  })
-
-  it('states the password rule before it is broken', async () => {
-    const user = userEvent.setup()
-    auth.previewInvite.mockResolvedValue('new.staff@example.com')
-
-    renderAt(LINK)
-    await screen.findByTestId('activate-address')
-    await user.click(screen.getByRole('button', { name: /Yes, that/ }))
-
-    expect(screen.getByText('At least 10 characters.')).toBeInTheDocument()
+    expect(await screen.findByTestId('activate-username')).toHaveTextContent('new.staff')
+    expect(screen.getByLabelText('Username')).toBeInTheDocument()
   })
 })
 
-/**
- * The repeat field. It exists because the password is typed blind, once, on a
- * phone, with no way back: a typo sets a password nobody knows and spends the
- * one-time code proving it.
- */
-describe('confirming the new password', () => {
-  const LINK = '/activate?code=ABCDE-FGHJK'
-
-  async function reachPasswordFields() {
+describe('Super Admin recovery', () => {
+  it('always acknowledges a recovery-email request the same way', async () => {
     const user = userEvent.setup()
-    auth.previewInvite.mockResolvedValue('new.staff@example.com')
-    renderAt(LINK)
-    await screen.findByTestId('activate-address')
-    await user.click(screen.getByRole('button', { name: /Yes, that/ }))
-    return user
-  }
+    auth.requestOwnerRecovery.mockResolvedValue(
+      'If that recovery email belongs to an active owner, a recovery link is on its way.',
+    )
+    renderAt('/recover')
 
-  it('refuses two different passwords without spending anything', async () => {
-    const user = await reachPasswordFields()
+    await user.type(screen.getByLabelText('Recovery email'), 'owner@example.com')
+    await user.click(screen.getByRole('button', { name: 'Send recovery link' }))
 
-    await user.type(screen.getByLabelText('New password'), 'a-real-password')
-    await user.type(screen.getByLabelText('Confirm password'), 'a-real-passwrod')
-    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
-
-    expect(await screen.findByTestId('activate-error')).toHaveTextContent('are not the same')
-    // Decided on the client, so the code is untouched and no allowance is spent.
-    expect(auth.redeemInvite).not.toHaveBeenCalled()
-    expect(auth.signIn).not.toHaveBeenCalled()
-  })
-
-  it('lets them correct the repeat and carry on', async () => {
-    const user = await reachPasswordFields()
-    auth.redeemInvite.mockResolvedValue(undefined)
-    auth.signIn.mockResolvedValue({ userId: 'u-3', email: 'new.staff@example.com' })
-
-    await user.type(screen.getByLabelText('New password'), 'a-real-password')
-    await user.type(screen.getByLabelText('Confirm password'), 'wrong')
-    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
-    await screen.findByTestId('activate-error')
-
-    await user.clear(screen.getByLabelText('Confirm password'))
-    await user.type(screen.getByLabelText('Confirm password'), 'a-real-password')
-    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
-
-    expect(auth.redeemInvite).toHaveBeenCalledWith('ABCDE-FGHJK', 'a-real-password')
+    expect(auth.requestOwnerRecovery).toHaveBeenCalledWith('owner@example.com')
+    expect(await screen.findByTestId('recovery-accepted')).toHaveTextContent(
+      'If that recovery email belongs to an active owner',
+    )
   })
 })

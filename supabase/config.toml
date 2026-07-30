@@ -41,7 +41,11 @@ file_size_limit = "50MiB"
 [auth]
 enabled = true
 site_url = "http://127.0.0.1:5173"
-additional_redirect_urls = ["http://127.0.0.1:5173"]
+additional_redirect_urls = [
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5173/recover",
+  "https://ops.shawarmania.in/recover",
+]
 # Short-lived access tokens are what make the claim model safe: app_role and
 # app_outlet_id are baked in at issue, so an hour bounds how stale a claim can
 # get. Deactivation does NOT rely on this — policies check status per request.
@@ -59,9 +63,9 @@ enable_signup = false
 # immediately through the policies — not a timer. Do not "tighten" this without
 # reading docs/ROLES_AND_PERMISSIONS.md first.
 
-# Staff sign in with email + password, admin-provisioned with the address
-# pre-confirmed — no confirmation mail is ever sent (owner-confirmed
-# 2026-07-26, replacing the earlier phone+password model).
+# Staff sign in with username + password. Supabase Auth stores each username as
+# a reserved internal email alias, pre-confirmed by the provisioning function;
+# no confirmation mail is sent.
 #
 # enable_signup here maps to GoTrue's "external email enabled", which gates
 # email SIGN-IN as well as signup — it must stay true or admin-provisioned
@@ -70,6 +74,15 @@ enable_signup = false
 [auth.email]
 enable_signup = true
 enable_confirmations = false
+
+# Every Auth message is intercepted. The hook itself permits only an active
+# Super Admin recovery action; signup, invite, magic-link and email-change
+# actions fail closed. This base64 value is local-only and intentionally not a
+# production secret. Production config uses its own rotated hook secret.
+[auth.hook.send_email]
+enabled = true
+uri = "http://host.docker.internal:54321/functions/v1/send-email-hook"
+secrets = "v1,whsec_c2hhd2FybWFuaWEtbG9jYWwtaG9vay12MQ=="
 
 # Phone auth is not used at all.
 [auth.sms]
@@ -106,4 +119,13 @@ verify_jwt = true
 # hashed at rest, single use, five attempts, seven days) and a response that
 # looks the same however it fails.
 [functions.redeem-invite]
+verify_jwt = false
+
+# The request action is public and enumeration-safe. The callback status action
+# re-derives a live Super Admin from the recovery session inside the function.
+[functions.owner-recovery]
+verify_jwt = false
+
+# Supabase Auth authenticates this HTTP hook with Standard Webhooks signatures.
+[functions.send-email-hook]
 verify_jwt = false

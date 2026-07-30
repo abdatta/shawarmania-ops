@@ -61,8 +61,8 @@ let employeeClient: Client
 let managerClient: Client
 
 beforeAll(async () => {
-  employeeClient = await signIn('staff.kalyani@example.com')
-  managerClient = await signIn('admin.kalyani@example.com')
+  employeeClient = await signIn('staff.kalyani@login.shawarmania.invalid')
+  managerClient = await signIn('admin.kalyani@login.shawarmania.invalid')
 }, 30_000)
 
 describe('the attendance adapter', () => {

@@ -23,6 +23,7 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > src/data-access/database.types.ts",
+    "auth:usernames": "node scripts/migrate-usernames.mjs",
     "contrast": "node scripts/check-contrast.mjs",
     "icons:generate": "node scripts/generate-icons.mjs",
     "roadmap:sync": "node openspec/tools/sync-roadmap-status.mjs"

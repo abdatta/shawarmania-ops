@@ -32,32 +32,38 @@ const OUTLETS = {
 } as const
 
 const PERSONAS = {
-  superAdmin: { email: 'owner@example.com', sub: '10000000-0000-4000-a000-000000000001' },
-  faKalyani: { email: 'admin.kalyani@example.com', sub: '10000000-0000-4000-a000-000000000002' },
+  superAdmin: {
+    email: 'owner@login.shawarmania.invalid',
+    sub: '10000000-0000-4000-a000-000000000001',
+  },
+  faKalyani: {
+    email: 'admin.kalyani@login.shawarmania.invalid',
+    sub: '10000000-0000-4000-a000-000000000002',
+  },
   faKanchrapara: {
-    email: 'admin.kanchrapara@example.com',
+    email: 'admin.kanchrapara@login.shawarmania.invalid',
     sub: '10000000-0000-4000-a000-000000000003',
   },
   deviceKalyani: {
-    email: 'tablet.kalyani@example.com',
+    email: 'tablet.kalyani@login.shawarmania.invalid',
     sub: '10000000-0000-4000-a000-000000000004',
   },
   employeeKalyani: {
-    email: 'staff.kalyani@example.com',
+    email: 'staff.kalyani@login.shawarmania.invalid',
     sub: '10000000-0000-4000-a000-000000000006',
   },
   deactivatedFa: {
-    email: 'deactivated.kalyani@example.com',
+    email: 'deactivated.kalyani@login.shawarmania.invalid',
     sub: '10000000-0000-4000-a000-000000000008',
   },
   revokedDevice: {
-    email: 'revoked.tablet.kalyani@example.com',
+    email: 'revoked.tablet.kalyani@login.shawarmania.invalid',
     sub: '10000000-0000-4000-a000-000000000009',
   },
   // One login, live assignments at BOTH outlets — the case that did not exist
   // before multi-outlet-people.
   splitShift: {
-    email: 'split.shift@example.com',
+    email: 'split.shift@login.shawarmania.invalid',
     sub: '10000000-0000-4000-a000-00000000000e',
   },
 } as const

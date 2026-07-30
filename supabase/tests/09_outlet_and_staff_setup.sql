@@ -212,13 +212,18 @@ select is((select count(*)
               and c.confrelid = 'public.profiles'::regclass
               and c.confdeltype = 'c'
               and ns.nspname = 'public'
-              and cl.relname not in ('account_invites', 'assignments')), 0::bigint,
-  'no foreign key onto profiles cascades, except the two recorded exceptions');
+              and cl.relname not in (
+                'account_invites',
+                'account_recovery_contacts',
+                'assignments'
+              )), 0::bigint,
+  'no foreign key onto profiles cascades, except the three recorded exceptions');
 
--- The two exceptions, named so that adding a third has to argue for itself
--- here. Both are PLUMBING rather than history: an invite is a code waiting to
--- be redeemed, an assignment is the record that somebody works somewhere.
--- Neither is evidence of anything that happened, which is what the
+-- The three exceptions, named so that adding another has to argue for itself
+-- here. They are PLUMBING rather than history: an invite is a code waiting to
+-- be redeemed, a recovery contact is private account configuration, and an
+-- assignment is the record that somebody works somewhere. None is evidence
+-- of anything that happened, which is what the
 -- no-deletion rule protects — and every table that IS evidence still refuses,
 -- which the two deletes above prove.
 select is((select string_agg(cl.relname, ', ' order by cl.relname)
@@ -229,8 +234,8 @@ select is((select string_agg(cl.relname, ', ' order by cl.relname)
               and c.confrelid = 'public.profiles'::regclass
               and c.confdeltype = 'c'
               and ns.nspname = 'public'),
-  'account_invites, assignments',
-  'and the cascading keys are exactly the two that are plumberage, not history');
+  'account_invites, account_recovery_contacts, assignments',
+  'and the cascading keys are exactly the three that are plumbing, not history');
 
 select throws_ok($q$
   delete from public.profiles where id = '10000000-0000-4000-a000-000000000006'

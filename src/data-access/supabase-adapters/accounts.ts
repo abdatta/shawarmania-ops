@@ -73,7 +73,9 @@ const MESSAGES: Record<string, string> = {
   already_assigned: 'This person already works at that outlet.',
   last_super_admin: 'There has to be an owner. Appoint another one before removing this.',
   assignment_rejected: 'That role and outlet do not go together.',
-  email_unavailable: 'That email address already has an account.',
+  username_unavailable: 'That username is already in use.',
+  recovery_email_unavailable: 'That recovery email is already used by another owner.',
+  self_change_forbidden: 'You cannot change your own username or recovery email here.',
   too_many_accounts: 'There are more accounts than this screen can list. Tell somebody.',
   invalid_request: 'Something in that form was missing or malformed.',
   not_found: 'That account no longer exists.',
@@ -99,12 +101,13 @@ async function callAdmin<T>(
 export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>): AccountsAdapter {
   const toSummary = (
     profile: ProfileRow,
-    email: string | null,
+    identifier: { username: string; recoveryEmail: string | null } | null,
     invite: { expiresAt: string } | null,
   ): AccountSummary => ({
     id: profile.id,
     fullName: profile.full_name,
-    email,
+    username: identifier?.username ?? null,
+    recoveryEmail: identifier?.recoveryEmail ?? null,
     phone: profile.phone,
     isActive: profile.is_active,
     roleTitle: profile.role_title,
@@ -120,17 +123,19 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
 
   return {
     async listAccounts(): Promise<AccountSummary[]> {
-      const [{ data: profiles, error }, { data: invites, error: inviteError }, addresses] =
+      const [{ data: profiles, error }, { data: invites, error: inviteError }, identifiers] =
         await Promise.all([
           client.from('profiles').select(PROFILE_COLUMNS).order('full_name'),
           client.from('account_invites').select(INVITE_COLUMNS),
-          // The one field RLS cannot serve: the address lives in `auth.users`,
-          // deliberately not mirrored onto `profiles` where a Biller could read
-          // their whole outlet's (design D12). A refusal or an outage here
-          // costs the addresses and not the screen.
-          callAdmin<{ emails: Record<string, string> }>(client, { action: 'emails' })
-            .then((result) => result.emails)
-            .catch(() => ({}) as Record<string, string>),
+          // Product identifiers are resolved through the privileged function.
+          // A refusal or outage degrades this surface to names.
+          callAdmin<{
+            identifiers: Record<string, { username: string; recoveryEmail: string | null }>
+          }>(client, { action: 'identifiers' })
+            .then((result) => result.identifiers)
+            .catch(
+              () => ({}) as Record<string, { username: string; recoveryEmail: string | null }>,
+            ),
         ])
       if (error) throw error
       if (inviteError) throw inviteError
@@ -142,7 +147,7 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       )
 
       return ((profiles ?? []) as unknown as ProfileRow[]).map((profile) =>
-        toSummary(profile, addresses[profile.id] ?? null, outstanding.get(profile.id) ?? null),
+        toSummary(profile, identifiers[profile.id] ?? null, outstanding.get(profile.id) ?? null),
       )
     },
 
@@ -150,7 +155,8 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       return await callAdmin<IssuedCode>(client, {
         action: 'provision',
         fullName: account.fullName,
-        email: account.email,
+        username: account.username,
+        recoveryEmail: account.recoveryEmail ?? null,
         phone: account.phone ?? null,
         role: account.role,
         outletIds: account.outletIds,
@@ -167,8 +173,20 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       await callAdmin(client, { action: 'set-active', profileId, isActive })
     },
 
-    async changeEmail(profileId: string, email: string): Promise<void> {
-      await callAdmin(client, { action: 'set-email', profileId, email: email.trim() })
+    async changeUsername(profileId: string, username: string): Promise<void> {
+      await callAdmin(client, {
+        action: 'set-username',
+        profileId,
+        username: username.trim(),
+      })
+    },
+
+    async setRecoveryEmail(profileId: string, recoveryEmail: string): Promise<void> {
+      await callAdmin(client, {
+        action: 'set-recovery-email',
+        profileId,
+        recoveryEmail: recoveryEmail.trim(),
+      })
     },
 
     /**
@@ -181,12 +199,14 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       personId: string
       role: AppRole
       outletId: string | null
+      recoveryEmail?: string | null
     }): Promise<IssuedCode | null> {
       const result = await callAdmin<AssignmentChangeResponse>(client, {
         action: 'assign',
         personId: input.personId,
         role: input.role,
         outletId: input.outletId,
+        recoveryEmail: input.recoveryEmail ?? null,
       })
       return result.issuedCode
     },

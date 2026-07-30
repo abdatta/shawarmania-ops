@@ -38,11 +38,11 @@ const OUTLETS = {
 } as const
 
 const PERSONAS = {
-  superAdmin: 'owner@example.com',
-  faKalyani: 'admin.kalyani@example.com',
-  faKanchrapara: 'admin.kanchrapara@example.com',
-  employeeKalyani: 'staff.kalyani@example.com',
-  billerKalyani: 'biller.kalyani@example.com',
+  superAdmin: 'owner@login.shawarmania.invalid',
+  faKalyani: 'admin.kalyani@login.shawarmania.invalid',
+  faKanchrapara: 'admin.kanchrapara@login.shawarmania.invalid',
+  employeeKalyani: 'staff.kalyani@login.shawarmania.invalid',
+  billerKalyani: 'biller.kalyani@login.shawarmania.invalid',
 } as const
 
 type Client = SupabaseClient<Database>
@@ -50,7 +50,10 @@ type Client = SupabaseClient<Database>
 /** Unique per run, so the suite is re-runnable without a database reset. */
 const RUN = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
 let seq = 0
-const freshEmail = (label: string) => `probe.${label}.${RUN}.${seq++}@example.com`
+const freshUsername = (label: string) => `probe.${label}.${RUN.slice(-6)}.${seq++}`
+const authAlias = (username: string) => `${username}@login.shawarmania.invalid`
+const codeUsernames = new Map<string, string>()
+const codeKey = (code: string) => code.replace(/[^0-9A-Z]/gi, '').toUpperCase()
 
 function anonClient(): Client {
   return createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -92,10 +95,28 @@ async function adminAccounts<T = Record<string, unknown>>(
     body: JSON.stringify(payload),
   })
   const text = await response.text()
-  return { status: response.status, body: (text ? JSON.parse(text) : {}) as T }
+  const body = (text ? JSON.parse(text) : {}) as T
+  const recordCode = (candidate: unknown) => {
+    const value = candidate as { code?: unknown; username?: unknown } | null
+    if (typeof value?.code === 'string' && typeof value.username === 'string') {
+      codeUsernames.set(codeKey(value.code), value.username)
+    }
+  }
+  recordCode(body)
+  recordCode((body as { issuedCode?: unknown }).issuedCode)
+  return { status: response.status, body }
 }
 
 async function redeem(payload: Record<string, unknown>): Promise<FnResult> {
+  const action = payload['action'] ?? 'redeem'
+  const code = payload['code']
+  const enriched =
+    action === 'redeem' &&
+    payload['username'] === undefined &&
+    typeof code === 'string' &&
+    codeUsernames.has(codeKey(code))
+      ? { ...payload, username: codeUsernames.get(codeKey(code)) }
+      : payload
   const response = await fetch(`${SUPABASE_URL}/functions/v1/redeem-invite`, {
     method: 'POST',
     headers: {
@@ -104,7 +125,7 @@ async function redeem(payload: Record<string, unknown>): Promise<FnResult> {
       // other REST files exercising the endpoint's per-address limiter.
       'x-forwarded-for': '198.51.100.23',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(enriched),
   })
   const text = await response.text()
   return {
@@ -115,6 +136,7 @@ async function redeem(payload: Record<string, unknown>): Promise<FnResult> {
 
 interface Provisioned {
   profileId: string
+  username: string
   code: string
   expiresAt: string
 }
@@ -127,17 +149,17 @@ interface AssignmentChanged {
 async function provisionAs(
   token: string,
   overrides: Record<string, unknown> = {},
-): Promise<{ email: string; result: FnResult<Provisioned> }> {
-  const email = freshEmail('staff')
+): Promise<{ username: string; email: string; result: FnResult<Provisioned> }> {
+  const username = freshUsername('staff')
   const result = await adminAccounts<Provisioned>(token, {
     action: 'provision',
     fullName: 'Probe Staff',
-    email,
+    username,
     role: 'employee',
     outletIds: [OUTLETS.kalyani],
     ...overrides,
   })
-  return { email, result }
+  return { username, email: authAlias(username), result }
 }
 
 let superAdminToken: string
@@ -230,11 +252,11 @@ describe('provisioning an account end to end', () => {
     ])
   })
 
-  it('refuses a duplicate email address without creating anything', async () => {
+  it('refuses a case-equivalent duplicate username without creating anything', async () => {
     const duplicate = await adminAccounts(superAdminToken, {
       action: 'provision',
       fullName: 'Impostor',
-      email: PERSONAS.employeeKalyani,
+      username: 'STAFF.KALYANI',
       role: 'employee',
       outletIds: [OUTLETS.kalyani],
     })
@@ -265,29 +287,29 @@ describe('the authority matrix is enforced, not documented', () => {
   })
 
   it('refuses a Franchise Admin reaching into the other outlet before creating anything', async () => {
-    const { email, result } = await provisionAs(faKalyaniToken, {
+    const { username, result } = await provisionAs(faKalyaniToken, {
       outletIds: [OUTLETS.kalyani, OUTLETS.kanchrapara],
     })
     expect(result.status).toBe(403)
 
-    // The same address remains available to the owner, proving the refused
-    // mixed-authority request did not even create an auth user to reserve it.
+    // The same username remains available to the owner, proving the refused
+    // mixed-authority request did not reserve an Auth alias.
     const retried = await adminAccounts<Provisioned>(superAdminToken, {
       action: 'provision',
       fullName: 'Owner Retry',
-      email,
+      username,
       role: 'employee',
       outletIds: [OUTLETS.kanchrapara],
     })
     expect(retried.status).toBe(201)
   })
 
-  it('rejects a malformed outlet set before reserving the address', async () => {
-    const email = freshEmail('malformed-outlet')
+  it('rejects a malformed outlet set before reserving the username', async () => {
+    const username = freshUsername('malformed')
     const refused = await adminAccounts(superAdminToken, {
       action: 'provision',
       fullName: 'Malformed Outlet',
-      email,
+      username,
       role: 'employee',
       outletIds: ['not-an-outlet-id'],
     })
@@ -296,7 +318,7 @@ describe('the authority matrix is enforced, not documented', () => {
     const retried = await adminAccounts<Provisioned>(superAdminToken, {
       action: 'provision',
       fullName: 'Valid Retry',
-      email,
+      username,
       role: 'employee',
       outletIds: [OUTLETS.kalyani],
     })
@@ -406,7 +428,15 @@ describe('the one-time code over the wire', () => {
     // over and over. Keyed on the code, a wrong guess matches no invite at all
     // and there is nothing for it to burn.
     for (let attempt = 0; attempt < 5; attempt++) {
-      expect((await redeem({ code: 'ZZZZZ-ZZZZZ', password: NEW_PASSWORD })).status).toBe(400)
+      expect(
+        (
+          await redeem({
+            code: 'ZZZZZ-ZZZZZ',
+            username: 'some.person',
+            password: NEW_PASSWORD,
+          })
+        ).status,
+      ).toBe(400)
     }
 
     expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(204)
@@ -422,7 +452,7 @@ describe('the one-time code over the wire', () => {
     const failures = await Promise.all([
       // A code that never existed, one that has been spent, and one belonging
       // to a deactivated account: three different truths, one answer.
-      redeem({ code: 'ZZZZZ-ZZZZZ', password: NEW_PASSWORD }),
+      redeem({ code: 'ZZZZZ-ZZZZZ', username: 'some.person', password: NEW_PASSWORD }),
       redeem({ code: spent.result.body.code, password: NEW_PASSWORD }),
       deactivateThenRedeem(result.body),
     ])
@@ -677,67 +707,75 @@ describe('an outstanding invite over REST', () => {
  * own outlet's profiles) and why this function refuses the request outright
  * rather than answering it with an empty object.
  */
-describe('email addresses, and who may see them', () => {
+describe('usernames and private owner recovery contacts', () => {
   it('is refused for a Biller — the counter tablet asks and is told no', async () => {
     const biller = await tokenFor(PERSONAS.billerKalyani)
-    const result = await adminAccounts<{ error: string }>(biller, { action: 'emails' })
+    const result = await adminAccounts<{ error: string }>(biller, { action: 'identifiers' })
 
     expect(result.status).toBe(403)
     expect(result.body.error).toBe('forbidden')
     // Not "an empty list": a boundary that merely happens to hold is not one.
-    expect(result.body).not.toHaveProperty('emails')
+    expect(result.body).not.toHaveProperty('identifiers')
   })
 
   it('is refused for an Employee too', async () => {
     const employee = await tokenFor(PERSONAS.employeeKalyani)
-    expect((await adminAccounts(employee, { action: 'emails' })).status).toBe(403)
+    expect((await adminAccounts(employee, { action: 'identifiers' })).status).toBe(403)
   })
 
   it('gives a Franchise Admin their own outlet, and nothing across the boundary', async () => {
-    const { email, result } = await provisionAs(faKalyaniToken)
+    const { username, result } = await provisionAs(faKalyaniToken)
     expect(result.status).toBe(201)
 
-    const seen = await adminAccounts<{ emails: Record<string, string> }>(faKalyaniToken, {
-      action: 'emails',
+    const seen = await adminAccounts<{
+      identifiers: Record<string, { username: string; recoveryEmail: string | null }>
+    }>(faKalyaniToken, {
+      action: 'identifiers',
     })
     expect(seen.status).toBe(200)
 
-    const addresses = Object.values(seen.body.emails)
-    expect(addresses).toContain(email)
+    const identifiers = Object.values(seen.body.identifiers)
+    expect(identifiers).toContainEqual({ username, recoveryEmail: null })
     // The other outlet's manager and staff are outside this caller's authority.
-    expect(addresses).not.toContain(PERSONAS.faKanchrapara)
-    expect(addresses).not.toContain('staff.kanchrapara@example.com')
+    expect(identifiers.map((item) => item.username)).not.toContain('admin.kanchrapara')
+    expect(identifiers.map((item) => item.username)).not.toContain('staff.kanchrapara')
   })
 
   it('gives the Super Admin every outlet', async () => {
-    const seen = await adminAccounts<{ emails: Record<string, string> }>(superAdminToken, {
-      action: 'emails',
+    const seen = await adminAccounts<{
+      identifiers: Record<string, { username: string; recoveryEmail: string | null }>
+    }>(superAdminToken, {
+      action: 'identifiers',
     })
-    const addresses = Object.values(seen.body.emails)
+    const identifiers = Object.values(seen.body.identifiers)
 
-    expect(addresses).toContain(PERSONAS.faKalyani)
-    expect(addresses).toContain(PERSONAS.faKanchrapara)
+    expect(identifiers.map((item) => item.username)).toContain('admin.kalyani')
+    expect(identifiers.map((item) => item.username)).toContain('admin.kanchrapara')
+    expect(identifiers.find((item) => item.username === 'admin.kalyani')?.recoveryEmail).toBeNull()
+    expect(identifiers.find((item) => item.username === 'owner')?.recoveryEmail).toBe(
+      'owner.recovery@example.com',
+    )
   })
 
-  it('corrects a mistyped address, and the code already sent still works', async () => {
+  it('corrects a mistyped username, and the code already sent still works', async () => {
     // The situation this exists for: an owner fat-fingers a staff address, and
     // the person is left with a code that refuses them and no way to find out
     // why. Everything below is the recovery, entirely through the API.
-    const typo = freshEmail('typo')
+    const typo = freshUsername('typo')
     const provisioned = await adminAccounts<Provisioned>(faKalyaniToken, {
       action: 'provision',
       fullName: 'Probe Mistyped',
-      email: typo,
+      username: typo,
       role: 'employee',
       outletIds: [OUTLETS.kalyani],
     })
     expect(provisioned.status).toBe(201)
 
-    const corrected = freshEmail('corrected')
+    const corrected = freshUsername('corrected')
     const change = await adminAccounts(faKalyaniToken, {
-      action: 'set-email',
+      action: 'set-username',
       profileId: provisioned.body.profileId,
-      email: corrected,
+      username: corrected,
     })
     expect(change.status).toBe(200)
 
@@ -746,28 +784,36 @@ describe('email addresses, and who may see them', () => {
     // is shown the corrected address rather than the typo.
     const preview = await redeem({ action: 'preview', code: provisioned.body.code })
     expect(preview.status).toBe(200)
-    expect(preview.body['email']).toBe(corrected)
-    expect(preview.body['email']).not.toBe(typo)
+    expect(preview.body['username']).toBe(corrected)
+    expect(preview.body['username']).not.toBe(typo)
 
-    expect((await redeem({ code: provisioned.body.code, password: NEW_PASSWORD })).status).toBe(204)
+    expect(
+      (
+        await redeem({
+          code: provisioned.body.code,
+          username: corrected,
+          password: NEW_PASSWORD,
+        })
+      ).status,
+    ).toBe(204)
 
     const session = await anonClient().auth.signInWithPassword({
-      email: corrected,
+      email: authAlias(corrected),
       password: NEW_PASSWORD,
     })
     expect(session.error).toBeNull()
   })
 
-  it('refuses an address another account already holds', async () => {
+  it('refuses a username another account already holds', async () => {
     const { result } = await provisionAs(faKalyaniToken)
     const clash = await adminAccounts<{ error: string }>(faKalyaniToken, {
-      action: 'set-email',
+      action: 'set-username',
       profileId: result.body.profileId,
-      email: PERSONAS.employeeKalyani,
+      username: 'STAFF.KALYANI',
     })
 
     expect(clash.status).toBe(409)
-    expect(clash.body.error).toBe('email_unavailable')
+    expect(clash.body.error).toBe('username_unavailable')
   })
 
   it('refuses a correction across the outlet boundary', async () => {
@@ -777,9 +823,9 @@ describe('email addresses, and who may see them', () => {
     })
 
     const reach = await adminAccounts<{ error: string }>(faKalyaniToken, {
-      action: 'set-email',
+      action: 'set-username',
       profileId: kanchrapara.result.body.profileId,
-      email: freshEmail('stolen'),
+      username: freshUsername('stolen'),
     })
 
     expect(reach.status).toBe(403)
@@ -793,9 +839,9 @@ describe('email addresses, and who may see them', () => {
     expect(
       (
         await adminAccounts(biller, {
-          action: 'set-email',
+          action: 'set-username',
           profileId: result.body.profileId,
-          email: freshEmail('nope'),
+          username: freshUsername('nope'),
         })
       ).status,
     ).toBe(403)

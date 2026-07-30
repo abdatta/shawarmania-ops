@@ -205,16 +205,12 @@ export interface AccountSummary {
   id: string
   fullName: string
   /**
-   * The address this account signs in with, or null when the caller may not
-   * see it — a Biller on the counter tablet gets null for everyone, because
-   * colleagues' contact details have no business being ambient on a shared
-   * device (design D12).
-   *
-   * It is not a column on `profiles`; it lives in `auth.users` and reaches
-   * here only through the privileged function. Null therefore also covers "the
-   * lookup failed", which degrades the list to names rather than blanking it.
+   * Canonical product username, returned through the privileged account
+   * function. The reserved provider alias is never exposed.
    */
-  email: string | null
+  username: string | null
+  /** Private recovery channel, visible only for authorized Super Admin operations. */
+  recoveryEmail: string | null
   phone: string | null
   isActive: boolean
   /** Free-text job label ("Griller"), distinct from the app-capability role. */
@@ -248,7 +244,9 @@ export interface AccountSummary {
  */
 export interface NewAccount {
   fullName: string
-  email: string
+  username: string
+  /** Required exactly for `super_admin`; null for every outlet-scoped role. */
+  recoveryEmail?: string | null
   phone?: string | null
   role: AppRole
   /** Empty exactly for `super_admin`; every scoped role needs one or more. */
@@ -261,22 +259,13 @@ export interface NewAccount {
 /**
  * The staff facts an admin edits as their own session under Row-Level
  * Security — unlike every other account write, which is privileged. Access
- * (active state, email) and placement (assignments) are deliberately absent:
- * each has its own boundary.
+ * Account access and placement are deliberately absent: each has its own
+ * boundary.
  */
 export type StaffFactsPatch = Partial<{
   fullName: string
   roleTitle: string | null
 }>
-
-/**
- * The reserved domain the roster-merge migration minted addresses on. Mail to
- * `.invalid` cannot route (RFC 2606), and no code is ever issued for such an
- * account — the People surface marks these as needing a real address first.
- */
-export function isPlaceholderAddress(email: string | null): boolean {
-  return email !== null && email.toLowerCase().endsWith('@placeholder.invalid')
-}
 
 /**
  * The roles that are people at an outlet — on staff lists and attendance days.
@@ -299,6 +288,7 @@ export function worksAt(account: Pick<AccountSummary, 'assignments'>, outletId: 
 /** The one-time code, returned once and never retrievable again. */
 export interface IssuedCode {
   profileId: string
+  username: string
   code: string
   expiresAt: string
 }
@@ -344,6 +334,7 @@ export interface AccountsAdapter {
     personId: string
     role: AppRole
     outletId: string | null
+    recoveryEmail?: string | null
   }): Promise<IssuedCode | null>
   /**
    * End a placement. Never a delete — the assignment stays, with its end date,
@@ -352,11 +343,11 @@ export interface AccountsAdapter {
    */
   endAssignment(assignmentId: string): Promise<IssuedCode | null>
   /**
-   * Correct the address an account signs in with. Any outstanding one-time
-   * code survives — it is bound to the account, not the address, so it starts
-   * working the moment the address is right (design D13).
+   * Correct the username an account signs in with. Any outstanding one-time
+   * code survives because it is bound to the account, not the username.
    */
-  changeEmail(profileId: string, email: string): Promise<void>
+  changeUsername(profileId: string, username: string): Promise<void>
+  setRecoveryEmail(profileId: string, recoveryEmail: string): Promise<void>
   /**
    * Edit the staff facts — the admin's own session under RLS, not the
    * privileged function. The database refuses a cross-outlet edit, a

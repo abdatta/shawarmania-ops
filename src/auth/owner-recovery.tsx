@@ -6,31 +6,29 @@ import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
   ActivationError,
+  finishOwnerRecovery,
   MIN_PASSWORD_LENGTH,
-  previewInvite,
-  redeemInvite,
-  signIn,
+  requestOwnerRecovery,
+  startOwnerRecovery,
 } from '@/data-access/auth'
 import { canonicalUsername } from '../../shared/username'
 
-type State =
-  | { kind: 'need-code' }
+type RecoveryState =
+  | { kind: 'request' }
+  | { kind: 'accepted'; message: string }
   | { kind: 'checking' }
-  | { kind: 'form'; code: string; username: string }
+  | { kind: 'reset'; username: string }
   | { kind: 'dead'; message: string }
 
-function deadMessage(cause: unknown): string {
-  return cause instanceof ActivationError
-    ? cause.message
-    : 'Could not check that link right now. Try again in a moment.'
-}
-
-export function Activate() {
+export function OwnerRecovery() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const linkCode = params.get('code')
-  const [state, setState] = useState<State>(linkCode ? { kind: 'checking' } : { kind: 'need-code' })
-  const [typedCode, setTypedCode] = useState('')
+  const tokenHash = params.get('token_hash')
+  const recoveryType = params.get('type')
+  const [state, setState] = useState<RecoveryState>(
+    tokenHash && recoveryType === 'recovery' ? { kind: 'checking' } : { kind: 'request' },
+  )
+  const [recoveryEmail, setRecoveryEmail] = useState('')
   const [typedUsername, setTypedUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
@@ -38,39 +36,50 @@ export function Activate() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!linkCode) return
+    if (!tokenHash || recoveryType !== 'recovery') return
     let active = true
-    previewInvite(linkCode)
+    startOwnerRecovery(tokenHash)
       .then((username) => {
-        if (active) setState({ kind: 'form', code: linkCode, username })
+        if (active) setState({ kind: 'reset', username })
       })
       .catch((cause: unknown) => {
-        if (active) setState({ kind: 'dead', message: deadMessage(cause) })
+        if (!active) return
+        setState({
+          kind: 'dead',
+          message:
+            cause instanceof ActivationError
+              ? cause.message
+              : 'That recovery link is no longer usable. Request another one.',
+        })
       })
     return () => {
       active = false
     }
-  }, [linkCode])
+  }, [recoveryType, tokenHash])
 
-  async function onCodeSubmit(event: FormEvent) {
+  async function onRequest(event: FormEvent) {
     event.preventDefault()
-    setState({ kind: 'checking' })
+    setBusy(true)
     setError(null)
     try {
-      const username = await previewInvite(typedCode)
-      setState({ kind: 'form', code: typedCode, username })
-    } catch (cause) {
-      setState({ kind: 'dead', message: deadMessage(cause) })
+      setState({ kind: 'accepted', message: await requestOwnerRecovery(recoveryEmail) })
+    } catch {
+      setState({
+        kind: 'accepted',
+        message:
+          'If that recovery email belongs to an active owner, a recovery link is on its way.',
+      })
+    } finally {
+      setBusy(false)
     }
   }
 
-  async function onPasswordSubmit(event: FormEvent) {
+  async function onReset(event: FormEvent) {
     event.preventDefault()
-    if (state.kind !== 'form') return
-
-    const submittedUsername = canonicalUsername(typedUsername)
-    if (submittedUsername !== state.username) {
-      setError('Type the username shown above, or ask your manager to correct it.')
+    if (state.kind !== 'reset') return
+    const username = canonicalUsername(typedUsername)
+    if (username !== state.username) {
+      setError('Type the username shown above.')
       return
     }
     if (password !== confirmation) {
@@ -81,19 +90,14 @@ export function Activate() {
     setBusy(true)
     setError(null)
     try {
-      await redeemInvite(state.code, submittedUsername, password)
-      await signIn(submittedUsername, password)
+      await finishOwnerRecovery(username, password)
       navigate('/', { replace: true })
     } catch (cause) {
-      if (cause instanceof ActivationError && cause.code === 'invalid_code') {
-        setState({ kind: 'dead', message: cause.message })
-      } else {
-        setError(
-          cause instanceof ActivationError
-            ? cause.message
-            : 'Could not set your password right now. Try again in a moment.',
-        )
-      }
+      setError(
+        cause instanceof ActivationError
+          ? cause.message
+          : 'Could not reset the password right now. Request another recovery link.',
+      )
     } finally {
       setBusy(false)
     }
@@ -103,50 +107,55 @@ export function Activate() {
     <div className="mx-auto max-w-md">
       <Card>
         <CardTitle>
-          {state.kind === 'dead' ? 'This link will not work' : 'Set your password'}
+          {state.kind === 'reset' ? 'Reset owner password' : 'Super Admin recovery'}
         </CardTitle>
         <CardBody>
-          {state.kind === 'need-code' && (
+          {state.kind === 'request' && (
             <>
               <p className="mb-4 text-sm text-content-muted">
-                Enter the one-time code your manager gave you. It works once and expires a week
-                after it was issued.
+                This private email recovery is only for an active Super Admin. Staff should ask
+                their Franchise Admin or Super Admin for a new one-time link.
               </p>
-              <form onSubmit={onCodeSubmit} className="space-y-4" noValidate>
+              <form onSubmit={onRequest} className="space-y-4" noValidate>
                 <div className="space-y-1">
-                  <label htmlFor="activate-code" className="block text-sm font-semibold">
-                    One-time code
+                  <label htmlFor="recovery-email" className="block text-sm font-semibold">
+                    Recovery email
                   </label>
                   <Input
-                    id="activate-code"
-                    name="one-time-code"
-                    inputMode="text"
-                    autoComplete="one-time-code"
-                    autoCapitalize="characters"
+                    id="recovery-email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    inputMode="email"
+                    autoCapitalize="none"
                     spellCheck={false}
-                    placeholder="XXXXX-XXXXX"
                     required
-                    value={typedCode}
-                    onChange={(event) => setTypedCode(event.target.value)}
-                    className="font-mono tracking-widest"
+                    value={recoveryEmail}
+                    onChange={(event) => setRecoveryEmail(event.target.value)}
                   />
                 </div>
-                <button type="submit" className={buttonVariants({ size: 'phone' })}>
-                  Continue
+                <button type="submit" disabled={busy} className={buttonVariants({ size: 'phone' })}>
+                  {busy ? 'Requesting…' : 'Send recovery link'}
                 </button>
               </form>
             </>
           )}
 
+          {state.kind === 'accepted' && (
+            <p data-testid="recovery-accepted" className="text-sm text-content">
+              {state.message}
+            </p>
+          )}
+
           {state.kind === 'checking' && (
-            <p data-testid="activate-checking" className="text-sm text-content-muted">
-              Checking your link…
+            <p data-testid="recovery-checking" className="text-sm text-content-muted">
+              Checking your recovery link…
             </p>
           )}
 
           {state.kind === 'dead' && (
             <p
-              data-testid="activate-error"
+              data-testid="recovery-error"
               role="alert"
               className="text-sm font-semibold text-danger"
             >
@@ -154,25 +163,22 @@ export function Activate() {
             </p>
           )}
 
-          {state.kind === 'form' && (
+          {state.kind === 'reset' && (
             <>
               <p className="mb-1 text-sm text-content-muted">Your username is</p>
               <p
-                data-testid="activate-username"
+                data-testid="recovery-username"
                 className="mb-4 break-all text-base font-semibold text-content"
               >
                 {state.username}
               </p>
-              <p className="mb-4 text-sm text-content-muted">
-                Type it below without an @ sign, then choose your password.
-              </p>
-              <form onSubmit={onPasswordSubmit} className="space-y-4" noValidate>
+              <form onSubmit={onReset} className="space-y-4" noValidate>
                 <div className="space-y-1">
-                  <label htmlFor="activate-username-input" className="block text-sm font-semibold">
+                  <label htmlFor="recovery-username-input" className="block text-sm font-semibold">
                     Username
                   </label>
                   <Input
-                    id="activate-username-input"
+                    id="recovery-username-input"
                     name="username"
                     type="text"
                     autoComplete="username"
@@ -184,11 +190,11 @@ export function Activate() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label htmlFor="activate-password" className="block text-sm font-semibold">
+                  <label htmlFor="recovery-password" className="block text-sm font-semibold">
                     New password
                   </label>
                   <Input
-                    id="activate-password"
+                    id="recovery-password"
                     name="new-password"
                     type="password"
                     autoComplete="new-password"
@@ -201,11 +207,11 @@ export function Activate() {
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <label htmlFor="activate-confirm" className="block text-sm font-semibold">
+                  <label htmlFor="recovery-confirm" className="block text-sm font-semibold">
                     Re-type password
                   </label>
                   <Input
-                    id="activate-confirm"
+                    id="recovery-confirm"
                     name="new-password-confirmation"
                     type="password"
                     autoComplete="new-password"
@@ -214,32 +220,25 @@ export function Activate() {
                     onChange={(event) => setConfirmation(event.target.value)}
                   />
                 </div>
-
                 {error && (
                   <p
-                    data-testid="activate-error"
+                    data-testid="recovery-error"
                     role="alert"
                     className="text-sm font-semibold text-danger"
                   >
                     {error}
                   </p>
                 )}
-
                 <button type="submit" disabled={busy} className={buttonVariants({ size: 'phone' })}>
-                  {busy ? 'Setting…' : 'Set password and sign in'}
+                  {busy ? 'Resetting…' : 'Reset password and continue'}
                 </button>
               </form>
-              <p className="mt-4 text-sm text-content-muted">
-                Not the username you expected? Ask the admin who sent this link to correct it. The
-                same link will keep working.
-              </p>
             </>
           )}
 
           <p className="mt-6 text-sm text-content-muted">
-            Already have a password?{' '}
             <Link to="/sign-in" className="font-semibold text-accent-text underline">
-              Sign in
+              Back to sign in
             </Link>
           </p>
         </CardBody>

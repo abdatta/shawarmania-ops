@@ -1,6 +1,7 @@
 import { createBrowserRouter, redirect, type RouteObject } from 'react-router'
 
 import { Activate } from '@/auth/activate'
+import { OwnerRecovery } from '@/auth/owner-recovery'
 import { RealRoot } from '@/auth/real-root'
 import { SignIn } from '@/auth/sign-in'
 import { DemoGate } from '@/demo/demo-gate'
@@ -34,6 +35,7 @@ export const appRoutes: RouteObject[] = [
       { index: true, Component: Landing },
       { path: 'sign-in', Component: SignIn },
       { path: 'activate', Component: Activate },
+      { path: 'recover', Component: OwnerRecovery },
       { path: '*', Component: NotFound },
     ],
   },

@@ -20,9 +20,10 @@ language sql immutable as $$
   select encode(extensions.digest(code, 'sha256'), 'hex')
 $$;
 
-create function pg_temp.redeem(p_code text)
+create function pg_temp.redeem(p_code text, p_username text default 'pending.kalyani')
 returns text language sql as $$
-  select status from public.redeem_account_invite(pg_temp.h(p_code))
+  select status
+    from public.redeem_account_invite(pg_temp.h(p_code), p_username, null)
 $$;
 
 create function pg_temp.live_invite(p_profile uuid) returns bigint
@@ -45,7 +46,12 @@ select is(pg_temp.redeem('ABCDEFGHJK'), 'ok',
   'a live code redeems');
 
 select is(
-  (select user_id from public.redeem_account_invite(pg_temp.h('KMNPQRSTVW'))),
+  (select user_id
+     from public.redeem_account_invite(
+       pg_temp.h('KMNPQRSTVW'),
+       'pending.kanchrapara',
+       null
+     )),
   :KPA::uuid,
   'and the code alone determines whose password is about to be set');
 
@@ -96,7 +102,7 @@ select is(pg_temp.live_invite(:KAL::uuid), 1::bigint,
 select is(pg_temp.redeem('ABCDEFGHJK'), 'invalid',
   'the superseded code stops working the moment a new one is issued');
 
-select is(pg_temp.redeem('NEWCODE111'), 'ok',
+select is(pg_temp.redeem('NEWCODE111', 'pending.kalyani'), 'ok',
   'the newly issued code works');
 rollback to reissue;
 
@@ -160,10 +166,18 @@ rollback to touch_profile;
 -- functions as RPCs to whoever holds execute.
 
 select ok(
-  not has_function_privilege('authenticated', 'public.redeem_account_invite(text, text)', 'execute'),
+  not has_function_privilege(
+    'authenticated',
+    'public.redeem_account_invite(text, text, text)',
+    'execute'
+  ),
   'authenticated cannot execute redeem_account_invite');
 select ok(
-  not has_function_privilege('anon', 'public.redeem_account_invite(text, text)', 'execute'),
+  not has_function_privilege(
+    'anon',
+    'public.redeem_account_invite(text, text, text)',
+    'execute'
+  ),
   'anon cannot execute redeem_account_invite');
 select ok(
   not has_function_privilege('anon', 'public.preview_account_invite(text, text)', 'execute'),
@@ -172,7 +186,11 @@ select ok(
   not has_function_privilege('authenticated', 'public.issue_account_invite(uuid, uuid, text, interval)', 'execute'),
   'authenticated cannot execute issue_account_invite');
 select ok(
-  has_function_privilege('service_role', 'public.redeem_account_invite(text, text)', 'execute'),
+  has_function_privilege(
+    'service_role',
+    'public.redeem_account_invite(text, text, text)',
+    'execute'
+  ),
   'service_role can execute redeem_account_invite');
 select ok(
   has_function_privilege('service_role', 'public.issue_account_invite(uuid, uuid, text, interval)', 'execute'),

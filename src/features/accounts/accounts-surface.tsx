@@ -18,7 +18,6 @@ import {
   DataActionError,
   FAILED_ACTIVATION_NOTICE,
   liveAssignments,
-  isPlaceholderAddress,
   type AccountSummary,
   type AppRole,
   type IssuedCode,
@@ -26,6 +25,7 @@ import {
 import { activationLink } from '@/lib/activation-link'
 import { useSession } from '@/session/context'
 import { holdsRole, ROLE_LABELS, sessionOutletsFor } from '@/session/session'
+import { validateUsername, usernameErrorMessage } from '../../../shared/username'
 
 /**
  * People — every person, for the Super Admin across all outlets and for a
@@ -49,7 +49,8 @@ const ROLE_ORDER: AppRole[] = ['super_admin', 'franchise_admin', 'biller', 'empl
 
 interface Draft {
   fullName: string
-  email: string
+  username: string
+  recoveryEmail: string
   phone: string
   role: AppRole
   outletIds: string[]
@@ -70,10 +71,11 @@ export function AccountsSurface() {
   const [accounts, setAccounts] = useState<AccountSummary[] | null>(null)
   const [outlets, setOutlets] = useState<Tables<'outlets'>[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [issued, setIssued] = useState<
-    (IssuedCode & { name: string; email: string | null; inactive?: boolean }) | null
-  >(null)
+  const [issued, setIssued] = useState<(IssuedCode & { name: string; inactive?: boolean }) | null>(
+    null,
+  )
   const [correcting, setCorrecting] = useState<AccountSummary | null>(null)
+  const [recoveryTarget, setRecoveryTarget] = useState<AccountSummary | null>(null)
   const [editing, setEditing] = useState<AccountSummary | null>(null)
   const [departing, setDeparting] = useState<AccountSummary | null>(null)
   const [assigning, setAssigning] = useState<AccountSummary | null>(null)
@@ -85,7 +87,8 @@ export function AccountsSurface() {
 
   const [draft, setDraft] = useState<Draft>({
     fullName: '',
-    email: '',
+    username: '',
+    recoveryEmail: '',
     phone: '',
     role: 'employee',
     outletIds: !isOwner && session.outletId ? [session.outletId] : [],
@@ -184,16 +187,17 @@ export function AccountsSurface() {
     const outletIds = draft.role === 'super_admin' ? [] : effectiveOutletIds
     const isPerson = draft.role === 'employee' || draft.role === 'franchise_admin'
 
-    // Both fields carry attributes that look like they validate and do not:
-    // this form has `noValidate`, which makes `required` and `type="email"`
-    // inert on submit. A blank name provisions an account that is nobody, and
-    // a blank address provisions one nobody can sign in to.
     if (!draft.fullName.trim()) {
       setError('This person needs a name — it is how they appear everywhere in the app.')
       return
     }
-    if (!draft.email.trim()) {
-      setError('An email address is needed — it is how this person signs in.')
+    const username = validateUsername(draft.username)
+    if (username.error) {
+      setError(usernameErrorMessage(username.error))
+      return
+    }
+    if (draft.role === 'super_admin' && !draft.recoveryEmail.trim()) {
+      setError('A Super Admin needs a private recovery email.')
       return
     }
 
@@ -207,19 +211,22 @@ export function AccountsSurface() {
     try {
       const code = await adapter.provision({
         fullName: draft.fullName,
-        email: draft.email,
+        username: username.username,
+        recoveryEmail:
+          draft.role === 'super_admin' ? draft.recoveryEmail.trim().toLowerCase() : null,
         phone: draft.phone.trim() || null,
         role: draft.role,
         outletIds,
         roleTitle: isPerson ? draft.roleTitle.trim() || null : null,
         joinedOn: isPerson ? draft.joinedOn || null : null,
       })
-      setIssued({ ...code, name: draft.fullName, email: draft.email.trim().toLowerCase() })
+      setIssued({ ...code, name: draft.fullName })
       setFormOpen(false)
       setDraft((current) => ({
         ...current,
         fullName: '',
-        email: '',
+        username: '',
+        recoveryEmail: '',
         phone: '',
         outletIds: provisionableOutlets.length === 1 ? [provisionableOutlets[0]!.id] : [],
         roleTitle: '',
@@ -258,27 +265,23 @@ export function AccountsSurface() {
           {row.roleTitle && (
             <span className="block text-xs text-content-muted">{row.roleTitle}</span>
           )}
-          {/*
-            Read back on the list because it is otherwise typed once and never
-            seen again — and a typo produces an account that refuses the code,
-            refuses sign-in, and says the same uninformative thing either way.
-          */}
-          {row.email &&
-            (isPlaceholderAddress(row.email) ? (
-              <span
-                data-testid={`placeholder-${row.id}`}
-                className="block break-all text-xs font-semibold text-warning"
-              >
-                Placeholder address — set a real one before issuing a code.
-              </span>
-            ) : (
-              <span
-                data-testid={`email-${row.id}`}
-                className="block break-all text-xs text-content-muted"
-              >
-                {row.email}
-              </span>
-            ))}
+          {/* Read the username back so an admin can catch a typo. */}
+          {row.username && (
+            <span
+              data-testid={`username-${row.id}`}
+              className="block break-all text-xs text-content-muted"
+            >
+              {row.username}
+            </span>
+          )}
+          {row.recoveryEmail && (
+            <span
+              data-testid={`recovery-email-${row.id}`}
+              className="block break-all text-xs text-content-muted"
+            >
+              Recovery: {row.recoveryEmail}
+            </span>
+          )}
         </span>
       ),
     },
@@ -323,8 +326,6 @@ export function AccountsSurface() {
             </span>
           ) : !row.isActive ? (
             <span className="font-semibold text-danger">Deactivated</span>
-          ) : isPlaceholderAddress(row.email) ? (
-            <span className="text-warning">Needs an address</span>
           ) : row.invite ? (
             <span className="text-content-muted">Awaiting activation</span>
           ) : (
@@ -347,20 +348,30 @@ export function AccountsSurface() {
               actions={[
                 {
                   label: 'New code',
-                  // A code for a placeholder address would show the person an
-                  // address that is not theirs at activation. Fix it first.
-                  disabled: busy || isPlaceholderAddress(row.email),
+                  disabled: busy,
                   onSelect: () =>
                     void run(async () => {
                       const code = await adapter.reissue(row.id)
-                      setIssued({ ...code, name: row.fullName, email: row.email })
+                      setIssued({ ...code, name: row.fullName })
                     }),
                 },
                 {
-                  label: 'Change email',
+                  label: 'Change username',
                   disabled: busy,
                   onSelect: () => setCorrecting(row),
                 },
+                ...(isOwner &&
+                liveAssignments(row.assignments).some(
+                  (assignment) => assignment.role === 'super_admin',
+                )
+                  ? [
+                      {
+                        label: 'Change recovery email',
+                        disabled: busy,
+                        onSelect: () => setRecoveryTarget(row),
+                      },
+                    ]
+                  : []),
                 {
                   label: 'Edit person',
                   disabled: busy,
@@ -497,16 +508,21 @@ export function AccountsSurface() {
             />
           </Field>
 
-          <Field label="Email" id="account-email">
+          <Field label="Username" id="account-username">
             <Input
-              id="account-email"
-              type="email"
+              id="account-username"
+              name="username"
+              type="text"
+              autoComplete="off"
               autoCapitalize="none"
               spellCheck={false}
               required
-              value={draft.email}
-              onChange={(event) => setDraft({ ...draft, email: event.target.value })}
+              value={draft.username}
+              onChange={(event) => setDraft({ ...draft, username: event.target.value })}
             />
+            <p className="text-xs text-content-muted">
+              3–30 lowercase letters, numbers, periods, or underscores. No @ sign.
+            </p>
           </Field>
 
           <Field label="Phone (optional)" id="account-phone">
@@ -531,6 +547,26 @@ export function AccountsSurface() {
               ))}
             </Select>
           </Field>
+
+          {draft.role === 'super_admin' && (
+            <Field label="Recovery email" id="account-recovery-email">
+              <Input
+                id="account-recovery-email"
+                name="recovery-email"
+                type="email"
+                autoComplete="off"
+                inputMode="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                required
+                value={draft.recoveryEmail}
+                onChange={(event) => setDraft({ ...draft, recoveryEmail: event.target.value })}
+              />
+              <p className="text-xs text-content-muted">
+                Private and used only when this Super Admin must recover access.
+              </p>
+            </Field>
+          )}
 
           {draft.role !== 'super_admin' && (
             <Field
@@ -633,18 +669,33 @@ export function AccountsSurface() {
         </form>
       </FormSheet>
 
-      {/* Keyed so opening it for a different person starts from their address. */}
-      <ChangeEmailSheet
+      {/* Keyed so opening it for a different person starts from their username. */}
+      <ChangeUsernameSheet
         key={correcting?.id ?? 'none'}
         account={correcting}
         busy={busy}
         onClose={() => setCorrecting(null)}
-        onSubmit={(email) => {
+        onSubmit={(username) => {
           const target = correcting
           if (!target) return
           void run(async () => {
-            await adapter.changeEmail(target.id, email)
+            await adapter.changeUsername(target.id, username)
             setCorrecting(null)
+          })
+        }}
+      />
+
+      <RecoveryEmailSheet
+        key={recoveryTarget?.id ?? 'no-recovery'}
+        account={recoveryTarget}
+        busy={busy}
+        onClose={() => setRecoveryTarget(null)}
+        onSubmit={(recoveryEmail) => {
+          const target = recoveryTarget
+          if (!target) return
+          void run(async () => {
+            await adapter.setRecoveryEmail(target.id, recoveryEmail)
+            setRecoveryTarget(null)
           })
         }}
       />
@@ -682,7 +733,6 @@ export function AccountsSurface() {
               setIssued({
                 ...replacement,
                 name: target.fullName,
-                email: target.email,
                 inactive: false,
               })
             }
@@ -695,7 +745,6 @@ export function AccountsSurface() {
                 setIssued({
                   ...replacement,
                   name: target.fullName,
-                  email: target.email,
                   inactive: true,
                 })
               }
@@ -725,7 +774,6 @@ export function AccountsSurface() {
               setIssued({
                 ...replacement,
                 name: target.fullName,
-                email: target.email,
               })
             }
           })
@@ -765,13 +813,13 @@ function Field({ label, id, children }: { label: string; id: string; children: R
 }
 
 /**
- * Correcting the address an account signs in with.
+ * Correcting the username an account signs in with.
  *
  * Its own sheet rather than a general "edit account", because this exists for
  * one situation — somebody typed it wrong and the person cannot get in — and a
  * form that also renamed and re-roled them would bury the thing being fixed.
  */
-function ChangeEmailSheet({
+function ChangeUsernameSheet({
   account,
   busy,
   onClose,
@@ -780,58 +828,51 @@ function ChangeEmailSheet({
   account: AccountSummary | null
   busy: boolean
   onClose: () => void
-  onSubmit: (email: string) => void
+  onSubmit: (username: string) => void
 }) {
-  const [email, setEmail] = useState(() =>
-    account?.email && !isPlaceholderAddress(account.email) ? account.email : '',
-  )
+  const [username, setUsername] = useState(account?.username ?? '')
 
   return (
     <FormSheet
       open={account !== null}
       onClose={onClose}
-      /*
-        Named for the consequence rather than the field, which also keeps the
-        dialog's aria-label out of the way: a sheet titled "Change email" is
-        matched by any substring search for "Email", including the one meant for
-        the provisioning form's field, and a closed <dialog> keeps its label.
-      */
-      title={account ? `Change sign-in address for ${account.fullName}` : 'Change sign-in address'}
+      title={account ? `Change username for ${account.fullName}` : 'Change username'}
       footer={
         <button
           type="submit"
-          form="change-email"
-          disabled={busy || email.trim() === ''}
+          form="change-username"
+          disabled={busy || validateUsername(username).error !== null}
           className={`${buttonVariants({ size: 'phone' })} w-full`}
         >
-          {busy ? 'Saving…' : 'Save this address'}
+          {busy ? 'Saving…' : 'Save username'}
         </button>
       }
     >
       <form
-        id="change-email"
+        id="change-username"
         noValidate
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault()
-          onSubmit(email)
+          onSubmit(username)
         }}
       >
-        <Field label="Email" id="correct-email">
+        <Field label="Username" id="correct-username">
           <Input
-            id="correct-email"
-            type="email"
+            id="correct-username"
+            name="username"
+            type="text"
             autoCapitalize="none"
             spellCheck={false}
             required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
           />
         </Field>
         <p className="rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted">
-          This is the address they sign in with. Any one-time code you have already given them still
-          works — a code belongs to the account, not to the address — so there is no need to issue a
-          new one.
+          This is the username they sign in with. Any one-time code you have already given them
+          still works — a code belongs to the account, not to the username — so there is no need to
+          issue a new one.
         </p>
       </form>
     </FormSheet>
@@ -843,6 +884,65 @@ function ChangeEmailSheet({
  * left of them since multi-outlet-people: who the person is and what they do.
  * Where they work is an assignment, with its own action and its own authority.
  */
+function RecoveryEmailSheet({
+  account,
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  account: AccountSummary | null
+  busy: boolean
+  onClose: () => void
+  onSubmit: (recoveryEmail: string) => void
+}) {
+  const [recoveryEmail, setRecoveryEmail] = useState(account?.recoveryEmail ?? '')
+
+  return (
+    <FormSheet
+      open={account !== null}
+      onClose={onClose}
+      title={account ? `Recovery email for ${account.fullName}` : 'Recovery email'}
+      footer={
+        <button
+          type="submit"
+          form="change-recovery-email"
+          disabled={busy || recoveryEmail.trim() === ''}
+          className={`${buttonVariants({ size: 'phone' })} w-full`}
+        >
+          {busy ? 'Saving…' : 'Save recovery email'}
+        </button>
+      }
+    >
+      <form
+        id="change-recovery-email"
+        className="space-y-4"
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit(recoveryEmail)
+        }}
+      >
+        <Field label="Private recovery email" id="correct-recovery-email">
+          <Input
+            id="correct-recovery-email"
+            name="recovery-email"
+            type="email"
+            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            value={recoveryEmail}
+            onChange={(event) => setRecoveryEmail(event.target.value)}
+          />
+        </Field>
+        <p className="rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted">
+          Only a Super Admin carries this private contact. It is never the everyday sign-in name.
+        </p>
+      </form>
+    </FormSheet>
+  )
+}
+
 function EditPersonSheet({
   account,
   busy,
@@ -1150,14 +1250,14 @@ function CopyButton({ text, label }: { text: string; label: string }) {
  * still read the code out of the URL, so nothing is actually lost by not
  * printing it twice.
  *
- * Everything here earns its line. The address is the exception worth keeping
- * text for: it is the last cheap moment to catch a typo before the message goes.
+ * The username is the last cheap moment to catch a typo before the link is
+ * handed over.
  */
 function IssuedCodePanel({
   issued,
   onDismiss,
 }: {
-  issued: IssuedCode & { name: string; email: string | null; inactive?: boolean }
+  issued: IssuedCode & { name: string; inactive?: boolean }
   onDismiss: () => void
 }) {
   const link = activationLink(issued.code)
@@ -1168,16 +1268,9 @@ function IssuedCodePanel({
       className="mb-4 rounded-xl border border-border bg-surface-raised p-4"
     >
       <p className="text-sm font-semibold text-content">Activation link for {issued.name}</p>
-      {/*
-        A wrong address here produces an account whose owner opens the link and
-        finds somebody else's email on it — recoverable, but only if it is
-        caught. This is the cheap place to catch it; the form has already gone.
-      */}
-      {issued.email && (
-        <p data-testid="issued-code-email" className="break-all text-sm text-content-muted">
-          Signs in as <strong className="text-content">{issued.email}</strong> — check this.
-        </p>
-      )}
+      <p data-testid="issued-code-username" className="break-all text-sm text-content-muted">
+        Username: <strong className="text-content">{issued.username}</strong> — check this.
+      </p>
       {issued.inactive && (
         <p
           data-testid="issued-code-inactive"

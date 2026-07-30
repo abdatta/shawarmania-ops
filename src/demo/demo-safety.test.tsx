@@ -88,7 +88,7 @@ describe('demo mode safety', () => {
 
     const provisioned = await adapters.accounts.provision({
       fullName: 'Demo Someone',
-      email: 'demo.someone@example.com',
+      username: 'demo.someone',
       role: 'employee',
       outletIds: [OUTLET_KALYANI_ID],
     })

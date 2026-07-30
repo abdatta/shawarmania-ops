@@ -20,9 +20,13 @@ language sql as $$
      and superseded_at is null
 $$;
 
-create function pg_temp.redeem(p_code text) returns text
+create function pg_temp.redeem(
+  p_code text,
+  p_username text default 'pending.kalyani'
+) returns text
 language sql as $$
-  select status from public.redeem_account_invite(pg_temp.h(p_code))
+  select status
+    from public.redeem_account_invite(pg_temp.h(p_code), p_username, null)
 $$;
 
 \set OWNER '10000000-0000-4000-a000-000000000001'
@@ -44,6 +48,7 @@ select ok(
         :'PENDING_KAL'::uuid,
         'employee',
         :'KPA'::uuid,
+        null,
         :'OWNER'::uuid,
         pg_temp.h('GRANTCODE1'),
         interval '7 days'
@@ -68,7 +73,11 @@ select is(
   'the grant leaves exactly one live invite'
 );
 select is(pg_temp.redeem('ABCDEFGHJK'), 'invalid', 'the pre-grant code is dead');
-select is(pg_temp.redeem('GRANTCODE1'), 'ok', 'the replacement grant code works');
+select is(
+  pg_temp.redeem('GRANTCODE1', 'pending.kalyani'),
+  'ok',
+  'the replacement grant code works'
+);
 
 rollback to grant_reissues;
 
@@ -111,7 +120,11 @@ select is(
   'the end leaves exactly one live invite'
 );
 select is(pg_temp.redeem('KMNPQRSTVW'), 'invalid', 'the pre-end code is dead');
-select is(pg_temp.redeem('ENDCODE111'), 'ok', 'the replacement end code works');
+select is(
+  pg_temp.redeem('ENDCODE111', 'pending.kanchrapara'),
+  'ok',
+  'the replacement end code works'
+);
 
 rollback to end_reissues;
 
@@ -124,6 +137,7 @@ select ok(
         :'STAFF_KAL'::uuid,
         'employee',
         :'KPA'::uuid,
+        null,
         :'OWNER'::uuid,
         pg_temp.h('DISCARDED1'),
         interval '7 days'
@@ -153,7 +167,7 @@ select throws_ok(
   format(
     $q$
       select * from public.grant_assignment_with_invite(
-        %L, 'employee', %L, %L, %L, interval '7 days'
+        %L, 'employee', %L, null, %L, %L, interval '7 days'
       )
     $q$,
     :'PENDING_KAL',
@@ -223,7 +237,11 @@ select is(
   1::bigint,
   'and restores the original pending invite after a failed end'
 );
-select is(pg_temp.redeem('KMNPQRSTVW'), 'ok', 'the pre-end code still works after rollback');
+select is(
+  pg_temp.redeem('KMNPQRSTVW', 'pending.kanchrapara'),
+  'ok',
+  'the pre-end code still works after rollback'
+);
 
 rollback to end_rolls_back;
 
@@ -237,7 +255,7 @@ rollback to end_rolls_back;
 select ok(
   has_function_privilege(
     'service_role',
-    'public.grant_assignment_with_invite(uuid,public.app_role,uuid,uuid,text,interval)',
+    'public.grant_assignment_with_invite(uuid,public.app_role,uuid,text,uuid,text,interval)',
     'EXECUTE'
   ),
   'the service role may call the transactional grant function'
@@ -245,7 +263,7 @@ select ok(
 select ok(
   not has_function_privilege(
     'authenticated',
-    'public.grant_assignment_with_invite(uuid,public.app_role,uuid,uuid,text,interval)',
+    'public.grant_assignment_with_invite(uuid,public.app_role,uuid,text,uuid,text,interval)',
     'EXECUTE'
   ),
   'an authenticated browser may not call the transactional grant function'
@@ -253,7 +271,7 @@ select ok(
 select ok(
   not has_function_privilege(
     'anon',
-    'public.grant_assignment_with_invite(uuid,public.app_role,uuid,uuid,text,interval)',
+    'public.grant_assignment_with_invite(uuid,public.app_role,uuid,text,uuid,text,interval)',
     'EXECUTE'
   ),
   'an anonymous caller may not call the transactional grant function'

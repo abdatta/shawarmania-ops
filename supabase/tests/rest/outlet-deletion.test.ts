@@ -53,8 +53,8 @@ let owner: ReturnType<typeof createSupabaseOutletsAdapter>
 let manager: ReturnType<typeof createSupabaseOutletsAdapter>
 
 beforeAll(async () => {
-  owner = createSupabaseOutletsAdapter(await signIn('owner@example.com'))
-  manager = createSupabaseOutletsAdapter(await signIn('admin.kalyani@example.com'))
+  owner = createSupabaseOutletsAdapter(await signIn('owner@login.shawarmania.invalid'))
+  manager = createSupabaseOutletsAdapter(await signIn('admin.kalyani@login.shawarmania.invalid'))
 })
 
 /** A throwaway outlet nothing references. Deleted by the test that made it. */

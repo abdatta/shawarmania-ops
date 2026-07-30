@@ -7,12 +7,8 @@ import type {
   StaffFactsPatch,
 } from '../adapters'
 import { AccountActionError, liveAssignments } from '../adapters'
-import {
-  accountFixtures,
-  assignmentFixtures,
-  DEMO_HELPER_ACCOUNT_ID,
-  PENDING_ACCOUNT_ID,
-} from './fixtures/accounts'
+import { canonicalUsername } from '../../../shared/username'
+import { accountFixtures, assignmentFixtures, PENDING_ACCOUNT_ID } from './fixtures/accounts'
 
 /**
  * The mock accounts adapter. Fixtures in, promises out, no I/O anywhere — the
@@ -52,36 +48,34 @@ function today(): string {
 }
 
 /**
- * A demo address from a demo name. `example.com` is reserved for exactly this
- * (RFC 2606) and can never reach a real inbox — fixtures never carry anything
- * that could read as a real person's contact detail (docs/DEMO_MODE.md).
+ * A deterministic demo username from a demo name.
  */
-function demoEmail(fullName: string): string {
-  const local = fullName
+function demoUsername(fullName: string): string {
+  return fullName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '.')
     .replace(/^\.|\.$/g, '')
-  return `${local}@example.com`
 }
 
 /** The demo's people list, shared by every surface that shows a person. */
 export function createDemoAccounts(): AccountSummary[] {
-  return accountFixtures.map((profile) => ({
-    id: profile.id,
-    fullName: profile.full_name,
-    // Demo Helper carries the address the roster merge would have minted —
-    // the reserved `.invalid` domain, unroutable by design — so the People
-    // surface has the "fix the address first" state to show.
-    email:
-      profile.id === DEMO_HELPER_ACCOUNT_ID
-        ? `${profile.id}@placeholder.invalid`
-        : demoEmail(profile.full_name),
-    phone: profile.phone,
-    isActive: profile.is_active,
-    roleTitle: profile.role_title,
-    assignments: structuredClone(assignmentFixtures[profile.id] ?? []),
-    invite: profile.id === PENDING_ACCOUNT_ID ? { expiresAt: inSevenDays() } : null,
-  }))
+  return accountFixtures.map((profile) => {
+    const assignments = structuredClone(assignmentFixtures[profile.id] ?? [])
+    const isOwner = liveAssignments(assignments).some(
+      (assignment) => assignment.role === 'super_admin',
+    )
+    return {
+      id: profile.id,
+      fullName: profile.full_name,
+      username: demoUsername(profile.full_name),
+      recoveryEmail: isOwner ? 'owner.recovery@example.com' : null,
+      phone: profile.phone,
+      isActive: profile.is_active,
+      roleTitle: profile.role_title,
+      assignments,
+      invite: profile.id === PENDING_ACCOUNT_ID ? { expiresAt: inSevenDays() } : null,
+    }
+  })
 }
 
 export function createMockAccountsAdapter(
@@ -121,19 +115,23 @@ export function createMockAccountsAdapter(
     async provision(account: NewAccount): Promise<IssuedCode> {
       const id = `d1000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`
       const expiresAt = inSevenDays()
-      refuseTakenEmail(account.email)
+      const username = requireAvailableUsername(account.username)
       const outletIds = account.role === 'super_admin' ? [null] : account.outletIds
       if (
         (account.role === 'super_admin' && account.outletIds.length > 0) ||
         (account.role !== 'super_admin' &&
-          (outletIds.length === 0 || new Set(outletIds).size !== outletIds.length))
+          (outletIds.length === 0 || new Set(outletIds).size !== outletIds.length)) ||
+        (account.role === 'super_admin' && !account.recoveryEmail?.trim()) ||
+        (account.role !== 'super_admin' && account.recoveryEmail != null)
       ) {
         throw new AccountActionError('invalid_request', 'Choose at least one valid outlet.')
       }
       accounts.push({
         id,
         fullName: account.fullName,
-        email: account.email.trim().toLowerCase(),
+        username,
+        recoveryEmail:
+          account.role === 'super_admin' ? account.recoveryEmail!.trim().toLowerCase() : null,
         phone: account.phone ?? null,
         isActive: true,
         roleTitle: account.roleTitle ?? null,
@@ -147,7 +145,7 @@ export function createMockAccountsAdapter(
         })),
         invite: { expiresAt },
       })
-      return { profileId: id, code: demoCode(), expiresAt }
+      return { profileId: id, username, code: demoCode(), expiresAt }
     },
 
     /**
@@ -181,6 +179,15 @@ export function createMockAccountsAdapter(
           'This person already works at that outlet.',
         )
       }
+      if (
+        (input.role === 'super_admin' && !input.recoveryEmail?.trim()) ||
+        (input.role !== 'super_admin' && input.recoveryEmail != null)
+      ) {
+        throw new AccountActionError(
+          'invalid_request',
+          'An owner assignment requires one private recovery email.',
+        )
+      }
 
       account.assignments.push({
         id: newAssignmentId(),
@@ -189,6 +196,9 @@ export function createMockAccountsAdapter(
         startedOn: today(),
         endedOn: null,
       })
+      if (input.role === 'super_admin') {
+        account.recoveryEmail = input.recoveryEmail!.trim().toLowerCase()
+      }
       return hadInvite ? replaceInvite(account) : null
     },
 
@@ -214,6 +224,7 @@ export function createMockAccountsAdapter(
         }
 
         assignment.endedOn = today()
+        if (assignment.role === 'super_admin') account.recoveryEmail = null
         return hadInvite ? replaceInvite(account) : null
       }
       throw new AccountActionError('not_found', 'That assignment no longer exists.')
@@ -228,13 +239,42 @@ export function createMockAccountsAdapter(
       find(profileId).isActive = isActive
     },
 
-    async changeEmail(profileId: string, email: string) {
+    async changeUsername(profileId: string, username: string) {
+      if (profileId === viewerId) {
+        throw new AccountActionError(
+          'self_change_forbidden',
+          'You cannot change your own username here.',
+        )
+      }
       const account = find(profileId)
-      refuseTakenEmail(email, profileId)
-      account.email = email.trim().toLowerCase()
-      // The outstanding invite is untouched on purpose: a code is bound to the
-      // account, not the address, and cancelling it would invalidate a message
-      // the admin has already sent (design D13).
+      account.username = requireAvailableUsername(username, profileId)
+      // The outstanding invite remains bound to the account UUID.
+    },
+
+    async setRecoveryEmail(profileId: string, recoveryEmail: string) {
+      if (profileId === viewerId) {
+        throw new AccountActionError(
+          'self_change_forbidden',
+          'You cannot change your own recovery email here.',
+        )
+      }
+      const account = find(profileId)
+      if (!liveAssignments(account.assignments).some((a) => a.role === 'super_admin')) {
+        throw new AccountActionError('forbidden', 'Only an owner has a recovery email.')
+      }
+      const wanted = recoveryEmail.trim().toLowerCase()
+      if (
+        !wanted ||
+        accounts.some(
+          (candidate) => candidate.id !== profileId && candidate.recoveryEmail === wanted,
+        )
+      ) {
+        throw new AccountActionError(
+          'recovery_email_unavailable',
+          'That recovery email is already used by another owner.',
+        )
+      }
+      account.recoveryEmail = wanted
     },
 
     /**
@@ -264,19 +304,23 @@ export function createMockAccountsAdapter(
     },
   }
 
-  function refuseTakenEmail(email: string, exceptId?: string) {
-    const wanted = email.trim().toLowerCase()
-    if (accounts.some((account) => account.id !== exceptId && account.email === wanted)) {
-      throw new AccountActionError(
-        'email_unavailable',
-        'That email address already has an account.',
-      )
+  function requireAvailableUsername(input: string, exceptId?: string): string {
+    const wanted = canonicalUsername(input)
+    if (!wanted) {
+      throw new AccountActionError('invalid_request', 'Enter a valid username.')
     }
+    if (accounts.some((account) => account.id !== exceptId && account.username === wanted)) {
+      throw new AccountActionError('username_unavailable', 'That username is already in use.')
+    }
+    return wanted
   }
 
   function replaceInvite(account: AccountSummary): IssuedCode {
     const expiresAt = inSevenDays()
     account.invite = { expiresAt }
-    return { profileId: account.id, code: demoCode(), expiresAt }
+    if (!account.username) {
+      throw new AccountActionError('invalid_request', 'This account needs a username.')
+    }
+    return { profileId: account.id, username: account.username, code: demoCode(), expiresAt }
   }
 }

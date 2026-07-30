@@ -201,7 +201,7 @@ describe('the People surface', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'Demo Newcomer')
-    await user.type(screen.getByLabelText('Email'), 'newcomer@example.com')
+    await user.type(screen.getByLabelText('Username'), 'newcomer')
     await user.type(screen.getByLabelText('Job title (optional)'), 'Grill')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
@@ -209,6 +209,7 @@ describe('the People surface', () => {
       expect(provision).toHaveBeenCalledWith(
         expect.objectContaining({
           fullName: 'Demo Newcomer',
+          username: 'newcomer',
           role: 'employee',
           outletIds: [OUTLET_KALYANI_ID],
           roleTitle: 'Grill',
@@ -235,7 +236,7 @@ describe('the People surface', () => {
       screen.getByText('Choose one or more. They will have the same role at each.'),
     ).toBeInTheDocument()
     await user.type(screen.getByLabelText('Full name'), 'Demo Two Outlets')
-    await user.type(screen.getByLabelText('Email'), 'two.outlets@example.com')
+    await user.type(screen.getByLabelText('Username'), 'two.outlets')
     await user.click(screen.getByRole('checkbox', { name: 'Shawarmania Kalyani' }))
     await user.click(screen.getByRole('checkbox', { name: 'Shawarmania Kanchrapara' }))
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
@@ -244,6 +245,7 @@ describe('the People surface', () => {
       expect(provision).toHaveBeenCalledWith(
         expect.objectContaining({
           fullName: 'Demo Two Outlets',
+          username: 'two.outlets',
           role: 'employee',
           outletIds: [OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID],
         }),
@@ -266,7 +268,7 @@ describe('the People surface', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'Demo Nowhere')
-    await user.type(screen.getByLabelText('Email'), 'nowhere@example.com')
+    await user.type(screen.getByLabelText('Username'), 'nowhere')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     expect(
@@ -283,7 +285,7 @@ describe('the People surface', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'New Starter')
-    await user.type(screen.getByLabelText('Email'), 'new.starter@example.com')
+    await user.type(screen.getByLabelText('Username'), 'new.starter')
     await user.click(screen.getByRole('checkbox', { name: 'Shawarmania Kalyani' }))
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
@@ -305,7 +307,7 @@ describe('the People surface', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'New Starter')
-    await user.type(screen.getByLabelText('Email'), 'new.starter@example.com')
+    await user.type(screen.getByLabelText('Username'), 'new.starter')
     await user.click(screen.getByRole('checkbox', { name: 'Shawarmania Kalyani' }))
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
@@ -314,8 +316,8 @@ describe('the People surface', () => {
     const code = new URL(link).searchParams.get('code')!
 
     expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
-    // The address is on the panel for the admin to check, and never in the URL
-    // — it would buy nothing and would land in history and link previews.
+    // The username is on the panel for the admin to check, but the activation
+    // URL carries only the one-time code.
     expect(link).not.toContain('@')
     expect(
       within(panel).getByRole('img', { name: /Activation link for New Starter/ }),
@@ -340,7 +342,7 @@ describe('the People surface', () => {
     await screen.findByRole('heading', { name: 'People' })
 
     await user.click(screen.getByRole('button', { name: 'Add person' }))
-    await user.type(screen.getByLabelText('Email'), 'nameless@example.com')
+    await user.type(screen.getByLabelText('Username'), 'nameless')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     expect(await screen.findByTestId('accounts-error')).toHaveTextContent('needs a name')
@@ -359,7 +361,7 @@ describe('the People surface', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), '   ')
-    await user.type(screen.getByLabelText('Email'), 'spaces@example.com')
+    await user.type(screen.getByLabelText('Username'), 'spaces')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     expect(await screen.findByTestId('accounts-error')).toHaveTextContent('needs a name')
@@ -367,9 +369,7 @@ describe('the People surface', () => {
     expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
   })
 
-  it('writes nothing at all when the email address is missing', async () => {
-    // `type="email"` is inert for exactly the same reason `required` is, and a
-    // blank address provisions an account nobody can ever sign in to.
+  it('writes nothing at all when the username is missing', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters('franchise_admin')
     const provision = vi.spyOn(adapters.accounts, 'provision')
@@ -380,7 +380,7 @@ describe('the People surface', () => {
     await user.type(screen.getByLabelText('Full name'), 'Demo Unreachable')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
-    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('email address is needed')
+    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('Enter a username')
     expect(provision).not.toHaveBeenCalled()
     expect(screen.queryByTestId('issued-code')).not.toBeInTheDocument()
   })
@@ -474,21 +474,17 @@ describe('the People surface', () => {
  * own reason and next step on the list itself.
  */
 describe('the people states', () => {
-  it('marks a placeholder address as the thing to fix, and will not issue a code past it', async () => {
+  it('shows an ordinary account username and allows an admin to reset its password', async () => {
     const user = userEvent.setup()
     renderSurface('franchise_admin')
 
     const row = (await screen.findByText('Demo Helper')).closest('tr')!
-    expect(within(row).getByTestId(`placeholder-${DEMO_HELPER_ACCOUNT_ID}`)).toHaveTextContent(
-      'Placeholder address',
+    expect(within(row).getByTestId(`username-${DEMO_HELPER_ACCOUNT_ID}`)).toHaveTextContent(
+      'demo.helper',
     )
-    expect(within(row).getByText('Needs an address')).toBeInTheDocument()
-
-    // A code for a placeholder address would show the person an address that
-    // is not theirs at activation — the fix is the address, then the code.
     await openRowActions(user, row)
-    expect(within(row).getByRole('button', { name: 'New code' })).toBeDisabled()
-    expect(within(row).getByRole('button', { name: 'Change email' })).toBeEnabled()
+    expect(within(row).getByRole('button', { name: 'New code' })).toBeEnabled()
+    expect(within(row).getByRole('button', { name: 'Change username' })).toBeEnabled()
   })
 
   it('keeps people with no live assignment off the list until asked', async () => {
@@ -720,17 +716,12 @@ describe('editing a person', () => {
   })
 })
 
-/**
- * The address is typed once and, until now, never seen again — and a typo
- * produced an account that refused its own code, refused sign-in, and gave the
- * same uninformative answer either way.
- */
-describe('the email address an account signs in with', () => {
+describe('the username an account signs in with', () => {
   it('is on the list, so a typo is visible at all', async () => {
     renderSurface('super_admin')
 
     const row = (await screen.findByText('Demo Manager')).closest('tr')!
-    expect(within(row).getByText('demo.manager@example.com')).toBeInTheDocument()
+    expect(within(row).getByText('demo.manager')).toBeInTheDocument()
   })
 
   it('is read back beside a freshly issued code', async () => {
@@ -740,16 +731,14 @@ describe('the email address an account signs in with', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add person' }))
     await user.type(screen.getByLabelText('Full name'), 'Demo Newcomer')
-    await user.type(screen.getByLabelText('Email'), 'Demo.Newcomer@Example.com')
+    await user.type(screen.getByLabelText('Username'), 'Demo.Newcomer')
     await user.click(screen.getByRole('button', { name: 'Create and issue a code' }))
 
     const panel = await screen.findByTestId('issued-code')
     // Normalised, so what is shown is what will actually be signed in with —
     // echoing the raw typing back would hide a case-only difference.
-    expect(within(panel).getByTestId('issued-code-email')).toHaveTextContent(
-      'demo.newcomer@example.com',
-    )
-    // The nudge survives the trim: the address is shown to be checked, not
+    expect(within(panel).getByTestId('issued-code-username')).toHaveTextContent('demo.newcomer')
+    // The nudge survives canonicalisation: the username is shown to be checked, not
     // merely displayed. It is the last cheap moment to catch a typo.
     expect(panel).toHaveTextContent('check this')
   })
@@ -762,80 +751,80 @@ describe('the email address an account signs in with', () => {
     await openRowActions(user, row)
     await user.click(within(row).getByRole('button', { name: 'New code' }))
 
-    expect(await screen.findByTestId('issued-code-email')).toHaveTextContent(
-      'demo.manager@example.com',
-    )
+    expect(await screen.findByTestId('issued-code-username')).toHaveTextContent('demo.manager')
   })
 
   it('can be corrected, and says the existing code still works', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()
-    const change = vi.spyOn(adapters.accounts, 'changeEmail')
+    const change = vi.spyOn(adapters.accounts, 'changeUsername')
     renderSurface('super_admin', adapters)
 
     const row = (await screen.findByText('Demo Manager')).closest('tr')!
     await openRowActions(user, row)
-    await user.click(within(row).getByRole('button', { name: 'Change email' }))
+    await user.click(within(row).getByRole('button', { name: 'Change username' }))
 
-    const field = screen.getByLabelText('Email')
-    expect(field).toHaveValue('demo.manager@example.com')
+    const field = screen.getByLabelText('Username')
+    expect(field).toHaveValue('demo.manager')
     expect(screen.getByText(/still works/)).toBeInTheDocument()
 
     await user.clear(field)
-    await user.type(field, 'demo.manager@corrected.example.com')
-    await user.click(screen.getByRole('button', { name: 'Save this address' }))
+    await user.type(field, 'demo.manager.corrected')
+    await user.click(screen.getByRole('button', { name: 'Save username' }))
 
     await waitFor(() =>
       expect(change).toHaveBeenCalledWith(
         personaFixtures.franchise_admin.profile.id,
-        'demo.manager@corrected.example.com',
+        'demo.manager.corrected',
       ),
     )
-    expect(await screen.findByText('demo.manager@corrected.example.com')).toBeInTheDocument()
+    expect(await screen.findByText('demo.manager.corrected')).toBeInTheDocument()
   })
 
-  it('refuses an address another account already holds', async () => {
+  it('refuses a username another account already holds', async () => {
     const user = userEvent.setup()
     renderSurface('super_admin')
 
     const row = (await screen.findByText('Demo Manager')).closest('tr')!
     await openRowActions(user, row)
-    await user.click(within(row).getByRole('button', { name: 'Change email' }))
+    await user.click(within(row).getByRole('button', { name: 'Change username' }))
 
-    const field = screen.getByLabelText('Email')
+    const field = screen.getByLabelText('Username')
     await user.clear(field)
-    await user.type(field, 'demo.griller@example.com')
-    await user.click(screen.getByRole('button', { name: 'Save this address' }))
+    await user.type(field, 'demo.griller')
+    await user.click(screen.getByRole('button', { name: 'Save username' }))
 
-    expect(await screen.findByTestId('accounts-error')).toHaveTextContent('already has an account')
+    expect(await screen.findByTestId('accounts-error')).toHaveTextContent(
+      'That username is already in use',
+    )
   })
 
-  it('starts the correction blank for a placeholder address — there is nothing worth keeping', async () => {
+  it('starts the correction with the account username', async () => {
     const user = userEvent.setup()
     renderSurface('franchise_admin')
 
     const row = (await screen.findByText('Demo Helper')).closest('tr')!
     await openRowActions(user, row)
-    await user.click(within(row).getByRole('button', { name: 'Change email' }))
+    await user.click(within(row).getByRole('button', { name: 'Change username' }))
 
-    expect(screen.getByLabelText('Email')).toHaveValue('')
+    expect(screen.getByLabelText('Username')).toHaveValue('demo.helper')
   })
 
-  it('renders the list as names when the address lookup is refused', async () => {
+  it('renders the list as names when the identifier lookup is refused', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()
-    // What a caller with no authority to read addresses gets: the privileged
+    // What a caller with no authority to read identifiers gets: the privileged
     // function refuses, and the screen is names-only rather than blank.
     vi.spyOn(adapters.accounts, 'listAccounts').mockImplementation(async () =>
       (await createMockAdapters().accounts.listAccounts()).map((account) => ({
         ...account,
-        email: null,
+        username: null,
       })),
     )
     renderSurface('super_admin', adapters)
 
     const row = (await screen.findByText('Demo Manager')).closest('tr')!
-    expect(within(row).queryByText(/@example\.com/)).not.toBeInTheDocument()
+    expect(within(row).queryByText('demo.manager')).not.toBeInTheDocument()
     await openRowActions(user, row)
     expect(within(row).getByRole('button', { name: 'New code' })).toBeInTheDocument()
   })

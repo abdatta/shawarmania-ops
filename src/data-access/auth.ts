@@ -1,6 +1,7 @@
 import type { Assignment } from './adapters'
 import type { Tables } from './database.types'
 import { getSupabaseClient } from './supabase'
+import { authAliasToUsername, canonicalUsername, usernameToAuthAlias } from '../../shared/username'
 
 /**
  * Authentication, as opposed to data access.
@@ -20,7 +21,7 @@ export type Profile = Tables<'profiles'>
 
 export interface AuthedUser {
   userId: string
-  email: string | null
+  username: string | null
 }
 
 /** A sign-in refusal the screen can phrase for a person. */
@@ -44,7 +45,8 @@ export class SignInError extends Error {
  */
 export class ActivationError extends Error {
   constructor(
-    readonly code: 'invalid_code' | 'weak_password' | 'rate_limited' | 'unavailable',
+    readonly code:
+      'invalid_code' | 'username_mismatch' | 'weak_password' | 'rate_limited' | 'unavailable',
     message: string,
   ) {
     super(message)
@@ -54,17 +56,20 @@ export class ActivationError extends Error {
 
 export const MIN_PASSWORD_LENGTH = 10
 
-export async function signIn(email: string, password: string): Promise<AuthedUser> {
+export async function signIn(username: string, password: string): Promise<AuthedUser> {
+  const authAlias = usernameToAuthAlias(username)
+  if (!authAlias) {
+    throw new SignInError('invalid_credentials', 'That username or password is not right.')
+  }
   const { data, error } = await getSupabaseClient().auth.signInWithPassword({
-    email: email.trim(),
+    email: authAlias,
     password,
   })
   if (error || !data.user) {
-    // One message for a wrong address and a wrong password alike: telling them
-    // apart would confirm which addresses have accounts.
-    throw new SignInError('invalid_credentials', 'That email or password is not right.')
+    // One message for an unknown username and a wrong password alike.
+    throw new SignInError('invalid_credentials', 'That username or password is not right.')
   }
-  return { userId: data.user.id, email: data.user.email ?? null }
+  return { userId: data.user.id, username: authAliasToUsername(data.user.email) }
 }
 
 export async function signOut(): Promise<void> {
@@ -74,7 +79,7 @@ export async function signOut(): Promise<void> {
 export async function currentUser(): Promise<AuthedUser | null> {
   const { data } = await getSupabaseClient().auth.getSession()
   const user = data.session?.user
-  return user ? { userId: user.id, email: user.email ?? null } : null
+  return user ? { userId: user.id, username: authAliasToUsername(user.email) } : null
 }
 
 /**
@@ -145,28 +150,33 @@ function activationFailure(reason: string | null): ActivationError {
     )
   }
   if (reason === 'rate_limited') return new ActivationError('rate_limited', TOO_MANY)
+  if (reason === 'username_mismatch') {
+    return new ActivationError(
+      'username_mismatch',
+      'Type the username shown above, or ask your manager to correct it.',
+    )
+  }
   if (reason === 'invalid_code') return new ActivationError('invalid_code', DEAD_CODE)
   return new ActivationError('unavailable', 'Could not activate right now. Try again in a moment.')
 }
 
 /**
- * Resolve a one-time code to the address its account will sign in with, so the
- * person can confirm it is theirs rather than type it.
+ * Resolve a one-time code to its product username so the activation screen can
+ * show it before asking the person to type it back.
  *
  * Safe because the code is the key: whoever can ask has already proven
  * possession of a live, single-use code for that one account, so the only
- * address they can learn is the one they already hold a code for. Consumes
- * nothing — somebody who says "that is not my email" leaves the code exactly as
- * redeemable as they found it.
+ * username they can learn is the one they already hold a code for. Previewing
+ * consumes nothing.
  */
 export async function previewInvite(code: string): Promise<string> {
-  const { data, error } = await getSupabaseClient().functions.invoke<{ email?: string }>(
+  const { data, error } = await getSupabaseClient().functions.invoke<{ username?: string }>(
     'redeem-invite',
     { body: { action: 'preview', code } },
   )
   if (error) throw activationFailure(await failureCode(error))
-  if (!data?.email) throw activationFailure('invalid_code')
-  return data.email
+  if (!data?.username) throw activationFailure('invalid_code')
+  return data.username
 }
 
 /**
@@ -175,16 +185,57 @@ export async function previewInvite(code: string): Promise<string> {
  * afterwards through the ordinary path, so there is exactly one way a session
  * is ever minted (design D5).
  *
- * Takes no address. The code identifies the account, which is what leaves a
- * password as the only thing anybody types.
+ * The code identifies the account; the typed username confirms the handover
+ * before the password is changed.
  */
-export async function redeemInvite(code: string, password: string): Promise<void> {
+export async function redeemInvite(
+  code: string,
+  username: string,
+  password: string,
+): Promise<void> {
   if (password.length < MIN_PASSWORD_LENGTH) throw activationFailure('weak_password')
 
   const { error } = await getSupabaseClient().functions.invoke('redeem-invite', {
-    body: { action: 'redeem', code, password },
+    body: { action: 'redeem', code, username, password },
   })
   if (error) throw activationFailure(await failureCode(error))
+}
+
+const RECOVERY_ACCEPTED =
+  'If that recovery email belongs to an active owner, a recovery link is on its way.'
+
+export async function requestOwnerRecovery(recoveryEmail: string): Promise<string> {
+  // The public response stays identical even when the resolver or provider
+  // fails, so this helper never becomes an account-enumeration oracle.
+  await getSupabaseClient().functions.invoke('owner-recovery', {
+    body: { action: 'request', recoveryEmail },
+  })
+  return RECOVERY_ACCEPTED
+}
+
+export async function startOwnerRecovery(tokenHash: string): Promise<string> {
+  const client = getSupabaseClient()
+  const { error: verifyError } = await client.auth.verifyOtp({
+    token_hash: tokenHash,
+    type: 'recovery',
+  })
+  if (verifyError) throw activationFailure('invalid_code')
+
+  const { data, error } = await client.functions.invoke<{ username?: string }>('owner-recovery', {
+    body: { action: 'status' },
+  })
+  if (error || !data?.username) throw activationFailure('invalid_code')
+  return data.username
+}
+
+export async function finishOwnerRecovery(username: string, password: string): Promise<void> {
+  if (!canonicalUsername(username)) throw activationFailure('username_mismatch')
+  if (password.length < MIN_PASSWORD_LENGTH) throw activationFailure('weak_password')
+
+  const { error } = await getSupabaseClient().auth.updateUser({ password })
+  if (error) {
+    throw activationFailure(error.code === 'weak_password' ? 'weak_password' : null)
+  }
 }
 
 /**

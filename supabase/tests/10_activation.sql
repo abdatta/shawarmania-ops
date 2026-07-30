@@ -61,14 +61,14 @@ $q$, '23505', null,
   'two live invites cannot share a code hash, so lookup by code is unambiguous');
 
 -- ---------------------------------------------------------------------------
--- Preview: a live code resolves to its address, and consumes nothing.
+-- Preview: a live code resolves to its username, and consumes nothing.
 
 select is((select status from public.preview_account_invite(pg_temp.hash('ABCDEFGHJK'), 'ip-a')),
   'ok', 'a live code previews');
 
-select is((select email from public.preview_account_invite(pg_temp.hash('ABCDEFGHJK'), 'ip-a')),
-  'pending.kalyani@example.com',
-  'and resolves to the address that account will sign in with');
+select is((select username from public.preview_account_invite(pg_temp.hash('ABCDEFGHJK'), 'ip-a')),
+  'pending.kalyani',
+  'and resolves to the current canonical username');
 
 select is((select consumed_at from public.account_invites
             where id = '80000000-0000-4000-a000-000000000001'), null,
@@ -80,8 +80,8 @@ select is((select count(*) from public.invite_redemption_attempts), 0::bigint,
 select is((select status from public.preview_account_invite(pg_temp.hash('NOTACODE00'), 'ip-a')),
   'invalid', 'an unknown code previews as invalid');
 
-select is((select email from public.preview_account_invite(pg_temp.hash('NOTACODE00'), 'ip-a')),
-  null, 'and discloses no address');
+select is((select username from public.preview_account_invite(pg_temp.hash('NOTACODE00'), 'ip-a')),
+  null, 'and discloses no username');
 
 select is((select count(*) from public.invite_redemption_attempts), 2::bigint,
   'each failed preview is recorded, because that is what bounds guessing now');
@@ -94,7 +94,7 @@ update public.account_invites set expires_at = now() - interval '1 minute'
 select is((select status from public.preview_account_invite(pg_temp.hash('KMNPQRSTVW'), 'ip-a')),
   'invalid', 'an expired code is refused');
 
-select is((select email from public.preview_account_invite(pg_temp.hash('KMNPQRSTVW'), 'ip-a')),
+select is((select username from public.preview_account_invite(pg_temp.hash('KMNPQRSTVW'), 'ip-a')),
   null, 'and is indistinguishable from a code that never existed');
 
 update public.account_invites set expires_at = now() + interval '7 days'
@@ -111,14 +111,44 @@ update public.profiles set is_active = true
  where id = '10000000-0000-4000-a000-00000000000d';
 
 -- ---------------------------------------------------------------------------
--- Redemption, keyed on the code, with no address anywhere.
+-- Redemption verifies the shown username before consuming the code.
 
 delete from public.invite_redemption_attempts;
 
-select is((select status from public.redeem_account_invite(pg_temp.hash('ABCDEFGHJK'), 'ip-b')),
-  'ok', 'a live code redeems with no address supplied');
+select is((
+    select status
+      from public.redeem_account_invite(
+        pg_temp.hash('ABCDEFGHJK'),
+        'different.person',
+        'ip-b'
+      )
+  ),
+  'username_mismatch',
+  'a different valid username is refused specifically');
 
-select is((select user_id from public.redeem_account_invite(pg_temp.hash('KMNPQRSTVW'), 'ip-b')),
+select is((select consumed_at from public.account_invites
+            where id = '80000000-0000-4000-a000-000000000001'), null,
+  'a username mismatch does not consume the invite');
+
+select is((
+    select status
+      from public.redeem_account_invite(
+        pg_temp.hash('ABCDEFGHJK'),
+        'PENDING.KALYANI',
+        'ip-b'
+      )
+  ),
+  'ok',
+  'the canonical username match redeems case-insensitively');
+
+select is((
+    select user_id
+      from public.redeem_account_invite(
+        pg_temp.hash('KMNPQRSTVW'),
+        'pending.kanchrapara',
+        'ip-b'
+      )
+  ),
   '10000000-0000-4000-a000-00000000000d'::uuid,
   'and returns the account the code identifies, derived rather than claimed');
 
@@ -126,7 +156,14 @@ select isnt((select consumed_at from public.account_invites
               where id = '80000000-0000-4000-a000-000000000001'), null,
   'redemption consumes the invite');
 
-select is((select status from public.redeem_account_invite(pg_temp.hash('ABCDEFGHJK'), 'ip-b')),
+select is((
+    select status
+      from public.redeem_account_invite(
+        pg_temp.hash('ABCDEFGHJK'),
+        'pending.kalyani',
+        'ip-b'
+      )
+  ),
   'invalid', 'a spent code cannot be redeemed twice');
 
 select is((select status from public.preview_account_invite(pg_temp.hash('ABCDEFGHJK'), 'ip-b')),
@@ -218,7 +255,7 @@ select throws_ok($q$ select * from public.invite_redemption_attempts $q$,
 -- Redemption itself stays out of every client's hands: PostgREST would expose
 -- any of these as an RPC to whoever held execute.
 select throws_ok($q$
-  select public.redeem_account_invite('whatever', 'ip-x')
+  select public.redeem_account_invite('whatever', 'some.username', 'ip-x')
 $q$, '42501', null, 'redemption is not callable by a signed-in client');
 
 select throws_ok($q$

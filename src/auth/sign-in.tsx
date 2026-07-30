@@ -5,14 +5,15 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { signIn, SignInError } from '@/data-access/auth'
+import { validateUsername, usernameErrorMessage } from '../../shared/username'
 
 import type { SessionEndReason } from './use-real-session'
 
 /**
- * Email and password. One field pair, nothing else (docs/SCREENS.md).
+ * Username and password. One field pair, nothing else (docs/SCREENS.md).
  *
- * Two deliberate silences. A wrong address and a wrong password produce the
- * same sentence, because telling them apart would confirm which addresses have
+ * Two deliberate silences. An unknown username and a wrong password produce
+ * the same sentence, because telling them apart would confirm which usernames
  * accounts. And there is no "forgot password" link, because v1 has no
  * self-service reset — the honest instruction is to ask an admin for a new
  * code, which the activation link already leads to.
@@ -36,7 +37,7 @@ export function SignIn() {
   const location = useLocation()
   const state = (location.state ?? {}) as SignInLocationState
 
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,10 +48,15 @@ export function SignIn() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
+    const validation = validateUsername(username)
+    if (validation.error) {
+      setError(usernameErrorMessage(validation.error))
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      await signIn(email, password)
+      await signIn(validation.username, password)
       // Land where they were headed. The role tree resolves the session and
       // redirects to their own shell if the path was not theirs to open.
       navigate(state.from && state.from !== '/sign-in' ? state.from : '/', { replace: true })
@@ -81,27 +87,23 @@ export function SignIn() {
 
           <form onSubmit={onSubmit} className="space-y-4" noValidate>
             <div className="space-y-1">
-              <label htmlFor="signin-email" className="block text-sm font-semibold">
-                Email
+              <label htmlFor="signin-username" className="block text-sm font-semibold">
+                Username
               </label>
               <Input
-                id="signin-email"
-                type="email"
+                id="signin-username"
+                name="username"
+                type="text"
                 autoComplete="username"
                 autoCapitalize="none"
                 spellCheck={false}
                 required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                aria-describedby="signin-email-hint"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                aria-describedby="signin-username-hint"
               />
-              {/*
-                Sign-in legitimately needs the address, so the least it can do
-                is say which one. "The email you gave your manager" is a
-                question somebody can actually answer about themselves.
-              */}
-              <p id="signin-email-hint" className="text-xs text-content-muted">
-                The email you gave your manager.
+              <p id="signin-username-hint" className="text-xs text-content-muted">
+                Type the username your manager gave you, without an @ sign.
               </p>
             </div>
 
@@ -111,6 +113,7 @@ export function SignIn() {
               </label>
               <Input
                 id="signin-password"
+                name="password"
                 type="password"
                 autoComplete="current-password"
                 required
@@ -139,6 +142,14 @@ export function SignIn() {
             <Link to="/activate" className="font-semibold text-accent-text underline">
               Set your password
             </Link>
+          </p>
+          <p className="mt-3 text-sm text-content-muted">
+            Forgot your password? Staff should ask a Franchise Admin or Super Admin for a new
+            one-time link. Super Admins can{' '}
+            <Link to="/recover" className="font-semibold text-accent-text underline">
+              recover by private email
+            </Link>
+            .
           </p>
         </CardBody>
       </Card>

@@ -85,6 +85,35 @@ export type Database = {
           },
         ]
       }
+      account_recovery_contacts: {
+        Row: {
+          created_at: string
+          email: string
+          profile_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          profile_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          profile_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_recovery_contacts_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alert_responses: {
         Row: {
           alert_id: string
@@ -1062,6 +1091,27 @@ export type Database = {
         }
         Relationships: []
       }
+      owner_recovery_attempts: {
+        Row: {
+          attempted_at: string
+          email_hash: string
+          id: number
+          ip_hash: string | null
+        }
+        Insert: {
+          attempted_at?: string
+          email_hash: string
+          id?: never
+          ip_hash?: string | null
+        }
+        Update: {
+          attempted_at?: string
+          email_hash?: string
+          id?: never
+          ip_hash?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -1166,6 +1216,8 @@ export type Database = {
       app_is_owner: { Args: never; Returns: boolean }
       app_may_manage_person: { Args: { person: string }; Returns: boolean }
       app_may_see_person: { Args: { person: string }; Returns: boolean }
+      app_normalize_recovery_email: { Args: { input: string }; Returns: string }
+      app_normalize_username: { Args: { input: string }; Returns: string }
       app_outlets_for: {
         Args: { required: Database["public"]["Enums"]["app_role"] }
         Returns: string[]
@@ -1182,6 +1234,9 @@ export type Database = {
         }
         Returns: boolean
       }
+      app_recovery_email_valid: { Args: { input: string }; Returns: boolean }
+      app_username_from_auth_alias: { Args: { input: string }; Returns: string }
+      app_username_valid: { Args: { input: string }; Returns: boolean }
       close_business_day: {
         Args: {
           p_actual_closing_paise: number
@@ -1232,6 +1287,7 @@ export type Database = {
           p_issued_by: string
           p_outlet_id: string
           p_person_id: string
+          p_recovery_email: string
           p_role: Database["public"]["Enums"]["app_role"]
           p_valid_for: string
         }
@@ -1270,8 +1326,28 @@ export type Database = {
       preview_account_invite: {
         Args: { p_code_hash: string; p_ip_hash?: string }
         Returns: {
-          email: string
           status: string
+          username: string
+        }[]
+      }
+      provision_account_with_invite: {
+        Args: {
+          p_code_hash: string
+          p_full_name: string
+          p_issued_by: string
+          p_outlet_ids: string[]
+          p_phone: string
+          p_profile_id: string
+          p_recovery_email: string
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_role_title: string
+          p_started_on: string
+          p_valid_for: string
+        }
+        Returns: {
+          invite_expires_at: string
+          invite_id: string
+          profile_id: string
         }[]
       }
       record_invite_failure: {
@@ -1279,11 +1355,26 @@ export type Database = {
         Returns: undefined
       }
       redeem_account_invite: {
-        Args: { p_code_hash: string; p_ip_hash?: string }
+        Args: { p_code_hash: string; p_ip_hash?: string; p_username: string }
         Returns: {
           status: string
           user_id: string
         }[]
+      }
+      resolve_owner_recovery: {
+        Args: {
+          p_email: string
+          p_global?: number
+          p_ip_hash: string
+          p_per_email?: number
+          p_per_ip?: number
+          p_window?: string
+        }
+        Returns: string
+      }
+      set_account_recovery_contact: {
+        Args: { p_email: string; p_profile_id: string }
+        Returns: undefined
       }
     }
     Enums: {

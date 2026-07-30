@@ -44,7 +44,7 @@ type Client = SupabaseClient<Database>
 /** Unique per run, so the suite is re-runnable without a database reset. */
 const RUN = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
 let seq = 0
-const freshEmail = (label: string) => `setup.${label}.${RUN}.${seq++}@example.com`
+const freshUsername = (label: string) => `setup.${label}.${RUN.slice(-6)}.${seq++}`
 
 function anonClient(): Client {
   return createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -81,11 +81,11 @@ async function onboard(
   fullName: string,
   extras: Record<string, unknown> = {},
 ): Promise<{ client: Client; profileId: string }> {
-  const email = freshEmail(role)
+  const username = freshUsername(role)
   const provisioned = await call('admin-accounts', token, {
     action: 'provision',
     fullName,
-    email,
+    username,
     role,
     outletIds: [outletId],
     ...extras,
@@ -93,14 +93,14 @@ async function onboard(
   expect(provisioned.status).toBe(201)
 
   const redeemed = await call('redeem-invite', null, {
-    email,
     code: provisioned.body['code'],
+    username,
     password: NEW_PASSWORD,
   })
   expect(redeemed.status).toBe(204)
 
   return {
-    client: await signIn(email, NEW_PASSWORD),
+    client: await signIn(`${username}@login.shawarmania.invalid`, NEW_PASSWORD),
     profileId: provisioned.body['profileId']!,
   }
 }
@@ -120,7 +120,7 @@ let businessDate: string
  * rebuilding a world.
  */
 beforeAll(async () => {
-  owner = await signIn('owner@example.com', SEED_PASSWORD)
+  owner = await signIn('owner@login.shawarmania.invalid', SEED_PASSWORD)
   ownerToken = (await owner.auth.getSession()).data.session!.access_token
 
   // 1. An outlet, from nothing.

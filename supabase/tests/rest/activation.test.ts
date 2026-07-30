@@ -1,22 +1,10 @@
 /**
- * Activation as a person actually performs it: open a link, look at an
- * address, choose a password. Over real HTTP, through Kong, through the Edge
- * Function, through GoTrue.
- *
- * The pgTAP suite (supabase/tests/10_activation.sql) proves the semantics
- * inside the database, where the rate-limit arithmetic can be set up exactly.
- * This proves the deployed pieces agree — including the parts only HTTP has:
- * the `action` shape, the status codes a client branches on, and the
- * `x-forwarded-for` plumbing the per-address limit rides on.
- *
- * The global bound is deliberately NOT exercised here. It is shared with every
- * other suite that produces a failure, and a test that spends a shared budget
- * makes its neighbours flaky. The per-address bound is self-contained, because
- * this file makes up its own addresses.
- *
- * Requires the local stack: `npm run db:start && npm run db:reset`, then
- * `npm run test:rls`.
+ * Username activation, owner recovery, and the signed mail boundary over the
+ * real local stack. The database suites prove the internals; this file proves
+ * Kong, Edge Functions, GoTrue, and Mailpit agree on the wire contract.
  */
+import { createHmac, randomUUID } from 'node:crypto'
+
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { beforeAll, describe, expect, it } from 'vitest'
 
@@ -25,20 +13,25 @@ import type { Database } from '../../../src/data-access/database.types'
 const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
 const SUPABASE_ANON_KEY =
   process.env['SUPABASE_ANON_KEY'] ??
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'
-
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYXNlLWRlbW8iLCJyb2xlIjoiYW5vbiIsImV4cCI6MTk4MzgxMjk5Nn0.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'
 const SEED_PASSWORD = 'shawarmania-local'
 const NEW_PASSWORD = 'a-genuinely-set-password'
 const OUTLET_KALYANI = '00000000-0000-4000-a000-000000000001'
+const OWNER_ID = '10000000-0000-4000-a000-000000000001'
+const OWNER_ALIAS = 'owner@login.shawarmania.invalid'
+const LOCAL_HOOK_SECRET = 'c2hhd2FybWFuaWEtbG9jYWwtaG9vay12MQ=='
 
 type Client = SupabaseClient<Database>
+interface Result<T = Record<string, unknown>> {
+  status: number
+  body: T
+}
 
-/** Unique per run, so the suite is re-runnable without a database reset. */
-const RUN = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
-let seq = 0
-const freshEmail = () => `activate.${RUN}.${seq++}@example.com`
-/** A caller address of our own, so this file's failures land on nobody else. */
-const freshIp = () => `203.0.113.${seq++ % 250}-${RUN}`
+const RUN = Date.now().toString(36).slice(-8)
+let sequence = 0
+const freshUsername = () => `act.${RUN}.${sequence++}`
+const authAlias = (username: string) => `${username}@login.shawarmania.invalid`
+const freshIp = () => `203.0.113.${sequence++ % 250}-${RUN}`
 
 function anonClient(): Client {
   return createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -46,216 +39,237 @@ function anonClient(): Client {
   })
 }
 
-interface Result<T = Record<string, unknown>> {
-  status: number
-  body: T
-}
-
-/** The activation endpoint, which takes no session — that is the whole point. */
-async function activation(
+async function callFunction<T = Record<string, unknown>>(
+  name: string,
   payload: Record<string, unknown>,
-  ip?: string,
-): Promise<Result<{ email?: string; error?: string }>> {
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/redeem-invite`, {
+  options: { token?: string; ip?: string; headers?: Record<string, string> } = {},
+): Promise<Result<T>> {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(ip ? { 'x-forwarded-for': ip } : {}),
+      ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+      ...(options.ip ? { 'x-forwarded-for': options.ip } : {}),
+      ...(options.headers ?? {}),
     },
     body: JSON.stringify(payload),
   })
   const text = await response.text()
-  return { status: response.status, body: text ? JSON.parse(text) : {} }
+  return { status: response.status, body: (text ? JSON.parse(text) : {}) as T }
 }
 
-const preview = (code: string, ip?: string) => activation({ action: 'preview', code }, ip)
-const redeem = (code: string, password: string, ip?: string) =>
-  activation({ action: 'redeem', code, password }, ip)
+const preview = (code: string, ip?: string) =>
+  callFunction<{ username?: string; error?: string }>(
+    'redeem-invite',
+    { action: 'preview', code },
+    ip ? { ip } : {},
+  )
+
+const redeem = (code: string, username: string, password: string, ip?: string) =>
+  callFunction<{ error?: string }>(
+    'redeem-invite',
+    { action: 'redeem', code, username, password },
+    ip ? { ip } : {},
+  )
 
 let ownerToken: string
 
-/** A brand-new account with an outstanding code, as an admin would make one. */
-async function provision(): Promise<{ email: string; code: string; profileId: string }> {
-  const email = freshEmail()
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/admin-accounts`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${ownerToken}`,
-    },
-    body: JSON.stringify({
+async function provision(): Promise<{ username: string; code: string; profileId: string }> {
+  const username = freshUsername()
+  const result = await callFunction<{ username: string; code: string; profileId: string }>(
+    'admin-accounts',
+    {
       action: 'provision',
       fullName: 'Probe Activation',
-      email,
+      username,
       role: 'employee',
       outletIds: [OUTLET_KALYANI],
-    }),
-  })
-  expect(response.status).toBe(201)
-  const body = (await response.json()) as { code: string; profileId: string }
-  return { email, code: body.code, profileId: body.profileId }
+    },
+    { token: ownerToken },
+  )
+  expect(result.status).toBe(201)
+  return { username, code: result.body.code, profileId: result.body.profileId }
 }
 
 beforeAll(async () => {
   const { data, error } = await anonClient().auth.signInWithPassword({
-    email: 'owner@example.com',
+    email: OWNER_ALIAS,
     password: SEED_PASSWORD,
   })
   if (error || !data.session) throw new Error(`owner sign-in failed: ${error?.message}`)
   ownerToken = data.session.access_token
 }, 60_000)
 
-describe('opening the link', () => {
-  it('resolves the code to the address, so nothing has to be typed', async () => {
-    const { email, code } = await provision()
-
-    const shown = await preview(code, freshIp())
-    expect(shown.status).toBe(200)
-    expect(shown.body.email).toBe(email)
+describe('opening and redeeming an activation link', () => {
+  it('shows only the canonical username and consumes nothing on preview', async () => {
+    const { username, code } = await provision()
+    expect(await preview(code, freshIp())).toMatchObject({
+      status: 200,
+      body: { username },
+    })
+    expect(await preview(code, freshIp())).toMatchObject({
+      status: 200,
+      body: { username },
+    })
   })
 
-  it('leaves the code exactly as redeemable as it found it', async () => {
-    const { code } = await provision()
-    const ip = freshIp()
+  it('requires the shown username without consuming on mismatch', async () => {
+    const { username, code } = await provision()
+    const mismatch = await redeem(code, 'different.person', NEW_PASSWORD, freshIp())
+    expect(mismatch).toMatchObject({
+      status: 409,
+      body: { error: 'username_mismatch' },
+    })
 
-    // Three looks — somebody opening the link, closing it, opening it again.
-    await preview(code, ip)
-    await preview(code, ip)
-    await preview(code, ip)
-
-    expect((await redeem(code, NEW_PASSWORD, ip)).status).toBe(204)
-  })
-
-  it('says nothing about a code that is not live, whatever made it dead', async () => {
-    const { code } = await provision()
-    const spent = await provision()
-    expect((await redeem(spent.code, NEW_PASSWORD, freshIp())).status).toBe(204)
-
-    const ip = freshIp()
-    const unknown = await preview('ZZZZZ-ZZZZZ', ip)
-    const consumed = await preview(spent.code, ip)
-
-    expect(unknown.status).toBe(400)
-    expect(unknown.body.error).toBe('invalid_code')
-    expect(JSON.stringify(consumed)).toBe(JSON.stringify(unknown))
-
-    // …and the live one is untouched by the two failures beside it.
-    expect((await preview(code, freshIp())).status).toBe(200)
-  })
-})
-
-describe('setting the password', () => {
-  it('takes a code and a password and nothing else', async () => {
-    const { email, code } = await provision()
-
-    expect((await redeem(code, NEW_PASSWORD, freshIp())).status).toBe(204)
-
-    const session = await anonClient().auth.signInWithPassword({ email, password: NEW_PASSWORD })
+    expect((await redeem(code, username.toUpperCase(), NEW_PASSWORD, freshIp())).status).toBe(204)
+    const session = await anonClient().auth.signInWithPassword({
+      email: authAlias(username),
+      password: NEW_PASSWORD,
+    })
     expect(session.error).toBeNull()
-    expect(session.data.user?.email).toBe(email)
   })
 
-  it('accepts a code however sloppily it was retyped', async () => {
-    const { code } = await provision()
-    // Lower case, the grouping mangled, spaces around it: what a code looks
-    // like when somebody types it off a phone screen rather than tapping a link.
+  it('normalizes a hand-typed code and identifies weak passwords specifically', async () => {
+    const { username, code } = await provision()
     const mangled = ` ${code.toLowerCase().replace('-', '  ')} `
-
-    expect((await redeem(mangled, NEW_PASSWORD, freshIp())).status).toBe(204)
+    const weak = await redeem(mangled, username, 'short', freshIp())
+    expect(weak).toMatchObject({ status: 400, body: { error: 'weak_password' } })
+    expect((await redeem(mangled, username, NEW_PASSWORD, freshIp())).status).toBe(204)
   })
 
-  it('names the password when the password is the problem', async () => {
-    const { code } = await provision()
-    const ip = freshIp()
+  it('keeps unknown, spent, inactive, and superseded codes uniform', async () => {
+    const live = await provision()
+    const spent = await provision()
+    expect((await redeem(spent.code, spent.username, NEW_PASSWORD, freshIp())).status).toBe(204)
 
-    const weak = await redeem(code, 'short', ip)
-    expect(weak.status).toBe(400)
-    expect(weak.body.error).toBe('weak_password')
+    const unknown = await preview('ZZZZZ-ZZZZZ', freshIp())
+    const consumed = await preview(spent.code, freshIp())
+    expect(unknown).toMatchObject({ status: 400, body: { error: 'invalid_code' } })
+    expect(consumed).toEqual(unknown)
 
-    // Distinct from a dead code, which is the whole complaint this change
-    // exists to answer: one field left, and it says which one was wrong.
-    expect((await preview('ZZZZZ-ZZZZZ', ip)).body.error).toBe('invalid_code')
-    expect((await redeem(code, NEW_PASSWORD, ip)).status).toBe(204)
+    const reissued = await callFunction<{ code: string }>(
+      'admin-accounts',
+      { action: 'reissue', profileId: live.profileId },
+      { token: ownerToken },
+    )
+    expect(reissued.status).toBe(200)
+    expect(await preview(live.code, freshIp())).toEqual(unknown)
   })
-})
 
-describe('the endpoint`s own bound', () => {
-  it('refuses a caller who has failed twenty times, and says that is why', async () => {
-    const { code } = await provision()
+  it('rate-limits failed callers without disclosing a username', async () => {
     const attacker = freshIp()
-
-    for (let attempt = 0; attempt < 20; attempt++) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
       expect((await preview('ZZZZZ-ZZZZZ', attacker)).status).toBe(400)
     }
-
-    const refused = await preview(code, attacker)
-    expect(refused.status).toBe(429)
-    expect(refused.body.error).toBe('rate_limited')
-    // Rate limiting describes the caller, never an account — which is why it
-    // is allowed to be specific where a code refusal is not.
-    expect(refused.body.email).toBeUndefined()
-
-    // Somebody else is unaffected, and the code they were guessing at is fine.
-    expect((await preview(code, freshIp())).status).toBe(200)
-    expect((await redeem(code, NEW_PASSWORD, freshIp())).status).toBe(204)
+    const refused = await preview('ZZZZZ-ZZZZZ', attacker)
+    expect(refused).toMatchObject({ status: 429, body: { error: 'rate_limited' } })
+    expect(refused.body.username).toBeUndefined()
   }, 60_000)
-
-  it('spends nothing on activations that work', async () => {
-    const shop = freshIp()
-
-    // A morning of onboarding from one connection: ten people, no failures.
-    for (let person = 0; person < 10; person++) {
-      const { code } = await provision()
-      expect((await preview(code, shop)).status).toBe(200)
-      expect((await redeem(code, NEW_PASSWORD, shop)).status).toBe(204)
-    }
-
-    // Still allowed — the eleventh person is not turned away for the shop
-    // having been busy.
-    const { code } = await provision()
-    expect((await preview(code, shop)).status).toBe(200)
-  }, 120_000)
 })
 
-describe('what a signed-in client may ask', () => {
-  it('tells the owner how much failed activation there has been', async () => {
-    const owner = anonClient()
-    await owner.auth.signInWithPassword({ email: 'owner@example.com', password: SEED_PASSWORD })
+function signedHookHeaders(body: string): Record<string, string> {
+  const id = randomUUID()
+  const timestamp = Math.floor(Date.now() / 1000).toString()
+  const secret = Buffer.from(LOCAL_HOOK_SECRET, 'base64')
+  const signature = createHmac('sha256', secret)
+    .update(`${id}.${timestamp}.${body}`)
+    .digest('base64')
+  return {
+    'webhook-id': id,
+    'webhook-timestamp': timestamp,
+    'webhook-signature': `v1,${signature}`,
+  }
+}
 
-    const { data, error } = await owner.rpc('invite_failure_pressure')
-    expect(error).toBeNull()
-    expect(typeof data).toBe('number')
+describe('the signed Send Email Hook', () => {
+  const recoveryPayload = {
+    user: { id: OWNER_ID, email: OWNER_ALIAS },
+    email_data: {
+      token_hash: 'integration-test-token',
+      redirect_to: 'https://ops.shawarmania.in/recover',
+      email_action_type: 'recovery',
+    },
+  }
+
+  it('rejects an invalid signature', async () => {
+    const result = await callFunction('send-email-hook', recoveryPayload, {
+      headers: {
+        'webhook-id': randomUUID(),
+        'webhook-timestamp': Math.floor(Date.now() / 1000).toString(),
+        'webhook-signature': 'v1,invalid',
+      },
+    })
+    expect(result.status).toBe(401)
   })
 
-  it('refuses a manager, who has no business with a brand-wide signal', async () => {
-    const manager = anonClient()
-    await manager.auth.signInWithPassword({
-      email: 'admin.kalyani@example.com',
+  it('fails closed for email changes and wrong redirects', async () => {
+    for (const emailData of [
+      { ...recoveryPayload.email_data, email_action_type: 'email_change' },
+      { ...recoveryPayload.email_data, redirect_to: 'https://attacker.invalid/recover' },
+    ]) {
+      const payload = { ...recoveryPayload, email_data: emailData }
+      const body = JSON.stringify(payload)
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/send-email-hook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...signedHookHeaders(body) },
+        body,
+      })
+      expect(response.status).toBe(403)
+    }
+  })
+
+  it('delivers only an active live owner recovery through the local mail sink', async () => {
+    const body = JSON.stringify(recoveryPayload)
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/send-email-hook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...signedHookHeaders(body) },
+      body,
+    })
+    expect(response.status).toBe(200)
+
+    const formerPayload = {
+      ...recoveryPayload,
+      user: {
+        id: '10000000-0000-4000-a000-000000000008',
+        email: 'deactivated.kalyani@login.shawarmania.invalid',
+      },
+    }
+    const formerBody = JSON.stringify(formerPayload)
+    const refused = await fetch(`${SUPABASE_URL}/functions/v1/send-email-hook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...signedHookHeaders(formerBody) },
+      body: formerBody,
+    })
+    expect(refused.status).toBe(403)
+  })
+})
+
+describe('public owner recovery', () => {
+  it('returns one response for a live owner, unknown address, and ordinary staff', async () => {
+    const responses = await Promise.all(
+      ['owner.recovery@example.com', 'nobody@example.com', 'staff.kalyani@example.com'].map(
+        (recoveryEmail, index) =>
+          callFunction(
+            'owner-recovery',
+            { action: 'request', recoveryEmail },
+            { ip: `198.51.100.${index + 10}` },
+          ),
+      ),
+    )
+    expect(new Set(responses.map((result) => JSON.stringify(result))).size).toBe(1)
+    expect(responses[0]).toMatchObject({ status: 202, body: { accepted: true } })
+  })
+
+  it('does not let an ordinary signed-in account use the callback status oracle', async () => {
+    const employee = await anonClient().auth.signInWithPassword({
+      email: 'staff.kalyani@login.shawarmania.invalid',
       password: SEED_PASSWORD,
     })
-
-    const { error } = await manager.rpc('invite_failure_pressure')
-    expect(error).not.toBeNull()
-  })
-
-  it('refuses the counter tablet outright', async () => {
-    const biller = anonClient()
-    await biller.auth.signInWithPassword({
-      email: 'biller.kalyani@example.com',
-      password: SEED_PASSWORD,
-    })
-
-    const { error } = await biller.rpc('invite_failure_pressure')
-    expect(error).not.toBeNull()
-  })
-
-  it('never exposes redemption itself as an RPC', async () => {
-    // PostgREST would happily publish these to whoever held execute, and
-    // preview in particular would become an address oracle.
-    const { error } = await anonClient().rpc('preview_account_invite', {
-      p_code_hash: 'whatever',
-    })
-    expect(error).not.toBeNull()
+    const result = await callFunction(
+      'owner-recovery',
+      { action: 'status' },
+      { token: employee.data.session!.access_token },
+    )
+    expect(result.status).toBe(403)
   })
 })

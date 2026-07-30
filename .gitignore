@@ -22,6 +22,7 @@ service-role*
 .temp
 supabase/.temp/
 supabase/.branches/
+supabase/.username-migration/
 
 # Real business data — never commit
 *.dump
