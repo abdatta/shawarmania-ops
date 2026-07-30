@@ -53,6 +53,9 @@ jobs:
           BASE_PATH: /
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          # Short-lived #24 rollout valve. It is intentionally a public build
+          # variable, not a secret, and is deleted after username postflight.
+          VITE_AUTH_CUTOVER_MODE: ${{ vars.VITE_AUTH_CUTOVER_MODE }}
         run: npm run build
 
       - uses: actions/configure-pages@v5

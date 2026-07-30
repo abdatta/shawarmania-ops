@@ -67,7 +67,7 @@ export function OwnerRecovery() {
       setState({
         kind: 'accepted',
         message:
-          'If that recovery email belongs to an active owner, a recovery link is on its way.',
+          'If that recovery email belongs to an active Super Admin, a recovery link is on its way.',
       })
     } finally {
       setBusy(false)
@@ -107,14 +107,14 @@ export function OwnerRecovery() {
     <div className="mx-auto max-w-md">
       <Card>
         <CardTitle>
-          {state.kind === 'reset' ? 'Reset owner password' : 'Super Admin recovery'}
+          {state.kind === 'reset' ? 'Reset your password' : 'Super Admin recovery'}
         </CardTitle>
         <CardBody>
           {state.kind === 'request' && (
             <>
               <p className="mb-4 text-sm text-content-muted">
-                This private email recovery is only for an active Super Admin. Staff should ask
-                their Franchise Admin or Super Admin for a new one-time link.
+                Email recovery is only for an active Super Admin. Staff should ask their Franchise
+                Admin or Super Admin for a new one-time link.
               </p>
               <form onSubmit={onRequest} className="space-y-4" noValidate>
                 <div className="space-y-1">

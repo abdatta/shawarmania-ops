@@ -56,13 +56,30 @@ export class ActivationError extends Error {
 
 export const MIN_PASSWORD_LENGTH = 10
 
-export async function signIn(username: string, password: string): Promise<AuthedUser> {
-  const authAlias = usernameToAuthAlias(username)
-  if (!authAlias) {
+/** True only for the explicitly supervised, short-lived production cutover. */
+export function transitionalEmailSignInEnabled(): boolean {
+  return import.meta.env.VITE_AUTH_CUTOVER_MODE === 'email-or-username'
+}
+
+function transitionalEmail(input: string): string | null {
+  const email = input.trim().toLowerCase()
+  if (
+    !transitionalEmailSignInEnabled() ||
+    email.length > 320 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  ) {
+    return null
+  }
+  return email
+}
+
+export async function signIn(identifier: string, password: string): Promise<AuthedUser> {
+  const providerIdentifier = usernameToAuthAlias(identifier) ?? transitionalEmail(identifier)
+  if (!providerIdentifier) {
     throw new SignInError('invalid_credentials', 'That username or password is not right.')
   }
   const { data, error } = await getSupabaseClient().auth.signInWithPassword({
-    email: authAlias,
+    email: providerIdentifier,
     password,
   })
   if (error || !data.user) {
@@ -202,7 +219,7 @@ export async function redeemInvite(
 }
 
 const RECOVERY_ACCEPTED =
-  'If that recovery email belongs to an active owner, a recovery link is on its way.'
+  'If that recovery email belongs to an active Super Admin, a recovery link is on its way.'
 
 export async function requestOwnerRecovery(recoveryEmail: string): Promise<string> {
   // The public response stays identical even when the resolver or provider
@@ -229,10 +246,21 @@ export async function startOwnerRecovery(tokenHash: string): Promise<string> {
 }
 
 export async function finishOwnerRecovery(username: string, password: string): Promise<void> {
-  if (!canonicalUsername(username)) throw activationFailure('username_mismatch')
+  const canonical = canonicalUsername(username)
+  if (!canonical) throw activationFailure('username_mismatch')
   if (password.length < MIN_PASSWORD_LENGTH) throw activationFailure('weak_password')
 
-  const { error } = await getSupabaseClient().auth.updateUser({ password })
+  const client = getSupabaseClient()
+  const { data: status, error: statusError } = await client.functions.invoke<{
+    username?: string
+  }>('owner-recovery', {
+    body: { action: 'status' },
+  })
+  if (statusError || status?.username !== canonical) {
+    throw activationFailure('invalid_code')
+  }
+
+  const { error } = await client.auth.updateUser({ password })
   if (error) {
     throw activationFailure(error.code === 'weak_password' ? 'weak_password' : null)
   }

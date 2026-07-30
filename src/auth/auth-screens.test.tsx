@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { appRoutes } from '@/routes'
 
@@ -40,6 +40,9 @@ const auth = vi.hoisted(() => {
     MIN_PASSWORD_LENGTH: 10,
     SignInError,
     ActivationError,
+    transitionalEmailSignInEnabled: vi.fn(
+      () => import.meta.env.VITE_AUTH_CUTOVER_MODE === 'email-or-username',
+    ),
   }
 })
 
@@ -55,6 +58,10 @@ beforeEach(() => {
   auth.onAuthChange.mockReturnValue(() => {})
   auth.currentUser.mockResolvedValue(null)
   auth.signOut.mockResolvedValue(undefined)
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 describe('sign in', () => {
@@ -116,13 +123,27 @@ describe('sign in', () => {
     expect(auth.signIn).not.toHaveBeenCalled()
   })
 
+  it('accepts a current email only while the supervised cutover switch is enabled', async () => {
+    vi.stubEnv('VITE_AUTH_CUTOVER_MODE', 'email-or-username')
+    const user = userEvent.setup()
+    auth.signIn.mockResolvedValue({ userId: 'u-1', username: null })
+    renderAt('/sign-in')
+
+    await user.type(screen.getByLabelText('Username or current email'), 'Owner@Example.com')
+    expect(screen.getByText(/During the account move/)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Password'), 'a-real-password')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(auth.signIn).toHaveBeenCalledWith('owner@example.com', 'a-real-password')
+  })
+
   it('routes only Super Admins toward private email recovery', () => {
     renderAt('/sign-in')
 
     expect(
       screen.getByText(/Staff should ask a Franchise Admin or Super Admin/),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'recover by private email' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'recover by email' })).toHaveAttribute(
       'href',
       '/recover',
     )
@@ -245,7 +266,7 @@ describe('Super Admin recovery', () => {
   it('always acknowledges a recovery-email request the same way', async () => {
     const user = userEvent.setup()
     auth.requestOwnerRecovery.mockResolvedValue(
-      'If that recovery email belongs to an active owner, a recovery link is on its way.',
+      'If that recovery email belongs to an active Super Admin, a recovery link is on its way.',
     )
     renderAt('/recover')
 
@@ -254,7 +275,7 @@ describe('Super Admin recovery', () => {
 
     expect(auth.requestOwnerRecovery).toHaveBeenCalledWith('owner@example.com')
     expect(await screen.findByTestId('recovery-accepted')).toHaveTextContent(
-      'If that recovery email belongs to an active owner',
+      'If that recovery email belongs to an active Super Admin',
     )
   })
 })
