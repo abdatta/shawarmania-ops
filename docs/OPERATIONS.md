@@ -52,17 +52,17 @@ The frontend is a static SPA — build, upload, done.
 npm run build
 ```
 
-Hosting is **GitHub Pages**, published by `.github/workflows/deploy.yml` on every push to `main`. It needs no third-party account and no DNS work, which is why it is the first-phase choice; Cloudflare Pages or Vercel remain better long-term hosting and are a workflow file plus DNS away.
+Hosting is **GitHub Pages**, published by `.github/workflows/deploy.yml` on every push to `main`. Hostinger holds the `shawarmania.in` DNS zone; the `ops` CNAME points to `abdatta.github.io`, while GitHub Pages terminates TLS and serves the deployment. Cloudflare Pages or Vercel remain later alternatives if the repository becomes private or the hosting requirements outgrow Pages.
 
 One prerequisite, and it is not optional: **the repo is public.** Pages from a private repo requires a paid GitHub plan.
 
 Beyond that the workflow is self-provisioning — `actions/configure-pages` enabled Pages on the first run, so the **Settings → Pages → Source** dropdown never had to be touched. If Pages is ever reset, that step will re-enable it rather than failing.
 
-The site is live at **https://abdatta.github.io/shawarmania-ops/**, served at `https://<owner>.github.io/<repo>/`. Assets are immutable and hashed, so a rollback is re-running the deploy workflow on an earlier commit (`Actions → Deploy to GitHub Pages → Run workflow`).
+The canonical production origin is **https://ops.shawarmania.in/**. GitHub Pages redirects the former `https://abdatta.github.io/shawarmania-ops/` project URL to the custom domain. Assets are immutable and hashed, so a rollback is re-running the deploy workflow on an earlier commit (`Actions → Deploy to GitHub Pages → Run workflow`).
 
 ### The base path
 
-A GitHub Pages project site serves from `/<repo>/`, not from the root, and that sub-path is baked into the build. It is set by the `BASE_PATH` environment variable at build time, defaulting to `/shawarmania-ops/` so that a plain `npm run build` produces a deployable artifact.
+The custom domain serves from `/`, and that path is baked into the production build by `BASE_PATH: /` in the deploy workflow. The Vite configuration still defaults a plain local `npm run build` to `/shawarmania-ops/`; this keeps the sub-path contract exercised by local builds and the E2E suite instead of letting a root-absolute asset regression reach production.
 
 Two consequences worth knowing before touching anything asset-related:
 
@@ -71,13 +71,17 @@ Two consequences worth knowing before touching anything asset-related:
 
 **Changing the base path on an origin that has already served the app orphans the old service worker.** A worker registered at the old scope keeps serving the old shell, and the old shell's router does not recognise the new path — the app loads and then claims every route does not exist, which reads as a routing bug rather than a caching one. If that happens, unregister the worker and clear its caches for that origin. It does not apply to a custom-domain move (the origin changes, so there is no overlapping registration) but it does apply to a repo rename.
 
-### Moving to a custom domain later
+### Custom domain
 
-Set `BASE_PATH: /` in `deploy.yml`, add a `CNAME` file, and point DNS at Pages. No source file changes.
+Three pieces must agree:
 
-To try a root build locally first, use PowerShell (`$env:BASE_PATH="/"; npm run build`). Git Bash on Windows rewrites a bare `/` into a Windows path before Node sees it, and the build silently comes out with a base of `/Program Files/Git/`.
+- `.github/workflows/deploy.yml` builds with `BASE_PATH: /`.
+- `public/CNAME` contains exactly `ops.shawarmania.in`, so every Pages artifact records the intended hostname.
+- Hostinger DNS has a CNAME record for host `ops` targeting `abdatta.github.io`; GitHub Pages has the same custom domain saved and HTTPS enforced.
 
-Note that the origin changes, so **every installed PWA must be reinstalled** — an installed app is bound to its origin. Plan that for a quiet trading period and re-enrol counter tablets deliberately rather than discovering it mid-shift.
+To test the production shape locally, use PowerShell (`$env:BASE_PATH="/"; npm run build`). Git Bash on Windows rewrites a bare `/` into a Windows path before Node sees it, and the build silently comes out with a base of `/Program Files/Git/`.
+
+The 2026-07-30 cutover changed the origin, so **every PWA installed from the old GitHub URL must be reinstalled from `ops.shawarmania.in`** — an installed app is bound to its origin. Re-enrol counter tablets deliberately once device enrolment exists; the current personal-login counter path only needs the app reinstalled.
 
 Privatising the repo at the same time needs a paid GitHub plan for Pages, or a move to different hosting. Worth deciding together with the domain, since both are disruptive in the same window.
 

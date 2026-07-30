@@ -1,6 +1,6 @@
 # Business Context
 
-Facts about Shawarmania that the software has to fit. Sourced from the public site (<https://abdatta.github.io/shawarmania/>) as of 2026-07-25. Treat this page as the record of what the business *is*; when reality and this page disagree, update this page in the same change that acts on the difference.
+Facts about Shawarmania that the software has to fit. Sourced from the public site (<https://shawarmania.in/>) as of 2026-07-25. Treat this page as the record of what the business *is*; when reality and this page disagree, update this page in the same change that acts on the difference.
 
 ## The business
 
