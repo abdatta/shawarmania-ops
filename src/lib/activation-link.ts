@@ -5,9 +5,9 @@
  * code produces the right URL under the GitHub Pages sub-path today and under
  * a custom domain later, with nothing to remember at the cutover.
  *
- * The address is deliberately absent. It would solve nothing the code does not
- * already solve, and would put personal data into browser history, link
- * previews and every proxy in between.
+ * Identity data is deliberately absent. The code already identifies the
+ * account, and the URL should not put a username into browser history, link
+ * previews, or proxies.
  */
 export function activationLink(
   code: string,

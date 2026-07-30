@@ -44,7 +44,7 @@ policy branch and an enum value, drop it rather than growing this change.
 - The Super Admin still cannot create bills. Billing is tied to an enrolled device and a shift; letting the owner ring a sale from their phone would corrupt attribution and cash reconciliation.
 - **Not accounting.** No depreciation, accruals, proper stock valuation, or tax. See `docs/LIMITATIONS.md`.
 - No aggregator commission modelling. Swiggy and Zomato revenue is recorded at order value, which makes it the largest known inaccuracy here; name it on screen rather than absorbing it silently.
-- No scheduled or emailed reports, no BI query builder.
+- No scheduled or automatically delivered reports, no BI query builder.
 
 ## Watch out for
 

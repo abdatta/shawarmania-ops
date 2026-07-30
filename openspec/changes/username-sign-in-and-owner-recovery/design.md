@@ -16,15 +16,21 @@ ever becomes a role claim.
 
 Supabase password authentication accepts an email or phone identifier, not a
 first-class username. The design must bridge that provider constraint without
-making staff invent email, exposing the service-role key, proxying ordinary
-passwords through a custom server, or creating a second user record. It must
-also preserve current user IDs, password hashes, refresh sessions, assignments,
-attendance history, and outstanding invites during cutover.
+making staff invent email, exposing the service-role key, revealing a private
+email-to-username mapping, or creating a second user record. Username sign-in
+can remain direct to Supabase. Email sign-in necessarily crosses one narrow
+credential bridge because the private associated email is not the provider's
+primary identifier; that bridge must still ask Supabase Auth to verify the
+password and mint the normal session. The change must preserve current user
+IDs, password hashes, refresh sessions, assignments, attendance history, and
+outstanding invites during migration.
 
 Super Admin recovery is deliberately different from staff activation and
 admin-issued resets. It is the only flow in this change that sends mail, and it
-must remain available when no second administrator can help. A recovery email
-is private contact data, never the everyday sign-in name.
+must remain available when no second administrator can help. The Super Admin's
+private account email is both a permanent alternate sign-in identifier and the
+self-recovery destination. Another role may gain an associated email later,
+but that alone never grants self-recovery or authority.
 
 The browser-password-manager goal is semantic, not a promise about Chrome UI.
 The page can provide the field names, autocomplete tokens, form submission, and
@@ -36,8 +42,8 @@ incognito mode, and its own heuristics.
 
 ### Goals
 
-- Make an admin-chosen username the only human-facing sign-in identifier for
-  all four roles.
+- Give every human account an admin-chosen username, and let any account with
+  an associated email use either identifier with the same password.
 - Require only name, username, role, and role-appropriate outlet selection to
   create ordinary staff; keep the existing optional facts optional.
 - Keep username syntax small, predictable, case-insensitive, and unique across
@@ -49,16 +55,18 @@ incognito mode, and its own heuristics.
   submitted username/password credential, while never claiming that a save
   prompt is guaranteed.
 - Preserve every existing account and its operational history in place.
-- Keep username, recovery contact, and provider-only aliases off
+- Keep username, account email, and provider-only aliases off
   outlet-readable tables and shared counter devices.
 - Leave a concrete later seam for self-service username and known-password
   changes without building that Settings surface now.
 
 ### Non-Goals
 
-- Email, phone, `@username`, social, passkey, magic-link, or SMS sign-in.
+- Phone, `@username`, social, passkey, magic-link, or SMS sign-in.
 - MFA enrollment or enforcement.
-- A custom password-authentication proxy or custom session format.
+- A custom password verifier, password store, or session format. The narrow
+  email bridge delegates password verification and session minting to
+  Supabase Auth.
 - Self-service username changes or known-password changes.
 - Any change to assignment-derived authority, tenancy policy, role shells,
   offline billing, money storage, business dates, or counter-device enrollment.
@@ -108,11 +116,28 @@ provider plumbing: it is called an **Auth alias** in code and documentation,
 never an email address in the product. It is not copied onto `profiles`,
 fixtures, analytics, or exports.
 
-Ordinary sign-in normalizes and validates the username locally, derives the
-Auth alias, and calls Supabase `signInWithPassword` directly. Passwords
-therefore travel on the existing client-to-Supabase Auth path and never through
-an application Edge Function. The failure remains one uniform “username or
-password” response.
+Username sign-in normalizes and validates the username locally, derives the
+Auth alias, and calls Supabase `signInWithPassword` directly.
+
+Email sign-in cannot reveal the matching alias to the browser: doing so would
+turn the sign-in page into a public email-to-username/account oracle. A public,
+narrowly scoped `email-sign-in` Edge Function therefore:
+
+1. normalizes the submitted email and records only hashed email/IP attempt
+   keys for abuse limits;
+2. privately resolves an active profile's associated email to its current Auth
+   alias;
+3. uses a request-local Supabase client configured with the public anon key to
+   call `signInWithPassword` with that alias and the submitted password;
+4. returns only the Supabase access and refresh tokens on success, and the same
+   invalid-credentials response for an unknown email, wrong password,
+   deactivated profile, malformed input, or exceeded limit.
+
+The browser immediately passes those tokens to Supabase `setSession`. The
+function does not verify passwords, mint tokens, use the service-role client
+for the password grant, log raw credentials/identifiers/tokens, or return the
+alias. Both paths therefore produce the same ordinary Supabase Auth session.
+The product failure remains one uniform “username/email or password” response.
 
 `auth.users.email` is the single source of truth for the current username
 alias. The privileged account function lists and parses aliases for authorized
@@ -134,16 +159,21 @@ Alternatives rejected:
 
 - A public username-to-real-email lookup would be an enumeration surface and
   would retain staff email.
-- A custom Edge Function that accepts every sign-in password would add a
-  sensitive credential-processing layer and a second session-mint path.
+- Returning the Auth alias from a public email resolver would disclose whether
+  an email is associated and expose its username.
+- Making the associated email the Auth primary identifier would remove direct
+  username sign-in because one password identity cannot have two primary email
+  values.
+- Proxying username sign-in as well would expose every password to an
+  unnecessary application hop; only the email path needs the bridge.
 - Mirroring the username onto `profiles` would make colleagues' credentials
   ambient on the future shared counter tablet.
 - Storing both a username row and an Auth alias as equal sources of truth would
   create a cross-system dual-write failure on every rename.
 
-### D3. Recovery email lives in a private Super Admin-only contact table
+### D3. An optional account email lives in a private server-only table
 
-`public.account_recovery_contacts` contains:
+`public.account_emails` contains:
 
 - `profile_id uuid primary key` referencing `profiles(id)`;
 - `email text not null`, normalized to lowercase and bounded in length;
@@ -158,21 +188,25 @@ Functions can read or write it. It never joins an outlet-readable response.
 
 A deferred database constraint checks the completed transaction:
 
-- every person with a live Super Admin assignment has exactly one recovery
-  contact;
-- a person without a live Super Admin assignment has none.
+- every person with a live Super Admin assignment has exactly one account
+  email;
+- a person without a live Super Admin assignment may have zero or one account
+  email.
 
-Provisioning a Super Admin, granting that role, ending its final live
-assignment, and changing another owner's recovery email therefore update the
-assignment and recovery row in one privileged transaction. A direct,
-hand-crafted assignment write cannot create an owner without recovery contact
-or leave former staff carrying owner recovery data.
+Provisioning or granting Super Admin and changing another Super Admin's email
+therefore update the assignment and email row in one privileged transaction. A
+direct, hand-crafted assignment write cannot create a Super Admin without an
+email. Ending the final Super Admin assignment does not erase the email: it
+remains an associated alternate sign-in identifier unless a separately
+authorized account-email operation removes it.
 
-An authorized Super Admin may read and correct another Super Admin's recovery
-email. A Super Admin may see their own recovery email read-only so they can
-verify it, but changing one's own recovery email belongs to the later
-self-service account-settings surface. Franchise Admins, Billers, and Employees
-can neither request nor read recovery contact data.
+An authorized Super Admin may read and correct another Super Admin's account
+email. A Super Admin may see their own email read-only so they can verify it,
+but changing one's own email belongs to the later self-service
+account-settings surface. Franchise Admins, Billers, and Employees can neither
+request nor read account-email data. This change does not expose a way to add
+email to an ordinary role; the generalized row shape is the deliberate seam
+for doing so later without another authentication migration.
 
 ### D4. Provisioning writes one Auth user and one atomic application account
 
@@ -181,23 +215,23 @@ The `admin-accounts` `provision` action accepts:
 - required `fullName`, `username`, `role`, and the role-appropriate
   `outletIds`;
 - optional `phone`, `roleTitle`, and `joinedOn`;
-- required `recoveryEmail` only when `role` is `super_admin`.
+- required `accountEmail` only when `role` is `super_admin`.
 
 The existing authority module re-derives the caller and validates the complete
 outlet set before any write. The function validates the username and recovery
 shape, creates one pre-confirmed Auth user at the derived alias with an unknown
 random password, then calls one database RPC that atomically inserts the
-profile, optional recovery contact, all requested assignments, and the hashed
+profile, optional account email, all requested assignments, and the hashed
 invite. The one-time code is returned only after that transaction commits.
 
 If the database transaction fails, the Edge Function deletes the just-created
 Auth user. A cleanup failure is logged by opaque user ID only and returns an
 operational error; the orphan has no profile, no authority, and cannot pass
 active-account RLS. No request or log includes a password, invite code,
-recovery email, or former staff email.
+account email, or former staff email.
 
-Auth alias collision produces `username_unavailable`. Recovery-contact
-collision produces `recovery_email_unavailable`. Contradictory Super Admin
+Auth alias collision produces `username_unavailable`. Account-email
+collision produces `email_unavailable`. Contradictory Super Admin
 outlets, missing ordinary-role outlets, invalid optional facts, and
 out-of-authority requests remain all-or-nothing refusals.
 
@@ -208,7 +242,7 @@ The current `emails` and `set-email` account actions become `identifiers` and
 
 - the canonical username for every account the caller may manage;
 - the caller's own username;
-- recovery email only where D3 permits it.
+- account email only where D3 permits it.
 
 `set-username` re-derives caller authority, refuses self-change, validates the
 new canonical value, and updates the Auth alias through the Admin API. The
@@ -219,14 +253,14 @@ username fails and the new one works. The outstanding invite remains attached
 to `profile_id`; a later preview shows the current username.
 
 The adapter changes `AccountSummary.email` to `username` and adds a narrowly
-scoped nullable `recoveryEmail` only to the Super Admin management view.
+scoped nullable `accountEmail` only to the Super Admin management view.
 `NewAccount` follows D4. Demo fixtures contain usernames but no simulated
 personal email for ordinary roles.
 
 The People status model removes “placeholder address” and “needs an address.”
 It continues to distinguish deactivated, outstanding activation, no live
 assignment, and ready accounts. A missing/malformed Auth alias is an integrity
-warning for an owner, not a contact-data prompt.
+warning for a Super Admin, not an account-email prompt.
 
 ### D6. Activation previews username and redeems code + username + password
 
@@ -278,13 +312,12 @@ exists. Nothing in this path sends mail.
 
 ### D8. Super Admin self-recovery uses Supabase recovery plus a Send Email Hook
 
-The public recovery form accepts a recovery email and always returns the same
+The public recovery form accepts the Super Admin's account email and always returns the same
 accepted response. A new `owner-recovery` Edge Function:
 
 1. normalizes the address and hashes the client IP;
 2. calls an attempt-limited database function that resolves only an active
-   profile with a live Super Admin assignment and matching private recovery
-   contact;
+   profile with a live Super Admin assignment and matching account email;
 3. derives that user's Auth alias server-side and asks Supabase Auth to begin a
    password recovery to the canonical production callback;
 4. returns the same response whether the address resolved, was rate-limited,
@@ -292,7 +325,7 @@ accepted response. A new `owner-recovery` Edge Function:
 
 The Supabase Send Email Hook verifies its Standard Webhooks signature and
 accepts only a `recovery` action. It re-derives the user's active profile and
-live Super Admin assignment at send time, reads the private recovery contact,
+live Super Admin assignment at send time, reads the private account email,
 and sends the token link there through Resend. It never sends to the hidden
 Auth alias. Every other Auth mail action fails closed, which also prevents
 user-initiated alias changes. Sender DNS, `RESEND_API_KEY`,
@@ -315,8 +348,8 @@ Alternatives rejected:
 
 - Sending custom invite codes directly would require inventing a parallel mail
   token lifecycle and provider retry contract.
-- Making recovery email the Auth primary email would require a public
-  username-to-email password proxy for everyday sign-in.
+- Making account email the Auth primary email would remove direct username
+  sign-in and still leave a dual-identifier problem.
 - Using Supabase SMTP without a hook would send to the non-deliverable Auth
   alias and could not enforce the live-owner check at delivery time.
 
@@ -338,66 +371,71 @@ session, and navigation. A manual Chrome check records whether an ordinary,
 non-incognito profile with password saving enabled offers the prompt, but the
 acceptance gate does not assert browser-owned UI.
 
-### D10. Migration is staged, owner-reviewed, and preserves account identity
+### D10. Migration is supervised, owner-reviewed, and preserves account identity
 
-The schema and application first deploy in a transitional state that can sign
-in with either the current email or a canonical username. This compatibility
-branch is explicitly temporary and is removed before the change is complete.
-No new account can be created with staff email once the transitional release is
-live.
+Email-or-username sign-in is the final account contract, so there is no
+temporary compatibility branch and no later username-only release. Before an
+existing Auth user receives its reserved alias, their current primary email
+continues to work directly with Supabase. After the alias update, that same
+real address continues to work through `email-sign-in` only when it is present
+in `account_emails`. No new ordinary account can be created with email.
 
 An operator-only migration tool uses the service-role key outside the browser:
 
 1. list all Auth users and live assignments;
-2. propose a canonical username from each current address local-part, or from
-   the profile name for a placeholder;
+2. propose a canonical username from profile data without treating the current
+   address as a committed business identifier;
 3. emit a local, access-restricted mapping file and stop on every collision,
-   malformed suggestion, missing profile, or missing live-owner email;
+   malformed suggestion, missing profile, or missing live-Super-Admin email;
 4. require the owner to review and edit every username, then validate the
    complete business-wide namespace before `--apply`;
-5. for each user, retain a real current address as private recovery contact
-   only if the person holds a live Super Admin assignment, update the same Auth
-   user to the derived alias through the Admin API, and leave password,
-   identities, sessions, profile, assignments, attendance, and invites in
-   place;
-6. verify that every Auth user now has a canonical reserved alias, every and
-   only live Super Admin has a recovery contact, no ordinary-role personal or
-   placeholder address remains in live identity/contact data, and every
-   outstanding invite previews the approved username.
+5. for each user, retain a reviewed real current address in private
+   `account_emails` only when explicitly approved (required for every live Super
+   Admin), update the same Auth user to the derived alias through the Admin API,
+   and leave password, identities, sessions, profile, assignments, attendance,
+   and invites in place;
+6. verify that every Auth user now has a canonical reserved alias, every live
+   Super Admin has an account email, every retained account email is explicitly
+   approved, no placeholder address remains in live identity or account-email
+   data, and every outstanding invite previews the approved username.
 
 The tool is idempotent and checkpoints by user ID. It never prints passwords,
-invite hashes/codes, or recovery addresses to CI logs. The reviewed mapping is
+invite hashes/codes, or account emails to CI logs. The reviewed mapping is
 sensitive migration material: it is not committed, is stored only in the
 approved operator location during the rollback window, and is securely removed
 after final verification.
 
-After verification, the final release removes legacy email sign-in, email form
-types and labels, placeholder-address states, and transitional tooling from
-the runtime. Existing open sessions remain usable because authority is read
-from assignments rather than the stale identifier claim in a token.
+The two owner-approved production usernames exist only in this gitignored
+mapping and the production Auth state; source files, fixtures, tests, docs, and
+commit messages never contain them as account mappings. Existing open sessions
+remain usable because authority is read from assignments rather than the stale
+identifier claim in a token.
 
 ### D11. Rollout and rollback have an explicit point of no return
 
 Rollout order:
 
-1. Rehearse the mapping and cutover against a production-shaped local backup.
+1. Rehearse the mapping and migration against a production-shaped local backup.
 2. Configure and test sender DNS, Resend, the signed Send Email Hook, canonical
    callback URL, and recovery rate limits.
-3. Deploy schema/functions plus the transitional sign-in release.
+3. Deploy schema/functions plus permanent email-or-username sign-in.
 4. Generate, owner-review, and apply the production username mapping.
 5. Run account, invite, RLS, and all-role authenticated probes; hand every
    active person their approved username.
 6. Test owner recovery from an unauthenticated phone.
-7. Deploy the final username-only release.
-8. Verify no legacy email acceptance or ordinary-role email data remains, then
-   close the rollback window and destroy the sensitive mapping copy.
+7. Verify username sign-in and associated-email sign-in reach the same account
+   without exposing the private mapping.
+8. Verify no unapproved or placeholder email data remains, then close the
+   rollback window and destroy the sensitive mapping copy.
 
 Before step 8, rollback uses the reviewed mapping to restore Auth addresses via
-the Admin API, removes recovery-contact rows, and returns to the transitional
-email sign-in release. User IDs, hashes, and sessions still are not recreated.
-After the mapping copy is destroyed and ordinary staff email is intentionally
-gone, rollback is forward-only: repair usernames or recovery configuration
-without attempting to resurrect deleted PII.
+the Admin API. Permanent dual-identifier sign-in requires no application
+rollback. The active schema still requires one private account-email row for
+every live Super Admin, so rollback retains those rows; it never recreates an
+ordinary staff email requirement. User IDs, hashes, and sessions still are not
+recreated. After the mapping copy is destroyed and unapproved staff email is
+intentionally gone, rollback is forward-only: repair usernames or email
+association without attempting to resurrect deleted PII.
 
 ## Risks / Trade-offs
 
@@ -409,20 +447,25 @@ without attempting to resurrect deleted PII.
   → Keep Secure Email Change enabled, make the Send Email Hook fail closed for
   `email_change`, and add a real-backend probe proving the old/new alias does
   not change.
-- **[Recovery email becomes high-value PII]** → Store it in a no-client-access
+- **[Account email becomes high-value PII]** → Store it in a no-client-access
   table, never mirror or log it, reveal it only to the owner-management path,
   and re-check role/active state at both request and send/callback.
-- **[Recovery requests can enumerate or harass the owner]** → Uniform public
+- **[Email sign-in or recovery requests can enumerate or harass an account]** → Uniform public
   responses, hashed-IP/address cooldowns, Supabase recovery limits, no
   client-visible resolution result, and monitoring without raw addresses.
 - **[The Send Email Hook is an external availability dependency]** → It affects
   only Super Admin self-recovery; ordinary sign-in and admin-issued reset
   remain local to Supabase and the app. Fail closed and document the owner
   fallback through another Super Admin or an operator.
+- **[Email sign-in passes a password through an application function]** →
+  Keep username sign-in direct; isolate the email bridge per request; use the
+  public anon key for the password grant; return only Supabase tokens; never
+  log or persist the email, password, alias, or tokens; and test uniform
+  failures plus hashed abuse limits.
 - **[Changing Auth aliases one user at a time creates a mixed migration
-  window]** → Deploy temporary dual sign-in first, checkpoint the tool, keep
-  sessions alive, schedule a short supervised cutover, and remove compatibility
-  only after a complete invariant report.
+  window]** → Permanent email-or-username behavior works on both sides of each
+  per-user update, the tool checkpoints by user ID, and existing sessions stay
+  alive.
 - **[Generated migration usernames can surprise staff]** → Suggestions are
   never applied automatically; the owner approves the full mapping and
   resolves every collision before `--apply`.
@@ -439,11 +482,12 @@ without attempting to resurrect deleted PII.
 ## Migration Plan
 
 The detailed operational sequence is D10–D11. Database migrations create the
-private recovery-contact table, deferred Super Admin invariant, invite
-username comparison, recovery attempt ledger/function, and hook permissions in
-the same change. No outlet-scoped table is added; nevertheless, RLS/grant tests
-must prove that anon, Employee, Biller, and Franchise Admin sessions cannot
-read recovery contacts or obtain them through RPCs.
+private account-email table, one-way deferred Super Admin invariant, invite
+username comparison, email-sign-in and recovery attempt ledgers/functions, and
+hook permissions in the same change. No outlet-scoped table is added;
+nevertheless, RLS/grant tests must prove that anon, Employee, Biller, and
+Franchise Admin sessions cannot read account emails or obtain them through
+RPCs.
 
 Generated TypeScript database types are refreshed after schema changes. Demo
 fixtures migrate separately and contain invented usernames only. No production
@@ -451,8 +495,9 @@ email or migration mapping enters source control.
 
 The change is not complete while any of these are true:
 
-- a runtime sign-in path accepts a human email;
-- a non-Super-Admin has a recovery-contact row;
+- an associated email cannot sign in to the same account as its username;
+- an unassociated, inactive, or malformed email produces a distinguishable
+  sign-in response;
 - a Super Admin lacks one;
 - an Auth identity lies outside the reserved alias domain;
 - an activation/reset screen omits username confirmation or password-manager
@@ -467,4 +512,5 @@ outlet-scoped RLS policies are unchanged.
 None. Resend is the selected first transactional provider behind the Supabase
 Send Email Hook; the hook boundary keeps a later provider swap operational
 rather than architectural. The exact production usernames remain owner input
+in the gitignored operator mapping and are not written into repository files.
 to the reviewed migration mapping, not an unresolved product decision.

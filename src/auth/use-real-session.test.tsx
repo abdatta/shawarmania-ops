@@ -64,7 +64,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   auth.onAuthChange.mockReturnValue(() => {})
   auth.signOut.mockResolvedValue(undefined)
-  auth.currentUser.mockResolvedValue({ userId: 'u-1', email: 'admin.kalyani@example.com' })
+  auth.currentUser.mockResolvedValue({ userId: 'u-1', username: 'admin.kalyani' })
   auth.loadOwnProfile.mockResolvedValue(PROFILE)
   auth.loadOwnAssignments.mockResolvedValue([MANAGES_KALYANI])
 })

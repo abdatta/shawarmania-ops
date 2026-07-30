@@ -78,7 +78,15 @@ Demo mode ships to production, because it has to be showable from a deployed URL
 - **A demo session is structurally incapable of writing to real data.** Not discouraged — incapable, in four layers: the demo route tree only ever constructs mock adapters; lint forbids its modules from importing the client or the real adapters; a runtime tripwire makes `getSupabaseClient()` throw while the demo tree is mounted; and two tests fail if a write escapes anyway — a unit test that walks the demo tree with a spied `fetch`, and a Playwright spec that fails on *any* request leaving the app's own origin.
 - **A real signed-in user can never enter demo mode silently.** With a persisted session present, every `/demo/*` URL renders an interstitial naming the signed-in state; continuing is an explicit choice held per-tab (sessionStorage), so it dies with the tab rather than sticking to the account. A biller who wandered into a demo and rang up fake bills would be a genuine operational problem.
 - **The demo indicator is always visible and cannot be dismissed.** The banner strip — "Demo — fabricated data", with the role switcher beside it — is chrome, not state: rendered unconditionally by every demo shell, with no close affordance and no prop that hides it. Leaving `/demo` is the only way to remove it. This protects the business more than the viewer: a screenshot of invented revenue circulating as real trading data is a serious problem in a franchise sales conversation.
-- **Mock data is obviously synthetic.** Invented staff (the four demo personas are literally named Demo Owner, Demo Manager, Demo Biller, Demo Staff), invented customers, plausible-but-fabricated figures. The two real outlets and the real menu are fine — those are public business facts — but no real people, and fixtures carry no phone numbers at all. Every fixture is typed from the generated schema types, so a fixture the database could not serve fails to compile.
+- **Mock data is obviously synthetic.** Invented staff (the four demo personas
+  are literally named Demo Owner, Demo Manager, Demo Biller, Demo Staff),
+  invented usernames, invented customers, plausible-but-fabricated figures.
+  Ordinary demo accounts carry no associated email; only the invented Demo
+  Owner has an invented account email in the mock's
+  privileged account view. The two real outlets and real menu are public
+  business facts, but no real people or phone numbers appear. Every fixture is
+  typed from generated schema-derived types, so a shape the database could not
+  serve fails to compile.
 
 ## What the demo dataset starts with
 
@@ -90,6 +98,9 @@ Worth knowing before running one:
 
 - **Both outlets trade, and deliberately not identically.** Kalyani is busier and carries every awkward state; Kanchrapara turns over roughly half as much, is short of nothing, and closed yesterday exactly. Two outlets of the same shape would make the comparison screen unreadable — a difference is only legible against something that is not different.
 - **Each outlet numbers its own bills from 1**, mirroring the per-outlet sequence the database enforces.
+- **Every demo person has one canonical username.** People creation, correction
+  and activation handover use the same namespace and validation as live mode,
+  but the mock adapter never calls Auth, a mail provider or any real endpoint.
 - **A shift is already open** for Demo Biller at Kalyani, so a walkthrough lands on the counter able to ring a bill. The shift screen is still fully walkable — close it, hand it over, open another. Kanchrapara's shift is closed; no persona stands at that counter.
 - **Alerts point at things you can go and look at.** The open high-priority one is about the pita bread that is genuinely below its threshold; the acknowledged one is about the drawer that genuinely came up short. An alert about a problem that exists nowhere else in the data is a sentence somebody typed.
 - **Start again** in the demo banner puts everything back. It states what it discards first, and it keeps you on the role you are looking at.

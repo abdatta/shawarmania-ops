@@ -50,7 +50,7 @@ const ROLE_ORDER: AppRole[] = ['super_admin', 'franchise_admin', 'biller', 'empl
 interface Draft {
   fullName: string
   username: string
-  recoveryEmail: string
+  accountEmail: string
   phone: string
   role: AppRole
   outletIds: string[]
@@ -75,7 +75,7 @@ export function AccountsSurface() {
     null,
   )
   const [correcting, setCorrecting] = useState<AccountSummary | null>(null)
-  const [recoveryTarget, setRecoveryTarget] = useState<AccountSummary | null>(null)
+  const [emailTarget, setEmailTarget] = useState<AccountSummary | null>(null)
   const [editing, setEditing] = useState<AccountSummary | null>(null)
   const [departing, setDeparting] = useState<AccountSummary | null>(null)
   const [assigning, setAssigning] = useState<AccountSummary | null>(null)
@@ -88,7 +88,7 @@ export function AccountsSurface() {
   const [draft, setDraft] = useState<Draft>({
     fullName: '',
     username: '',
-    recoveryEmail: '',
+    accountEmail: '',
     phone: '',
     role: 'employee',
     outletIds: !isOwner && session.outletId ? [session.outletId] : [],
@@ -196,8 +196,8 @@ export function AccountsSurface() {
       setError(usernameErrorMessage(username.error))
       return
     }
-    if (draft.role === 'super_admin' && !draft.recoveryEmail.trim()) {
-      setError('A Super Admin needs a private recovery email.')
+    if (draft.role === 'super_admin' && !draft.accountEmail.trim()) {
+      setError('A Super Admin needs a private email.')
       return
     }
 
@@ -212,8 +212,7 @@ export function AccountsSurface() {
       const code = await adapter.provision({
         fullName: draft.fullName,
         username: username.username,
-        recoveryEmail:
-          draft.role === 'super_admin' ? draft.recoveryEmail.trim().toLowerCase() : null,
+        accountEmail: draft.role === 'super_admin' ? draft.accountEmail.trim().toLowerCase() : null,
         phone: draft.phone.trim() || null,
         role: draft.role,
         outletIds,
@@ -226,7 +225,7 @@ export function AccountsSurface() {
         ...current,
         fullName: '',
         username: '',
-        recoveryEmail: '',
+        accountEmail: '',
         phone: '',
         outletIds: provisionableOutlets.length === 1 ? [provisionableOutlets[0]!.id] : [],
         roleTitle: '',
@@ -274,12 +273,12 @@ export function AccountsSurface() {
               {row.username}
             </span>
           )}
-          {row.recoveryEmail && (
+          {row.accountEmail && (
             <span
-              data-testid={`recovery-email-${row.id}`}
+              data-testid={`account-email-${row.id}`}
               className="block break-all text-xs text-content-muted"
             >
-              Recovery: {row.recoveryEmail}
+              Email: {row.accountEmail}
             </span>
           )}
         </span>
@@ -366,9 +365,9 @@ export function AccountsSurface() {
                 )
                   ? [
                       {
-                        label: 'Change recovery email',
+                        label: 'Change email',
                         disabled: busy,
-                        onSelect: () => setRecoveryTarget(row),
+                        onSelect: () => setEmailTarget(row),
                       },
                     ]
                   : []),
@@ -549,21 +548,22 @@ export function AccountsSurface() {
           </Field>
 
           {draft.role === 'super_admin' && (
-            <Field label="Recovery email" id="account-recovery-email">
+            <Field label="Email" id="account-email">
               <Input
-                id="account-recovery-email"
-                name="recovery-email"
+                id="account-email"
+                name="account-email"
                 type="email"
                 autoComplete="off"
                 inputMode="email"
                 autoCapitalize="none"
                 spellCheck={false}
                 required
-                value={draft.recoveryEmail}
-                onChange={(event) => setDraft({ ...draft, recoveryEmail: event.target.value })}
+                value={draft.accountEmail}
+                onChange={(event) => setDraft({ ...draft, accountEmail: event.target.value })}
               />
               <p className="text-xs text-content-muted">
-                Private and used only when this Super Admin must recover access.
+                Private. This Super Admin can sign in with either their username or this email, and
+                use it to recover access.
               </p>
             </Field>
           )}
@@ -685,17 +685,17 @@ export function AccountsSurface() {
         }}
       />
 
-      <RecoveryEmailSheet
-        key={recoveryTarget?.id ?? 'no-recovery'}
-        account={recoveryTarget}
+      <AccountEmailSheet
+        key={emailTarget?.id ?? 'no-email'}
+        account={emailTarget}
         busy={busy}
-        onClose={() => setRecoveryTarget(null)}
-        onSubmit={(recoveryEmail) => {
-          const target = recoveryTarget
+        onClose={() => setEmailTarget(null)}
+        onSubmit={(accountEmail) => {
+          const target = emailTarget
           if (!target) return
           void run(async () => {
-            await adapter.setRecoveryEmail(target.id, recoveryEmail)
-            setRecoveryTarget(null)
+            await adapter.setAccountEmail(target.id, accountEmail)
+            setEmailTarget(null)
           })
         }}
       />
@@ -884,7 +884,7 @@ function ChangeUsernameSheet({
  * left of them since multi-outlet-people: who the person is and what they do.
  * Where they work is an assignment, with its own action and its own authority.
  */
-function RecoveryEmailSheet({
+function AccountEmailSheet({
   account,
   busy,
   onClose,
@@ -893,50 +893,51 @@ function RecoveryEmailSheet({
   account: AccountSummary | null
   busy: boolean
   onClose: () => void
-  onSubmit: (recoveryEmail: string) => void
+  onSubmit: (accountEmail: string) => void
 }) {
-  const [recoveryEmail, setRecoveryEmail] = useState(account?.recoveryEmail ?? '')
+  const [accountEmail, setAccountEmail] = useState(account?.accountEmail ?? '')
 
   return (
     <FormSheet
       open={account !== null}
       onClose={onClose}
-      title={account ? `Recovery email for ${account.fullName}` : 'Recovery email'}
+      title={account ? `Email for ${account.fullName}` : 'Email'}
       footer={
         <button
           type="submit"
-          form="change-recovery-email"
-          disabled={busy || recoveryEmail.trim() === ''}
+          form="change-account-email"
+          disabled={busy || accountEmail.trim() === ''}
           className={`${buttonVariants({ size: 'phone' })} w-full`}
         >
-          {busy ? 'Saving…' : 'Save recovery email'}
+          {busy ? 'Saving…' : 'Save email'}
         </button>
       }
     >
       <form
-        id="change-recovery-email"
+        id="change-account-email"
         className="space-y-4"
         noValidate
         onSubmit={(event) => {
           event.preventDefault()
-          onSubmit(recoveryEmail)
+          onSubmit(accountEmail)
         }}
       >
-        <Field label="Private recovery email" id="correct-recovery-email">
+        <Field label="Email" id="correct-account-email">
           <Input
-            id="correct-recovery-email"
-            name="recovery-email"
+            id="correct-account-email"
+            name="account-email"
             type="email"
             inputMode="email"
             autoCapitalize="none"
             spellCheck={false}
             required
-            value={recoveryEmail}
-            onChange={(event) => setRecoveryEmail(event.target.value)}
+            value={accountEmail}
+            onChange={(event) => setAccountEmail(event.target.value)}
           />
         </Field>
         <p className="rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted">
-          Only a Super Admin carries this private contact. It is never the everyday sign-in name.
+          This private email is an alternate sign-in for the same account and the destination for
+          Super Admin self-recovery.
         </p>
       </form>
     </FormSheet>

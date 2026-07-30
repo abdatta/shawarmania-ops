@@ -474,6 +474,16 @@ describe('the People surface', () => {
  * own reason and next step on the list itself.
  */
 describe('the people states', () => {
+  it('shows private account email on the Super Admin fixture only', async () => {
+    renderSurface('super_admin')
+
+    const owner = (await screen.findByText('Demo Owner')).closest('tr')!
+    const ordinary = screen.getByText('Demo Helper').closest('tr')!
+
+    expect(within(owner).getByText('Email: owner.account@example.com')).toBeInTheDocument()
+    expect(within(ordinary).queryByText(/^Email:/)).not.toBeInTheDocument()
+  })
+
   it('shows an ordinary account username and allows an admin to reset its password', async () => {
     const user = userEvent.setup()
     renderSurface('franchise_admin')

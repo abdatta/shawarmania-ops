@@ -5,12 +5,12 @@
 --
 --   <username>@login.shawarmania.invalid
 --
--- The alias is provider plumbing, never contact data. Real email is retained
--- only in account_recovery_contacts, and only while the person holds a live
--- Super Admin assignment.
+-- The alias is provider plumbing, never a person's email. A real email is
+-- retained only in private account_emails when explicitly associated with an
+-- account. Every live Super Admin must have one; another role may have none.
 
 -- ---------------------------------------------------------------------------
--- Canonical username and recovery-address helpers.
+-- Canonical username and account-email helpers.
 
 create or replace function public.app_normalize_username(input text)
 returns text
@@ -58,7 +58,7 @@ begin
 end;
 $$;
 
-create or replace function public.app_normalize_recovery_email(input text)
+create or replace function public.app_normalize_account_email(input text)
 returns text
 language sql
 immutable
@@ -67,15 +67,15 @@ as $$
   select lower(btrim(coalesce(input, '')))
 $$;
 
-create or replace function public.app_recovery_email_valid(input text)
+create or replace function public.app_account_email_valid(input text)
 returns boolean
 language sql
 immutable
 set search_path = ''
 as $$
   select
-    char_length(public.app_normalize_recovery_email(input)) between 3 and 320
-    and public.app_normalize_recovery_email(input)
+    char_length(public.app_normalize_account_email(input)) between 3 and 320
+    and public.app_normalize_account_email(input)
       ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
 $$;
 
@@ -85,59 +85,59 @@ revoke execute on function public.app_username_valid(text)
   from public, anon, authenticated;
 revoke execute on function public.app_username_from_auth_alias(text)
   from public, anon, authenticated;
-revoke execute on function public.app_normalize_recovery_email(text)
+revoke execute on function public.app_normalize_account_email(text)
   from public, anon, authenticated;
-revoke execute on function public.app_recovery_email_valid(text)
+revoke execute on function public.app_account_email_valid(text)
   from public, anon, authenticated;
 grant execute on function public.app_normalize_username(text) to service_role;
 grant execute on function public.app_username_valid(text) to service_role;
 grant execute on function public.app_username_from_auth_alias(text) to service_role;
-grant execute on function public.app_normalize_recovery_email(text) to service_role;
-grant execute on function public.app_recovery_email_valid(text) to service_role;
+grant execute on function public.app_normalize_account_email(text) to service_role;
+grant execute on function public.app_account_email_valid(text) to service_role;
 
 -- ---------------------------------------------------------------------------
--- Private recovery contacts.
+-- Private optional account emails.
 
-create table public.account_recovery_contacts (
+create table public.account_emails (
   profile_id uuid primary key references public.profiles (id) on delete cascade,
   email text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint account_recovery_contacts_email_normalized
-    check (email = public.app_normalize_recovery_email(email)),
-  constraint account_recovery_contacts_email_valid
-    check (public.app_recovery_email_valid(email)),
-  constraint account_recovery_contacts_email_unique unique (email)
+  constraint account_emails_email_normalized
+    check (email = public.app_normalize_account_email(email)),
+  constraint account_emails_email_valid
+    check (public.app_account_email_valid(email)),
+  constraint account_emails_email_unique unique (email)
 );
 
-create trigger account_recovery_contacts_set_updated_at
-  before update on public.account_recovery_contacts
+create trigger account_emails_set_updated_at
+  before update on public.account_emails
   for each row execute function public.set_updated_at();
 
-alter table public.account_recovery_contacts enable row level security;
+alter table public.account_emails enable row level security;
 
 -- No client policy exists. The grant revocation is an independent boundary:
--- a future accidental policy still cannot expose owner contact data.
-revoke all privileges on public.account_recovery_contacts
+-- a future accidental policy still cannot expose private account emails.
+revoke all privileges on public.account_emails
   from public, anon, authenticated;
-grant all privileges on public.account_recovery_contacts to service_role;
+grant all privileges on public.account_emails to service_role;
 
--- Existing live owners retain their current real Auth address as recovery
--- contact. The operator-reviewed cutover later changes the same Auth user to a
+-- Existing live Super Admins retain their current real Auth address as their
+-- account email. The operator-reviewed migration later changes the same Auth user to a
 -- reserved alias without touching this private copy.
-insert into public.account_recovery_contacts (profile_id, email)
-select distinct a.person_id, public.app_normalize_recovery_email(u.email)
+insert into public.account_emails (profile_id, email)
+select distinct a.person_id, public.app_normalize_account_email(u.email)
   from public.assignments a
   join public.profiles p on p.id = a.person_id
   join auth.users u on u.id = a.person_id
  where a.role = 'super_admin'
    and a.ended_on is null
-   and public.app_recovery_email_valid(u.email);
+   and public.app_account_email_valid(u.email);
 
--- The every-and-only invariant is checked after the completed transaction so
--- privileged operations can write assignment plus contact atomically, while a
--- hand-crafted one-sided write still fails at commit.
-create or replace function public.enforce_owner_recovery_contact()
+-- The one-way invariant is checked after the completed transaction so
+-- privileged operations can write assignment plus account email atomically,
+-- while a hand-crafted owner assignment without email still fails at commit.
+create or replace function public.enforce_super_admin_account_email()
 returns trigger
 language plpgsql
 security definer
@@ -146,7 +146,7 @@ as $$
 declare
   v_person uuid;
   v_is_owner boolean;
-  v_has_contact boolean;
+  v_has_account_email boolean;
 begin
   if tg_table_name = 'assignments' then
     v_person := new.person_id;
@@ -164,34 +164,34 @@ begin
 
   select exists (
     select 1
-      from public.account_recovery_contacts c
-     where c.profile_id = v_person
-  ) into v_has_contact;
+      from public.account_emails r
+     where r.profile_id = v_person
+  ) into v_has_account_email;
 
-  if v_is_owner is distinct from v_has_contact then
+  if v_is_owner and not v_has_account_email then
     raise exception
-      'a live super admin assignment and one recovery contact must exist together'
+      'a live super admin assignment requires one account email'
       using errcode = 'check_violation';
   end if;
   return null;
 end;
 $$;
 
-create constraint trigger assignments_owner_recovery_contact
+create constraint trigger assignments_super_admin_account_email
   after insert or update of role, ended_on on public.assignments
   deferrable initially deferred
-  for each row execute function public.enforce_owner_recovery_contact();
+  for each row execute function public.enforce_super_admin_account_email();
 
-create constraint trigger recovery_contact_owner_assignment
-  after insert or update or delete on public.account_recovery_contacts
+create constraint trigger account_email_owner_requirement
+  after insert or update or delete on public.account_emails
   deferrable initially deferred
-  for each row execute function public.enforce_owner_recovery_contact();
+  for each row execute function public.enforce_super_admin_account_email();
 
-revoke execute on function public.enforce_owner_recovery_contact()
+revoke execute on function public.enforce_super_admin_account_email()
   from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
--- Atomic provisioning and owner-contact maintenance.
+-- Atomic provisioning and Super Admin account-email maintenance.
 
 create or replace function public.provision_account_with_invite(
   p_profile_id uuid,
@@ -201,7 +201,7 @@ create or replace function public.provision_account_with_invite(
   p_outlet_ids uuid[],
   p_role_title text,
   p_started_on date,
-  p_recovery_email text,
+  p_account_email text,
   p_issued_by uuid,
   p_code_hash text,
   p_valid_for interval
@@ -215,7 +215,7 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  v_recovery_email text := public.app_normalize_recovery_email(p_recovery_email);
+  v_account_email text := public.app_normalize_account_email(p_account_email);
   v_invite_id uuid;
   v_invite_expires_at timestamptz;
 begin
@@ -225,16 +225,16 @@ begin
 
   if p_role = 'super_admin' then
     if cardinality(p_outlet_ids) <> 0
-       or not public.app_recovery_email_valid(v_recovery_email) then
-      raise exception 'super admin provisioning requires recovery contact and no outlets'
+       or not public.app_account_email_valid(v_account_email) then
+      raise exception 'super admin provisioning requires account email and no outlets'
         using errcode = 'check_violation';
     end if;
   else
     if cardinality(p_outlet_ids) < 1
        or (select count(distinct outlet_id) from unnest(p_outlet_ids) outlet_id)
           <> cardinality(p_outlet_ids)
-       or v_recovery_email <> '' then
-      raise exception 'outlet role provisioning has invalid outlets or recovery contact'
+       or v_account_email <> '' then
+      raise exception 'outlet role provisioning has invalid outlets or account email'
         using errcode = 'check_violation';
     end if;
   end if;
@@ -243,8 +243,8 @@ begin
   values (p_profile_id, p_full_name, p_phone, true, p_role_title);
 
   if p_role = 'super_admin' then
-    insert into public.account_recovery_contacts (profile_id, email)
-    values (p_profile_id, v_recovery_email);
+    insert into public.account_emails (profile_id, email)
+    values (p_profile_id, v_account_email);
 
     insert into public.assignments (person_id, role, outlet_id, started_on)
     values (p_profile_id, p_role, null, coalesce(p_started_on, current_date));
@@ -276,7 +276,7 @@ grant execute on function public.provision_account_with_invite(
   uuid, text, text, public.app_role, uuid[], text, date, text, uuid, text, interval
 ) to service_role;
 
-create or replace function public.set_account_recovery_contact(
+create or replace function public.set_super_admin_account_email(
   p_profile_id uuid,
   p_email text
 )
@@ -285,7 +285,7 @@ language plpgsql
 set search_path = ''
 as $$
 declare
-  v_email text := public.app_normalize_recovery_email(p_email);
+  v_email text := public.app_normalize_account_email(p_email);
 begin
   perform 1
     from public.assignments
@@ -293,23 +293,23 @@ begin
      and role = 'super_admin'
      and ended_on is null
    for update;
-  if not found or not public.app_recovery_email_valid(v_email) then
-    raise exception 'recovery contact requires a live super admin assignment'
+  if not found or not public.app_account_email_valid(v_email) then
+    raise exception 'account email update requires a live super admin assignment'
       using errcode = 'check_violation';
   end if;
 
-  insert into public.account_recovery_contacts (profile_id, email)
+  insert into public.account_emails (profile_id, email)
   values (p_profile_id, v_email)
   on conflict (profile_id) do update set email = excluded.email;
 end;
 $$;
 
-revoke execute on function public.set_account_recovery_contact(uuid, text)
+revoke execute on function public.set_super_admin_account_email(uuid, text)
   from public, anon, authenticated;
-grant execute on function public.set_account_recovery_contact(uuid, text)
+grant execute on function public.set_super_admin_account_email(uuid, text)
   to service_role;
 
--- Granting an owner role writes its recovery contact in the same transaction.
+-- Granting an owner role writes its account email in the same transaction.
 drop function public.grant_assignment_with_invite(
   uuid, public.app_role, uuid, uuid, text, interval
 );
@@ -318,7 +318,7 @@ create function public.grant_assignment_with_invite(
   p_person_id uuid,
   p_role public.app_role,
   p_outlet_id uuid,
-  p_recovery_email text,
+  p_account_email text,
   p_issued_by uuid,
   p_code_hash text,
   p_valid_for interval
@@ -336,7 +336,7 @@ declare
   v_had_invite boolean;
   v_invite_id uuid;
   v_invite_expires_at timestamptz;
-  v_recovery_email text := public.app_normalize_recovery_email(p_recovery_email);
+  v_account_email text := public.app_normalize_account_email(p_account_email);
 begin
   perform 1
     from public.profiles
@@ -347,14 +347,15 @@ begin
   end if;
 
   if p_role = 'super_admin' then
-    if p_outlet_id is not null or not public.app_recovery_email_valid(v_recovery_email) then
-      raise exception 'super admin grant requires recovery contact and no outlet'
+    if p_outlet_id is not null or not public.app_account_email_valid(v_account_email) then
+      raise exception 'super admin grant requires account email and no outlet'
         using errcode = 'check_violation';
     end if;
-    insert into public.account_recovery_contacts (profile_id, email)
-    values (p_person_id, v_recovery_email);
-  elsif v_recovery_email <> '' then
-    raise exception 'ordinary assignment cannot carry recovery contact'
+    insert into public.account_emails (profile_id, email)
+    values (p_person_id, v_account_email)
+    on conflict (profile_id) do update set email = excluded.email;
+  elsif v_account_email <> '' then
+    raise exception 'ordinary assignment cannot carry account email'
       using errcode = 'check_violation';
   end if;
 
@@ -394,8 +395,9 @@ grant execute on function public.grant_assignment_with_invite(
   uuid, public.app_role, uuid, text, uuid, text, interval
 ) to service_role;
 
--- Ending the final live owner assignment removes its private contact after the
--- existing last-owner guard has proved another owner remains.
+-- Ending the final live Super Admin assignment retains its private account
+-- email as a permanent alternate sign-in identifier. The existing last-owner
+-- guard still proves another owner remains before the assignment ends.
 create or replace function public.end_assignment_with_invite(
   p_assignment_id uuid,
   p_issued_by uuid,
@@ -452,10 +454,6 @@ begin
      set ended_on = current_date
    where id = p_assignment_id
      and ended_on is null;
-
-  if v_role = 'super_admin' then
-    delete from public.account_recovery_contacts where profile_id = v_person_id;
-  end if;
 
   if v_had_invite then
     v_invite_id := public.issue_account_invite(
@@ -614,6 +612,89 @@ grant execute on function public.preview_account_invite(text, text) to service_r
 grant execute on function public.redeem_account_invite(text, text, text) to service_role;
 
 -- ---------------------------------------------------------------------------
+-- Enumeration-safe email sign-in resolution and attempt ledger.
+
+create table public.email_sign_in_attempts (
+  id bigint generated always as identity primary key,
+  ip_hash text,
+  email_hash text not null,
+  attempted_at timestamptz not null default now()
+);
+
+create index email_sign_in_attempts_at_idx
+  on public.email_sign_in_attempts (attempted_at desc);
+create index email_sign_in_attempts_email_idx
+  on public.email_sign_in_attempts (email_hash, attempted_at desc);
+
+alter table public.email_sign_in_attempts enable row level security;
+revoke all privileges on public.email_sign_in_attempts
+  from public, anon, authenticated;
+grant all privileges on public.email_sign_in_attempts to service_role;
+
+create or replace function public.resolve_email_sign_in(
+  p_email text,
+  p_ip_hash text,
+  p_window interval default interval '15 minutes',
+  p_per_ip integer default 30,
+  p_per_email integer default 10,
+  p_global integer default 1000
+)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_email text := public.app_normalize_account_email(p_email);
+  v_email_hash text;
+  v_ip_count bigint;
+  v_email_count bigint;
+  v_global_count bigint;
+  v_auth_alias text;
+begin
+  v_email_hash := encode(extensions.digest(v_email, 'sha256'), 'hex');
+
+  delete from public.email_sign_in_attempts
+   where attempted_at <= now() - p_window;
+
+  select count(*),
+         count(*) filter (where p_ip_hash is not null and ip_hash = p_ip_hash),
+         count(*) filter (where email_hash = v_email_hash)
+    into v_global_count, v_ip_count, v_email_count
+    from public.email_sign_in_attempts
+   where attempted_at > now() - p_window;
+
+  insert into public.email_sign_in_attempts (ip_hash, email_hash)
+  values (p_ip_hash, v_email_hash);
+
+  if v_global_count >= p_global
+     or v_ip_count >= p_per_ip
+     or v_email_count >= p_per_email
+     or not public.app_account_email_valid(v_email) then
+    return null;
+  end if;
+
+  select u.email
+    into v_auth_alias
+    from public.account_emails e
+    join public.profiles p on p.id = e.profile_id and p.is_active
+    join auth.users u on u.id = e.profile_id
+   where e.email = v_email
+     and public.app_username_from_auth_alias(u.email) is not null
+   limit 1;
+
+  return v_auth_alias;
+end;
+$$;
+
+revoke execute on function public.resolve_email_sign_in(
+  text, text, interval, integer, integer, integer
+) from public, anon, authenticated;
+grant execute on function public.resolve_email_sign_in(
+  text, text, interval, integer, integer, integer
+) to service_role;
+
+-- ---------------------------------------------------------------------------
 -- Enumeration-safe owner recovery resolution and attempt ledger.
 
 create table public.owner_recovery_attempts (
@@ -647,7 +728,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_email text := public.app_normalize_recovery_email(p_email);
+  v_email text := public.app_normalize_account_email(p_email);
   v_email_hash text;
   v_ip_count bigint;
   v_email_count bigint;
@@ -672,13 +753,13 @@ begin
   if v_global_count >= p_global
      or v_ip_count >= p_per_ip
      or v_email_count >= p_per_email
-     or not public.app_recovery_email_valid(v_email) then
+     or not public.app_account_email_valid(v_email) then
     return null;
   end if;
 
   select c.profile_id
     into v_profile_id
-    from public.account_recovery_contacts c
+    from public.account_emails c
     join public.profiles p on p.id = c.profile_id and p.is_active
    where c.email = v_email
      and exists (
@@ -701,8 +782,10 @@ grant execute on function public.resolve_owner_recovery(
   text, text, interval, integer, integer, integer
 ) to service_role;
 
-comment on table public.account_recovery_contacts is
-  'Private recovery email for every and only live Super Admin. No client role '
-  'has table privileges or an RLS policy.';
+comment on table public.account_emails is
+  'Optional private alternate sign-in email; required for every live Super '
+  'Admin. No client role has table privileges or an RLS policy.';
+comment on table public.email_sign_in_attempts is
+  'Enumeration-safe email sign-in ledger. Stores only hashed IP and email.';
 comment on table public.owner_recovery_attempts is
   'Enumeration-safe owner recovery ledger. Stores only hashed IP and address.';

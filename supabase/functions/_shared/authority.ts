@@ -202,7 +202,7 @@ export function mayManage(caller: Caller, target: TargetAccount): boolean {
  * Does this caller manage anybody at all?
  *
  * Used to refuse an account-management request outright rather than answering
- * it with an empty result. The difference matters for reading email addresses
+ * it with an empty result. The difference matters for reading sign-in identifiers
  * (design D12): a Biller is a *shared counter tablet*, and "you get nothing
  * because nothing matched" is a boundary that merely happens to hold today.
  * "You may not ask" is one that stays held when the matching changes.

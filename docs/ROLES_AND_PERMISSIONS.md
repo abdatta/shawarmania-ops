@@ -112,59 +112,126 @@ Two deliberate asymmetries worth noting. **The Super Admin cannot create bills**
 
 ## Authentication
 
-### Personal smartphones — email + password
+### Human accounts — username or associated email + password
 
-Super Admins, Franchise Admins and Employees sign in with their email address and a password they set themselves.
+Every role signs in with one admin-chosen, business-wide username and a
+password they set themselves. Usernames normalize to lowercase, contain 3–30
+ASCII letters, digits, periods or underscores, and never begin/end with a
+period or contain consecutive periods. They are typed without `@`. If a
+private email is associated with the account, the person may instead use that
+email with the same password.
 
-*(Owner-confirmed 2026-07-26, replacing an earlier phone+password design. Phone sign-in turned out to drag in an SMS-provider dependency even with no OTP flow — the auth service gates password sign-in behind the provider flag — while email carries no external dependency at all: addresses are pre-confirmed at provisioning and no mail is ever sent. Phone numbers remain on profiles as contact data only.)*
+Supabase Auth remains the password/session authority. Because it has no
+first-class username field, the canonical username is encoded internally as
+`<username>@login.shawarmania.invalid`. That reserved Auth alias is
+non-deliverable provider plumbing, never a staff email and never product copy.
+The browser derives it and calls Supabase password Auth directly for username
+sign-in. Associated-email sign-in uses a narrow Edge Function so the private
+email-to-alias mapping never reaches the browser. That function applies hashed
+abuse limits, uses a request-local public-key Supabase client for the password
+grant, and returns only Supabase session tokens; it does not verify, retain, or
+log the password or mint a custom session.
 
-Accounts are **admin-provisioned**: an admin creates the person's record with the email pre-confirmed and selects one role at one or more outlets. The system creates every selected assignment first, then issues one one-time code for the whole account, which the admin passes on (in practice over WhatsApp, which the business already uses). The person redeems it at *Set your password*, and is signed in from there with all of those assignments already live. No SMS provider and no TRAI/DLT registration is involved anywhere, and no mail is ever sent — not even a confirmation.
+Accounts are **admin-provisioned**: an admin enters name, username, role and
+role-appropriate outlets; phone, title and joining date remain optional. Only
+a Super Admin additionally requires a real account email. The system creates
+the profile, every selected assignment, that private Super Admin email when
+applicable, and one invite before it returns the handover. Ordinary creation
+does not collect email, though the private schema permits another role to have
+one later without changing sign-in again.
 
-**The one-time code, as built.** Ten Crockford-base32 characters shown as `XXXXX-XXXXX` (50 bits; the letters I, L, O and U are absent so nothing can be misread). Valid seven days, redeemable once, dead after five wrong attempts, and superseded the instant a replacement is issued — so exactly one code per account is ever live. It is stored only as a hash, in a column no client role can read at all, which is why an admin sees it once and never again. If an assignment is granted or ended before activation, the authority change and a replacement invite happen in one database transaction and the new link is shown immediately; the old link never silently dies. Once the person has activated, assignment changes create no new code. Every way redemption can fail produces one identical response: an unauthenticated endpoint must not become a way to find out which addresses have accounts.
+At *Set your password*, a live code reveals “Your username is …” and the person
+must type that username plus the same new password twice. The form uses
+`autocomplete="username"` and `autocomplete="new-password"` so a conforming
+password manager can associate the submitted pair. Whether Chrome actually
+shows a save prompt remains browser-controlled.
 
-**Sessions are long-lived** — access tokens last an hour and refresh silently, with no inactivity timeout. A delivery employee who opens the app fortnightly should not be re-authenticating, and there is no self-service reset to rescue them if they are. Ending a session early is an administrative act, not a timer: deactivate the account.
+**The one-time code, as built.** Ten Crockford-base32 characters shown as
+`XXXXX-XXXXX` (50 bits; I, L, O and U are absent). It is valid seven days,
+redeemable once, and superseded the instant a replacement is issued, so exactly
+one code per account is live. Only its hash is stored, in a column no client
+role can read. Preview consumes nothing. A mistyped username does not consume
+the code; unknown, expired, spent, superseded and inactive-account codes remain
+indistinguishable. Failed callers are bounded over a rolling window without
+storing raw IP addresses.
 
-**Deactivation bites immediately, and an assignment change needs no new session.** A deactivated account cannot read even its own profile row, because every policy is gated on the active check — and the client uses exactly that as its signal, ending the open session within five minutes (sooner if the tab is returned to) rather than waiting an hour for the token. An assignment granted or ended is different in kind since `multi-outlet-people`: nothing about authority is carried in the token, so the database honours it at the next request and the open client picks it up on the same revalidation cycle. No token is reissued and nobody is signed out for having been moved. The only credential replacement is the visible activation-link replacement described above, and only while an unconsumed invite exists.
+If an assignment is granted or ended before activation, the authority change
+and replacement invite happen in one database transaction and the new link is
+shown immediately. Once the person has activated, assignment changes issue no
+code. A username correction also preserves the outstanding invite because it
+is bound to the Auth user ID rather than identifier text.
 
-Password reset in v1 is admin-initiated: the admin issues a new one-time code. Self-service reset was considered and deliberately not shipped, and neither was changing a password you still know — both are recorded in [`openspec/todos/`](../openspec/todos/README.md). Google sign-in mapped to the same email address is a possible later convenience, not a commitment.
+**Sessions are long-lived** — access tokens last an hour and refresh silently,
+with no inactivity timeout. An Auth-alias rename preserves the current user ID,
+password hash and refresh sessions. Ending a session early is an administrative
+act: deactivate the account.
 
-**Who may provision whom** is re-derived inside the privileged function from the caller's own session, never from the request:
+**Deactivation bites immediately, and an assignment change needs no new
+session.** A deactivated account cannot read even its own profile row; the
+client uses that as its signal and ends the open session. Assignments are read
+from the database on every request, so a grant or ending applies at the next
+request without changing or reissuing a token.
+
+Password recovery has exactly two paths:
+
+- Franchise Admins, Billers and Employees ask an authorized Admin or Super
+  Admin for a new one-time link. An associated email, if one is added later,
+  is not by itself a self-recovery entitlement.
+- A live Super Admin may also request an enumeration-safe recovery message at
+  their required private account email. The public response is identical for
+  a match, unknown email, former owner, rate limit or provider failure. The
+  callback rechecks that the recovery session still belongs to a live owner
+  before allowing the displayed username and matching new passwords.
+
+Changing a password one still knows and self-service username changes remain
+deferred to [Self-Service Account Settings](../openspec/todos/self-service-account-settings.md).
+
+**Who may provision whom** is re-derived inside the privileged function from
+the caller's own session, never from the request:
 
 | | Super Admin | Franchise Admin |
 |---|---|---|
-| Create an account | any role, one or more outlets | Biller / Employee, one or more managed outlets |
+| Create an account | any role; account email required only for Super Admin | Biller / Employee at one or more managed outlets |
 | Issue a new code | any account but their own | own-outlet Billers and Employees |
 | Deactivate / reactivate | any account but their own | own-outlet Billers and Employees |
-| See / correct the sign-in address | any account, plus their own | own-outlet Billers and Employees, plus their own |
+| See / correct username | any managed account, plus own read-only username | own-outlet Billers and Employees, plus own read-only username |
+| See / correct Super Admin account email | own read-only; another Super Admin editable | never |
 
-**The sign-in address is deliberately not a column on `profiles`.** It lives in
-`auth.users`, which no client can read, and reaches an admin surface only
-through the privileged function — which refuses a Biller or an Employee
-outright rather than returning an empty result. The reason is specific:
-`profiles_select` lets a Biller read every profile in their own outlet, and a
-Biller *is a shared counter tablet* that whoever is standing at it can pick up.
-A column there would make every colleague's personal email address ambient on
-that device, permanently, as a side effect of an admin convenience.
+**Username and private account email are deliberately not columns on
+`profiles`.** Usernames are parsed from `auth.users` only at the privileged
+account boundary. Account emails live in a separate no-client-access table.
+The reason is specific: `profiles_select` lets outlet roles see coworkers they
+need operationally, while a future Biller session is a shared counter tablet.
+Neither a colleague's credential nor the owner's inbox should become ambient
+on that device.
 
-Correcting an address does **not** cancel an outstanding one-time code — the
-code is bound to the account, not the address, so it starts working the moment
-the address is right. This matters because a mistyped address is otherwise
-undiagnosable: redemption and sign-in both refuse an unknown address with the
-same uniform message they give a wrong password, so a typo presents as "the
-code is broken" and nothing contradicts it.
+Secure Email Change remains enabled in Auth, but the signed Send Email Hook
+fails closed for `email_change`; a hand-crafted client request therefore cannot
+rewrite the hidden alias. Admin username correction through the service-role
+boundary is the only supported rename path.
 
-Nobody manages their own account. Locking the only Super Admin out has no in-app recovery, and re-issuing your own code is meaningless while you are signed in.
+Nobody manages their own account from People. A Super Admin can see their own
+account email but changing it belongs to the later account-settings surface;
+another Super Admin or an operator is the fallback if that value is wrong.
 
-**Editing a person's staff facts** is a different kind of write and is governed differently. Since `staff-as-accounts` (#21) the person *is* the account: there is no roster table and no link step, and a griller who never touches the app is simply an account on a placeholder address that cannot be signed in with. What is left of the staff facts since `multi-outlet-people` — the name and the job title — is an **ordinary column-scoped write under Row-Level Security**, made by the admin's own session rather than by the privileged function: the column grant plus `profiles_update_staff` allow the Super Admin anyone and a Franchise Admin the people at outlets they manage. Access (active state, the sign-in address) stays reachable only through the privileged function, and placement is an assignment with its own policy. Two rules are enforced by the database, not the form:
+**Editing staff facts** is a different write. Name and job title are ordinary
+column-scoped updates under RLS. Active state and username remain privileged
+account operations, placement is an assignment, and account email is private
+identity configuration.
 
-- `left_on` cannot precede `joined_on`; and
-- **departure and deactivation are independent facts** — marking someone departed does not end their sessions, and deactivating them does not remove them from the staff record. The People surface offers both together at departure so neither is forgotten.
-
-**Deleting a person with recorded history is refused by the database itself**: every foreign key onto `profiles` is NO ACTION (the sole exception is the invite cascade), so the account stays because the days were worked. Remove access by deactivating; remove list membership with a leaving date.
+**Deleting a person with recorded history is refused by the database itself.**
+Historical foreign keys are NO ACTION; only assignment, invite and private
+account-email plumbing cascades. Remove access by deactivating and remove
+placement by ending assignments.
 
 ### Counter tablet — device enrolment + shift PIN
 
-> **Not built yet.** Device enrolment and shift PINs arrive with `counter-devices-and-offline`. In the meantime a Biller signs in on the tablet with their own email and password, which is exactly the arrangement this section argues against — accepted briefly and on purpose, and recorded in [Limitations](LIMITATIONS.md). RLS scopes them to one outlet's billing surfaces either way.
+> **Not built yet.** Device enrolment and shift PINs arrive with
+> `counter-devices-and-offline`. In the meantime a Biller signs in on the
+> tablet with their own username and password — still a personal credential on
+> a shared device, accepted briefly and recorded in
+> [Limitations](LIMITATIONS.md). RLS scopes them to one outlet's billing
+> surfaces either way.
 
 Two layers, because a shared device has a different threat model than a personal one:
 

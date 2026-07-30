@@ -5,7 +5,7 @@ import { clientIpHash } from '../_shared/invite-code.ts'
 
 const ACCEPTED = {
   accepted: true,
-  message: 'If that recovery email belongs to an active owner, a recovery link is on its way.',
+  message: 'If that email is associated with an active Super Admin, a recovery link is on its way.',
 }
 
 function recoveryRedirect(): string {
@@ -13,12 +13,12 @@ function recoveryRedirect(): string {
 }
 
 async function requestRecovery(req: Request, body: Record<string, unknown>): Promise<Response> {
-  const recoveryEmail = str(body['recoveryEmail'])?.toLowerCase()
-  if (!recoveryEmail) return json(ACCEPTED, 202)
+  const accountEmail = str(body['email'])?.toLowerCase()
+  if (!accountEmail) return json(ACCEPTED, 202)
 
   const service = serviceClient()
   const { data: profileId } = await service.rpc('resolve_owner_recovery', {
-    p_email: recoveryEmail,
+    p_email: accountEmail,
     p_ip_hash: await clientIpHash(req),
   })
 

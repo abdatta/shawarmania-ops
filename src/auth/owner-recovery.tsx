@@ -28,7 +28,7 @@ export function OwnerRecovery() {
   const [state, setState] = useState<RecoveryState>(
     tokenHash && recoveryType === 'recovery' ? { kind: 'checking' } : { kind: 'request' },
   )
-  const [recoveryEmail, setRecoveryEmail] = useState('')
+  const [accountEmail, setAccountEmail] = useState('')
   const [typedUsername, setTypedUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
@@ -62,12 +62,12 @@ export function OwnerRecovery() {
     setBusy(true)
     setError(null)
     try {
-      setState({ kind: 'accepted', message: await requestOwnerRecovery(recoveryEmail) })
+      setState({ kind: 'accepted', message: await requestOwnerRecovery(accountEmail) })
     } catch {
       setState({
         kind: 'accepted',
         message:
-          'If that recovery email belongs to an active Super Admin, a recovery link is on its way.',
+          'If that email is associated with an active Super Admin, a recovery link is on its way.',
       })
     } finally {
       setBusy(false)
@@ -119,7 +119,7 @@ export function OwnerRecovery() {
               <form onSubmit={onRequest} className="space-y-4" noValidate>
                 <div className="space-y-1">
                   <label htmlFor="recovery-email" className="block text-sm font-semibold">
-                    Recovery email
+                    Email
                   </label>
                   <Input
                     id="recovery-email"
@@ -130,8 +130,8 @@ export function OwnerRecovery() {
                     autoCapitalize="none"
                     spellCheck={false}
                     required
-                    value={recoveryEmail}
-                    onChange={(event) => setRecoveryEmail(event.target.value)}
+                    value={accountEmail}
+                    onChange={(event) => setAccountEmail(event.target.value)}
                   />
                 </div>
                 <button type="submit" disabled={busy} className={buttonVariants({ size: 'phone' })}>

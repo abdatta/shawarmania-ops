@@ -49,14 +49,14 @@ classified as (
       -- and `app_may_manage_person` — rather than by a column on the row.
       -- Listed by name for the same reason 'tenant-less' is: the next table
       -- with no outlet_id has to be argued for here, not slip through.
-      when tbl in ('profiles', 'account_invites', 'account_recovery_contacts')
+      when tbl in ('profiles', 'account_invites', 'account_emails')
         then 'person-scoped'
       when tbl = 'outlets' then 'tenancy-root'
       -- Tenant-less: belongs to no outlet at all, because the thing it counts
       -- happens before anybody has an outlet. Listed by name rather than
       -- inferred, so the next table with no outlet_id still has to be argued
       -- for here instead of quietly slipping through.
-      when tbl in ('invite_redemption_attempts', 'owner_recovery_attempts')
+      when tbl in ('invite_redemption_attempts', 'email_sign_in_attempts', 'owner_recovery_attempts')
         then 'tenant-less'
     end as class
   from tables

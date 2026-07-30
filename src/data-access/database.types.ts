@@ -34,6 +34,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_emails: {
+        Row: {
+          created_at: string
+          email: string
+          profile_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          profile_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          profile_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_emails_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       account_invites: {
         Row: {
           attempts: number
@@ -80,35 +109,6 @@ export type Database = {
             foreignKeyName: "account_invites_profile_id_fkey"
             columns: ["profile_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      account_recovery_contacts: {
-        Row: {
-          created_at: string
-          email: string
-          profile_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          email: string
-          profile_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          email?: string
-          profile_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "account_recovery_contacts_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -765,6 +765,27 @@ export type Database = {
           },
         ]
       }
+      email_sign_in_attempts: {
+        Row: {
+          attempted_at: string
+          email_hash: string
+          id: number
+          ip_hash: string | null
+        }
+        Insert: {
+          attempted_at?: string
+          email_hash: string
+          id?: never
+          ip_hash?: string | null
+        }
+        Update: {
+          attempted_at?: string
+          email_hash?: string
+          id?: never
+          ip_hash?: string | null
+        }
+        Relationships: []
+      }
       expenses: {
         Row: {
           amount_paise: number
@@ -1197,6 +1218,7 @@ export type Database = {
     }
     Functions: {
       app_account_active: { Args: never; Returns: boolean }
+      app_account_email_valid: { Args: { input: string }; Returns: boolean }
       app_business_date: {
         Args: { cutover: string; ts: string }
         Returns: string
@@ -1216,7 +1238,7 @@ export type Database = {
       app_is_owner: { Args: never; Returns: boolean }
       app_may_manage_person: { Args: { person: string }; Returns: boolean }
       app_may_see_person: { Args: { person: string }; Returns: boolean }
-      app_normalize_recovery_email: { Args: { input: string }; Returns: string }
+      app_normalize_account_email: { Args: { input: string }; Returns: string }
       app_normalize_username: { Args: { input: string }; Returns: string }
       app_outlets_for: {
         Args: { required: Database["public"]["Enums"]["app_role"] }
@@ -1234,7 +1256,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      app_recovery_email_valid: { Args: { input: string }; Returns: boolean }
       app_username_from_auth_alias: { Args: { input: string }; Returns: string }
       app_username_valid: { Args: { input: string }; Returns: boolean }
       close_business_day: {
@@ -1283,11 +1304,11 @@ export type Database = {
       }
       grant_assignment_with_invite: {
         Args: {
+          p_account_email: string
           p_code_hash: string
           p_issued_by: string
           p_outlet_id: string
           p_person_id: string
-          p_recovery_email: string
           p_role: Database["public"]["Enums"]["app_role"]
           p_valid_for: string
         }
@@ -1332,13 +1353,13 @@ export type Database = {
       }
       provision_account_with_invite: {
         Args: {
+          p_account_email: string
           p_code_hash: string
           p_full_name: string
           p_issued_by: string
           p_outlet_ids: string[]
           p_phone: string
           p_profile_id: string
-          p_recovery_email: string
           p_role: Database["public"]["Enums"]["app_role"]
           p_role_title: string
           p_started_on: string
@@ -1361,6 +1382,17 @@ export type Database = {
           user_id: string
         }[]
       }
+      resolve_email_sign_in: {
+        Args: {
+          p_email: string
+          p_global?: number
+          p_ip_hash: string
+          p_per_email?: number
+          p_per_ip?: number
+          p_window?: string
+        }
+        Returns: string
+      }
       resolve_owner_recovery: {
         Args: {
           p_email: string
@@ -1372,7 +1404,7 @@ export type Database = {
         }
         Returns: string
       }
-      set_account_recovery_contact: {
+      set_super_admin_account_email: {
         Args: { p_email: string; p_profile_id: string }
         Returns: undefined
       }

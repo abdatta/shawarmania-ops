@@ -209,8 +209,8 @@ export interface AccountSummary {
    * function. The reserved provider alias is never exposed.
    */
   username: string | null
-  /** Private recovery channel, visible only for authorized Super Admin operations. */
-  recoveryEmail: string | null
+  /** Private alternate identifier, visible only for authorized Super Admin operations. */
+  accountEmail: string | null
   phone: string | null
   isActive: boolean
   /** Free-text job label ("Griller"), distinct from the app-capability role. */
@@ -246,7 +246,7 @@ export interface NewAccount {
   fullName: string
   username: string
   /** Required exactly for `super_admin`; null for every outlet-scoped role. */
-  recoveryEmail?: string | null
+  accountEmail?: string | null
   phone?: string | null
   role: AppRole
   /** Empty exactly for `super_admin`; every scoped role needs one or more. */
@@ -334,7 +334,7 @@ export interface AccountsAdapter {
     personId: string
     role: AppRole
     outletId: string | null
-    recoveryEmail?: string | null
+    accountEmail?: string | null
   }): Promise<IssuedCode | null>
   /**
    * End a placement. Never a delete — the assignment stays, with its end date,
@@ -347,7 +347,7 @@ export interface AccountsAdapter {
    * code survives because it is bound to the account, not the username.
    */
   changeUsername(profileId: string, username: string): Promise<void>
-  setRecoveryEmail(profileId: string, recoveryEmail: string): Promise<void>
+  setAccountEmail(profileId: string, accountEmail: string): Promise<void>
   /**
    * Edit the staff facts — the admin's own session under RLS, not the
    * privileged function. The database refuses a cross-outlet edit, a

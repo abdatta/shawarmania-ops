@@ -121,6 +121,12 @@ verify_jwt = true
 [functions.redeem-invite]
 verify_jwt = false
 
+# Associated-email sign-in is public by definition. It resolves the private
+# email-to-alias mapping server-side, rate-limits hashed attempt keys, and asks
+# Supabase Auth to verify the password with the public anon credential.
+[functions.email-sign-in]
+verify_jwt = false
+
 # The request action is public and enumeration-safe. The callback status action
 # re-derives a live Super Admin from the recovery session inside the function.
 [functions.owner-recovery]

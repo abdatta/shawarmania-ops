@@ -19,6 +19,7 @@ npm run contrast  # WCAG validator over the token file, both themes
 npm run db:start  # bring up the local Supabase stack (Docker)
 npm run db:reset  # apply every migration and the seed to a fresh database
 npm run db:types  # regenerate src/data-access/database.types.ts (CI fails on drift)
+npm run auth:usernames:rehearse # local-only migration, interruption, rollback, forward repair
 ```
 
 `test:db`, `test:rls` and `test:e2e:auth` need the local stack running with the seed applied (`db:start`, then `db:reset`). They are excluded from plain `npm test` so unit feedback stays instant; CI runs them in their own job against a fresh stack.
@@ -37,8 +38,9 @@ npm run db:types  # regenerate src/data-access/database.types.ts (CI fails on dr
 |---|---|---|
 | Domain unit tests | Vitest | Money maths, expected cash, business-date resolution, P&L, geofence distance |
 | Database policy tests | pgTAP (`supabase/tests/`) + REST probes | RLS isolation and the write contract, on every outlet-scoped table |
+| Identity migration/tooling | Vitest + local rehearsal | Canonical namespace, private approval seal, permanent dual sign-in, drift refusal, password/session/history preservation, rollback |
 | Component tests | Vitest + Testing Library | Interactive components, especially the billing surface |
-| End-to-end | Playwright | The critical paths, including offline billing |
+| End-to-end | Playwright | The critical paths, including username activation/recovery and offline billing |
 | Design-system checks | Node scripts | Contrast in both themes; no hex literal outside the brand layer |
 | Architecture boundaries | ESLint | Only `data-access` imports Supabase; `domain` imports nothing |
 
@@ -62,7 +64,12 @@ Pure functions over integer paise, so they are trivially testable and there is n
 
 The most important suite in the repo, because tenancy bugs are silent — nothing errors, a query just quietly returns more than it should.
 
-Two layers, because they prove different halves: pgTAP simulates each persona's claims exactly as PostgREST would present them and sweeps every table exhaustively; the REST probes sign seeded personas in through the real auth service and hand-craft cross-outlet requests over HTTP, proving the deployed stack injects and enforces those claims. Both include positive controls — a suite that passes because a role can read *nothing at all* is a bug the controls catch.
+Two layers, because they prove different halves: pgTAP impersonates each
+database role/user and sweeps every table exhaustively; REST probes sign seeded
+personas in through the real Auth service and hand-craft cross-outlet requests
+over HTTP. Both prove that scope is resolved from live assignments rather than
+token claims, and both include positive controls — a suite that passes because
+a role can read *nothing at all* is a bug the controls catch.
 
 For **every** outlet-scoped table, with sessions for each role:
 
@@ -101,6 +108,15 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
 - **PWA install changes**: check an eligible Chromium browser, iOS Safari's manual instructions, installed display mode, and an ineligible browser. The app-owned action must survive public-to-real navigation, disappear after use, and remain absent in demo mode.
 - **Theme changes**: the contrast validator passes. AA is the floor.
 - **Schema changes**: migrations apply cleanly to a fresh database *and* to a copy with existing data.
+- **Authentication/identity changes**: run username and associated-email sign-in, three-field
+  activation, admin reset, alias-rename/session-survival, hand-crafted
+  email-change refusal, Super Admin recovery, uniform-enumeration and all-role
+  browser paths. A migration release additionally runs the local
+  `auth:usernames:rehearse` sequence and records the production postflight.
+- **Password-manager behavior**: inspect the real forms in a normal Chrome
+  profile with password saving enabled. DOM names/autocomplete tokens,
+  submission and navigation are acceptance evidence; Chrome's optional native
+  save prompt is an observation, never a deterministic gate.
 
 ## Fixtures
 

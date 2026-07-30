@@ -6,9 +6,8 @@ import type { AddressSuggestion } from '@/data-access/adapters'
 /**
  * Type a landmark, pick a place, fill an address.
  *
- * Knows nothing about outlets — it takes a lookup and a callback — because the
- * employee roster carries an address too and this is meant to be adopted there
- * without a rewrite.
+ * Knows nothing about outlets — it takes a lookup and a callback — so its
+ * network, cancellation, and keyboard behavior stay isolated from the form.
  *
  * A real combobox rather than a div with a click handler: this form is filled
  * on a phone by somebody who may well be using a screen reader, and the

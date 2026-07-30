@@ -3,6 +3,7 @@ import { Webhook } from 'https://esm.sh/standardwebhooks@1.0.0'
 import { authAliasToUsername } from '../../../shared/username.ts'
 import { isOwner, loadAccount, serviceClient } from '../_shared/authority.ts'
 import { json } from '../_shared/http.ts'
+import { sendRecoveryEmail } from '../_shared/recovery-mail.ts'
 
 interface SendEmailHookPayload {
   user?: {
@@ -27,53 +28,6 @@ function recoveryLink(tokenHash: string): string {
   link.searchParams.set('token_hash', tokenHash)
   link.searchParams.set('type', 'recovery')
   return link.toString()
-}
-
-function htmlFor(link: string): string {
-  return [
-    '<p>You asked to reset the Shawarmania owner password.</p>',
-    `<p><a href="${link}">Reset owner password</a></p>`,
-    '<p>If you did not ask for this, you can ignore this message.</p>',
-  ].join('')
-}
-
-async function sendRecoveryEmail(to: string, link: string): Promise<boolean> {
-  const resendKey = Deno.env.get('RESEND_API_KEY')
-  if (resendKey) {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: Deno.env.get('RECOVERY_EMAIL_FROM') ?? 'Shawarmania Ops <access@ops.shawarmania.in>',
-        to: [to],
-        subject: 'Reset your Shawarmania owner password',
-        html: htmlFor(link),
-        text: `Reset your Shawarmania owner password: ${link}`,
-      }),
-    })
-    return response.ok
-  }
-
-  // The local Supabase stack includes Mailpit. Its HTTP send API lets the same
-  // signed hook flow reach the test inbox without any real provider or DNS.
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-  if (!supabaseUrl.includes('127.0.0.1') && !supabaseUrl.includes('kong')) return false
-  const response = await fetch('http://inbucket:8025/api/v1/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      From: { Email: 'access@shawarmania.test', Name: 'Shawarmania Ops' },
-      To: [{ Email: to }],
-      Subject: 'Reset your Shawarmania owner password',
-      HTML: htmlFor(link),
-      Text: `Reset your Shawarmania owner password: ${link}`,
-      Tags: ['owner-recovery'],
-    }),
-  })
-  return response.ok
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -122,14 +76,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json({ error: 'mail_action_not_allowed' }, 403)
   }
 
-  const { data: contact, error } = await service
-    .from('account_recovery_contacts')
+  const { data: accountEmail, error } = await service
+    .from('account_emails')
     .select('email')
     .eq('profile_id', profileId)
     .maybeSingle()
-  if (error || !contact?.email) return json({ error: 'mail_action_not_allowed' }, 403)
+  if (error || !accountEmail?.email) return json({ error: 'mail_action_not_allowed' }, 403)
 
-  const sent = await sendRecoveryEmail(contact.email as string, recoveryLink(tokenHash))
+  const sent = await sendRecoveryEmail(accountEmail.email as string, recoveryLink(tokenHash), {
+    resendApiKey: Deno.env.get('RESEND_API_KEY'),
+    recoveryEmailFrom: Deno.env.get('RECOVERY_EMAIL_FROM'),
+    supabaseUrl,
+  })
   if (!sent) return json({ error: 'provider_failed' }, 502)
   return json({}, 200)
 })

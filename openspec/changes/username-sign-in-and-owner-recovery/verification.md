@@ -1,0 +1,146 @@
+# Verification evidence
+
+Evidence is being collected on 2026-07-30 against the local Supabase stack and
+production-shaped fixtures. Production discovery has been read-only; no
+production database or Auth state has been changed.
+
+## Product contract
+
+- Every human account has one canonical username and password.
+- An associated account email is optional by default and required for every
+  live Super Admin. It is private account data, a permanent alternate sign-in
+  identifier, and the destination for Super Admin self-recovery.
+- People does not ask for email when an ordinary Employee, Biller, or Franchise
+  Admin is created. The schema and sign-in boundary nevertheless support an
+  associated email for another role if an authorized flow is added later.
+- Staff recovery remains an admin-issued one-time link. Super Admin recovery is
+  a uniform public email request whose signed mail hook rechecks live Super
+  Admin authority immediately before delivery.
+- The permanent sign-in form accepts username or associated email. There is no
+  temporary cutover mode and no later username-only phase.
+
+## Automated gates
+
+| Gate | Evidence |
+|---|---|
+| `npm run lint` | Passed; one pre-existing attendance fast-refresh warning only |
+| `npm run format:check` | Passed |
+| `npm run typecheck` | Passed |
+| `npm test` | 57 files, 589 tests passed |
+| `npm run contrast` | 50 light/dark token pairs passed |
+| `npm run build` | Passed |
+| `npm run test:e2e` | 160 browser tests passed |
+| `npm run db:reset` | Fresh local reset passed |
+| `npm run test:db` | 596 pgTAP assertions passed |
+| `npm run test:rls` | 121 RLS assertions passed |
+| `npm run test:e2e:auth` | 15 real-backend browser tests passed |
+| `npm run db:types` | Generated declarations refreshed from the reset database |
+| `npm run auth:usernames:rehearse` | Interruption/resume, username and email sign-in to one account, password and refresh-session survival, pending invite, postflight, rollback, forward repair, and private-artifact destruction passed |
+| `npx openspec validate username-sign-in-and-owner-recovery --strict` | Change is valid |
+| `npm run roadmap:sync` | Roadmap already in sync; 0 rows updated |
+
+The signed Send Email Hook tests cover invalid signatures, email-change denial,
+redirect allow-list refusal, active Super Admin delivery, and inactive/former
+Super Admin refusal. Transport unit tests cover provider success, provider
+failure, hosted fail-closed behavior, and local Mailpit delivery. Public
+recovery tests prove the same accepted response for a live Super Admin, unknown
+address, and ordinary staff. Email-sign-in tests prove that an associated email
+and username reach the same account and that unknown-email and wrong-password
+failures are indistinguishable. Database tests prove normalized private lookup
+and separate hashed abuse limits.
+
+## Browser and password-manager contract
+
+- Sign-in uses one `name="username"` field with `autocomplete="username"` and
+  one `name="password"` field with `autocomplete="current-password"`. The label
+  says “Username or email”; no reserved Auth alias is exposed.
+- Activation displays “Your username is …” and asks the person to type that
+  username plus a password and re-typed password. The fields use `username` and
+  `new-password` autocomplete tokens.
+- The recovery request has exactly one Email field and describes the flow as
+  Super Admin self-recovery; staff guidance points to a Franchise Admin or
+  Super Admin.
+- People asks ordinary accounts for name, username, role and outlets, retaining
+  the existing optional profile fields. Selecting Super Admin adds one required
+  Email field.
+
+Chrome owns the save-password prompt and does not expose it to page automation.
+Acceptance therefore uses the standard form semantics plus successful
+navigation. Chrome may offer to save a newly entered password when password
+saving is enabled; the prompt is not guaranteed when saving is disabled,
+managed by policy, or previously declined for the site.
+
+The final in-app browser inspection covered 390×844 and 1024×768 viewports in
+light and dark. Sign-in, activation, recovery, and People had no horizontal
+overflow or console warning/error. The ordinary People form had no Email field;
+selecting Owner added exactly one private Email field and removed outlet/profile
+fields that do not apply to a Super Admin.
+
+## Scoped email sweep
+
+Every retained non-archive `email` mention must fit one of these reviewed
+classes:
+
+1. **Optional private account email** — durable documentation, the active
+   change, the privileged People response, typed adapters, private schema, and
+   their tests. It is required only by the live Super Admin invariant.
+2. **Associated-email sign-in or Super Admin self-recovery** — the narrow
+   public Edge Functions, uniform UI copy, signed recovery hook, and abuse
+   controls.
+3. **Provider/Auth plumbing** — the non-deliverable reserved Auth alias,
+   Supabase hook configuration, Resend/Mailpit transport, environment names,
+   and security tests. No reserved alias is rendered or returned as a person's
+   email.
+4. **Migration or historical baseline** — immutable database migrations,
+   migration/rehearsal scripts, rollback wording, and the current main
+   `identity-and-access` baseline that the delta replaces during sync/archive.
+
+No live or future ordinary-account flow requires email. Archived changes are
+excluded and remain byte-for-byte untouched.
+
+## Production-data boundary
+
+The approved production usernames exist only in
+`supabase/.username-migration/mapping.json`, beneath a gitignored,
+operator-private directory. A tracked-diff scan for both approved values
+returns no match. The values are not copied into a proposal, task, test,
+fixture, seed, command transcript, or verification artifact.
+
+The production migration will read that ignored mapping and run through
+`npx supabase`; it will not add a production-data file to the repository.
+Postflight is forward repair only. After the rollback/repair decision is closed,
+the operator destroys the local mapping and any private copies.
+
+## Production rollout gate
+
+Read-only discovery found two live Super Admin accounts, both still using their
+legacy Auth emails, with no username aliases or #24 schema. The repository
+change defines one supervised in-place data migration; that is rollout work,
+not a temporary authentication phase. The final application permanently
+supports both username and associated-email sign-in.
+
+Before production rollout can complete, the operator must:
+
+1. regenerate and seal the ignored mapping with both approved usernames and
+   explicitly approved account emails;
+2. configure a verified sender plus `RESEND_API_KEY`,
+   `SEND_EMAIL_HOOK_SECRET`, `RECOVERY_EMAIL_FROM`, and
+   `OWNER_RECOVERY_REDIRECT_URL`;
+3. deploy the schema and five Edge Functions;
+4. apply the ignored mapping, run postflight, and verify both sign-in
+   identifiers reach each account;
+5. run one supervised Super Admin recovery, then perform only read-only
+   production verification.
+
+The final prerequisite check will be repeated immediately before rollout.
+
+### Earlier access-repair deployment
+
+Production commit `45394b2` briefly served a username-only checkpoint while the
+two live Auth users still had legacy email identifiers. Commit `c2b283c`
+restored access through a temporary static compatibility build without changing
+production Auth or database state.
+
+This change removes that build-time branch. Once the permanent dual-sign-in
+implementation is deployed, the temporary GitHub variable is inert and will be
+deleted.

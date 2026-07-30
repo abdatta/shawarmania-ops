@@ -6,20 +6,20 @@ import { expect, test } from '@playwright/test'
  * Activation itself has no demo counterpart — demo mode is authentication-free
  * by design, which is exactly what lets it exist without a backend. What IS
  * demonstrable is the half an admin performs: provisioning somebody and being
- * handed a link, a scannable code and the code itself.
+ * handed a link and a scannable code.
  *
  * That handover is worth a walk of its own for one reason: the QR. A code
  * fetched from an image service would work perfectly, look identical, and
  * quietly break the guarantee the whole demo tree rests on — while handing a
  * live bearer credential to a third party on the way to the screen.
  */
-test('an admin is handed a link, a scannable code, and the code itself', async ({ page }) => {
+test('an admin is handed one username-only activation link', async ({ page }) => {
   await page.goto('demo/owner/people')
   await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Add person' }).click()
   await page.getByLabel('Full name').fill('Demo Fresh Hire')
-  await page.getByLabel('Email', { exact: true }).fill('demo.fresh.hire@example.com')
+  await page.getByLabel('Username', { exact: true }).fill('demo.fresh.hire')
   await page.getByRole('checkbox', { name: 'Shawarmania Kalyani' }).check()
   await page.getByRole('checkbox', { name: 'Shawarmania Kanchrapara' }).check()
   await expect(page.getByLabel('Staff code')).toHaveCount(0)
@@ -32,14 +32,14 @@ test('an admin is handed a link, a scannable code, and the code itself', async (
   const code = new URL(link).searchParams.get('code')!
 
   expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
-  // The address is on the panel for the admin to check, and never in the URL.
+  // The username is on the panel for the admin to check, never in the URL.
   expect(link).not.toContain('@')
 
   // One handover. The code lives inside the URL and is deliberately not
   // printed beside it as a second thing somebody could send instead.
   await expect(panel.getByTestId('issued-code-value')).toHaveCount(0)
   await expect(panel.getByRole('button', { name: 'Copy code' })).toHaveCount(0)
-  await expect(panel.getByTestId('issued-code-email')).toContainText('demo.fresh.hire@example.com')
+  await expect(panel.getByTestId('issued-code-username')).toContainText('demo.fresh.hire')
 
   // Drawn in the page, from real modules — not an <img> pointed somewhere.
   const qr = panel.getByRole('img', { name: /Demo Fresh Hire/ })
@@ -64,7 +64,7 @@ test('producing the handover leaves the app origin alone', async ({ page, baseUR
   await page.goto('demo/owner/people')
   await page.getByRole('button', { name: 'Add person' }).click()
   await page.getByLabel('Full name').fill('Demo Second Starter')
-  await page.getByLabel('Email', { exact: true }).fill('demo.second.starter@example.com')
+  await page.getByLabel('Username', { exact: true }).fill('demo.second.starter')
   await page.getByRole('checkbox', { name: 'Shawarmania Kalyani' }).check()
   await page.getByRole('checkbox', { name: 'Shawarmania Kanchrapara' }).check()
   await expect(page.getByLabel('Staff code')).toHaveCount(0)

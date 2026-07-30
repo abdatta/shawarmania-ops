@@ -144,7 +144,7 @@ test.describe('with a persisted real session', () => {
       id: '10000000-0000-4000-a000-000000000001',
       aud: 'authenticated',
       role: 'authenticated',
-      email: 'owner@example.com',
+      email: 'owner@login.shawarmania.invalid',
       app_metadata: { provider: 'email', providers: ['email'] },
       user_metadata: {},
       created_at: '2026-07-26T00:00:00Z',

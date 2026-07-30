@@ -75,7 +75,7 @@ async function provision(
   const fullName = str(body['fullName'])
   const username = canonicalUsername(str(body['username']) ?? '')
   const authAlias = usernameToAuthAlias(username ?? '')
-  const recoveryEmail = str(body['recoveryEmail'])?.toLowerCase() ?? null
+  const accountEmail = str(body['accountEmail'])?.toLowerCase() ?? null
   const phone = str(body['phone']) ?? null
   const role = str(body['role']) as AppRole | undefined
   const rawOutletIds = body['outletIds']
@@ -100,8 +100,8 @@ async function provision(
     return json({ error: 'forbidden' }, 403)
   }
   if (
-    (role === 'super_admin' && recoveryEmail === null) ||
-    (role !== 'super_admin' && recoveryEmail !== null)
+    (role === 'super_admin' && accountEmail === null) ||
+    (role !== 'super_admin' && accountEmail !== null)
   ) {
     return json({ error: 'invalid_request' }, 400)
   }
@@ -127,7 +127,7 @@ async function provision(
       p_outlet_ids: requestedOutletIds,
       p_role_title: roleTitle,
       p_started_on: startedOn,
-      p_recovery_email: recoveryEmail,
+      p_account_email: accountEmail,
       p_issued_by: caller.id,
       p_code_hash: await hashCode(normaliseCode(code)),
       p_valid_for: INVITE_VALID_FOR,
@@ -137,14 +137,14 @@ async function provision(
   if (provisionError) {
     const { error: cleanupError } = await service.auth.admin.deleteUser(created.user.id)
     if (cleanupError) {
-      // Opaque user id only: no username, contact, invite, or password belongs
+      // Opaque user id only: no username, personal email, invite, or password belongs
       // in logs.
       console.error('auth cleanup failed after account transaction', created.user.id)
       return json({ error: 'cleanup_failed' }, 500)
     }
     const detail = `${provisionError.message} ${provisionError.details ?? ''}`
-    if (provisionError.code === '23505' && detail.includes('recovery')) {
-      return json({ error: 'recovery_email_unavailable' }, 409)
+    if (provisionError.code === '23505' && detail.includes('email')) {
+      return json({ error: 'email_unavailable' }, 409)
     }
     return json({ error: 'account_rejected' }, 400)
   }
@@ -209,8 +209,8 @@ async function setActive(
 }
 
 /**
- * Usernames are parsed from Auth aliases before returning. Recovery contact is
- * included only for an owner looking at an owner (their own contact remains
+ * Usernames are parsed from Auth aliases before returning. Account email is
+ * included only for a Super Admin looking at a Super Admin (their own email remains
  * read-only here); no outlet-scoped role can receive it.
  */
 async function identifiers(service: SupabaseClient, caller: Caller): Promise<Response> {
@@ -220,18 +220,18 @@ async function identifiers(service: SupabaseClient, caller: Caller): Promise<Res
   if (error) return json({ error: 'lookup_failed' }, 500)
   if (data.users.length >= 1000) return json({ error: 'too_many_accounts' }, 500)
 
-  const recoveryContacts = new Map<string, string>()
+  const accountEmails = new Map<string, string>()
   if (isOwner(caller)) {
-    const { data: contacts, error: contactError } = await service
-      .from('account_recovery_contacts')
+    const { data: rows, error: accountEmailError } = await service
+      .from('account_emails')
       .select('profile_id, email')
-    if (contactError) return json({ error: 'lookup_failed' }, 500)
-    for (const contact of contacts ?? []) {
-      recoveryContacts.set(contact.profile_id as string, contact.email as string)
+    if (accountEmailError) return json({ error: 'lookup_failed' }, 500)
+    for (const row of rows ?? []) {
+      accountEmails.set(row.profile_id as string, row.email as string)
     }
   }
 
-  const visible: Record<string, { username: string; recoveryEmail: string | null }> = {}
+  const visible: Record<string, { username: string; accountEmail: string | null }> = {}
   for (const user of data.users) {
     const username = authAliasToUsername(user.email)
     if (!username) continue
@@ -239,7 +239,7 @@ async function identifiers(service: SupabaseClient, caller: Caller): Promise<Res
     if (user.id === caller.id) {
       visible[user.id] = {
         username,
-        recoveryEmail: recoveryContacts.get(user.id) ?? null,
+        accountEmail: accountEmails.get(user.id) ?? null,
       }
       continue
     }
@@ -248,8 +248,8 @@ async function identifiers(service: SupabaseClient, caller: Caller): Promise<Res
     if (!target || !mayManage(caller, target)) continue
     visible[user.id] = {
       username,
-      recoveryEmail:
-        isOwner(caller) && isOwner(target) ? (recoveryContacts.get(user.id) ?? null) : null,
+      accountEmail:
+        isOwner(caller) && isOwner(target) ? (accountEmails.get(user.id) ?? null) : null,
     }
   }
 
@@ -281,14 +281,14 @@ async function setUsername(
   return json({ profileId: target.id, username }, 200)
 }
 
-async function setRecoveryEmail(
+async function setAccountEmail(
   service: SupabaseClient,
   caller: Caller,
   body: Record<string, unknown>,
 ): Promise<Response> {
   const profileId = str(body['profileId'])
-  const recoveryEmail = str(body['recoveryEmail'])?.toLowerCase()
-  if (!profileId || !recoveryEmail) return json({ error: 'invalid_request' }, 400)
+  const accountEmail = str(body['accountEmail'])?.toLowerCase()
+  if (!profileId || !accountEmail) return json({ error: 'invalid_request' }, 400)
   if (!isOwner(caller)) return json({ error: 'forbidden' }, 403)
   if (profileId === caller.id) return json({ error: 'self_change_forbidden' }, 403)
 
@@ -298,15 +298,15 @@ async function setRecoveryEmail(
     return json({ error: 'forbidden' }, 403)
   }
 
-  const { error } = await service.rpc('set_account_recovery_contact', {
+  const { error } = await service.rpc('set_super_admin_account_email', {
     p_profile_id: profileId,
-    p_email: recoveryEmail,
+    p_email: accountEmail,
   })
   if (error?.code === '23505') {
-    return json({ error: 'recovery_email_unavailable' }, 409)
+    return json({ error: 'email_unavailable' }, 409)
   }
   if (error) return json({ error: 'invalid_request' }, 400)
-  return json({ profileId, recoveryEmail }, 200)
+  return json({ profileId, accountEmail }, 200)
 }
 
 async function assign(
@@ -317,13 +317,13 @@ async function assign(
   const personId = str(body['personId'])
   const role = str(body['role']) as AppRole | undefined
   const outletId = str(body['outletId']) ?? null
-  const recoveryEmail = str(body['recoveryEmail'])?.toLowerCase() ?? null
+  const accountEmail = str(body['accountEmail'])?.toLowerCase() ?? null
   if (!personId || !role || !APP_ROLES.includes(role)) {
     return json({ error: 'invalid_request' }, 400)
   }
   if (
-    (role === 'super_admin' && recoveryEmail === null) ||
-    (role !== 'super_admin' && recoveryEmail !== null)
+    (role === 'super_admin' && accountEmail === null) ||
+    (role !== 'super_admin' && accountEmail !== null)
   ) {
     return json({ error: 'invalid_request' }, 400)
   }
@@ -339,13 +339,13 @@ async function assign(
     p_person_id: personId,
     p_role: role,
     p_outlet_id: outletId,
-    p_recovery_email: recoveryEmail,
+    p_account_email: accountEmail,
     p_issued_by: caller.id,
     p_code_hash: await hashCode(normaliseCode(code)),
     p_valid_for: INVITE_VALID_FOR,
   })
-  if (error?.code === '23505' && `${error.message} ${error.details ?? ''}`.includes('recovery')) {
-    return json({ error: 'recovery_email_unavailable' }, 409)
+  if (error?.code === '23505' && `${error.message} ${error.details ?? ''}`.includes('email')) {
+    return json({ error: 'email_unavailable' }, 409)
   }
   if (error?.code === '23505') return json({ error: 'already_assigned' }, 409)
   if (error) return json({ error: 'assignment_rejected' }, 400)
@@ -472,8 +472,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return await identifiers(service, caller)
     case 'set-username':
       return await setUsername(service, caller, body)
-    case 'set-recovery-email':
-      return await setRecoveryEmail(service, caller, body)
+    case 'set-account-email':
+      return await setAccountEmail(service, caller, body)
     case 'assign':
       return await assign(service, caller, body)
     case 'end-assignment':

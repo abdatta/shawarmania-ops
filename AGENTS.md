@@ -73,12 +73,13 @@ Rationale for each of these choices is recorded in [Architecture](docs/ARCHITECT
 
 Two device contexts, deliberately different:
 
-- **Personal smartphones** (Super Admin, Franchise Admin, Employee): email + password, admin-provisioned with the address pre-confirmed. No SMS provider, no TRAI/DLT registration, no confirmation mail. (Owner-confirmed 2026-07-26; phone numbers are contact data, not credentials.) **Built.**
-- **Counter tablet** (Biller): the *device* is enrolled once and holds a long-lived session scoped by RLS to exactly one outlet. Billers then unlock a shift with a short PIN, which selects attribution — it is not the security boundary. **Not built** — arrives with `counter-devices-and-offline`; until then a Biller signs in with their own email, which is recorded in [Limitations](docs/LIMITATIONS.md).
+- **Personal human accounts** (all four roles until shared counter-device enrollment): an admin-chosen, business-wide username plus password. An account with a private associated email may use either identifier with the same password. Supabase stores the username as a reserved non-deliverable Auth alias; it is provider plumbing, never contact data. Phone numbers remain optional contact facts, not credentials. **Built.**
+- **Counter tablet** (Biller): the *device* is enrolled once and holds a long-lived session scoped by RLS to exactly one outlet. Billers then unlock a shift with a short PIN, which selects attribution — it is not the security boundary. **Not built** — arrives with `counter-devices-and-offline`; until then a Biller signs in with their own username and password, which is recorded in [Limitations](docs/LIMITATIONS.md).
 
 Three rules that follow, and that a change touching auth must not quietly undo:
 
-- **Accounts are admin-provisioned with a one-time code, handed over by hand.** Nothing is ever emailed or texted. The code is stored only as a hash, in a column no client role can read — so it is shown to the issuing admin once and is genuinely unrecoverable afterwards. Every way redeeming it can fail returns one identical response.
+- **Accounts are admin-provisioned with a username and one-time code, handed over by hand.** Activation and staff reset are never emailed or texted by the app. The code is stored only as a hash, in a column no client role can read — so it is shown to the issuing admin once and is genuinely unrecoverable afterwards. Every code-related failure returns one identical response; a username mismatch does not consume the code.
+- **Every live Super Admin has a private account email.** It is a permanent alternate sign-in identifier and the destination for enumeration-safe self-recovery (and future security messages). Another role may receive an associated email later without changing authentication, but ordinary account creation does not collect one; Franchise Admins, Billers, and Employees recover through a fresh admin-issued one-time link.
 - **Privileged account operations re-derive the caller's authority from their own token**, never from the request body. Being an Edge Function is not authorisation.
 - **Deactivation is immediate at the database, and the client must not lag it.** A deactivated account cannot read its own profile row; that is the signal an open app uses to end its session rather than waiting out the token.
 

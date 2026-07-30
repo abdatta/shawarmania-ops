@@ -10,11 +10,6 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL?: string
   /** Public anon key. The service-role key never appears in client config. */
   readonly VITE_SUPABASE_ANON_KEY?: string
-  /**
-   * Supervised #24 cutover switch. The only accepted enabled value is
-   * `email-or-username`; it is removed after production postflight.
-   */
-  readonly VITE_AUTH_CUTOVER_MODE?: string
 }
 
 interface ImportMeta {

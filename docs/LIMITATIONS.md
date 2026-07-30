@@ -108,15 +108,27 @@ Supported, but shift overlaps are flagged for a human rather than resolved autom
 
 ## Operational gaps
 
-### No self-service password reset
+### Staff recovery still requires an administrator
 
-Resets are admin-initiated: an admin regenerates a one-time code and passes it on. Self-service reset by email is possible in principle (email is the sign-in identifier) but `auth-and-roles` decided against it for v1. Acceptable at current headcount; annoying at fifty staff across ten franchises.
+Franchise Admins, Billers and Employees intentionally have no self-service
+email recovery. An associated email may become an alternate sign-in later, but
+an authorized Admin or Super Admin still regenerates a one-time link and hands
+it over. Only a Super Admin can self-recover by private email, because locking out
+the only business-wide administrator cannot depend on another administrator
+being reachable.
 
-There is also **no way to change a password you still know** from inside the app — the same admin-issued code is the only route. Both are recorded in [`openspec/todos/`](../openspec/todos/README.md) as decisions rather than omissions.
+There is also **no screen for changing a password one still knows, requesting
+a username change, or changing one's own Super Admin account email**. Those
+belong to [Self-Service Account Settings](../openspec/todos/self-service-account-settings.md);
+until then another authorized admin performs supported corrections.
 
-### Billers sign in with an email address, for now
+### Billers use a personal username session, for now
 
-The counter tablet is meant to hold a *device* credential with a shift PIN selecting attribution — that design is in [Roles And Permissions](ROLES_AND_PERMISSIONS.md) and arrives with `counter-devices-and-offline`. Until it does, a Biller signs in on the tablet with a personal email and password like everyone else.
+The counter tablet is meant to hold a *device* credential with a shift PIN
+selecting attribution — that design is in
+[Roles And Permissions](ROLES_AND_PERMISSIONS.md) and arrives with
+`counter-devices-and-offline`. Until it does, a Biller signs in on the tablet
+with their personal username and password.
 
 This is exactly the arrangement that document argues against: a shared device holding a personal credential gets left signed in, and the password gets typed on a greasy counter screen in front of whoever is standing there. It is accepted deliberately and briefly, because the alternative was to leave one of the four roles unable to sign in at all. The exposure is bounded by RLS to that one outlet's billing surfaces, which is the same scope enrolment will give the device anyway.
 

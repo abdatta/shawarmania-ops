@@ -74,8 +74,8 @@ const MESSAGES: Record<string, string> = {
   last_super_admin: 'There has to be an owner. Appoint another one before removing this.',
   assignment_rejected: 'That role and outlet do not go together.',
   username_unavailable: 'That username is already in use.',
-  recovery_email_unavailable: 'That recovery email is already used by another owner.',
-  self_change_forbidden: 'You cannot change your own username or recovery email here.',
+  email_unavailable: 'That email is already associated with another account.',
+  self_change_forbidden: 'You cannot change your own username or email here.',
   too_many_accounts: 'There are more accounts than this screen can list. Tell somebody.',
   invalid_request: 'Something in that form was missing or malformed.',
   not_found: 'That account no longer exists.',
@@ -101,13 +101,13 @@ async function callAdmin<T>(
 export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>): AccountsAdapter {
   const toSummary = (
     profile: ProfileRow,
-    identifier: { username: string; recoveryEmail: string | null } | null,
+    identifier: { username: string; accountEmail: string | null } | null,
     invite: { expiresAt: string } | null,
   ): AccountSummary => ({
     id: profile.id,
     fullName: profile.full_name,
     username: identifier?.username ?? null,
-    recoveryEmail: identifier?.recoveryEmail ?? null,
+    accountEmail: identifier?.accountEmail ?? null,
     phone: profile.phone,
     isActive: profile.is_active,
     roleTitle: profile.role_title,
@@ -130,12 +130,10 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
           // Product identifiers are resolved through the privileged function.
           // A refusal or outage degrades this surface to names.
           callAdmin<{
-            identifiers: Record<string, { username: string; recoveryEmail: string | null }>
+            identifiers: Record<string, { username: string; accountEmail: string | null }>
           }>(client, { action: 'identifiers' })
             .then((result) => result.identifiers)
-            .catch(
-              () => ({}) as Record<string, { username: string; recoveryEmail: string | null }>,
-            ),
+            .catch(() => ({}) as Record<string, { username: string; accountEmail: string | null }>),
         ])
       if (error) throw error
       if (inviteError) throw inviteError
@@ -156,7 +154,7 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
         action: 'provision',
         fullName: account.fullName,
         username: account.username,
-        recoveryEmail: account.recoveryEmail ?? null,
+        accountEmail: account.accountEmail ?? null,
         phone: account.phone ?? null,
         role: account.role,
         outletIds: account.outletIds,
@@ -181,11 +179,11 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       })
     },
 
-    async setRecoveryEmail(profileId: string, recoveryEmail: string): Promise<void> {
+    async setAccountEmail(profileId: string, accountEmail: string): Promise<void> {
       await callAdmin(client, {
-        action: 'set-recovery-email',
+        action: 'set-account-email',
         profileId,
-        recoveryEmail: recoveryEmail.trim(),
+        accountEmail: accountEmail.trim(),
       })
     },
 
@@ -199,14 +197,14 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
       personId: string
       role: AppRole
       outletId: string | null
-      recoveryEmail?: string | null
+      accountEmail?: string | null
     }): Promise<IssuedCode | null> {
       const result = await callAdmin<AssignmentChangeResponse>(client, {
         action: 'assign',
         personId: input.personId,
         role: input.role,
         outletId: input.outletId,
-        recoveryEmail: input.recoveryEmail ?? null,
+        accountEmail: input.accountEmail ?? null,
       })
       return result.issuedCode
     },

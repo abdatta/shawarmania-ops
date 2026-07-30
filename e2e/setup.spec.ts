@@ -66,7 +66,9 @@ test('creating a person is one act that ends in a working handover', async ({ pa
   await expect(page.getByLabel(/Staff code/)).toHaveCount(0)
 
   await page.getByLabel('Full name').fill('Demo Newcomer')
-  await page.getByLabel('Email').fill('demo.newcomer@example.com')
+  await page.getByLabel('Username', { exact: true }).fill('demo.newcomer')
+  await page.getByLabel('Role', { exact: true }).selectOption('employee')
+  await expect(page.locator('#account-recovery-email')).toHaveCount(0)
   await page.getByLabel('Job title (optional)').fill('Grill')
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
@@ -74,6 +76,7 @@ test('creating a person is one act that ends in a working handover', async ({ pa
   const panel = page.getByTestId('issued-code')
   await expect(panel).toBeVisible()
   await expect(panel).toContainText('Shown once')
+  await expect(page.getByTestId('issued-code-username')).toContainText('demo.newcomer')
 
   // And the person is on the staff list at once, already placed at an outlet —
   // there is no second surface where they still have to be added or linked.
@@ -85,11 +88,9 @@ test('creating a person is one act that ends in a working handover', async ({ pa
 test('the people states each say what is wrong and what to do', async ({ page }) => {
   await page.goto('demo/admin/people')
 
-  // The roster merge's leftover: a placeholder address, named as the fix.
-  await expect(page.getByTestId(`placeholder-${DEMO_HELPER_ACCOUNT_ID}`)).toContainText(
-    'Placeholder address',
-  )
-  await expect(page.getByRole('row', { name: /Demo Helper/ })).toContainText('Needs an address')
+  // Ordinary staff have a username and no email-dependent repair state.
+  await expect(page.getByTestId(`username-${DEMO_HELPER_ACCOUNT_ID}`)).toContainText('demo.helper')
+  await expect(page.getByRole('row', { name: /Demo Helper/ })).not.toContainText('Needs an address')
 
   // Provisioned, activated by nobody yet.
   await expect(page.getByRole('row', { name: /Demo New Starter/ })).toContainText(
@@ -136,7 +137,9 @@ test('the whole setup walk stays inside the app origin', async ({ page, baseURL 
   await page.goto('demo/admin/people')
   await page.getByRole('button', { name: 'Add person' }).click()
   await page.getByLabel('Full name').fill('Demo Origin Probe')
-  await page.getByLabel('Email').fill('demo.origin.probe@example.com')
+  await page.getByLabel('Username', { exact: true }).fill('demo.origin.probe')
+  await page.getByLabel('Role', { exact: true }).selectOption('employee')
+  await expect(page.locator('#account-recovery-email')).toHaveCount(0)
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
   await expect(page.getByTestId('issued-code')).toBeVisible()
 

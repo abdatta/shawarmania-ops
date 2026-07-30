@@ -1,20 +1,54 @@
 # Screens
 
-> The four role shells exist, and all four roles now sign in and reach their own (#4): phone shells with bottom-tab navigation for Super Admin, Franchise Admin and Employee, the fixed-chrome tablet shell for the Biller, each with a thin home overview. Sign in, Set your password, People, Outlets, Attendance and My attendance are built, and the setup chain from an empty database through to a working check-in runs entirely in the app (#5, #15) — **walked in production**: an outlet created and surveyed on site, a phone check-in at 5.1 m from its fence, and a check-out. Activation is one tap and one password — the code travels in a link, and the address is shown for confirmation rather than typed (#16). `staff-as-accounts` (#21) then collapsed the former Staff and Access screens into the one People surface — a person is created once, as an account — and added manager-entered attendance.
+> The four role shells exist, and all four roles sign in by username (or by an
+> associated email when present) and reach
+> their own assignment-derived shell: phone navigation for Super Admin,
+> Franchise Admin and Employee, and fixed tablet chrome for Biller. Sign in,
+> activation/reset, Super Admin recovery, People, Outlets, Attendance and My
+> attendance are built. Activation shows the current username and requires it
+> plus the same new password twice. `staff-as-accounts` (#21) collapsed the
+> former Staff and Access screens into People; `multi-outlet-hiring` (#23)
+> creates every starting assignment before the one handover; #24 removes
+> ordinary staff email.
 >
 > **The counter and the manager's operational surfaces are built and demo-gated** (#6, #7): the billing counter with its shift screens and sync indicator, and Menu, Stock, Expenses and Daily cash — all walkable at `/demo/*` against mocked data, none of them connected to real data yet. They become real one at a time in #10, #11 and #12.
 >
 > **The owner console completes the set** (#8): the cross-outlet dashboard, the outlet switcher and its read-only outlet view, Compare, Profit and loss, Reports and Alerts — all demo-gated, over a scenario spanning **both** outlets where every figure is derived from the rows another screen shows. The whole four-role experience now walks through coherently; [Demo Mode](DEMO_MODE.md) has the route. #13 makes the owner's figures real.
 
-One bundle serves all four roles. After sign-in the shell reads the role claim and mounts a different navigation and route set; in demo mode the same shells mount from the URL (`/demo/owner`, `/demo/admin`, `/demo/biller`, `/demo/staff` — the stable role path segments). Every screen below is additionally protected by Row-Level Security — hiding a route is convenience, not access control.
+One bundle serves all four roles. After sign-in the shell reads live
+assignments and mounts the matching navigation and route set; in demo mode the
+same shells mount from the URL (`/demo/owner`, `/demo/admin`, `/demo/biller`,
+`/demo/staff` — the stable role path segments). Every screen below is
+additionally protected by Row-Level Security — hiding a route is convenience,
+not access control.
 
 **Every screen here is built twice over, in a sense**: first against mocked data behind a feature gate, so the whole experience is demonstrable early, and later wired to real data by a `*-live` change that swaps one adapter and promotes the gate — without redesigning anything. Gates live in `src/gates/registry.ts`; a screen in the `hidden` state is genuinely absent — no navigation entry, no reachable route — not greyed out. Shared layout primitives (page header, data table, empty state, form sheet, confirm dialog) live in `src/components/layout/` and every surface below composes them. See [Demo Mode](DEMO_MODE.md).
 
 ## Shared
 
-**Sign in** — email + password. One field pair, nothing else. A wrong address and a wrong password get the same sentence, deliberately: telling them apart would confirm which addresses have accounts. There is no "forgot password" link, because there is no self-service reset — the honest instruction is the activation link.
+**Sign in** — username or associated email + password, with stable field names and
+`autocomplete="username"` / `"current-password"`. Unknown username and wrong
+password receive the same sentence as unknown/unassociated email. An
+`@username` is refused with direct guidance because usernames are handle-shaped
+but typed without it. Staff who forgot a
+password are told to ask an Admin or Super Admin for a new one-time link; a
+Super Admin also has the private-email recovery route.
 
-**Set your password** — the first-run screen, and the whole of password reset. Ordinarily reached by opening the activation link an admin sent, which carries the code, so **the only thing typed is a password** — entered twice, because it is typed blind with no way back: a typo sets a password nobody knows and spends the code proving it. It opens by showing the address the account will sign in with and asking, with two equally prominent answers, whether that is you — never a passive Continue, because catching a mistyped address is the entire reason the step exists. Saying it is not yours sends you to your manager, who can correct it. A dead link says so on arrival, before anything has been typed. Somebody handed only the code, with no link, gets one field asking for it and then the same confirmation. A separate screen rather than a sign-in field clever enough to guess whether you typed a password or a code — guessing would be wrong occasionally and confusing always, on somebody's first day.
+**Set your password** — both first activation and an admin-issued reset.
+Opening the handover link previews **“Your username is …”** and presents one
+real form: type that username, a new password, and the same password again.
+The username and both password fields carry password-manager semantics.
+Mismatch remains on the form and consumes nothing; a dead or spent link says
+so before password fields appear. Someone handed only the code types it first
+and reaches the same form. Success sets the password, signs in through the
+ordinary username path, and navigates to the assigned shell.
+
+**Super Admin recovery** — a public request field for the owner's private
+account email. Every request receives the same acknowledgement. A valid
+emailed callback rechecks that its session still belongs to a live Super Admin,
+shows the current username, requires username plus two matching new passwords,
+then continues that recovery session into the owner shell. Ordinary staff are
+directed to an administrator instead.
 
 **Install app** — the public header and every real role shell expose one 44px
 install action when the browser has an installation path. Chromium-family
@@ -108,7 +142,18 @@ A manager supplies one number, what they counted, and **the difference appears t
 
 **Attendance** — the outlet's staff by day: who checked in, when, from where, how accurate the reading was, and any geofence flags. **Everyone currently on the outlet's staff appears, including those with nothing recorded** — a day view that listed only the rows that exist would quietly hide the people who never arrived. A departed person drops off the day; a deactivated one still appears with the deactivation noted, because access and working there are different facts. A check-in the fence could not vouch for is marked as waiting for a decision and counted absent until it is approved; approving it records the approver and a reason that cannot be blank. A manager can also **enter a check-in or check-out on someone's behalf** — past times only, on today's business day — for the person whose phone cannot; the event carries `manual` as its source and reads *entered by* that manager wherever it is shown.
 
-**People** — everyone at this outlet, in one place: since #21 the staff record and the account are the same record, so there is no separate roster screen and no link step. **Adding somebody is one step** — name, email, role, one or more outlets, job title — and creates the account and every selected **assignment** before the one-time code panel appears. A manager with one management outlet keeps that outlet preselected in the singular disabled control; one who manages several gets the same phone-sized checkbox list as the owner, containing only the outlets where they are a Franchise Admin. The list's *Works at* column names every outlet a person is live at and what they do at each, so somebody splitting shifts reads as one person with two places rather than as two people. **Assigning somebody to another outlet** is a row action: it offers only outlets they do not already work at, only roles the caller may grant, and leaves everything they already had exactly as it was. **Ending an assignment** asks which outlet when there is more than one, and offers the sign-in cut *only* when it was their last — cutting access for somebody still working the other shop would be the panic button wearing a departure's clothes. If the person has not activated yet, either assignment action replaces the now-invalid activation link and shows the replacement immediately; an activated person gets no unsolicited reset code. A person holding no live assignment reads as **Not assigned to any outlet**, under the same toggle departed people used to sit behind. A person added without a real address carries a **Needs an address** badge: their account exists, appears on attendance, and cannot be signed in with until an admin sets a real one — the state is visible, never silent. A manager sees only people and hiring options within their management authority, with no role beyond Biller and Employee — the privileged function refuses anything wider whatever the form sends — and is not shown the owner-only failed-activation notice at all.
+**People** — everyone at this outlet, in one place. **Adding somebody is one
+step**: required name, username, role and one or more managed outlets; optional
+phone, title and joining date. No ordinary-email field or placeholder-account
+state exists. The account and every selected assignment commit before the
+one-time-code panel appears. A manager with one outlet sees it preselected; a
+multi-outlet manager chooses only among outlets they manage. The list names
+every live outlet/role for the person. Assigning or ending placement preserves
+everything else and replaces a still-pending activation link transactionally.
+An activated person gets no unsolicited reset code. A person with no live
+assignment reads **Not assigned to any outlet**. Managers can correct another
+person's username and issue a fresh reset link within their authority; they
+cannot manage themselves or create privileged roles.
 
 **Profit and loss** — outlet-level estimate for a chosen period, with the **cash-basis / consumption-basis toggle stated plainly on screen**, because the two answer different questions and mixing them is the classic error. See [Data Model](DATA_MODEL.md#two-modelling-traps-in-this-domain).
 
@@ -134,7 +179,23 @@ The same screen creates and edits an outlet: code, name, location label, address
 
 An outlet can also be **marked closed**. That means the shop is not trading: it disappears from the lists accounts are assigned from, and check-ins there are refused — while a check-out is never refused, so anyone mid-shift can still close their day. Nothing cascades. Accounts and recorded attendance are untouched, no login is revoked, and reopening is one tap; the confirmation says all of that, because an owner expecting it to cut off access would be dangerously wrong.
 
-**People** — every person across all outlets. Create one account with one role at one or several outlets, issue a fresh one-time code, correct a wrong email address, deactivate and reactivate. More than one available outlet renders as a phone-sized checkbox list and requires at least one choice; selecting Owner hides it because a Super Admin is business-wide. The account, profile and every selected assignment exist before the single activation code is issued, so the link handed over already represents the person's complete starting authority. Since #21 the same rows carry the staff facts — role title, joining date, the issued code — with the same one-step create, placeholder-address badge and departure flow as a manager's People, at every outlet; the Super Admin belongs to no outlet by schema constraint, so this is also how the one person who can create an outlet staffs it. Each row carries the address that account signs in with — visible only to admins who manage it, and never to the counter tablet. A newly issued code is handed over **once**, and **as a link only**: a QR for handing a phone across a counter — tap it to fill the screen, since the panel has no room to draw it at a size another camera reads reliably — the link itself, and one button to copy it. The raw code is deliberately not printed beside it — one way to hand access over rather than a choice between three, and it kept the panel wordy for a handover nobody should be using. The URL carries no address. The panel states plainly that it cannot be looked up again — because only its hash is stored, and no client can read that. Granting or ending an assignment while that link is outstanding replaces it transactionally and shows the new link in the completed action; once the person has activated, the same assignment changes issue nothing. Above it, the owner alone sees a notice when failed activations across the whole endpoint are unusually high, which is the only signal a targeted guessing attempt gives off. Your own row offers no actions: nobody manages their own account.
+**People** — every person across all outlets. Create one account at one or
+several outlets, issue a fresh one-time code, correct another person's
+username, deactivate/reactivate, and manage assignments. Selecting Super Admin
+hides outlets and requires that owner's real account email; every other role
+omits email entirely. Only an authorized Super Admin can see another Super
+Admin's account email or correct it, and one's own remains read-only here. The
+same email is an alternate sign-in identifier and the self-recovery
+destination.
+
+The account, profile, role-required Super Admin account email, and every starting
+assignment exist before the single code is issued. A handover is shown once:
+username, QR/link containing only the code, and copy action. The URL carries
+neither username nor email and the code cannot be looked up again. Granting or
+ending an assignment while it is outstanding replaces the link
+transactionally; an activated account receives nothing unless an admin
+explicitly chooses **New code**. The owner alone sees the global failed-
+activation notice. One's own row offers no actions.
 
 **Comparison** — outlets side by side over a period: sales, expenses, estimated profit, cash differences. The screen that justifies the whole system for a multi-outlet owner. The **period and the profit basis are both stated on screen**, because two outlets compared on different bases, or over a range the reader has to remember, mislead more reliably than no comparison at all.
 

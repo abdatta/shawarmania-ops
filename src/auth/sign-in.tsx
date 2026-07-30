@@ -4,19 +4,19 @@ import { Link, useLocation, useNavigate } from 'react-router'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { signIn, SignInError, transitionalEmailSignInEnabled } from '@/data-access/auth'
+import { signIn, SignInError } from '@/data-access/auth'
 import { validateUsername, usernameErrorMessage } from '../../shared/username'
 
 import type { SessionEndReason } from './use-real-session'
 
 /**
- * Username and password. One field pair, nothing else (docs/SCREENS.md).
+ * Username-or-email and password. One field pair, nothing else
+ * (docs/SCREENS.md).
  *
- * Two deliberate silences. An unknown username and a wrong password produce
- * the same sentence, because telling them apart would confirm which usernames
- * accounts. And there is no "forgot password" link, because v1 has no
- * self-service reset — the honest instruction is to ask an admin for a new
- * code, which the activation link already leads to.
+ * Two deliberate silences. An unknown identifier and a wrong password produce
+ * the same sentence, because telling them apart would confirm which accounts
+ * exist. Staff still ask an admin for a new code; only a Super Admin may use
+ * the private email recovery path.
  */
 
 interface SignInLocationState {
@@ -37,11 +37,10 @@ export function SignIn() {
   const location = useLocation()
   const state = (location.state ?? {}) as SignInLocationState
 
-  const [username, setUsername] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const cutoverMode = transitionalEmailSignInEnabled()
 
   // Shown once, and only until the person starts typing: it explains why they
   // are looking at this screen, and then it stops being the news.
@@ -49,20 +48,19 @@ export function SignIn() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
-    const validation = validateUsername(username)
-    const currentEmail =
-      cutoverMode && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username.trim())
-        ? username.trim().toLowerCase()
-        : null
-    if (!currentEmail && validation.error) {
+    const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier.trim())
+      ? identifier.trim().toLowerCase()
+      : null
+    const validation = email ? null : validateUsername(identifier)
+    if (validation?.error) {
       setError(usernameErrorMessage(validation.error))
       return
     }
-    const identifier = currentEmail ?? validation.username
+    const submittedIdentifier = email ?? validation!.username
     setBusy(true)
     setError(null)
     try {
-      await signIn(identifier, password)
+      await signIn(submittedIdentifier, password)
       // Land where they were headed. The role tree resolves the session and
       // redirects to their own shell if the path was not theirs to open.
       navigate(state.from && state.from !== '/sign-in' ? state.from : '/', { replace: true })
@@ -94,7 +92,7 @@ export function SignIn() {
           <form onSubmit={onSubmit} className="space-y-4" noValidate>
             <div className="space-y-1">
               <label htmlFor="signin-username" className="block text-sm font-semibold">
-                {cutoverMode ? 'Username or current email' : 'Username'}
+                Username or email
               </label>
               <Input
                 id="signin-username"
@@ -104,14 +102,13 @@ export function SignIn() {
                 autoCapitalize="none"
                 spellCheck={false}
                 required
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
+                value={identifier}
+                onChange={(event) => setIdentifier(event.target.value)}
                 aria-describedby="signin-username-hint"
               />
               <p id="signin-username-hint" className="text-xs text-content-muted">
-                {cutoverMode
-                  ? 'During the account move, use your new username or the email you currently sign in with.'
-                  : 'Type the username your manager gave you, without an @ sign.'}
+                Use the username your manager gave you, without an @ sign. Email also works when one
+                is associated with your account.
               </p>
             </div>
 

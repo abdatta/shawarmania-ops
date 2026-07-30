@@ -1,14 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const supabase = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
+  invoke: vi.fn(),
+  setSession: vi.fn(),
 }))
 
 vi.mock('./supabase', () => ({
   getSupabaseClient: () => ({
     auth: {
       signInWithPassword: supabase.signInWithPassword,
+      setSession: supabase.setSession,
     },
+    functions: { invoke: supabase.invoke },
   }),
 }))
 
@@ -26,10 +30,22 @@ describe('provider identifier at sign-in', () => {
       },
       error: null,
     })
-  })
-
-  afterEach(() => {
-    vi.unstubAllEnvs()
+    supabase.invoke.mockResolvedValue({
+      data: {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      },
+      error: null,
+    })
+    supabase.setSession.mockResolvedValue({
+      data: {
+        user: {
+          id: 'person-1',
+          email: 'owner@login.shawarmania.invalid',
+        },
+      },
+      error: null,
+    })
   })
 
   it('encodes an ordinary username as the reserved Auth alias', async () => {
@@ -41,36 +57,45 @@ describe('provider identifier at sign-in', () => {
       email: 'owner@login.shawarmania.invalid',
       password: 'correct-password',
     })
+    expect(supabase.invoke).not.toHaveBeenCalled()
   })
 
-  it('refuses a current email when the cutover switch is absent', async () => {
-    await expect(signIn('owner@example.com', 'correct-password')).rejects.toEqual(
+  it('uses the private email bridge and installs its Supabase session', async () => {
+    await expect(signIn(' Owner@Example.com ', 'correct-password')).resolves.toEqual({
+      userId: 'person-1',
+      username: 'owner',
+    })
+    expect(supabase.signInWithPassword).not.toHaveBeenCalled()
+    expect(supabase.invoke).toHaveBeenCalledWith('email-sign-in', {
+      body: { email: 'owner@example.com', password: 'correct-password' },
+    })
+    expect(supabase.setSession).toHaveBeenCalledWith({
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+    })
+  })
+
+  it('returns the same refusal when the email bridge cannot authenticate', async () => {
+    supabase.invoke.mockResolvedValue({
+      data: { error: 'invalid_credentials' },
+      error: new Error('non-2xx'),
+    })
+
+    await expect(signIn('owner@example.com', 'wrong-password')).rejects.toEqual(
+      expect.objectContaining<Partial<SignInError>>({
+        code: 'invalid_credentials',
+      }),
+    )
+    expect(supabase.setSession).not.toHaveBeenCalled()
+  })
+
+  it('refuses a malformed identifier before either authentication path', async () => {
+    await expect(signIn('@owner', 'correct-password')).rejects.toEqual(
       expect.objectContaining<Partial<SignInError>>({
         code: 'invalid_credentials',
       }),
     )
     expect(supabase.signInWithPassword).not.toHaveBeenCalled()
-  })
-
-  it('passes a normalized current email only in supervised cutover mode', async () => {
-    vi.stubEnv('VITE_AUTH_CUTOVER_MODE', 'email-or-username')
-    supabase.signInWithPassword.mockResolvedValue({
-      data: {
-        user: {
-          id: 'legacy-owner',
-          email: 'owner@example.com',
-        },
-      },
-      error: null,
-    })
-
-    await expect(signIn(' Owner@Example.com ', 'correct-password')).resolves.toEqual({
-      userId: 'legacy-owner',
-      username: null,
-    })
-    expect(supabase.signInWithPassword).toHaveBeenCalledWith({
-      email: 'owner@example.com',
-      password: 'correct-password',
-    })
+    expect(supabase.invoke).not.toHaveBeenCalled()
   })
 })

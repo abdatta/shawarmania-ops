@@ -1,6 +1,12 @@
 # Operations
 
-> The build and CI pipeline landed with `project-foundations`; hosting and the production Supabase project went live on 2026-07-27. `outlet-and-staff-setup` (#15) closed the setup gap: **creating an outlet and adding its people are both done in the app**, and no step of onboarding needs SQL — and `staff-as-accounts` (#21) then removed the roster and its link step entirely, so a person is created once, as an account. `multi-outlet-hiring` (#23) makes that same one action cover every starting outlet before one activation link is issued. `activation-without-typing` (#16) made the handover a link — **you send it, they tap it and choose a password**, and the address they will sign in with is on the screen for them to confirm. The menu, tablet enrolment and the opening cash float are still to come, and the steps below say which.
+> Hosting and the production Supabase project are live. A person is created
+> once, with one admin-chosen username and every starting assignment, before
+> one activation link is issued. They open it, type the username shown there
+> and the same new password twice. Ordinary account creation needs no email;
+> any associated email is an alternate sign-in, and every live Super Admin
+> requires one for self-recovery. Menu, tablet enrolment
+> and opening cash float are still to come, and the steps below say which.
 
 ## Environments
 
@@ -28,6 +34,20 @@ VITE_SUPABASE_ANON_KEY
 The anon key is designed to be public; Row-Level Security is what protects the data. **The service-role key is never in client configuration.** It lives only in Edge Function secrets.
 
 `.env.example` documents every variable. `.env` is gitignored and must stay that way.
+
+The owner-recovery Edge Functions require four hosted secrets:
+
+```
+SEND_EMAIL_HOOK_SECRET
+RESEND_API_KEY
+RECOVERY_EMAIL_FROM
+OWNER_RECOVERY_REDIRECT_URL=https://ops.shawarmania.in/recover
+```
+
+`SEND_EMAIL_HOOK_SECRET` is the same independently generated Standard Webhooks
+secret registered in Supabase Auth. `RECOVERY_EMAIL_FROM` must use a
+Resend-verified sender domain. None belongs in GitHub variables, Vite config,
+logs, or the migration mapping.
 
 Local development needs the Supabase CLI and Docker. `supabase start` brings the stack up from the committed `supabase/config.toml` and prints the local anon key to paste into `.env`. It prints a service-role key too — that one never leaves the terminal.
 
@@ -120,10 +140,24 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
 
 1. **Create the outlet** (Super Admin → Outlets → *Add outlet*): short code, name, location label, address, phone, business-day cutover. Use **Find the address** to fill the address block from a search rather than typing five fields — it fills the District from the PIN code, which is the part nobody remembers. Check what it filled before saving; OpenStreetMap data is contributed rather than surveyed, and this address is what a GST invoice will carry. If it finds nothing, type it: the search is a shortcut and never a step. **The business-day cutover is not the opening time** — it is where one trading day ends and the next begins, so it belongs in the quiet hours (04:00 is the default and the owner-confirmed value for both outlets). The form resolves a whole session against whatever you type and warns if it would split one night across two days; leave it at 04:00 unless you have a reason. On a brand-new installation this is the only thing there is to do, and the empty screen says so.
 2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → *Capture position here*). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the Outlets screen shows it as unsurveyed.
-3. **Create the Franchise Admin** (Super Admin → People) and send them their activation link. Needs the outlet to exist first — the form has no outlet to assign anyone to otherwise, and says so rather than showing an empty dropdown. If the same admin will run several outlets, select all of them now; one account and one code cover every selected assignment.
+3. **Create the Franchise Admin** (Super Admin → People): name, username and
+   every outlet they manage, plus any optional staff facts. No email is needed.
+   Send the one activation link. The outlet must exist first; if the same admin
+   runs several outlets, select all now — one account and code cover every
+   assignment.
 4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ. *(Not built — demo only until #10.)*
-5. **Enrol the counter tablet**: sign in on the device, enrol it to this outlet, confirm it appears under Devices. *(Not built — #9.)* Until then a Biller signs in with their own email on the tablet; shift PINs arrive with enrolment.
-6. **Add employees and billers** (People), sending each their activation link. Creating a person is one step — name, email, one role, one or more outlets, job title — and the account *is* the staff record: creating them writes the account and every selected **assignment** before it shows one code, so the person appears on every selected outlet's attendance day immediately. A one-outlet manager still sees that outlet preselected with nothing extra to decide. Somebody who starts working at another outlet later is not a second account: open them on People, choose *Assign to an outlet*, and they keep everything they already had. If they have not activated yet, that grant automatically replaces the invalidated link and shows the new one; if they have activated, no code is created. Ending an assignment behaves the same way for an outstanding link and removes them from that outlet only — if it was their last, the confirmation offers to cut their sign-in too. Someone whose address you do not have yet can be added anyway and shows **Needs an address** until you set a real one — they appear on attendance but cannot sign in until then, so it is worth reading down the list once before you finish.
+5. **Enrol the counter tablet**: sign in on the device, enrol it to this outlet,
+   confirm it appears under Devices. *(Not built — #9.)* Until then a Biller
+   signs in with their own username on the tablet; shift PINs arrive with
+   enrolment.
+6. **Add employees and billers** (People), sending each activation link.
+   Creating a person requires name, username, one role and one or more outlets;
+   job title, phone and joined date are optional. It writes the account and
+   every selected assignment before showing one code, so the person appears on
+   every selected outlet's attendance day immediately. A one-outlet manager
+   keeps that outlet preselected. Later assignment changes keep the same
+   account. A pending link is replaced transactionally; an activated person
+   gets no code unless an admin explicitly chooses **New code**.
 7. **Set the opening cash float** for the first business day. *(Not built — #12.)*
 8. **Verify isolation before going live** — sign in as the new Franchise Admin and confirm no other outlet is visible anywhere. This is a real step, not a formality: it is the last point at which a misconfiguration is cheap to fix.
 
@@ -151,43 +185,42 @@ linking this repo to it would run these migrations into someone else's data.
    hosted project** — it drops everything and applies `seed.sql`, which creates
    synthetic staff whose password is published in this repo.
 
-3. **Push the auth configuration.**
+3. **Configure hosted Auth deliberately.**
+
+   The committed `supabase/config.toml` is the local configuration: its
+   `site_url`, Mailpit path and Send Email Hook URI point at localhost. **Do not
+   run `supabase config push` against production from that file.** In
+   Authentication settings:
+
+   - disable public signup; keep password/email provider support enabled
+     because Supabase's username alias uses that provider;
+   - disable confirmation mail;
+   - set Site URL to `https://ops.shawarmania.in`;
+   - allow exactly `https://ops.shawarmania.in/recover` as the production
+     recovery redirect;
+   - keep Secure Email Change enabled;
+   - register the Send Email Hook at
+     `https://<ref>.supabase.co/functions/v1/send-email-hook` with a fresh
+     Standard Webhooks secret.
+
+   There is no access-token hook. Authority is resolved from
+   `public.assignments` on every request, so a token carries nothing about what
+   a person may do.
+
+4. **Configure mail and deploy all identity Edge Functions.** Verify the
+   Resend sender domain first, then set the four secrets from
+   [Configuration](#configuration). The hook secret set on the function must
+   exactly match the Auth Hook registration.
 
    ```
-   npx supabase config push
-   ```
-
-   This carries the settings that make the whole permission model work:
-   signup disabled and email confirmations off.
-
-   **There is no access-token hook.** `multi-outlet-people` (#22) dropped both
-   claim helpers — authority is resolved from `public.assignments` on every
-   request, so a token carries nothing about what a person may do — and the
-   hook function itself was dropped on 2026-07-30 once the registration was
-   removed from Authentication → Hooks. A fresh project needs no hook
-   registered at any point.
-
-   That retirement was deliberately done in two steps rather than one, and the
-   reason is worth keeping: a deployed project registers its hook in its own
-   auth settings, not in `config.toml`, so dropping the function while the
-   registration still stood would have failed every token issue and locked
-   everybody out — including whoever would go and turn it off. So #22 emptied
-   the function to `select event`, the registration came off in the dashboard,
-   and only then did a one-line migration drop it. **A schema migration must
-   never be able to lock the owner out of their own business.**
-
-   Then correct one thing by hand: `config.toml` carries a localhost
-   `site_url`, which is right for development and wrong for production. Set
-   Site URL to the deployed URL in Authentication → URL Configuration. Nothing
-   in v1 sends a link, so it is tidiness rather than function — until the first
-   feature that does.
-
-4. **Deploy the Edge Functions** — after the migration, never before; they read
-   tables and functions it creates.
-
-   ```
+   npx supabase secrets set SEND_EMAIL_HOOK_SECRET=... RESEND_API_KEY=... \
+     RECOVERY_EMAIL_FROM="Shawarmania Ops <access@ops.shawarmania.in>" \
+     OWNER_RECOVERY_REDIRECT_URL=https://ops.shawarmania.in/recover
    npx supabase functions deploy admin-accounts
    npx supabase functions deploy redeem-invite
+   npx supabase functions deploy email-sign-in
+   npx supabase functions deploy owner-recovery
+   npx supabase functions deploy send-email-hook
    ```
 
    `redeem-invite` is declared `verify_jwt = false` in `config.toml`, because
@@ -195,10 +228,18 @@ linking this repo to it would run these migrations into someone else's data.
    effect: an unauthenticated `POST` with a wrong code must answer `400
    invalid_code`, not `401`.
 
-5. **Create the first Super Admin.** Nothing in the app can do this — see
+   Before onboarding anyone, send one recovery message to a synthetic/local
+   owner in staging and then to the intended production owner during the
+   supervised rollout. Confirm the callback origin and that signup,
+   magic-link, invite and email-change mail are refused. Never use a recovery
+   request as the later read-only production verification.
+
+5. **Create the first Super Admin.** Nothing in the app can bootstrap authority
+   from an empty database — see
    [`supabase/snippets/bootstrap-first-admin.sql`](../supabase/snippets/bootstrap-first-admin.sql),
-   which explains why and is safe to re-run. It is the only account ever
-   created by hand.
+   which creates the profile, required private account email and owner
+   assignment together, and is safe to re-run. The Auth user is created first
+   at the chosen username alias. It is the only account ever created by hand.
 
 6. **Sign in as that Super Admin and create the outlets in the app** (Outlets →
    *Add outlet*). Nothing here needs SQL, and nothing here should be given
@@ -226,28 +267,156 @@ linking this repo to it would run these migrations into someone else's data.
    existed has the old (empty) values baked in; the variables are read at build
    time, not at page load.
 
-8. **Verify, in this order.** Sign in as the Super Admin → People lists your
-   own account → provision a Franchise Admin → open the activation link in a
-   private window → that admin sees their outlet and nothing of any other.
+8. **Verify, in this order.** Sign in with the Super Admin username and then
+   its associated email → People lists that account and its own read-only
+   email → provision a
+   username-only Franchise Admin → open the activation link in a private window
+   → type the displayed username and matching passwords → that admin sees only
+   their managed outlet. Then request and complete the owner's recovery once as
+   a supervised functional test. Subsequent deployment verification is
+   read-only.
+
+## Existing-account username migration
+
+This is a supervised, one-time procedure. The operator tool is service-role
+only, writes sensitive material under the ignored
+`supabase/.username-migration/` directory with restricted permissions, and
+never prints account emails. Do not run it in CI.
+
+1. **Rehearse locally from a fresh production-shaped synthetic reset.**
+
+   ```powershell
+   npm run db:reset
+   # Set the three local values from `supabase status` in this shell only.
+   npm run auth:usernames:rehearse
+   ```
+
+   The rehearsal proves checkpoint interruption/resume, existing password and
+   access/refresh-session survival, profile/assignment/attendance/invite row
+   preservation, pending-invite preview/redeem, postflight, rollback and
+   forward repair. It is hard-locked to `http://127.0.0.1:54321`.
+
+2. **Finish mail configuration before touching live identity.** Resend sender
+   DNS must be verified, all four Edge secrets present, the canonical recovery
+   redirect allowed, and the signed Send Email Hook registered. A Super Admin
+   must not lose the only independent recovery path during an identifier move.
+
+3. **Apply the schema and deploy the permanent dual-sign-in frontend plus all
+   five functions.** Email-or-username is the steady-state contract, not a
+   temporary compatibility mode. Before an Auth alias is migrated, the current
+   email still signs in directly; afterwards an approved associated email
+   signs in through `email-sign-in`.
+
+   ```powershell
+   npx supabase db push
+   npx supabase functions deploy admin-accounts
+   npx supabase functions deploy redeem-invite
+   npx supabase functions deploy email-sign-in
+   npx supabase functions deploy owner-recovery
+   npx supabase functions deploy send-email-hook
+   ```
+
+   The migration copies every current live Super Admin's real Auth email into
+   the private account-email table before it enforces the one-way Super Admin
+   requirement. It does not rename an Auth user.
+
+4. **Generate and review the private production mapping.** Supply the hosted
+   URL and service-role key in the operator shell only:
+
+   ```powershell
+   npm run auth:usernames -- --dry-run
+   ```
+
+   First rerun dry-run with `--approve-email <profile-uuid>` once per account
+   whose current real email is approved for retention; this is mandatory for
+   every live Super Admin. Then open
+   `supabase/.username-migration/mapping.json` locally. The business owner
+   reviews and edits **every** proposed username, resolves collisions, and
+   confirms every retained email. The approval flags
+   regenerate the mapping, so do not edit usernames before that final dry run.
+   Never paste the mapping into chat, an issue, logs, or source control.
+
+5. **Seal the explicit approval, then apply.**
+
+   ```powershell
+   npm run auth:usernames -- --approve-mapping --approved-by business-owner
+   npm run auth:usernames -- --apply
+   npm run auth:usernames -- --postflight
+   ```
+
+   The seal covers every user ID, old identifier, username, alias and approved
+   account email. Any later edit invalidates it. Apply also reloads Auth first and
+   refuses before its first write if a user appeared, disappeared, or drifted
+   after review. It checkpoints after each user and is idempotent.
+
+6. **Prove the live migration.** Confirm each
+   existing password works with its approved username, an already-open session
+   still reads and refreshes, every pending invite previews the approved
+   username, and assignments/attendance counts match the preflight. Confirm
+   every approved associated email reaches the same Auth user as its username.
+   Hand each active person their username. Complete one Super Admin recovery
+   from an unauthenticated phone during this supervised functional window.
+
+7. **Close the rollback window.** Verify the permanent username-or-email form
+   plus production health using read-only actions. Keep the reviewed mapping
+   only for the agreed short rollback window; then run:
+
+   ```powershell
+   npm run auth:usernames -- --destroy-mapping
+   ```
+
+   After destruction, repair is forward-only: correct a username or account
+   email through the supported privileged path rather than trying to recreate
+   deleted staff PII.
+
+**Rollback before the mapping is destroyed:** run
+`npm run auth:usernames -- --rollback`. This restores reviewed legacy Auth
+emails without recreating users, passwords or sessions; no application
+rollback is needed because dual sign-in is permanent. The active schema still
+requires each live Super Admin account email, so those private rows remain.
+The checkpoint is unwound,
+allowing a corrected approved mapping to be applied forward again. Do not edit
+or reverse a released SQL migration.
 
 ## Managing accounts
 
-Accounts are admin-provisioned; there is no self-service signup, and nothing is ever emailed or texted to anybody.
+Accounts are admin-provisioned; there is no self-service signup. Activation and
+staff reset links are handed over by the administrator rather than sent by the
+app. Only Super Admin self-recovery sends email.
 
 - **Super Admin → People** manages every account across all outlets.
 - **Franchise Admin → People** manages Billers and Employees only at the outlets where that admin holds a live Franchise Admin assignment. One managed outlet stays preselected; several become a checkbox list. The limits are enforced server-side from the caller's own session, not by the form.
 
-**To give someone access**: add the account (name, email, one role, one or more outlets). Every selected assignment is written before the single handover is shown **once**, alongside the address that account will sign in with — read that address before you send anything, because it is the last cheap moment to catch a typo. Send the **activation link** (WhatsApp is what the business already uses): they tap it, confirm the address is theirs, choose a password — twice, so a blind typo cannot lock them out — and are in. The QR beside it is for handing a phone across a counter. Those are the only two ways offered; the link carries no address. There is nowhere to look it up afterwards, so if the message is lost, issue a new one; doing so cancels the old one automatically.
+**To give someone access**: add the account with name, username, role and
+role-appropriate outlets. Phone, title and joining date are optional. Only a
+Super Admin also needs an account email. Every selected assignment is written
+before the handover is shown **once**, alongside the username—read it before
+sending anything. Send the activation link (WhatsApp is what the business
+already uses): they open it, see “Your username is …”, type that username and
+the same new password twice, and are signed in. The QR is for handing a phone
+across a counter. The link contains only the code. If it is lost, issue a new
+one; that cancels the old one automatically.
 
 **If you change an assignment before activation**: finish the grant or end action and use the replacement link that appears. The database changes the assignment, invalidates the old link, and creates the replacement in one transaction, so there is no state where the placement changed but the admin has no working handover. If no activation link was outstanding, the assignment changes with no code panel.
 
-**If somebody says the address on the link is not theirs**, they are being told to come to you, which is the point: fix it with *Change email* and send the link again. The link keeps working after the correction, but sending it again is what tells them it is safe to continue.
+**If somebody says the username is wrong**, fix it with *Change username*.
+The same outstanding link immediately previews the correction and remains
+usable, although telling the person the correction is still necessary.
 
 **If the People screen says failed activations are unusually high** (owner only), somebody is trying codes. Nothing is at immediate risk — a code is 50 bits, single-use, and expires in a week — but it is worth knowing when it happens. Outstanding codes are unaffected by another person's guessing; the endpoint refuses the guesser, not the invite.
 
-**To fix a wrong email address**: *Change email* on their row. The one-time code you already handed over keeps working, so there is no need to issue another. Addresses are visible only to the admins who manage that account — never on the counter tablet.
+**To fix a wrong username**: *Change username* on their row. The current user
+ID, password, sessions, assignments and outstanding code remain. The old
+username stops signing in and the corrected one starts.
 
-**To reset a password**: issue a new code for that account. That is the entire reset story.
+**To reset staff passwords**: issue a new code and hand over its link. An
+associated email does not grant staff self-recovery. A Super Admin can use the
+same admin path, or
+can self-recover through **Forgot password → recover by private email**.
+
+**To fix a Super Admin account email**: another Super Admin chooses *Change
+email*. One's own value is read-only in People; use another Super Admin or
+the operator fallback rather than weakening the self-management boundary.
 
 **To remove access**: deactivate the account. Do not delete it — history references it, and reactivating is one tap if the person comes back.
 
@@ -268,11 +437,27 @@ Deliberately minimal at this scale — the useful signals are operational rather
 - **Sync backlog**: a tablet with a persistent unsynced queue is the most valuable alert in the system. It means bills exist in exactly one place.
 - **Device last-seen**: a counter device silent during trading hours means something is wrong at that outlet.
 - **Cash differences**: a consistently non-zero difference at one outlet is a business signal, and the app already computes it.
+- **Identity functions**: monitor `email-sign-in`, `owner-recovery`, and
+  `send-email-hook` non-2xx
+  rates, Supabase Auth recovery limits, Resend delivery/bounce status and sender
+  DNS. Logs may name an action/result but never a raw account email, password, Auth
+  alias, token hash or invite code. A provider outage does not affect ordinary
+  username sign-in or admin-issued staff reset.
 - Supabase's built-in error and usage dashboards cover the rest.
 
 No third-party analytics or session-recording tooling. The app handles customer PII and employee location; sending that to an analytics vendor is not a trade worth making.
 
-**Two external services are contacted, both only from the outlet form.** `photon.komoot.io` (OpenStreetMap geocoding) and `api.postalpincode.in` (India Post's PIN directory) answer the address search. Both are keyless and free, so there is nothing to provision, restrict or renew — and nothing to notice when it expires. They see only what an admin types while looking up their own shop's address; no customer, employee or billing data reaches either, and neither is contacted anywhere else in the app. If either disappears the address block simply goes back to being typed.
+**Two public lookup services are contacted only from the outlet form.**
+`photon.komoot.io` (OpenStreetMap geocoding) and `api.postalpincode.in` (India
+Post's PIN directory) answer postal-address search. Both are keyless. They see
+only what an admin types while finding their shop; no customer, employee,
+billing or identity data reaches either. If either disappears the address
+block remains manually typeable.
+
+**Resend is the one transactional mail provider.** It receives only a freshly
+authorized live Super Admin account email and the canonical recovery link
+from the signed hook. It never receives staff activation/reset, ordinary
+usernames or outlet data.
 
 ## Runbook stubs
 
@@ -282,9 +467,30 @@ No third-party analytics or session-recording tooling. The app handles customer 
 
 **Cash does not reconcile** → check for late-synced bills against a closed day (they surface as reconciliation exceptions), then cash expenses recorded under the wrong business date, then withdrawals not recorded.
 
-**Someone cannot sign in** → **read the address on their row first** (People — the owner sees every outlet, a Franchise Admin their own). If the row says **Needs an address**, the account was created on a placeholder and cannot sign in at all until a real address is set. Sign-in gives one message for a wrong address and a wrong password alike, so a mistyped address looks exactly like a forgotten password. Activation no longer hides this — the link shows the address and invites them to say it is wrong — but sign-in still needs it typed. Fix it with *Change email*; the link you already sent still works afterwards. Then confirm the account is active. Issue a new code if the password is forgotten; there is no self-service reset.
+**Someone cannot sign in** → read the username on their People row and confirm
+they type it without `@`, or use the associated email when one exists. Sign-in
+gives one message for an unknown username/email and wrong password alike.
+Correct a typo with *Change username*; an outstanding
+link remains attached to the account. Confirm the profile is active and still
+has a live assignment. If the password is forgotten, issue a new one-time link.
+Only a Super Admin uses private-email self-recovery.
 
-**An activation link will not work** → it expires after seven days, works once, and is cancelled the moment a newer one is issued. Granting or ending an assignment also invalidates it, but that completed People action immediately shows the transactional replacement; send that latest link. All failure reasons look identical to whoever opened it, deliberately — a link that said *which* would be a way to ask whether an account exists. The person sees this on arrival, before typing anything. If the replacement was lost, issue a new one. Nobody can look the old one up; only a hash was ever stored.
+**An activation link will not work** → it expires after seven days, works once,
+and is cancelled when a newer one is issued. Granting or ending an assignment
+while it is pending immediately shows the transactional replacement. The page
+must show the expected username. A different typed username consumes nothing;
+correct the account or explain the spelling. Every code-state failure remains
+identical. If the latest link was lost, issue a new one. Nobody can retrieve
+the old plaintext because only its hash was stored.
+
+**A Super Admin recovery message does not arrive** → do not repeatedly submit the
+public form; its acknowledgement is intentionally uniform and rate-limited.
+Check Resend status/sender DNS, Edge Function non-2xx logs, hook secret
+agreement, canonical redirect, and that another live Super Admin sees the
+correct account email on People. Another Super Admin can issue a normal reset
+link or correct the email. If no other Super Admin is available, use a service-role
+operator repair after verifying the person's identity out of band; never
+disable the signed hook or expose the recovery table to solve a lockout.
 
 **"Too many activation attempts from this connection"** → the endpoint's own rate limit, not a problem with the code. It clears within fifteen minutes. A working activation never counts toward it — only failures do — so seeing this means something on that connection has been failing repeatedly.
 

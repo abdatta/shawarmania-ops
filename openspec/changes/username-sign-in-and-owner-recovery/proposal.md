@@ -1,6 +1,6 @@
 # Proposal: username-sign-in-and-owner-recovery
 
-> **Model**: **GPT-5.6 Sol** · **Wave**: D · **Depends on**: #23 · **Gate**: **an admin creates a person without an email, the person opens one activation link, types the username shown there and the same new password twice, the form exposes Chrome-compatible semantics for saving that username/password pair, and the person signs in with it; only a Super Admin carries a recovery email and can recover without another admin — while every existing account, assignment, password, session, invite and attendance row survives the move.**
+> **Model**: **GPT-5.6 Sol** · **Wave**: D · **Depends on**: #23 · **Gate**: **an admin creates an ordinary person without an email, the person opens one activation link, types the username shown there and the same new password twice, the form exposes Chrome-compatible semantics for saving that username/password pair, and the person signs in with it; an account with an associated email may also sign in with that email, every Super Admin has one and can self-recover through it, and every existing account, assignment, password, session, invite and attendance row survives the move.**
 
 ## Why
 
@@ -12,9 +12,12 @@ somebody can start work.
 
 The business wants the identifier it can actually hand over and support: a
 short username chosen by the admin who creates the person. Super Admins are the
-one exception for email collection because the business must never depend on a
-second administrator being reachable when its owner is locked out; their email
-is a recovery channel, not their everyday sign-in name.
+one required exception for email collection because the business must never
+depend on a second administrator being reachable when its owner is locked out.
+That associated account email remains a valid alternate sign-in identifier and
+is also the Super Admin's self-recovery destination. The data model permits an
+email to be associated with another role later without changing sign-in again,
+but ordinary People creation does not collect one in this change.
 
 This belongs immediately after `multi-outlet-hiring` because that change
 finishes the one-person/one-login creation flow this one changes. It should
@@ -23,14 +26,15 @@ carry the temporary personal Biller login forward.
 
 ## What Changes
 
-- **BREAKING — every human account signs in with username and password.**
-  Email ceases to be a sign-in identifier for Super Admin, Franchise Admin,
-  Biller and Employee accounts alike. Sign-in accepts the username itself,
-  never an `@username` spelling.
+- **BREAKING — every human account receives a username.** Sign-in accepts that
+  username, never an `@username` spelling. If the account also has an associated
+  email, the same password works with either identifier. This is permanent
+  behavior, not a migration compatibility mode.
 - The create-person form requires name, username, role, and the role-appropriate
   outlet selection. Phone, job title, and joined date remain optional. A
-  Super Admin additionally requires a recovery email; every other role omits
-  email entirely from the form and account.
+  Super Admin additionally requires an account email; every other role omits
+  email from the form. The private schema can associate one later without
+  making it required for that role.
 - Usernames use one business-wide namespace and an Instagram-handle-like shape
   without the `@`: 3–30 canonical lowercase characters from `a–z`, `0–9`, `.`
   and `_`; no spaces or hyphens; no leading, trailing, or consecutive periods.
@@ -60,22 +64,25 @@ carry the temporary personal Biller login forward.
   Employees. The current authority rule remains: a Franchise Admin may act
   only when they manage every outlet where the target person has a live
   assignment; otherwise a Super Admin is required.
-- A Super Admin carries a required, private recovery email in addition to their
-  username. A public, enumeration-safe recovery request sends a single-use
+- A Super Admin carries a required, private account email in addition to their
+  username. It is a permanent alternate sign-in identifier. A public,
+  enumeration-safe recovery request sends a single-use
   password-reset link only for an active account that currently holds a live
   Super Admin assignment. The link returns to the canonical production origin
   and uses the same username-plus-two-password-fields reset screen.
-- No activation, admin-issued reset, username change, or ordinary sign-in sends
-  email. Super Admin recovery and security notifications are the only outbound
+- No activation, admin-issued reset, username change, or sign-in sends email.
+  Super Admin recovery and security notifications are the only outbound
   authentication mail introduced by this change.
 - Existing human accounts are migrated in place. Non-Super-Admin personal
   emails and placeholder addresses are removed from live Auth identity data;
-  Super Admin email is retained as recovery data. User IDs, password hashes,
+  Super Admin email is retained as private account data. The two existing
+  production usernames stay only in the operator-reviewed, gitignored mapping
+  and are never committed. User IDs, password hashes,
   refresh sessions, profiles, assignments, attendance, and outstanding invites
   are not recreated.
 - The `Needs an address` account state disappears. A person without an
   outstanding invite is sign-in-capable once an authorized admin issues one;
-  nobody needs contact data merely to exist on People or Attendance.
+  nobody needs an email address merely to exist on People or Attendance.
 - Forward-looking roadmap seeds, todos, docs, fixtures, tests, and comments are
   reconciled so no future design quietly assumes staff email. Archived change
   folders remain immutable historical context.
@@ -85,10 +92,11 @@ carry the temporary personal Biller login forward.
 - No self-service Profile or Settings surface for changing a username or a
   known password. Those remain later roadmap work; this change keeps the
   admin correction path needed to repair onboarding mistakes.
-- No email, SMS, WhatsApp, social-login, magic-link, phone-number, passkey, or
-  `@username` sign-in.
-- No MFA enrollment or enforcement. The Super Admin recovery email leaves a
-  contact and recovery channel for that later design; a future second factor
+- No SMS, WhatsApp, social-login, magic-link, phone-number, passkey, or
+  `@username` sign-in. Email sign-in exists only when the account has a private
+  associated email.
+- No MFA enrollment or enforcement. The Super Admin's associated email enables
+  self-recovery and can support a later security design; a future second factor
   is expected to use an authenticator or another explicitly designed factor,
   not to smuggle role authority into the token.
 - No role, assignment, tenancy, deactivation, session-lifetime, counter-device,
@@ -106,19 +114,23 @@ system.
 
 ### Modified Capabilities
 
-- `identity-and-access`: replace email sign-in and placeholder-address accounts
-  with admin-chosen usernames for every human role; make email a private,
-  required Super Admin recovery channel only; require username confirmation on
-  activation/reset; preserve the existing invite, authority, deactivation,
-  session, and one-person/one-login guarantees through migration.
+- `identity-and-access`: replace email-required and placeholder-address accounts
+  with admin-chosen usernames for every human role; make an associated email
+  private and optional except that every Super Admin requires one; allow either
+  identifier to authenticate the same account when email exists; require
+  username confirmation on activation/reset; preserve the existing invite,
+  authority, deactivation, session, and one-person/one-login guarantees through
+  migration.
 
 ## Impact
 
 - **Schema and Auth identity data**: username uniqueness and normalization,
-  private Super Admin recovery email, current Auth users/identities, legacy
+  private optional account email with a Super Admin requirement, current Auth
+  users/identities, legacy
   placeholder accounts, generated database types, and migration verification.
-- **Privileged functions**: `admin-accounts`, `redeem-invite`, the recovery-mail
-  path, shared authority checks, and identity normalization helpers. The
+- **Privileged functions**: `admin-accounts`, `redeem-invite`, a narrowly scoped
+  `email-sign-in` bridge, the recovery-mail path, shared authority checks, and
+  identity normalization helpers. The
   service-role credential remains server-only.
 - **Frontend auth**: sign-in, activation/reset, recovery request and callback,
   session bootstrapping, routing, browser-password-manager metadata, and

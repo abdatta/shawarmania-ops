@@ -24,10 +24,9 @@ import {
  *     else would make this an account-enumeration oracle.
  *  3. It returns no session. The client signs in afterwards with the password
  *     it just set, so there stays exactly one way a session is minted.
- *  4. The code is the key. Nothing here takes an email address, which is why
- *     `preview` can safely hand one back: whoever asks has already proven
- *     possession of a live, single-use code for that one account, so the only
- *     address they can learn is the one they already hold a code for.
+ *  4. The code is the key. Nothing here takes an email address. `preview` may
+ *     return the current username only because the caller already holds the
+ *     live, single-use code for that account.
  *
  * Two refusals are allowed to be specific, because each describes the request
  * rather than any account: a password below the minimum, and a caller that has

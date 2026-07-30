@@ -57,6 +57,21 @@ function demoUsername(fullName: string): string {
     .replace(/^\.|\.$/g, '')
 }
 
+type DemoAccountEmailFixture = {
+  superAdmin: string
+  ordinaryAccount: null
+}
+
+/**
+ * The fixture shape makes the product rule compile-time visible: the demo has
+ * one invented Super Admin account email and no email for any
+ * ordinary account.
+ */
+const DEMO_ACCOUNT_EMAILS = {
+  superAdmin: 'owner.account@example.com',
+  ordinaryAccount: null,
+} as const satisfies DemoAccountEmailFixture
+
 /** The demo's people list, shared by every surface that shows a person. */
 export function createDemoAccounts(): AccountSummary[] {
   return accountFixtures.map((profile) => {
@@ -68,7 +83,7 @@ export function createDemoAccounts(): AccountSummary[] {
       id: profile.id,
       fullName: profile.full_name,
       username: demoUsername(profile.full_name),
-      recoveryEmail: isOwner ? 'owner.recovery@example.com' : null,
+      accountEmail: isOwner ? DEMO_ACCOUNT_EMAILS.superAdmin : DEMO_ACCOUNT_EMAILS.ordinaryAccount,
       phone: profile.phone,
       isActive: profile.is_active,
       roleTitle: profile.role_title,
@@ -121,8 +136,8 @@ export function createMockAccountsAdapter(
         (account.role === 'super_admin' && account.outletIds.length > 0) ||
         (account.role !== 'super_admin' &&
           (outletIds.length === 0 || new Set(outletIds).size !== outletIds.length)) ||
-        (account.role === 'super_admin' && !account.recoveryEmail?.trim()) ||
-        (account.role !== 'super_admin' && account.recoveryEmail != null)
+        (account.role === 'super_admin' && !account.accountEmail?.trim()) ||
+        (account.role !== 'super_admin' && account.accountEmail != null)
       ) {
         throw new AccountActionError('invalid_request', 'Choose at least one valid outlet.')
       }
@@ -130,8 +145,8 @@ export function createMockAccountsAdapter(
         id,
         fullName: account.fullName,
         username,
-        recoveryEmail:
-          account.role === 'super_admin' ? account.recoveryEmail!.trim().toLowerCase() : null,
+        accountEmail:
+          account.role === 'super_admin' ? account.accountEmail!.trim().toLowerCase() : null,
         phone: account.phone ?? null,
         isActive: true,
         roleTitle: account.roleTitle ?? null,
@@ -180,12 +195,12 @@ export function createMockAccountsAdapter(
         )
       }
       if (
-        (input.role === 'super_admin' && !input.recoveryEmail?.trim()) ||
-        (input.role !== 'super_admin' && input.recoveryEmail != null)
+        (input.role === 'super_admin' && !input.accountEmail?.trim()) ||
+        (input.role !== 'super_admin' && input.accountEmail != null)
       ) {
         throw new AccountActionError(
           'invalid_request',
-          'An owner assignment requires one private recovery email.',
+          'A Super Admin assignment requires an email.',
         )
       }
 
@@ -197,7 +212,7 @@ export function createMockAccountsAdapter(
         endedOn: null,
       })
       if (input.role === 'super_admin') {
-        account.recoveryEmail = input.recoveryEmail!.trim().toLowerCase()
+        account.accountEmail = input.accountEmail!.trim().toLowerCase()
       }
       return hadInvite ? replaceInvite(account) : null
     },
@@ -224,7 +239,6 @@ export function createMockAccountsAdapter(
         }
 
         assignment.endedOn = today()
-        if (assignment.role === 'super_admin') account.recoveryEmail = null
         return hadInvite ? replaceInvite(account) : null
       }
       throw new AccountActionError('not_found', 'That assignment no longer exists.')
@@ -251,30 +265,30 @@ export function createMockAccountsAdapter(
       // The outstanding invite remains bound to the account UUID.
     },
 
-    async setRecoveryEmail(profileId: string, recoveryEmail: string) {
+    async setAccountEmail(profileId: string, accountEmail: string) {
       if (profileId === viewerId) {
         throw new AccountActionError(
           'self_change_forbidden',
-          'You cannot change your own recovery email here.',
+          'You cannot change your own email here.',
         )
       }
       const account = find(profileId)
       if (!liveAssignments(account.assignments).some((a) => a.role === 'super_admin')) {
-        throw new AccountActionError('forbidden', 'Only an owner has a recovery email.')
+        throw new AccountActionError('forbidden', 'Only a Super Admin email can be changed here.')
       }
-      const wanted = recoveryEmail.trim().toLowerCase()
+      const wanted = accountEmail.trim().toLowerCase()
       if (
         !wanted ||
         accounts.some(
-          (candidate) => candidate.id !== profileId && candidate.recoveryEmail === wanted,
+          (candidate) => candidate.id !== profileId && candidate.accountEmail === wanted,
         )
       ) {
         throw new AccountActionError(
-          'recovery_email_unavailable',
-          'That recovery email is already used by another owner.',
+          'email_unavailable',
+          'That email is already associated with another account.',
         )
       }
-      account.recoveryEmail = wanted
+      account.accountEmail = wanted
     },
 
     /**

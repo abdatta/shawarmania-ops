@@ -14,9 +14,7 @@ import { liveAssignment, personaFixtures } from './personas'
  * deliberately includes every people state an admin has to recognise and
  * repair (demo-mode spec, "unconfigured states"):
  *
- *   * `DEMO_HELPER_ACCOUNT_ID` carries a **placeholder address** — the state
- *     the roster merge mints for someone who never had a login. They cannot
- *     be invited until an admin fixes the address; the People surface says so.
+ *   * `DEMO_HELPER_ACCOUNT_ID` is an ordinary username-only staff account.
  *   * `PENDING_ACCOUNT_ID` has an **invite outstanding** — provisioned,
  *     activated by nobody yet.
  *   * `Demo Former Staff` holds **no live assignment**: off every staff list,
@@ -36,7 +34,7 @@ const FIXTURE_CREATED_AT = '2026-07-26T00:00:00+00:00'
 
 /** An ordinary active colleague — the manual-entry demo records their check-out. */
 export const DEMO_GRILLER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000006'
-/** The placeholder-address person: cannot be invited until the address is fixed. */
+/** An ordinary staff account used by People and attendance walkthroughs. */
 export const DEMO_HELPER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000011'
 /** Deactivated while still assigned: the panic-button state, still on the day. */
 export const DEMO_PREP_COOK_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000013'
@@ -107,9 +105,7 @@ const colleagues = [
     created_at: FIXTURE_CREATED_AT,
   },
   {
-    // The roster merge's leftover: an account minted for somebody who never
-    // had a login, still on its placeholder address. createDemoAccounts gives
-    // this one `…@placeholder.invalid` instead of a demo address.
+    // An ordinary username-only staff account.
     id: DEMO_HELPER_ACCOUNT_ID,
     full_name: 'Demo Helper',
     phone: null,

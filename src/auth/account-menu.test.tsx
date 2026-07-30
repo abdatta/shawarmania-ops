@@ -85,7 +85,7 @@ describe('the demo’s front door', () => {
     expect(document.querySelector('a[href*="/demo"]')).toBeNull()
   })
 
-  it('appears in the Super Admin’s account menu, and addresses the demo root', () => {
+  it('appears in the Super Admin’s account menu, and targets the demo root', () => {
     renderMenu('super_admin')
 
     expect(screen.getByTestId('demo-entry')).toBeInTheDocument()

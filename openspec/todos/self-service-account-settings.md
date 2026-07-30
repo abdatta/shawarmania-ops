@@ -22,13 +22,14 @@ credential for every human role:
 - an authorized admin can correct another person's username from People;
 - a Franchise Admin, Biller, or Employee who forgets a password asks an
   authorized admin for a one-time link;
-- a Super Admin can use their private recovery email when no other admin is
-  available;
+- a Super Admin can use their associated email to sign in or recover access
+  without another administrator;
 - nobody has an in-app self-service page for changing a username or a known
   password.
 
-This todo starts from that contract. It does not reintroduce ordinary staff
-email, email sign-in, `@username`, or a second login per assignment.
+This todo starts from that contract. It does not require email for ordinary
+staff, add `@username`, or create a second login per assignment. Any account
+that has an associated email can already use it as an alternate sign-in.
 
 ## Why it is deferred
 
@@ -58,8 +59,9 @@ standing at it.
   is the future enrolled counter device excluded from that blast radius?
 - Does a Biller have any personal credential setting after #9, or is the
   device enrollment plus shift PIN the whole counter identity?
-- Should the screen permit a Super Admin to change private recovery email, and
-  what recent-authentication proof is required before that high-value change?
+- Should the screen permit a person to request a change to their associated
+  email, and what recent-authentication proof and administrator approval are
+  required before that high-value change?
 
 ## Trigger to promote
 

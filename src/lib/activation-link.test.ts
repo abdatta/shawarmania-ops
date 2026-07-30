@@ -33,7 +33,7 @@ describe('activationLink', () => {
     )
   })
 
-  it('never carries an address', () => {
+  it('never carries identity data', () => {
     expect(activationLink('ABCDE-FGHJK', 'https://x.test', '/')).not.toContain('@')
   })
 })

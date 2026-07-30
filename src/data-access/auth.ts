@@ -56,37 +56,53 @@ export class ActivationError extends Error {
 
 export const MIN_PASSWORD_LENGTH = 10
 
-/** True only for the explicitly supervised, short-lived production cutover. */
-export function transitionalEmailSignInEnabled(): boolean {
-  return import.meta.env.VITE_AUTH_CUTOVER_MODE === 'email-or-username'
-}
-
-function transitionalEmail(input: string): string | null {
+function accountEmail(input: string): string | null {
   const email = input.trim().toLowerCase()
-  if (
-    !transitionalEmailSignInEnabled() ||
-    email.length > 320 ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-  ) {
+  if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return null
   }
   return email
 }
 
 export async function signIn(identifier: string, password: string): Promise<AuthedUser> {
-  const providerIdentifier = usernameToAuthAlias(identifier) ?? transitionalEmail(identifier)
-  if (!providerIdentifier) {
-    throw new SignInError('invalid_credentials', 'That username or password is not right.')
+  const authAlias = usernameToAuthAlias(identifier)
+  const email = accountEmail(identifier)
+  if (!authAlias && !email) {
+    throw new SignInError('invalid_credentials', 'Those sign-in details are not right.')
   }
-  const { data, error } = await getSupabaseClient().auth.signInWithPassword({
-    email: providerIdentifier,
-    password,
-  })
-  if (error || !data.user) {
-    // One message for an unknown username and a wrong password alike.
-    throw new SignInError('invalid_credentials', 'That username or password is not right.')
+
+  const client = getSupabaseClient()
+  if (authAlias) {
+    const { data, error } = await client.auth.signInWithPassword({
+      email: authAlias,
+      password,
+    })
+    if (!error && data.user) {
+      return { userId: data.user.id, username: authAliasToUsername(data.user.email) }
+    }
+  } else {
+    const { data, error } = await client.functions.invoke<{
+      accessToken?: string
+      refreshToken?: string
+    }>('email-sign-in', {
+      body: { email, password },
+    })
+    if (!error && data?.accessToken && data.refreshToken) {
+      const { data: sessionData, error: sessionError } = await client.auth.setSession({
+        access_token: data.accessToken,
+        refresh_token: data.refreshToken,
+      })
+      if (!sessionError && sessionData.user) {
+        return {
+          userId: sessionData.user.id,
+          username: authAliasToUsername(sessionData.user.email),
+        }
+      }
+    }
   }
-  return { userId: data.user.id, username: authAliasToUsername(data.user.email) }
+
+  // One message for an unknown identifier and a wrong password alike.
+  throw new SignInError('invalid_credentials', 'Those sign-in details are not right.')
 }
 
 export async function signOut(): Promise<void> {
@@ -219,13 +235,13 @@ export async function redeemInvite(
 }
 
 const RECOVERY_ACCEPTED =
-  'If that recovery email belongs to an active Super Admin, a recovery link is on its way.'
+  'If that email is associated with an active Super Admin, a recovery link is on its way.'
 
-export async function requestOwnerRecovery(recoveryEmail: string): Promise<string> {
+export async function requestOwnerRecovery(accountEmail: string): Promise<string> {
   // The public response stays identical even when the resolver or provider
   // fails, so this helper never becomes an account-enumeration oracle.
   await getSupabaseClient().functions.invoke('owner-recovery', {
-    body: { action: 'request', recoveryEmail },
+    body: { action: 'request', email: accountEmail },
   })
   return RECOVERY_ACCEPTED
 }

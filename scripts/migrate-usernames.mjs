@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from 'node:crypto'
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
@@ -17,18 +18,37 @@ function parseArgs(argv) {
     mode: 'dry-run',
     mapping: DEFAULT_MAPPING,
     checkpoint: DEFAULT_CHECKPOINT,
-    approvedOwners: new Set(),
+    approvedEmails: new Set(),
+    approvedBy: null,
+    stopAfter: null,
   }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
-    if (['--dry-run', '--apply', '--postflight', '--rollback', '--destroy-mapping'].includes(arg)) {
+    if (
+      [
+        '--dry-run',
+        '--approve-mapping',
+        '--apply',
+        '--postflight',
+        '--rollback',
+        '--destroy-mapping',
+      ].includes(arg)
+    ) {
       options.mode = arg.slice(2)
     } else if (arg === '--mapping') {
       options.mapping = path.resolve(argv[++index] ?? '')
     } else if (arg === '--checkpoint') {
       options.checkpoint = path.resolve(argv[++index] ?? '')
-    } else if (arg === '--approve-owner') {
-      options.approvedOwners.add(argv[++index] ?? '')
+    } else if (arg === '--approve-email') {
+      options.approvedEmails.add(argv[++index] ?? '')
+    } else if (arg === '--approved-by') {
+      options.approvedBy = argv[++index]?.trim() || null
+    } else if (arg === '--stop-after') {
+      const value = Number(argv[++index])
+      if (!Number.isSafeInteger(value) || value < 1) {
+        throw new Error('--stop-after requires a positive integer')
+      }
+      options.stopAfter = value
     } else {
       throw new Error(`Unknown argument: ${arg}`)
     }
@@ -107,7 +127,7 @@ async function loadRows(config, table, select) {
 function proposedUsername(user, profile) {
   const existing = authAliasToUsername(user.email)
   if (existing) return existing
-  const source = user.email?.split('@')[0] || profile?.full_name || ''
+  const source = profile?.full_name || ''
   const normalized = source
     .trim()
     .toLowerCase()
@@ -118,9 +138,9 @@ function proposedUsername(user, profile) {
   return canonicalUsername(normalized)
 }
 
-export function buildMapping({ users, profiles, assignments, contacts, approvedOwners }) {
+export function buildMapping({ users, profiles, assignments, accountEmails, approvedEmails }) {
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]))
-  const contactById = new Map(contacts.map((contact) => [contact.profile_id, contact.email]))
+  const accountEmailById = new Map(accountEmails.map((row) => [row.profile_id, row.email]))
   const ownerIds = new Set(
     assignments
       .filter((assignment) => assignment.role === 'super_admin' && assignment.ended_on === null)
@@ -128,24 +148,28 @@ export function buildMapping({ users, profiles, assignments, contacts, approvedO
   )
   const proposed = users.map((user) => {
     const owner = ownerIds.has(user.id)
-    const ownerApproved = !owner || approvedOwners.has(user.id)
+    const emailApproved = approvedEmails.has(user.id)
     const username = proposedUsername(user, profileById.get(user.id))
-    const recoveryEmail =
-      contactById.get(user.id) ??
-      (owner && ownerApproved && user.email ? user.email.toLowerCase() : null)
+    const candidateEmail =
+      accountEmailById.get(user.id) ??
+      (user.email && !PLACEHOLDER.test(user.email) && !authAliasToUsername(user.email)
+        ? user.email.toLowerCase()
+        : null)
+    const accountEmail = emailApproved ? candidateEmail : null
     return {
       userId: user.id,
       oldEmail: user.email ?? null,
       username,
       newAlias: username ? usernameToAuthAlias(username) : null,
       isOwner: owner,
-      recoveryEmail: owner ? recoveryEmail : null,
-      ownerApproved,
+      accountEmail,
+      emailApproved,
       status: 'pending',
       flags: [
         ...(user.email && PLACEHOLDER.test(user.email) ? ['placeholder_address'] : []),
         ...(!username ? ['username_needs_review'] : []),
-        ...(owner && !recoveryEmail ? ['owner_recovery_missing'] : []),
+        ...(owner && !accountEmail ? ['owner_account_email_missing'] : []),
+        ...(candidateEmail && !emailApproved ? ['account_email_needs_approval'] : []),
       ],
     }
   })
@@ -165,14 +189,35 @@ export function buildMapping({ users, profiles, assignments, contacts, approvedO
   }
 
   return {
-    version: 1,
+    version: 2,
     generatedAt: new Date().toISOString(),
     sourceUrl: process.env.SUPABASE_URL,
+    approval: null,
     users: proposed,
   }
 }
 
-export function validateMapping(mapping) {
+function approvalMaterial(mapping) {
+  return (mapping.users ?? [])
+    .map((row) => ({
+      userId: row.userId,
+      oldEmail: row.oldEmail,
+      username: row.username,
+      newAlias: row.newAlias,
+      isOwner: row.isOwner,
+      accountEmail: row.accountEmail,
+      emailApproved: row.emailApproved,
+    }))
+    .sort((left, right) => String(left.userId).localeCompare(String(right.userId)))
+}
+
+export function mappingFingerprint(mapping) {
+  return createHash('sha256')
+    .update(JSON.stringify(approvalMaterial(mapping)))
+    .digest('hex')
+}
+
+export function validateMapping(mapping, { requireApproval = true } = {}) {
   const errors = []
   const aliases = new Set()
   for (const row of mapping.users ?? []) {
@@ -185,52 +230,86 @@ export function validateMapping(mapping) {
     } else {
       aliases.add(alias)
     }
-    if (row.isOwner && (!row.recoveryEmail || !row.ownerApproved)) {
-      errors.push(`${row.userId}: owner recovery email is missing or not approved`)
+    if (row.isOwner && (!row.accountEmail || !row.emailApproved)) {
+      errors.push(`${row.userId}: Super Admin account email is missing or not approved`)
     }
-    if (!row.isOwner && row.recoveryEmail) {
-      errors.push(`${row.userId}: ordinary account must not carry recovery email`)
+    if (row.accountEmail && !row.emailApproved) {
+      errors.push(`${row.userId}: retained account email is not approved`)
     }
     if (row.flags?.includes('username_collision') || row.flags?.includes('username_needs_review')) {
       errors.push(`${row.userId}: unresolved username review flag`)
     }
   }
+  if (
+    requireApproval &&
+    (!mapping.approval?.approvedAt ||
+      !mapping.approval?.approvedBy ||
+      mapping.approval?.fingerprint !== mappingFingerprint(mapping))
+  ) {
+    errors.push('the complete mapping has not been owner-approved, or changed after approval')
+  }
   return errors
 }
 
 async function dryRun(options, config) {
-  const [users, profiles, assignments, contacts] = await Promise.all([
+  const [users, profiles, assignments, accountEmails] = await Promise.all([
     loadAuthUsers(config),
     loadRows(config, 'profiles', 'id,full_name,is_active'),
     loadRows(config, 'assignments', 'person_id,role,outlet_id,ended_on'),
-    loadRows(config, 'account_recovery_contacts', 'profile_id,email').catch(() => []),
+    loadRows(config, 'account_emails', 'profile_id,email').catch(() => []),
   ])
   const mapping = buildMapping({
     users,
     profiles,
     assignments,
-    contacts,
-    approvedOwners: options.approvedOwners,
+    accountEmails,
+    approvedEmails: options.approvedEmails,
   })
   await writePrivateJson(options.mapping, mapping)
-  const flagged = mapping.users.filter((row) => row.flags.length > 0 || !row.ownerApproved)
+  const flagged = mapping.users.filter((row) => row.flags.length > 0)
   console.log(`Dry run mapped ${mapping.users.length} Auth users.`)
   console.log(`Private mapping: ${options.mapping}`)
   console.log(`Rows requiring review or owner approval: ${flagged.length}`)
   for (const row of flagged) {
-    console.log(
-      `${row.userId}: ${[...row.flags, ...(!row.ownerApproved ? ['owner_approval'] : [])].join(', ')}`,
-    )
+    console.log(`${row.userId}: ${row.flags.join(', ')}`)
   }
 }
 
-async function setRecoveryContact(config, row) {
-  if (!row.isOwner) return
-  await request(config, '/rest/v1/rpc/set_account_recovery_contact', {
+async function approveMapping(options) {
+  if (!options.approvedBy) {
+    throw new Error('--approve-mapping requires --approved-by after the owner reviews every row')
+  }
+  const mapping = await readJson(options.mapping)
+  const errors = validateMapping(mapping, { requireApproval: false })
+  if (errors.length > 0) {
+    throw new Error(`Approval refused:\n${errors.map((error) => `- ${error}`).join('\n')}`)
+  }
+  mapping.approval = {
+    approvedAt: new Date().toISOString(),
+    approvedBy: options.approvedBy,
+    fingerprint: mappingFingerprint(mapping),
+  }
+  await writePrivateJson(options.mapping, mapping)
+  console.log(`Owner approval sealed for all ${mapping.users.length} mapped users.`)
+}
+
+async function setAccountEmail(config, row) {
+  if (!row.accountEmail) {
+    await request(
+      config,
+      `/rest/v1/account_emails?profile_id=eq.${encodeURIComponent(row.userId)}`,
+      {
+        method: 'DELETE',
+      },
+    )
+    return
+  }
+  await request(config, '/rest/v1/account_emails?on_conflict=profile_id', {
     method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates' },
     body: JSON.stringify({
-      p_profile_id: row.userId,
-      p_email: row.recoveryEmail,
+      profile_id: row.userId,
+      email: row.accountEmail,
     }),
   })
 }
@@ -242,9 +321,32 @@ async function updateAuthEmail(config, userId, email) {
   })
 }
 
+export function validateCurrentAuthUsers(mapping, users) {
+  const errors = []
+  const mappedById = new Map((mapping.users ?? []).map((row) => [row.userId, row]))
+  const currentById = new Map(users.map((user) => [user.id, user]))
+
+  for (const user of users) {
+    if (!mappedById.has(user.id)) {
+      errors.push(`${user.id}: current Auth user is absent from the approved mapping`)
+    }
+  }
+  for (const row of mapping.users ?? []) {
+    const current = currentById.get(row.userId)
+    if (!current) {
+      errors.push(`${row.userId}: approved mapping user no longer exists`)
+    } else if (current.email !== row.oldEmail && current.email !== row.newAlias) {
+      errors.push(`${row.userId}: Auth identifier drifted after the mapping was generated`)
+    }
+  }
+  return errors
+}
+
 async function applyMapping(options, config) {
   const mapping = await readJson(options.mapping)
   const errors = validateMapping(mapping)
+  const currentUsers = await loadAuthUsers(config)
+  errors.push(...validateCurrentAuthUsers(mapping, currentUsers))
   if (errors.length > 0) {
     throw new Error(`Apply refused:\n${errors.map((error) => `- ${error}`).join('\n')}`)
   }
@@ -254,9 +356,10 @@ async function applyMapping(options, config) {
     completedUserIds: [],
   }))
   const completed = new Set(checkpoint.completedUserIds)
+  let appliedThisRun = 0
   for (const row of mapping.users) {
     if (completed.has(row.userId)) continue
-    await setRecoveryContact(config, row)
+    await setAccountEmail(config, row)
     await updateAuthEmail(config, row.userId, row.newAlias)
     completed.add(row.userId)
     row.status = 'applied'
@@ -265,73 +368,143 @@ async function applyMapping(options, config) {
     await writePrivateJson(options.checkpoint, checkpoint)
     await writePrivateJson(options.mapping, mapping)
     console.log(`Applied ${row.userId}`)
+    appliedThisRun += 1
+    if (options.stopAfter !== null && appliedThisRun >= options.stopAfter) {
+      throw new Error(
+        `Rehearsal interruption requested after ${appliedThisRun} user; rerun --apply to resume`,
+      )
+    }
   }
   console.log(`Applied ${completed.size} users; rerunning --apply is idempotent.`)
 }
 
-async function postflight(options, config) {
-  const mapping = await readJson(options.mapping)
-  const [users, assignments, contacts, invites] = await Promise.all([
-    loadAuthUsers(config),
-    loadRows(config, 'assignments', 'person_id,role,ended_on'),
-    loadRows(config, 'account_recovery_contacts', 'profile_id,email'),
-    loadRows(config, 'account_invites', 'profile_id,consumed_at,superseded_at,expires_at'),
-  ])
+export function auditMigrationState({ mapping, users, assignments, accountEmails, invites, now }) {
+  const checkedAt = now ?? new Date().toISOString()
+  const checkedAtMs = new Date(checkedAt).getTime()
+  const mappedById = new Map(mapping.users.map((row) => [row.userId, row]))
+  const mappedIds = new Set(mappedById.keys())
+  const userIds = new Set(users.map((user) => user.id))
   const userById = new Map(users.map((user) => [user.id, user]))
   const liveOwners = new Set(
     assignments
       .filter((row) => row.role === 'super_admin' && row.ended_on === null)
       .map((row) => row.person_id),
   )
-  const contactIds = new Set(contacts.map((row) => row.profile_id))
+  const accountEmailById = new Map(accountEmails.map((row) => [row.profile_id, row.email]))
   const findings = []
 
+  for (const user of users) {
+    if (!mappedIds.has(user.id)) {
+      findings.push(`${user.id}: current Auth user is absent from the approved mapping`)
+    }
+    if (!authAliasToUsername(user.email)) {
+      findings.push(`${user.id}: Auth identifier is not a canonical reserved alias`)
+    }
+  }
   for (const row of mapping.users) {
     const current = userById.get(row.userId)
-    if (authAliasToUsername(current?.email) !== row.username) {
+    if (!current) {
+      findings.push(`${row.userId}: approved mapping user no longer exists`)
+    } else if (authAliasToUsername(current.email) !== row.username) {
       findings.push(`${row.userId}: Auth alias does not match the approved username`)
     }
   }
   for (const ownerId of liveOwners) {
-    if (!contactIds.has(ownerId)) findings.push(`${ownerId}: live owner has no recovery contact`)
+    if (!accountEmailById.has(ownerId)) {
+      findings.push(`${ownerId}: live owner has no account email`)
+    }
   }
-  for (const contactId of contactIds) {
-    if (!liveOwners.has(contactId)) {
-      findings.push(`${contactId}: recovery contact belongs to a non-owner`)
+  for (const row of mapping.users) {
+    if ((accountEmailById.get(row.userId) ?? null) !== (row.accountEmail ?? null)) {
+      findings.push(`${row.userId}: account email differs from the approved mapping`)
+    }
+  }
+  for (const profileId of accountEmailById.keys()) {
+    if (!mappedById.has(profileId)) {
+      findings.push(`${profileId}: account email belongs to a user outside the approved mapping`)
     }
   }
   for (const invite of invites.filter(
-    (row) => row.consumed_at === null && row.superseded_at === null,
+    (row) =>
+      row.consumed_at === null &&
+      row.superseded_at === null &&
+      new Date(row.expires_at).getTime() > checkedAtMs,
   )) {
-    if (!authAliasToUsername(userById.get(invite.profile_id)?.email)) {
-      findings.push(`${invite.profile_id}: pending invite has no canonical username`)
+    if (
+      !userIds.has(invite.profile_id) ||
+      !authAliasToUsername(userById.get(invite.profile_id)?.email)
+    ) {
+      findings.push(`${invite.profile_id}: live pending invite has no canonical username`)
     }
   }
 
-  const report = {
-    checkedAt: new Date().toISOString(),
+  return {
+    checkedAt,
     users: users.length,
     liveOwners: liveOwners.size,
-    recoveryContacts: contacts.length,
+    accountEmails: accountEmails.length,
     livePendingInvites: invites.filter(
-      (row) => row.consumed_at === null && row.superseded_at === null,
+      (row) =>
+        row.consumed_at === null &&
+        row.superseded_at === null &&
+        new Date(row.expires_at).getTime() > checkedAtMs,
     ).length,
     findings,
   }
+}
+
+async function postflight(options, config) {
+  const mapping = await readJson(options.mapping)
+  const mappingErrors = validateMapping(mapping)
+  if (mappingErrors.length > 0) {
+    throw new Error(`Postflight refused:\n${mappingErrors.map((error) => `- ${error}`).join('\n')}`)
+  }
+  const [users, assignments, accountEmails, invites] = await Promise.all([
+    loadAuthUsers(config),
+    loadRows(config, 'assignments', 'person_id,role,ended_on'),
+    loadRows(config, 'account_emails', 'profile_id,email'),
+    loadRows(config, 'account_invites', 'profile_id,consumed_at,superseded_at,expires_at'),
+  ])
+  const report = auditMigrationState({
+    mapping,
+    users,
+    assignments,
+    accountEmails,
+    invites,
+  })
   await writePrivateJson(path.join(path.dirname(options.mapping), 'postflight.json'), report)
   console.log(JSON.stringify(report, null, 2))
-  if (findings.length > 0) process.exitCode = 1
+  if (report.findings.length > 0) process.exitCode = 1
 }
 
 async function rollback(options, config) {
   const mapping = await readJson(options.mapping)
+  const errors = validateMapping(mapping)
+  if (errors.length > 0) {
+    throw new Error(`Rollback refused:\n${errors.map((error) => `- ${error}`).join('\n')}`)
+  }
+  const checkpoint = await readJson(options.checkpoint).catch(() => ({
+    version: 1,
+    completedUserIds: [],
+  }))
+  const completed = new Set(checkpoint.completedUserIds)
   for (const row of [...mapping.users].reverse()) {
     if (!row.oldEmail) throw new Error(`${row.userId}: rollback email is missing`)
     await updateAuthEmail(config, row.userId, row.oldEmail)
     row.status = 'rolled_back'
+    completed.delete(row.userId)
+    checkpoint.completedUserIds = [...completed]
+    checkpoint.updatedAt = new Date().toISOString()
+    await writePrivateJson(options.checkpoint, checkpoint)
     await writePrivateJson(options.mapping, mapping)
     console.log(`Rolled back ${row.userId}`)
   }
+  await writePrivateJson(path.join(path.dirname(options.mapping), 'rollback.json'), {
+    rolledBackAt: new Date().toISOString(),
+    users: mapping.users.length,
+    accountEmailsRetained: true,
+    note: 'The active schema requires every live Super Admin account email to remain. Returning to the final model is a forward username repair.',
+  })
 }
 
 async function destroyMapping(options) {
@@ -340,6 +513,7 @@ async function destroyMapping(options) {
   await rm(mapping, { force: true })
   await rm(checkpoint, { force: true })
   await rm(path.join(path.dirname(mapping), 'postflight.json'), { force: true })
+  await rm(path.join(path.dirname(mapping), 'rollback.json'), { force: true })
   console.log('Sensitive mapping, checkpoint, and postflight files removed.')
 }
 
@@ -348,6 +522,8 @@ async function main() {
   options.mapping = requirePrivatePath(options.mapping)
   options.checkpoint = requirePrivatePath(options.checkpoint)
   if (options.mode === 'destroy-mapping') return await destroyMapping(options)
+
+  if (options.mode === 'approve-mapping') return await approveMapping(options)
 
   const config = apiConfig()
   if (options.mode === 'dry-run') return await dryRun(options, config)

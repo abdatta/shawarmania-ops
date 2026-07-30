@@ -23,8 +23,8 @@ silently choose a different available value after the admin submits.
 #### Scenario: An at-prefixed spelling is refused
 
 - **WHEN** an admin submits `@rahul` as the username
-- **THEN** the request is refused and no account, profile, assignment, recovery
-  contact, or invite is created
+- **THEN** the request is refused and no account, profile, assignment,
+  account-email row, or invite is created
 
 #### Scenario: Case cannot create a second account
 
@@ -38,46 +38,56 @@ silently choose a different available value after the admin submits.
 - **THEN** the form states that the username is unavailable and the system does
   not substitute a suffix or another username
 
-### Requirement: Only a Super Admin carries a private recovery email
+### Requirement: Account email is private, optional by default, and required for Super Admin
 
 Every person with a live Super Admin assignment SHALL have exactly one
-normalized recovery email, and a person with no live Super Admin assignment
-SHALL have none. That invariant SHALL be enforced after the complete database
-transaction, including against hand-crafted assignment writes.
+normalized account email. A person with no live Super Admin assignment MAY have
+zero or one account email. The Super Admin requirement SHALL be enforced after
+the complete database transaction, including against hand-crafted assignment
+writes.
 
-Recovery email SHALL be private contact data, SHALL NOT be the account's
-everyday sign-in identifier, and SHALL NOT be stored on `public.profiles`.
+Account email SHALL be private account data, SHALL be a permanent alternate
+sign-in identifier for that same account, and SHALL NOT be stored on
+`public.profiles`.
 Only a Super Admin management path may read or change another Super Admin's
-recovery email. A Super Admin MAY see their own address read-only until a
+account email. A Super Admin MAY see their own address read-only until a
 later self-service settings surface exists.
 
-#### Scenario: Creating a Super Admin requires recovery contact
+#### Scenario: Creating a Super Admin requires account email
 
 - **WHEN** an authorized Super Admin creates another Super Admin without a
-  recovery email
+  account email
 - **THEN** the complete request is refused and no partial account is created
 
-#### Scenario: Ordinary staff cannot be given recovery contact
+#### Scenario: Ordinary creation does not require account email
 
-- **WHEN** an account is created or changed with no live Super Admin assignment
-- **THEN** no recovery-email row exists for that person even if a hand-crafted
-  request includes an address
+- **WHEN** an authorized admin creates an Employee, Biller, or Franchise Admin
+  through the People form
+- **THEN** no email is requested and no account-email row is required
 
-#### Scenario: Granting the owner role and contact is atomic
+#### Scenario: A future ordinary-role email remains compatible
+
+- **WHEN** an authorized future account-email path associates an email with a
+  person who has no Super Admin assignment
+- **THEN** the private row is valid and that email becomes an alternate sign-in
+  identifier without granting recovery or role authority
+
+#### Scenario: Granting Super Admin and its account email is atomic
 
 - **WHEN** a Super Admin grants a person a live Super Admin assignment
-- **THEN** a valid recovery email is required and the assignment plus private
-  recovery contact either both commit or neither commits
+- **THEN** a valid account email is required and the assignment plus private
+  email either both commit or neither commits
 
-#### Scenario: Ending the final owner role removes the contact
+#### Scenario: Ending the final Super Admin assignment keeps the associated email
 
 - **WHEN** a person's final live Super Admin assignment is ended while another
   live Super Admin remains
-- **THEN** that person's recovery contact is removed in the same transaction
+- **THEN** the assignment ends but the private account email remains an
+  alternate sign-in identifier until separately removed
 
 ### Requirement: A Super Admin can recover through private email without account enumeration
 
-The unauthenticated recovery surface SHALL accept a recovery email and SHALL
+The unauthenticated recovery surface SHALL accept the account email and SHALL
 return one identical accepted response whether the address is absent, belongs
 to a non-owner, belongs to an inactive account, or is temporarily rate-limited.
 Only a matching active account with a live Super Admin assignment SHALL cause a
@@ -89,9 +99,9 @@ and SHALL re-check active state plus the live Super Admin assignment before a
 new password is accepted. The recovery screen SHALL show the current username
 and require username, new password, and repeated new password.
 
-#### Scenario: An active owner requests recovery
+#### Scenario: An active Super Admin requests recovery
 
-- **WHEN** an active Super Admin submits their private recovery email
+- **WHEN** an active Super Admin submits their private account email
 - **THEN** the public response is the standard accepted response and one
   single-use recovery link is sent to that private address
 
@@ -120,7 +130,7 @@ and require username, new password, and repeated new password.
 The authentication provider SHALL encode a canonical username in a
 non-deliverable reserved-domain alias so that its native password and session
 machinery remains in use. That alias SHALL never be displayed, exported, used
-as contact data, or accepted from a product form. No authentication message
+as a deliverable address, or accepted from a product form. No authentication message
 SHALL be delivered to it.
 
 An authenticated person SHALL NOT be able to change that alias through a
@@ -156,10 +166,10 @@ authority.
 
 The owner SHALL review a complete proposed username mapping before it is
 applied. Collisions and malformed suggestions SHALL stop the migration rather
-than receive an automatic suffix. Existing real email SHALL be retained only
-as private recovery contact for a person with a live Super Admin assignment;
-ordinary-role personal email and every placeholder address SHALL be absent from
-live identity/contact data when the change completes.
+than receive an automatic suffix. A real email SHALL be retained as private
+account email only when explicitly approved, and every live Super Admin SHALL
+have one. Every placeholder address SHALL be absent from live identity or
+account-email data when the change completes.
 
 #### Scenario: An activated Employee crosses the migration
 
@@ -171,7 +181,7 @@ live identity/contact data when the change completes.
 
 #### Scenario: A pending invite crosses the migration
 
-- **WHEN** an existing account has an unconsumed one-time code during cutover
+- **WHEN** an existing account has an unconsumed one-time code during migration
 - **THEN** the same code remains live and its preview shows the owner-approved
   username
 
@@ -179,14 +189,21 @@ live identity/contact data when the change completes.
 
 - **WHEN** an existing account uses a migration placeholder address
 - **THEN** the migration stops until the owner approves a valid unique username
-  and no placeholder survives the completed cutover
+  and no placeholder survives the completed migration
 
-#### Scenario: The completed migration contains only owner recovery email
+#### Scenario: The completed migration retains only approved account email
 
 - **WHEN** post-migration invariants inspect every human account
-- **THEN** every Auth sign-in identity is a canonical provider alias, every and
-  only live Super Admin has private recovery contact, and no other human email
-  remains
+- **THEN** every Auth primary identity is a canonical provider alias, every live
+  Super Admin has private account email, every other retained account email was
+  explicitly approved, and no placeholder email remains
+
+#### Scenario: Production mappings never enter source control
+
+- **WHEN** the owner-approved production mapping is prepared and applied
+- **THEN** its usernames and emails exist only in the gitignored operator file
+  and production identity state, not in a tracked source, test, fixture,
+  document, or commit message
 
 ### Requirement: Credential forms expose password-manager semantics without promising browser UI
 
@@ -221,16 +238,25 @@ save prompt, because that decision remains under browser and user policy.
 
 ## MODIFIED Requirements
 
-### Requirement: Staff sign in with username and password
+### Requirement: Every account signs in with username, and associated email is an alternate
 
 The application SHALL authenticate every human role with a canonical username
-and password. The person SHALL type the username without an `@`. Email and
-phone numbers SHALL NOT be accepted as everyday sign-in identifiers.
+and password. The person SHALL type the username without an `@`. If the account
+has an associated private email, the same password SHALL also authenticate that
+same account when the person enters the email. Phone numbers SHALL NOT be
+accepted as sign-in identifiers.
 
-Ordinary password authentication SHALL use the authentication provider
-directly rather than sending the password through an application Edge
-Function. A wrong username and a wrong password SHALL remain
-indistinguishable.
+Username password authentication SHALL call the authentication provider
+directly. Email authentication SHALL use a narrowly scoped server bridge that
+privately resolves the current Auth alias and delegates password verification
+and session minting to the provider with its public client credential. The
+bridge SHALL NOT verify or retain passwords, mint a custom session, expose the
+email-to-username mapping, or log raw email, password, alias, access token, or
+refresh token.
+
+Unknown username, unknown email, unassociated email, inactive account, malformed
+identifier, rate-limited email, and wrong password SHALL remain
+indistinguishable in the product.
 
 #### Scenario: A provisioned account signs in
 
@@ -238,6 +264,25 @@ indistinguishable.
   correct password on the sign-in screen
 - **THEN** a session is established and they are taken to a shell for a role
   they currently hold
+
+#### Scenario: An associated email signs in to the same account
+
+- **WHEN** a person whose account has an associated email enters that email and
+  the correct password
+- **THEN** the provider establishes a normal session for the same Auth user ID
+  reached by their username
+
+#### Scenario: An account without email still signs in
+
+- **WHEN** an Employee has no associated email
+- **THEN** their canonical username and password work and no email is required
+
+#### Scenario: Email resolution remains private
+
+- **WHEN** email sign-in is attempted with an unknown address, an inactive
+  account address, and a real address plus wrong password
+- **THEN** every attempt returns the same credential refusal and no username,
+  alias, user ID, or resolution result is disclosed
 
 #### Scenario: An at-prefixed username is refused
 
@@ -251,12 +296,12 @@ indistinguishable.
   wrong password for a real username
 - **THEN** both attempts produce the same username-or-password refusal
 
-#### Scenario: Staff email is not a compatibility sign-in
+#### Scenario: A former unassociated email does not sign in
 
-- **WHEN** a non-Super-Admin's former email address is submitted after the
-  migration is complete
-- **THEN** no session is established and the product offers no email sign-in
-  path
+- **WHEN** a former address that was not retained in `account_emails` is
+  submitted after migration
+- **THEN** no session is established and the standard credential refusal is
+  returned
 
 ### Requirement: Accounts are provisioned by an admin, never self-registered
 
@@ -271,7 +316,7 @@ before issuing one activation code. A Super Admin account SHALL accept no
 outlet because that role is business-wide.
 
 The admin SHALL supply name, canonical username, and role. Outlet selection
-SHALL be required for every outlet-scoped role, and recovery email SHALL be
+SHALL be required for every outlet-scoped role, and account email SHALL be
 required only for Super Admin. Phone, job title, and joined date SHALL remain
 optional.
 
@@ -286,14 +331,14 @@ optional.
 #### Scenario: An admin creates a Super Admin
 
 - **WHEN** an authorized Super Admin submits a name, unique username, Super
-  Admin role, no outlets, and a unique recovery email
-- **THEN** one account, live Super Admin assignment, private recovery contact,
+  Admin role, no outlets, and a unique account email
+- **THEN** one account, live Super Admin assignment, private account email,
   and activation link are created as one account-creation act
 
 #### Scenario: A contradictory Super Admin request is refused
 
 - **WHEN** a Super Admin provisioning request carries any outlet
-- **THEN** no account, profile, assignment, recovery contact, or invite is
+- **THEN** no account, profile, assignment, account email, or invite is
   created
 
 #### Scenario: Self-registration is refused
@@ -348,7 +393,7 @@ redeems it with the displayed username and a new password typed twice.
 Self-service forgotten-password recovery SHALL NOT be offered to those roles.
 
 One Super Admin MAY issue the same link for another Super Admin. Separately, a
-Super Admin MAY use the private recovery-email flow when another administrator
+Super Admin MAY use the private account-email recovery flow when another administrator
 is unavailable.
 
 #### Scenario: A staff member who forgot their password gets admin help
@@ -375,14 +420,14 @@ account within the authority limits of the caller's role.
 A newly issued code SHALL be presented once as the activation link, QR image,
 and copy action for the admin to pass on, and SHALL NOT be retrievable
 afterwards. Username SHALL be visible wherever the admin must identify or
-support an account. Recovery email SHALL appear only under the private owner
+support an account. Account email SHALL appear only under the private owner
 rules.
 
 #### Scenario: The Franchise Admin list is authority-scoped
 
 - **WHEN** a Franchise Admin opens People
 - **THEN** only people wholly within their management authority are actionable,
-  and no control offers a role, outlet, username change, or recovery contact
+  and no control offers a role, outlet, username change, or account email
   outside that authority
 
 #### Scenario: The handover is shown once
@@ -395,7 +440,7 @@ rules.
 
 - **WHEN** an authorized admin opens a person's People detail
 - **THEN** the current canonical username is visible without exposing a
-  provider alias or ordinary staff email
+  provider alias or private account email outside the owner rule
 
 ### Requirement: A person is created once, as an account
 
@@ -410,7 +455,7 @@ The person's job title (`role_title`) lives on the account record; where they
 work and from when lives on each assignment. One optional joined date supplied
 at creation SHALL apply to every assignment created in that action. Editing
 staff facts SHALL remain the admin's own session under RLS, while username,
-active state, recovery contact, and assignments remain governed by their
+active state, account email, and assignments remain governed by their
 identity and authority boundaries.
 
 The create form SHALL keep role as one selection. It SHALL offer a phone-usable
@@ -442,7 +487,7 @@ outlet preselected in the singular disabled control.
 #### Scenario: Access fields stay out of direct client writes
 
 - **WHEN** any client session attempts to write username, active state, or
-  recovery contact directly
+  account email directly
 - **THEN** the database/provider boundary refuses it and only the authorized
   privileged path can complete the change
 
@@ -464,9 +509,10 @@ superseded, a new code SHALL be issued after the changed assignment set exists,
 and the admin SHALL be shown the new link in the same action. An assignment
 change for a person without an outstanding code SHALL NOT create one.
 
-Granting a Super Admin assignment SHALL require and atomically write recovery
-contact. Ending a person's final live Super Admin assignment SHALL atomically
-remove recovery contact, and the existing last-Super-Admin guard SHALL remain.
+Granting a Super Admin assignment SHALL require and atomically write an account
+email. Ending a person's final live Super Admin assignment SHALL retain that
+private email as an alternate sign-in identifier, and the existing
+last-Super-Admin guard SHALL remain.
 
 #### Scenario: A new assignment appears without signing out
 
@@ -504,10 +550,10 @@ remove recovery contact, and the existing last-Super-Admin guard SHALL remain.
 - **WHEN** an admin changes an assignment for a person with no outstanding code
 - **THEN** the assignment changes and no invite or email is issued
 
-#### Scenario: Owner-role contact cannot be bypassed
+#### Scenario: The Super Admin account-email requirement cannot be bypassed
 
-- **WHEN** a Super Admin assignment is inserted or ended through a hand-crafted
-  database request without its matching recovery-contact change
+- **WHEN** a Super Admin assignment is inserted through a hand-crafted database
+  request for a person without an account-email row
 - **THEN** the transaction is refused
 
 ### Requirement: An admin can see and correct the username an account signs in with
@@ -538,12 +584,12 @@ username. An admin SHALL NOT use this path to change their own username.
 - **THEN** the change is refused as unavailable and the old username remains
   unchanged
 
-### Requirement: Login identifiers and recovery contacts stay off the counter tablet
+### Requirement: Login identifiers and account emails stay off the counter tablet
 
-Usernames, provider aliases, and recovery email SHALL NOT be stored on
+Usernames, provider aliases, and account email SHALL NOT be stored on
 `public.profiles`, which a Biller may read for their own outlet. The identifier
 response SHALL be served only by the privileged account function, per caller,
-for accounts that caller may support. Recovery contact SHALL be narrower still:
+for accounts that caller may support. Account email SHALL be narrower still:
 only an authorized Super Admin path may receive it.
 
 A caller with no management authority SHALL be refused outright rather than
@@ -552,7 +598,7 @@ handed an empty identifier response.
 #### Scenario: A Biller asks for identifiers
 
 - **WHEN** a Biller session calls the privileged account function for usernames
-  or recovery contacts
+  or account emails
 - **THEN** the request is refused and neither value is returned by any other
   client-readable path
 
@@ -560,12 +606,12 @@ handed an empty identifier response.
 
 - **WHEN** a Franchise Admin loads People
 - **THEN** usernames are present only for people wholly within their management
-  authority and no recovery email is present
+  authority and no account email is present
 
-#### Scenario: A Super Admin sees owner recovery contact narrowly
+#### Scenario: A Super Admin sees another Super Admin's account email narrowly
 
 - **WHEN** a Super Admin manages another live Super Admin
-- **THEN** that target's recovery email is available for correction without
+- **THEN** that target's account email is available for correction without
   exposing it to any outlet-scoped role
 
 ### Requirement: Every people surface answers whether a person can check in
@@ -584,7 +630,7 @@ personal email or placeholder address SHALL never be an account state.
 
 - **WHEN** People lists a person with an outstanding activation link
 - **THEN** the row states that activation is pending and offers the authorized
-  admin action rather than asking for contact data
+  admin action rather than asking for an email address
 
 #### Scenario: A person with no assignment reads as unplaced
 
@@ -601,7 +647,7 @@ personal email or placeholder address SHALL never be an account state.
 The issuing surface SHALL offer an origin-relative activation link containing
 the code as the only handover: a scannable image, the link itself, and one copy
 action. The raw code SHALL NOT be separately displayed, and the URL SHALL carry
-no username, provider alias, recovery email, or other personal detail.
+no username, provider alias, account email, or other personal detail.
 
 Opening a live link SHALL resolve and display the current username, then ask
 the person to type that username, a new password, and the repeated new password.
@@ -621,7 +667,7 @@ The code itself SHALL NOT be typed.
 #### Scenario: The link contains no identity data
 
 - **WHEN** an activation link is generated
-- **THEN** its URL carries the code and no username, alias, or recovery email
+- **THEN** its URL carries the code and no username, alias, or account email
 
 #### Scenario: Opening the link presents three credential fields
 
@@ -636,7 +682,7 @@ to the current canonical username. The lookup SHALL NOT consume the code or
 change the account, and SHALL return the same refusal for unknown, expired,
 redeemed, superseded, and inactive-account codes.
 
-The lookup SHALL return no provider alias, recovery email, role, outlet, name,
+The lookup SHALL return no provider alias, account email, role, outlet, name,
 or account ID.
 
 #### Scenario: A live code resolves to current username
@@ -715,18 +761,20 @@ mistyped repeat consumes neither a code nor a rate-limit allowance.
 - **THEN** the password is updated and the recovery session continues into the
   app
 
-### Requirement: Sign-in asks for the admin-issued username
+### Requirement: Sign-in asks for username or associated email
 
 The sign-in screen SHALL identify the field as the username given by the
-person's manager, SHALL show examples without an `@`, and SHALL route forgotten
-password help according to role: admin help for staff, private email recovery
-for Super Admin.
+person's manager or the email associated with their account, SHALL show a
+username example without an `@`, and SHALL route forgotten-password help
+according to role: admin help for staff, private email recovery for Super
+Admin.
 
-#### Scenario: The username field explains what to enter
+#### Scenario: The identifier field explains what to enter
 
 - **WHEN** a person opens sign-in
-- **THEN** the identifier field asks for the username their manager gave them
-  and does not label or type the control as email
+- **THEN** the identifier field asks for username or email, remains a text
+  control with `autocomplete="username"`, and explains that email works only
+  when associated with the account
 
 #### Scenario: Staff help names the human recovery path
 
@@ -743,13 +791,13 @@ product data. A canonical admin-approved username exists before every account
 is created or migrated.
 
 **Migration**: The owner-reviewed username migration replaces every placeholder
-with a valid unique username before cutover. People replaces “needs an address”
+with a valid unique username before completion. People replaces “needs an address”
 with the existing activation-pending, deactivated, and unassigned states.
 
 ## RENAMED Requirements
 
 - **FROM**: `Staff sign in with email and password`
-- **TO**: `Staff sign in with username and password`
+- **TO**: `Every account signs in with username, and associated email is an alternate`
 - **FROM**: `Redeeming a code sets a password and reveals nothing`
 - **TO**: `Redeeming a code sets a password and reveals nothing beyond its username`
 - **FROM**: `An admin-issued code is the password reset path`
@@ -757,7 +805,7 @@ with the existing activation-pending, deactivated, and unassigned states.
 - **FROM**: `An admin can see and correct the address an account signs in with`
 - **TO**: `An admin can see and correct the username an account signs in with`
 - **FROM**: `Staff email addresses are not readable from the counter tablet`
-- **TO**: `Login identifiers and recovery contacts stay off the counter tablet`
+- **TO**: `Login identifiers and account emails stay off the counter tablet`
 - **FROM**: `An activation link carries the code so nothing but a password is typed`
 - **TO**: `An activation link carries the code and asks for username plus a new password`
 - **FROM**: `A code resolves to its address only for whoever holds that code`
@@ -765,4 +813,4 @@ with the existing activation-pending, deactivated, and unassigned states.
 - **FROM**: `Activation confirms the address before a password is set`
 - **TO**: `Activation shows and verifies the username before setting a password`
 - **FROM**: `Sign-in names where the address came from`
-- **TO**: `Sign-in asks for the admin-issued username`
+- **TO**: `Sign-in asks for username or associated email`

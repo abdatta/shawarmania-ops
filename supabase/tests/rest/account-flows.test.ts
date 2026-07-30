@@ -13,7 +13,7 @@
  * `npm run test:rls`.
  *
  * Unlike rls-probes.test.ts, this suite necessarily creates accounts. It uses
- * a fresh address per run so it is re-runnable without a reset, and it asserts
+ * a fresh username per run so it is re-runnable without a reset, and it asserts
  * properties rather than row counts so it does not fight anything else that
  * writes to the same database.
  */
@@ -134,6 +134,30 @@ async function redeem(payload: Record<string, unknown>): Promise<FnResult> {
   }
 }
 
+async function emailSignIn(
+  email: string,
+  password: string,
+  ip = '198.51.100.42',
+): Promise<FnResult<{ accessToken?: string; refreshToken?: string; error?: string }>> {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/email-sign-in`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-forwarded-for': ip,
+    },
+    body: JSON.stringify({ email, password }),
+  })
+  const text = await response.text()
+  return {
+    status: response.status,
+    body: (text ? JSON.parse(text) : {}) as {
+      accessToken?: string
+      refreshToken?: string
+      error?: string
+    },
+  }
+}
+
 interface Provisioned {
   profileId: string
   username: string
@@ -168,6 +192,41 @@ let faKalyaniToken: string
 beforeAll(async () => {
   superAdminToken = await tokenFor(PERSONAS.superAdmin)
   faKalyaniToken = await tokenFor(PERSONAS.faKalyani)
+})
+
+describe('permanent associated-email sign-in', () => {
+  it('returns a normal Supabase session for the same account as the username', async () => {
+    const byEmail = await emailSignIn(' OWNER.ACCOUNT@EXAMPLE.COM ', SEED_PASSWORD)
+    expect(byEmail.status).toBe(200)
+    expect(byEmail.body).toEqual({
+      accessToken: expect.any(String),
+      refreshToken: expect.any(String),
+    })
+    expect(byEmail.body).not.toHaveProperty('username')
+    expect(byEmail.body).not.toHaveProperty('email')
+
+    const installed = await anonClient().auth.setSession({
+      access_token: byEmail.body.accessToken!,
+      refresh_token: byEmail.body.refreshToken!,
+    })
+    const byUsername = await anonClient().auth.signInWithPassword({
+      email: PERSONAS.superAdmin,
+      password: SEED_PASSWORD,
+    })
+    expect(installed.data.user?.id).toBe(byUsername.data.user?.id)
+  })
+
+  it('keeps unknown email and wrong password indistinguishable', async () => {
+    const [unknown, wrong] = await Promise.all([
+      emailSignIn('nobody@example.com', SEED_PASSWORD, '198.51.100.43'),
+      emailSignIn('owner.account@example.com', 'wrong-password', '198.51.100.44'),
+    ])
+    expect(unknown).toEqual({
+      status: 401,
+      body: { error: 'invalid_credentials' },
+    })
+    expect(wrong).toEqual(unknown)
+  })
 })
 
 describe('provisioning an account end to end', () => {
@@ -697,17 +756,17 @@ describe('an outstanding invite over REST', () => {
 })
 
 /**
- * The address an account signs in with: readable by the admins who manage it,
+ * The username an account signs in with: readable by the admins who manage it,
  * correctable by them, and — the part that matters most — unreachable from the
  * counter tablet.
  *
  * A Biller is a shared device that whoever is standing at it can pick up.
- * Colleagues' personal contact details must not be ambient on it, which is why
- * the address is never mirrored onto `public.profiles` (a Biller may read their
+ * Colleagues' sign-in identifiers must not be ambient on it, which is why the
+ * username is never mirrored onto `public.profiles` (a Biller may read their
  * own outlet's profiles) and why this function refuses the request outright
  * rather than answering it with an empty object.
  */
-describe('usernames and private owner recovery contacts', () => {
+describe('usernames and private Super Admin account emails', () => {
   it('is refused for a Biller — the counter tablet asks and is told no', async () => {
     const biller = await tokenFor(PERSONAS.billerKalyani)
     const result = await adminAccounts<{ error: string }>(biller, { action: 'identifiers' })
@@ -728,14 +787,14 @@ describe('usernames and private owner recovery contacts', () => {
     expect(result.status).toBe(201)
 
     const seen = await adminAccounts<{
-      identifiers: Record<string, { username: string; recoveryEmail: string | null }>
+      identifiers: Record<string, { username: string; accountEmail: string | null }>
     }>(faKalyaniToken, {
       action: 'identifiers',
     })
     expect(seen.status).toBe(200)
 
     const identifiers = Object.values(seen.body.identifiers)
-    expect(identifiers).toContainEqual({ username, recoveryEmail: null })
+    expect(identifiers).toContainEqual({ username, accountEmail: null })
     // The other outlet's manager and staff are outside this caller's authority.
     expect(identifiers.map((item) => item.username)).not.toContain('admin.kanchrapara')
     expect(identifiers.map((item) => item.username)).not.toContain('staff.kanchrapara')
@@ -743,7 +802,7 @@ describe('usernames and private owner recovery contacts', () => {
 
   it('gives the Super Admin every outlet', async () => {
     const seen = await adminAccounts<{
-      identifiers: Record<string, { username: string; recoveryEmail: string | null }>
+      identifiers: Record<string, { username: string; accountEmail: string | null }>
     }>(superAdminToken, {
       action: 'identifiers',
     })
@@ -751,14 +810,14 @@ describe('usernames and private owner recovery contacts', () => {
 
     expect(identifiers.map((item) => item.username)).toContain('admin.kalyani')
     expect(identifiers.map((item) => item.username)).toContain('admin.kanchrapara')
-    expect(identifiers.find((item) => item.username === 'admin.kalyani')?.recoveryEmail).toBeNull()
-    expect(identifiers.find((item) => item.username === 'owner')?.recoveryEmail).toBe(
-      'owner.recovery@example.com',
+    expect(identifiers.find((item) => item.username === 'admin.kalyani')?.accountEmail).toBeNull()
+    expect(identifiers.find((item) => item.username === 'owner')?.accountEmail).toBe(
+      'owner.account@example.com',
     )
   })
 
   it('corrects a mistyped username, and the code already sent still works', async () => {
-    // The situation this exists for: an owner fat-fingers a staff address, and
+    // The situation this exists for: an owner fat-fingers a staff username, and
     // the person is left with a code that refuses them and no way to find out
     // why. Everything below is the recovery, entirely through the API.
     const typo = freshUsername('typo')
@@ -779,9 +838,9 @@ describe('usernames and private owner recovery contacts', () => {
     })
     expect(change.status).toBe(200)
 
-    // The code is bound to the account rather than to the address, so the
+    // The code is bound to the account rather than to the username, so the
     // message the admin already sent still works — and the person who opens it
-    // is shown the corrected address rather than the typo.
+    // is shown the corrected username rather than the typo.
     const preview = await redeem({ action: 'preview', code: provisioned.body.code })
     expect(preview.status).toBe(200)
     expect(preview.body['username']).toBe(corrected)
@@ -802,6 +861,91 @@ describe('usernames and private owner recovery contacts', () => {
       password: NEW_PASSWORD,
     })
     expect(session.error).toBeNull()
+  })
+
+  it('keeps an open session through a rename while only the new username signs in', async () => {
+    const { username, email, result } = await provisionAs(faKalyaniToken)
+    expect(
+      (await redeem({ code: result.body.code, username, password: NEW_PASSWORD })).status,
+    ).toBe(204)
+    const openClient = anonClient()
+    const signedIn = await openClient.auth.signInWithPassword({
+      email,
+      password: NEW_PASSWORD,
+    })
+    expect(signedIn.error).toBeNull()
+
+    const renamed = freshUsername('renamed')
+    expect(
+      (
+        await adminAccounts(faKalyaniToken, {
+          action: 'set-username',
+          profileId: result.body.profileId,
+          username: renamed,
+        })
+      ).status,
+    ).toBe(200)
+
+    const sameSession = await openClient
+      .from('profiles')
+      .select('id')
+      .eq('id', result.body.profileId)
+    expect(sameSession.data).toEqual([{ id: result.body.profileId }])
+    expect(
+      (
+        await anonClient().auth.signInWithPassword({
+          email,
+          password: NEW_PASSWORD,
+        })
+      ).error,
+    ).not.toBeNull()
+    expect(
+      (
+        await anonClient().auth.signInWithPassword({
+          email: authAlias(renamed),
+          password: NEW_PASSWORD,
+        })
+      ).error,
+    ).toBeNull()
+  })
+
+  it('lets an admin-issued replacement link reset staff without staff email', async () => {
+    const { username, email, result } = await provisionAs(faKalyaniToken)
+    expect(
+      (await redeem({ code: result.body.code, username, password: NEW_PASSWORD })).status,
+    ).toBe(204)
+
+    const replacement = await adminAccounts<Provisioned>(faKalyaniToken, {
+      action: 'reissue',
+      profileId: result.body.profileId,
+    })
+    expect(replacement.status).toBe(200)
+    const resetPassword = 'a-replacement-password'
+    expect(
+      (
+        await redeem({
+          code: replacement.body.code,
+          username,
+          password: resetPassword,
+        })
+      ).status,
+    ).toBe(204)
+    expect(
+      (
+        await anonClient().auth.signInWithPassword({
+          email,
+          password: NEW_PASSWORD,
+        })
+      ).error,
+    ).not.toBeNull()
+    expect(
+      (
+        await anonClient().auth.signInWithPassword({
+          email,
+          password: resetPassword,
+        })
+      ).error,
+    ).toBeNull()
   })
 
   it('refuses a username another account already holds', async () => {
@@ -832,7 +976,7 @@ describe('usernames and private owner recovery contacts', () => {
     expect(reach.body.error).toBe('forbidden')
   })
 
-  it('refuses a Biller trying to change anybody’s address', async () => {
+  it('refuses a Biller trying to change anybody’s username', async () => {
     const biller = await tokenFor(PERSONAS.billerKalyani)
     const { result } = await provisionAs(faKalyaniToken)
 
@@ -845,5 +989,109 @@ describe('usernames and private owner recovery contacts', () => {
         })
       ).status,
     ).toBe(403)
+  })
+})
+
+describe('Super Admin account-email invariants over the privileged boundary', () => {
+  it('requires the email, keeps it private, and cleans up a duplicate refusal', async () => {
+    const username = freshUsername('owner')
+    const accountEmail = `probe.owner.${RUN}.${seq++}@example.com`
+    const missing = await adminAccounts(superAdminToken, {
+      action: 'provision',
+      fullName: 'Probe Owner Missing Email',
+      username,
+      role: 'super_admin',
+      outletIds: [],
+    })
+    expect(missing.status).toBe(400)
+
+    const created = await adminAccounts<Provisioned>(superAdminToken, {
+      action: 'provision',
+      fullName: 'Probe Owner',
+      username,
+      role: 'super_admin',
+      outletIds: [],
+      accountEmail,
+    })
+    expect(created.status).toBe(201)
+
+    const identifiers = await adminAccounts<{
+      identifiers: Record<string, { username: string; accountEmail: string | null }>
+    }>(superAdminToken, { action: 'identifiers' })
+    expect(identifiers.body.identifiers[created.body.profileId]).toEqual({
+      username,
+      accountEmail,
+    })
+
+    const duplicateUsername = freshUsername('owndup')
+    const duplicate = await adminAccounts<{ error: string }>(superAdminToken, {
+      action: 'provision',
+      fullName: 'Probe Owner Duplicate Email',
+      username: duplicateUsername,
+      role: 'super_admin',
+      outletIds: [],
+      accountEmail,
+    })
+    expect(duplicate).toMatchObject({
+      status: 409,
+      body: { error: 'email_unavailable' },
+    })
+
+    const retried = await adminAccounts<Provisioned>(superAdminToken, {
+      action: 'provision',
+      fullName: 'Probe Owner Retry',
+      username: duplicateUsername,
+      role: 'super_admin',
+      outletIds: [],
+      accountEmail: `probe.owner.retry.${RUN}.${seq++}@example.com`,
+    })
+    expect(retried.status).toBe(201)
+  })
+
+  it('cannot grant the owner role without its email, and retains it when that role ends', async () => {
+    const { username, result } = await provisionAs(superAdminToken)
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(204)
+    const refused = await adminAccounts(superAdminToken, {
+      action: 'assign',
+      personId: result.body.profileId,
+      role: 'super_admin',
+      outletId: null,
+    })
+    expect(refused.status).toBe(400)
+
+    const ownerRowsBefore = await clientWithToken(superAdminToken)
+      .from('assignments')
+      .select('id')
+      .eq('person_id', result.body.profileId)
+      .eq('role', 'super_admin')
+      .is('ended_on', null)
+    expect(ownerRowsBefore.data).toEqual([])
+
+    const accountEmail = `probe.grant.${RUN}.${seq++}@example.com`
+    const granted = await adminAccounts<AssignmentChanged>(superAdminToken, {
+      action: 'assign',
+      personId: result.body.profileId,
+      role: 'super_admin',
+      outletId: null,
+      accountEmail,
+    })
+    expect(granted.status).toBe(201)
+
+    const ended = await adminAccounts(superAdminToken, {
+      action: 'end-assignment',
+      assignmentId: granted.body.assignmentId,
+    })
+    expect(ended.status).toBe(200)
+
+    const identifiers = await adminAccounts<{
+      identifiers: Record<string, { username: string; accountEmail: string | null }>
+    }>(superAdminToken, { action: 'identifiers' })
+    expect(identifiers.body.identifiers[result.body.profileId]).toEqual({
+      username,
+      accountEmail: null,
+    })
+
+    const retained = await emailSignIn(accountEmail, NEW_PASSWORD, '198.51.100.45')
+    expect(retained.status).toBe(200)
   })
 })

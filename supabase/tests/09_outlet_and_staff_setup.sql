@@ -214,14 +214,14 @@ select is((select count(*)
               and ns.nspname = 'public'
               and cl.relname not in (
                 'account_invites',
-                'account_recovery_contacts',
+                'account_emails',
                 'assignments'
               )), 0::bigint,
   'no foreign key onto profiles cascades, except the three recorded exceptions');
 
 -- The three exceptions, named so that adding another has to argue for itself
 -- here. They are PLUMBING rather than history: an invite is a code waiting to
--- be redeemed, a recovery contact is private account configuration, and an
+-- be redeemed, an account email is private account configuration, and an
 -- assignment is the record that somebody works somewhere. None is evidence
 -- of anything that happened, which is what the
 -- no-deletion rule protects — and every table that IS evidence still refuses,
@@ -234,7 +234,7 @@ select is((select string_agg(cl.relname, ', ' order by cl.relname)
               and c.confrelid = 'public.profiles'::regclass
               and c.confdeltype = 'c'
               and ns.nspname = 'public'),
-  'account_invites, account_recovery_contacts, assignments',
+  'account_emails, account_invites, assignments',
   'and the cascading keys are exactly the three that are plumbing, not history');
 
 select throws_ok($q$

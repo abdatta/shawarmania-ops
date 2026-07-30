@@ -12,8 +12,8 @@ Exactly-once semantics are brutal to retrofit onto a shipped queue, which is why
 
 `username-sign-in-and-owner-recovery` (#24) lands first so this change designs
 device enrollment against the durable username identity model. No personal
-staff email or temporary personal Biller login may leak into the device
-credential, enrollment record, PIN attribution, or recovery story.
+staff sign-in identifier or temporary personal Biller login may leak into the
+device credential, enrollment record, PIN attribution, or recovery story.
 
 ## Scope
 

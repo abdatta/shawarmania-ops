@@ -218,6 +218,31 @@ describe('the signed Send Email Hook', () => {
     }
   })
 
+  it('prevents a signed-in staff member from rewriting the hidden Auth alias', async () => {
+    const client = anonClient()
+    const originalAlias = 'staff.kalyani@login.shawarmania.invalid'
+    const attemptedAlias = `hijack.${RUN}@login.shawarmania.invalid`
+    const signedIn = await client.auth.signInWithPassword({
+      email: originalAlias,
+      password: SEED_PASSWORD,
+    })
+    expect(signedIn.error).toBeNull()
+
+    const changed = await client.auth.updateUser({ email: attemptedAlias })
+    expect(changed.error).not.toBeNull()
+
+    const current = await client.auth.getUser()
+    expect(current.data.user?.email).toBe(originalAlias)
+    expect(
+      (
+        await anonClient().auth.signInWithPassword({
+          email: attemptedAlias,
+          password: SEED_PASSWORD,
+        })
+      ).error,
+    ).not.toBeNull()
+  })
+
   it('delivers only an active live owner recovery through the local mail sink', async () => {
     const body = JSON.stringify(recoveryPayload)
     const response = await fetch(`${SUPABASE_URL}/functions/v1/send-email-hook`, {
@@ -247,11 +272,11 @@ describe('the signed Send Email Hook', () => {
 describe('public owner recovery', () => {
   it('returns one response for a live owner, unknown address, and ordinary staff', async () => {
     const responses = await Promise.all(
-      ['owner.recovery@example.com', 'nobody@example.com', 'staff.kalyani@example.com'].map(
-        (recoveryEmail, index) =>
+      ['owner.account@example.com', 'nobody@example.com', 'staff.kalyani@example.com'].map(
+        (email, index) =>
           callFunction(
             'owner-recovery',
-            { action: 'request', recoveryEmail },
+            { action: 'request', email },
             { ip: `198.51.100.${index + 10}` },
           ),
       ),

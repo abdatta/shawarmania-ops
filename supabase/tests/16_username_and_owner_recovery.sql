@@ -1,6 +1,7 @@
 -- Username identity and owner recovery are privileged plumbing. This suite
--- proves the canonical namespace, every-and-only owner-contact invariant,
--- enumeration-safe resolver, and the independent privilege boundary.
+-- proves the canonical namespace, required Super Admin account email,
+-- enumeration-safe sign-in/recovery resolvers, and the independent privilege
+-- boundary.
 
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -68,24 +69,24 @@ select is(
 );
 
 -- ---------------------------------------------------------------------------
--- Recovery contact exists for every and only the live owner.
+-- Account email is optional generally and required for every live owner.
 
 select is(
-  (select count(*) from public.account_recovery_contacts),
+  (select count(*) from public.account_emails),
   1::bigint,
-  'the seed contains exactly one private recovery contact'
+  'the seed contains exactly one private account email'
 );
 select is(
   (
     select count(*)
-      from public.account_recovery_contacts c
+      from public.account_emails c
       join public.assignments a
         on a.person_id = c.profile_id
        and a.role = 'super_admin'
        and a.ended_on is null
   ),
   1::bigint,
-  'that contact belongs to a live Super Admin'
+  'that account email belongs to a live Super Admin'
 );
 select is(
   (
@@ -95,45 +96,45 @@ select is(
        and a.ended_on is null
        and not exists (
          select 1
-           from public.account_recovery_contacts c
+           from public.account_emails c
           where c.profile_id = a.person_id
        )
   ),
   0::bigint,
-  'no live Super Admin is missing a recovery contact'
+  'no live Super Admin is missing an account email'
 );
 
-savepoint ordinary_contact;
-insert into public.account_recovery_contacts (profile_id, email)
-values (:EMPLOYEE, 'staff.recovery@example.com');
+savepoint ordinary_account_email;
+insert into public.account_emails (profile_id, email)
+values (:EMPLOYEE, 'staff.account@example.com');
+select lives_ok(
+  'set constraints all immediate',
+  'a non-owner may carry one private account email'
+);
+rollback to ordinary_account_email;
+set constraints all deferred;
+
+savepoint owner_without_account_email;
+delete from public.account_emails where profile_id = :OWNER;
 select throws_ok(
   'set constraints all immediate',
   '23514',
   null,
-  'a non-owner cannot carry a recovery contact even through direct SQL'
+  'a live owner cannot lose the required account email'
 );
-rollback to ordinary_contact;
-
-savepoint owner_without_contact;
-delete from public.account_recovery_contacts where profile_id = :OWNER;
-select throws_ok(
-  'set constraints all immediate',
-  '23514',
-  null,
-  'a live owner cannot lose the required recovery contact'
-);
-rollback to owner_without_contact;
+rollback to owner_without_account_email;
+set constraints all deferred;
 
 select throws_ok(
   format(
-    'insert into public.account_recovery_contacts (profile_id, email) '
+    'insert into public.account_emails (profile_id, email) '
     'values (%L, %L)',
     :EMPLOYEE,
-    'owner.recovery@example.com'
+    'owner.account@example.com'
   ),
   '23505',
   null,
-  'recovery addresses are unique after normalization'
+  'account emails are unique after normalization'
 );
 
 select throws_ok(
@@ -149,11 +150,11 @@ select throws_ok(
 select is(
   (
     select count(*)
-      from public.account_recovery_contacts
+      from public.account_emails
      where profile_id = :OWNER
   ),
   1::bigint,
-  'a refused last-owner write leaves the recovery contact intact'
+  'a refused last-owner write leaves the account email intact'
 );
 
 -- ---------------------------------------------------------------------------
@@ -161,10 +162,16 @@ select is(
 
 select pg_temp.impersonate(:OWNER);
 select throws_ok(
-  'select * from public.account_recovery_contacts',
+  'select * from public.account_emails',
   '42501',
   null,
-  'a Super Admin cannot read recovery contacts through the client role'
+  'a Super Admin cannot read account emails through the client role'
+);
+select throws_ok(
+  'select * from public.email_sign_in_attempts',
+  '42501',
+  null,
+  'a Super Admin cannot read email sign-in attempt hashes'
 );
 select throws_ok(
   'select * from public.owner_recovery_attempts',
@@ -175,41 +182,49 @@ select throws_ok(
 
 select pg_temp.impersonate(:ADMIN);
 select throws_ok(
-  'select * from public.account_recovery_contacts',
+  'select * from public.account_emails',
   '42501',
   null,
-  'a Franchise Admin cannot read recovery contacts'
+  'a Franchise Admin cannot read account emails'
 );
 
 select pg_temp.impersonate(:BILLER);
 select throws_ok(
-  'select * from public.account_recovery_contacts',
+  'select * from public.account_emails',
   '42501',
   null,
-  'a Biller cannot read recovery contacts'
+  'a Biller cannot read account emails'
 );
 
 select pg_temp.impersonate(:EMPLOYEE);
 select throws_ok(
-  'select * from public.account_recovery_contacts',
+  'select * from public.account_emails',
   '42501',
   null,
-  'an Employee cannot read recovery contacts'
+  'an Employee cannot read account emails'
 );
 
 reset role;
 
 select ok(
-  not has_table_privilege('anon', 'public.account_recovery_contacts', 'select'),
-  'anon has no recovery-contact table privilege'
+  not has_table_privilege('anon', 'public.account_emails', 'select'),
+  'anon has no account-email table privilege'
 );
 select ok(
   not has_table_privilege(
     'authenticated',
-    'public.account_recovery_contacts',
+    'public.account_emails',
     'select'
   ),
-  'authenticated has no recovery-contact table privilege'
+  'authenticated has no account-email table privilege'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.resolve_email_sign_in(text,text,interval,integer,integer,integer)',
+    'execute'
+  ),
+  'a browser cannot invoke the private email sign-in resolver'
 );
 select ok(
   not has_function_privilege(
@@ -221,13 +236,42 @@ select ok(
 );
 
 -- ---------------------------------------------------------------------------
--- Resolution is uniform, rate-limited, and stores no raw email or IP.
+-- Resolution is private, rate-limited, and stores no raw email or IP.
+
+delete from public.email_sign_in_attempts;
+
+select is(
+  public.resolve_email_sign_in(
+    '  OWNER.ACCOUNT@EXAMPLE.COM ',
+    encode(extensions.digest('203.0.113.9', 'sha256'), 'hex')
+  ),
+  'owner@login.shawarmania.invalid',
+  'an associated email resolves privately to the active account Auth alias'
+);
+select is(
+  public.resolve_email_sign_in(
+    'nobody@example.com',
+    encode(extensions.digest('203.0.113.8', 'sha256'), 'hex')
+  ),
+  null,
+  'an unknown sign-in email resolves to no alias'
+);
+select is(
+  (
+    select count(*)
+      from public.email_sign_in_attempts
+     where email_hash like '%@%'
+        or ip_hash like '%.%'
+  ),
+  0::bigint,
+  'the email sign-in ledger contains hashes rather than raw identifiers'
+);
 
 delete from public.owner_recovery_attempts;
 
 select is(
   public.resolve_owner_recovery(
-    '  OWNER.RECOVERY@EXAMPLE.COM ',
+    '  OWNER.ACCOUNT@EXAMPLE.COM ',
     encode(extensions.digest('203.0.113.10', 'sha256'), 'hex')
   ),
   :OWNER::uuid,
@@ -252,10 +296,10 @@ select is(
   'the recovery ledger contains hashes rather than raw addresses'
 );
 
-select public.resolve_owner_recovery('owner.recovery@example.com', 'ip-2');
-select public.resolve_owner_recovery('owner.recovery@example.com', 'ip-3');
+select public.resolve_owner_recovery('owner.account@example.com', 'ip-2');
+select public.resolve_owner_recovery('owner.account@example.com', 'ip-3');
 select is(
-  public.resolve_owner_recovery('owner.recovery@example.com', 'ip-4'),
+  public.resolve_owner_recovery('owner.account@example.com', 'ip-4'),
   null,
   'the per-address recovery limit refuses the fourth request in the window'
 );

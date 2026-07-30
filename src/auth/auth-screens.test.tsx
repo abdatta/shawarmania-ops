@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { appRoutes } from '@/routes'
 
@@ -40,9 +40,6 @@ const auth = vi.hoisted(() => {
     MIN_PASSWORD_LENGTH: 10,
     SignInError,
     ActivationError,
-    transitionalEmailSignInEnabled: vi.fn(
-      () => import.meta.env.VITE_AUTH_CUTOVER_MODE === 'email-or-username',
-    ),
   }
 })
 
@@ -60,17 +57,13 @@ beforeEach(() => {
   auth.signOut.mockResolvedValue(undefined)
 })
 
-afterEach(() => {
-  vi.unstubAllEnvs()
-})
-
 describe('sign in', () => {
   it('signs in with the canonical username and leaves the sign-in screen', async () => {
     const user = userEvent.setup()
     auth.signIn.mockResolvedValue({ userId: 'u-1', username: 'admin.kalyani' })
 
     const { router } = renderAt('/sign-in')
-    await user.type(screen.getByLabelText('Username'), 'Admin.Kalyani')
+    await user.type(screen.getByLabelText('Username or email'), 'Admin.Kalyani')
     await user.type(screen.getByLabelText('Password'), 'a-real-password')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
@@ -86,7 +79,7 @@ describe('sign in', () => {
     })
     render(<RouterProvider router={router} />)
 
-    await user.type(screen.getByLabelText('Username'), 'admin.kalyani')
+    await user.type(screen.getByLabelText('Username or email'), 'admin.kalyani')
     await user.type(screen.getByLabelText('Password'), 'a-real-password')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
@@ -96,16 +89,16 @@ describe('sign in', () => {
   it('keeps invalid username and password failures indistinguishable', async () => {
     const user = userEvent.setup()
     auth.signIn.mockRejectedValue(
-      new auth.SignInError('invalid_credentials', 'That username or password is not right.'),
+      new auth.SignInError('invalid_credentials', 'Those sign-in details are not right.'),
     )
 
     renderAt('/sign-in')
-    await user.type(screen.getByLabelText('Username'), 'nobody')
+    await user.type(screen.getByLabelText('Username or email'), 'nobody')
     await user.type(screen.getByLabelText('Password'), 'whatever-goes')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
     expect(await screen.findByTestId('signin-error')).toHaveTextContent(
-      'That username or password is not right.',
+      'Those sign-in details are not right.',
     )
   })
 
@@ -113,7 +106,7 @@ describe('sign in', () => {
     const user = userEvent.setup()
     renderAt('/sign-in')
 
-    await user.type(screen.getByLabelText('Username'), '@admin.kalyani')
+    await user.type(screen.getByLabelText('Username or email'), '@admin.kalyani')
     await user.type(screen.getByLabelText('Password'), 'a-real-password')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
@@ -123,14 +116,13 @@ describe('sign in', () => {
     expect(auth.signIn).not.toHaveBeenCalled()
   })
 
-  it('accepts a current email only while the supervised cutover switch is enabled', async () => {
-    vi.stubEnv('VITE_AUTH_CUTOVER_MODE', 'email-or-username')
+  it('accepts an associated email permanently', async () => {
     const user = userEvent.setup()
-    auth.signIn.mockResolvedValue({ userId: 'u-1', username: null })
+    auth.signIn.mockResolvedValue({ userId: 'u-1', username: 'owner' })
     renderAt('/sign-in')
 
-    await user.type(screen.getByLabelText('Username or current email'), 'Owner@Example.com')
-    expect(screen.getByText(/During the account move/)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Username or email'), 'Owner@Example.com')
+    expect(screen.getByText(/Email also works when one is associated/)).toBeInTheDocument()
     await user.type(screen.getByLabelText('Password'), 'a-real-password')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
@@ -266,16 +258,16 @@ describe('Super Admin recovery', () => {
   it('always acknowledges a recovery-email request the same way', async () => {
     const user = userEvent.setup()
     auth.requestOwnerRecovery.mockResolvedValue(
-      'If that recovery email belongs to an active Super Admin, a recovery link is on its way.',
+      'If that email is associated with an active Super Admin, a recovery link is on its way.',
     )
     renderAt('/recover')
 
-    await user.type(screen.getByLabelText('Recovery email'), 'owner@example.com')
+    await user.type(screen.getByLabelText('Email'), 'owner@example.com')
     await user.click(screen.getByRole('button', { name: 'Send recovery link' }))
 
     expect(auth.requestOwnerRecovery).toHaveBeenCalledWith('owner@example.com')
     expect(await screen.findByTestId('recovery-accepted')).toHaveTextContent(
-      'If that recovery email belongs to an active Super Admin',
+      'If that email is associated with an active Super Admin',
     )
   })
 })

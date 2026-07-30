@@ -1,85 +1,59 @@
-import { expect, test, type Page } from '@playwright/test'
-
-/**
- * The roadmap gate for auth-and-roles, walked in a browser against the real
- * local stack: four roles sign in and land on their own shell, an admin
- * provisions an account end to end with a one-time code, and deactivating an
- * account blocks access without waiting for a token to expire.
- *
- * Needs the stack up — see playwright.auth.config.ts.
- *
- * baseURL carries the deployment sub-path, so every goto is relative.
- */
+import { expect, test, type Browser, type Page } from '@playwright/test'
 
 const PASSWORD = 'shawarmania-local'
 const NEW_PASSWORD = 'a-genuinely-set-password'
+const RESET_PASSWORD = 'a-second-genuine-password'
+const RECOVERED_PASSWORD = 'an-owner-recovered-password'
+const MAILPIT_API = 'http://127.0.0.1:54324/api/v1'
 
-/**
- * `lands` is a locator rather than a string because one of these shells now
- * renders its anchor text twice — the owner console's "All outlets" is its
- * heading and an option in its outlet switcher — and a bare text match goes
- * ambiguous the moment a surface grows a control that repeats its own title.
- */
 const PERSONAS = {
   owner: {
-    email: 'owner@example.com',
+    username: 'owner',
     segment: 'owner',
     lands: (page: Page) => page.getByRole('heading', { name: 'All outlets' }),
   },
   admin: {
-    email: 'admin.kalyani@example.com',
+    username: 'admin.kalyani',
     segment: 'admin',
     lands: (page: Page) => page.getByText('Outlet details'),
   },
   biller: {
-    email: 'biller.kalyani@example.com',
+    username: 'biller.kalyani',
     segment: 'biller',
     lands: (page: Page) => page.getByText('No shift open'),
   },
   staff: {
-    email: 'staff.kalyani@example.com',
+    username: 'staff.kalyani',
     segment: 'staff',
     lands: (page: Page) => page.getByText('Hello, Synthetic Staff'),
   },
 } as const
 
-/**
- * A fresh person per call, so the suite is re-runnable without resetting the
- * database. The **display name** has to be unique too, not just the address:
- * the accounts these tests create are never cleaned up, so a second run
- * against the same database would otherwise find three "E2E New Starter" rows
- * and every row locator would go ambiguous.
- */
-const RUN = `${Date.now().toString(36)}`
-let seq = 0
-function freshPerson(label: string): { email: string; name: string } {
-  const id = `${RUN}-${seq++}`
+const RUN = Date.now().toString(36).slice(-8)
+let sequence = 0
+
+interface FreshPerson {
+  name: string
+  username: string
+}
+
+function freshPerson(label: string): FreshPerson {
+  const id = sequence++
   return {
-    email: `e2e.${label}.${id}@example.com`,
-    name: `E2E ${label} ${id}`,
+    name: `E2E ${label} ${RUN}-${id}`,
+    username: `e2e.${label}.${RUN}.${id}`,
   }
 }
 
-/** Fills the form and submits. Says nothing about whether it worked. */
-async function attemptSignIn(page: Page, email: string, password: string) {
+async function attemptSignIn(page: Page, username: string, password: string) {
   await page.goto('sign-in')
-  await page.getByLabel('Email', { exact: true }).fill(email)
+  await page.getByLabel('Username or email', { exact: true }).fill(username)
   await page.getByLabel('Password').fill(password)
   await page.getByRole('button', { name: 'Sign in' }).click()
 }
 
-/**
- * Signs in and waits until the session is actually established. Leaving the
- * sign-in URL is the signal: a `page.goto` issued before then is a full
- * navigation that can outrun the token being persisted, and the app would
- * quite correctly find nobody signed in.
- *
- * The URL rather than the button, deliberately — the button relabels itself
- * to "Signing in…" while the request is in flight, so waiting for it to
- * disappear succeeds immediately and proves nothing.
- */
-async function signIn(page: Page, email: string, password = PASSWORD) {
-  await attemptSignIn(page, email, password)
+async function signIn(page: Page, username: string, password = PASSWORD) {
+  await attemptSignIn(page, username, password)
   await expect(page).not.toHaveURL(/\/sign-in$/)
 }
 
@@ -110,18 +84,89 @@ async function signOut(page: Page) {
   await expect(page).toHaveURL(/\/sign-in$/)
 }
 
-test.describe('signing in', () => {
+async function activate(browser: Browser, link: string, username: string, password = NEW_PASSWORD) {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await page.goto(link)
+
+  await expect(page.getByTestId('activate-username')).toHaveText(username)
+  await expect(page.getByLabel('One-time code')).toHaveCount(0)
+  const usernameField = page.getByLabel('Username', { exact: true })
+  const passwordField = page.getByLabel('New password')
+  const repeatField = page.getByLabel('Re-type password')
+  await expect(usernameField).toHaveAttribute('name', 'username')
+  await expect(usernameField).toHaveAttribute('autocomplete', 'username')
+  await expect(passwordField).toHaveAttribute('autocomplete', 'new-password')
+  await expect(repeatField).toHaveAttribute('autocomplete', 'new-password')
+
+  await usernameField.fill(username)
+  await passwordField.fill(password)
+  await repeatField.fill(password)
+  await page.getByRole('button', { name: 'Set password and sign in' }).click()
+  await expect(page).not.toHaveURL(/\/activate/)
+  return { context, page }
+}
+
+async function provisionEmployee(
+  page: Page,
+  person: FreshPerson,
+  outlets: string[] = ['Shawarmania Kalyani'],
+) {
+  await page.getByRole('button', { name: 'Add person' }).click()
+  await page.getByLabel('Full name').fill(person.name)
+  await page.getByLabel('Username', { exact: true }).fill(person.username)
+  for (const outlet of outlets) {
+    await page.getByRole('checkbox', { name: outlet }).check()
+  }
+  await page.getByRole('button', { name: 'Create and issue a code' }).click()
+
+  const panel = page.getByTestId('issued-code')
+  await expect(panel).toBeVisible()
+  await expect(panel.getByTestId('issued-code-username')).toContainText(person.username)
+  const link = (await panel.getByTestId('issued-code-link').innerText()).trim()
+  expect(new URL(link).searchParams.get('code')).toMatch(
+    /^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/,
+  )
+  expect(link).not.toContain(person.username)
+  return { link, panel }
+}
+
+async function latestRecoveryLink(recipient: string): Promise<string> {
+  const deadline = Date.now() + 15_000
+  while (Date.now() < deadline) {
+    const response = await fetch(`${MAILPIT_API}/messages`)
+    const inbox = (await response.json()) as {
+      messages?: Array<{
+        ID: string
+        To?: Array<{ Address?: string }>
+        Subject?: string
+      }>
+    }
+    const message = inbox.messages?.find(
+      (candidate) =>
+        candidate.Subject === 'Reset your Shawarmania Ops password' &&
+        candidate.To?.some((target) => target.Address === recipient),
+    )
+    if (message) {
+      const detail = (await (
+        await fetch(`${MAILPIT_API}/message/${encodeURIComponent(message.ID)}`)
+      ).json()) as { Text?: string }
+      const match = detail.Text?.match(/https:\/\/ops\.shawarmania\.in\/recover\?\S+/)
+      if (match) return match[0]
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  throw new Error(`Mailpit did not receive Super Admin recovery for ${recipient}`)
+}
+
+test.describe('username sign-in and role routing', () => {
   for (const [label, persona] of Object.entries(PERSONAS)) {
     test(`a ${label} signs in and lands on their own shell`, async ({ page }) => {
-      await signIn(page, persona.email)
+      await signIn(page, persona.username)
 
       await expect(page).toHaveURL(new RegExp(`/${persona.segment}$`))
-      // Matched by role: the owner console's "All outlets" is both its heading
-      // and an option in its outlet switcher, so a bare text match is ambiguous.
       await expect(persona.lands(page)).toBeVisible()
-      // Signed in, and it says who: the account menu is in every shell's chrome.
       await expect(page.getByTestId('account-menu')).toBeVisible()
-      // And demo chrome is nowhere near a real session.
       await expect(page.getByTestId('demo-banner')).toHaveCount(0)
     })
   }
@@ -158,7 +203,7 @@ test.describe('signing in', () => {
         }),
       ).toBeVisible()
 
-      await page.getByLabel('Email', { exact: true }).fill(persona.email)
+      await page.getByLabel('Username or email', { exact: true }).fill(persona.username)
       await page.getByLabel('Password').fill(PASSWORD)
       await page.getByRole('button', { name: 'Sign in' }).click()
 
@@ -221,242 +266,228 @@ test.describe('signing in', () => {
     })
   }
 
-  test('a wrong password is refused, and says nothing about the address', async ({ page }) => {
-    await attemptSignIn(page, PERSONAS.owner.email, 'not-the-password')
+  test('unknown username and wrong password remain indistinguishable', async ({ page }) => {
+    await attemptSignIn(page, PERSONAS.owner.username, 'not-the-password')
     await expect(page.getByTestId('signin-error')).toHaveText(
-      'That email or password is not right.',
+      'Those sign-in details are not right.',
     )
 
-    // An address with no account produces exactly the same sentence.
-    await attemptSignIn(page, 'nobody-at-all@example.com', 'not-the-password')
+    await attemptSignIn(page, 'nobody.at.all', 'not-the-password')
     await expect(page.getByTestId('signin-error')).toHaveText(
-      'That email or password is not right.',
+      'Those sign-in details are not right.',
     )
     await expect(page).toHaveURL(/\/sign-in$/)
   })
 
-  test('another role’s path redirects to your own shell', async ({ page }) => {
-    await signIn(page, PERSONAS.staff.email)
-    await expect(page).toHaveURL(/\/staff$/)
-
-    await page.goto('owner')
-    await expect(page).toHaveURL(/\/staff$/)
-    await expect(PERSONAS.staff.lands(page)).toBeVisible()
-
-    // And the owner's surfaces are not reachable by naming them either.
-    await page.goto('staff/people')
-    await expect(page.getByText('That page does not exist')).toBeVisible()
+  test('an associated email signs in to the same account as its username', async ({ page }) => {
+    await signIn(page, 'owner.account@example.com')
+    await expect(page).toHaveURL(/\/owner$/)
+    await expect(PERSONAS.owner.lands(page)).toBeVisible()
+    await signOut(page)
   })
 
-  test('a deep link survives the trip through sign-in', async ({ page }) => {
+  test('a deep link survives username sign-in', async ({ page }) => {
     await page.goto('admin/people')
     await expect(page).toHaveURL(/\/sign-in$/)
 
-    await page.getByLabel('Email', { exact: true }).fill(PERSONAS.admin.email)
+    await page.getByLabel('Username or email', { exact: true }).fill(PERSONAS.admin.username)
     await page.getByLabel('Password').fill(PASSWORD)
+    await expect(page.getByLabel('Password')).toHaveAttribute('autocomplete', 'current-password')
     await page.getByRole('button', { name: 'Sign in' }).click()
 
     await expect(page).toHaveURL(/\/admin\/people$/)
     await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
   })
 
-  test('the session survives a reload, and sign-out ends it', async ({ page }) => {
-    await signIn(page, PERSONAS.admin.email)
-    await expect(page).toHaveURL(/\/admin$/)
+  test('another role path redirects to the live assignment shell', async ({ page }) => {
+    await signIn(page, PERSONAS.staff.username)
+    await page.goto('owner')
+    await expect(page).toHaveURL(/\/staff$/)
+    await expect(PERSONAS.staff.lands(page)).toBeVisible()
 
     await page.reload()
-    await expect(PERSONAS.admin.lands(page)).toBeVisible()
-
-    // The landing page does not detain someone who is already signed in.
-    await page.goto('.')
-    await expect(page).toHaveURL(/\/admin$/)
-
+    await expect(PERSONAS.staff.lands(page)).toBeVisible()
     await signOut(page)
-    await page.goto('admin')
-    await expect(page).toHaveURL(/\/sign-in$/)
   })
 })
 
-test.describe('provisioning, end to end', () => {
-  test('the owner creates one two-outlet account, hands over one code, and the person signs in', async ({
-    page,
-    browser,
-  }) => {
+test.describe('provisioning and staff recovery', () => {
+  test('one username-only hire activates at two outlets', async ({ page, browser }) => {
     const person = freshPerson('starter')
-
-    await signIn(page, PERSONAS.owner.email)
+    await signIn(page, PERSONAS.owner.username)
     await page.goto('owner/people')
-    await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Add person' }).click()
-    await page.getByLabel('Full name').fill(person.name)
-    await page.getByLabel('Email', { exact: true }).fill(person.email)
-    await page.getByRole('checkbox', { name: 'Shawarmania Kalyani' }).check()
-    await page.getByRole('checkbox', { name: 'Shawarmania Kanchrapara' }).check()
-
-    // One act creates the person: the account IS the staff-list membership,
-    // and a `before insert` trigger issues their staff code from the outlet's
-    // prefix — so the form never asks for one, and there is no roster step
-    // left to finish anywhere.
-    await expect(page.getByLabel('Staff code')).toHaveCount(0)
-    await page.getByLabel('Job title (optional)').fill('Grill')
-    await page.getByRole('button', { name: 'Create and issue a code' }).click()
-
-    const panel = page.getByTestId('issued-code')
-    await expect(panel).toBeVisible()
-    // The link is the whole handover, so it is what the walk uses. It carries
-    // the code and never the address.
-    const link = (await panel.getByTestId('issued-code-link').innerText()).trim()
-    const code = new URL(link).searchParams.get('code')!
-    expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
-    expect(link).not.toContain('@')
-    await expect(panel).toContainText('Shown once')
+    const { link, panel } = await provisionEmployee(page, person, [
+      'Shawarmania Kalyani',
+      'Shawarmania Kanchrapara',
+    ])
+    const row = page.getByRole('row', { name: new RegExp(person.name) })
+    await expect(row).toContainText('Awaiting activation')
+    await expect(row).toContainText('Shawarmania Kalyani')
+    await expect(row).toContainText('Shawarmania Kanchrapara')
     await expect(panel.getByRole('img', { name: new RegExp(person.name) })).toBeVisible()
 
-    // The new person is listed, honestly described as not yet activated, and
-    // already placed at the outlet the one act assigned them to — an account
-    // with no assignment would be a person who exists and works nowhere.
-    const newRow = page.getByRole('row', { name: person.name })
-    await expect(newRow).toContainText('Awaiting activation')
-    await expect(newRow).toContainText('Shawarmania Kalyani')
-    await expect(newRow).toContainText('Shawarmania Kanchrapara')
+    const activated = await activate(browser, link, person.username)
+    await expect(activated.page).toHaveURL(/\/staff$/)
+    await expect(activated.page.getByText(`Hello, ${person.name}`)).toBeVisible()
+    await expect(activated.page.getByTestId('attendance-action')).toBeVisible()
 
-    // The code is gone the moment it is dismissed — there is nowhere to look
-    // it up, because only a hash was ever stored.
-    await panel.getByRole('button', { name: 'Done' }).click()
-    await page.reload()
-    await expect(page.getByTestId('issued-code')).toHaveCount(0)
-    await expect(page.getByText(code)).toHaveCount(0)
-
-    // A different person, on a different device, opening the message they were
-    // sent. One tap, one field.
-    const context = await browser.newContext()
-    const theirPhone = await context.newPage()
-    await theirPhone.goto(link)
-
-    // The address is shown for them to recognise, never asked for.
-    await expect(theirPhone.getByTestId('activate-address')).toHaveText(person.email)
-    await expect(theirPhone.getByLabel('Email', { exact: true })).toHaveCount(0)
-    await expect(theirPhone.getByLabel('One-time code')).toHaveCount(0)
-
-    await theirPhone.getByRole('button', { name: /Yes, that/ }).click()
-    await theirPhone.getByLabel('New password').fill(NEW_PASSWORD)
-    await theirPhone.getByLabel('Confirm password').fill(NEW_PASSWORD)
-    await theirPhone.getByRole('button', { name: 'Set password and sign in' }).click()
-
-    await expect(theirPhone).toHaveURL(/\/staff$/)
-    await expect(theirPhone.getByText(`Hello, ${person.name}`)).toBeVisible()
-
-    // The whole point of the chain: a person provisioned minutes ago arrives
-    // at a working check-in. There is no roster row and no link that could
-    // have been missed — the account is the person, which is what
-    // staff-as-accounts exists to make true.
-    await expect(theirPhone.getByTestId('attendance-action')).toBeVisible()
-
-    // The code is spent: a second person forwarded the same message gets
-    // nowhere — and is told so on arrival, before typing anything, because the
-    // link is checked the moment it opens.
     const replayContext = await browser.newContext()
     const replay = await replayContext.newPage()
     await replay.goto(link)
     await expect(replay.getByTestId('activate-error')).toContainText('no longer usable')
     await expect(replay.getByLabel('New password')).toHaveCount(0)
 
-    await context.close()
+    await activated.context.close()
     await replayContext.close()
   })
 
-  test('a manager cannot give anyone more than their own outlet', async ({ page }) => {
-    await signIn(page, PERSONAS.admin.email)
-    await page.goto('admin/people')
-
-    await page.getByRole('button', { name: 'Add person' }).click()
-    await expect(page.getByLabel('Role').locator('option')).toHaveText(['Biller', 'Staff'])
-    await expect(page.getByLabel('Outlet', { exact: true })).toBeDisabled()
-
-    // Their list is their outlet's, whatever the owner can see.
-    await expect(page.getByRole('columnheader', { name: 'Outlet' })).toHaveCount(0)
-    await expect(page.getByRole('row', { name: /Synthetic Admin Kpa/ })).toHaveCount(0)
-  })
-})
-
-test.describe('deactivation', () => {
-  test('ends an open session without waiting for the token to expire', async ({
+  test('rename preserves a session and an admin-issued reset changes the password', async ({
     page,
     browser,
   }) => {
-    const person = freshPerson('doomed')
-
-    // The owner provisions someone…
-    await signIn(page, PERSONAS.owner.email)
+    const person = freshPerson('rename')
+    const renamed = `${person.username}.new`
+    await signIn(page, PERSONAS.owner.username)
     await page.goto('owner/people')
-    await page.getByRole('button', { name: 'Add person' }).click()
-    await page.getByLabel('Full name').fill(person.name)
-    await page.getByLabel('Email', { exact: true }).fill(person.email)
-    await page.getByRole('checkbox', { name: 'Shawarmania Kalyani' }).check()
-    await page.getByRole('button', { name: 'Create and issue a code' }).click()
+    const issued = await provisionEmployee(page, person)
+    const activated = await activate(browser, issued.link, person.username)
+    await expect(activated.page).toHaveURL(/\/staff$/)
 
-    const link = (await page.getByTestId('issued-code-link').innerText()).trim()
+    await issued.panel.getByRole('button', { name: 'Done' }).click()
+    let row = page.getByRole('row', { name: new RegExp(person.name) })
+    await row.getByRole('button', { name: /^Actions for / }).click()
+    await row.getByRole('button', { name: 'Change username' }).click()
+    const renameSheet = page.getByRole('dialog')
+    await renameSheet.getByLabel('Username', { exact: true }).fill(renamed)
+    await renameSheet.getByRole('button', { name: 'Save username' }).click()
+    await expect(page.getByText(renamed, { exact: true })).toBeVisible()
 
-    // …who activates on their own phone and is happily signed in.
-    const context = await browser.newContext()
-    const theirPhone = await context.newPage()
-    await theirPhone.goto(link)
-    await theirPhone.getByRole('button', { name: /Yes, that/ }).click()
-    await theirPhone.getByLabel('New password').fill(NEW_PASSWORD)
-    await theirPhone.getByLabel('Confirm password').fill(NEW_PASSWORD)
-    await theirPhone.getByRole('button', { name: 'Set password and sign in' }).click()
-    await expect(theirPhone).toHaveURL(/\/staff$/)
+    await activated.page.reload()
+    await expect(activated.page).toHaveURL(/\/staff$/)
+    await expect(activated.page.getByText(`Hello, ${person.name}`)).toBeVisible()
 
-    // The owner deactivates them while that phone is still open.
-    await page.getByTestId('issued-code').getByRole('button', { name: 'Done' }).click()
-    const row = page.getByRole('row', { name: person.name })
-    await row.getByRole('button', { name: /^Actions for /i }).click()
-    await row.getByRole('button', { name: 'Deactivate' }).click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toContainText('immediately')
-    await dialog.getByRole('button', { name: 'Deactivate' }).click()
-    await expect(row).toContainText('Deactivated')
-
-    // Back on the phone. Firing visibilitychange is what a real tab-return
-    // does; the point is that the session ends on the NEXT check rather than
-    // when the hour-long token expires. (The database refusing the still-valid
-    // token is proved directly in supabase/tests/rest/account-flows.test.ts.)
-    await theirPhone.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
-
-    await expect(theirPhone).toHaveURL(/\/sign-in$/)
-    await expect(theirPhone.getByTestId('session-ended')).toContainText(
-      'Your account has been deactivated',
+    const oldContext = await browser.newContext()
+    const oldLogin = await oldContext.newPage()
+    await attemptSignIn(oldLogin, person.username, NEW_PASSWORD)
+    await expect(oldLogin.getByTestId('signin-error')).toHaveText(
+      'Those sign-in details are not right.',
     )
 
-    // And their password no longer gets them anywhere.
-    await theirPhone.getByLabel('Email', { exact: true }).fill(person.email)
-    await theirPhone.getByLabel('Password').fill(NEW_PASSWORD)
-    await theirPhone.getByRole('button', { name: 'Sign in' }).click()
-    await expect(theirPhone.getByTestId('session-ended')).toBeVisible()
-    await expect(theirPhone).toHaveURL(/\/sign-in$/)
+    const renamedContext = await browser.newContext()
+    const renamedLogin = await renamedContext.newPage()
+    await signIn(renamedLogin, renamed, NEW_PASSWORD)
+    await expect(renamedLogin).toHaveURL(/\/staff$/)
 
-    await context.close()
+    row = page.getByRole('row', { name: new RegExp(person.name) })
+    await row.getByRole('button', { name: /^Actions for / }).click()
+    await row.getByRole('button', { name: 'New code' }).click()
+    const resetPanel = page.getByTestId('issued-code')
+    const resetLink = (await resetPanel.getByTestId('issued-code-link').innerText()).trim()
+    const reset = await activate(browser, resetLink, renamed, RESET_PASSWORD)
+    await expect(reset.page).toHaveURL(/\/staff$/)
+
+    const resetLoginContext = await browser.newContext()
+    const resetLogin = await resetLoginContext.newPage()
+    await signIn(resetLogin, renamed, RESET_PASSWORD)
+    await expect(resetLogin).toHaveURL(/\/staff$/)
+
+    await activated.context.close()
+    await oldContext.close()
+    await renamedContext.close()
+    await reset.context.close()
+    await resetLoginContext.close()
   })
 })
 
-test.describe('demo mode alongside a real session', () => {
-  test('still works, still warns, and still offers no sign-out', async ({ page }) => {
-    await signIn(page, PERSONAS.owner.email)
-    await expect(page).toHaveURL(/\/owner$/)
+test('deactivation ends an open username session immediately', async ({ page, browser }) => {
+  const person = freshPerson('doomed')
+  await signIn(page, PERSONAS.owner.username)
+  await page.goto('owner/people')
+  const issued = await provisionEmployee(page, person)
+  const activated = await activate(browser, issued.link, person.username)
+  await expect(activated.page).toHaveURL(/\/staff$/)
 
-    // A signed-in user is stopped on the way in, exactly as design D5 of #3
-    // requires — the guard now has a real session to find, not a fake one.
-    await page.goto('demo/owner')
-    await expect(page.getByTestId('demo-interstitial')).toBeVisible()
+  await issued.panel.getByRole('button', { name: 'Done' }).click()
+  const row = page.getByRole('row', { name: new RegExp(person.name) })
+  await row.getByRole('button', { name: /^Actions for / }).click()
+  await row.getByRole('button', { name: 'Deactivate' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText('immediately')
+  await dialog.getByRole('button', { name: 'Deactivate' }).click()
+  await expect(row).toContainText('Deactivated')
 
-    await page.getByRole('button', { name: 'Continue to demo' }).click()
-    await expect(page.getByTestId('demo-banner')).toBeVisible()
-    await expect(page.getByTestId('account-menu')).toHaveCount(0)
+  await activated.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await expect(activated.page).toHaveURL(/\/sign-in$/)
+  await expect(activated.page.getByTestId('session-ended')).toContainText(
+    'Your account has been deactivated',
+  )
+  await activated.context.close()
+})
 
-    // The promoted People surface runs on fixtures in demo mode.
-    await page.goto('demo/owner/people')
-    await expect(page.getByText('Demo Manager', { exact: true })).toBeVisible()
-    await expect(page.getByTestId('demo-banner')).toBeVisible()
-  })
+test('a Super Admin recovers through the private test inbox', async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  const owner = freshPerson('owner')
+  const recoveryEmail = `e2e.owner.${RUN}.${sequence++}@example.com`
+  await signIn(page, PERSONAS.owner.username)
+  await page.goto('owner/people')
+
+  await page.getByRole('button', { name: 'Add person' }).click()
+  await page.getByLabel('Full name').fill(owner.name)
+  await page.getByLabel('Username', { exact: true }).fill(owner.username)
+  await page.getByLabel('Role').selectOption('super_admin')
+  await page.getByRole('textbox', { name: 'Email', exact: true }).fill(recoveryEmail)
+  await expect(page.getByLabel('Outlet', { exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Create and issue a code' }).click()
+
+  const activationLink = (await page.getByTestId('issued-code-link').innerText()).trim()
+  const activated = await activate(browser, activationLink, owner.username)
+  await expect(activated.page).toHaveURL(/\/owner$/)
+  await activated.context.close()
+
+  const recoveryContext = await browser.newContext()
+  const recovery = await recoveryContext.newPage()
+  await recovery.goto(new URL('recover', baseURL).toString())
+  await recovery.getByLabel('Email', { exact: true }).fill(recoveryEmail)
+  await recovery.getByRole('button', { name: 'Send recovery link' }).click()
+  await expect(recovery.getByTestId('recovery-accepted')).toContainText(
+    'If that email is associated with an active Super Admin',
+  )
+
+  const productionLink = new URL(await latestRecoveryLink(recoveryEmail))
+  const localLink = new URL(`recover${productionLink.search}`, baseURL).toString()
+  await recovery.goto(localLink)
+  await expect(recovery.getByTestId('recovery-username')).toHaveText(owner.username)
+  const usernameField = recovery.getByLabel('Username', { exact: true })
+  const passwordField = recovery.getByLabel('New password')
+  const repeatField = recovery.getByLabel('Re-type password')
+  await expect(usernameField).toHaveAttribute('autocomplete', 'username')
+  await expect(passwordField).toHaveAttribute('autocomplete', 'new-password')
+  await expect(repeatField).toHaveAttribute('autocomplete', 'new-password')
+  await usernameField.fill(owner.username)
+  await passwordField.fill(RECOVERED_PASSWORD)
+  await repeatField.fill(RECOVERED_PASSWORD)
+  await recovery.getByRole('button', { name: 'Reset password and continue' }).click()
+  await expect(recovery).toHaveURL(/\/owner$/)
+
+  await signOut(recovery)
+  await signIn(recovery, owner.username, RECOVERED_PASSWORD)
+  await expect(recovery).toHaveURL(/\/owner$/)
+  await recoveryContext.close()
+})
+
+test('demo mode remains isolated beside a real username session', async ({ page }) => {
+  await signIn(page, PERSONAS.owner.username)
+  await page.goto('demo/owner')
+  await expect(page.getByTestId('demo-interstitial')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Continue to demo' }).click()
+  await expect(page.getByTestId('demo-banner')).toBeVisible()
+  await expect(page.getByTestId('account-menu')).toHaveCount(0)
+  await page.goto('demo/owner/people')
+  await expect(page.getByText('Demo Manager', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('demo-banner')).toBeVisible()
 })

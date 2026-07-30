@@ -144,13 +144,13 @@ values
 -- the point: one login, an Employee assignment at each outlet, and a day
 -- worked at each — the case that did not exist before this change.
 --
--- The owner and private recovery contact are seeded as one transaction. The
+-- The owner and private account email are seeded as one transaction. The
 -- deferred invariant makes either row without the other impossible, including
 -- from a hand-crafted write.
 do $$
 begin
-  insert into public.account_recovery_contacts (profile_id, email)
-  values ('10000000-0000-4000-a000-000000000001', 'owner.recovery@example.com');
+  insert into public.account_emails (profile_id, email)
+  values ('10000000-0000-4000-a000-000000000001', 'owner.account@example.com');
 
   insert into public.assignments (person_id, role, outlet_id, started_on)
   values (

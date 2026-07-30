@@ -15,7 +15,7 @@
 │  │ outbox (Dexie) │  ← counter writes queue here first                     │
 │  └───────┬────────┘                                                        │
 └──────────┼─────────────────────────────────────────────────────────────────┘
-           │  supabase-js  (anon key + user JWT carrying role + outlet_id)
+           │  supabase-js  (public key + user JWT; no authority claims)
            ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  Supabase                                                                   │
@@ -27,12 +27,15 @@
 │                             │              │  · enrol / revoke device     │ │
 │  ┌──────────────────────────▼─────────────┐│                              │ │
 │  │  Postgres — RLS on every table         ││                              │ │
-│  │  policies read outlet_id from the JWT  │└──────────────────────────────┘ │
+│  │  policies resolve live assignments     │└──────────────────────────────┘ │
 │  └────────────────────────────────────────┘                                 │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-One bundle serves all four roles. The shell reads the role claim and mounts a different navigation and route set; it does not rely on that for security, because the database enforces access independently.
+One bundle serves all four roles. The session loader reads the person's live
+assignments and mounts the corresponding navigation and route set; it does not
+rely on routing for security, because the database evaluates those same
+assignments independently on every request.
 
 ## Why this stack
 
@@ -125,10 +128,31 @@ Because the policies read the table, **an assignment granted or ended bites at t
 
 Anything requiring the service-role key runs in an Edge Function. The service-role key bypasses RLS entirely and **must never reach the browser**.
 
-- **Provision a staff account** — creating an auth user with a confirmed email requires admin privileges.
+- **Provision or repair an account** — create one Auth user at the deterministic
+  username alias, create every assignment and the one-time invite atomically,
+  rename another person's username, and issue admin-led resets.
+- **Sign in by associated email** — privately resolve the email to the current
+  Auth alias, apply hashed abuse limits, ask Supabase Auth to verify the
+  password with the public credential, and return only Supabase session tokens.
+- **Recover a Super Admin** — resolve a private account email without exposing
+  whether it matched, ask Supabase Auth to issue a recovery token, and route
+  only that signed mail action through the configured transactional provider.
 - **Enrol or revoke a counter device** — mints and invalidates the device's long-lived scoped session.
 
-Each function re-checks the caller's role from their JWT. Being an Edge Function is not authorisation.
+Each privileged function re-derives the caller from their token and reads live
+assignments from the database. Being an Edge Function is not authorisation.
+
+Supabase Auth has no first-class username field, so the provider identifier is
+`<username>@login.shawarmania.invalid`. The browser derives that alias locally
+and sends username passwords directly to Supabase. An associated email cannot
+be exposed as an email-to-alias lookup, so only that sign-in path crosses a
+narrow Edge Function: it resolves privately, delegates the password grant to a
+request-local anon-key Supabase client, and returns the resulting access and
+refresh tokens. It never verifies or retains passwords, mints sessions, or
+returns aliases. Private account email lives in a no-client-access table and is
+required for a live Super Admin while optional for another role. The signed
+Send Email Hook permits only a live Super Admin's recovery action and refuses signup,
+invite, magic-link, and email-change mail.
 
 Bill numbers were originally sketched as a third Edge Function and deliberately moved **into the database**: a `before insert` trigger allocates from a per-outlet counter inside the insert transaction, which is atomic with the bill in a way a separate network call can never be — gapless on failure, race-safe under two devices, and the client's value is overwritten regardless.
 

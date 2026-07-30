@@ -44,8 +44,9 @@ A live row has `ended_on` null; **ending is a date, never a delete**, because
 rows written under an assignment have to stay explicable. Two partial unique
 indexes enforce one live assignment per person per outlet, and one live
 `super_admin` row per person (two indexes rather than one, because null outlet
-ids do not collide in a plain unique index). `person_id` cascades — the second
-key in this schema permitted to, after `account_invites.profile_id` — because
+ids do not collide in a plain unique index). `person_id` cascades — one of
+three identity-plumbing references permitted to cascade, alongside the invite
+and private owner-recovery row — because
 an assignment is *placement* rather than history, and without it a
 half-provisioned account could never be cleaned up. Every table that genuinely
 is history still points at `profiles(id)` with NO ACTION, and any one of them
@@ -57,7 +58,55 @@ next request — see [Roles And Permissions](ROLES_AND_PERMISSIONS.md).
 
 There is no access-token hook and no claim to mirror into: it was emptied by #22 and dropped once nothing registered it (2026-07-30), so no code path exists by which a token could be handed authority. `is_active` is likewise checked in policies directly, so deactivation takes effect immediately rather than at the next token refresh.
 
-**The person is the account** (`staff-as-accounts`, #21): there is no separate roster table and no link step. A person who never opens the app still exists as an account, provisioned on a placeholder address under the reserved `.invalid` TLD — it cannot be signed in with, and the People surface shows it as *Needs an address* rather than passing it off as real. `is_active` and an assignment's `ended_on` are **two independent facts**: deactivation is the session lever and bites immediately; ending an assignment is staff-list membership at *one* outlet — it removes the person from that outlet's lists and new attendance days while every recorded day stays, and leaves their other assignments and their account alone. Having left the business is holding no live assignment anywhere, and is derived rather than stored. No payroll column exists anywhere, by owner decision. **Deleting a person with recorded history is refused by the foreign keys themselves**: every FK onto `profiles(id)` is NO ACTION except two that are plumbing rather than history — the invite cascade and the assignment cascade — and a migration-time self-check aborts a deploy that ever introduces another.
+**The person is the account** (`staff-as-accounts`, #21): there is no separate
+roster table and no link step. Every person receives one admin-chosen canonical
+username, stored by Supabase Auth as
+`<username>@login.shawarmania.invalid`. That reserved alias is the username's
+provider encoding, not a real email and never a profile or contact field.
+If a private email is associated with the account, either that email or the
+username reaches the same Auth user and password.
+A person who never opens the app still has a usable username and a pending
+one-time code; there is no placeholder-address or *Needs an address* state.
+
+`is_active` and an assignment's `ended_on` are **two independent facts**:
+deactivation is the session lever and bites immediately; ending an assignment
+is staff-list membership at *one* outlet — it removes the person from that
+outlet's lists and new attendance days while every recorded day stays, and
+leaves their other assignments and their account alone. Having left the
+business is holding no live assignment anywhere, and is derived rather than
+stored. No payroll column exists anywhere, by owner decision. **Deleting a
+person with recorded history is refused by the foreign keys themselves**:
+every FK onto `profiles(id)` is NO ACTION except three that are account
+plumbing rather than history — invite, assignment, and account-email rows —
+and a migration-time self-check aborts a deploy that ever introduces another.
+
+**`account_invites`** — the single outstanding activation or admin-reset
+credential for a person.
+`id`, `profile_id`, `code_hash`, `issued_by`, `issued_at`, `expires_at`,
+`consumed_at`, `superseded_at`.
+
+The plaintext code is returned once and never stored. Preview parses the
+person's current username from their Auth alias; redemption requires that
+displayed username plus a matching new password. A username mismatch consumes
+nothing. Unknown, expired, spent, superseded, and inactive-account codes remain
+indistinguishable.
+
+**`account_emails`** — zero or one private associated email per account.
+`profile_id`, `email`, `created_at`, `updated_at`.
+
+The table has RLS enabled, no client policy, and no privileges for `anon` or
+`authenticated`. A deferred invariant makes the Super Admin requirement exact:
+every person with a live `super_admin` assignment has one row. Another role may
+have zero or one, so a future Franchise Admin email needs no new identity
+migration. Current ordinary People creation does not collect one. The email is
+a permanent alternate sign-in identifier; for a live Super Admin it is also
+the self-recovery destination. Ending that role retains the association until
+a separately authorized operation removes it.
+
+**`invite_redemption_attempts`**, **`email_sign_in_attempts`**, and
+**`owner_recovery_attempts`** are short-window abuse ledgers. They store hashes
+of caller IP and submitted identifier, never raw addresses, and have no
+client-readable policy.
 
 **`counter_devices`** — enrolled tablets.
 `id`, `outlet_id`, `label`, `enrolled_by`, `enrolled_at`, `revoked_at`, `last_seen_at`.
