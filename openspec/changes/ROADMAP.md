@@ -46,6 +46,7 @@ Promoting a surface from `demo` to `live` is the visible outcome of every `*-liv
 | ✅ | 2 | A | `data-model-and-tenancy` | **Fable** | **archived 2026-07-26** | #1 | isolation suite passes for **every** outlet-scoped table; a Franchise Admin session provably cannot read the other outlet's rows even with a hand-crafted request; both outlets seeded; TypeScript types generated |
 | ✅ | 3 | A | `demo-mode-and-app-shell` | **Fable** | **archived 2026-07-27** | #1, #2 | all four role shells navigable in demo mode with a working role switcher; **a demo session provably cannot write to Supabase**; a real signed-in user cannot silently enter demo mode; the demo banner is never dismissible; a mock that drifts from schema types fails to compile |
 | ✅ | 4 | B | `auth-and-roles` | Opus | **archived 2026-07-27** | #2, #3 | all four roles sign in and land on their own shell; an admin provisions a staff account end-to-end with a one-time code; deactivating an account blocks access without waiting for token expiry |
+| ✅ | 25 | B | `pwa-install-affordance` | **GPT-5.6 Sol** | **archived 2026-07-30** | #1, #3, #4 | an install-eligible browser shows one app-owned action in public and real shell chrome; it opens the native prompt at most once or explains iOS Safari's manual path; installed, ineligible and demo contexts show nothing; capability survives sign-in navigation; phone and counter layouts remain usable in both themes and reduced motion |
 | ✅ | 15 | B | `outlet-and-staff-setup` | Opus | **archived 2026-07-27** | #4 | **from an empty database, entirely through the UI and with no SQL**: an owner creates an outlet, captures its position, provisions a manager and an employee, links that employee to a roster row, and the employee checks in from their own phone |
 | ✅ | 5 | B | `attendance` | Opus | **archived 2026-07-27** | #3, #4, **#15** | **real staff check in and out on their own phones in production**; in-fence succeeds, out-of-fence blocks then clears via manager override recorded with who and why; an Employee sees only their own records |
 | ✅ | 16 | B | `activation-without-typing` | Opus | **archived 2026-07-27** | #4, #15 | a new employee sets their password by opening one link and typing one thing — a password — and every way of getting it wrong says which thing was wrong |
@@ -97,6 +98,9 @@ graph TD
     C2 --> C3
     C2 --> C4[4 auth-and-roles]
     C3 --> C4
+    C1 --> C25[25 pwa-install-affordance]
+    C3 --> C25
+    C4 --> C25
     C3 --> C5[5 attendance]
     C4 --> C5
     C4 --> C15[15 outlet-and-staff-setup]
@@ -141,7 +145,7 @@ Changes within a wave can run in any order or in parallel; a wave starts when it
 
 - **Wave A — foundations (#1–#3)**: `project-foundations`, `data-model-and-tenancy`, `demo-mode-and-app-shell`. **Two keystones here.** #2 is the write contract every query inherits. #3 is the delivery contract every screen inherits — and it must come after #2 so mocks are typed from the real schema and cannot drift from it. Soft start: #2 needs only #1's *scaffold* half (repo, test harness, Supabase local), not the theme or PWA work — it may begin as soon as those tasks are checked.
 
-- **Wave B — attendance goes live (#4, #15, #5)**: `auth-and-roles`, `outlet-and-staff-setup`, and `attendance`. **This wave ends with real staff checking in on their own phones in production** — the first genuine business value the project delivers, and a shakedown of auth, deployment and live data before billing depends on all three. #5 also registers its demo fixtures, because the Employee role's whole demo experience *is* attendance — see the note in Wave C.
+- **Wave B — attendance goes live (#4, #25, #15, #5)**: `auth-and-roles`, `pwa-install-affordance`, `outlet-and-staff-setup`, and `attendance`. **This wave ends with real staff checking in on their own phones in production** — the first genuine business value the project delivers, and a shakedown of auth, deployment and live data before billing depends on all three. #25 is independent polish on the already-built PWA and role shells and can run as soon as #4 is complete; it changes no data or attendance dependency. #5 also registers its demo fixtures, because the Employee role's whole demo experience *is* attendance — see the note in Wave C.
 
   **#15 was discovered by #5 failing its own gate**, and is the clearest lesson this roadmap has produced so far. Attendance was built, tested at every layer, and deployed — and could not be used, because production had no outlet to attend and nothing in the app could create one, and because nothing ever linked an employee's login to their roster row. Both blanks were invisible to every test, since fixtures and seeds describe a business that is *already configured*. See **Configuration Surfaces** below, which exists so the next one is caught on paper.
 

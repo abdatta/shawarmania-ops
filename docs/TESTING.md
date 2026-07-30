@@ -29,7 +29,7 @@ npm run db:types  # regenerate src/data-access/database.types.ts (CI fails on dr
 
 `npm test` runs `.test.ts` / `.test.tsx` under `src/` in a jsdom environment and `.test.mjs` under `scripts/` in a node environment. The shared setup file guards its DOM work, so the build-tooling suites do not need a second Vitest project to live alongside the app suites.
 
-`npm run test:e2e` builds the app and serves the build — never the dev server. The service worker only exists in a real build, and the offline gate is the whole point of that suite. Browsers install once with `npx playwright install chromium`.
+`npm run test:e2e` builds the app and serves the build — never the dev server. The service worker only exists in a real build, and the offline gate is the whole point of that suite. Browsers install once with `npx playwright install chromium`. The install-affordance browser cases dispatch a controlled `beforeinstallprompt` capability because Playwright does not own Chromium's native install UI; they prove capture, route persistence, single consumption, installed-mode suppression, and demo omission. `test:e2e:auth` carries that same capability through sign-in into both the phone and counter shells against a real session.
 
 ## The layers
 
@@ -98,6 +98,7 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
 - **Tenancy-touching changes**: the isolation suite passes, including new cases for any new table.
 - **Billing or offline changes**: the offline E2E path passes.
 - **UI changes**: run the app and look at it — phone viewport and tablet viewport, light and dark themes.
+- **PWA install changes**: check an eligible Chromium browser, iOS Safari's manual instructions, installed display mode, and an ineligible browser. The app-owned action must survive public-to-real navigation, disappear after use, and remain absent in demo mode.
 - **Theme changes**: the contrast validator passes. AA is the floor.
 - **Schema changes**: migrations apply cleanly to a fresh database *and* to a copy with existing data.
 

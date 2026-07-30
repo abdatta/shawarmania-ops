@@ -19,9 +19,11 @@ import { heldRoles, ROLE_SEGMENTS, type Role } from '@/session/session'
 export function PhoneShell({
   banner,
   accountMenu,
+  installAction,
 }: {
   banner?: ReactNode
   accountMenu?: ReactNode
+  installAction?: ReactNode
 }) {
   const session = useSession()
   // Every role the person holds, not just the one whose shell they are in: a
@@ -50,6 +52,7 @@ export function PhoneShell({
           <span className="block truncate text-xs text-content-muted">{session.displayName}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {installAction}
           <ThemeToggle />
           {accountMenu}
         </div>

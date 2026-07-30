@@ -188,6 +188,15 @@ The counter numbers are larger on purpose. Billing happens fast, one-handed, som
 
 ## Component conventions
 
+- **The app install action is chrome, not page content.** It uses the semantic
+  primary button treatment, a 44px touch target, and the accessible name
+  “Install Shawarmania Ops as an app”. The compact download icon expands to
+  show *Install* on hover or keyboard focus and once, for five seconds, after a
+  three-second discovery delay. That timed motion never repeats in the same
+  tab; `prefers-reduced-motion` renders the full label without animation.
+  Installed and ineligible browsers render nothing, iOS Safari opens a
+  semantic-token instruction callout, and demo shells intentionally omit the
+  action.
 - **The "add new thing" trigger is `AddButton`** (`src/components/ui/add-button.tsx`), used once per page header. The visible label is always the plus icon and the word "Add" — never "Add outlet", "Add person", etc. — because the page title already says what's being added; `label` still sets the accessible name (`"Add outlet"`) so screen reader users get that same specificity without reading it visually. `whitespace-nowrap` is baked in so the icon and word can never wrap onto two lines. If a page's context genuinely doesn't make the object obvious, that's a sign the page needs a clearer title or subtitle — not a longer button.
 - **Money** renders through one formatter — paise in, `₹1,234` out, Indian digit grouping (`₹1,23,456`). Never format inline; never hand a float to a component.
 - **Dates** render in Asia/Kolkata through one formatter. Business dates render as dates, never as timestamps.

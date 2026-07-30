@@ -83,6 +83,27 @@ async function signIn(page: Page, email: string, password = PASSWORD) {
   await expect(page).not.toHaveURL(/\/sign-in$/)
 }
 
+async function offerInstallCapability(page: Page) {
+  await page.evaluate(() => {
+    const event = new Event('beforeinstallprompt', { cancelable: true })
+    Object.defineProperties(event, {
+      prompt: {
+        value: async () => {
+          ;(
+            window as Window & { __shawarmaniaInstallPromptCalls?: number }
+          ).__shawarmaniaInstallPromptCalls =
+            ((window as Window & { __shawarmaniaInstallPromptCalls?: number })
+              .__shawarmaniaInstallPromptCalls ?? 0) + 1
+        },
+      },
+      userChoice: {
+        value: Promise.resolve({ outcome: 'accepted', platform: 'web' }),
+      },
+    })
+    window.dispatchEvent(event)
+  })
+}
+
 async function signOut(page: Page) {
   await page.getByTestId('account-menu').click()
   await page.getByRole('button', { name: 'Sign out' }).click()
@@ -102,6 +123,101 @@ test.describe('signing in', () => {
       await expect(page.getByTestId('account-menu')).toBeVisible()
       // And demo chrome is nowhere near a real session.
       await expect(page.getByTestId('demo-banner')).toHaveCount(0)
+    })
+  }
+
+  for (const label of ['owner', 'biller'] as const) {
+    const persona = PERSONAS[label]
+
+    test(`the install action follows a ${label} from public chrome into their shell`, async ({
+      page,
+      baseURL,
+    }, testInfo) => {
+      const consoleErrors: string[] = []
+      const unexpectedRequests: string[] = []
+      const appOrigin = new URL(baseURL!).origin
+      page.on('console', (message) => {
+        if (message.type() === 'error') consoleErrors.push(message.text())
+      })
+      page.on('request', (request) => {
+        const origin = new URL(request.url()).origin
+        if (origin !== appOrigin && origin !== 'http://127.0.0.1:54321') {
+          unexpectedRequests.push(request.url())
+        }
+      })
+
+      await page.goto('sign-in')
+      await page.evaluate(() => {
+        localStorage.setItem('shawarmania.theme', 'light')
+      })
+      await page.reload()
+      await offerInstallCapability(page)
+      await expect(
+        page.getByRole('button', {
+          name: 'Install Shawarmania Ops as an app',
+        }),
+      ).toBeVisible()
+
+      await page.getByLabel('Email', { exact: true }).fill(persona.email)
+      await page.getByLabel('Password').fill(PASSWORD)
+      await page.getByRole('button', { name: 'Sign in' }).click()
+
+      await expect(page).toHaveURL(new RegExp(`/${persona.segment}$`))
+      const install = page.getByRole('button', {
+        name: 'Install Shawarmania Ops as an app',
+      })
+      await expect(install).toBeVisible()
+
+      const capture = async (viewport: 'phone' | 'tablet', theme: 'light' | 'dark') => {
+        const size =
+          viewport === 'phone' ? { width: 390, height: 844 } : { width: 1080, height: 810 }
+        await page.setViewportSize(size)
+        await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+        await expect(install).toBeVisible()
+        const target = await install.boundingBox()
+        expect(target?.height).toBeGreaterThanOrEqual(44)
+        expect(
+          await page
+            .getByRole('banner')
+            .evaluate((header) => header.scrollWidth <= header.clientWidth),
+        ).toBe(true)
+        await testInfo.attach(`${label}-${theme}-${viewport}`, {
+          body: await page.screenshot(),
+          contentType: 'image/png',
+        })
+      }
+
+      await capture('phone', 'light')
+      await page.getByRole('button', { name: 'Switch to dark theme' }).click()
+      await capture('phone', 'dark')
+      await capture('tablet', 'dark')
+      await page.getByRole('button', { name: 'Switch to light theme' }).click()
+      await capture('tablet', 'light')
+
+      await page.emulateMedia({ reducedMotion: 'reduce' })
+      await page.setViewportSize({ width: 390, height: 844 })
+      await expect(install.getByText('Install')).toHaveCSS('opacity', '1')
+      await testInfo.attach(`${label}-reduced-motion-phone`, {
+        body: await page.screenshot(),
+        contentType: 'image/png',
+      })
+
+      await install.click()
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              (
+                window as Window & {
+                  __shawarmaniaInstallPromptCalls?: number
+                }
+              ).__shawarmaniaInstallPromptCalls ?? 0,
+          ),
+        )
+        .toBe(1)
+      await expect(install).toHaveCount(0)
+      expect(consoleErrors).toEqual([])
+      expect(unexpectedRequests).toEqual([])
     })
   }
 

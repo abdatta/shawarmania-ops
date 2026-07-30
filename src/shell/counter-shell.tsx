@@ -30,9 +30,11 @@ import { ROLE_SEGMENTS } from '@/session/session'
 export function CounterShell({
   banner,
   accountMenu,
+  installAction,
 }: {
   banner?: ReactNode
   accountMenu?: ReactNode
+  installAction?: ReactNode
 }) {
   const session = useSession()
   const { outlets } = useAdapters()
@@ -95,6 +97,7 @@ export function CounterShell({
         <span className="ml-auto">
           <SyncIndicator />
         </span>
+        {installAction}
         <ThemeToggle />
         {accountMenu}
       </header>

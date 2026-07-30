@@ -87,6 +87,22 @@ Privatising the repo at the same time needs a paid GitHub plan for Pages, or a m
 
 Database changes deploy as migrations, applied to staging first and then production. **Migrations are forward-only**; a mistake is corrected by a new migration, not by editing a released one.
 
+### Installing the app
+
+Open `https://ops.shawarmania.in/` in the browser. When the browser confirms
+that the PWA is eligible, the download action appears in the public header and
+continues into a signed-in role shell. Tap it to open the browser's native
+install prompt. On iPhone or iPad Safari, tap the action and follow the shown
+path: **Share → Add to Home Screen**, turn on **Open as Web App**, then tap
+**Add**.
+
+The action is intentionally absent when the app is already running from an
+installed window, when the browser offers no supported path, and in demo mode.
+If installation should be available but the action is missing, first confirm
+the canonical HTTPS origin is open and that the browser has not already
+installed the app. Do not clear site data on a counter tablet merely to recover
+the prompt; once offline billing lands, that would destroy its pending outbox.
+
 ### Service worker caution
 
 The PWA caches the app shell, which means **a bad deploy can persist on a counter tablet that has not refreshed**. Two mitigations, both non-optional, and both now implemented:

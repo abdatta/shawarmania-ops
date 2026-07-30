@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router'
 
 import { BuildVersion } from '@/components/build-version'
+import { InstallAppButton } from '@/components/install-app-button'
 import { ThemeToggle } from '@/components/theme-toggle'
 
 /**
@@ -15,7 +16,10 @@ export function RootLayout() {
     <div className="flex min-h-dvh flex-col bg-canvas text-content">
       <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
         <span className="font-display text-xl tracking-wide text-accent-text">Shawarmania Ops</span>
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <InstallAppButton />
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="flex-1 px-4 py-6">

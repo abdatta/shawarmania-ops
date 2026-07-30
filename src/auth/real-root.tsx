@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Navigate, useLocation, useParams } from 'react-router'
 
+import { InstallAppButton } from '@/components/install-app-button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { AdaptersContext } from '@/data-access/adapters-context'
@@ -116,7 +117,10 @@ export function RealRoot() {
   return (
     <SessionContext.Provider value={session}>
       <AdaptersContext.Provider value={adapters}>
-        <Shell accountMenu={<AccountMenu onSignOut={endSession} />} />
+        <Shell
+          accountMenu={<AccountMenu onSignOut={endSession} />}
+          installAction={<InstallAppButton />}
+        />
       </AdaptersContext.Provider>
     </SessionContext.Provider>
   )

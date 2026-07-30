@@ -16,6 +16,16 @@ One bundle serves all four roles. After sign-in the shell reads the role claim a
 
 **Set your password** — the first-run screen, and the whole of password reset. Ordinarily reached by opening the activation link an admin sent, which carries the code, so **the only thing typed is a password** — entered twice, because it is typed blind with no way back: a typo sets a password nobody knows and spends the code proving it. It opens by showing the address the account will sign in with and asking, with two equally prominent answers, whether that is you — never a passive Continue, because catching a mistyped address is the entire reason the step exists. Saying it is not yours sends you to your manager, who can correct it. A dead link says so on arrival, before anything has been typed. Somebody handed only the code, with no link, gets one field asking for it and then the same confirmation. A separate screen rather than a sign-in field clever enough to guess whether you typed a password or a code — guessing would be wrong occasionally and confusing always, on somebody's first day.
 
+**Install app** — the public header and every real role shell expose one 44px
+install action when the browser has an installation path. Chromium-family
+browsers get their native prompt; iOS Safari gets the manual Share → Add to
+Home Screen instructions. The action is absent when the app is already
+installed, when the browser offers no path, and throughout demo mode so a
+fabricated scenario never promotes itself as the operational app. Its label
+opens briefly once per tab to teach the download icon, while reduced-motion
+users get the stable full label. A prompt captured before sign-in remains
+available after the real phone or counter shell mounts.
+
 **Account menu** — in every shell's chrome: who you are, your role, your outlet, and sign out. Demo shells do not have one; there is no session to end.
 
 It is also **the first thing in that chrome that is not the same for all four roles**: the Super Admin's carries the demo, with a **copy-link** action beside it, so the one person who pitches franchisees can produce the URL without typing it from memory. Nobody else sees the entry — a manager showing the demo to a walk-in lead is plausible enough, and no harm follows since the link is public either way, but there is no reason to widen an affordance ahead of wanting it. It links and copies `/demo` rather than a role path, because the banner's role switcher is right there and a recipient should not be pinned to whichever role the owner was looking at. **Following it while signed in still lands on the "you are signed in — this is the demo" gate**, deliberately and with no special case: somebody ringing up fake bills in a tab they thought was real is a genuine operational problem, and an owner is no less capable of losing track of a tab than a biller is.
