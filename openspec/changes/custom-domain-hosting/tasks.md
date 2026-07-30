@@ -11,14 +11,14 @@
 ## 2. Verify and publish
 
 - [x] 2.1 Run the repository's non-Docker CI gates.
-- [ ] 2.2 Commit and push the change to `main`; confirm Pages deploys that
+- [x] 2.2 Commit and push the change to `main`; confirm Pages deploys that
       commit successfully.
 
 ## 3. Cut over the hostname
 
-- [ ] 3.1 Add the Hostinger `ops` CNAME without changing the apex or `www`
+- [x] 3.1 Add the Hostinger `ops` CNAME without changing the apex or `www`
       landing-page records.
-- [ ] 3.2 Save `ops.shawarmania.in` as the custom domain in GitHub Pages and
+- [x] 3.2 Save `ops.shawarmania.in` as the custom domain in GitHub Pages and
       enforce HTTPS.
-- [ ] 3.3 Verify the live root, a direct nested route, PWA metadata,
+- [x] 3.3 Verify the live root, a direct nested route, PWA metadata,
       service-worker registration, asset requests, and the former URL redirect.
