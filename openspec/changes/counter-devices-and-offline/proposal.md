@@ -1,6 +1,6 @@
 # Proposal: counter-devices-and-offline
 
-> **Model**: Fable · **Wave**: D · **Depends on**: #4, #21 · **Gate**: an enrolled tablet reaches only its own outlet's billing surface and revoke takes effect immediately; offline → 20 bills → online → exactly 20 rows, zero duplicates; the queue survives reload and restart; a replayed client UUID inserts once; a malformed entry quarantines instead of vanishing.
+> **Model**: Fable · **Wave**: D · **Depends on**: #4, #21, #22, #24 · **Gate**: an enrolled tablet reaches only its own outlet's billing surface and revoke takes effect immediately; offline → 20 bills → online → exactly 20 rows, zero duplicates; the queue survives reload and restart; a replayed client UUID inserts once; a malformed entry quarantines instead of vanishing.
 
 ## Why
 
@@ -9,6 +9,11 @@ Makes the counter tablet a **trusted, offline-capable device** — the prerequis
 Device trust and the outbox ship together because the outbox's security posture depends on the device session: a queued write drains under the device's credentials, and revoking a device with a pending queue has to do something sensible. Building them apart would mean designing that interaction twice.
 
 Exactly-once semantics are brutal to retrofit onto a shipped queue, which is why this is proved by a harness **before** any screen depends on it.
+
+`username-sign-in-and-owner-recovery` (#24) lands first so this change designs
+device enrollment against the durable username identity model. No personal
+staff email or temporary personal Biller login may leak into the device
+credential, enrollment record, PIN attribution, or recovery story.
 
 ## Scope
 

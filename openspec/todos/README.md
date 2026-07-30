@@ -21,8 +21,7 @@ Keep entries behavior-focused:
 | [Cross-Outlet Customer Identity](./cross-outlet-customer-identity.md) | Feature | **Parked** | Customers | A loyalty feature with real value — and the design question settled first |
 | [Audit Log](./audit-log.md) | Feature | Anticipated | Security | The first franchise dispute, or headcount outgrowing "a small trusted team" |
 | [Data Retention Policy](./data-retention-policy.md) | Feature | Anticipated | Security | **A quarter of real attendance data in production** — sooner than customer volume |
-| [Self-Service Password Reset](./self-service-password-reset.md) | Feature | Anticipated | Auth | Admin-initiated resets become a bottleneck |
-| [Signed-In Password Change](./signed-in-password-change.md) | Feature | Deferred by decision | Auth | The shared Profile screen gets built for any reason |
+| [Self-Service Account Settings](./self-service-account-settings.md) | Feature | Deferred by decision | Auth | The shared Profile/Settings surface is built or the first real request arrives |
 | [Workbox Build-Chain Advisories](./workbox-build-advisories.md) | Investigation | Accepted | Build tooling | A fixed `workbox-build` ships, or an advisory becomes runtime-reachable |
 | [Unreachable Backend Blames The Password](./unreachable-backend-blames-the-password.md) | **Defect** | Open | Auth | Anyone signs in on a bad connection — so, any shift |
 | [Attendance Gate: Two Clauses Never Walked](./attendance-gate-unwalked-clauses.md) | Verification gap | Accepted at archive | Attendance | The first real staff member checks in at a live outlet |
@@ -43,3 +42,4 @@ Two entries carry a status worth reading before the trigger column:
 | Role Grants: One Login, Many Hats | Graduated into `multi-outlet-people` (#22) on 2026-07-29 — the trigger fired on both counts at once: a staffer splitting shifts across the outlets, and the owner day-running one. The same day the owner simplified the design: plain per-outlet **assignments** checked by membership, no session hats or switching. One login per person and no role hierarchy stay rejected exactly as recorded here. |
 | Owner Break-Glass Writes | Folded into `multi-outlet-people` (#22) by owner decision on 2026-07-29 — the two todos were one feature seen from two ends. The boundary carries over intact: non-cash only, always visibly the owner's, the drawer stays the Franchise Admin's alone. |
 | Two Ways To Draw A Dropdown | Completed by `staff-as-accounts` (#21): the People surface adopted the `Select` primitive and the roster surface was deleted, so the primitive is now the only `<select>` in the app. |
+| Self-Service Password Reset | Split by `username-sign-in-and-owner-recovery` (#24): a Super Admin receives private, enumeration-safe recovery because the owner must not depend on another admin; Franchise Admins, Billers, and Employees deliberately keep the admin-issued one-time-link path because they carry no recovery email. |

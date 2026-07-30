@@ -20,7 +20,10 @@ One bundle serves all four roles. After sign-in the shell reads the role claim a
 
 It is also **the first thing in that chrome that is not the same for all four roles**: the Super Admin's carries the demo, with a **copy-link** action beside it, so the one person who pitches franchisees can produce the URL without typing it from memory. Nobody else sees the entry — a manager showing the demo to a walk-in lead is plausible enough, and no harm follows since the link is public either way, but there is no reason to widen an affordance ahead of wanting it. It links and copies `/demo` rather than a role path, because the banner's role switcher is right there and a recipient should not be pinned to whichever role the owner was looking at. **Following it while signed in still lands on the "you are signed in — this is the demo" gate**, deliberately and with no special case: somebody ringing up fake bills in a tab they thought was real is a genuine operational problem, and an owner is no less capable of losing track of a tab than a biller is.
 
-**Profile** — own name, phone, role, assigned outlet. Change password. Sign out. *(Not built. Sign-out lives in the account menu; changing a password you still know is [deferred by decision](../openspec/todos/signed-in-password-change.md).)*
+**Profile / Settings** — own name, phone, role, assigned outlets, account
+settings, sign out. *(Not built. Sign-out lives in the account menu; requesting
+a username change or changing a password you still know is
+[deferred by decision](../openspec/todos/self-service-account-settings.md).)*
 
 ## Biller — the counter tablet
 
