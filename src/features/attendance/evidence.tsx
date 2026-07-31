@@ -150,6 +150,18 @@ export function ApprovalNote({
 }
 
 /**
+ * What each settled status reads as at a glance. Present and absent are the two
+ * a person scanning a month is looking for, so they carry the colour; half day
+ * and leave are neither good news nor bad and stay neutral.
+ */
+const STATUS_TONE = {
+  present: 'text-content',
+  absent: 'font-semibold text-danger',
+  half_day: 'text-content-muted',
+  leave: 'text-content-muted',
+} as const satisfies Record<AttendanceRecord['status'], string>
+
+/**
  * The day's headline: what it counts as, and whether anything about it is
  * unresolved. Identical wording on every surface.
  */
@@ -167,10 +179,10 @@ export function DayVerdict({ record, late = false }: { record: AttendanceRecord;
         <span className="inline-flex items-center gap-1">
           {record.status === 'present' ? (
             <CheckCircle2 aria-hidden size={14} className="text-success" />
+          ) : record.status === 'absent' ? (
+            <CircleSlash aria-hidden size={14} className="text-danger" />
           ) : null}
-          <span className={record.status === 'present' ? 'text-content' : 'text-content-muted'}>
-            {describeDay(record)}
-          </span>
+          <span className={STATUS_TONE[record.status]}>{describeDay(record)}</span>
         </span>
       )}
       {late && <LateTag />}
@@ -206,7 +218,7 @@ export function DerivedVerdict({ reading }: { reading: DayReading }) {
     return (
       <span
         data-testid="derived-absent"
-        className="inline-flex items-center gap-1 font-semibold text-content-muted"
+        className="inline-flex items-center gap-1 font-semibold text-danger"
       >
         <CircleSlash aria-hidden size={14} />
         Absent
