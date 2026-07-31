@@ -1,5 +1,5 @@
 import { CalendarCheck, ChevronLeft, ChevronRight, PencilLine, ShieldCheck } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
@@ -60,7 +60,7 @@ export function OutletAttendance() {
   // per-surface choice for somebody who manages more than one, which
   // confers nothing — the database decides every write from the
   // assignment (multi-outlet-people, design D6).
-  const { outletId, selector: outletSelector } = useOutletScope()
+  const { outletId, selector: outletSelector, choose } = useOutletScope()
 
   // The outlet and its people: fetched once, independent of which day is shown.
   useEffect(() => {
@@ -104,7 +104,7 @@ export function OutletAttendance() {
         subtitle={outlet ? `${outlet.name} — who was here, and where they were.` : undefined}
       />
 
-      <StrandedDays />
+      <StrandedDays currentOutletId={outletId} onChoose={choose} />
 
       <div className="mb-3 flex gap-2" role="tablist" aria-label="Read attendance by">
         <Button
@@ -162,8 +162,22 @@ export function OutletAttendance() {
  * are the one person who cannot notice a forgotten approval by opening their own
  * outlet — and a day nobody settles is invisible until somebody queries their
  * pay.
+ *
+ * The count here spans every business day, so it is deliberately not the same
+ * number as the waiting count on the day below: an outlet can hold nothing today
+ * and a week of unsettled days behind it.
+ *
+ * Choosing another outlet brings the view to it, so noticing and acting are one
+ * gesture. The outlet already in scope is stated rather than offered, because
+ * there is nowhere to go.
  */
-function StrandedDays() {
+function StrandedDays({
+  currentOutletId,
+  onChoose,
+}: {
+  currentOutletId: string | null
+  onChoose: (outletId: string) => void
+}) {
   const session = useSession()
   const { attendance } = useAdapters()
   const [counts, setCounts] = useState<WaitingCount[] | null>(null)
@@ -194,16 +208,52 @@ function StrandedDays() {
     >
       <p className="text-sm font-semibold text-content">Days waiting for a manager</p>
       <ul className="mt-1 space-y-0.5 text-sm text-content-muted">
-        {counts.map((count) => (
-          <li key={count.outletId} data-testid={`stranded-${count.outletId}`}>
-            <span className="font-semibold text-content">{count.outletName ?? 'An outlet'}</span>:{' '}
-            {count.waiting === 1 ? '1 day' : `${count.waiting} days`}, oldest{' '}
-            {formatBusinessDate(count.oldest)}
-          </li>
-        ))}
+        {counts.map((count) => {
+          const name = count.outletName ?? 'An outlet'
+          const tally = `${count.waiting === 1 ? '1 day' : `${count.waiting} days`}, oldest ${formatBusinessDate(count.oldest)}`
+
+          if (count.outletId === currentOutletId) {
+            return (
+              <li key={count.outletId} data-testid={`stranded-${count.outletId}`}>
+                <span className="font-semibold text-content">{name}</span> (this outlet): {tally}
+              </li>
+            )
+          }
+
+          return (
+            <li key={count.outletId}>
+              <button
+                type="button"
+                data-testid={`stranded-${count.outletId}`}
+                onClick={() => onChoose(count.outletId)}
+                className="rounded text-left underline decoration-dotted underline-offset-2 hover:text-content focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              >
+                <span className="font-semibold text-content">{name}</span>: {tally}
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
+}
+
+/**
+ * How long a position reading may be reused across approvals (design D11).
+ *
+ * The approver's position is evidence written to each row, so this window is
+ * exactly how stale that evidence is allowed to be. It is also the abuse bound:
+ * longer would let a manager take one reading inside the fence, walk away, and
+ * keep collecting one-tap no-reason approvals against it.
+ */
+const POSITION_CACHE_MS = 60_000
+
+/** Rank a day by how much it wants somebody's attention (design D12). */
+const READING_RANK: Record<DayReading['kind'], number> = {
+  waiting: 0,
+  'not-yet-arrived': 1,
+  absent: 2,
+  recorded: 3,
 }
 
 /** What an approval is waiting on, once the manager's position is known. */
@@ -238,6 +288,23 @@ function DayAxis({
   const [flow, setFlow] = useState<ApprovalFlow>({ kind: 'idle' })
   const [manualFor, setManualFor] = useState<AccountSummary | null>(null)
 
+  // A position reading, reused for a minute so approving one at a time is not one
+  // GPS read per person (design D11). In memory only, so a reload asks again.
+  const cachedPosition = useRef<{ reading: PositionReading; at: number } | null>(null)
+
+  // The day exactly as it loaded, kept beside the live records purely to order the
+  // roll-call (design D12). Approvals update `records` and never this, so settling
+  // a row cannot move the list; reloading the day replaces it and re-sorts.
+  const [orderSeed, setOrderSeed] = useState<{
+    records: readonly AttendanceRecord[]
+    at: Date
+  } | null>(null)
+
+  // A reading taken at one outlet says nothing about standing at another.
+  useEffect(() => {
+    cachedPosition.current = null
+  }, [outlet.id])
+
   useEffect(() => {
     let active = true
     void (async () => {
@@ -245,6 +312,7 @@ function DayAxis({
         const rows = await attendance.listOutletDay(outlet.id, businessDate)
         if (!active) return
         setRecords(rows)
+        setOrderSeed({ records: rows, at: new Date() })
         onError(null)
       } catch {
         if (active) onError('Could not load that day. Try again in a moment.')
@@ -278,10 +346,27 @@ function DayAxis({
    */
   async function beginApprove(ids: string[]) {
     if (ids.length === 0) return
+
+    // A reading from the last minute stands in for a fresh one; anything older is
+    // no longer a claim about where this manager is now.
+    const cached = cachedPosition.current
+    const fresh = cached !== null && Date.now() - cached.at < POSITION_CACHE_MS
+    if (fresh) return decideApproval(ids, cached.reading)
+
     setFlow({ kind: 'locating', ids })
     const result = await readPosition()
     const reading = result.ok ? result.reading : null
+    // Only a real reading is worth keeping. A failure is not cached, so the next
+    // approval asks again rather than inheriting a silence.
+    cachedPosition.current = reading === null ? null : { reading, at: Date.now() }
+    return decideApproval(ids, reading)
+  }
 
+  /**
+   * Decide what an approval costs, given a position reading that may have just
+   * been taken or may be up to a minute old.
+   */
+  async function decideApproval(ids: string[], reading: PositionReading | null) {
     const inside =
       reading !== null &&
       evaluateFence(
@@ -358,7 +443,7 @@ function DayAxis({
   // Manual entries belong to the current business day — the database refuses
   // anything else, so a past day simply does not offer the action.
   const manualDay = businessDate === today
-  const rows = people.map((person) => {
+  const unordered = people.map((person) => {
     const record = records.find((candidate) => candidate.personId === person.id) ?? null
     return {
       person,
@@ -367,6 +452,20 @@ function DayAxis({
       late: record !== null && isLate(record, outlet.business_day_cutover),
     }
   })
+
+  // Put the waiting arrivals first. Ranked against the day as it loaded rather
+  // than as it now stands, so approving a row cannot drop it down the list and
+  // slide the next person's Approve button under a moving thumb (design D12).
+  // The sort is stable, so `people`'s alphabetical order survives inside each rank.
+  const rankAtLoad = (personId: string): number => {
+    if (orderSeed === null) return READING_RANK.recorded
+    const asLoaded = orderSeed.records.find((row) => row.personId === personId) ?? null
+    return READING_RANK[readDay(asLoaded, outlet, businessDate, orderSeed.at).kind]
+  }
+  const rows =
+    orderSeed === null
+      ? unordered
+      : [...unordered].sort((a, b) => rankAtLoad(a.person.id) - rankAtLoad(b.person.id))
   const waitingIds = rows
     .filter((row) => row.reading.kind === 'waiting')
     .map((row) => row.record?.id)
@@ -384,22 +483,23 @@ function DayAxis({
       {waitingIds.length > 0 && (
         <div
           data-testid="awaiting-count"
-          className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning bg-surface-raised p-2"
+          className="mb-3 rounded-lg border border-warning bg-surface-raised p-2"
         >
           <p className="text-sm font-semibold text-content">
             {waitingIds.length === 1
               ? '1 arrival is waiting for your approval.'
               : `${waitingIds.length} arrivals are waiting for your approval.`}
           </p>
-          <Button
-            size="phone"
-            disabled={busy}
-            data-testid="approve-all"
-            onClick={() => void beginApprove(waitingIds)}
-          >
-            <ShieldCheck aria-hidden size={14} />
-            {busy ? 'Working…' : 'Approve all'}
-          </Button>
+          {/*
+            No approve-all here, deliberately (design D8). Approving is meant to be
+            the moment somebody remembers this person turning up for this shift,
+            and one button settling the lot is how an unseen arrival gets counted.
+          */}
+          <p className="mt-0.5 text-xs text-content-muted">
+            {waitingIds.length === 1
+              ? 'Listed first below. Approve it against what you remember of the shift.'
+              : 'Listed first below. Each one is approved on its own, against what you remember of the shift.'}
+          </p>
         </div>
       )}
 

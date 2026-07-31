@@ -120,13 +120,38 @@ test('approving from away from the outlet costs a reason, and records it', async
   await expect(card.getByTestId('approver-place')).toContainText('from the outlet')
 })
 
-test('a manager settles the whole waiting morning in one action', async ({ page }) => {
+test('a manager settles a waiting morning one day at a time, and the list holds still', async ({
+  page,
+}) => {
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
   await expect(page.getByTestId('awaiting-count')).toBeVisible()
 
-  await page.getByTestId('approve-all').click()
+  // No bulk control: one button settling the lot is how an arrival nobody saw
+  // gets counted (design D8).
+  await expect(page.getByTestId('approve-all')).toHaveCount(0)
 
+  const cards = page.getByTestId(/^day-[0-9a-f-]{36}$/)
+  const orderBefore = await cards.evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute('data-testid')),
+  )
+
+  // The waiting rows are the ones at the top, so the work is where a manager
+  // opens (design D12).
+  const waiting = page.getByTestId(/^approve-[0-9a-f-]{36}$/)
+  await expect(waiting).toHaveCount(2)
+  await waiting.first().click()
+
+  // Standing at the counter on the day, so one tap and no sheet.
+  await expect(page.getByLabel('Why are you approving this?')).toHaveCount(0)
+  await expect(page.getByTestId('awaiting-count')).toContainText('1 arrival is waiting')
+  // Settling one did not move the others out from under the next tap.
+  await expect
+    .poll(() => cards.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-testid'))))
+    .toEqual(orderBefore)
+
+  // And the second is settled on its own, which is the whole point.
+  await waiting.first().click()
   await expect(page.getByTestId('awaiting-count')).toHaveCount(0)
 })
 

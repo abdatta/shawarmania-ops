@@ -226,19 +226,69 @@ the leak: omitted by a caller who meant "my outlet", it silently becomes
 "everywhere the policy allows", and for a Super Admin viewing a Franchise
 Admin's screen it would return more than the screen claims to show.
 
-### D8 — A batch approval is one statement
+### D8 — An approval is one statement, and the UI gives it one day
 
-The client reads a position once and issues a single update over the selected
-ids (`.in('id', ids)`), so the batch is one round trip and one transaction.
-The trigger stamps each row's approver name and evaluates each row's distance
-independently.
+The client issues a single update over the ids it was given (`.in('id', ids)`),
+so an approval is one round trip and one transaction. The trigger stamps each
+row's approver name and evaluates each row's distance independently.
 
-**Rejected: a loop of single-row updates.** A partial failure leaves half a
-morning approved with nothing on screen saying which half.
+**The adapter stays id-list shaped, and the UI passes exactly one.** The
+database contract and its pgTAP coverage prove that each row settles with its
+own approver, time, position and computed distance, which is worth keeping
+proven whether or not a screen ever sends two. Narrowing the signature would
+delete that coverage and buy nothing.
+
+**Rejected: a bulk approve-all control** (owner, 2026-07-31). One button that
+settles every waiting day is how a manager approves an arrival they did not
+see. Approving is meant to be the moment somebody remembers this person turning
+up for this shift, so the friction is the feature. The cost is that a manager
+catching up on a backlog taps once per person; the mitigation is D11, not a
+bulk action.
+
+**Rejected: a loop of single-row updates behind one control.** Moot now that
+the UI approves one at a time, but the reasoning stands if a bulk action ever
+returns: a partial failure leaves half a morning approved with nothing on
+screen saying which half.
 
 **Rejected: an RPC.** Nothing here needs privilege the caller lacks, and a
 `security definer` function would move an authorisation decision out of RLS
 where the isolation suite tests it.
+
+### D11 — The position reading is cached for 60 seconds
+
+Approving one at a time would otherwise mean one GPS read per person, which is
+slow on a phone and, off site, one reason sheet per person. So a successful
+reading is held in memory and reused for 60 seconds.
+
+**Why 60 seconds and not longer.** The approver's position is *evidence*
+written to each row, so the cache window is exactly how stale that evidence is
+allowed to be. It is also the abuse bound: a longer window would let a manager
+take one reading inside the fence, walk away, and keep collecting one-tap
+no-reason approvals against it. A minute covers a run of approvals at the
+counter without meaningfully weakening the on-site reason rule.
+
+Held in memory only, so it does not survive a reload, and dropped when the
+outlet in scope changes. A failed reading is never cached: nothing is stored,
+and the next approval asks again.
+
+### D12 — The roll-call order is frozen while the page is open
+
+Waiting rows sort above the rest, then not-yet-arrived, then absent, then
+recorded, alphabetical inside each.
+
+Recomputed when the day view mounts and when the chosen business day changes,
+and **not** when a row's state changes. Approving a row would otherwise flip it
+from waiting to recorded, drop it down the list, and slide the next person's
+Approve button under a thumb that is already moving. The order is a reading
+aid, so it is allowed to be a moment out of date; a mis-tap on somebody else's
+day is not.
+
+**Rejected: sorting on every render.** Correct and unusable.
+
+**Rejected: a "needs action" sort rather than a waiting sort.** A manual entry
+is offered for anybody with no check-in, so on the current day that would float
+everyone who has not arrived yet and bury the thing worth seeing. Only a
+waiting day is somebody else's request for attention (owner, 2026-07-31).
 
 ### D9 — Enforcement is in the database, listed
 

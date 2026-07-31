@@ -48,6 +48,16 @@ export function useOutletScope(): {
   managed: boolean
   /** Render this in the surface's header. Null when there is nothing to choose. */
   selector: ReactNode
+  /**
+   * Move the surface to another outlet, for a surface that has its own reason to
+   * offer the move — the owner's stranded-days list, which exists precisely to
+   * say "the unsettled days are over there".
+   *
+   * Ignored for somebody with a single outlet, who has nowhere to go. Confers
+   * nothing that the selector does not: this is the same filter, set from a
+   * different control.
+   */
+  choose: (outletId: string) => void
 } {
   const session = useSession()
   const { outlets: outletsAdapter } = useAdapters()
@@ -95,12 +105,18 @@ export function useOutletScope(): {
 
   if (!needsList) {
     const only = mine[0] ?? null
-    return { outletId: only, managed: only !== null && manages.includes(only), selector: null }
+    return {
+      outletId: only,
+      managed: only !== null && manages.includes(only),
+      selector: null,
+      choose: () => undefined,
+    }
   }
 
   return {
     outletId: chosen,
     managed: chosen !== null && manages.includes(chosen),
+    choose: setChosen,
     selector:
       outlets.length > 1 ? (
         <label className="flex items-center gap-2 text-sm text-content-muted">

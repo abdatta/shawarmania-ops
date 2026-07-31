@@ -10,6 +10,7 @@ import {
   DEMO_GRILLER_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
   OUTLET_KALYANI_ID,
+  OUTLET_KANCHRAPARA_ID,
 } from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
@@ -71,6 +72,16 @@ const managerSession: Session = {
   ...deriveSessionScope(personaFixtures.franchise_admin.assignments),
   displayName: personaFixtures.franchise_admin.profile.full_name,
   persona: personaFixtures.franchise_admin,
+}
+
+/**
+ * The roll-call cards in the order they are rendered.
+ *
+ * Keyed on a person id so `day-label` and anything else beginning "day-" cannot
+ * creep into an assertion about ordering.
+ */
+function dayCards(): HTMLElement[] {
+  return screen.getAllByTestId(/^day-[0-9a-f-]{36}$/)
 }
 
 function renderDay(adapters: DataAdapters = createMockAdapters()) {
@@ -243,20 +254,72 @@ describe('the outlet attendance day', () => {
     expect(approve).not.toHaveBeenCalled()
   })
 
-  it('settles a whole morning in one action', async () => {
+  it('offers no way to settle more than one day at once', async () => {
+    renderDay()
+
+    // The count still tells a manager there is work waiting. What is deliberately
+    // gone is the single button that would clear it without looking at it: an
+    // approval is meant to be the moment somebody remembers this person turning
+    // up for this shift (design D8).
+    expect(await screen.findByTestId('awaiting-count')).toHaveTextContent(
+      'arrivals are waiting for your approval',
+    )
+    expect(screen.queryByTestId('approve-all')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /approve all/i })).not.toBeInTheDocument()
+  })
+
+  it('lists arrivals waiting for approval above the rest of the roll-call', async () => {
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    const waiting = dayCards().map(
+      (card) => within(card).queryByRole('button', { name: 'Approve' }) !== null,
+    )
+
+    // More than one waiting row, and none of them after a row that is settled:
+    // the work a manager came here to do is at the top (design D12).
+    expect(waiting.filter(Boolean).length).toBeGreaterThan(1)
+    expect(waiting).toEqual([...waiting].sort((a, b) => Number(b) - Number(a)))
+  })
+
+  it('leaves the roll-call order alone when a day is settled', async () => {
     const user = userEvent.setup()
-    const adapters = createMockAdapters()
-    const approve = vi.spyOn(adapters.attendance, 'approve')
     atPosition(AT_COUNTER)
-    renderDay(adapters)
+    renderDay()
+    await screen.findByTestId('attendance-day')
 
-    await user.click(await screen.findByTestId('approve-all'))
+    const before = dayCards().map((card) => card.dataset.testid)
+    await user.click(await screen.findByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId(`day-${DEMO_RUNNER_ACCOUNT_ID}`)).getByTestId('approval-note'),
+      ).toBeInTheDocument(),
+    )
 
-    // One call carrying both ids, not a call each: a partial failure must not
-    // leave half a morning approved (design D8).
-    await waitFor(() => expect(approve).toHaveBeenCalledTimes(1))
-    expect(approve.mock.calls[0]?.[0]).toHaveLength(2)
-    await waitFor(() => expect(screen.queryByTestId('awaiting-count')).not.toBeInTheDocument())
+    // The settled row keeps its place. Re-sorting here would drop it down the
+    // list and slide the next person's Approve button under a moving thumb.
+    expect(dayCards().map((card) => card.dataset.testid)).toEqual(before)
+  })
+
+  it('reads the position once for approvals given in quick succession', async () => {
+    const user = userEvent.setup()
+    atPosition(AT_COUNTER)
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    const buttons = screen
+      .getAllByTestId(/^approve-[0-9a-f-]{36}$/)
+      .map((button) => button.dataset.testid as string)
+    expect(buttons.length).toBeGreaterThan(1)
+
+    for (const testid of buttons) {
+      await user.click(screen.getByTestId(testid))
+      await waitFor(() => expect(screen.queryByTestId(testid)).not.toBeInTheDocument())
+    }
+
+    // One reading for the run rather than one per person, so approving one at a
+    // time does not mean a GPS read each (design D11).
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1)
   })
 
   it('moves between business days and cannot walk into the future', async () => {
@@ -368,5 +431,96 @@ describe('the outlet attendance person view', () => {
 
     await waitFor(() => expect(range.mock.calls.length).toBeGreaterThan(before))
     expect(range.mock.calls.at(-1)?.[1]).toBe(OUTLET_KALYANI_ID)
+  })
+})
+
+/**
+ * The owner's cross-outlet view of unsettled days.
+ *
+ * This count spans every business day, which is why it is not the same number as
+ * the waiting count on the day below it: an outlet can hold nothing today and a
+ * week of unsettled days behind it. The owner is the one person who cannot notice
+ * a forgotten approval by opening their own outlet, so noticing and acting are
+ * made one gesture.
+ */
+describe("the owner's stranded days", () => {
+  const ownerSession: Session = {
+    mode: 'demo',
+    userId: personaFixtures.super_admin.profile.id,
+    assignments: personaFixtures.super_admin.assignments,
+    ...deriveSessionScope(personaFixtures.super_admin.assignments),
+    displayName: personaFixtures.super_admin.profile.full_name,
+    persona: personaFixtures.super_admin,
+  }
+
+  /**
+   * Days stranded at both outlets, staged rather than seeded.
+   *
+   * The fixtures happen to hold unsettled days at one outlet only, and what is
+   * under test here is the rendering and the switch, not the counting — which
+   * `countWaitingByOutlet` is covered for on its own.
+   */
+  function renderAsOwner(adapters: DataAdapters = createMockAdapters()) {
+    vi.spyOn(adapters.attendance, 'countWaitingByOutlet').mockResolvedValue([
+      {
+        outletId: OUTLET_KALYANI_ID,
+        outletName: 'Shawarmania Kalyani',
+        waiting: 2,
+        oldest: '2026-07-20',
+      },
+      {
+        outletId: OUTLET_KANCHRAPARA_ID,
+        outletName: 'Shawarmania Kanchrapara',
+        waiting: 5,
+        oldest: '2026-07-18',
+      },
+    ])
+    return render(
+      <MemoryRouter>
+        <SessionContext.Provider value={ownerSession}>
+          <AdaptersContext.Provider value={adapters}>
+            <OutletAttendance />
+          </AdaptersContext.Provider>
+        </SessionContext.Provider>
+      </MemoryRouter>,
+    )
+  }
+
+  it('counts unsettled days per outlet with the oldest date', async () => {
+    renderAsOwner()
+
+    const stranded = await screen.findByTestId('stranded-days')
+    expect(stranded).toHaveTextContent('Days waiting for a manager')
+    expect(within(stranded).getByTestId(`stranded-${OUTLET_KANCHRAPARA_ID}`)).toHaveTextContent(
+      '5 days, oldest',
+    )
+  })
+
+  it('follows a stranded count to the outlet it belongs to', async () => {
+    const user = userEvent.setup()
+    renderAsOwner()
+
+    // The outlet in scope is stated rather than offered: there is nowhere to go.
+    const here = await screen.findByTestId(`stranded-${OUTLET_KALYANI_ID}`)
+    expect(here).toHaveTextContent('this outlet')
+    expect(here.tagName).not.toBe('BUTTON')
+
+    await user.click(screen.getByTestId(`stranded-${OUTLET_KANCHRAPARA_ID}`))
+
+    // One gesture from noticing to acting, rather than a count followed by
+    // hunting through the picker.
+    await waitFor(() =>
+      expect(screen.getByTestId('surface-outlet')).toHaveValue(OUTLET_KANCHRAPARA_ID),
+    )
+    expect(await screen.findByTestId(`stranded-${OUTLET_KANCHRAPARA_ID}`)).toHaveTextContent(
+      'this outlet',
+    )
+  })
+
+  it('shows a manager nothing about other outlets', async () => {
+    renderDay()
+
+    await screen.findByTestId('attendance-day')
+    expect(screen.queryByTestId('stranded-days')).not.toBeInTheDocument()
   })
 })

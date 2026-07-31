@@ -129,12 +129,25 @@ access does not falsify the day.
 The count of days waiting for approval SHALL be stated on the view, so a
 manager learns of them without reading every row.
 
+Days waiting for approval SHALL be listed first, since they are the only rows
+on this view carrying somebody else's request for attention. The order SHALL be
+fixed while the view is open and recomputed when it is opened again or the
+chosen day changes, so that settling a day never moves the rows beneath it.
+
 #### Scenario: A manager opens the day
 
 - **WHEN** a Franchise Admin opens attendance for a business day
 - **THEN** every current staff member's record for that day is listed with
   the time, evidence, late tag and flags; rows waiting for approval are
-  distinguished and counted; and manually entered events show who entered them
+  distinguished, counted, and listed above the rest; and manually entered
+  events show who entered them
+
+#### Scenario: Settling a day does not move the list
+
+- **WHEN** a Franchise Admin approves a waiting day while others are still
+  waiting
+- **THEN** the approved row keeps its position and shows its new state, and the
+  rows beneath it do not move
 
 #### Scenario: A manager opens a day at another outlet
 
@@ -310,9 +323,14 @@ their own day, or anyone else's.
 An approval SHALL require a check-in on the row: a day nobody claimed is not
 a day anybody can settle.
 
-A manager SHALL be able to approve every waiting day at once in a single
-action, and each row SHALL record its own approver, time, position and
-distance.
+An approval SHALL be given one day at a time. No surface SHALL offer an action
+that settles more than one waiting day at once, so that approving is a
+deliberate act per person rather than a rubber stamp.
+
+The approving device's position reading MAY be reused across approvals given in
+quick succession, for no longer than 60 seconds, so that approving one at a
+time does not mean one location read per person. A reading that could not be
+taken SHALL NOT be reused.
 
 #### Scenario: A manager approves a waiting day
 
@@ -336,11 +354,18 @@ distance.
 - **WHEN** an approval is written onto a row that carries no check-in
 - **THEN** the database refuses the write
 
-#### Scenario: A whole morning is approved at once
+#### Scenario: There is no way to approve a whole morning at once
 
-- **WHEN** a manager approves several waiting days in one action
-- **THEN** every selected row is settled together, each carrying its own
-  approver, time, position and computed distance
+- **WHEN** a Franchise Admin opens a day on which several arrivals are waiting
+- **THEN** the count of waiting days is stated, no control settles more than one
+  of them, and each is approved on its own
+
+#### Scenario: A run of approvals reads the position once
+
+- **WHEN** a manager approves several waiting days one after another, within a
+  minute of the first
+- **THEN** the position is read once and reused, and each row still records its
+  own approver, time, position and computed distance
 
 ### Requirement: An approval records where the approver was, and being elsewhere costs a reason
 
@@ -558,12 +583,27 @@ A Super Admin SHALL be able to see, without opening each outlet in turn, how
 many days are waiting for approval at each outlet. A day nobody settles is
 otherwise invisible until somebody queries their pay.
 
+Choosing another outlet from that list SHALL bring the view to it, so noticing
+a stranded day and acting on it are one gesture rather than a count followed by
+hunting through a picker. The outlet already in scope SHALL be shown as such
+rather than offered as somewhere to go.
+
+This count is across every business day, and is therefore not the same as the
+waiting count for the day on screen: an outlet may hold nothing today and a
+week of unsettled days behind it.
+
 #### Scenario: The owner sees where days are stranded
 
 - **WHEN** a Super Admin opens attendance and two outlets each hold waiting
   days
-- **THEN** a count is shown for each outlet, and opening one leads to those
-  days
+- **THEN** a count and the oldest waiting date are shown for each outlet
+
+#### Scenario: The owner follows a stranded count to its outlet
+
+- **WHEN** a Super Admin chooses an outlet other than the one in scope from
+  that list
+- **THEN** the attendance view moves to that outlet, and the outlet in scope is
+  not offered as a destination
 
 ### Requirement: Location is captured only at check-in, at approval, and at an outlet capture
 

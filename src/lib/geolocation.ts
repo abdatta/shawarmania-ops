@@ -5,7 +5,7 @@
  * typed failure, which is what makes a blocked check-in testable without a
  * browser permission prompt. And the rule that this system never tracks anyone
  * in the background is then enforceable by reading one file: position is read
- * in direct response to a check-in, a check-out, or an outlet capture, and
+ * in direct response to a check-in, an approval, or an outlet capture, and
  * nowhere else. Adding a background watch would need a deliberate decision in
  * its own proposal (AGENTS.md, docs/SECURITY_AND_PRIVACY.md).
  */
@@ -60,7 +60,7 @@ function geolocation(): Geolocation | null {
 }
 
 /**
- * One high-accuracy reading, for a check-in or check-out. A single sample on
+ * One high-accuracy reading, for a check-in or an approval. A single sample on
  * purpose: the person is standing at work with their thumb on one big button,
  * and a sampling window would be latency they can feel for a fix that is
  * usually no better.

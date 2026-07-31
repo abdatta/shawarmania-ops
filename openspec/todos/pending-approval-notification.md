@@ -13,11 +13,12 @@ Since `attendance-approved-on-site` (#26), every arrival counts as nothing until
 manager approves it. That makes a forgotten approval a real cost to somebody's
 record, and the only thing that surfaces it today is a **count on a screen**:
 
-- The manager's attendance day states how many arrivals are waiting and offers
-  **Approve all**.
+- The manager's attendance day states how many arrivals are waiting and sorts
+  them to the top of the roll-call. There is no bulk approve, by decision, so
+  the count is a prompt to work through them rather than to clear them.
 - The owner's attendance surface states the count per outlet and the oldest
   waiting business date, so a stranded day at a shop nobody opened is visible
-  without opening it.
+  without opening it, and choosing that outlet brings the view to it.
 - The owner's console lists waiting arrivals as an attention item beside open
   alerts and low stock.
 

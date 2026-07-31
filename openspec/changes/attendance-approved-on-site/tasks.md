@@ -44,7 +44,7 @@
 
 - [x] 5.1 `check-in-card.tsx`: check-out phase and handler removed; a recorded arrival states plainly that it is waiting for a manager; the blocked state says an approving manager will have to give a reason; late arrival shown after the deadline
 - [x] 5.2 `evidence.tsx`: one event instead of two; the late tag; the approval note showing approver, whether they were on site, and any reason
-- [x] 5.3 `outlet-attendance.tsx`: the day view keeps its roll-call and gains derived absent / not-yet-arrived rows, the late tag, the waiting count, an approve action per row and an approve-all action
+- [x] 5.3 `outlet-attendance.tsx`: the day view keeps its roll-call and gains derived absent / not-yet-arrived rows, the late tag, the waiting count, and an approve action per row
 - [x] 5.4 The approval flow: reads the manager's position once, asks for a reason only when the rule requires one, and surfaces the database's refusal when a hand-crafted or stale attempt is rejected
 - [x] 5.5 `outlet-attendance.tsx`: the person axis — pick a staff member, pick a range defaulting to this month, with the present / late / absent / waiting summary, reading through `listPersonRange` with its outlet explicit
 - [x] 5.6 `my-attendance.tsx` + `use-own-attendance.ts`: the same range control over the person's own days across every outlet they work at
@@ -63,7 +63,7 @@
 ## 7. Component and E2E tests
 
 - [x] 7.1 `check-in-card.test.tsx` and `my-attendance.test.tsx`: check-out cases deleted; waiting, late and approved states asserted
-- [x] 7.2 `outlet-attendance.test.tsx`: approve one, approve all, the reason rule as the UI applies it, the person view and its summary, derived absent rows
+- [x] 7.2 `outlet-attendance.test.tsx`: approve one, the reason rule as the UI applies it, the person view and its summary, derived absent rows
 - [x] 7.3 `e2e/attendance.spec.ts`: the demo walk becomes check in, see it waiting, approve as the manager, read the month by person
 - [x] 7.4 `e2e/setup.spec.ts`: the arrival deadline on the outlet form
 - [x] 7.5 `npm run lint`, `format:check`, `typecheck`, `test`, `contrast`, `build`, `test:e2e` all green; then `db:start` + `db:reset` and `test:db`, `test:rls`, `test:e2e:auth`
@@ -83,4 +83,23 @@
 
 ## 9. PHASE GATE
 
+**Walked last, after section 10.** The amendment landed before this gate was
+walked, so the gate certifies the behaviour that actually ships rather than
+behaviour already superseded.
+
+
 - [ ] 9.1 🧍 **Gate**: real staff check in on their own phones in production and the day counts only once a manager approves it; an in-fence approval on the row's own business day is one tap with no reason, and an off-site or later one is refused without a reason, proved by a hand-crafted request; a check-in past the outlet's arrival deadline records its real time and evidence and reads late; a person with no check-in reads absent once that deadline passes; **no check-out exists anywhere in schema, adapter, UI or spec**; a manager opens one person's month and its figures reconcile exactly with the same days read by day; a Franchise Admin's person view returns no rows worked at the other outlet, proved by a hand-crafted request; and the four-role demo walkthrough still walks
+
+## 10. Amendment — approving is deliberate, and the work sorts first
+
+Owner decisions of 2026-07-31, taken after the change was deployed but before
+its gate was walked, so they are folded in here rather than raised as a change
+to undo one that never closed.
+
+- [x] 10.1 Remove the approve-all control from the day view's waiting banner, keeping the count, which is its own requirement (D8)
+- [x] 10.2 Cache a successful position reading in memory for 60 seconds and reuse it across approvals, dropping it when the outlet in scope changes; never cache a failed reading (D11)
+- [x] 10.3 Sort the roll-call waiting → not-yet-arrived → absent → recorded, alphabetical inside each, and freeze that order until the view is reopened or the chosen day changes (D12)
+- [x] 10.4 Make the owner's stranded-days list switch the outlet in scope, with the outlet already in scope marked rather than offered; `useOutletScope` gains a setter for it
+- [x] 10.5 Tests: no bulk control exists; approving one row leaves the order alone; a second approval inside the window reads no new position; the stranded list switches outlet
+- [x] 10.6 Docs restated: `OPERATIONS.md` loses approve-all as the answer to a backlog, `SCREENS.md` the day view's actions, `pending-approval-notification.md` its reference to it
+- [x] 10.7 Full gate suite green again: `lint`, `format:check`, `typecheck`, `test`, `contrast`, `build`, `test:e2e`, then `test:db`, `test:rls`, `test:e2e:auth`

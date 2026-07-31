@@ -48,8 +48,16 @@ the manager was there, not that they must have been. A manager who approves
 from home every morning shows up as a column of reasons, which is oversight a
 refusal would not have produced.
 
-**A batch approval settles everyone pending in one action**, on one position
-reading, carrying one reason where a reason is required.
+**An approval is given one person at a time.** There is deliberately no bulk
+action: the owner's rule (2026-07-31) is that a manager should have to remember
+this person arriving for this shift, and a single control settling a whole
+morning is how somebody approves an arrival they never saw. The position
+reading is cached briefly so a run of approvals is not a run of GPS reads, but
+each day is still its own decision.
+
+**The day view puts the work first.** Rows waiting for approval sort to the top
+of the roll-call, and the order is fixed while the page is open so nothing
+moves under a thumb mid-approval; it is recomputed on the next visit.
 
 **BREAKING: check-out is removed.** Every check-out column is dropped, along
 with its evidence rendering, its manual-entry half, its far-from-outlet flag,
