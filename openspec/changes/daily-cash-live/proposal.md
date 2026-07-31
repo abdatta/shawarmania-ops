@@ -29,6 +29,12 @@ It keeps its own change at every level of consolidation because it contains the 
 - What reopening a closed day does to the previous snapshot — it should be preserved, not replaced, or the audit value is lost.
 - Whether a day can be closed while an outlet has a known-pending outbox on a device, and what the manager is told.
 - The sign convention for difference, asserted explicitly in tests. Short is negative; this is exactly the kind of thing that silently inverts.
+- **May the owner close a day or record a withdrawal at an outlet they do not manage?** Today: no, by decision (#22). Cash closing and withdrawals are granted only by a live Franchise Admin assignment at that outlet, and the refusal comes from the database rather than from a hidden button; the owner's remote path is non-cash only. The owner reaches the drawer by assigning themselves as that outlet's manager, which is one action and states the arrangement in the data. **The owner wants this reopened here** (2026-08-01): where an outlet has no dedicated manager, the owner is its de facto admin and appointing themselves reads as paperwork. Settle it in this change, since it is this change's boundary. What has to be answered:
+  - **A role rule, or an outlet fact?** Either the owner role reaches every drawer, or an outlet can be marked as having no manager and the owner inherits that one drawer while it stays that way. The second is narrower and keeps the day's sign-off attributable, which is the reason the boundary exists at all: a cash count is a claim by whoever counted the cash.
+  - **What does the record say?** A day closed by the owner remotely and one closed by the manager at the counter must not read the same. Attendance approval already solved a version of this: the act is allowed, and whether the person was on site is recorded and shown.
+  - **Reason, position, or neither?** Approval asks for a reason when the approver is off site. A cash close is a stronger claim than an approval, so the same test is at least arguable.
+  - **What happens when a manager is later appointed?** An inherited drawer has to end cleanly, and days already closed have to stay explicable.
+  - What already exists for it: the owner self-assignment carve-out, the owner's non-cash remote write path with its policy coverage, the managed-versus-visible distinction the cash surface already uses to show the day while offering neither the close nor a withdrawal, and `closed_by` on the record.
 
 ## Docs to update before archiving
 
