@@ -36,13 +36,29 @@ import type { Role, SessionMode } from '@/session/session'
 
 export type GateState = 'hidden' | 'demo' | 'live'
 
+/**
+ * The surfaces that can tell the app somebody is waiting on them.
+ *
+ * Named here rather than in the shell, because badging a further surface should
+ * be a registry edit like promoting one is (notification-badges, design D2).
+ * `src/features/attention/sources.ts` supplies exactly one implementation per
+ * id, so an id added here without one fails to compile.
+ */
+export type AttentionSourceId = 'attendance-waiting'
+
 interface SurfaceDefInput {
   /** Which role's shell mounts this surface. */
   role: Role
   /** Path relative to the role's prefix; '' is the role's index surface. */
   path: string
-  /** Navigation metadata. Surfaces without it never appear in navigation. */
-  nav?: { label: string; icon: LucideIcon; order: number }
+  /**
+   * Navigation metadata. Surfaces without it never appear in navigation.
+   *
+   * `attention` names where a count of work waiting for the reader comes from.
+   * The shell renders whatever number that source reports and knows nothing
+   * about what is being counted.
+   */
+  nav?: { label: string; icon: LucideIcon; order: number; attention?: AttentionSourceId }
   state: GateState
 }
 
@@ -143,10 +159,20 @@ const defs = {
     nav: { label: 'Cash', icon: Banknote, order: 5 },
     state: 'demo',
   },
+  /**
+   * The one badged surface, and the reason the mechanism exists: an arrival
+   * nobody approves is invisible until somebody queries their pay, and the
+   * person who could settle it is rarely already looking at this screen.
+   */
   'admin-attendance': {
     role: 'franchise_admin',
     path: 'attendance',
-    nav: { label: 'Attendance', icon: CalendarCheck, order: 6 },
+    nav: {
+      label: 'Attendance',
+      icon: CalendarCheck,
+      order: 6,
+      attention: 'attendance-waiting',
+    },
     state: 'live',
   },
   'admin-pnl': {

@@ -94,6 +94,8 @@ Two rules keep this honest. **Mocks are typed from the generated schema types**,
 
 Surfaces are `hidden`, `demo`, or `live`, declared in one registry (`src/gates/registry.ts`) that navigation and routing derive from. Full detail, including the safety rules that let demo mode ship to production, is in [Demo Mode](DEMO_MODE.md).
 
+A registry entry may also **declare that its surface has work waiting**, by naming a count source. The shell renders whatever number that source reports and knows nothing about what is being counted, so badging a further surface is a registry line plus one hook in `src/features/attention/sources.ts` — never an edit to either shell. The map is keyed by the id union the registry declares, so a source with no entry is dead code and an entry with no source does not compile. Counts are read on mount and again when the app returns to the foreground, never on a timer, and readers sharing an adapter share one request.
+
 ## How a bill flows
 
 The critical path, and the reason the outbox exists:

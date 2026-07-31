@@ -170,11 +170,20 @@ describe('the attendance adapter', () => {
     const counts = await attendance.countWaitingByOutlet()
 
     // A Franchise Admin's answer is scoped by policy to their own outlet, with
-    // no filter written here to do it.
+    // no filter written here to do it. This is the tenancy every badge in the
+    // app rests on: a count must never reveal work somewhere the reader could
+    // not open (notification-badges, design D-RLS).
     expect(counts.every((count) => count.outletId === OUTLET_KALYANI)).toBe(true)
     for (const count of counts) {
       expect(count.waiting).toBeGreaterThan(0)
       expect(count.oldest).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+      // `newest` rides along on the same already-sorted query, and is what tells
+      // the day view there is unsettled work after the day on screen.
+      expect(count.newest).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+      expect(count.newest >= count.oldest).toBe(true)
+      // An outlet whose only unsettled day is a single date is its own oldest
+      // and newest — the degenerate case the two marks have to get right.
+      if (count.waiting === 1) expect(count.newest).toBe(count.oldest)
     }
   })
 

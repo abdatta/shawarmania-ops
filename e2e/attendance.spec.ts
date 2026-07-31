@@ -87,7 +87,7 @@ test('a manager standing at the counter approves a waiting day in one tap', asyn
 
   const day = page.getByTestId('attendance-day')
   await expect(day).toBeVisible()
-  await expect(page.getByTestId('awaiting-count')).toContainText('waiting for your approval')
+  await expect(page.getByTestId('day-waiting')).toBeVisible()
 
   // The browser's emulated position is AT_COUNTER, and the day being settled is
   // today's — so the honest path is exactly one tap, with no sheet at all.
@@ -120,12 +120,64 @@ test('approving from away from the outlet costs a reason, and records it', async
   await expect(card.getByTestId('approver-place')).toContainText('from the outlet')
 })
 
+test('the navigation carries the count, and doing the work takes it away', async ({ page }) => {
+  await page.goto('demo/admin')
+
+  // Read from a screen that is not attendance, which is the whole point: the
+  // person who could settle a day is rarely already looking at the day.
+  const nav = page.getByRole('navigation', { name: 'Primary' }).first()
+  const badge = nav.getByTestId('nav-badge-attendance-waiting')
+  // Three unsettled at Kalyani: two this morning and one five days back.
+  await expect(badge).toContainText('3 arrivals waiting for approval')
+
+  await nav.getByRole('link', { name: 'Attendance' }).click()
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  // The tab counts every unsettled day; the day badge counts only the day on
+  // screen. The difference between the two is the older day, and the mark on
+  // the earlier-days control is what says so.
+  await expect(page.getByTestId('day-waiting')).toContainText('2 arrivals waiting for approval')
+  await expect(page.getByTestId('earlier-days-waiting')).toBeVisible()
+  await expect(page.getByTestId('later-days-waiting')).toHaveCount(0)
+
+  const waiting = page.getByTestId(/^approve-[0-9a-f-]{36}$/)
+  await waiting.first().click()
+  await expect(badge).toContainText('2 arrivals waiting for approval')
+  await waiting.first().click()
+  await expect(badge).toContainText('1 arrival waiting for approval')
+
+  // Today is settled and its badge has gone. The tab's has not, because there
+  // is still a day behind this one that nobody has looked at.
+  await expect(page.getByTestId('day-waiting')).toHaveCount(0)
+  await expect(page.getByTestId('earlier-days-waiting')).toBeVisible()
+
+  // So follow the mark back to it.
+  for (let back = 0; back < 5; back += 1) {
+    await page.getByRole('button', { name: 'Previous day' }).click()
+  }
+  await expect(page.getByTestId('day-waiting')).toContainText('1 arrival waiting for approval')
+  // A day this far behind is closed, so settling it costs a reason even from
+  // inside the outlet.
+  await waiting.first().click()
+  await page
+    .getByLabel('Why are you approving this?')
+    .fill('Worked the morning; I am settling it late')
+  await page.getByRole('button', { name: /Approve and record my reason/ }).click()
+
+  // Nothing waiting anywhere now, so every badge is gone rather than showing a
+  // nought (design D5), and neither day control points anywhere.
+  await expect(nav.getByTestId('nav-badge-attendance-waiting')).toHaveCount(0)
+  await expect(page.getByTestId('day-waiting')).toHaveCount(0)
+  await expect(page.getByTestId('earlier-days-waiting')).toHaveCount(0)
+  await expect(page.getByTestId('later-days-waiting')).toHaveCount(0)
+})
+
 test('a manager settles a waiting morning one day at a time, and the list holds still', async ({
   page,
 }) => {
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
-  await expect(page.getByTestId('awaiting-count')).toBeVisible()
+  await expect(page.getByTestId('day-waiting')).toContainText('2 arrivals waiting for approval')
 
   // No bulk control: one button settling the lot is how an arrival nobody saw
   // gets counted (design D8).
@@ -144,7 +196,7 @@ test('a manager settles a waiting morning one day at a time, and the list holds 
 
   // Standing at the counter on the day, so one tap and no sheet.
   await expect(page.getByLabel('Why are you approving this?')).toHaveCount(0)
-  await expect(page.getByTestId('awaiting-count')).toContainText('1 arrival is waiting')
+  await expect(page.getByTestId('day-waiting')).toContainText('1 arrival waiting for approval')
   // Settling one did not move the others out from under the next tap.
   await expect
     .poll(() => cards.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-testid'))))
@@ -152,7 +204,9 @@ test('a manager settles a waiting morning one day at a time, and the list holds 
 
   // And the second is settled on its own, which is the whole point.
   await waiting.first().click()
-  await expect(page.getByTestId('awaiting-count')).toHaveCount(0)
+  // Gone rather than showing a nought: an absent badge always means the same
+  // thing (notification-badges, design D5).
+  await expect(page.getByTestId('day-waiting')).toHaveCount(0)
 })
 
 test('a manager reads one person’s month, and the figures reconcile with the day', async ({
@@ -270,7 +324,7 @@ test('the attendance walk makes no request beyond the app origin', async ({ page
   await expect(page.getByTestId('attendance-day')).toBeVisible()
   // The approval reads a position too, and it must reach nothing either.
   await page.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`).click()
-  await expect(page.getByTestId('awaiting-count')).toBeVisible()
+  await expect(page.getByTestId('day-waiting')).toBeVisible()
 
   await page.goto('demo/admin/people')
   await expect(page.getByText('Demo Griller')).toBeVisible()

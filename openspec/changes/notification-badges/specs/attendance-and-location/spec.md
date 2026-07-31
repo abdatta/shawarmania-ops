@@ -70,6 +70,12 @@ on it are one gesture rather than a count followed by hunting through a picker.
 The outlet already in scope SHALL be shown as such rather than offered as
 somewhere to go.
 
+This SHALL be shown only while some outlet **other than the one in scope** holds
+unsettled days. Where the outlet in scope is the only one, nothing SHALL be
+shown: the view already names that outlet and already states whether it holds
+work on other days, and a lone entry about where the reader already is repeats
+both while pointing nowhere.
+
 This count is across every business day, and is therefore not the same as the
 waiting count for the day on screen: an outlet may hold nothing today and a
 week of unsettled days behind it.
@@ -86,6 +92,12 @@ week of unsettled days behind it.
   that list
 - **THEN** the attendance view moves to that outlet, and the outlet in scope is
   not offered as a destination
+
+#### Scenario: Only the outlet in scope holds unsettled days
+
+- **WHEN** a Super Admin opens attendance and the outlet in scope is the only
+  one holding unsettled days
+- **THEN** no cross-outlet list is shown at all
 
 #### Scenario: A manager sees only their own
 

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
+import { Badge, BadgeDot } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
@@ -10,8 +11,9 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { useAdapters, type Tables } from '@/data-access'
-import type { AccountSummary, AttendanceRecord, WaitingCount } from '@/data-access/adapters'
+import type { AccountSummary, AttendanceRecord } from '@/data-access/adapters'
 import { AttendanceActionError, worksAt } from '@/data-access/adapters'
+import { attentionChanged } from '@/features/attention/attention'
 import {
   evaluateFence,
   formatBusinessDate,
@@ -29,6 +31,7 @@ import { assembleRange, monthRange, type DateRange, type DayRow } from './attend
 import { RangeDayList, TallySummary } from './day-range-list'
 import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence } from './evidence'
 import { RangePicker } from './range-picker'
+import { useWaitingCounts, waitingAt, waitingLabel } from './waiting-counts'
 
 /**
  * The outlet's attendance, along two axes (docs/SCREENS.md).
@@ -163,13 +166,23 @@ export function OutletAttendance() {
  * outlet — and a day nobody settles is invisible until somebody queries their
  * pay.
  *
- * The count here spans every business day, so it is deliberately not the same
- * number as the waiting count on the day below: an outlet can hold nothing today
- * and a week of unsettled days behind it.
+ * One chip per outlet holding work, each carrying its own count. It used to be a
+ * paragraph headed "Days waiting for a manager", which described a database
+ * state rather than asking for anything, and printed each outlet's oldest
+ * waiting date. That date is not lost: it changed job, and now marks the
+ * earlier-days control below (design D3).
+ *
+ * The count spans every business day, so it is deliberately not the same number
+ * as the day's own badge: an outlet can hold nothing today and a week of
+ * unsettled days behind it.
  *
  * Choosing another outlet brings the view to it, so noticing and acting are one
  * gesture. The outlet already in scope is stated rather than offered, because
- * there is nowhere to go.
+ * there is nowhere to go — and it is stated only when there is somewhere else
+ * to compare it against. When it is the only outlet holding work the whole row
+ * goes: the header already names the outlet and the day controls already say
+ * there is more behind, so a lone chip about where you already are is a
+ * sentence repeating two others.
  */
 function StrandedDays({
   currentOutletId,
@@ -179,61 +192,50 @@ function StrandedDays({
   onChoose: (outletId: string) => void
 }) {
   const session = useSession()
-  const { attendance } = useAdapters()
-  const [counts, setCounts] = useState<WaitingCount[] | null>(null)
   const isOwner = holdsRole(session, 'super_admin')
+  // Shared with the navigation badge and the day controls, so all three agree
+  // and one read serves them. A failed read keeps the last known counts.
+  const { counts } = useWaitingCounts()
 
-  useEffect(() => {
-    if (!isOwner) return
-    let active = true
-    void attendance
-      .countWaitingByOutlet()
-      .then((rows) => {
-        if (active) setCounts(rows)
-      })
-      // A count is a convenience, not the surface. Failing to load it must not
-      // take the day view down with it.
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [attendance, isOwner])
-
-  if (!isOwner || !counts || counts.length === 0) return null
+  // Nothing to say unless some OTHER outlet is holding work. This is the whole
+  // job of the row: reaching a shop nobody opened.
+  const elsewhere = counts?.some((count) => count.outletId !== currentOutletId) ?? false
+  if (!isOwner || !counts || !elsewhere) return null
 
   return (
-    <div
-      data-testid="stranded-days"
-      className="mb-3 rounded-xl border border-warning bg-surface-raised p-2"
-    >
-      <p className="text-sm font-semibold text-content">Days waiting for a manager</p>
-      <ul className="mt-1 space-y-0.5 text-sm text-content-muted">
-        {counts.map((count) => {
-          const name = count.outletName ?? 'An outlet'
-          const tally = `${count.waiting === 1 ? '1 day' : `${count.waiting} days`}, oldest ${formatBusinessDate(count.oldest)}`
+    <div data-testid="stranded-days" className="mb-3 flex flex-wrap items-center gap-2">
+      {counts.map((count) => {
+        const name = count.outletName ?? 'An outlet'
+        // The chip already says which outlet, so the badge does not repeat it.
+        const badge = <Badge count={count.waiting} label={waitingLabel(count.waiting)} />
 
-          if (count.outletId === currentOutletId) {
-            return (
-              <li key={count.outletId} data-testid={`stranded-${count.outletId}`}>
-                <span className="font-semibold text-content">{name}</span> (this outlet): {tally}
-              </li>
-            )
-          }
-
+        if (count.outletId === currentOutletId) {
           return (
-            <li key={count.outletId}>
-              <button
-                type="button"
-                data-testid={`stranded-${count.outletId}`}
-                onClick={() => onChoose(count.outletId)}
-                className="rounded text-left underline decoration-dotted underline-offset-2 hover:text-content focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-              >
-                <span className="font-semibold text-content">{name}</span>: {tally}
-              </button>
-            </li>
+            <span
+              key={count.outletId}
+              data-testid={`stranded-${count.outletId}`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 py-1 text-sm font-semibold text-content"
+            >
+              {name}
+              <span className="font-normal text-content-muted">(this outlet)</span>
+              {badge}
+            </span>
           )
-        })}
-      </ul>
+        }
+
+        return (
+          <button
+            key={count.outletId}
+            type="button"
+            data-testid={`stranded-${count.outletId}`}
+            onClick={() => onChoose(count.outletId)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-sm font-semibold text-content hover:bg-surface-raised focus-visible:focus-ring"
+          >
+            {name}
+            {badge}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -280,6 +282,9 @@ function DayAxis({
 }) {
   const session = useSession()
   const { attendance } = useAdapters()
+  // The same counts the navigation badge and the owner's chips read, so all
+  // three agree and the read is made once (design D4).
+  const { counts } = useWaitingCounts()
 
   const today = resolveBusinessDate(new Date(), outlet.business_day_cutover)
   const [businessDate, setBusinessDate] = useState(today)
@@ -407,6 +412,9 @@ function DayAxis({
       )
       setFlow({ kind: 'idle' })
       onError(null)
+      // The badge that pointed here has to go when the work is done, and it is
+      // usually somewhere else on screen from the button that did it.
+      attentionChanged()
     } catch (cause) {
       setFlow({ kind: 'idle' })
       onError(
@@ -430,6 +438,8 @@ function DayAxis({
       ])
       setManualFor(null)
       onError(null)
+      // A manual entry settles the day too, so it can only shrink a backlog.
+      attentionChanged()
     } catch (cause) {
       onError(
         cause instanceof AttendanceActionError
@@ -472,36 +482,27 @@ function DayAxis({
     .filter((id): id is string => id !== undefined)
   const busy = flow.kind === 'locating' || flow.kind === 'saving'
 
+  // Whether this outlet holds unsettled arrivals on days other than the one on
+  // screen — the two extremes of its waiting dates, against the day shown. Read
+  // from the entry for THIS outlet only, so another outlet's backlog cannot mark
+  // these controls; that is true by construction rather than by a filter
+  // somebody has to remember (design D3).
+  //
+  // There is no approve-all above the list, deliberately (design D8). Approving
+  // is meant to be the moment somebody remembers this person turning up for this
+  // shift, and one button settling the lot is how an unseen arrival gets counted.
+  const scoped = waitingAt(counts, outlet.id)
+
   return (
     <>
       <DayPicker
         businessDate={businessDate}
         onChange={setBusinessDate}
         cutover={outlet.business_day_cutover}
+        waiting={waitingIds.length}
+        earlier={scoped !== null && scoped.oldest < businessDate}
+        later={scoped !== null && scoped.newest > businessDate}
       />
-
-      {waitingIds.length > 0 && (
-        <div
-          data-testid="awaiting-count"
-          className="mb-3 rounded-lg border border-warning bg-surface-raised p-2"
-        >
-          <p className="text-sm font-semibold text-content">
-            {waitingIds.length === 1
-              ? '1 arrival is waiting for your approval.'
-              : `${waitingIds.length} arrivals are waiting for your approval.`}
-          </p>
-          {/*
-            No approve-all here, deliberately (design D8). Approving is meant to be
-            the moment somebody remembers this person turning up for this shift,
-            and one button settling the lot is how an unseen arrival gets counted.
-          */}
-          <p className="mt-0.5 text-xs text-content-muted">
-            {waitingIds.length === 1
-              ? 'Listed first below. Approve it against what you remember of the shift.'
-              : 'Listed first below. Each one is approved on its own, against what you remember of the shift.'}
-          </p>
-        </div>
-      )}
 
       {loading ? (
         <p className="text-sm text-content-muted">Loading…</p>
@@ -553,39 +554,86 @@ function DayAxis({
   )
 }
 
+/**
+ * Which day, and where else the work is.
+ *
+ * Three badges, all about the outlet in scope. The day's own count sits beside
+ * its name, from the rows already on screen. The two arrows carry a bare dot
+ * when this outlet has unapproved arrivals before or after the day shown — a
+ * number there would be a number about a day nobody is looking at, and the only
+ * thing worth saying is "there is something that way".
+ */
 function DayPicker({
   businessDate,
   cutover,
   onChange,
+  waiting,
+  earlier,
+  later,
 }: {
   businessDate: string
   cutover: string
   onChange: (date: string) => void
+  /** Arrivals waiting for approval on the day shown. */
+  waiting: number
+  /** This outlet holds unapproved arrivals on some earlier business day. */
+  earlier: boolean
+  /** …and on some later one. */
+  later: boolean
 }) {
   const today = resolveBusinessDate(new Date(), cutover)
 
   return (
     <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface p-2">
-      <Button
-        variant="ghost"
-        size="phone"
-        aria-label="Previous day"
-        onClick={() => onChange(shiftBusinessDate(businessDate, -1))}
-      >
-        <ChevronLeft aria-hidden size={18} />
-      </Button>
-      <span data-testid="day-label" className="text-sm font-semibold text-content">
-        {businessDate === today ? 'Today' : formatBusinessDate(businessDate)}
+      <span className="relative inline-flex">
+        <Button
+          variant="ghost"
+          size="phone"
+          aria-label="Previous day"
+          onClick={() => onChange(shiftBusinessDate(businessDate, -1))}
+        >
+          <ChevronLeft aria-hidden size={18} />
+        </Button>
+        {earlier && (
+          <span className="pointer-events-none absolute right-1 top-1">
+            <BadgeDot
+              data-testid="earlier-days-waiting"
+              label="Earlier days at this outlet hold arrivals waiting for approval"
+            />
+          </span>
+        )}
       </span>
-      <Button
-        variant="ghost"
-        size="phone"
-        aria-label="Next day"
-        disabled={businessDate >= today}
-        onClick={() => onChange(shiftBusinessDate(businessDate, 1))}
-      >
-        <ChevronRight aria-hidden size={18} />
-      </Button>
+
+      <span className="inline-flex items-center gap-2">
+        <span data-testid="day-label" className="text-sm font-semibold text-content">
+          {businessDate === today ? 'Today' : formatBusinessDate(businessDate)}
+        </span>
+        <Badge
+          data-testid="day-waiting"
+          count={waiting}
+          label={`${waitingLabel(waiting)} on this day`}
+        />
+      </span>
+
+      <span className="relative inline-flex">
+        <Button
+          variant="ghost"
+          size="phone"
+          aria-label="Next day"
+          disabled={businessDate >= today}
+          onClick={() => onChange(shiftBusinessDate(businessDate, 1))}
+        >
+          <ChevronRight aria-hidden size={18} />
+        </Button>
+        {later && (
+          <span className="pointer-events-none absolute right-1 top-1">
+            <BadgeDot
+              data-testid="later-days-waiting"
+              label="Later days at this outlet hold arrivals waiting for approval"
+            />
+          </span>
+        )}
+      </span>
     </div>
   )
 }

@@ -11,19 +11,27 @@ the attendance screen to find out.
 
 Since `attendance-approved-on-site` (#26), every arrival counts as nothing until a
 manager approves it. That makes a forgotten approval a real cost to somebody's
-record, and the only thing that surfaces it today is a **count on a screen**:
+record. `notification-badges` (#27) took the in-app half of this problem, so what
+surfaces it today is a **badge**:
 
-- The manager's attendance day states how many arrivals are waiting and sorts
-  them to the top of the roll-call. There is no bulk approve, by decision, so
-  the count is a prompt to work through them rather than to clear them.
-- The owner's attendance surface states the count per outlet and the oldest
-  waiting business date, so a stranded day at a shop nobody opened is visible
-  without opening it, and choosing that outlet brings the view to it.
+- **The Attendance navigation entry carries the count**, in both the phone and
+  counter shells, so it is read from wherever somebody happens to be rather than
+  only from the screen that needed reading. It spans every unsettled business
+  day the reader can reach.
+- The manager's attendance day badges the day on screen and marks its two day
+  controls when that same outlet holds unsettled work before or after it. There
+  is no bulk approve, by decision, so a count is a prompt to work through them
+  rather than to clear them.
+- The owner gets a chip per outlet with its own count, and choosing one brings
+  the view to that outlet.
 - The owner's console lists waiting arrivals as an attention item beside open
   alerts and low stock.
 
-Nothing pushes. A manager who does not open the screen does not find out, and the
-person whose day it is finds out when they query their pay.
+**What is still missing is reaching somebody who is not holding the phone.**
+Nothing pushes. A manager who does not open the app does not find out, and the
+person whose day it is finds out when they query their pay. A badge is also
+read on arrival rather than kept live, so it can lag work that arrived while a
+screen sat open.
 
 ## Why it is deferred
 
@@ -41,9 +49,14 @@ turns out to be common.
 
 ## What already exists for it
 
-- **The waiting count per outlet**, with its oldest date, already computed by the
-  adapter (`countWaitingByOutlet`) and scoped by RLS rather than by a filter
-  anybody wrote. Whatever delivers a notification would ask the same question.
+- **The waiting count per outlet**, with its oldest and newest dates, already
+  computed by the adapter (`countWaitingByOutlet`) and scoped by RLS rather than
+  by a filter anybody wrote. Whatever delivers a notification would ask the same
+  question.
+- **The attention mechanism** (`src/features/attention/`): a surface declares a
+  count source in the gate registry, the shells render it knowing nothing about
+  what is counted, and doing the work clears it. A delivered notification would
+  be a second way of reading the same source, not a second source.
 - **`alerts`**, which is the nearest existing thing to a channel: a manager raises
   one and the owner works it through. It is manager-to-owner and pull-based, so it
   is not the mechanism, but it is the precedent for what an in-app notice looks
@@ -53,10 +66,11 @@ turns out to be common.
 
 ## Open questions
 
-- **Push, or in-app?** A PWA push notification needs a service-worker
-  subscription, a server to hold it and a key pair to sign with — none of which
-  exists. An in-app badge on the shell's navigation is nearly free and is
-  probably most of the value.
+- **Push, or in-app?** Settled in part: the in-app badge on the shell's
+  navigation was built in #27, and it was indeed nearly free. What is left is
+  genuinely push — a service-worker subscription, a server to hold it and a key
+  pair to sign with, none of which exists — and it is worth waiting to see
+  whether the badge alone turns out to be enough.
 - **What is the trigger?** "Anything waiting" fires every morning and becomes
   noise a manager learns to dismiss. "Waiting since yesterday" fires only when
   something has actually gone wrong, which is the notice worth reading.

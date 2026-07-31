@@ -112,6 +112,12 @@ The answer today is for the manager to **mark the day as leave**, which a stored
 
 Fixing it properly is rostering — expected working days per person, which the absent reading would then be bounded by, the same way it is already bounded by the assignment window so that days before somebody joined are not painted at all. That is its own change and is deliberately not this one; adding a half-guess (assume Sundays off, assume six-day weeks) would be wrong for some outlet within a month and harder to remove than to add. Recorded in `openspec/todos/`.
 
+### A badge is not a notification, and its count can be stale
+
+The count on the Attendance tab reaches only somebody already holding the app. Nothing pushes: a manager who does not open it does not find out, and the person whose day it is finds out when they query their pay. Reaching somebody who is not looking needs a service-worker subscription, a server to hold it and a key pair to sign with, none of which exists; it is tracked in `openspec/todos/pending-approval-notification.md`.
+
+The count is also **read on arrival rather than kept live**. It is correct when a screen is opened and again when the app is brought back to the foreground, and it may lag work that arrives while a screen sits open. That is a deliberate trade against battery on a phone that spends its day in an apron: a timer waking the radio for a number nobody is looking at is a cost paid continuously for a benefit taken occasionally. A read that fails leaves the last known number on screen rather than blanking it, because a badge that vanishes says the work is done.
+
 ### Recorded check-out history is gone
 
 Check-out was removed in #26 (owner decision, 2026-07-31) with the cost stated: the check-out times and locations already recorded in production were dropped by the migration. A full production dump was taken and verified beforehand and lives outside the repo under the snapshot procedure, so the data exists — but no screen can show it again, and there is no down migration. Nobody had used the feature, and unused monitoring data is the kind [Security And Privacy](SECURITY_AND_PRIVACY.md) says not to keep; that is the trade, not an accident.

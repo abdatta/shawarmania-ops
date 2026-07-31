@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router'
 
 import { ThemeToggle } from '@/components/theme-toggle'
 import { useAdapters } from '@/data-access/adapters-context'
+import { NavAttentionBadge } from '@/features/attention/nav-badge'
 import { ShiftStatus, SyncIndicator } from '@/features/billing/counter-status'
 import { visibleSurfaces } from '@/gates/registry'
 import { cn } from '@/lib/cn'
@@ -88,6 +89,13 @@ export function CounterShell({
               >
                 {Icon && <Icon aria-hidden size={16} />}
                 {surface.nav?.label}
+                {surface.nav?.attention && (
+                  <NavAttentionBadge
+                    key={surface.nav.attention}
+                    source={surface.nav.attention}
+                    surface={surface.nav.label}
+                  />
+                )}
               </NavLink>
             )
           })}

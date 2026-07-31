@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { NavLink, Outlet } from 'react-router'
 
 import { ThemeToggle } from '@/components/theme-toggle'
+import { NavAttentionBadge } from '@/features/attention/nav-badge'
 import { visibleSurfaces, type Surface } from '@/gates/registry'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
@@ -82,6 +83,15 @@ export function PhoneShell({
               >
                 {Icon && <Icon aria-hidden size={18} />}
                 {surface.nav?.label}
+                {surface.nav?.attention && (
+                  <span className="ml-auto">
+                    <NavAttentionBadge
+                      key={surface.nav.attention}
+                      source={surface.nav.attention}
+                      surface={surface.nav.label}
+                    />
+                  </span>
+                )}
               </NavLink>
             )
           })}
@@ -111,7 +121,23 @@ export function PhoneShell({
                 )
               }
             >
-              {Icon && <Icon aria-hidden size={20} />}
+              {/*
+                The badge sits on the corner of the icon here rather than after
+                the label: a bottom tab is a stack, and a number on the end of
+                the word would push the tab wider than its neighbours.
+              */}
+              <span className="relative">
+                {Icon && <Icon aria-hidden size={20} />}
+                {surface.nav?.attention && (
+                  <span className="absolute -right-2.5 -top-1.5">
+                    <NavAttentionBadge
+                      key={surface.nav.attention}
+                      source={surface.nav.attention}
+                      surface={surface.nav.label}
+                    />
+                  </span>
+                )}
+              </span>
               {surface.nav?.label}
             </NavLink>
           )

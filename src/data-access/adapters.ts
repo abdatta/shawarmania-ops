@@ -530,6 +530,14 @@ export interface WaitingCount {
   waiting: number
   /** The oldest waiting business date, which is what makes a count urgent. */
   oldest: string
+  /**
+   * The newest waiting business date. With `oldest` this is what marks the day
+   * controls on the attendance view: there is unsettled work before the day on
+   * screen when `oldest` is earlier, and after it when `newest` is later
+   * (notification-badges, design D3). Two extremes answer that question without
+   * a second read, so nothing here lists every waiting date.
+   */
+  newest: string
 }
 
 /** A refusal from the attendance write path. */

@@ -3,8 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { DataAdapters } from '@/data-access/adapters'
+import type { DataAdapters, WaitingCount } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
+import { resolveBusinessDate } from '@/domain'
 import {
   createMockAdapters,
   DEMO_GRILLER_ACCOUNT_ID,
@@ -84,6 +85,26 @@ function dayCards(): HTMLElement[] {
   return screen.getAllByTestId(/^day-[0-9a-f-]{36}$/)
 }
 
+/**
+ * Stage what is waiting where, rather than seeding it.
+ *
+ * The day controls' marks are about business days other than the one on screen,
+ * and the fixtures hold a fixed handful at one outlet. Staging the counts is
+ * what makes "an older day exists" and "only another outlet's does" two
+ * different, deterministic tests; the counting itself is covered against the
+ * adapters.
+ */
+function stageCounts(adapters: DataAdapters, counts: WaitingCount[]) {
+  vi.spyOn(adapters.attendance, 'countWaitingByOutlet').mockResolvedValue(counts)
+}
+
+/** The business day the view opens on, which every mark is measured against. */
+async function todayAt(adapters: DataAdapters, outletId: string) {
+  const outlet = await adapters.outlets.getOutlet(outletId)
+  if (!outlet) throw new Error('missing outlet fixture')
+  return resolveBusinessDate(new Date(), outlet.business_day_cutover)
+}
+
 function renderDay(adapters: DataAdapters = createMockAdapters()) {
   return {
     adapters,
@@ -138,9 +159,8 @@ describe('the outlet attendance day', () => {
 
     // Two today: the runner's out-of-fence reading and the prep cook's in-fence
     // one. Inside the fence buys nothing now — only an approval settles a day.
-    expect(await screen.findByTestId('awaiting-count')).toHaveTextContent(
-      '2 arrivals are waiting for your approval.',
-    )
+    expect(await screen.findByTestId('day-waiting')).toHaveTextContent('2')
+    expect(screen.getByText('2 arrivals waiting for approval on this day')).toBeInTheDocument()
     expect(screen.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`)).toBeInTheDocument()
     // The griller's day was approved in the fixtures, so it needs nothing.
     expect(screen.queryByTestId(`approve-${DEMO_GRILLER_ACCOUNT_ID}`)).not.toBeInTheDocument()
@@ -261,9 +281,7 @@ describe('the outlet attendance day', () => {
     // gone is the single button that would clear it without looking at it: an
     // approval is meant to be the moment somebody remembers this person turning
     // up for this shift (design D8).
-    expect(await screen.findByTestId('awaiting-count')).toHaveTextContent(
-      'arrivals are waiting for your approval',
-    )
+    expect(await screen.findByTestId('day-waiting')).toBeInTheDocument()
     expect(screen.queryByTestId('approve-all')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /approve all/i })).not.toBeInTheDocument()
   })
@@ -320,6 +338,115 @@ describe('the outlet attendance day', () => {
     // One reading for the run rather than one per person, so approving one at a
     // time does not mean a GPS read each (design D11).
     expect(getCurrentPosition).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks the earlier-days control when this outlet has an older unsettled day', async () => {
+    const adapters = createMockAdapters()
+    const today = await todayAt(adapters, OUTLET_KALYANI_ID)
+    stageCounts(adapters, [
+      {
+        outletId: OUTLET_KALYANI_ID,
+        outletName: 'Shawarmania Kalyani',
+        waiting: 4,
+        oldest: '2020-01-01',
+        newest: today,
+      },
+    ])
+    renderDay(adapters)
+
+    expect(await screen.findByTestId('earlier-days-waiting')).toBeInTheDocument()
+    // The dot says which way to go and says it out loud, because a dot that only
+    // works for people who can see the accent colour is not a signal.
+    expect(
+      screen.getByText('Earlier days at this outlet hold arrivals waiting for approval'),
+    ).toBeInTheDocument()
+    // Nothing after today, and today is where the view opens.
+    expect(screen.queryByTestId('later-days-waiting')).not.toBeInTheDocument()
+  })
+
+  it("does not mark the day controls for another outlet's backlog", async () => {
+    const adapters = createMockAdapters()
+    stageCounts(adapters, [
+      {
+        outletId: OUTLET_KANCHRAPARA_ID,
+        outletName: 'Shawarmania Kanchrapara',
+        waiting: 9,
+        oldest: '2020-01-01',
+        newest: '2020-06-01',
+      },
+    ])
+    renderDay(adapters)
+
+    await screen.findByTestId('attendance-day')
+    // The marks read the entry for the outlet in scope and nothing else, so a
+    // backlog somewhere the manager cannot open cannot point them anywhere
+    // (design D3).
+    expect(screen.queryByTestId('earlier-days-waiting')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('later-days-waiting')).not.toBeInTheDocument()
+  })
+
+  it('marks neither control when the day on screen is the only one waiting', async () => {
+    const adapters = createMockAdapters()
+    const today = await todayAt(adapters, OUTLET_KALYANI_ID)
+    stageCounts(adapters, [
+      {
+        outletId: OUTLET_KALYANI_ID,
+        outletName: 'Shawarmania Kalyani',
+        waiting: 2,
+        oldest: today,
+        newest: today,
+      },
+    ])
+    renderDay(adapters)
+
+    // The day carries its own count; there is nowhere else to be sent.
+    expect(await screen.findByTestId('day-waiting')).toBeInTheDocument()
+    expect(screen.queryByTestId('earlier-days-waiting')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('later-days-waiting')).not.toBeInTheDocument()
+  })
+
+  it('re-reads the counts when the app comes back to the foreground', async () => {
+    const adapters = createMockAdapters()
+    const today = await todayAt(adapters, OUTLET_KALYANI_ID)
+    stageCounts(adapters, [
+      {
+        outletId: OUTLET_KALYANI_ID,
+        outletName: 'Shawarmania Kalyani',
+        waiting: 1,
+        oldest: '2020-01-01',
+        newest: today,
+      },
+    ])
+    renderDay(adapters)
+    await screen.findByTestId('earlier-days-waiting')
+
+    // Somebody else settled the backlog while this phone was in an apron.
+    stageCounts(adapters, [])
+    document.dispatchEvent(new Event('visibilitychange'))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('earlier-days-waiting')).not.toBeInTheDocument(),
+    )
+  })
+
+  it('makes no further request while a badged screen simply sits open', async () => {
+    const adapters = createMockAdapters()
+    stageCounts(adapters, [])
+    const read = adapters.attendance.countWaitingByOutlet as ReturnType<typeof vi.fn>
+    renderDay(adapters)
+    await screen.findByTestId('attendance-day')
+    const settled = read.mock.calls.length
+
+    vi.useFakeTimers()
+    try {
+      // Ten minutes of nothing happening. A timer here would be a cost paid
+      // continuously for a number nobody is looking at (design D4).
+      await vi.advanceTimersByTimeAsync(10 * 60_000)
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(read.mock.calls.length).toBe(settled)
   })
 
   it('moves between business days and cannot walk into the future', async () => {
@@ -461,18 +588,20 @@ describe("the owner's stranded days", () => {
    * `countWaitingByOutlet` is covered for on its own.
    */
   function renderAsOwner(adapters: DataAdapters = createMockAdapters()) {
-    vi.spyOn(adapters.attendance, 'countWaitingByOutlet').mockResolvedValue([
+    stageCounts(adapters, [
       {
         outletId: OUTLET_KALYANI_ID,
         outletName: 'Shawarmania Kalyani',
         waiting: 2,
         oldest: '2026-07-20',
+        newest: '2026-07-21',
       },
       {
         outletId: OUTLET_KANCHRAPARA_ID,
         outletName: 'Shawarmania Kanchrapara',
         waiting: 5,
         oldest: '2026-07-18',
+        newest: '2026-07-25',
       },
     ])
     return render(
@@ -486,14 +615,25 @@ describe("the owner's stranded days", () => {
     )
   }
 
-  it('counts unsettled days per outlet with the oldest date', async () => {
+  it('gives each outlet a chip carrying its own count', async () => {
     renderAsOwner()
 
     const stranded = await screen.findByTestId('stranded-days')
-    expect(stranded).toHaveTextContent('Days waiting for a manager')
-    expect(within(stranded).getByTestId(`stranded-${OUTLET_KANCHRAPARA_ID}`)).toHaveTextContent(
-      '5 days, oldest',
-    )
+    const chip = within(stranded).getByTestId(`stranded-${OUTLET_KANCHRAPARA_ID}`)
+    expect(chip).toHaveTextContent('Shawarmania Kanchrapara')
+    expect(chip).toHaveTextContent('5')
+    expect(within(chip).getByText('5 arrivals waiting for approval')).toBeInTheDocument()
+  })
+
+  it('no longer describes a database state, nor prints an oldest date', async () => {
+    renderAsOwner()
+
+    // The heading described what the table held rather than asking for
+    // anything, and the date it printed changed job: it now marks the
+    // earlier-days control instead (design D3).
+    const stranded = await screen.findByTestId('stranded-days')
+    expect(stranded).not.toHaveTextContent('Days waiting for a manager')
+    expect(stranded).not.toHaveTextContent('oldest')
   })
 
   it('follows a stranded count to the outlet it belongs to', async () => {
@@ -515,6 +655,34 @@ describe("the owner's stranded days", () => {
     expect(await screen.findByTestId(`stranded-${OUTLET_KANCHRAPARA_ID}`)).toHaveTextContent(
       'this outlet',
     )
+  })
+
+  it('shows nothing at all when the outlet in scope is the only one waiting', async () => {
+    const adapters = createMockAdapters()
+    stageCounts(adapters, [
+      {
+        outletId: OUTLET_KALYANI_ID,
+        outletName: 'Shawarmania Kalyani',
+        waiting: 3,
+        oldest: '2026-07-20',
+        newest: '2026-07-28',
+      },
+    ])
+    render(
+      <MemoryRouter>
+        <SessionContext.Provider value={ownerSession}>
+          <AdaptersContext.Provider value={adapters}>
+            <OutletAttendance />
+          </AdaptersContext.Provider>
+        </SessionContext.Provider>
+      </MemoryRouter>,
+    )
+
+    // The header already names the outlet and the day controls already say
+    // there is work behind this day. A chip about where the reader already is
+    // repeats both and points nowhere.
+    await screen.findByTestId('attendance-day')
+    expect(screen.queryByTestId('stranded-days')).not.toBeInTheDocument()
   })
 
   it('shows a manager nothing about other outlets', async () => {

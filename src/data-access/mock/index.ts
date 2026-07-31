@@ -1,4 +1,5 @@
-import type { AppRole, DataAdapters } from '../adapters'
+import type { AppRole, AttendanceAdapter, DataAdapters } from '../adapters'
+import { assignedOutlets } from '../adapters'
 import { createMockAddressLookupAdapter } from './address-lookup'
 import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
 import { createMockAlertsAdapter } from './alerts'
@@ -50,6 +51,31 @@ export function createDemoData(): DemoData {
 }
 
 /**
+ * The one attendance read that spans outlets, cut down to the ones the caller
+ * can reach.
+ *
+ * In the real adapter this costs nothing: `countWaitingByOutlet` is a plain
+ * filtered select and the RLS policies scope it. The mock holds a single store
+ * shared by every role — that is deliberate, so a check-in survives a role
+ * switch — so the boundary the policies draw has to be drawn here instead, as
+ * the alerts and insights mocks already do. Without it a manager's navigation
+ * badge would count arrivals at an outlet they cannot open, which is the one
+ * thing a badge must never do (notification-badges, attention-badges spec).
+ */
+function withReachableWaiting(
+  adapter: AttendanceAdapter,
+  reach: readonly string[],
+): AttendanceAdapter {
+  return {
+    ...adapter,
+    async countWaitingByOutlet() {
+      const counts = await adapter.countWaitingByOutlet()
+      return counts.filter((count) => reach.includes(count.outletId))
+    },
+  }
+}
+
+/**
  * Everything the demo tree needs, and the only factory it may import.
  * Nothing under src/data-access/mock/ may import the Supabase client or the
  * real adapters — eslint enforces it (design D4, layer 1).
@@ -81,7 +107,12 @@ export function createMockAdapters(
     // The persona's role and id reach the accounts mock so it refuses a
     // manager assigning themselves exactly where the database will.
     accounts: createMockAccountsAdapter(accounts, role, persona.profile.id),
-    attendance,
+    // Only the Super Admin reads waiting counts across outlets; everybody else
+    // sees their own assignments' worth, exactly as the policies will answer.
+    attendance:
+      role === 'super_admin'
+        ? attendance
+        : withReachableWaiting(attendance, assignedOutlets(persona.assignments)),
     // The persona's role reaches the menu mock so it refuses a Biller's write
     // where `menu_items_write` will refuse it.
     menu: createMockMenuAdapter(store, role),

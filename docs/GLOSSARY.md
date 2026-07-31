@@ -97,6 +97,10 @@ The cost of inventory consumed in a period, computed from `used` and `wasted` mo
 
 A message raised by a Franchise Admin for the Super Admin about an operational problem — inventory shortage, equipment failure, cash mismatch, employee or supplier issue. Carries a priority and a status, and can receive a response.
 
+### Badge
+
+A small count attached to the thing it is about — a navigation entry, a day, a control — meaning **this many items are waiting for you to act**. It clears by the work being done rather than by being dismissed, and a count of nought is drawn as nothing at all. Distinct from an **alert**, which is a message one person raises for another and which carries a priority, a status and a reply; a badge carries no content, names no sender, and is read by whoever happens to be holding the app. A badge is also not a notification: it reaches nobody who is not already looking. See [Design System](DESIGN_SYSTEM.md) and [Limitations](LIMITATIONS.md).
+
 ### Geofence
 
 The radius around an outlet's stored coordinates within which a reading counts as on-site. It judges two things and refuses neither: an employee's check-in, which is recorded whatever its distance, and a manager's approval, which is recorded whatever its distance but costs a written reason from outside. See [Roles And Permissions](ROLES_AND_PERMISSIONS.md) for the approval rule and [Limitations](LIMITATIONS.md) for what geolocation can and cannot prove.

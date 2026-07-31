@@ -270,6 +270,8 @@ export function createSupabaseAttendanceAdapter(
         const seen = byOutlet.get(row.outlet_id)
         if (seen) {
           seen.waiting += 1
+          // Ascending by date, so the last row seen for an outlet is its newest.
+          seen.newest = row.business_date
         } else {
           byOutlet.set(row.outlet_id, {
             outletId: row.outlet_id,
@@ -277,6 +279,8 @@ export function createSupabaseAttendanceAdapter(
             waiting: 1,
             // Ascending by date, so the first row for an outlet is its oldest.
             oldest: row.business_date,
+            // An outlet with one waiting day is its own oldest and newest.
+            newest: row.business_date,
           })
         }
       }

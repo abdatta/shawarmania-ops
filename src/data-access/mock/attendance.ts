@@ -277,12 +277,17 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         if (seen) {
           seen.waiting += 1
           if (record.businessDate < seen.oldest) seen.oldest = record.businessDate
+          // The store is not ordered, so the extremes are tracked rather than
+          // taken from the ends. Same answer as the Supabase adapter's, which is
+          // what makes the derived day marks identical in demo and live.
+          if (record.businessDate > seen.newest) seen.newest = record.businessDate
         } else {
           byOutlet.set(record.outletId, {
             outletId: record.outletId,
             outletName: record.outletName,
             waiting: 1,
             oldest: record.businessDate,
+            newest: record.businessDate,
           })
         }
       }
