@@ -2,9 +2,9 @@
 
 ## 1. Protect what is about to be destroyed
 
-- [ ] 1.1 🧍 Full `pg_dump` of the production database (schema + data), taken before any migration runs, stored outside the repo under the established snapshot procedure
-- [ ] 1.2 🧍 Restore that dump into a scratch database and confirm `attendance` comes back with its check-out columns populated — an unverified dump is not a backup
-- [ ] 1.3 Record in the dump's notes how many production rows carry a `check_out_at`, so what was traded away is a number and not a guess
+- [x] 1.1 🧍 Full `pg_dump` of the production database (schema + data), taken before any migration runs, stored outside the repo under the established snapshot procedure
+- [x] 1.2 🧍 Restore that dump into a scratch database and confirm `attendance` comes back with its check-out columns populated — an unverified dump is not a backup
+- [x] 1.3 Record in the dump's notes how many production rows carry a `check_out_at`, so what was traded away is a number and not a guess
 
 ## 2. Database — the migration
 
