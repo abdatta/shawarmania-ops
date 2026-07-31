@@ -4,6 +4,7 @@
 
 Guarantees that an outlet's data belongs to that outlet alone, enforced in the database rather than the UI. A Franchise Admin, Biller, or Employee session cannot read or write another outlet's rows by any means — including hand-crafted API requests with a valid session — and the guarantees that must be immediate (deactivation, device revocation) are immediate. Coverage is enumerated from the schema itself, so a new table cannot silently opt out.
 ## Requirements
+
 ### Requirement: Outlet isolation is enforced by the database on every outlet-scoped table
 
 Every outlet-scoped table SHALL have Row-Level Security enabled with policies
@@ -136,10 +137,10 @@ server-side function.
 
 The Super Admin SHALL be able to create an outlet and edit an existing one from
 a surface in the app, supplying its code, name, location label, address, phone,
-business-day cutover and active state. No other role SHALL be offered either
-action, and the database SHALL refuse both for any other role regardless of
-what a client sends — the `outlets_insert` and `outlets_update` policies are
-the boundary, not the presence of a button.
+business-day cutover, arrival deadline and active state. No other role SHALL be
+offered either action, and the database SHALL refuse both for any other role
+regardless of what a client sends — the `outlets_insert` and `outlets_update`
+policies are the boundary, not the presence of a button.
 
 An outlet code SHALL be unique across the business, and an attempt to reuse one
 SHALL be refused with a message naming the collision rather than a raw database
@@ -152,6 +153,11 @@ moment would be filed under, and warning when one session would be split across
 more than one business day. The value is still accepted: this is a warning
 about a choice, not a validation rule, because no outlet's real hours are known
 to the form.
+
+The arrival deadline SHALL be presented as the time by which staff are expected
+to have arrived, distinct from the cutover, and SHALL default to 13:00 for a
+new outlet. Editing it SHALL state that it applies to arrivals recorded from
+then on and does not change how any already recorded day reads.
 
 #### Scenario: The owner creates the first outlet
 
@@ -179,6 +185,18 @@ to the form.
   at least one moment of a single trading session landing on a different
   business day from the rest, and warns that one night's trading would be split
   across two business days
+
+#### Scenario: A new outlet arrives with a default deadline
+
+- **WHEN** a Super Admin creates an outlet without changing the arrival
+  deadline
+- **THEN** the outlet is stored with an arrival deadline of 13:00
+
+#### Scenario: A Franchise Admin cannot move the arrival deadline
+
+- **WHEN** a Franchise Admin's session attempts to write an arrival deadline
+  for their own outlet
+- **THEN** the database refuses the write
 
 ### Requirement: An empty database presents an instruction, not a blank screen
 

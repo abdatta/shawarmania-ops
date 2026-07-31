@@ -88,7 +88,7 @@ walked, so the gate certifies the behaviour that actually ships rather than
 behaviour already superseded.
 
 
-- [ ] 9.1 🧍 **Gate**: real staff check in on their own phones in production and the day counts only once a manager approves it; an in-fence approval on the row's own business day is one tap with no reason, and an off-site or later one is refused without a reason, proved by a hand-crafted request; a check-in past the outlet's arrival deadline records its real time and evidence and reads late; a person with no check-in reads absent once that deadline passes; **no check-out exists anywhere in schema, adapter, UI or spec**; a manager opens one person's month and its figures reconcile exactly with the same days read by day; a Franchise Admin's person view returns no rows worked at the other outlet, proved by a hand-crafted request; and the four-role demo walkthrough still walks
+- [x] 9.1 🧍 **Gate**: real staff check in on their own phones in production and the day counts only once a manager approves it; an in-fence approval on the row's own business day is one tap with no reason, and an off-site or later one is refused without a reason, proved by a hand-crafted request; a check-in past the outlet's arrival deadline records its real time and evidence and reads late; a person with no check-in reads absent once that deadline passes; **no check-out exists anywhere in schema, adapter, UI or spec**; a manager opens one person's month and its figures reconcile exactly with the same days read by day; a Franchise Admin's person view returns no rows worked at the other outlet, proved by a hand-crafted request; and the four-role demo walkthrough still walks
 
 ## 10. Amendment — approving is deliberate, and the work sorts first
 
