@@ -99,7 +99,23 @@ A message raised by a Franchise Admin for the Super Admin about an operational p
 
 ### Geofence
 
-The radius around an outlet's stored coordinates within which an attendance check-in counts as on-site. Check-ins outside it are refused, with a Franchise Admin override available. See [Roles And Permissions](ROLES_AND_PERMISSIONS.md) for the override flow and [Limitations](LIMITATIONS.md) for what geolocation can and cannot prove.
+The radius around an outlet's stored coordinates within which a reading counts as on-site. It judges two things and refuses neither: an employee's check-in, which is recorded whatever its distance, and a manager's approval, which is recorded whatever its distance but costs a written reason from outside. See [Roles And Permissions](ROLES_AND_PERMISSIONS.md) for the approval rule and [Limitations](LIMITATIONS.md) for what geolocation can and cannot prove.
+
+### Approval
+
+The recorded human decision that makes an attendance day count. Only a Super Admin, or a Franchise Admin holding a live assignment at the row's own outlet, can record one; it carries the approver's identity, the time, their own position, and a reason where the rule asks for one. It replaced the **override** in #26, which was the exception path for a check-in the fence refused — once every day goes through it, the word describes nothing.
+
+### On-site approval
+
+An approval whose recorded position is inside the outlet's radius. Derived from the stored coordinates rather than claimed, and the one case that needs no reason — together with the requirement that it be given on the row's own business day.
+
+### Arrival deadline
+
+The per-outlet time by which staff are expected to have arrived, defaulting to 13:00 and set by the owner beside the business-day cutover. Stamped onto each attendance row when its arrival lands, so a later edit never changes how a recorded day reads.
+
+### Late
+
+An arrival after the deadline stamped on its own row. A tag shown wherever attendance is read, never a status: an approved late day is present *and* late, and whether that costs half a day stays a manager's decision recorded in the status.
 
 ### Outbox
 

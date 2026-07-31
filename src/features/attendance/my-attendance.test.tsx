@@ -49,28 +49,56 @@ function renderWith(
 }
 
 describe('my attendance', () => {
-  it('lists the employee’s own days', async () => {
+  it('lists the employee’s own days, with the counts for the range', async () => {
     renderWith('employee', <MyAttendance />, createMockAdapters())
 
     const history = await screen.findByTestId('attendance-history')
-    // The fixture week: normal days, a leave day, and an overridden one.
-    expect(within(history).getAllByText(/^(In|Out)$/).length).toBeGreaterThan(0)
+    // The fixture month: approved days, a leave day, a waiting one, a late one,
+    // and days with nothing recorded at all.
+    expect(within(history).getAllByText('In').length).toBeGreaterThan(0)
     expect(within(history).getByText('Leave')).toBeInTheDocument()
+    expect(within(history).getByTestId('attendance-tally')).toBeInTheDocument()
+    // Never a check-out, anywhere, ever again.
+    expect(within(history).queryByText('Out')).not.toBeInTheDocument()
   })
 
-  it('shows who approved an override, and the reason they gave', async () => {
+  it('shows who approved a day, whether they were there, and any reason', async () => {
     renderWith('employee', <MyAttendance />, createMockAdapters())
 
     const history = await screen.findByTestId('attendance-history')
-    expect(within(history).getByText(/Approved by Demo Manager/)).toBeInTheDocument()
+    expect(within(history).getAllByText(/Approved by Demo Manager/).length).toBeGreaterThan(0)
+    // The off-site approval: the reason it cost, and the fact that the manager
+    // was not at the outlet — both readable by the person the day is about.
     expect(within(history).getByText(/Signal drift by the main road/)).toBeInTheDocument()
+    expect(
+      within(history)
+        .getAllByTestId('approver-place')
+        .some((node) => /from the outlet/.test(node.textContent ?? '')),
+    ).toBe(true)
+    expect(
+      within(history)
+        .getAllByTestId('approver-place')
+        .some((node) => /They were at the outlet/.test(node.textContent ?? '')),
+    ).toBe(true)
   })
 
-  it('shows a flagged check-out, not just a clean summary', async () => {
+  it('shows a day nobody has approved as waiting, and a late one as late', async () => {
     renderWith('employee', <MyAttendance />, createMockAdapters())
 
     const history = await screen.findByTestId('attendance-history')
-    expect(within(history).getByText('check-out flagged')).toBeInTheDocument()
+    expect(within(history).getAllByText('Waiting for a manager to approve').length).toBeGreaterThan(
+      0,
+    )
+    expect(within(history).getAllByTestId('late-tag').length).toBeGreaterThan(0)
+  })
+
+  it('derives an absent day for a date with nothing recorded', async () => {
+    renderWith('employee', <MyAttendance />, createMockAdapters())
+
+    const history = await screen.findByTestId('attendance-history')
+    // No row exists for these dates. Nothing wrote them and nothing will — the
+    // reading is derived when the day is read (design D6).
+    expect(within(history).getAllByTestId('derived-absent').length).toBeGreaterThan(0)
   })
 
   it('says the same thing about a day as the manager’s view does', async () => {

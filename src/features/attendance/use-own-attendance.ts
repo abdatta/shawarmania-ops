@@ -4,7 +4,7 @@ import { useAdapters, type Tables } from '@/data-access'
 import type { AttendanceRecord } from '@/data-access/adapters'
 import { resolveBusinessDate } from '@/domain'
 
-import { dayPhase } from './attendance-record'
+import { isWaitingForApproval } from './attendance-record'
 
 /**
  * What every Employee attendance surface needs: which outlets judge them, and
@@ -37,11 +37,13 @@ export type OwnAttendance =
       /**
        * The day the card is *about*.
        *
-       * A day in progress wherever that is; failing that, the single outlet's
-       * day for somebody who works at one place — complete, absent or not yet
-       * started, it is still their day and the screen says so. Null only for a
-       * multi-outlet person with nothing open, which is precisely when the
-       * fence gets to decide where they are (design D5).
+       * A day waiting for a manager wherever that is, because that is the day
+       * the person has a question about; failing that, whatever they did record
+       * today; failing that, the single outlet's day for somebody who works at
+       * one place — recorded, absent or not yet started, it is still their day
+       * and the screen says so. Null only for a multi-outlet person with nothing
+       * recorded, which is precisely when the fence gets to decide where they
+       * are (design D5).
        */
       current: OwnDay | null
       /**
@@ -129,17 +131,18 @@ export function useOwnAttendance(personId: string, outletIds: readonly string[])
   // rather than reset in the effect, which would cascade a render on every load.
   if (state.kind === 'loading' || state.key !== key) return { status: 'loading' }
 
-  // Started and not finished, wherever that is — that day owns the screen.
-  // Failing that, whatever they DID record today, so a day just completed does
-  // not vanish off the screen that recorded it. Failing that, their first
-  // outlet, so the card has an outlet to be about while it offers a check-in.
+  // Recorded and unsettled, wherever that is — that day owns the screen, because
+  // it is the one the person is waiting on. Failing that, whatever they DID
+  // record today, so a day just recorded does not vanish off the screen that
+  // recorded it. Failing that, their first outlet, so the card has an outlet to
+  // be about while it offers a check-in.
   const current =
-    state.days.find((day) => day.record !== null && dayPhase(day.record) === 'open') ??
+    state.days.find((day) => day.record !== null && isWaitingForApproval(day.record)) ??
     state.days.find((day) => day.record !== null) ??
     state.days[0] ??
     null
 
-  // Somewhere else to start. A completed day usually ends the screen — but
+  // Somewhere else to start. A recorded day usually ends the screen — but
   // somebody who finished a morning at Kalyani can still work an evening at
   // Kanchrapara, and the button has to offer it (multi-outlet-people, D5).
   const canStartElsewhere = state.days.some((day) => day.record === null)

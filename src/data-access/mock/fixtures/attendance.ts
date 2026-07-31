@@ -16,16 +16,23 @@ import { personaFixtures } from './personas'
  *
  * Coordinates are given; distances are not. The mock adapter computes them with
  * the same domain function the database's trigger mirrors, and applies the same
- * rule — an out-of-fence check-in with no override is not counted present. A
- * mock that hard-coded its distances could show a demo that the real system
- * could never produce, which is the one thing a demo must not do.
+ * rule — a check-in nobody has approved is not counted present, however close to
+ * the counter it was taken. A mock that hard-coded its distances could show a
+ * demo the real system could never produce, which is the one thing a demo must
+ * not do.
+ *
+ * The Employee persona's month is deliberately a *pattern* rather than a run of
+ * identical good days, because the person view exists to show a pattern: it
+ * holds an approved-on-site day, a day approved from elsewhere with the reason
+ * that cost, a day still waiting for a manager, a late arrival, and days with
+ * nothing recorded at all that the surfaces derive as absent.
  *
  * A `manual` event carries an enterer instead of coordinates, exactly as the
- * database stores one: the admin typed it in, and the row says so wherever it
- * is read.
+ * database stores one: the admin typed it in, the recording settled the day, and
+ * the row says so wherever it is read.
  *
  * Offsets are in business days back from today, so a walkthrough always shows a
- * plausible recent week rather than a date from whenever these were written.
+ * plausible recent month rather than dates from whenever these were written.
  */
 
 interface EventSeed {
@@ -36,6 +43,22 @@ interface EventSeed {
   accuracyMetres?: number
   /** Present on a manually entered event; coordinates must then be absent. */
   manual?: { byId: string; byName: string }
+}
+
+/**
+ * The decision that settles a day. `reason` is absent on the honest path —
+ * inside the fence, on the row's own business day — and required by the mock
+ * (as by the database) whenever the approver's position was elsewhere or
+ * missing.
+ */
+interface ApprovalSeed {
+  byName: string
+  /** IST wall-clock time on the business day, `HH:MM`. */
+  time: string
+  reason?: string
+  latitude?: number
+  longitude?: number
+  accuracyMetres?: number
 }
 
 export interface AttendanceSeed {
@@ -52,8 +75,7 @@ export interface AttendanceSeed {
   /** The claim. The mock adjudicates it exactly as the database would. */
   status: AttendanceStatus
   checkIn?: EventSeed
-  checkOut?: EventSeed
-  override?: { byName: string; reason: string; time: string }
+  approval?: ApprovalSeed
 }
 
 const DEMO_STAFF_ID = personaFixtures.employee.profile.id
@@ -68,37 +90,46 @@ const DOWN_THE_ROAD = { latitude: 22.9765, longitude: 88.4362, accuracyMetres: 4
 const AT_KANCHRAPARA = { latitude: 22.94508, longitude: 88.43312, accuracyMetres: 19 }
 /** Further still, and with a loose fix: the reading a manager has to judge. */
 const OFF_THE_MAP = { latitude: 22.97382, longitude: 88.43254, accuracyMetres: 65 }
+/** The manager's own reading, taken standing at Kalyani's counter. */
+const APPROVED_AT_COUNTER = { latitude: 22.97501, longitude: 88.43452, accuracyMetres: 12 }
+/** The manager's own reading, taken at home. Visible, and it costs a sentence. */
+const APPROVED_FROM_HOME = { latitude: 22.9894, longitude: 88.4481, accuracyMetres: 28 }
+/** As above, at Kanchrapara. */
+const APPROVED_AT_KANCHRAPARA = { latitude: 22.94503, longitude: 88.43305, accuracyMetres: 16 }
 
 export const attendanceSeeds: AttendanceSeed[] = [
-  // ── The Employee persona's own week ──────────────────────────────────────
+  // ── The Employee persona's own month ─────────────────────────────────────
   //
   // Today is deliberately absent. The Employee persona's whole demo is the one
   // big button, so a walkthrough should arrive able to press it — a day already
-  // started would make the fourth role a read-only screen. The mid-shift and
-  // blocked states are demonstrated by colleagues on the manager's day view.
+  // recorded would make the fourth role a read-only screen. The waiting state is
+  // demonstrated by colleagues on the manager's day view, and by this person's
+  // own day five days back.
   //
-  // A normal completed day.
+  // A normal day: in the fence, approved by the manager standing at the counter
+  // the same morning. One tap, no reason, and that is the point of the rule.
   {
     personId: DEMO_STAFF_ID,
     outletId: OUTLET_KALYANI_ID,
     daysAgo: 1,
     status: 'present',
     checkIn: { time: '09:02', ...AT_COUNTER },
-    checkOut: { time: '18:11', ...NEAR_COUNTER },
+    approval: { byName: DEMO_MANAGER.full_name, time: '09:18', ...APPROVED_AT_COUNTER },
   },
-  // A day that started outside the fence and was cleared by the manager — the
-  // employee sees the approver and the reason, exactly as the manager does.
+  // A day that started outside the fence and was settled by a manager who was
+  // not there either — so the row carries their reason, and the employee sees
+  // both facts exactly as the manager does.
   {
     personId: DEMO_STAFF_ID,
     outletId: OUTLET_KALYANI_ID,
     daysAgo: 2,
     status: 'present',
     checkIn: { time: '09:20', ...DOWN_THE_ROAD },
-    checkOut: { time: '18:05', ...AT_COUNTER },
-    override: {
-      byName: 'Demo Manager',
-      reason: 'Signal drift by the main road; seen at the counter at 9:15.',
+    approval: {
+      byName: DEMO_MANAGER.full_name,
       time: '09:26',
+      reason: 'Signal drift by the main road; seen at the counter at 9:15 before I left.',
+      ...APPROVED_FROM_HOME,
     },
   },
   {
@@ -107,17 +138,45 @@ export const attendanceSeeds: AttendanceSeed[] = [
     daysAgo: 3,
     status: 'present',
     checkIn: { time: '08:58', ...AT_COUNTER },
-    checkOut: { time: '17:40', ...AT_COUNTER },
+    approval: { byName: DEMO_MANAGER.full_name, time: '09:11', ...APPROVED_AT_COUNTER },
   },
   { personId: DEMO_STAFF_ID, outletId: OUTLET_KALYANI_ID, daysAgo: 4, status: 'leave' },
+  // Recorded and still waiting. Nobody approved it, so it counts as nothing —
+  // the state the whole change exists to make visible.
   {
     personId: DEMO_STAFF_ID,
     outletId: OUTLET_KALYANI_ID,
     daysAgo: 5,
     status: 'present',
     checkIn: { time: '09:10', ...NEAR_COUNTER },
-    // Checked out far away: recorded and flagged, never blocked (design D3).
-    checkOut: { time: '18:30', ...DOWN_THE_ROAD },
+  },
+  // Late: 14:20 against Kalyani's 13:00. Approved, so it is present AND late —
+  // lateness is a tag, never a status.
+  {
+    personId: DEMO_STAFF_ID,
+    outletId: OUTLET_KALYANI_ID,
+    daysAgo: 8,
+    status: 'present',
+    checkIn: { time: '14:20', ...AT_COUNTER },
+    approval: { byName: DEMO_MANAGER.full_name, time: '14:35', ...APPROVED_AT_COUNTER },
+  },
+  {
+    personId: DEMO_STAFF_ID,
+    outletId: OUTLET_KALYANI_ID,
+    daysAgo: 9,
+    status: 'present',
+    checkIn: { time: '09:05', ...AT_COUNTER },
+    approval: { byName: DEMO_MANAGER.full_name, time: '09:20', ...APPROVED_AT_COUNTER },
+  },
+  // Days 6, 7 and 10 hold nothing at all, so the month view derives them as
+  // absent rather than skipping them. That is the reading no row can carry.
+  {
+    personId: DEMO_STAFF_ID,
+    outletId: OUTLET_KALYANI_ID,
+    daysAgo: 11,
+    status: 'present',
+    checkIn: { time: '08:51', ...NEAR_COUNTER },
+    approval: { byName: DEMO_MANAGER.full_name, time: '09:05', ...APPROVED_AT_COUNTER },
   },
 
   // ── The manager's day: colleagues in different situations ────────────────
@@ -126,34 +185,34 @@ export const attendanceSeeds: AttendanceSeed[] = [
     daysAgo: 0,
     status: 'present',
     checkIn: { time: '08:47', ...AT_COUNTER },
+    approval: { byName: DEMO_MANAGER.full_name, time: '09:02', ...APPROVED_AT_COUNTER },
   },
-  // Access was cut at lunchtime — the panic button — but the morning was
-  // worked and the day view still shows the person (deactivation is about
-  // sign-in, not existence).
+  // Access was cut at lunchtime — the panic button — but the morning was worked
+  // and the day view still shows the person (deactivation is about sign-in, not
+  // existence). Nobody has approved it, so it is still waiting.
   {
     personId: DEMO_PREP_COOK_ACCOUNT_ID,
     daysAgo: 0,
     status: 'present',
     checkIn: { time: '08:55', ...NEAR_COUNTER },
   },
-  // Awaiting a decision. Claimed present; the fence says otherwise and nobody
-  // has blessed it, so it sits as absent until a manager acts.
+  // Waiting, and the reading is a poor one taken well outside the fence: the
+  // row a manager actually has to think about before settling it.
   {
     personId: DEMO_RUNNER_ACCOUNT_ID,
     daysAgo: 0,
     status: 'present',
     checkIn: { time: '09:33', ...OFF_THE_MAP },
   },
-  // Yesterday the griller's phone died mid-shift, so the manager typed the
-  // check-out in: a manual entry, visibly not a self check-in, with the
-  // enterer stamped where the GPS evidence would be.
+  // Yesterday the griller's phone died before their shift, so the manager typed
+  // the arrival in: a manual entry, visibly not a self check-in, settled by the
+  // act of recording it, with the enterer stamped where GPS evidence would be.
   {
     personId: DEMO_GRILLER_ACCOUNT_ID,
     daysAgo: 1,
     status: 'present',
-    checkIn: { time: '08:52', ...AT_COUNTER },
-    checkOut: {
-      time: '18:20',
+    checkIn: {
+      time: '08:52',
       manual: { byId: DEMO_MANAGER.id, byName: DEMO_MANAGER.full_name },
     },
   },
@@ -164,14 +223,16 @@ export const attendanceSeeds: AttendanceSeed[] = [
   // The case that did not exist before multi-outlet-people, and the one a
   // demonstrator has to be able to walk: a morning at Kalyani, an evening at
   // Kanchrapara, both from the same phone and the same single action, with
-  // nothing anywhere asking them which shop they were at.
+  // nothing anywhere asking them which shop they were at. Each day is settled by
+  // the manager of the shop it was worked at — Kanchrapara's 20:00 deadline is
+  // why a 15:10 evening arrival there is not late.
   {
     personId: DEMO_SPLIT_SHIFT_ACCOUNT_ID,
     outletId: OUTLET_KALYANI_ID,
     daysAgo: 1,
     status: 'present',
     checkIn: { time: '08:55', ...AT_COUNTER },
-    checkOut: { time: '13:05', ...NEAR_COUNTER },
+    approval: { byName: DEMO_MANAGER.full_name, time: '09:14', ...APPROVED_AT_COUNTER },
   },
   {
     personId: DEMO_SPLIT_SHIFT_ACCOUNT_ID,
@@ -179,10 +240,10 @@ export const attendanceSeeds: AttendanceSeed[] = [
     daysAgo: 1,
     status: 'present',
     checkIn: { time: '15:10', ...AT_KANCHRAPARA },
-    checkOut: { time: '21:20', ...AT_KANCHRAPARA },
+    approval: { byName: DEMO_MANAGER.full_name, time: '15:28', ...APPROVED_AT_KANCHRAPARA },
   },
   // The Employee PERSONA's own split day — the one a demonstrator walks. Their
-  // Kalyani morning is already in their week above; this is the evening at the
+  // Kalyani morning is already in their month above; this is the evening at the
   // other shop, on the same business date, from the same phone.
   {
     personId: DEMO_STAFF_ID,
@@ -190,17 +251,17 @@ export const attendanceSeeds: AttendanceSeed[] = [
     daysAgo: 1,
     status: 'present',
     checkIn: { time: '19:05', ...AT_KANCHRAPARA },
-    checkOut: { time: '22:30', ...AT_KANCHRAPARA },
+    approval: { byName: DEMO_MANAGER.full_name, time: '19:22', ...APPROVED_AT_KANCHRAPARA },
   },
-  // And today, a morning at Kalyani already finished — so their big button
-  // still offers a check-in, which the fence will resolve to wherever they
-  // actually are next.
+  // And today, a morning at Kalyani already recorded and approved — so their big
+  // button still offers a check-in, which the fence will resolve to wherever
+  // they actually are next.
   {
     personId: DEMO_SPLIT_SHIFT_ACCOUNT_ID,
     outletId: OUTLET_KALYANI_ID,
     daysAgo: 0,
     status: 'present',
     checkIn: { time: '08:50', ...AT_COUNTER },
-    checkOut: { time: '12:40', ...NEAR_COUNTER },
+    approval: { byName: DEMO_MANAGER.full_name, time: '09:06', ...APPROVED_AT_COUNTER },
   },
 ]

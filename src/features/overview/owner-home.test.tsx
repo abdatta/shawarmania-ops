@@ -116,14 +116,24 @@ describe('OwnerHome — the console', () => {
         // calm copy needs staging to be reviewed at all.
         async outletDay(outletId, businessDate) {
           const real = await base.insights.outletDay(outletId, businessDate)
-          return real && { ...real, lowStockCount: 0, openAlertCount: 0, checkedInCount: 2 }
+          return (
+            real && {
+              ...real,
+              lowStockCount: 0,
+              openAlertCount: 0,
+              checkedInCount: 2,
+              // An arrival nobody has approved needs attention, so the calm copy
+              // needs a day where every arrival is settled too.
+              waitingApprovalCount: 0,
+            }
+          )
         },
       },
     }
     renderConsole(adapters)
 
     expect(await screen.findByTestId(`attention-${OUTLET_KANCHRAPARA_ID}`)).toHaveTextContent(
-      /2 people checked in · nothing needs attention/i,
+      /2 arrivals recorded and approved · nothing needs attention/i,
     )
   })
 

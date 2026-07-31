@@ -116,7 +116,7 @@ $q$, 'the super admin edits an outlet');
 
 -- ---------------------------------------------------------------------------
 -- Deactivation means "this shop is not trading", and the asymmetry between
--- check-in and check-out is the whole design (D9).
+-- refusing a new arrival and still settling an old one is the whole design.
 
 select lives_ok($q$
   update public.outlets set is_active = false
@@ -135,22 +135,40 @@ select throws_ok($q$
 $q$, '23514', 'outlet is not trading',
   'a check-in at a deactivated outlet is refused, and says why');
 
--- Someone mid-shift when the shop closed must still be able to close their day.
--- The seeded griller checked in yesterday and never checked out.
+-- A day worked before the shop closed must still be settleable afterwards. The
+-- seeded griller's tablet arrival from yesterday is waiting for a manager, and
+-- deactivating the outlet must not strand it — otherwise closing a shop would
+-- silently cost somebody a day's pay.
+--
+-- It also happens to be a day that has already closed, so the same write proves
+-- the other half of the rule: a reason is required, in the fence or not.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
+
+select throws_ok($q$
+  update public.attendance
+     set approved_by = '10000000-0000-4000-a000-000000000002', status = 'present',
+         approver_lat = 22.97502, approver_lng = 88.43455, approver_accuracy_m = 20
+   where person_id = '20000000-0000-4000-a000-000000000002'
+     and outlet_id = '00000000-0000-4000-a000-000000000001'
+     and business_date = current_date - 1
+$q$, 'P0001', 'an approval from away from the outlet, or after the row''s own business day, requires a reason',
+  'settling a day that has already closed needs a reason, even from inside the fence');
 
 select lives_ok($q$
   update public.attendance
-     set check_out_at = now(), check_out_lat = 22.97502, check_out_lng = 88.43455,
-         check_out_accuracy_m = 20, check_out_source = 'phone'
+     set approved_by = '10000000-0000-4000-a000-000000000002', status = 'present',
+         approval_reason = 'Worked the shift before we closed the shop (synthetic)',
+         approver_lat = 22.97502, approver_lng = 88.43455, approver_accuracy_m = 20
    where person_id = '20000000-0000-4000-a000-000000000002'
+     and outlet_id = '00000000-0000-4000-a000-000000000001'
      and business_date = current_date - 1
-$q$, 'a check-out at a deactivated outlet is recorded, never refused (design D3)');
+$q$, 'an approval at a deactivated outlet is recorded, never refused');
 
-select isnt((select check_out_at from public.attendance
-              where person_id = '20000000-0000-4000-a000-000000000002'
-                and business_date = current_date - 1), null,
-  'and the day is closed');
+select is((select status from public.attendance
+            where person_id = '20000000-0000-4000-a000-000000000002'
+              and outlet_id = '00000000-0000-4000-a000-000000000001'
+              and business_date = current_date - 1), 'present'::public.attendance_status,
+  'and the day now counts');
 
 -- Nothing cascaded. The staff, the accounts and the recorded days are all
 -- still there — deactivation is a trading state, not a delete.
@@ -167,7 +185,7 @@ select is((select count(*) from public.assignments
 
 select is((select count(*) from public.attendance
             where outlet_id = '00000000-0000-4000-a000-000000000001'
-              and business_date in (current_date - 1, current_date - 2)), 4::bigint,
+              and business_date in (current_date - 1, current_date - 2)), 5::bigint,
   'and every recorded day still exists');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
@@ -191,7 +209,12 @@ $q$, 'reactivating restores check-in with no other intervention');
 select is((select status::text from public.attendance
             where person_id = '10000000-0000-4000-a000-000000000006'
               and business_date = public.app_business_date(now(), time '04:00')),
-  'present', 'and the fence judges it exactly as before');
+  'absent', 'and it waits for a manager exactly as any other arrival does');
+
+select is((select arrival_deadline from public.attendance
+            where person_id = '10000000-0000-4000-a000-000000000006'
+              and business_date = public.app_business_date(now(), time '04:00')),
+  time '13:00', 'with the reopened outlet''s own deadline stamped onto it');
 
 -- ---------------------------------------------------------------------------
 -- Nothing with history is deletable. Every foreign key onto profiles(id) is

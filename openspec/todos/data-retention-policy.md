@@ -8,7 +8,7 @@ Personal data has a defined lifetime. Customer contact details and attendance lo
 
 ## Current behaviour
 
-Nothing is deleted, ever. Customer names and phone numbers persist indefinitely. Attendance stores coordinates, accuracy and computed distance for **every check-in and check-out**, and those accumulate indefinitely too.
+Nothing is deleted, ever. Customer names and phone numbers persist indefinitely. Attendance stores coordinates, accuracy and computed distance for **every check-in and every approval**, and those accumulate indefinitely too. Since #26 that includes the approving manager's own position, so the accumulating location history is about managers as well as staff.
 
 ## Why it is deferred
 
@@ -22,7 +22,7 @@ The roadmap frames the trigger as *meaningful customer volume, or a franchise ag
 
 ## What already exists for it
 
-- **Location is captured at check-in and check-out only.** There is no background tracking anywhere in this system, so the volume is bounded at two points per person per day rather than a continuous trail — a deliberate design decision that also makes this policy much easier to write.
+- **Location is captured at a check-in, an approval, and an outlet capture only.** There is no background tracking anywhere in this system, so the volume is bounded at roughly two points per person per day rather than a continuous trail — a deliberate design decision that also makes this policy much easier to write.
 - Attendance rows carry a business date, so an age-based rule has a clean key.
 - Customer records carry first-seen and last-seen timestamps, so "no visit in N months" is expressible without adding anything.
 - Location evidence is already framed as reviewable input rather than proof, so removing it later does not invalidate a verdict that was never supposed to rest on it alone.

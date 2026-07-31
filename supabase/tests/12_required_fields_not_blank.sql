@@ -262,7 +262,7 @@ select bag_eq($$
    where conname like '%\_not\_blank'
      and connamespace = 'public'::regnamespace
 $$, $$ values
-  ('attendance_override_reason_not_blank'),
+  ('attendance_approval_reason_not_blank'),
   ('outlets_name_not_blank'),
   ('outlets_code_not_blank'),
   ('outlets_location_label_not_blank'),

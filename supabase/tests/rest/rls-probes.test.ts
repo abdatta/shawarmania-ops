@@ -378,18 +378,34 @@ describe('an Employee session', () => {
     expect(error?.message).toContain('captured check-in evidence is immutable')
   })
 
-  it('cannot approve its own blocked check-in', async () => {
+  it('cannot approve its own day over HTTP', async () => {
     const employee = (await signIn(PERSONAS.employeeKalyani.email)).client
+
+    // Their own arrival on a day nothing else in any suite touches, so this
+    // proves the guard rather than depending on which file ran first. Every
+    // seeded day of theirs is already settled, and a settled day is refused by
+    // the immutability rule — a different refusal from the one being proved.
+    const at = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
+    const businessDate = resolveBusinessDate(at, '04:00')
+    await employee.from('attendance').insert({
+      outlet_id: OUTLETS.kalyani,
+      person_id: PERSONAS.employeeKalyani.sub,
+      business_date: businessDate,
+      status: 'present',
+      check_in_at: at.toISOString(),
+      check_in_source: 'phone',
+    })
 
     const { error } = await employee
       .from('attendance')
       .update({
-        override_by: PERSONAS.employeeKalyani.sub,
-        override_reason: 'self-approved',
-        override_at: new Date().toISOString(),
+        approved_by: PERSONAS.employeeKalyani.sub,
+        approval_reason: 'self-approved',
       })
       .eq('person_id', PERSONAS.employeeKalyani.sub)
-    expect(error?.message).toContain('only a franchise admin or super admin may record an override')
+      .eq('business_date', businessDate)
+      .is('approved_by', null)
+    expect(error?.message).toContain('only a franchise admin or super admin may record an approval')
   })
 
   it('cannot fabricate a manual entry over HTTP', async () => {

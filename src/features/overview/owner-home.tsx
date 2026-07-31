@@ -1,4 +1,13 @@
-import { BarChart3, Bell, FileText, Package, Store, TrendingUp, TriangleAlert } from 'lucide-react'
+import {
+  BarChart3,
+  Bell,
+  FileText,
+  Hourglass,
+  Package,
+  Store,
+  TrendingUp,
+  TriangleAlert,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 
@@ -261,6 +270,19 @@ function AttentionRow({
       to: `${base}/alerts`,
     })
   }
+  if (summary.waitingApprovalCount > 0) {
+    items.push({
+      key: 'attendance',
+      icon: Hourglass,
+      // A stranded day is invisible until somebody queries their pay, which is
+      // exactly the kind of thing this list exists to surface.
+      label:
+        summary.waitingApprovalCount === 1
+          ? '1 arrival waiting for approval'
+          : `${summary.waitingApprovalCount} arrivals waiting for approval`,
+      to: `${base}/attendance`,
+    })
+  }
   if (summary.lowStockCount > 0) {
     items.push({
       key: 'stock',
@@ -286,8 +308,8 @@ function AttentionRow({
   if (items.length === 0) {
     return (
       <p className="text-xs text-content-muted" data-testid={`attention-${outletId}`}>
-        {summary.checkedInCount === 1 ? '1 person' : `${summary.checkedInCount} people`} checked in
-        · nothing needs attention
+        {summary.checkedInCount === 1 ? '1 arrival' : `${summary.checkedInCount} arrivals`} recorded
+        and approved · nothing needs attention
       </p>
     )
   }

@@ -28,10 +28,15 @@ test('the owner creates an outlet from the app', async ({ page }) => {
   await page.getByLabel('Name', { exact: true }).fill('Shawarmania Barrackpore')
   await page.getByLabel('Short code').fill('barrackpore')
   await page.getByLabel('Location label').fill('Barrackpore')
+  // The arrival deadline sits beside the cutover, already filled with the 13:00
+  // default — an outlet is set up without anybody having to decide it.
+  await expect(page.getByLabel('Staff are expected by')).toHaveValue('13:00')
+  await page.getByLabel('Staff are expected by').fill('12:30')
   await page.getByRole('button', { name: 'Create outlet' }).click()
 
   const card = page.getByTestId('outlet-barrackpore')
   await expect(card).toBeVisible()
+  await expect(card).toContainText('staff are expected by 12:30')
   // A new outlet has never been stood in, and says so rather than judging
   // anyone against a point nobody has visited.
   await expect(page.getByTestId('uncaptured-barrackpore')).toContainText(

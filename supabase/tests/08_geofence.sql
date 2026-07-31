@@ -1,5 +1,10 @@
--- Geofence evaluation: the distance is derived from the evidence, the fence
--- only ever denies a claim of `present`, and captured evidence is frozen.
+-- Geofence evaluation: every distance is derived from the evidence, the fence
+-- decides nothing about status any more, and captured evidence is frozen.
+--
+-- The fence used to be the thing that denied a claim of `present`. It is now
+-- only evidence: an unapproved check-in is stored `absent` whatever its
+-- distance, and a recorded human approval is the only thing that settles a day.
+-- The fence still never IMPOSES a status.
 --
 -- The distance table below is the SQL half of a pinning pair — the same
 -- coordinates and the same expected metres are asserted against the TypeScript
@@ -108,7 +113,18 @@ select is((select status::text from public.attendance
             where person_id = '20000000-0000-4000-a000-000000000004'
               and business_date = current_date - 1),
   'absent',
-  'a seeded out-of-fence check-in with no override is not counted present');
+  'a seeded check-in with no approval is not counted present');
+
+select is(round((select approver_distance_m from public.attendance
+                  where person_id = '10000000-0000-4000-a000-000000000007'
+                    and business_date = current_date - 1)::numeric, 0),
+  1531::numeric,
+  'and a seeded off-site approval stores the distance ITS coordinates imply');
+
+select is((select arrival_deadline from public.attendance
+            where person_id = '10000000-0000-4000-a000-000000000007'
+              and business_date = current_date - 1), time '20:00',
+  'the stamped deadline is the OUTLET''s, so Kanchrapara''s 20:00 is not Kalyani''s 13:00');
 
 select is((select check_in_distance_m from public.attendance
             where person_id = '20000000-0000-4000-a000-000000000002'
@@ -117,7 +133,7 @@ select is((select check_in_distance_m from public.attendance
   'a counter-tablet check-in with no coordinates stores no distance');
 
 -- ---------------------------------------------------------------------------
--- An employee cannot claim `present` from outside the fence.
+-- An employee cannot claim `present` at all, wherever they are standing.
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
@@ -141,6 +157,28 @@ select is(round((select check_in_distance_m from public.attendance
                     and business_date = public.app_business_date(now(), time '04:00'))::numeric, 2),
   1000.75::numeric,
   'and the claimed 3 m is replaced by the 1000.75 m its coordinates imply');
+
+select is((select arrival_deadline from public.attendance
+            where person_id = '10000000-0000-4000-a000-000000000006'
+              and business_date = public.app_business_date(now(), time '04:00')), time '13:00',
+  'and the outlet''s arrival deadline is stamped onto the row as it lands');
+
+-- The same claim from INSIDE the fence, which used to survive as present. It no
+-- longer does: standing at the counter is evidence, not a witness.
+select lives_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status,
+     check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
+  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
+          public.app_business_date(now() - interval '3 days', time '04:00'), 'present',
+          now() - interval '3 days', 22.97505, 88.43460, 14, 'phone')
+$q$, 'an employee checks in from inside the fence');
+
+select is((select status::text from public.attendance
+            where person_id = '10000000-0000-4000-a000-000000000006'
+              and business_date = public.app_business_date(now() - interval '3 days', time '04:00')),
+  'absent',
+  'and an in-fence present claim is stored absent too — only an approval settles a day');
 
 -- A phone check-in with no coordinates at all cannot be judged, so it is not
 -- counted present either — otherwise refusing location permission would be the
@@ -179,8 +217,8 @@ select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 select is((select status::text from public.attendance
             where person_id = '20000000-0000-4000-a000-000000000002'
               and business_date = public.app_business_date(now(), time '04:00')),
-  'present',
-  'and that stays present — the tablet is the trusted device, not the fence');
+  'absent',
+  'and it waits like any other: the device stands in the outlet, it does not attest');
 
 -- An outlet that was never surveyed blocks nobody: that gap is the owner's to
 -- close, not the staff's to pay for. Un-survey Kanchrapara as the owner of the
@@ -208,8 +246,8 @@ $q$, 'an employee checks in at an unsurveyed outlet');
 select is((select status::text from public.attendance
             where person_id = '10000000-0000-4000-a000-000000000007'
               and business_date = public.app_business_date(now(), time '04:00')),
-  'present',
-  'and is counted present, however far away, because there is nothing to judge against');
+  'absent',
+  'and it waits for a manager, because nothing but a manager ever counted it');
 
 select is((select check_in_distance_m from public.attendance
             where person_id = '10000000-0000-4000-a000-000000000007'
@@ -233,72 +271,113 @@ select throws_ok($q$
      and business_date = public.app_business_date(now(), time '04:00')
 $q$, 'P0001', null, 'an employee cannot set their own attendance status');
 
--- Checking out is recorded and never refused, however far away it happens.
-select lives_ok($q$
-  update public.attendance
-     set check_out_at = now(), check_out_lat = 28.6139, check_out_lng = 77.2090,
-         check_out_accuracy_m = 30, check_out_distance_m = 5, check_out_source = 'phone'
-   where person_id = '10000000-0000-4000-a000-000000000006'
-     and business_date = public.app_business_date(now(), time '04:00')
-$q$, 'a distant check-out is recorded rather than blocked (design D3)');
-
-select is(round((select check_out_distance_m from public.attendance
-                  where person_id = '10000000-0000-4000-a000-000000000006'
-                    and business_date = public.app_business_date(now(), time '04:00'))::numeric, 0),
-  1285955::numeric,
-  'and its distance is computed too, so the manager sees the flag');
-
 -- ---------------------------------------------------------------------------
--- The manager's side: an override clears the block, a blank reason does not.
+-- The manager's side: the approval, and where the approver was.
+--
+-- The approver's distance is the database's number for the same reason the
+-- employee's is — it is the one figure a client has every incentive to shade,
+-- and the whole point of recording it is that it cannot be arranged.
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
+-- On site and on the day, so the rule asks for no reason at all — which makes
+-- this the one path on which a BLANK reason reaches the constraint rather than
+-- the guard. Somebody who types spaces has still recorded nothing.
 select throws_ok($q$
   update public.attendance
-     set override_by = '10000000-0000-4000-a000-000000000002',
-         override_reason = '   ',
-         override_at = now(),
+     set approved_by = '10000000-0000-4000-a000-000000000002',
+         approver_lat = 22.97505, approver_lng = 88.43460, approver_accuracy_m = 14,
+         approval_reason = '   ',
          status = 'present'
    where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
-$q$, '23514', null, 'an override with a blank reason is not a recorded decision');
+$q$, '23514', null, 'a blank reason is refused by the constraint even where none was needed');
 
 select lives_ok($q$
   update public.attendance
-     set override_by = '10000000-0000-4000-a000-000000000002',
-         override_reason = 'Delivery run, confirmed by phone (synthetic test)',
-         override_at = now(),
+     set approved_by = '10000000-0000-4000-a000-000000000002',
+         approver_lat = 22.97505, approver_lng = 88.43460, approver_accuracy_m = 14,
+         approver_distance_m = 9999,
          status = 'present'
    where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
-$q$, 'a manager clears the block with a reason, and the row becomes present');
+$q$, 'a manager standing at the counter approves the day, on the day, with no reason');
 
 select is((select status::text from public.attendance
             where person_id = '10000000-0000-4000-a000-000000000006'
               and business_date = public.app_business_date(now(), time '04:00')),
   'present',
-  'the overridden row stays present — the fence does not re-deny it');
+  'the approved row becomes present, and the fence does not re-deny it');
 
-select is((select override_by_name from public.attendance
+select is(round((select approver_distance_m from public.attendance
+                  where person_id = '10000000-0000-4000-a000-000000000006'
+                    and business_date = public.app_business_date(now(), time '04:00'))::numeric, 2),
+  11.65::numeric,
+  'and the claimed 9999 m is replaced by the 11.65 m the approver''s coordinates imply');
+
+select is((select approved_by_name from public.attendance
             where person_id = '10000000-0000-4000-a000-000000000006'
               and business_date = public.app_business_date(now(), time '04:00')),
   'Synthetic Admin Kal',
   'the approver''s name is snapshot onto the row, so the employee can read it too');
 
--- The name is derived, never accepted: a forged one is replaced.
-select lives_ok($q$
+select isnt((select approved_at from public.attendance
+              where person_id = '10000000-0000-4000-a000-000000000006'
+                and business_date = public.app_business_date(now(), time '04:00')), null,
+  'and the approval time is stamped by the database rather than supplied');
+
+-- A recorded decision is a record. Correcting a mistaken approval means
+-- changing the STATUS, which stays the manager's to set and leaves the approval
+-- visible — not quietly rewriting who vouched for what.
+select throws_ok($q$
   update public.attendance
-     set override_reason = 'Reworded, still the same approver (synthetic test)',
-         override_by_name = 'Somebody Else Entirely'
+     set approval_reason = 'Reworded after the fact (synthetic test)'
    where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
-$q$, 'an override reason may be amended by the approving manager');
+$q$, 'P0001', 'a recorded approval is immutable',
+  'a recorded approval cannot be edited afterwards');
 
-select is((select override_by_name from public.attendance
-            where person_id = '10000000-0000-4000-a000-000000000006'
-              and business_date = public.app_business_date(now(), time '04:00')),
-  'Synthetic Admin Kal',
-  'and a client-supplied approver name does not survive');
+-- Off site, on the same day: not refused, but it costs a sentence.
+select throws_ok($q$
+  update public.attendance
+     set approved_by = '10000000-0000-4000-a000-000000000002',
+         approver_lat = 28.6139, approver_lng = 77.2090, approver_accuracy_m = 30,
+         status = 'present'
+   where person_id = '20000000-0000-4000-a000-000000000002'
+     and outlet_id = '00000000-0000-4000-a000-000000000001'
+     and business_date = public.app_business_date(now(), time '04:00')
+$q$, 'P0001', 'an approval from away from the outlet, or after the row''s own business day, requires a reason',
+  'an approval taken a thousand kilometres away is refused without a reason');
+
+select throws_ok($q$
+  update public.attendance
+     set approved_by = '10000000-0000-4000-a000-000000000002',
+         approver_lat = 28.6139, approver_lng = 77.2090, approver_accuracy_m = 30,
+         approval_reason = '   ',
+         status = 'present'
+   where person_id = '20000000-0000-4000-a000-000000000002'
+     and outlet_id = '00000000-0000-4000-a000-000000000001'
+     and business_date = public.app_business_date(now(), time '04:00')
+$q$, 'P0001', 'an approval from away from the outlet, or after the row''s own business day, requires a reason',
+  'and spaces are not a reason — the guard reads it the same as nothing');
+
+select lives_ok($q$
+  update public.attendance
+     set approved_by = '10000000-0000-4000-a000-000000000002',
+         approver_lat = 28.6139, approver_lng = 77.2090, approver_accuracy_m = 30,
+         approval_reason = 'Seen at the counter before I travelled (synthetic test)',
+         status = 'present'
+   where person_id = '20000000-0000-4000-a000-000000000002'
+     and outlet_id = '00000000-0000-4000-a000-000000000001'
+     and business_date = public.app_business_date(now(), time '04:00')
+$q$, 'with a reason it is recorded — nothing is refused on distance alone');
+
+select is(round((select approver_distance_m from public.attendance
+                  where person_id = '20000000-0000-4000-a000-000000000002'
+                    and outlet_id = '00000000-0000-4000-a000-000000000001'
+                    and business_date = public.app_business_date(now(), time '04:00'))::numeric, 0),
+  1285955::numeric,
+  'and the row keeps how far away the approver was, so being elsewhere is visible');
 
 -- The fence denies a present claim; it never imposes one.
 select lives_ok($q$
@@ -334,6 +413,38 @@ select is((select geofence_radius_m from public.outlets
             where id = '00000000-0000-4000-a000-000000000001'), 150,
   'and the outlet''s radius is unchanged');
 
+-- An unsurveyed outlet cannot vouch for anybody, approvers included: there is
+-- no position to judge them against, so every approval there costs a reason.
+-- That is honest, and it matches how check-ins already behave there.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000003'::uuid);
+
+select throws_ok($q$
+  update public.attendance
+     set approved_by = '10000000-0000-4000-a000-000000000003',
+         approver_lat = 22.94508, approver_lng = 88.43312, approver_accuracy_m = 19,
+         status = 'present'
+   where person_id = '10000000-0000-4000-a000-000000000007'
+     and outlet_id = '00000000-0000-4000-a000-000000000002'
+     and business_date = public.app_business_date(now(), time '04:00')
+$q$, 'P0001', 'an approval from away from the outlet, or after the row''s own business day, requires a reason',
+  'an approval at an unsurveyed outlet needs a reason, standing at the counter or not');
+
+select lives_ok($q$
+  update public.attendance
+     set approved_by = '10000000-0000-4000-a000-000000000003',
+         approval_reason = 'Outlet position never captured; seen at the counter (synthetic)',
+         status = 'present'
+   where person_id = '10000000-0000-4000-a000-000000000007'
+     and outlet_id = '00000000-0000-4000-a000-000000000002'
+     and business_date = public.app_business_date(now(), time '04:00')
+$q$, 'and with one it is recorded, with the approver''s position stored as unknown');
+
+select is((select approver_distance_m from public.attendance
+            where person_id = '10000000-0000-4000-a000-000000000007'
+              and outlet_id = '00000000-0000-4000-a000-000000000002'
+              and business_date = public.app_business_date(now(), time '04:00')), null,
+  'rather than a distance from a point nobody has stood on');
+
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select is((select location_captured_at from public.outlets
@@ -354,15 +465,15 @@ select is(round((select location_accuracy_m from public.outlets
   7::numeric, 'the accuracy of the saved fix is stored with it');
 
 -- Re-capturing a position must not rewrite the distances already judged. The
--- outlet just moved ~3.3 km; a later write to a settled row (adding a
--- check-out) must leave its check-in distance exactly where it was.
+-- outlet just moved ~3.3 km; a later write to a settled row must leave its
+-- check-in distance and its approver distance exactly where they were.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000003'::uuid);
+
 select lives_ok($q$
-  update public.attendance
-     set check_out_at = now(), check_out_lat = 22.94690, check_out_lng = 88.43500,
-         check_out_accuracy_m = 25, check_out_source = 'phone'
+  update public.attendance set status = 'half_day'
    where person_id = '10000000-0000-4000-a000-000000000007'
      and business_date = current_date - 1
-$q$, 'a check-out is added to a settled row after the outlet moved');
+$q$, 'a settled row is amended after the outlet moved');
 
 select is(round((select check_in_distance_m from public.attendance
                   where person_id = '10000000-0000-4000-a000-000000000007'
@@ -370,11 +481,16 @@ select is(round((select check_in_distance_m from public.attendance
   293.77::numeric,
   'moving an outlet does not retroactively rewrite a settled check-in distance');
 
-select is((select status::text from public.attendance
+select is(round((select approver_distance_m from public.attendance
+                  where person_id = '10000000-0000-4000-a000-000000000007'
+                    and business_date = current_date - 1)::numeric, 0),
+  1531::numeric,
+  'nor a recorded approval''s, so "was the manager there" cannot be changed later');
+
+select is((select arrival_deadline from public.attendance
             where person_id = '10000000-0000-4000-a000-000000000007'
-              and business_date = current_date - 1),
-  'present',
-  'nor does it retroactively un-present a day a manager already blessed');
+              and business_date = current_date - 1), time '20:00',
+  'and the deadline the day was judged against is still the one it was recorded under');
 
 reset role;
 

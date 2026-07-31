@@ -19,7 +19,7 @@ Applied everywhere, without exception:
 ## Tenancy and identity
 
 **`outlets`** — the isolation unit.
-`id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `is_active`, `created_at`.
+`id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `arrival_deadline` (`time`, default `13:00`), `is_active`, `created_at`.
 
 Coordinates and radius exist for attendance verification. The cutover time is what makes cross-midnight trade reconcile correctly.
 
@@ -178,8 +178,38 @@ arrives, re-adding it is one migration and #18's archived design is the recipe.
 
 **`attendance`** — `id`, `outlet_id`, `person_id` (→ `profiles(id)`, no cascade), `business_date`, `status` (`present` | `absent` | `half_day` | `leave`),
 check-in: `check_in_at`, `check_in_lat`, `check_in_lng`, `check_in_accuracy_m`, `check_in_distance_m`, `check_in_source` (`phone` | `counter_tablet` | `manual`), `check_in_entered_by`, `check_in_entered_by_name`,
-check-out: the same seven fields prefixed `check_out_`,
-override: `override_by`, `override_reason`, `override_at`.
+the deadline that applied: `arrival_deadline`,
+approval: `approved_by`, `approved_by_name`, `approval_reason`, `approved_at`, `approver_lat`, `approver_lng`, `approver_accuracy_m`, `approver_distance_m`.
+
+**There is no check-out.** Ten columns and four constraints were dropped by
+`attendance-approved-on-site` (#26, owner decision 2026-07-31), with a full
+production dump taken beforehand and held outside the repo. Nobody used it, and
+unused monitoring data is the kind [Security And Privacy](SECURITY_AND_PRIVACY.md)
+says not to keep. A day is one arrival event.
+
+**The approval columns were `override_*` until #26.** An override was the
+exception path for a check-in the fence refused; approval is now the only path
+for every check-in, so the word described nothing. The rename is faithful to what
+was already stored — every historic override carried an approver, a time and a
+reason, which is exactly an off-site approval under the new rule — so no existing
+row changed meaning and none was recomputed. `approval_reason` became nullable in
+the same change: an approval taken inside the fence on the row's own business day
+is not asked for one.
+
+**`approver_*` is the manager's own evidence**, mirroring the check-in leg
+exactly and for the same reason. `approver_distance_m` is recomputed by the
+trigger from the stored coordinates, never accepted from the client. Whether the
+approver was *on site* is derived from it against the outlet's radius rather than
+stored, so it cannot disagree with the coordinates it comes from. A position may
+exist only beside the approval it belongs to; without one it would be stray
+location data about a manager.
+
+**`arrival_deadline` is the rule that applied**, stamped by the guard from
+`outlets.arrival_deadline` when the check-in first lands and frozen with the rest
+of the captured evidence. Lateness is judged against it, in the outlet's local
+reckoning of the business day — so editing an outlet's deadline next month never
+relabels a day recorded under the old one. Null on a day with no arrival, and on
+every day recorded before deadlines existed.
 
 `unique (person_id, outlet_id, business_date)` — per outlet since
 `multi-outlet-people` (#22). A morning at Kalyani and an evening at
@@ -188,7 +218,20 @@ at the *same* outlet on one date are still refused.
 
 **A `manual` event is an admin recording attendance on someone's behalf** — the escape hatch for a phone that cannot check in, the kiosk having been rejected. The `entered_by` / `entered_by_name` pair is stamped by the guard trigger from the acting session, never accepted from the client; constraints tie the pair to the `manual` source and forbid coordinates on manual events, so the geofence never judges them. Times must be in the past, on the outlet's current business day. A Franchise Admin enters for their own outlet, the Super Admin for any; an Employee or Biller session is refused.
 
+A `manual` arrival is also **settled by the act of recording it**: the guard
+stamps `approved_by` as the entering session, because the admin has already
+attested to the arrival by typing it in and making them approve their own entry
+would be a second signature on the same sentence. No approver position is
+recorded, because none was read.
+
 Captured coordinates, GPS accuracy, **and** computed distance are all stored. Storing the inputs alongside the verdict is what makes a disputed check-in reviewable instead of a black box — "the app said no" is not an acceptable answer to an employee.
+
+**Three readings are not columns**: waiting for a manager, late, and absent
+because nobody came. Each is derived from the stored rows and the outlet's clock
+in one shared module (`src/features/attendance/attendance-record.ts`), so every
+surface agrees by construction. No scheduled process manufactures attendance
+rows — a job writing an absence per assigned person per day would need a backfill
+for every past day and would race the late arrival it was trying to describe.
 
 ## Daily cash
 

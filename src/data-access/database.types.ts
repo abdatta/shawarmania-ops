@@ -251,6 +251,15 @@ export type Database = {
       }
       attendance: {
         Row: {
+          approval_reason: string | null
+          approved_at: string | null
+          approved_by: string | null
+          approved_by_name: string | null
+          approver_accuracy_m: number | null
+          approver_distance_m: number | null
+          approver_lat: number | null
+          approver_lng: number | null
+          arrival_deadline: string | null
           business_date: string
           check_in_accuracy_m: number | null
           check_in_at: string | null
@@ -260,27 +269,22 @@ export type Database = {
           check_in_lat: number | null
           check_in_lng: number | null
           check_in_source: Database["public"]["Enums"]["check_in_source"] | null
-          check_out_accuracy_m: number | null
-          check_out_at: string | null
-          check_out_distance_m: number | null
-          check_out_entered_by: string | null
-          check_out_entered_by_name: string | null
-          check_out_lat: number | null
-          check_out_lng: number | null
-          check_out_source:
-            | Database["public"]["Enums"]["check_in_source"]
-            | null
           created_at: string
           id: string
           outlet_id: string
-          override_at: string | null
-          override_by: string | null
-          override_by_name: string | null
-          override_reason: string | null
           person_id: string
           status: Database["public"]["Enums"]["attendance_status"]
         }
         Insert: {
+          approval_reason?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          approved_by_name?: string | null
+          approver_accuracy_m?: number | null
+          approver_distance_m?: number | null
+          approver_lat?: number | null
+          approver_lng?: number | null
+          arrival_deadline?: string | null
           business_date: string
           check_in_accuracy_m?: number | null
           check_in_at?: string | null
@@ -292,27 +296,22 @@ export type Database = {
           check_in_source?:
             | Database["public"]["Enums"]["check_in_source"]
             | null
-          check_out_accuracy_m?: number | null
-          check_out_at?: string | null
-          check_out_distance_m?: number | null
-          check_out_entered_by?: string | null
-          check_out_entered_by_name?: string | null
-          check_out_lat?: number | null
-          check_out_lng?: number | null
-          check_out_source?:
-            | Database["public"]["Enums"]["check_in_source"]
-            | null
           created_at?: string
           id?: string
           outlet_id: string
-          override_at?: string | null
-          override_by?: string | null
-          override_by_name?: string | null
-          override_reason?: string | null
           person_id: string
           status: Database["public"]["Enums"]["attendance_status"]
         }
         Update: {
+          approval_reason?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          approved_by_name?: string | null
+          approver_accuracy_m?: number | null
+          approver_distance_m?: number | null
+          approver_lat?: number | null
+          approver_lng?: number | null
+          arrival_deadline?: string | null
           business_date?: string
           check_in_accuracy_m?: number | null
           check_in_at?: string | null
@@ -324,23 +323,9 @@ export type Database = {
           check_in_source?:
             | Database["public"]["Enums"]["check_in_source"]
             | null
-          check_out_accuracy_m?: number | null
-          check_out_at?: string | null
-          check_out_distance_m?: number | null
-          check_out_entered_by?: string | null
-          check_out_entered_by_name?: string | null
-          check_out_lat?: number | null
-          check_out_lng?: number | null
-          check_out_source?:
-            | Database["public"]["Enums"]["check_in_source"]
-            | null
           created_at?: string
           id?: string
           outlet_id?: string
-          override_at?: string | null
-          override_by?: string | null
-          override_by_name?: string | null
-          override_reason?: string | null
           person_id?: string
           status?: Database["public"]["Enums"]["attendance_status"]
         }
@@ -348,13 +333,6 @@ export type Database = {
           {
             foreignKeyName: "attendance_check_in_entered_by_fkey"
             columns: ["check_in_entered_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attendance_check_out_entered_by_fkey"
-            columns: ["check_out_entered_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -368,7 +346,7 @@ export type Database = {
           },
           {
             foreignKeyName: "attendance_override_by_fkey"
-            columns: ["override_by"]
+            columns: ["approved_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1053,6 +1031,7 @@ export type Database = {
         Row: {
           address_line1: string | null
           address_line2: string | null
+          arrival_deadline: string
           business_day_cutover: string
           city: string | null
           code: string
@@ -1073,6 +1052,7 @@ export type Database = {
         Insert: {
           address_line1?: string | null
           address_line2?: string | null
+          arrival_deadline?: string
           business_day_cutover?: string
           city?: string | null
           code: string
@@ -1093,6 +1073,7 @@ export type Database = {
         Update: {
           address_line1?: string | null
           address_line2?: string | null
+          arrival_deadline?: string
           business_day_cutover?: string
           city?: string | null
           code?: string

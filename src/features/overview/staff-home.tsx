@@ -10,8 +10,13 @@ import { useSession } from '@/session/context'
 import { sessionOutlets } from '@/session/session'
 
 /**
- * The Employee home: one large check-in or check-out action, today's status,
- * and the outlet it is judged against (docs/SCREENS.md).
+ * The Employee home: one large check-in action, today's status, and the outlet
+ * it is judged against (docs/SCREENS.md).
+ *
+ * "Today's status" now includes a state it did not have: recorded, and waiting
+ * for a manager. The card owns that wording, because a home screen that read
+ * "your day is recorded" about a day that counts for nothing would be the exact
+ * misunderstanding this change exists to remove.
  */
 export function StaffHome() {
   const session = useSession()
@@ -59,7 +64,7 @@ export function StaffHome() {
         <CheckInCard
           personId={session.userId}
           outlets={own.days.map((day) => day.outlet)}
-          // The day in progress, if there is one; otherwise their first
+          // The day waiting on a manager, if there is one; otherwise their first
           // outlet, which is what today's status is rendered against until the
           // fence picks one.
           outlet={(own.current ?? own.days[0])!.outlet}

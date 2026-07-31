@@ -76,16 +76,14 @@ select lives_ok($q$
           now(), 22.97502, 88.43455, 15, 8, 'phone')
 $q$, 'an employee checks in with coordinates, accuracy, distance and source stored');
 
--- …and checks out on the same row.
-select lives_ok($q$
-  update public.attendance
-     set check_out_at = now(),
-         check_out_lat = 22.97501, check_out_lng = 88.43457,
-         check_out_accuracy_m = 20, check_out_distance_m = 10,
-         check_out_source = 'phone'
-   where person_id = '10000000-0000-4000-a000-000000000006'
-     and business_date = public.app_business_date(now(), time '04:00')
-$q$, 'the employee records their own check-out');
+-- …and it counts for nothing until somebody vouches for it, even though the
+-- coordinates put them at the counter.
+select is(
+  (select status from public.attendance
+    where person_id = '10000000-0000-4000-a000-000000000006'
+      and business_date = public.app_business_date(now(), time '04:00')),
+  'absent'::public.attendance_status,
+  'and the day is stored absent, waiting for a manager, however close they were');
 
 -- Not for a colleague, though.
 select throws_ok($q$
@@ -102,15 +100,17 @@ select throws_ok($q$
           public.app_business_date(now(), time '04:00'), 'present', now(), 'phone')
 $q$, '23505', null, 'one attendance row per person per business day');
 
--- An employee cannot bless their own out-of-fence check-in.
+-- An employee cannot vouch for their own day. This is the whole point of the
+-- change: the second signal has to come from somebody else.
 select throws_ok($q$
   update public.attendance
-     set override_by = '10000000-0000-4000-a000-000000000006',
-         override_reason = 'self-approved',
-         override_at = now()
+     set approved_by = '10000000-0000-4000-a000-000000000006',
+         approval_reason = 'self-approved',
+         approved_at = now()
    where person_id = '10000000-0000-4000-a000-000000000006'
      and business_date = public.app_business_date(now(), time '04:00')
-$q$, 'P0001', null, 'an employee cannot record an override');
+$q$, 'P0001', 'only a franchise admin or super admin may record an approval',
+  'an employee cannot approve their own day');
 
 -- The counter tablet is the secondary check-in path, and says so.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
@@ -130,27 +130,116 @@ select throws_ok($q$
           public.app_business_date(now(), time '04:00'), 'present', now(), 'phone')
 $q$, '42501', null, 'the tablet cannot record a phone-sourced check-in (and not for another outlet''s employee)');
 
--- A manager override is recorded with who and why; the guard demands it be
--- the session's own identity.
+-- ---------------------------------------------------------------------------
+-- The approval: who may record one, over which rows, and under whose name.
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
+
+-- Approving under somebody else's name is refused before anything else about
+-- the write is considered.
+select throws_ok($q$
+  update public.attendance
+     set approved_by = '10000000-0000-4000-a000-000000000001',
+         approval_reason = 'forged attribution',
+         approver_lat = 22.97502, approver_lng = 88.43455, approver_accuracy_m = 15
+   where person_id = '20000000-0000-4000-a000-000000000002'
+     and outlet_id = '00000000-0000-4000-a000-000000000001'
+     and business_date = current_date - 1
+$q$, 'P0001', 'approved_by must be the approving session',
+  'an approval under someone else''s name is refused');
+
+-- A day nobody claimed is not a day anybody can settle. The griller's D-2 row
+-- is a manager-marked absence with no check-in at all.
+select throws_ok($q$
+  update public.attendance
+     set approved_by = '10000000-0000-4000-a000-000000000002',
+         approval_reason = 'settling a day nobody worked (synthetic test)',
+         status = 'present'
+   where person_id = '20000000-0000-4000-a000-000000000002'
+     and outlet_id = '00000000-0000-4000-a000-000000000001'
+     and business_date = current_date - 2
+$q$, 'P0001', 'an approval requires a check-in on the row',
+  'an approval with no check-in on the row is refused');
+
+-- The manager of the OTHER outlet cannot reach this outlet's rows. RLS filters
+-- the row out rather than raising, so the proof is that nothing was touched.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000003'::uuid);
+
+select is(pg_temp.rows_touched($q$
+  update public.attendance
+     set approved_by = '10000000-0000-4000-a000-000000000003',
+         approval_reason = 'reaching across outlets (synthetic test)',
+         status = 'present'
+   where person_id = '20000000-0000-4000-a000-000000000002'
+     and outlet_id = '00000000-0000-4000-a000-000000000001'
+     and business_date = current_date - 1
+$q$), 0::bigint, 'a franchise admin''s approval at another outlet touches no rows');
+
+-- Their own outlet, and a day that has already closed, so a reason is required.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select lives_ok($q$
   update public.attendance
-     set override_by = '10000000-0000-4000-a000-000000000002',
-         override_reason = 'GPS drift, staff present (synthetic test)',
-         override_at = now()
-   where person_id = '10000000-0000-4000-a000-000000000006'
+     set approved_by = '10000000-0000-4000-a000-000000000002',
+         approval_reason = 'GPS drift, staff present (synthetic test)',
+         approver_lat = 22.97502, approver_lng = 88.43455, approver_accuracy_m = 15,
+         status = 'present'
+   where person_id = '20000000-0000-4000-a000-000000000002'
+     and outlet_id = '00000000-0000-4000-a000-000000000001'
      and business_date = current_date - 1
-$q$, 'the franchise admin records an override with attribution');
+$q$, 'the franchise admin settles a waiting day at their own outlet, with attribution');
+
+select is(
+  (select approved_by_name from public.attendance
+    where person_id = '20000000-0000-4000-a000-000000000002'
+      and outlet_id = '00000000-0000-4000-a000-000000000001'
+      and business_date = current_date - 1),
+  'Synthetic Admin Kal',
+  'and the approver''s name is snapshotted, not joined');
+
+-- ---------------------------------------------------------------------------
+-- The stamped arrival deadline, and the batch.
+
+select is(
+  (select arrival_deadline from public.attendance
+    where person_id = '10000000-0000-4000-a000-000000000006'
+      and business_date = public.app_business_date(now(), time '04:00')),
+  time '13:00',
+  'the deadline stamped on a check-in is the outlet''s, not the client''s');
 
 select throws_ok($q$
   update public.attendance
-     set override_by = '10000000-0000-4000-a000-000000000001',
-         override_reason = 'forged attribution',
-         override_at = now()
-   where person_id = '20000000-0000-4000-a000-000000000002'
-     and business_date = current_date - 1
-$q$, 'P0001', null, 'an override under someone else''s name is refused');
+     set arrival_deadline = time '23:00'
+   where person_id = '10000000-0000-4000-a000-000000000006'
+     and business_date = public.app_business_date(now(), time '04:00')
+$q$, 'P0001', 'captured check-in evidence is immutable',
+  'and it is frozen with the rest of the captured evidence');
+
+-- A batch is one statement over several rows, and each row is settled with its
+-- own computed distance rather than one figure copied across them. The two
+-- outlets are 3.3 km apart, so a single reading at Kalyani proves it: the
+-- Kalyani row reads on site and the Kanchrapara row does not.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
+
+select is(pg_temp.rows_touched($q$
+  update public.attendance
+     set approved_by = '10000000-0000-4000-a000-000000000001',
+         approval_reason = 'Settled the morning in one action (synthetic test)',
+         approver_lat = 22.97505, approver_lng = 88.43460, approver_accuracy_m = 14,
+         status = 'present'
+   where business_date = current_date - 1
+     and check_in_at is not null
+     and approved_by is null
+$q$), 1::bigint, 'the owner settles every remaining waiting day in one statement');
+
+select is(
+  (select count(*) from public.attendance
+    where business_date = current_date - 1
+      and check_in_at is not null
+      and approved_by is null), 0::bigint,
+  'and nothing is left waiting on that day');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 -- Identity is frozen; business date cannot drift from its evidence.
 select throws_ok($q$
@@ -235,16 +324,38 @@ select is(
   'present'::public.attendance_status,
   'the geofence does not judge a manual entry — no evidence, no denial');
 
+-- Recording it IS the decision: the enterer's stamp settles the day, so nobody
+-- has to approve their own typing. There is no approver position, because
+-- nobody read one — claiming otherwise would be evidence the row does not hold.
+select is(
+  (select approved_by from public.attendance
+    where person_id = '10000000-0000-4000-a000-00000000000c'
+      and business_date = public.app_business_date(
+        pg_temp.current_business_instant(), time '04:00')),
+  '10000000-0000-4000-a000-000000000002'::uuid,
+  'a manual entry settles the day under the enterer''s own name');
+
+select is(
+  (select approver_distance_m from public.attendance
+    where person_id = '10000000-0000-4000-a000-00000000000c'
+      and business_date = public.app_business_date(
+        pg_temp.current_business_instant(), time '04:00')),
+  null,
+  'and records no approver position, because none was ever read');
+
 -- An enterer stamp on a non-manual event is refused by name.
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
+
 select throws_ok($q$
   update public.attendance
-     set check_out_at = now(), check_out_source = 'counter_tablet',
-         check_out_entered_by = '10000000-0000-4000-a000-000000000002',
-         check_out_entered_by_name = 'Synthetic Admin Kal'
-   where person_id = '10000000-0000-4000-a000-00000000000c'
-     and business_date = public.app_business_date(
-       pg_temp.current_business_instant(), time '04:00')
-$q$, 'P0001', null, 'an enterer stamp on a non-manual event is refused');
+     set check_in_entered_by = '10000000-0000-4000-a000-000000000002',
+         check_in_entered_by_name = 'Synthetic Admin Kal'
+   where person_id = '10000000-0000-4000-a000-000000000006'
+     and business_date = public.app_business_date(now(), time '04:00')
+$q$, 'P0001', 'captured check-in evidence is immutable',
+  'an enterer stamp cannot be added to an event that was not manual');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 -- The Super Admin has the same capability at any outlet.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
@@ -267,17 +378,17 @@ select is(
 
 -- Neither non-admin role can fabricate one, by any path. The person the
 -- manual check-in was recorded for updates their own row — the update policy
--- permits the row, so what refuses the manual check-out is the guard's role
--- gate, not an accident of policy branch shapes.
+-- permits the row, so what refuses the write is the guard's role gate, not an
+-- accident of policy branch shapes.
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000c'::uuid);
 
 select throws_ok($q$
   update public.attendance
-     set check_out_at = now(), check_out_source = 'manual'
+     set approved_by = '10000000-0000-4000-a000-00000000000c', status = 'present'
    where person_id = '10000000-0000-4000-a000-00000000000c'
      and business_date = public.app_business_date(
        pg_temp.current_business_instant(), time '04:00')
-$q$, 'P0001', null, 'an employee cannot hand-craft a manual event, even on their own row');
+$q$, 'P0001', null, 'an employee cannot hand-craft an approval, even on their own row');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
@@ -382,13 +493,17 @@ select is(
   2::bigint,
   'both rows exist, one per outlet, each recording exactly who');
 
+-- Both inside their own outlet's fence, and both still counting for nothing:
+-- standing at the counter is evidence, and each half of the split day needs the
+-- manager of the shop it was worked at to vouch for it separately.
 select is(
   (select count(*) from public.attendance
     where person_id = '10000000-0000-4000-a000-00000000000e'
       and business_date = public.app_business_date(now(), time '04:00')
-      and status = 'present'),
+      and status = 'absent'
+      and approved_by is null),
   2::bigint,
-  'and each was judged present by its own outlet''s fence');
+  'and each waits for the manager of its own outlet, in-fence or not');
 
 select throws_ok($q$
   insert into public.attendance

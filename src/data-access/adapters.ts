@@ -61,6 +61,13 @@ export interface NewOutlet {
   phone?: string | null
   /** `HH:MM`, the per-outlet business-day boundary. */
   businessDayCutover?: string
+  /**
+   * `HH:MM`, the time by which staff are expected to have arrived. Defaults to
+   * 13:00. Editing it applies to arrivals from then on and never
+   * retrospectively, because each attendance row stamps the deadline that
+   * applied to it.
+   */
+  arrivalDeadline?: string
 }
 
 export type OutletPatch = Partial<
@@ -376,7 +383,7 @@ export type AttendanceStatus = Tables<'attendance'>['status']
 export type CheckInSource = Tables<'attendance'>['check_in_source']
 
 /**
- * One captured attendance event — a check-in or a check-out.
+ * One captured attendance event: an arrival.
  *
  * `distanceMetres` is the database's answer, not the client's: it is recomputed
  * from the coordinates on every write, so a row cannot show a distance its own
@@ -400,13 +407,30 @@ export interface AttendanceEvent {
   enteredByName: string | null
 }
 
-/** Who cleared a blocked check-in, when, and why. */
-export interface AttendanceOverride {
+/**
+ * The recorded human decision that makes a day count.
+ *
+ * Every day goes through one of these: a check-in is a claim about where a
+ * phone was, and only an approval says somebody worked. The position is the
+ * approver's own, read in direct response to pressing approve, so the record
+ * shows whether the manager was standing at the outlet when they vouched — the
+ * approving manager is a subject of monitoring here exactly as the employee is.
+ *
+ * `reason` is null on the honest path: inside the fence, on the row's own
+ * business day, an approval is one tap. Anywhere or any day else, the database
+ * refuses it without one.
+ */
+export interface AttendanceApproval {
   by: string
   /** Snapshot on the row, so the employee it concerns can read it too. */
   byName: string | null
   at: string
-  reason: string
+  reason: string | null
+  latitude: number | null
+  longitude: number | null
+  accuracyMetres: number | null
+  /** The database's number, computed from the coordinates above. */
+  distanceMetres: number | null
 }
 
 /**
@@ -430,8 +454,15 @@ export interface AttendanceRecord {
   businessDate: string
   status: AttendanceStatus
   checkIn: AttendanceEvent | null
-  checkOut: AttendanceEvent | null
-  override: AttendanceOverride | null
+  approval: AttendanceApproval | null
+  /**
+   * The outlet's arrival deadline as it stood when this check-in landed,
+   * `HH:MM:SS` in the outlet's reckoning. Stamped by the database and frozen,
+   * so editing an outlet's rule next month cannot relabel a day recorded under
+   * the old one. Null on a day with no check-in, and on every day recorded
+   * before arrival deadlines existed.
+   */
+  arrivalDeadline: string | null
 }
 
 export interface CheckInInput {
@@ -440,37 +471,65 @@ export interface CheckInInput {
   businessDate: string
   /**
    * Null when the device could not supply one — permission refused, no fix.
-   * The record is still written, because the override path needs a row to
-   * point at; the database declines to count it present until a manager does.
+   * The record is still written, because a manager needs a row to approve; the
+   * database counts it as nothing until one does.
    */
   reading: PositionReading | null
 }
 
 /**
- * An admin recording an event on somebody's behalf — the escape hatch that
- * keeps hard geofence blocking humane. Past times only, on the outlet's
- * current business day; the database refuses a future time and stamps the
- * enterer itself.
+ * An admin recording an arrival on somebody's behalf — the escape hatch that
+ * keeps a hard arrival rule humane: the phone died, the person forgot, the
+ * network was down. Past times only, on the outlet's current business day; the
+ * database refuses a future time and stamps the enterer itself.
+ *
+ * Recording it is also settling it. The admin has already attested to the
+ * arrival by typing it in, and asking them to then approve their own entry
+ * would be a second signature on the same sentence.
  */
 export interface ManualEntryInput {
   personId: string
   outletId: string
   businessDate: string
-  event: 'check-in' | 'check-out'
-  /** The moment the event actually happened, as an ISO instant. */
+  /** The moment the arrival actually happened, as an ISO instant. */
   at: string
   /**
    * The recording session's own id. A convenience for the caller, never a
    * trust boundary — the database overwrites it with the writing session
-   * regardless (the same contract as `approveOverride`'s `approverId`).
+   * regardless (the same contract as `approve`'s `approverId`).
    */
   enteredBy: string
 }
 
-export interface CheckOutInput {
-  attendanceId: string
-  /** Null for the same reasons. A check-out is never refused (design D3). */
+/**
+ * What one approval action carries, whether it settles one day or a morning's
+ * worth. One position reading and one reason cover the batch: the manager is
+ * standing in one place making one decision, and the database computes each
+ * row's distance from that reading independently.
+ */
+export interface ApprovalInput {
+  /**
+   * Null unless the rule requires one. Callers should send what the manager
+   * typed and let the database refuse a missing one — the rule is enforced
+   * there, and a client that pre-judged it would drift.
+   */
+  reason: string | null
+  /** Null when the approving device could supply no position, which costs a reason. */
   reading: PositionReading | null
+  /**
+   * The approving session's own id. The database refuses anything else, so this
+   * is a convenience for the caller, never a trust boundary.
+   */
+  approverId: string
+}
+
+/** Days waiting for a manager at one outlet. */
+export interface WaitingCount {
+  outletId: string
+  outletName: string | null
+  waiting: number
+  /** The oldest waiting business date, which is what makes a count urgent. */
+  oldest: string
 }
 
 /** A refusal from the attendance write path. */
@@ -491,34 +550,63 @@ export interface AttendanceAdapter {
    * person may hold a row at each of two outlets on one business date.
    */
   getDay(personId: string, businessDate: string, outletId: string): Promise<AttendanceRecord | null>
-  /** One person's history, most recent business date first. */
-  listHistory(personId: string, limit?: number): Promise<AttendanceRecord[]>
+  /**
+   * One person's OWN history, most recent business date first, spanning every
+   * outlet they work or worked at — each day naming its outlet, because a
+   * person may hold a morning at one and an evening at another.
+   *
+   * This is the read a person makes about themselves. A manager reading
+   * somebody else uses `listPersonRange`, which names its outlet, because a
+   * read shaped by person is the shape that leaks when the outlet is left
+   * implicit (design D7).
+   */
+  listHistory(personId: string, from: string, to: string): Promise<AttendanceRecord[]>
+  /**
+   * One person's days at ONE named outlet over a range of business dates, for a
+   * manager reading a pattern rather than a roll-call.
+   *
+   * The outlet is required and never resolved from the session. A Franchise
+   * Admin therefore cannot even express "this person's days everywhere", and
+   * the policy refuses it as well — RLS is the second line of defence here, not
+   * the only thing making the query correct.
+   */
+  listPersonRange(
+    personId: string,
+    outletId: string,
+    from: string,
+    to: string,
+  ): Promise<AttendanceRecord[]>
   /** One outlet's day, for a manager. */
   listOutletDay(outletId: string, businessDate: string): Promise<AttendanceRecord[]>
   /**
-   * Record a check-in with its evidence. The claim is always `present`; whether
-   * it survives is the database's call, and an out-of-fence row comes back
-   * `absent` and awaiting an override.
+   * How many days are waiting for approval at each outlet the caller can reach,
+   * so the owner learns where days are stranded without opening every outlet in
+   * turn. A day nobody settles is otherwise invisible until somebody queries
+   * their pay.
+   */
+  countWaitingByOutlet(): Promise<WaitingCount[]>
+  /**
+   * Record a check-in with its evidence. The claim is always `present`; the
+   * database stores `absent` whatever the distance says, because the fence is
+   * evidence and only a recorded approval settles a day.
    */
   checkIn(input: CheckInInput): Promise<AttendanceRecord>
-  checkOut(input: CheckOutInput): Promise<AttendanceRecord>
   /**
-   * Record a check-in or check-out on somebody's behalf, at a past time on
-   * the current business day. Admin only, and the row permanently shows who
-   * entered it — the database stamps the enterer and refuses the write from
-   * anyone else.
+   * Record an arrival on somebody's behalf, at a past time on the current
+   * business day. Admin only, and the row permanently shows who entered it —
+   * the database stamps the enterer, settles the day under their name, and
+   * refuses the write from anyone else.
    */
   recordManualEntry(input: ManualEntryInput): Promise<AttendanceRecord>
   /**
-   * Clear a blocked check-in. `approverId` must be the calling session's own
-   * id — the database refuses anything else, so this argument is a convenience
-   * for the caller, never a trust boundary.
+   * Settle one waiting day, or every one of them, in a single statement — so a
+   * partial failure cannot leave half a morning approved with nothing on screen
+   * saying which half (design D8).
+   *
+   * Returns the settled rows. The database decides whether the reason was
+   * needed and refuses the batch if it was and none was given.
    */
-  approveOverride(
-    attendanceId: string,
-    reason: string,
-    approverId: string,
-  ): Promise<AttendanceRecord>
+  approve(attendanceIds: readonly string[], input: ApprovalInput): Promise<AttendanceRecord[]>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1067,7 +1155,13 @@ export interface OutletDaySummary {
   cashDifferencePaise: number | null
   lowStockCount: number
   openAlertCount: number
+  /**
+   * Arrivals recorded today. A recorded arrival is a claim, not a settled day —
+   * `waitingApprovalCount` is how many of them still count for nothing.
+   */
   checkedInCount: number
+  /** Arrivals nobody has approved. A day left here counts for nothing at all. */
+  waitingApprovalCount: number
 }
 
 /** One day inside a period, for the shape of a run rather than its total. */

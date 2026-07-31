@@ -181,6 +181,19 @@ select is((select count(*) from public.assignments
 select is((select count(*) from public.attendance
             where person_id = '10000000-0000-4000-a000-00000000000e'), 1::bigint,
   'fa_kalyani sees only the day the split-shift person worked at Kalyani');
+-- The per-person range read, hand-crafted to name the other outlet. This is the
+-- shape that leaks if the outlet is left implicit (design D7): the surface always
+-- passes its own outlet, and the policy refuses this even when it does not.
+select is((select count(*) from public.attendance
+            where person_id = '10000000-0000-4000-a000-00000000000e'
+              and outlet_id = '00000000-0000-4000-a000-000000000002'
+              and business_date between current_date - 40 and current_date), 0::bigint,
+  'fa_kalyani''s range read for that person at the OTHER outlet returns nothing');
+select is((select count(*) from public.attendance
+            where person_id = '10000000-0000-4000-a000-00000000000e'
+              and outlet_id = '00000000-0000-4000-a000-000000000001'
+              and business_date between current_date - 40 and current_date), 1::bigint,
+  'while the same read at their own outlet returns the day worked there');
 select is((select count(*) from public.daily_cash_records), 1::bigint,
   'fa_kalyani sees the Kalyani closed day');
 select is((select count(*) from public.outlets), 1::bigint,

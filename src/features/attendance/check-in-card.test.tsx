@@ -12,6 +12,7 @@ import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
 
 import { StaffHome } from '../overview/staff-home'
+import { isLate } from './attendance-record'
 
 /**
  * The Employee's day, driven end to end through the mock adapter and a stubbed
@@ -104,7 +105,7 @@ describe('the employee home', () => {
     expect(screen.getByRole('link', { name: 'My attendance' })).toBeInTheDocument()
   })
 
-  it('records a check-in taken at the counter, then offers check-out', async () => {
+  it('records a check-in taken at the counter, and says it is waiting', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()
     atPosition(AT_COUNTER)
@@ -112,9 +113,14 @@ describe('the employee home', () => {
     renderHome(adapters)
     await user.click(await screen.findByTestId('attendance-action'))
 
+    // Inside the fence and still not counted: the fence is evidence, and only a
+    // manager's approval settles a day. The screen must never imply otherwise.
     await waitFor(() =>
-      expect(screen.getByTestId('attendance-action')).toHaveTextContent('Check out'),
+      expect(screen.getByTestId('attendance-waiting')).toHaveTextContent(
+        'waiting for your manager to approve it',
+      ),
     )
+    expect(screen.getByText('Waiting for a manager to approve')).toBeInTheDocument()
     expect(screen.getByText(/12 m from the outlet/)).toBeInTheDocument()
     expect(screen.queryByTestId('attendance-blocked')).not.toBeInTheDocument()
   })
@@ -132,6 +138,9 @@ describe('the employee home', () => {
     // The distance, the limit, how far beyond, and the reading's own accuracy.
     expect(blocked).toHaveTextContent('150 m')
     expect(blocked).toHaveTextContent('±45 m')
+    // And what approving it will cost the manager, so the person asking knows
+    // what they are asking for.
+    expect(blocked).toHaveTextContent('will have to give a reason')
     expect(screen.getByTestId('request-override')).toBeInTheDocument()
   })
 
@@ -150,7 +159,7 @@ describe('the employee home', () => {
     expect(checkIn).not.toHaveBeenCalled()
   })
 
-  it('records the day as awaiting approval when an override is requested', async () => {
+  it('records the day as awaiting approval when it is recorded anyway', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()
     atPosition(DOWN_THE_ROAD)
@@ -192,20 +201,43 @@ describe('the employee home', () => {
     expect(await screen.findByText('Waiting for a manager to approve')).toBeInTheDocument()
   })
 
-  it('offers nothing further once the day is complete', async () => {
+  it('offers nothing further once a manager has approved the day', async () => {
     const adapters = createMockAdapters()
-    // Staff are accounts: the employee's history is keyed by their own id.
-    const history = await adapters.attendance.listHistory(personaFixtures.employee.profile.id)
-    // Yesterday is the completed day in the fixtures.
-    const complete = history.find((record) => record.checkOut !== null)!
-    vi.spyOn(adapters.attendance, 'getDay').mockResolvedValue(complete)
+    // Staff are accounts: the employee's history is keyed by their own id. The
+    // range is wide enough to reach the approved day in the fixtures.
+    const history = await adapters.attendance.listHistory(
+      personaFixtures.employee.profile.id,
+      '2000-01-01',
+      '2100-01-01',
+    )
+    const approved = history.find(
+      (record) => record.approval !== null && record.outletId === OUTLET_KALYANI_ID,
+    )!
+    vi.spyOn(adapters.attendance, 'getDay').mockResolvedValue(approved)
 
     renderHome(adapters)
 
-    expect(await screen.findByTestId('attendance-complete')).toHaveTextContent(
-      'Your day is recorded',
+    expect(await screen.findByTestId('attendance-approved')).toHaveTextContent(
+      'Your manager has approved today',
     )
     expect(screen.queryByTestId('attendance-action')).not.toBeInTheDocument()
+  })
+
+  it('shows a late arrival as late, against the deadline the row was stamped with', async () => {
+    const adapters = createMockAdapters()
+    const history = await adapters.attendance.listHistory(
+      personaFixtures.employee.profile.id,
+      '2000-01-01',
+      '2100-01-01',
+    )
+    // Found by the same rule the surfaces use rather than by a hard-coded
+    // instant: the fixture's 14:20 arrival against Kalyani's 13:00 deadline.
+    const late = history.find((record) => isLate(record, '04:00:00'))!
+    vi.spyOn(adapters.attendance, 'getDay').mockResolvedValue(late)
+
+    renderHome(adapters)
+
+    expect(await screen.findByTestId('late-tag')).toHaveTextContent('late')
   })
 
   it('does not read a position while the screen merely sits open', async () => {

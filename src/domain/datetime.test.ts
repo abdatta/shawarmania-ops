@@ -8,6 +8,7 @@ import {
   formatTime,
   QUIET_HOURS_FROM,
   QUIET_HOURS_UNTIL,
+  instantOnBusinessDay,
   resolveBusinessDate,
   shiftBusinessDate,
 } from './datetime'
@@ -222,5 +223,42 @@ describe('shiftBusinessDate', () => {
 
   it('rejects anything that is not a business date', () => {
     expect(() => shiftBusinessDate('2026-07-25T00:00:00Z', 1)).toThrow(TypeError)
+  })
+})
+
+/**
+ * A business day is not a calendar day, and this is the sum that keeps the two
+ * straight. It answers both "where does an admin's typed-in time land" and "when
+ * does the outlet's arrival deadline fall", because those are the same question.
+ */
+describe('instantOnBusinessDay', () => {
+  it('places a time after the cutover on the business date itself', () => {
+    // 13:00 IST on 25 Jul is 07:30 UTC the same day.
+    expect(instantOnBusinessDay('2026-07-25', '13:00', '04:00')).toBe('2026-07-25T07:30:00.000Z')
+  })
+
+  it('places a time before the cutover on the NEXT calendar day', () => {
+    // 01:30 IST belongs to business day 25 Jul under an 04:00 cutover, and it
+    // happened at 20:00 UTC on the 25th — which is 01:30 IST on the 26th.
+    expect(instantOnBusinessDay('2026-07-25', '01:30', '04:00')).toBe('2026-07-25T20:00:00.000Z')
+  })
+
+  it('accepts the HH:MM:SS spelling Postgres returns', () => {
+    expect(instantOnBusinessDay('2026-07-25', '13:00:00', '04:00:00')).toBe(
+      '2026-07-25T07:30:00.000Z',
+    )
+  })
+
+  it('puts a 01:30 arrival AFTER that business day’s 13:00 deadline', () => {
+    // The case design D5 is built around: somebody arriving at half past one in
+    // the morning is filed under the previous business date, and is therefore
+    // very late for it rather than very early for the next one.
+    const deadline = instantOnBusinessDay('2026-07-25', '13:00', '04:00')
+    const arrival = instantOnBusinessDay('2026-07-25', '01:30', '04:00')
+    expect(arrival > deadline).toBe(true)
+  })
+
+  it('refuses a time it cannot parse rather than guessing', () => {
+    expect(() => instantOnBusinessDay('2026-07-25', '1pm', '04:00')).toThrow(TypeError)
   })
 })

@@ -28,18 +28,25 @@
 insert into public.outlets
   (id, code, name, location_label,
    address_line1, city, district, pincode, phone,
-   latitude, longitude, geofence_radius_m, business_day_cutover,
+   latitude, longitude, geofence_radius_m, business_day_cutover, arrival_deadline,
    location_accuracy_m, location_captured_at)
 values
   ('00000000-0000-4000-a000-000000000001', 'kalyani', 'Shawarmania Kalyani',
    'Kalyani — Central Park', 'Ward 10, B-9 Diagonal Road, Near Central Park Ground',
    'Kalyani', 'Nadia', '741235', '+91 89815 24778',
-   22.9750, 88.4345, 150, time '04:00',
+   22.9750, 88.4345, 150, time '04:00', time '13:00',
    9, now() - interval '3 days'),
+  -- Kanchrapara keeps a deadline that is NOT the 13:00 default, so every
+  -- surface and test that judges lateness has to read the outlet's own rule
+  -- rather than a constant it happens to share with the other shop. 20:00
+  -- rather than something tighter because the split-shift person works an
+  -- EVENING here: one deadline per outlet cannot describe two shifts, and a
+  -- value that made a 19:05 arrival read late would be demonstrating that
+  -- limitation rather than the rule (docs/LIMITATIONS.md).
   ('00000000-0000-4000-a000-000000000002', 'kanchrapara', 'Shawarmania Kanchrapara',
    'Kanchrapara', '281, K G Path (N), Near Joramandir Bus Stand',
    'Kanchrapara', 'North 24 Parganas', '743145', '+91 89815 24778',
-   22.9450, 88.4330, 150, time '04:00',
+   22.9450, 88.4330, 150, time '04:00', time '20:00',
    null, null);
 
 -- ---------------------------------------------------------------------------
@@ -519,65 +526,93 @@ values
 -- outlet positions; the inputs sit beside the verdict on every row. Rows key
 -- on the person's account (person_id) since staff-as-accounts; the
 -- 20000000-… people keep the ids their roster rows had, so history reads
--- the same before and after the merge. The griller's day is deliberately
--- never checked out — 09_outlet_and_staff_setup.sql closes it to prove a
--- check-out survives outlet deactivation; manual entries are exercised live
--- in 06_write_contract_attendance_alerts.sql rather than seeded.
+-- the same before and after the merge.
+--
+-- A check-in counts as nothing until a manager approves it, so these rows are
+-- the four states a day can be in and every surface has to render:
+--
+--   * approved on site, on the day — the honest path, no reason recorded
+--   * approved from elsewhere, with the reason that cost
+--   * recorded and still waiting for a manager
+--   * late: recorded after the outlet's own arrival deadline, and approved
+--
+-- No row is checked out, because a check-out no longer exists. Distances and
+-- the stamped arrival deadline are left to the triggers deliberately: the
+-- database recomputes each distance from the coordinates and takes the
+-- deadline from the outlet, and a seed that supplied them could describe a row
+-- the real system cannot produce. Manual entries stay exercised live in
+-- 06_write_contract_attendance_alerts.sql rather than seeded, because their
+-- whole point is the enterer stamp the trigger applies to a session.
 
 insert into public.attendance
   (outlet_id, person_id, business_date, status,
-   check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_distance_m, check_in_source,
-   check_out_at, check_out_lat, check_out_lng, check_out_accuracy_m, check_out_distance_m, check_out_source,
-   override_by, override_reason, override_at)
+   check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source,
+   approved_by, approval_reason, approved_at,
+   approver_lat, approver_lng, approver_accuracy_m)
 values
-  -- Kalyani staff, phone check-in inside the fence, full day
+  -- Kalyani staff: in the fence at 09:05, approved by their manager standing at
+  -- the counter the same morning. On site and on the day, so no reason.
   ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
    current_date - 1, 'present',
-   ((current_date - 1) + time '09:05') at time zone 'Asia/Kolkata', 22.97505, 88.43460, 18, 12, 'phone',
-   ((current_date - 1) + time '18:10') at time zone 'Asia/Kolkata', 22.97498, 88.43452, 22, 9, 'phone',
-   null, null, null),
-  -- Kalyani griller, tablet check-in (no GPS on the counter tablet)
+   ((current_date - 1) + time '09:05') at time zone 'Asia/Kolkata', 22.97505, 88.43460, 18, 'phone',
+   '10000000-0000-4000-a000-000000000002', null,
+   ((current_date - 1) + time '09:20') at time zone 'Asia/Kolkata',
+   22.97498, 88.43448, 12),
+  -- Kalyani staff, the day before: arrived at 14:20 against a 13:00 deadline.
+  -- Late is a tag, never a status — approved, this day is present AND late.
+  ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
+   current_date - 2, 'present',
+   ((current_date - 2) + time '14:20') at time zone 'Asia/Kolkata', 22.97511, 88.43455, 21, 'phone',
+   '10000000-0000-4000-a000-000000000002', null,
+   ((current_date - 2) + time '14:31') at time zone 'Asia/Kolkata',
+   22.97502, 88.43452, 15),
+  -- Kalyani griller, tablet check-in (no GPS on the counter tablet). Nobody has
+  -- approved it, so it waits: the counter device stands in the outlet, but it
+  -- does not decide who worked.
   ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000002',
    current_date - 1, 'present',
-   ((current_date - 1) + time '09:30') at time zone 'Asia/Kolkata', null, null, null, null, 'counter_tablet',
-   null, null, null, null, null, null,
-   null, null, null),
+   ((current_date - 1) + time '09:30') at time zone 'Asia/Kolkata', null, null, null, 'counter_tablet',
+   null, null, null, null, null, null),
   -- Kalyani griller, absent two days ago (no check-in, nothing to validate)
   ('00000000-0000-4000-a000-000000000001', '20000000-0000-4000-a000-000000000002',
    current_date - 2, 'absent',
-   null, null, null, null, null, null,
-   null, null, null, null, null, null,
-   null, null, null),
-  -- Kanchrapara staff, out-of-fence check-in cleared by manager override
+   null, null, null, null, null,
+   null, null, null, null, null, null),
+  -- Kanchrapara staff: out of fence at 09:10, and the manager who settled it
+  -- was over a kilometre away. Not refused — recorded, with the reason that
+  -- being elsewhere costs, and every surface says the approver was not there.
   ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-000000000007',
    current_date - 1, 'present',
-   ((current_date - 1) + time '09:10') at time zone 'Asia/Kolkata', 22.94680, 88.43510, 35, 220, 'phone',
-   null, null, null, null, null, null,
-   '10000000-0000-4000-a000-000000000003', 'GPS drifted; staff visibly at counter (synthetic)',
-   ((current_date - 1) + time '09:12') at time zone 'Asia/Kolkata'),
-  -- Kanchrapara griller, out of fence and still awaiting a decision: the state
-  -- a manager's day view has to make actionable. Status is 'absent' because
-  -- nobody has blessed it yet — which is what "blocked" means for payroll.
+   ((current_date - 1) + time '09:10') at time zone 'Asia/Kolkata', 22.94680, 88.43510, 35, 'phone',
+   '10000000-0000-4000-a000-000000000003',
+   'GPS drifted; staff visibly at counter, called in from home (synthetic)',
+   ((current_date - 1) + time '09:12') at time zone 'Asia/Kolkata',
+   22.95600, 88.44200, 30),
+  -- Kanchrapara griller, still waiting for a decision: the state a manager's
+  -- day view has to make actionable. Status is 'absent' because nobody has
+  -- vouched for it — which is what "waiting" means for payroll.
   ('00000000-0000-4000-a000-000000000002', '20000000-0000-4000-a000-000000000004',
    current_date - 1, 'absent',
-   ((current_date - 1) + time '09:40') at time zone 'Asia/Kolkata', 22.94120, 88.42880, 28, null, 'phone',
-   null, null, null, null, null, null,
-   null, null, null),
+   ((current_date - 1) + time '09:40') at time zone 'Asia/Kolkata', 22.94120, 88.42880, 28, 'phone',
+   null, null, null, null, null, null),
   -- The split day: ONE person, ONE business date, TWO outlets. Morning at
   -- Kalyani, evening at Kanchrapara, each check-in inside its own fence and
   -- neither aware of the other. This pair is exactly what the old
   -- `(person_id, business_date)` uniqueness made impossible, and what
-  -- `(person_id, outlet_id, business_date)` exists to allow.
+  -- `(person_id, outlet_id, business_date)` exists to allow. Kanchrapara's
+  -- 20:00 deadline is why a 15:10 evening arrival there is not late.
   ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000e',
    current_date - 1, 'present',
-   ((current_date - 1) + time '08:55') at time zone 'Asia/Kolkata', 22.97495, 88.43443, 15, 8, 'phone',
-   ((current_date - 1) + time '13:05') at time zone 'Asia/Kolkata', 22.97502, 88.43455, 17, 11, 'phone',
-   null, null, null),
+   ((current_date - 1) + time '08:55') at time zone 'Asia/Kolkata', 22.97495, 88.43443, 15, 'phone',
+   '10000000-0000-4000-a000-000000000002', null,
+   ((current_date - 1) + time '09:15') at time zone 'Asia/Kolkata',
+   22.97500, 88.43450, 11),
   ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-00000000000e',
    current_date - 1, 'present',
-   ((current_date - 1) + time '15:10') at time zone 'Asia/Kolkata', 22.94508, 88.43312, 19, 14, 'phone',
-   ((current_date - 1) + time '21:20') at time zone 'Asia/Kolkata', 22.94494, 88.43289, 24, 17, 'phone',
-   null, null, null);
+   ((current_date - 1) + time '15:10') at time zone 'Asia/Kolkata', 22.94508, 88.43312, 19, 'phone',
+   '10000000-0000-4000-a000-000000000003', null,
+   ((current_date - 1) + time '15:22') at time zone 'Asia/Kolkata',
+   22.94503, 88.43305, 16);
 
 -- ---------------------------------------------------------------------------
 -- Close D-2 at both outlets. Seeds run as the database owner, not through

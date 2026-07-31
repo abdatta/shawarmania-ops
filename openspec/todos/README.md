@@ -25,6 +25,8 @@ Keep entries behavior-focused:
 | [Super Admin Email Recovery](./super-admin-email-recovery.md) | Feature | Deferred by decision | Auth | Core live operations are complete, repeated owner lockouts make admin-issued reset painful, or future MFA needs security mail |
 | [Workbox Build-Chain Advisories](./workbox-build-advisories.md) | Investigation | Accepted | Build tooling | A fixed `workbox-build` ships, or an advisory becomes runtime-reachable |
 | [Unreachable Backend Blames The Password](./unreachable-backend-blames-the-password.md) | **Defect** | Open | Auth | Anyone signs in on a bad connection — so, any shift |
+| [Rostering And Weekly Offs](./rostering-and-weekly-offs.md) | Feature | Anticipated | Attendance | Somebody asks why the figures show absences on days off, manual leave-marking stops being kept up, or an outlet genuinely runs two shifts |
+| [Pending Approval Notification](./pending-approval-notification.md) | Feature | Anticipated | Attendance | The first waiting day that survives its own business date and is noticed by somebody other than the manager |
 | [Attendance Gate: Two Clauses Never Walked](./attendance-gate-unwalked-clauses.md) | Verification gap | Accepted at archive | Attendance | The first real staff member checks in at a live outlet |
 | [Outlet Deletion: The Populated Refusal Never Walked](./outlet-deletion-refusal-unwalked-in-production.md) | Verification gap | Accepted at archive | Outlets | The first real staff member is added to a live outlet |
 
@@ -33,7 +35,8 @@ The three billing items are grouped deliberately: v1 ships bills as **record-onl
 Two entries carry a status worth reading before the trigger column:
 
 - **Cross-Outlet Customer Identity is parked on principle, not priority.** It requires reading across the isolation boundary the security model exists to enforce. It stays parked until someone has decided *what* is being unified — the identity, or only the aggregates.
-- **Data Retention Policy has a nearer trigger than the roadmap states.** Employee location history begins accumulating the day attendance goes live, which is the sharpest exposure in the system and arrives well before meaningful customer volume.
+- **Data Retention Policy has a nearer trigger than the roadmap states.** Employee location history begins accumulating the day attendance goes live, which is the sharpest exposure in the system and arrives well before meaningful customer volume. It now accrues about the approving manager too, not only about staff (#26).
+- **The two attendance items above are both costs #26 took deliberately**, not oversights: a day off reads as absent because nothing knows a roster, and a forgotten approval surfaces only as a count on a screen because there is no notification channel in the app to put it through. Each is recorded with what already exists for it, so promoting one is narrowing a function rather than starting a design.
 
 ## Graduated / Absorbed
 

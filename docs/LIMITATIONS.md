@@ -86,7 +86,35 @@ Attendance location can be faked with browser devtools or a mock-location app. T
 
 The counter-tablet check-in path is substantially stronger — the device is physically in the shop — and is available as an alternative wherever assurance matters more than convenience.
 
-GPS accuracy indoors also drifts 20–100m routinely, which is why the geofence has a manager override and a tablet fallback rather than being a hard wall.
+GPS accuracy indoors also drifts 20–100m routinely, which is why the geofence refuses nothing at all: it is evidence a manager reads, and the manager's approval is what counts a day. That approval carries the manager's own position for the same reason it carries the employee's, and it is subject to the same limitation — an approval recorded as on-site raises the bar that the manager was there, and does not prove it.
+
+### One arrival deadline cannot describe two shifts
+
+An outlet carries **one** arrival deadline, and lateness is judged against it for
+everybody. A shop running a morning and an evening shift has two arrival times
+and one rule to describe them, so whichever shift starts later reads as late — or
+the deadline is set late enough for the evening and stops measuring the morning
+at all, which is the same problem facing the other way.
+
+This is visible in the local seed: Kanchrapara's deadline is 20:00 rather than
+something tighter, purely so the split-shift person's 19:05 evening arrival does
+not read as late. That is a workaround, not a design.
+
+The fix is the same one as below — a roster knows which shift somebody was
+expected on, and the deadline follows from that rather than from the outlet. Both
+are recorded together in `openspec/todos/rostering-and-weekly-offs.md`.
+
+### A genuine day off reads as absent
+
+Nothing in this app knows a roster. A person holding a live assignment at an outlet reads as **absent** on every surface once that outlet's arrival deadline passes with nothing recorded for them — and a weekly off is exactly that shape. The counts on the person view include it.
+
+The answer today is for the manager to **mark the day as leave**, which a stored row always wins over the derived reading. That is a real cost: somebody has to remember, once a week, per person.
+
+Fixing it properly is rostering — expected working days per person, which the absent reading would then be bounded by, the same way it is already bounded by the assignment window so that days before somebody joined are not painted at all. That is its own change and is deliberately not this one; adding a half-guess (assume Sundays off, assume six-day weeks) would be wrong for some outlet within a month and harder to remove than to add. Recorded in `openspec/todos/`.
+
+### Recorded check-out history is gone
+
+Check-out was removed in #26 (owner decision, 2026-07-31) with the cost stated: the check-out times and locations already recorded in production were dropped by the migration. A full production dump was taken and verified beforehand and lives outside the repo under the snapshot procedure, so the data exists — but no screen can show it again, and there is no down migration. Nobody had used the feature, and unused monitoring data is the kind [Security And Privacy](SECURITY_AND_PRIVACY.md) says not to keep; that is the trade, not an accident.
 
 ### An unsynced bill exists in exactly one place
 
@@ -145,7 +173,7 @@ The consequence is narrow but real: staffing an outlet once makes that outlet pe
 
 ### No audit log
 
-Who changed a price, voided a bill, or overrode a geofence is recorded on the affected row (`voided_by`, `override_by`, `recorded_by`), but there is no separate immutable audit trail. Sufficient for a small trusted team; insufficient if a franchise dispute ever turns adversarial.
+Who changed a price, voided a bill, or approved an attendance day is recorded on the affected row (`voided_by`, `approved_by`, `recorded_by`), but there is no separate immutable audit trail. Sufficient for a small trusted team; insufficient if a franchise dispute ever turns adversarial.
 
 ### Single Supabase project, single region
 

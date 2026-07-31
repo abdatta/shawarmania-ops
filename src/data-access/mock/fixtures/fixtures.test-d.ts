@@ -89,7 +89,10 @@ export const attendanceEvidenceShape: Pick<
   | 'check_in_distance_m'
   | 'check_in_accuracy_m'
   | 'check_in_source'
-  | 'override_by_name'
+  | 'approved_by_name'
+  | 'approval_reason'
+  | 'approver_distance_m'
+  | 'arrival_deadline'
   | 'person_id'
   | 'check_in_entered_by'
   | 'check_in_entered_by_name'
@@ -97,10 +100,20 @@ export const attendanceEvidenceShape: Pick<
   check_in_distance_m: 11.6,
   check_in_accuracy_m: 14,
   check_in_source: 'phone',
-  override_by_name: 'Demo Manager',
+  approved_by_name: 'Demo Manager',
+  // Null on the honest path: an approval taken inside the fence on the row's
+  // own business day is not asked for one.
+  approval_reason: null,
+  approver_distance_m: 6.2,
+  arrival_deadline: '13:00:00',
   person_id: 'd1000000-0000-4000-a000-000000000004',
   check_in_entered_by: null,
   check_in_entered_by_name: null,
+}
+
+// @ts-expect-error — check-out was removed from the product, not renamed.
+export const checkOutIsGone: Pick<Tables<'attendance'>, 'check_out_at'> = {
+  check_out_at: null,
 }
 
 export const inventedCheckInSource: Pick<Tables<'attendance'>, 'check_in_source'> = {

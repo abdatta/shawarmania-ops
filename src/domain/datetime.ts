@@ -232,6 +232,42 @@ export function describeCutover(cutover: string): CutoverAdvice {
   }
 }
 
+/**
+ * A wall-clock time on a business day, as an instant.
+ *
+ * The subtlety is that a business day is not a calendar day. Times before the
+ * outlet's cutover belong to the NEXT calendar date — 01:30 on business day X
+ * under an 04:00 cutover happened on calendar day X+1 — and the database
+ * validates exactly this arithmetic, so the app has to perform exactly this
+ * arithmetic.
+ *
+ * Used for two things that are the same sum: where an admin's typed-in time
+ * lands, and when an outlet's arrival deadline falls. A deadline of 13:00
+ * against an 04:00 cutover falls on the business date's own calendar day, which
+ * is why a 01:30 arrival — filed under the previous business date — reads as
+ * late rather than as very early.
+ *
+ * @param time `HH:MM` or `HH:MM:SS` in the outlet's reckoning (OUTLET_TIME_ZONE)
+ */
+export function instantOnBusinessDay(businessDate: string, time: string, cutover: string): string {
+  const seconds = timeToSeconds(time)
+  const calendarDate =
+    seconds < timeToSeconds(cutover) ? shiftBusinessDate(businessDate, 1) : businessDate
+  const pad = (value: number) => String(value).padStart(2, '0')
+  const clock = `${pad(Math.floor(seconds / 3600))}:${pad(Math.floor(seconds / 60) % 60)}:${pad(seconds % 60)}`
+  // Asia/Kolkata keeps no daylight saving, so its offset is a constant rather
+  // than something that has to be resolved per date.
+  return new Date(`${calendarDate}T${clock}+05:30`).toISOString()
+}
+
+function timeToSeconds(value: string): number {
+  const match = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value)
+  if (!match) {
+    throw new TypeError(`Expected a HH:MM or HH:MM:SS time, got "${value}"`)
+  }
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] ?? 0)
+}
+
 /** `2026-07-25` shifted by whole days, staying a calendar label throughout. */
 export function shiftBusinessDate(businessDate: string, days: number): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) {

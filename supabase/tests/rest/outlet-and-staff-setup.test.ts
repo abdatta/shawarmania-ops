@@ -110,6 +110,7 @@ let ownerToken: string
 let outletId: string
 let manager: Client
 let managerToken: string
+let managerProfileId: string
 let employee: Client
 let employeeProfileId: string
 let businessDate: string
@@ -141,6 +142,7 @@ beforeAll(async () => {
   const managerAccount = await onboard(ownerToken, 'franchise_admin', outletId, 'Probe Manager')
   manager = managerAccount.client
   managerToken = (await manager.auth.getSession()).data.session!.access_token
+  managerProfileId = managerAccount.profileId
 
   // 3. An Employee, provisioned by their own manager — one act, staff facts
   //    included. There is no roster row and no link: the account is the
@@ -310,28 +312,38 @@ describe('the check-in the whole chain existed for', () => {
       },
     })
 
-    // The outlet was never surveyed, so there is nothing to judge against and
-    // nobody is denied for the owner's omission.
-    expect(record.status).toBe('present')
+    // The outlet was never surveyed, so there is nothing to judge against — and
+    // it makes no difference either way: an arrival counts for nothing until a
+    // manager approves it, wherever it was taken.
+    expect(record.status).toBe('absent')
+    expect(record.approval).toBeNull()
     expect(record.checkIn?.distanceMetres).toBeNull()
+    // And the new outlet took the 13:00 default, which nobody had to type.
+    expect(record.arrivalDeadline).toBe('13:00:00')
   })
 
-  it('lets somebody finish a shift that outlived the shop being open', async () => {
+  it('lets a manager settle a day that outlived the shop being open', async () => {
     await createSupabaseOutletsAdapter(owner).updateOutlet(outletId, { isActive: false })
 
-    const attendance = createSupabaseAttendanceAdapter(employee)
+    const attendance = createSupabaseAttendanceAdapter(manager)
     const day = await attendance.getDay(employeeProfileId, businessDate, outletId)
-    const closed = await attendance.checkOut({
-      attendanceId: day!.id,
+    // A day worked before the outlet closed must still be settleable afterwards,
+    // or closing a shop would silently cost somebody a day's pay. The outlet was
+    // never surveyed here, so the approver's position can vouch for nobody and
+    // the rule wants a reason.
+    const [settled] = await attendance.approve([day!.id], {
+      reason: 'Worked the shift before we closed the shop (setup suite)',
       reading: {
         latitude: 22.975,
         longitude: 88.4345,
         accuracyMetres: 15,
         at: new Date().toISOString(),
       },
+      approverId: managerProfileId,
     })
 
-    expect(closed.checkOut).not.toBeNull()
+    expect(settled?.approval).not.toBeNull()
+    expect(settled?.status).toBe('present')
 
     await createSupabaseOutletsAdapter(owner).updateOutlet(outletId, { isActive: true })
   })
@@ -352,10 +364,13 @@ describe('the check-in the whole chain existed for', () => {
       outletId,
     )
     expect(day?.checkIn).not.toBeNull()
-    expect(day?.checkOut).not.toBeNull()
+    expect(day?.approval).not.toBeNull()
 
-    const ownHistory =
-      await createSupabaseAttendanceAdapter(employee).listHistory(employeeProfileId)
+    const ownHistory = await createSupabaseAttendanceAdapter(employee).listHistory(
+      employeeProfileId,
+      '2000-01-01',
+      '2100-01-01',
+    )
     expect(ownHistory.length).toBeGreaterThan(0)
 
     // Ending their last assignment takes them out of this manager's reach

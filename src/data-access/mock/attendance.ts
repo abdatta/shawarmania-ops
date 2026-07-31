@@ -3,9 +3,11 @@ import type { PositionReading } from '@/lib/geolocation'
 
 import type {
   AttendanceAdapter,
+  AttendanceApproval,
   AttendanceEvent,
   AttendanceRecord,
   AttendanceStatus,
+  WaitingCount,
 } from '../adapters'
 import { AttendanceActionError, assignedOutlets } from '../adapters'
 import { accountFixtures, assignmentFixtures } from './fixtures/accounts'
@@ -22,10 +24,11 @@ import { personaFixtures } from './fixtures/personas'
  * demo tree.
  *
  * It also *adjudicates* rather than replays. Distances are computed with the
- * same domain function the database's trigger mirrors, and an out-of-fence
- * check-in with no override comes back `absent` here exactly as it would there.
- * A mock that simply echoed its fixtures could demonstrate a system that could
- * not exist.
+ * same domain function the database's trigger mirrors; a check-in with no
+ * approval comes back `absent` here exactly as it would there; and an approval
+ * taken away from the outlet is refused without a reason, here as there. A mock
+ * that simply echoed its fixtures could demonstrate a system that could not
+ * exist.
  *
  * People are accounts: rows key on profile ids, and the person lookup reads
  * the accounts fixture — the one list of people the whole demo shares.
@@ -43,35 +46,31 @@ function personFor(personId: string) {
   return person
 }
 
+/** Metres from an outlet, or null when either end has no position to compare. */
+function metresFromOutlet(
+  outlet: { latitude: number | null; longitude: number | null },
+  latitude: number | null,
+  longitude: number | null,
+): number | null {
+  if (outlet.latitude === null || outlet.longitude === null) return null
+  if (latitude === null || longitude === null) return null
+  return distanceMetres(
+    { latitude: outlet.latitude, longitude: outlet.longitude },
+    { latitude, longitude },
+  )
+}
+
 /** A live reading turned into a stored event, distance and all — as the trigger does. */
 function eventFromReading(
   outlet: (typeof outletFixtures)[number],
   reading: PositionReading | null,
 ): AttendanceEvent {
-  if (!reading) {
-    return {
-      at: new Date().toISOString(),
-      latitude: null,
-      longitude: null,
-      accuracyMetres: null,
-      distanceMetres: null,
-      source: 'phone',
-      enteredBy: null,
-      enteredByName: null,
-    }
-  }
   return {
-    at: reading.at,
-    latitude: reading.latitude,
-    longitude: reading.longitude,
-    accuracyMetres: reading.accuracyMetres,
-    distanceMetres:
-      outlet.latitude === null || outlet.longitude === null
-        ? null
-        : distanceMetres(
-            { latitude: outlet.latitude, longitude: outlet.longitude },
-            { latitude: reading.latitude, longitude: reading.longitude },
-          ),
+    at: reading?.at ?? new Date().toISOString(),
+    latitude: reading?.latitude ?? null,
+    longitude: reading?.longitude ?? null,
+    accuracyMetres: reading?.accuracyMetres ?? null,
+    distanceMetres: reading ? metresFromOutlet(outlet, reading.latitude, reading.longitude) : null,
     source: 'phone',
     enteredBy: null,
     enteredByName: null,
@@ -81,28 +80,23 @@ function eventFromReading(
 /**
  * The database's rule, restated where the demo can feel it. Kept in step with
  * `attendance_evaluate_geofence()` — a demo that adjudicated differently from
- * production would be demonstrating a system nobody is building. A manual
- * event is never judged: it carries no evidence, and the enterer stamp is the
- * accountability in its place.
+ * production would be demonstrating a system nobody is building.
+ *
+ * The fence no longer decides anything about status: an unapproved check-in is
+ * `absent` whatever its distance, because only a recorded approval settles a
+ * day. A manual entry is exempt, because recording it is itself the approval.
  */
 function adjudicate(
   claimed: AttendanceStatus,
   checkIn: AttendanceEvent | null,
-  outlet: { latitude: number | null; longitude: number | null; radiusMetres: number },
-  overridden: boolean,
+  approved: boolean,
 ): AttendanceStatus {
-  const surveyed = outlet.latitude !== null && outlet.longitude !== null
-  if (claimed !== 'present' || overridden || checkIn === null || !surveyed) return claimed
-
-  // No coordinates from a phone: unjudgeable for exactly the reason the fence
-  // exists, so it waits for a manager.
-  if (checkIn.latitude === null || checkIn.longitude === null) {
-    return checkIn.source === 'phone' ? 'absent' : claimed
-  }
-  return checkIn.distanceMetres !== null && checkIn.distanceMetres > outlet.radiusMetres
-    ? 'absent'
-    : claimed
+  if (claimed !== 'present' || approved || checkIn === null) return claimed
+  return checkIn.source === 'manual' ? claimed : 'absent'
 }
+
+/** The demo manager, as the fallback author of a seeded manual arrival. */
+const DEMO_MANAGER_ID = personaFixtures.franchise_admin.profile.id
 
 export function createMockAttendanceAdapter(): AttendanceAdapter {
   const today = resolveBusinessDate(new Date(), outletFor(OUTLET_KALYANI_ID).business_day_cutover)
@@ -129,25 +123,57 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         enteredByName: seed.manual.byName,
       }
     }
-    const outlet = outletFor(outletId)
     return {
       at: instantAt(businessDate, seed.time),
       latitude: seed.latitude ?? null,
       longitude: seed.longitude ?? null,
       accuracyMetres: seed.accuracyMetres ?? null,
-      distanceMetres:
-        outlet.latitude === null ||
-        outlet.longitude === null ||
-        seed.latitude === undefined ||
-        seed.longitude === undefined
-          ? null
-          : distanceMetres(
-              { latitude: outlet.latitude, longitude: outlet.longitude },
-              { latitude: seed.latitude, longitude: seed.longitude },
-            ),
+      distanceMetres: metresFromOutlet(
+        outletFor(outletId),
+        seed.latitude ?? null,
+        seed.longitude ?? null,
+      ),
       source: 'phone',
       enteredBy: null,
       enteredByName: null,
+    }
+  }
+
+  const approvalFrom = (
+    businessDate: string,
+    outletId: string,
+    seed: AttendanceSeed['approval'],
+    checkIn: AttendanceEvent | null,
+  ): AttendanceApproval | null => {
+    // A manual arrival is settled by the act of recording it, exactly as the
+    // guard settles one: the admin attested to it by typing it in. A seed does
+    // not have to say so, and one that did could forget to.
+    if (!seed && checkIn?.source === 'manual') {
+      return {
+        by: checkIn.enteredBy ?? DEMO_MANAGER_ID,
+        byName: checkIn.enteredByName,
+        at: checkIn.at,
+        reason: null,
+        latitude: null,
+        longitude: null,
+        accuracyMetres: null,
+        distanceMetres: null,
+      }
+    }
+    if (!seed) return null
+    return {
+      by: personaFixtures.franchise_admin.profile.id,
+      byName: seed.byName,
+      at: instantAt(businessDate, seed.time),
+      reason: seed.reason ?? null,
+      latitude: seed.latitude ?? null,
+      longitude: seed.longitude ?? null,
+      accuracyMetres: seed.accuracyMetres ?? null,
+      distanceMetres: metresFromOutlet(
+        outletFor(outletId),
+        seed.latitude ?? null,
+        seed.longitude ?? null,
+      ),
     }
   }
 
@@ -172,6 +198,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
     const outletId = seed.outletId ?? soleOutletFor(seed.personId)
     const businessDate = shiftBusinessDate(today, -seed.daysAgo)
     const checkIn = eventFrom(businessDate, outletId, seed.checkIn)
+    const approval = approvalFrom(businessDate, outletId, seed.approval, checkIn)
     const outlet = outletFor(outletId)
 
     return {
@@ -181,26 +208,12 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       personId: person.id,
       personName: person.full_name,
       businessDate,
-      status: adjudicate(
-        seed.status,
-        checkIn,
-        {
-          latitude: outlet.latitude,
-          longitude: outlet.longitude,
-          radiusMetres: outlet.geofence_radius_m,
-        },
-        Boolean(seed.override),
-      ),
+      status: adjudicate(seed.status, checkIn, approval !== null),
+      // Stamped from the outlet exactly as the guard stamps it, and only where a
+      // check-in landed — a day with no arrival has no deadline to have applied.
+      arrivalDeadline: checkIn ? outlet.arrival_deadline : null,
       checkIn,
-      checkOut: eventFrom(businessDate, outletId, seed.checkOut),
-      override: seed.override
-        ? {
-            by: personaFixtures.franchise_admin.profile.id,
-            byName: seed.override.byName,
-            at: instantAt(businessDate, seed.override.time),
-            reason: seed.override.reason,
-          }
-        : null,
+      approval,
     }
   }
 
@@ -216,6 +229,9 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
 
   const clone = (record: AttendanceRecord) => structuredClone(record)
 
+  const inRange = (record: AttendanceRecord, from: string, to: string) =>
+    record.businessDate >= from && record.businessDate <= to
+
   return {
     async getDay(personId, businessDate, outletId) {
       const record = records.find(
@@ -227,11 +243,22 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       return record ? clone(record) : null
     },
 
-    async listHistory(personId, limit = 30) {
+    async listHistory(personId, from, to) {
       return records
-        .filter((record) => record.personId === personId)
+        .filter((record) => record.personId === personId && inRange(record, from, to))
         .sort((a, b) => b.businessDate.localeCompare(a.businessDate))
-        .slice(0, limit)
+        .map(clone)
+    },
+
+    async listPersonRange(personId, outletId, from, to) {
+      return records
+        .filter(
+          (record) =>
+            record.personId === personId &&
+            record.outletId === outletId &&
+            inRange(record, from, to),
+        )
+        .sort((a, b) => b.businessDate.localeCompare(a.businessDate))
         .map(clone)
     },
 
@@ -242,9 +269,34 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         .map(clone)
     },
 
+    async countWaitingByOutlet() {
+      const byOutlet = new Map<string, WaitingCount>()
+      for (const record of records) {
+        if (!record.checkIn || record.approval || record.status !== 'absent') continue
+        const seen = byOutlet.get(record.outletId)
+        if (seen) {
+          seen.waiting += 1
+          if (record.businessDate < seen.oldest) seen.oldest = record.businessDate
+        } else {
+          byOutlet.set(record.outletId, {
+            outletId: record.outletId,
+            outletName: record.outletName,
+            waiting: 1,
+            oldest: record.businessDate,
+          })
+        }
+      }
+      return [...byOutlet.values()].sort((a, b) =>
+        (a.outletName ?? '').localeCompare(b.outletName ?? ''),
+      )
+    },
+
     async checkIn({ personId, outletId, businessDate, reading }) {
       const existing = records.find(
-        (candidate) => candidate.personId === personId && candidate.businessDate === businessDate,
+        (candidate) =>
+          candidate.personId === personId &&
+          candidate.outletId === outletId &&
+          candidate.businessDate === businessDate,
       )
       if (existing?.checkIn) {
         throw new AttendanceActionError(
@@ -260,23 +312,14 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       const record: AttendanceRecord = {
         id: `d3000000-0000-4000-a000-${String(nextId++).padStart(12, '0')}`,
         outletId,
-        outletName: outletFor(outletId).name,
+        outletName: outlet.name,
         personId,
         personName: person.full_name,
         businessDate,
-        status: adjudicate(
-          'present',
-          event,
-          {
-            latitude: outlet.latitude,
-            longitude: outlet.longitude,
-            radiusMetres: outlet.geofence_radius_m,
-          },
-          false,
-        ),
+        status: adjudicate('present', event, false),
+        arrivalDeadline: outlet.arrival_deadline,
         checkIn: event,
-        checkOut: null,
-        override: null,
+        approval: null,
       }
 
       if (existing) {
@@ -287,106 +330,131 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       return clone(record)
     },
 
-    async checkOut({ attendanceId, reading }) {
-      const record = find(attendanceId)
-      if (!record.checkIn) {
-        throw new AttendanceActionError('not_started', 'There is no check-in to close.')
-      }
-      if (record.checkOut) {
-        throw new AttendanceActionError(
-          'already_checked_out',
-          'A check-out is already recorded for today.',
-        )
-      }
-
-      record.checkOut = eventFromReading(outletFor(record.outletId), reading)
-      return clone(record)
-    },
-
     /**
-     * Mirrors the guard where the demo can feel it: past times only, the
-     * enterer stamped from the recording session, no coordinates ever. Role
-     * authority is the surface's business here, as it is for overrides — the
-     * real boundary lives in the database this mock stands in for.
+     * Mirrors the guard where the demo can feel it: past times only, the enterer
+     * stamped from the recording session, no coordinates ever, and the recording
+     * settles the day under the enterer's name rather than queueing a second
+     * decision. Role authority is the surface's business here — the real
+     * boundary lives in the database this mock stands in for.
      */
-    async recordManualEntry({ personId, outletId, businessDate, event, at, enteredBy }) {
+    async recordManualEntry({ personId, outletId, businessDate, at, enteredBy }) {
       if (new Date(at).getTime() > Date.now()) {
         throw new AttendanceActionError('future_entry', 'A manual entry cannot be in the future.')
       }
 
       const entererAccount = accountFixtures.find((candidate) => candidate.id === enteredBy)
-      const stamp = {
-        source: 'manual' as const,
+      const entererName = entererAccount?.full_name ?? null
+      const outlet = outletFor(outletId)
+
+      const existing = records.find(
+        (candidate) =>
+          candidate.personId === personId &&
+          candidate.outletId === outletId &&
+          candidate.businessDate === businessDate,
+      )
+      if (existing?.checkIn) {
+        throw new AttendanceActionError(
+          'already_checked_in',
+          'A check-in is already recorded for this day.',
+        )
+      }
+
+      const person = personFor(personId)
+      const record: AttendanceRecord = existing ?? {
+        id: `d3000000-0000-4000-a000-${String(nextId++).padStart(12, '0')}`,
+        outletId,
+        outletName: outlet.name,
+        personId,
+        personName: person.full_name,
+        businessDate,
+        status: 'present',
+        arrivalDeadline: null,
+        checkIn: null,
+        approval: null,
+      }
+      record.status = 'present'
+      record.arrivalDeadline = outlet.arrival_deadline
+      record.checkIn = {
+        at,
         latitude: null,
         longitude: null,
         accuracyMetres: null,
         distanceMetres: null,
+        source: 'manual',
         enteredBy,
-        enteredByName: entererAccount?.full_name ?? null,
+        enteredByName: entererName,
       }
-
-      const existing = records.find(
-        (candidate) => candidate.personId === personId && candidate.businessDate === businessDate,
-      )
-
-      if (event === 'check-in') {
-        if (existing?.checkIn) {
-          throw new AttendanceActionError(
-            'already_checked_in',
-            'A check-in is already recorded for this day.',
-          )
-        }
-        const person = personFor(personId)
-        const record: AttendanceRecord = existing ?? {
-          id: `d3000000-0000-4000-a000-${String(nextId++).padStart(12, '0')}`,
-          outletId,
-          outletName: outletFor(outletId).name,
-          personId,
-          personName: person.full_name,
-          businessDate,
-          status: 'present',
-          checkIn: null,
-          checkOut: null,
-          override: null,
-        }
-        record.status = 'present'
-        record.checkIn = { at, ...stamp }
-        if (!existing) records.push(record)
-        return clone(record)
+      // The recording is the decision, so no position is read and none is
+      // claimed: the enterer stamp is the accountability in evidence's place.
+      record.approval = {
+        by: enteredBy,
+        byName: entererName,
+        at: new Date().toISOString(),
+        reason: null,
+        latitude: null,
+        longitude: null,
+        accuracyMetres: null,
+        distanceMetres: null,
       }
-
-      if (!existing?.checkIn) {
-        throw new AttendanceActionError('not_started', 'There is no check-in to close.')
-      }
-      if (existing.checkOut) {
-        throw new AttendanceActionError(
-          'already_checked_out',
-          'A check-out is already recorded for this day.',
-        )
-      }
-      existing.checkOut = { at, ...stamp }
-      return clone(existing)
+      if (!existing) records.push(record)
+      return clone(record)
     },
 
-    async approveOverride(attendanceId, reason, approverId) {
-      const trimmed = reason.trim()
-      if (!trimmed) {
-        throw new AttendanceActionError('reason_required', 'An override needs a reason.')
-      }
-
-      const record = find(attendanceId)
+    async approve(attendanceIds, { reason, reading, approverId }) {
+      const trimmed = reason?.trim() ?? ''
       const approver = Object.values(personaFixtures).find(
         (persona) => persona.profile.id === approverId,
       )
+      const targets = attendanceIds.map(find)
 
-      record.override = {
-        by: approverId,
-        byName: approver?.profile.full_name ?? null,
-        at: new Date().toISOString(),
-        reason: trimmed,
+      for (const record of targets) {
+        if (!record.checkIn) {
+          throw new AttendanceActionError(
+            'nothing_to_approve',
+            'There is no check-in on this day to approve.',
+          )
+        }
+        if (record.approval) {
+          throw new AttendanceActionError(
+            'already_approved',
+            'This day has already been approved. Reload to see who settled it.',
+          )
+        }
+        const outlet = outletFor(record.outletId)
+        const distance = reading
+          ? metresFromOutlet(outlet, reading.latitude, reading.longitude)
+          : null
+        const onSite = distance !== null && distance <= outlet.geofence_radius_m
+        const sameDay =
+          record.businessDate === resolveBusinessDate(new Date(), outlet.business_day_cutover)
+        if (!(onSite && sameDay) && trimmed === '') {
+          throw new AttendanceActionError(
+            'reason_required',
+            'You are not at the outlet, or this day has already closed, so this approval needs a reason.',
+          )
+        }
       }
-      record.status = 'present'
-      return clone(record)
+
+      // Written only once every row has passed, so a batch settles together or
+      // not at all — the mock's stand-in for one statement in one transaction.
+      const now = new Date().toISOString()
+      return targets.map((record) => {
+        const outlet = outletFor(record.outletId)
+        record.approval = {
+          by: approverId,
+          byName: approver?.profile.full_name ?? null,
+          at: now,
+          reason: trimmed === '' ? null : trimmed,
+          latitude: reading?.latitude ?? null,
+          longitude: reading?.longitude ?? null,
+          accuracyMetres: reading?.accuracyMetres ?? null,
+          distanceMetres: reading
+            ? metresFromOutlet(outlet, reading.latitude, reading.longitude)
+            : null,
+        }
+        record.status = 'present'
+        return clone(record)
+      })
     },
   }
 }

@@ -71,6 +71,7 @@ interface Draft {
   pincode: string
   phone: string
   businessDayCutover: string
+  arrivalDeadline: string
 }
 
 const EMPTY_DRAFT: Draft = {
@@ -84,6 +85,7 @@ const EMPTY_DRAFT: Draft = {
   pincode: '',
   phone: '',
   businessDayCutover: '04:00',
+  arrivalDeadline: '13:00',
 }
 
 /** `04:00:00` from Postgres, `04:00` in a time input. */
@@ -150,6 +152,7 @@ function toDraft(outlet: Tables<'outlets'>): Draft {
     pincode: outlet.pincode ?? '',
     phone: outlet.phone ?? '',
     businessDayCutover: toTimeInput(outlet.business_day_cutover),
+    arrivalDeadline: toTimeInput(outlet.arrival_deadline),
   }
 }
 
@@ -165,6 +168,7 @@ function toPayload(draft: Draft): NewOutlet {
     pincode: draft.pincode,
     phone: draft.phone,
     businessDayCutover: draft.businessDayCutover,
+    arrivalDeadline: draft.arrivalDeadline,
   }
 }
 
@@ -541,7 +545,8 @@ function OutletCard({
 
       <p className="text-xs text-content-muted">
         Staff may check in within {formatMetres(outlet.geofence_radius_m)} of this point. The day
-        rolls over at {toTimeInput(outlet.business_day_cutover)}.
+        rolls over at {toTimeInput(outlet.business_day_cutover)}, and staff are expected by{' '}
+        {toTimeInput(outlet.arrival_deadline)}.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -823,6 +828,31 @@ function OutletFormSheet({
           <p className="text-xs text-content-muted">
             Changing it never moves anything already recorded — each day is stamped when it happens,
             not worked out afterwards.
+          </p>
+        </Field>
+
+        {/*
+          The other per-outlet fact about when a day works, and it sits beside
+          the cutover because the two are read together: the deadline is a time
+          within the business day the cutover defines.
+        */}
+        <Field label="Staff are expected by" id="outlet-arrival-deadline">
+          <Input
+            id="outlet-arrival-deadline"
+            type="time"
+            required
+            value={draft.arrivalDeadline}
+            onChange={(event) => set({ arrivalDeadline: event.target.value })}
+          />
+          <p className="text-xs text-content-muted">
+            An arrival after this reads as late wherever attendance is shown, and somebody with no
+            arrival at all reads as absent once it passes. It is a tag and a reading, never a
+            deduction — what a late day is worth stays the manager&rsquo;s call.
+          </p>
+          <p className="text-xs text-content-muted">
+            Changing it applies to arrivals from then on. Every day already recorded keeps the
+            deadline it was recorded under, so nothing already judged changes between late and on
+            time.
           </p>
         </Field>
 

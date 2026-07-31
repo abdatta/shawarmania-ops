@@ -47,6 +47,9 @@ function toColumns(patch: OutletPatch): TablesUpdate<'outlets'> {
     ...(patch.businessDayCutover !== undefined && {
       business_day_cutover: patch.businessDayCutover,
     }),
+    ...(patch.arrivalDeadline !== undefined && {
+      arrival_deadline: patch.arrivalDeadline,
+    }),
     ...(patch.isActive !== undefined && { is_active: patch.isActive }),
   }
 }

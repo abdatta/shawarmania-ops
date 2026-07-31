@@ -8,7 +8,7 @@ An immutable trail of who did what, queryable after the fact, that survives the 
 
 ## Current behaviour
 
-Accountability is recorded **on the affected row**: who voided a bill and why, who overrode a geofenced check-in and why and when, who recorded an expense. Bills are append-only and a void never mutates the original sale, so the money path already resists quiet rewriting.
+Accountability is recorded **on the affected row**: who voided a bill and why, who approved an attendance day and when and from where, who recorded an expense. Bills are append-only and a void never mutates the original sale, so the money path already resists quiet rewriting.
 
 What is missing is everything else and one property:
 
@@ -22,7 +22,7 @@ Sufficient for a small trusted team, which is an accurate description of the bus
 
 ## What already exists for it
 
-- **Per-row actor and reason columns** on voids, geofence overrides, and expenses.
+- **Per-row actor and reason columns** on voids, attendance approvals, and expenses. Attendance approvals go further than the rest: the approver's own position is stored, and a recorded approval is immutable — correcting a mistaken one means changing the day's status, which leaves the original decision visible.
 - **Append-only bills**, so a correction is a new record rather than an edit.
 - **The signed-off-day rule** — a bill arriving after reconciliation raises an exception instead of silently changing a number a human approved.
 

@@ -45,6 +45,7 @@ export {
   formatDate,
   formatDateTime,
   formatTime,
+  instantOnBusinessDay,
   OUTLET_TIME_ZONE,
   QUIET_HOURS_FROM,
   QUIET_HOURS_UNTIL,

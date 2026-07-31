@@ -1,12 +1,4 @@
-import {
-  CircleSlash,
-  Clock,
-  LoaderCircle,
-  LogIn,
-  LogOut,
-  MapPinOff,
-  TriangleAlert,
-} from 'lucide-react'
+import { CircleSlash, Hourglass, LoaderCircle, LogIn, MapPinOff, TriangleAlert } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -23,8 +15,8 @@ import {
 } from '@/domain'
 import { readPosition, type GeolocationFailureKind, type PositionReading } from '@/lib/geolocation'
 
-import { dayPhase } from './attendance-record'
-import { DayVerdict, EventEvidence, OverrideNote } from './evidence'
+import { isLate, isWaitingForApproval } from './attendance-record'
+import { ApprovalNote, DayVerdict, EventEvidence } from './evidence'
 
 /**
  * One large action, today's status, and — when the fence refuses — a state
@@ -32,16 +24,19 @@ import { DayVerdict, EventEvidence, OverrideNote } from './evidence'
  *
  * The order of operations matters and is the whole point of the screen: read a
  * position, judge it locally, and only then decide what to *show*. A refused
- * check-in writes nothing at all until the person chooses to ask for an
- * override, so abandoning a blocked attempt leaves no record and does not burn
- * the one row that day allows.
+ * check-in writes nothing at all until the person chooses to record it anyway,
+ * so abandoning a blocked attempt leaves no record and does not burn the one row
+ * that day allows.
+ *
+ * What the screen must never do is imply the day is done. A recorded arrival is
+ * a claim, and it counts as nothing until the outlet's manager approves it.
  */
 
 const FAILURE_COPY: Record<GeolocationFailureKind, { title: string; advice: string }> = {
   denied: {
     title: 'Location permission is off',
     advice:
-      'This app needs your location only when you check in or out. Turn it on for this site in your browser settings, then try again.',
+      'This app needs your location only when you check in. Turn it on for this site in your browser settings, then try again.',
   },
   unavailable: {
     title: 'Your phone could not find a position',
@@ -140,8 +135,9 @@ export function CheckInCard({
   const [attempt, setAttempt] = useState<Attempt>({ kind: 'idle' })
   const [busy, setBusy] = useState(false)
 
-  const phase = dayPhase(record)
+  const phase = cardPhase(record)
   const radius = outlet.geofence_radius_m
+  const late = record !== null && isLate(record, outlet.business_day_cutover)
 
   const write = useCallback(
     async (action: () => Promise<AttendanceRecord>) => {
@@ -216,23 +212,13 @@ export function CheckInCard({
     await submitCheckIn(target, result.reading)
   }
 
-  async function onCheckOut() {
-    if (!record) return
-    setAttempt({ kind: 'locating' })
-    const result = await readPosition()
-    // A check-out is never refused, however far away it is taken (design D3).
-    await write(() =>
-      attendance.checkOut({ attendanceId: record.id, reading: result.ok ? result.reading : null }),
-    )
-  }
-
   return (
     <Card className="space-y-4">
       <div className="flex items-baseline justify-between gap-2">
         <CardTitle>Today</CardTitle>
         {record && (
           <span className="text-sm">
-            <DayVerdict record={record} radiusMetres={radius} />
+            <DayVerdict record={record} late={late} />
           </span>
         )}
       </div>
@@ -247,10 +233,7 @@ export function CheckInCard({
       {record && (
         <div className="space-y-2">
           <EventEvidence label="Checked in" event={record.checkIn} radiusMetres={radius} />
-          {record.checkOut && (
-            <EventEvidence label="Checked out" event={record.checkOut} radiusMetres={radius} />
-          )}
-          <OverrideNote record={record} />
+          <ApprovalNote record={record} radiusMetres={radius} />
         </div>
       )}
 
@@ -307,6 +290,7 @@ export function CheckInCard({
 
       <PrimaryAction
         phase={phase}
+        waiting={record !== null && isWaitingForApproval(record)}
         locating={attempt.kind === 'locating'}
         busy={busy}
         blocked={
@@ -316,10 +300,27 @@ export function CheckInCard({
         }
         canStartElsewhere={canStartElsewhere}
         onCheckIn={() => void onCheckIn()}
-        onCheckOut={() => void onCheckOut()}
       />
     </Card>
   )
+}
+
+/**
+ * What the card is showing. There is no open-and-then-closed day any more: an
+ * arrival is recorded once, and after that the only question is whether a
+ * manager has settled it.
+ */
+type CardPhase =
+  /** Nothing recorded here today. */
+  | 'not-started'
+  /** An arrival is recorded — waiting for a manager, or already approved. */
+  | 'recorded'
+  /** A row with no arrival at all: a manager marked leave, or an absence. */
+  | 'marked'
+
+function cardPhase(record: AttendanceRecord | null): CardPhase {
+  if (!record) return 'not-started'
+  return record.checkIn ? 'recorded' : 'marked'
 }
 
 /**
@@ -328,20 +329,21 @@ export function CheckInCard({
  */
 function PrimaryAction({
   phase,
+  waiting,
   locating,
   busy,
   blocked,
   canStartElsewhere = false,
   onCheckIn,
-  onCheckOut,
 }: {
-  phase: ReturnType<typeof dayPhase>
+  phase: CardPhase
+  /** Recorded, and no manager has settled it yet. */
+  waiting: boolean
   locating: boolean
   busy: boolean
   blocked: boolean
   canStartElsewhere?: boolean
   onCheckIn: () => void
-  onCheckOut: () => void
 }) {
   if (locating || busy) {
     return (
@@ -352,19 +354,29 @@ function PrimaryAction({
     )
   }
 
-  if (phase === 'complete') {
+  if (phase === 'recorded') {
     return (
       <div className="space-y-3">
+        {/*
+          Never "your day is done". A recorded arrival counts as nothing until a
+          manager approves it, and a screen that implied otherwise would be the
+          one thing this change exists to stop.
+        */}
         <p
-          data-testid="attendance-complete"
-          className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised px-4 py-3 text-sm font-semibold text-content"
+          data-testid={waiting ? 'attendance-waiting' : 'attendance-approved'}
+          className={
+            waiting
+              ? 'flex items-center justify-center gap-2 rounded-lg border border-warning bg-surface-raised px-4 py-3 text-sm font-semibold text-content'
+              : 'flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised px-4 py-3 text-sm font-semibold text-content'
+          }
         >
-          <Clock aria-hidden size={16} />
-          Your day is recorded
-          {canStartElsewhere ? ' here.' : '. Nothing more to do.'}
+          <Hourglass aria-hidden size={16} />
+          {waiting
+            ? 'Your arrival is recorded and is waiting for your manager to approve it.'
+            : `Your manager has approved today${canStartElsewhere ? ' here.' : '. Nothing more to do.'}`}
         </p>
         {/*
-          A completed day is the end of it for somebody who works at one shop.
+          A recorded day is the end of it for somebody who works at one shop.
           For somebody who works at two it is not: the evening shift is at the
           other one, and the fence will resolve which when they press this
           (multi-outlet-people, design D5).
@@ -393,15 +405,6 @@ function PrimaryAction({
         <CircleSlash aria-hidden size={16} />
         Today is already recorded by your manager.
       </p>
-    )
-  }
-
-  if (phase === 'open') {
-    return (
-      <Button size="tile" className="w-full" onClick={onCheckOut} data-testid="attendance-action">
-        <LogOut aria-hidden size={20} />
-        Check out
-      </Button>
     )
   }
 
@@ -466,12 +469,13 @@ function BlockedState({
         <dd className="text-content">±{formatMetres(reading.accuracyMetres)}</dd>
       </dl>
       <p className="text-xs text-content-muted">
-        Phone locations drift, especially indoors. If you are at work, ask your manager to approve
-        it — they will see this reading and decide.
+        Phone locations drift, especially indoors. If you are at work, record it anyway — your
+        manager will see this reading and decide. Because it was taken away from the outlet, they
+        will have to give a reason when they approve it, and it will be stored on your day.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button size="phone" onClick={onRequest} disabled={busy} data-testid="request-override">
-          Ask my manager to approve
+          Record it and ask my manager
         </Button>
         <Button variant="ghost" size="phone" onClick={onDismiss} disabled={busy}>
           Not now
@@ -507,7 +511,8 @@ function UnlocatableState({
       </p>
       <p className="text-xs text-content-muted">{copy.advice}</p>
       <p className="text-xs text-content-muted">
-        You can still record today without a position — it will wait for your manager to approve.
+        You can still record today without a position — it will wait for your manager to approve,
+        and with no reading to vouch for you they will have to give a reason.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" size="phone" onClick={onRetry} disabled={busy}>
@@ -523,8 +528,8 @@ function UnlocatableState({
 
 /**
  * Which business day a check-in belongs to. Taken from the record when one
- * exists, so a check-out at 00:30 cannot land on a different day from the
- * check-in it closes.
+ * exists, so a second attempt against a day the manager already opened cannot
+ * land on a different date from the row it is amending.
  */
 function businessDateOf(record: AttendanceRecord | null, outlet: Tables<'outlets'>): string {
   return record?.businessDate ?? currentBusinessDate(outlet)

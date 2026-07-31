@@ -40,6 +40,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     longitude: 88.4345,
     geofence_radius_m: 150,
     business_day_cutover: '04:00:00',
+    arrival_deadline: '13:00:00',
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: 9,
@@ -60,6 +61,13 @@ export const outletFixtures: Tables<'outlets'>[] = [
     longitude: 88.433,
     geofence_radius_m: 150,
     business_day_cutover: '04:00:00',
+    // Not the 13:00 default, mirroring supabase/seed.sql: a demo where both
+    // shops share the deadline could not show a surface reading the outlet's
+    // own rule rather than a constant. Late in the evening because the demo's
+    // split-shift person works an EVENING here — one deadline per outlet cannot
+    // describe two shifts, and a tighter value would demonstrate that
+    // limitation instead of the rule (docs/LIMITATIONS.md).
+    arrival_deadline: '20:00:00',
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
     // Never surveyed, mirroring supabase/seed.sql — so the demo shows both
@@ -86,6 +94,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     longitude: null,
     geofence_radius_m: 150,
     business_day_cutover: '04:00:00',
+    arrival_deadline: '13:00:00',
     // Already closed, so the demo starts where the delete action is offered.
     // Nothing is rostered here, nobody's account points at it, and no day was
     // ever traded — which is exactly the precondition that makes deleting it

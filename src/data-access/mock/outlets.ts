@@ -109,6 +109,7 @@ export function createMockOutletsAdapter(): OutletsAdapter {
         longitude: null,
         geofence_radius_m: 150,
         business_day_cutover: outlet.businessDayCutover ?? '04:00:00',
+        arrival_deadline: outlet.arrivalDeadline ?? '13:00:00',
         is_active: true,
         created_at: new Date().toISOString(),
         // A new outlet has never been stood in, so it judges nobody until

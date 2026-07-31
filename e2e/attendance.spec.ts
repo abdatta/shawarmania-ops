@@ -24,19 +24,21 @@ async function openStaffHome(page: Page) {
   await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
 }
 
-test('an employee checks in at the counter and checks out again', async ({ page }) => {
+test('an employee checks in at the counter, and the day waits for a manager', async ({ page }) => {
   await openStaffHome(page)
 
   const action = page.getByTestId('attendance-action')
   await expect(action).toHaveText(/Check in/)
   await action.click()
 
-  await expect(page.getByTestId('attendance-action')).toHaveText(/Check out/)
+  // Standing at the counter, inside the fence, and still counting for nothing.
+  // The screen has to say so rather than imply the day is done.
+  await expect(page.getByTestId('attendance-waiting')).toContainText(
+    'waiting for your manager to approve it',
+  )
   await expect(page.getByText(/from the outlet/)).toBeVisible()
   await expect(page.getByTestId('attendance-blocked')).toHaveCount(0)
-
-  await page.getByTestId('attendance-action').click()
-  await expect(page.getByTestId('attendance-complete')).toContainText('Your day is recorded')
+  await expect(page.getByText('Waiting for a manager to approve')).toBeVisible()
 })
 
 test('a check-in from outside the fence is refused, explained, and writes nothing', async ({
@@ -52,12 +54,15 @@ test('a check-in from outside the fence is refused, explained, and writes nothin
   await expect(blocked).toBeVisible()
   // Named, because the demo Employee works at two outlets since
   // multi-outlet-people and "the outlet" would mean nothing to them. The fence
-  // picked the nearer one, which is where the override will be asked for.
+  // picked the nearer one, which is whose manager will be asked.
   await expect(blocked).toContainText('too far from Shawarmania Kalyani')
   // The numbers a person needs to argue with it: distance, limit, and how
   // sure the phone was.
   await expect(blocked).toContainText('150 m')
   await expect(blocked).toContainText(/±\d+/)
+  // And what it will cost the manager who settles it, so the person asking
+  // knows what they are asking for.
+  await expect(blocked).toContainText('will have to give a reason')
 
   // Walking away records nothing at all.
   await page.getByRole('button', { name: 'Not now' }).click()
@@ -77,47 +82,99 @@ test('a blocked check-in becomes a request the manager can approve', async ({ pa
   await expect(page.getByText('Waiting for a manager to approve')).toBeVisible()
 })
 
-test('a manager sees the outlet day, approves an override, and the reason sticks', async ({
-  page,
-}) => {
+test('a manager standing at the counter approves a waiting day in one tap', async ({ page }) => {
   await page.goto('demo/admin/attendance')
 
   const day = page.getByTestId('attendance-day')
   await expect(day).toBeVisible()
-  await expect(page.getByTestId('awaiting-count')).toContainText('waiting for your decision')
+  await expect(page.getByTestId('awaiting-count')).toContainText('waiting for your approval')
+
+  // The browser's emulated position is AT_COUNTER, and the day being settled is
+  // today's — so the honest path is exactly one tap, with no sheet at all.
+  await page.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`).click()
+
+  const card = page.getByTestId(`day-${DEMO_RUNNER_ACCOUNT_ID}`)
+  await expect(card.getByTestId('approval-note')).toContainText('Approved by Demo Manager')
+  await expect(card.getByTestId('approver-place')).toContainText('They were at the outlet')
+  await expect(page.getByLabel('Why are you approving this?')).toHaveCount(0)
+})
+
+test('approving from away from the outlet costs a reason, and records it', async ({
+  page,
+  context,
+}) => {
+  await context.setGeolocation(DOWN_THE_ROAD)
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
 
   await page.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`).click()
+
+  // Not refused — asked. A visible off-site approval is better oversight than a
+  // refusal a manager routes around by telephone.
+  await expect(page.getByTestId('reason-required')).toContainText('You are not at the outlet')
   await page.getByLabel('Why are you approving this?').fill('At the counter, phone signal poor')
   await page.getByRole('button', { name: /Approve and record my reason/ }).click()
 
+  const card = page.getByTestId(`day-${DEMO_RUNNER_ACCOUNT_ID}`)
+  await expect(card.getByTestId('approval-note')).toContainText('At the counter, phone signal poor')
+  await expect(card.getByTestId('approver-place')).toContainText('from the outlet')
+})
+
+test('a manager settles the whole waiting morning in one action', async ({ page }) => {
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+  await expect(page.getByTestId('awaiting-count')).toBeVisible()
+
+  await page.getByTestId('approve-all').click()
+
   await expect(page.getByTestId('awaiting-count')).toHaveCount(0)
-  await expect(page.getByText(/Approved by Demo Manager/)).toBeVisible()
-  await expect(page.getByText(/At the counter, phone signal poor/)).toBeVisible()
+})
+
+test('a manager reads one person’s month, and the figures reconcile with the day', async ({
+  page,
+}) => {
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  await page.getByTestId('axis-person').click()
+  await page.getByTestId('person-picker').selectOption('d1000000-0000-4000-a000-000000000004')
+
+  // The pattern, which reading one day at a time cannot show: present days, a
+  // late one, days derived as absent, and anything still waiting.
+  await expect(page.getByTestId('attendance-tally')).toBeVisible()
+  await expect(page.getByTestId('attendance-range')).toBeVisible()
+  await expect(page.getByTestId('late-tag').first()).toBeVisible()
+  await expect(page.getByTestId('derived-absent').first()).toBeVisible()
+
+  // And any range, not only this month.
+  await page.getByRole('button', { name: 'Previous month' }).click()
+  await expect(page.getByTestId('range-picker')).toBeVisible()
 })
 
 test('a manager records a manual entry, and the row names who typed it in', async ({ page }) => {
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
 
-  // Demo Staff has nothing recorded today, so the offered event is a
-  // check-in. 04:00 is the earliest moment of any business day — the one
-  // time guaranteed not to be in the future while that day is current.
+  // Demo Staff has nothing recorded today, so an arrival can still be typed in.
+  // 04:00 is the earliest moment of any business day — the one time guaranteed
+  // not to be in the future while that day is current.
   const staffId = 'd1000000-0000-4000-a000-000000000004'
   await page.getByTestId(`manual-${staffId}`).click()
   await expect(page.getByText(/permanently show that you entered it/)).toBeVisible()
-  await page.getByLabel('When did it happen?').fill('04:00')
+  await page.getByLabel('When did they arrive?').fill('04:00')
   await page.getByRole('button', { name: 'Record it under my name' }).click()
 
   const card = page.getByTestId(`day-${staffId}`)
   await expect(card.getByTestId('entered-by')).toContainText('Entered by Demo Manager')
   await expect(card.getByText('manual entry')).toBeVisible()
+  // Recording it settled it: the enterer's stamp is the decision, so nobody has
+  // to approve their own typing.
+  await expect(card.getByTestId('approval-note')).toContainText('Approved by Demo Manager')
 })
 
-test('a seeded manual check-out is visibly not a self check-in, on both sides', async ({
-  page,
-}) => {
-  // The griller's phone died yesterday and the manager typed the check-out
-  // in; the day view renders the enterer where the GPS evidence would be.
+test('a seeded manual arrival is visibly not a self check-in, on both sides', async ({ page }) => {
+  // The griller's phone died yesterday and the manager typed the arrival in;
+  // the day view renders the enterer where the GPS evidence would be.
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
   await page.getByRole('button', { name: 'Previous day' }).click()
@@ -128,16 +185,21 @@ test('a seeded manual check-out is visibly not a self check-in, on both sides', 
   await expect(card.getByText('manual entry')).toBeVisible()
 })
 
-test('an employee’s own history shows the override and its reason', async ({ page }) => {
+test('an employee’s own history shows the approval, where the approver was, and why', async ({
+  page,
+}) => {
   await page.goto('demo/staff/my-attendance')
 
   const history = page.getByTestId('attendance-history')
   await expect(history).toBeVisible()
   // The same facts a manager sees about the same day — the symmetry the
-  // proposal insists on.
-  await expect(history.getByText(/Approved by Demo Manager/)).toBeVisible()
+  // proposal insists on, including the new one: whether the manager was there.
+  await expect(history.getByText(/Approved by Demo Manager/).first()).toBeVisible()
   await expect(history.getByText(/Signal drift by the main road/)).toBeVisible()
-  await expect(history.getByText('check-out flagged')).toBeVisible()
+  await expect(history.getByTestId('late-tag').first()).toBeVisible()
+  await expect(history.getByTestId('derived-absent').first()).toBeVisible()
+  // And no check-out, anywhere, ever again.
+  await expect(history.getByText('Out', { exact: true })).toHaveCount(0)
 })
 
 test('the owner sees which outlets have never been surveyed', async ({ page }) => {
@@ -174,13 +236,16 @@ test('the attendance walk makes no request beyond the app origin', async ({ page
 
   await openStaffHome(page)
   await page.getByTestId('attendance-action').click()
-  await expect(page.getByTestId('attendance-action')).toHaveText(/Check out/)
+  await expect(page.getByTestId('attendance-waiting')).toBeVisible()
 
   await page.goto('demo/staff/my-attendance')
   await expect(page.getByTestId('attendance-history')).toBeVisible()
 
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
+  // The approval reads a position too, and it must reach nothing either.
+  await page.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`).click()
+  await expect(page.getByTestId('awaiting-count')).toBeVisible()
 
   await page.goto('demo/admin/people')
   await expect(page.getByText('Demo Griller')).toBeVisible()

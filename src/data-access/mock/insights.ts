@@ -195,6 +195,12 @@ export function createMockInsightsAdapter(
         (alert) => alert.outlet_id === outletId && alert.status === 'open',
       ).length,
       checkedInCount: roster.filter((record) => record.checkIn !== null).length,
+      // The same derivation the surfaces use: an arrival with no approval, held
+      // at `absent` by the trigger, is a day waiting for a manager.
+      waitingApprovalCount: roster.filter(
+        (record) =>
+          record.checkIn !== null && record.approval === null && record.status === 'absent',
+      ).length,
     }
   }
 
