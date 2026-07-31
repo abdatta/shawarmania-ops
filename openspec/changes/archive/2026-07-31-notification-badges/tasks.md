@@ -52,7 +52,7 @@
 
 ## 8. PHASE GATE
 
-- [ ] 8.1 🧍 **Gate**: on a real phone, a manager with unapproved arrivals sees a count on the Attendance nav item from another screen, opens it, and finds those arrivals listed first; the day controls are marked only for that outlet's other unsettled days and **not** for the other outlet's, proved by switching outlets and watching the marks change; the owner sees a count per outlet and reaches a stranded outlet in one tap; approving the last waiting day removes every badge rather than showing zero; the count is stale after backgrounding and correct again on return; and the four-role demo walkthrough still walks
+- [x] 8.1 🧍 **Gate**: on a real phone, a manager with unapproved arrivals sees a count on the Attendance nav item from another screen, opens it, and finds those arrivals listed first; the day controls are marked only for that outlet's other unsettled days and **not** for the other outlet's, proved by switching outlets and watching the marks change; the owner sees a count per outlet and reaches a stranded outlet in one tap; approving the last waiting day removes every badge rather than showing zero; the count is stale after backgrounding and correct again on return; and the four-role demo walkthrough still walks
 
 **Ordering**: this change must not archive before `attendance-approved-on-site`
 (#26), whose `attendance-and-location` requirements it modifies.
