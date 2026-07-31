@@ -48,6 +48,7 @@
 ## 7. Gates
 
 - [x] 7.1 `npm run lint`, `format:check`, `typecheck`, `test`, `contrast`, `build`, `test:e2e` green; then `db:start` + `db:reset` and `test:db`, `test:rls`, `test:e2e:auth` **in that order**, since the account-creating suites change the seed counts `test:db` asserts
+- [x] 7.2 `npm run db:types` and `git diff --exit-code src/data-access/database.types.ts` — the last CI step, and the one a change with no migration of its own can still fail: #26's constraint rename left the checked-in types naming `attendance_override_by_fkey`, and CI regenerates and diffs them
 
 ## 8. PHASE GATE
 

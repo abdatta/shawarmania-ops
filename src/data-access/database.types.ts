@@ -331,6 +331,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "attendance_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "attendance_check_in_entered_by_fkey"
             columns: ["check_in_entered_by"]
             isOneToOne: false
@@ -342,13 +349,6 @@ export type Database = {
             columns: ["outlet_id"]
             isOneToOne: false
             referencedRelation: "outlets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attendance_override_by_fkey"
-            columns: ["approved_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
