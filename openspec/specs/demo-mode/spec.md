@@ -367,9 +367,9 @@ does before doing it, and SHALL keep the reader on the role they are viewing.
 ### Requirement: The demo link is found in the owner's account menu, not on the public landing page
 
 The public landing page SHALL NOT offer a route into demo mode. The Super
-Admin's account menu SHALL offer one, together with an action that copies the
-link, and that link SHALL address demo mode itself rather than any single
-role.
+Admin's account menu SHALL offer one entry into it, and that entry SHALL
+address demo mode itself rather than any single role. Sharing the link is left
+to the browser, so no in-app copy action is required.
 
 Demo mode SHALL remain reachable without authentication, so that a shared link
 works for a recipient who has no account.
@@ -382,11 +382,11 @@ works for a recipient who has no account.
 #### Scenario: The owner produces the link
 
 - **WHEN** the Super Admin opens their account menu
-- **THEN** a demo entry and a copy-link action are offered, and the copied link addresses demo mode rather than one role's path
+- **THEN** a demo entry is offered, and it addresses demo mode rather than one role's path
 
 #### Scenario: A recipient with no account
 
-- **WHEN** somebody with no session opens the copied link
+- **WHEN** somebody with no session opens the shared link
 - **THEN** demo mode renders, without a sign-in being requested
 
 ### Requirement: The owner's own demo link meets the signed-in interstitial

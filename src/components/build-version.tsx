@@ -12,7 +12,7 @@ export function BuildVersion({ className }: { className?: string }) {
   }
 
   return (
-    <p className={cn('text-xs text-content-muted', className)} data-testid="build-version">
+    <p className={cn('text-xs text-content-muted whitespace-nowrap', className)} data-testid="build-version">
       Build <span data-numeric="">{BUILD_SHA}</span> · {builtAt}
     </p>
   )

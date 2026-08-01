@@ -136,6 +136,33 @@ Base interactive components SHALL meet the density metrics for their context: 56
 - **WHEN** a form input is focused on a mobile viewport
 - **THEN** its computed font size is at least 16px
 
+### Requirement: A menu closes by clicking away from it, not only by the control that opened it
+
+A menu, popover, or other transient panel SHALL close when a pointer lands
+outside it and when Escape is pressed, in addition to closing from its own
+trigger. A panel that can only be dismissed by returning to its trigger reads
+as stuck, and covers whatever is beneath it until the person finds their way
+back.
+
+Native `<details>`/`<summary>` supplies the disclosure and the keyboard
+behaviour but not this dismissal, so a component built on it SHALL hold its own
+open state and release it on an outside pointer.
+
+#### Scenario: A pointer lands outside an open menu
+
+- **WHEN** a menu is open and a pointer lands anywhere outside its panel and trigger
+- **THEN** the menu closes
+
+#### Scenario: A pointer lands inside an open menu
+
+- **WHEN** a menu is open and a pointer lands within its own panel
+- **THEN** the menu stays open
+
+#### Scenario: Escape is pressed
+
+- **WHEN** a menu is open and Escape is pressed
+- **THEN** the menu closes and focus returns to the control that opened it
+
 ### Requirement: A placeholder never reads as a value already filled in
 
 A placeholder that shows an **example of the value** SHALL be marked as an

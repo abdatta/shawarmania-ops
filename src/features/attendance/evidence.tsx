@@ -116,7 +116,7 @@ export function ApprovalNote({
   return (
     <div
       data-testid="approval-note"
-      className="mt-2 rounded-lg border border-border bg-surface-raised p-2 text-xs"
+      className="mt-2 rounded-lg border border-border bg-surface-raised p-2 text-xs flex flex-col"
     >
       <p className="inline-flex items-center gap-1 font-semibold text-content">
         <ShieldCheck aria-hidden size={13} />
@@ -138,13 +138,15 @@ export function ApprovalNote({
         >
           {onSite ? <MapPin aria-hidden size={12} /> : <MapPinOff aria-hidden size={12} />}
           {onSite
-            ? 'They were at the outlet'
+            ? 'Approver was at the outlet'
             : approval.distanceMetres === null
-              ? 'Their position was not recorded'
-              : `They were ${formatMetres(approval.distanceMetres)} from the outlet`}
+              ? "Approver's position was not recorded"
+              : `Approver was ${formatMetres(approval.distanceMetres)} from the outlet`}
         </p>
       )}
-      {approval.reason && <p className="mt-0.5 text-content-muted">“{approval.reason}”</p>}
+      {approval.reason && (
+        <p className="mt-0.5 text-content-muted">Approval Reason: “{approval.reason}”</p>
+      )}
     </div>
   )
 }

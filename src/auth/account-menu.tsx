@@ -1,5 +1,5 @@
-import { Check, Copy, PlayCircle, UserRound } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { PlayCircle, UserRound } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
 import { BuildVersion } from '@/components/build-version'
@@ -22,13 +22,38 @@ const DEMO_PATH = '/demo'
  *
  * Native `<details>` rather than a hand-built popover: keyboard operation,
  * Escape, and focus behaviour come from the platform and cannot be got subtly
- * wrong.
+ * wrong. The one thing `<details>` does not give is dismissal by clicking away
+ * — a menu that can only be closed by the control that opened it reads as
+ * stuck — so `open` is held here and released on an outside pointer, the same
+ * way `RowActionsMenu` does it.
  */
 export function AccountMenu({ onSignOut }: { onSignOut: () => void | Promise<void> }) {
   const session = useSession()
   const { outlets } = useAdapters()
+  const detailsRef = useRef<HTMLDetailsElement>(null)
+  const [open, setOpen] = useState(false)
   const [outletName, setOutletName] = useState<string | null>(null)
   const outletId = session.outletId
+
+  useEffect(() => {
+    if (!open) return
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      setOpen(false)
+      detailsRef.current?.querySelector('summary')?.focus()
+    }
+    function onPointerDown(event: PointerEvent) {
+      if (!detailsRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [open])
 
   useEffect(() => {
     if (!outletId) return
@@ -47,7 +72,13 @@ export function AccountMenu({ onSignOut }: { onSignOut: () => void | Promise<voi
   }, [outlets, outletId])
 
   return (
-    <details className="relative" data-testid="account-menu">
+    <details
+      ref={detailsRef}
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      className="relative"
+      data-testid="account-menu"
+    >
       <summary
         className="flex size-[var(--size-control-phone)] cursor-pointer list-none items-center justify-center rounded-lg text-content-muted hover:bg-surface-raised hover:text-content focus-visible:focus-ring [&::-webkit-details-marker]:hidden"
         aria-label="Account"
@@ -67,7 +98,7 @@ export function AccountMenu({ onSignOut }: { onSignOut: () => void | Promise<voi
             .join(' · ') || 'No outlet'}
           {outletName ? ` · ${outletName}` : ''}
         </p>
-        {holdsRole(session, 'super_admin') && <DemoLink />}
+        {holdsRole(session, 'super_admin') && <DemoLink onOpen={() => setOpen(false)} />}
 
         <button
           type="button"
@@ -90,71 +121,31 @@ export function AccountMenu({ onSignOut }: { onSignOut: () => void | Promise<voi
  * follows since the link is public either way — but there is no reason to widen
  * an affordance ahead of wanting it.
  *
- * It links and copies `/demo` rather than `/demo/owner`. The banner's role
- * switcher is right there, and a recipient should not be pinned to whichever
- * role the owner happened to be looking at.
+ * It links `/demo` rather than `/demo/owner`. The banner's role switcher is
+ * right there, and a recipient should not be pinned to whichever role the owner
+ * happened to be looking at. Handing the link to somebody else is the browser's
+ * own share or address bar rather than a button here: a copy control that the
+ * clipboard may refuse (it does, over plain http on a phone) needs a fallback
+ * that explains itself, and that is a lot of menu for something the platform
+ * already does.
  *
  * **Following it while signed in still meets the interstitial**, deliberately.
  * Somebody ringing up fake bills in a tab they thought was real is a genuine
  * operational problem, and an owner is no less capable of losing track of a tab
  * than a biller is. There is no special case here, and there must not be one.
  */
-function DemoLink() {
-  const [copied, setCopied] = useState(false)
-  const [fallback, setFallback] = useState<string | null>(null)
-
-  const url =
-    typeof window === 'undefined' ? DEMO_PATH : new URL(DEMO_PATH, window.location.origin).href
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(url)
-      setCopied(true)
-      setFallback(null)
-      window.setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Refused, or unavailable over plain http on a phone. Showing the URL to
-      // select by hand is a working answer; a copy button that silently does
-      // nothing is worse than no copy button.
-      setFallback(url)
-    }
-  }
-
+function DemoLink({ onOpen }: { onOpen: () => void }) {
   return (
     <div className="mt-3 space-y-2 border-t border-border pt-3" data-testid="demo-entry">
-      <p className="text-xs text-content-muted">
-        A walkable demo on invented data, for showing the product to somebody.
-      </p>
-      <div className="flex gap-2">
-        <Link
-          to={DEMO_PATH}
-          data-testid="demo-link"
-          className={`${buttonVariants({ variant: 'secondary', size: 'phone' })} flex-1`}
-        >
-          <PlayCircle aria-hidden size={16} />
-          Open the demo
-        </Link>
-        <button
-          type="button"
-          onClick={() => void copy()}
-          aria-label="Copy the demo link"
-          data-testid="copy-demo-link"
-          className={buttonVariants({ variant: 'secondary', size: 'phone' })}
-        >
-          {copied ? <Check aria-hidden size={16} /> : <Copy aria-hidden size={16} />}
-        </button>
-      </div>
-      {copied && (
-        <p role="status" className="text-xs font-semibold text-content">
-          Link copied.
-        </p>
-      )}
-      {fallback && (
-        <p className="text-xs text-content-muted" data-testid="demo-link-fallback">
-          Copying is not available here. The link is{' '}
-          <span className="break-all font-semibold text-content">{fallback}</span>
-        </p>
-      )}
+      <Link
+        to={DEMO_PATH}
+        onClick={onOpen}
+        data-testid="demo-link"
+        className={`${buttonVariants({ variant: 'secondary', size: 'phone' })} w-full`}
+      >
+        <PlayCircle aria-hidden size={16} />
+        View Demo
+      </Link>
     </div>
   )
 }

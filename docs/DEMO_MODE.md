@@ -10,8 +10,8 @@ Demo mode lives at a dedicated route prefix: **`/demo/owner`, `/demo/admin`, `/d
 
 **The demo is not advertised on the public landing page**, and has not been since #8. It became something the owner distributes rather than something a visitor stumbles into, so:
 
-- **the Super Admin's account menu** carries **Open the demo** and a **copy-link** button beside it;
-- what it copies is `/demo` — the demo root, not a role path, because the banner's role switcher is right there and a recipient should not be pinned to whichever role the owner was looking at;
+- **the Super Admin's account menu** carries a **View Demo** entry;
+- where it goes is `/demo` — the demo root, not a role path, because the banner's role switcher is right there and a recipient should not be pinned to whichever role the owner was looking at. Sending it to somebody is the browser's own share or address bar: a copy button that the clipboard may refuse (it does, over plain http on a phone) needs a fallback explaining itself, and that is a lot of menu for something the platform already does;
 - **the link is still public.** Anybody it is sent to can open it with no account, because a shared link that demanded a login would not be a demo. What changed is who *finds* it, not who may open it.
 
 Franchise Admins do not have the entry. That is a decision to revisit when somebody asks rather than an oversight — the link is public either way, so nothing is protected by the omission; there is simply no reason to widen an affordance ahead of wanting it.

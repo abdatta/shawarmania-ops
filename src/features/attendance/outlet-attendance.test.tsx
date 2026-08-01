@@ -210,7 +210,9 @@ describe('the outlet attendance day', () => {
         'Approved by Demo Manager',
       ),
     )
-    expect(within(card).getByTestId('approver-place')).toHaveTextContent('They were at the outlet')
+    expect(within(card).getByTestId('approver-place')).toHaveTextContent(
+      'Approver was at the outlet',
+    )
   })
 
   it('asks for a reason when the manager is away from the outlet', async () => {

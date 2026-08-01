@@ -98,7 +98,7 @@ describe('my attendance', () => {
     expect(
       within(history)
         .getAllByTestId('approver-place')
-        .some((node) => /They were at the outlet/.test(node.textContent ?? '')),
+        .some((node) => /Approver was at the outlet/.test(node.textContent ?? '')),
     ).toBe(true)
   })
 
