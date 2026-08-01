@@ -211,10 +211,32 @@ reckoning of the business day — so editing an outlet's deadline next month nev
 relabels a day recorded under the old one. Null on a day with no arrival, and on
 every day recorded before deadlines existed.
 
-`unique (person_id, outlet_id, business_date)` — per outlet since
-`multi-outlet-people` (#22). A morning at Kalyani and an evening at
-Kanchrapara on one business date are two rows, which is what they are; two rows
-at the *same* outlet on one date are still refused.
+`unique (person_id, business_date)` — **a day belongs to the person, not to the
+shop** (`attendance-one-day-per-person`, #29). #22 had briefly made it
+`(person_id, outlet_id, business_date)` on the assumption that a split day across
+two outlets was a real thing to record. It is not: somebody staffed at two
+outlets works at one of them on any given day, and their month is a mix. Under
+the per-outlet rule a person who worked at Kalyani was *derived absent* at
+Kanchrapara on the same date, which is a false claim about a day they are paid
+for.
+
+A second row is therefore refused whatever outlet it names, and **recording a
+genuine split day is impossible** — deliberately, and recorded in
+[Limitations](LIMITATIONS.md). Production held no split day when the constraint
+went on (7 rows, 5 people, 0 violations, read 2026-08-01), so it needed no
+backfill.
+
+Reversing it is two migration statements plus one module
+(`src/features/attendance/attendance-record.ts`), and rows written under the
+narrower rule already satisfy the wider one, so a rollback loses no data.
+
+**`attendance_elsewhere(uuid[], date)`** is the one consequence of that rule
+which the client could not compute for itself. Row-Level Security means a
+Franchise Admin cannot see another outlet's rows at all, so they cannot tell
+somebody who was absent from somebody who worked elsewhere. This `security
+definer` function answers, for a set of outlets and a date, which people on
+those outlets' own staff lists hold a row somewhere outside the set — person ids
+and nothing more. See [Security And Privacy](SECURITY_AND_PRIVACY.md).
 
 **A `manual` event is an admin recording attendance on someone's behalf** — the escape hatch for a phone that cannot check in, the kiosk having been rejected. The `entered_by` / `entered_by_name` pair is stamped by the guard trigger from the acting session, never accepted from the client; constraints tie the pair to the `manual` source and forbid coordinates on manual events, so the geofence never judges them. Times must be in the past, on the outlet's current business day. A Franchise Admin enters for their own outlet, the Super Admin for any; an Employee or Biller session is refused.
 

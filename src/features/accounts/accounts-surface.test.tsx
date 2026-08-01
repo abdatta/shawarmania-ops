@@ -10,7 +10,7 @@ import {
   DEMO_GRILLER_ACCOUNT_ID,
   DEMO_HELPER_ACCOUNT_ID,
   DEMO_RETURNER_ACCOUNT_ID,
-  DEMO_SPLIT_SHIFT_ACCOUNT_ID,
+  DEMO_TWO_OUTLETS_ACCOUNT_ID,
   OUTLET_KALYANI_ID,
   OUTLET_KANCHRAPARA_ID,
   PENDING_ACCOUNT_ID,
@@ -92,8 +92,8 @@ describe('the People surface', () => {
   it('shows both outlets for somebody who works at both', async () => {
     renderSurface('super_admin')
 
-    const row = (await screen.findByText('Demo Split Shift')).closest('tr')!
-    const assignments = within(row).getByTestId(`assignments-${DEMO_SPLIT_SHIFT_ACCOUNT_ID}`)
+    const row = (await screen.findByText('Demo Both Outlets')).closest('tr')!
+    const assignments = within(row).getByTestId(`assignments-${DEMO_TWO_OUTLETS_ACCOUNT_ID}`)
     expect(assignments).toHaveTextContent('Shawarmania Kalyani')
     expect(assignments).toHaveTextContent('Shawarmania Kanchrapara')
   })
@@ -689,7 +689,7 @@ describe('editing a person', () => {
     const setActive = vi.spyOn(adapters.accounts, 'setActive')
     renderSurface('super_admin', adapters)
 
-    const row = (await screen.findByText('Demo Split Shift')).closest('tr')!
+    const row = (await screen.findByText('Demo Both Outlets')).closest('tr')!
     await openRowActions(user, row)
     await user.click(within(row).getByRole('button', { name: 'End an assignment' }))
 
@@ -702,7 +702,7 @@ describe('editing a person', () => {
     await user.click(screen.getByRole('button', { name: 'End this assignment' }))
 
     // Still on the list, still signed-in-able, still working the other outlet.
-    const updated = (await screen.findByText('Demo Split Shift')).closest('tr')!
+    const updated = (await screen.findByText('Demo Both Outlets')).closest('tr')!
     await waitFor(() =>
       expect(within(updated).queryByText('Not assigned to any outlet')).not.toBeInTheDocument(),
     )

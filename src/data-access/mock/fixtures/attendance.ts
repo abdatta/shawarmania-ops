@@ -4,7 +4,7 @@ import {
   DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
   DEMO_PREP_COOK_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
-  DEMO_SPLIT_SHIFT_ACCOUNT_ID,
+  DEMO_TWO_OUTLETS_ACCOUNT_ID,
 } from './accounts'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from './outlets'
 import { personaFixtures } from './personas'
@@ -68,7 +68,7 @@ export interface AttendanceSeed {
    * Which outlet the day was worked at. Explicit since multi-outlet-people:
    * a person may hold assignments at several, so "their outlet" stopped being
    * a thing a seed could look up. Absent means their only assigned outlet,
-   * which is every seed but the split shift's.
+   * which is every seed but the two-outlet people's.
    */
   outletId?: string
   /** Business days back from today. 0 is today. */
@@ -169,8 +169,9 @@ export const attendanceSeeds: AttendanceSeed[] = [
     checkIn: { time: '09:05', ...AT_COUNTER },
     approval: { byName: DEMO_MANAGER.full_name, time: '09:20', ...APPROVED_AT_COUNTER },
   },
-  // Days 6, 7 and 10 hold nothing at all, so the month view derives them as
+  // Days 7 and 10 hold nothing at all, so the month view derives them as
   // absent rather than skipping them. That is the reading no row can carry.
+  // (Day 6 was worked at the other outlet — see the two-outlet seeds below.)
   {
     personId: DEMO_STAFF_ID,
     outletId: OUTLET_KALYANI_ID,
@@ -219,16 +220,20 @@ export const attendanceSeeds: AttendanceSeed[] = [
   },
   { personId: DEMO_RUNNER_ACCOUNT_ID, daysAgo: 1, status: 'absent' },
 
-  // ── The split shift: one person, one business day, two outlets ───────────
+  // ── Two outlets, one day each ────────────────────────────────────────────
   //
-  // The case that did not exist before multi-outlet-people, and the one a
-  // demonstrator has to be able to walk: a morning at Kalyani, an evening at
-  // Kanchrapara, both from the same phone and the same single action, with
-  // nothing anywhere asking them which shop they were at. Each day is settled by
-  // the manager of the shop it was worked at — Kanchrapara's 20:00 deadline is
-  // why a 15:10 evening arrival there is not late.
+  // The case a demonstrator has to be able to walk: somebody staffed at both
+  // shops works at ONE of them on any given day, and their month is a mix. Both
+  // check-ins came from the same phone and the same single action, with nothing
+  // anywhere asking which shop they were at — the fence resolved it.
+  //
+  // The pair is deliberately on consecutive days rather than the same one, and
+  // that is the whole demo: on D-1 Kanchrapara's manager must read this person
+  // as working at another outlet rather than absent, and on D-2 Kalyani's
+  // manager must read the mirror. A same-day pair is what the database now
+  // refuses (attendance-one-day-per-person).
   {
-    personId: DEMO_SPLIT_SHIFT_ACCOUNT_ID,
+    personId: DEMO_TWO_OUTLETS_ACCOUNT_ID,
     outletId: OUTLET_KALYANI_ID,
     daysAgo: 1,
     status: 'present',
@@ -236,20 +241,23 @@ export const attendanceSeeds: AttendanceSeed[] = [
     approval: { byName: DEMO_MANAGER.full_name, time: '09:14', ...APPROVED_AT_COUNTER },
   },
   {
-    personId: DEMO_SPLIT_SHIFT_ACCOUNT_ID,
+    personId: DEMO_TWO_OUTLETS_ACCOUNT_ID,
     outletId: OUTLET_KANCHRAPARA_ID,
-    daysAgo: 1,
+    daysAgo: 2,
     status: 'present',
+    // Kanchrapara's 20:00 deadline is why a 15:10 arrival there is not late,
+    // and why a combined roll-call must read each row's own outlet's clock.
     checkIn: { time: '15:10', ...AT_KANCHRAPARA },
     approval: { byName: DEMO_MANAGER.full_name, time: '15:28', ...APPROVED_AT_KANCHRAPARA },
   },
-  // The Employee PERSONA's own split day — the one a demonstrator walks. Their
-  // Kalyani morning is already in their month above; this is the evening at the
-  // other shop, on the same business date, from the same phone.
+  // The Employee PERSONA works at both shops too, so their own month has to mix
+  // them. Day 6 was otherwise empty, which makes this the one day in their
+  // history that names the other outlet — and the proof that their combined
+  // view lists each date once.
   {
     personId: DEMO_STAFF_ID,
     outletId: OUTLET_KANCHRAPARA_ID,
-    daysAgo: 1,
+    daysAgo: 6,
     status: 'present',
     checkIn: { time: '19:05', ...AT_KANCHRAPARA },
     approval: { byName: DEMO_MANAGER.full_name, time: '19:22', ...APPROVED_AT_KANCHRAPARA },
@@ -258,7 +266,7 @@ export const attendanceSeeds: AttendanceSeed[] = [
   // button still offers a check-in, which the fence will resolve to wherever
   // they actually are next.
   {
-    personId: DEMO_SPLIT_SHIFT_ACCOUNT_ID,
+    personId: DEMO_TWO_OUTLETS_ACCOUNT_ID,
     outletId: OUTLET_KALYANI_ID,
     daysAgo: 0,
     status: 'present',

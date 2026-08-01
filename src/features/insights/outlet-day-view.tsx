@@ -81,7 +81,7 @@ export function OutletDayView() {
         insights.outletDay(outletId, businessDate),
         inventory.listItems(outletId),
         alerts.listAlerts({ outletId }),
-        attendance.listOutletDay(outletId, businessDate),
+        attendance.listOutletDay([outletId], businessDate),
       ])
       if (!active) return
       setSummary(day)

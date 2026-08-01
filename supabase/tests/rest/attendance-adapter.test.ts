@@ -33,11 +33,10 @@ const PASSWORD = 'shawarmania-local'
 const OUTLET_KALYANI = '00000000-0000-4000-a000-000000000001'
 const OUTLET_KANCHRAPARA = '00000000-0000-4000-a000-000000000002'
 // Staff are accounts: attendance keys on the person's own profile id.
-const KALYANI = '00000000-0000-4000-a000-000000000001'
 const STAFF_KAL = '10000000-0000-4000-a000-000000000006'
 const STAFF_KPA = '10000000-0000-4000-a000-000000000007'
 /** Works at both outlets, which is what makes the person-range read testable. */
-const SPLIT_SHIFT = '10000000-0000-4000-a000-00000000000e'
+const TWO_OUTLETS = '10000000-0000-4000-a000-00000000000e'
 /** Kalyani's radius, from the seed. Named so an assertion reads as a claim. */
 const outletRadius = 150
 // Pending Staff Kal: nothing else in any suite writes attendance for them,
@@ -63,6 +62,13 @@ function yesterday(): string {
   return date.toISOString().slice(0, 10)
 }
 
+/** The day the two-outlet person worked at Kanchrapara, per the seed. */
+function dayBeforeYesterday(): string {
+  const date = new Date()
+  date.setDate(date.getDate() - 2)
+  return date.toISOString().slice(0, 10)
+}
+
 /** A range wide enough to cover everything the seed wrote. */
 const WIDE_RANGE = { from: '2000-01-01', to: '2100-01-01' } as const
 
@@ -80,7 +86,7 @@ beforeAll(async () => {
 describe('the attendance adapter', () => {
   it('reads a day with the person’s name joined in', async () => {
     const attendance = createSupabaseAttendanceAdapter(managerClient)
-    const day = await attendance.listOutletDay(OUTLET_KALYANI, yesterday())
+    const day = await attendance.listOutletDay([OUTLET_KALYANI], yesterday())
 
     expect(day.length).toBeGreaterThan(0)
     const own = day.find((record) => record.personId === STAFF_KAL)
@@ -97,7 +103,7 @@ describe('the attendance adapter', () => {
 
   it('maps the evidence the database computed, not what a client claimed', async () => {
     const attendance = createSupabaseAttendanceAdapter(employeeClient)
-    const day = await attendance.getDay(STAFF_KAL, yesterday(), KALYANI)
+    const day = await attendance.getDay(STAFF_KAL, yesterday())
 
     expect(day?.checkIn).not.toBeNull()
     // The seed claimed 12 m; the trigger stored what the coordinates imply.
@@ -116,7 +122,7 @@ describe('the attendance adapter', () => {
 
   it('maps an approval taken away from the outlet, with the reason it cost', async () => {
     const attendance = createSupabaseAttendanceAdapter(ownerClient)
-    const day = await attendance.listOutletDay(OUTLET_KANCHRAPARA, yesterday())
+    const day = await attendance.listOutletDay([OUTLET_KANCHRAPARA], yesterday())
     const off = day.find((record) => record.personId === STAFF_KPA)
 
     expect(off?.approval).not.toBeNull()
@@ -141,28 +147,59 @@ describe('the attendance adapter', () => {
     expect(none).toHaveLength(0)
   })
 
-  it('reads one person at one named outlet, and refuses to reach the other', async () => {
-    const attendance = createSupabaseAttendanceAdapter(managerClient)
+  it('reads one person across every outlet the reader may see, and no further', async () => {
+    // The read names no outlet at all since attendance-one-day-per-person
+    // (design D4): what comes back is the policy's answer, so this asserts the
+    // policy rather than a filter the client wrote.
+    const asManager = createSupabaseAttendanceAdapter(managerClient)
+    const here = await asManager.listPersonRange(TWO_OUTLETS, WIDE_RANGE.from, WIDE_RANGE.to)
 
-    const here = await attendance.listPersonRange(
-      SPLIT_SHIFT,
-      OUTLET_KALYANI,
-      WIDE_RANGE.from,
-      WIDE_RANGE.to,
-    )
     expect(here.length).toBeGreaterThan(0)
+    // The Kalyani manager holds one assignment, so one outlet is what they get —
+    // and the day this person worked at Kanchrapara is not in it, though they
+    // asked for no outlet and could not have excluded it if they wanted to.
     expect(here.every((record) => record.outletId === OUTLET_KALYANI)).toBe(true)
 
-    // The hand-crafted request the surface never makes. The Kalyani manager
-    // names the other outlet directly, and the policy returns nothing — the
-    // outlet argument is the first line of defence, not the only one (D7).
-    const elsewhere = await attendance.listPersonRange(
-      SPLIT_SHIFT,
-      OUTLET_KANCHRAPARA,
-      WIDE_RANGE.from,
-      WIDE_RANGE.to,
+    // The owner asks exactly the same question and gets both, which is the
+    // by-staff axis working: one person's month, wherever it was worked.
+    const asOwner = createSupabaseAttendanceAdapter(ownerClient)
+    const everywhere = await asOwner.listPersonRange(TWO_OUTLETS, WIDE_RANGE.from, WIDE_RANGE.to)
+    expect(new Set(everywhere.map((record) => record.outletId))).toEqual(
+      new Set([OUTLET_KALYANI, OUTLET_KANCHRAPARA]),
     )
-    expect(elsewhere).toHaveLength(0)
+
+    // And one row per business date, whatever outlet each was worked at. This is
+    // the whole point: the summary above it is a day count, and a day counted
+    // twice is a day paid twice.
+    const dates = everywhere.map((record) => record.businessDate)
+    expect(new Set(dates).size).toBe(dates.length)
+  })
+
+  it('tells a manager that somebody is accounted for elsewhere, and nothing more', async () => {
+    const attendance = createSupabaseAttendanceAdapter(managerClient)
+
+    // The two-outlet person worked at Kanchrapara the day before yesterday, and
+    // the Kalyani manager cannot see that row — so without this they would read
+    // as absent on a day they were paid for (design D3).
+    const away = await attendance.listElsewhere([OUTLET_KALYANI], dayBeforeYesterday())
+    expect(away).toContain(TWO_OUTLETS)
+
+    // Person ids and nothing else. There is no shape of this answer that could
+    // carry an outlet, a time or an approval, which is the bound.
+    expect(away.every((id) => typeof id === 'string')).toBe(true)
+
+    // Naming an outlet they do not manage borrows nothing from it.
+    const borrowed = await attendance.listElsewhere([OUTLET_KANCHRAPARA], dayBeforeYesterday())
+    expect(borrowed).toHaveLength(0)
+
+    // And with both outlets in scope the real row is on screen, so there is no
+    // elsewhere left to report.
+    const asOwner = createSupabaseAttendanceAdapter(ownerClient)
+    const covered = await asOwner.listElsewhere(
+      [OUTLET_KALYANI, OUTLET_KANCHRAPARA],
+      dayBeforeYesterday(),
+    )
+    expect(covered).not.toContain(TWO_OUTLETS)
   })
 
   it('counts the days stranded at each outlet the caller can reach', async () => {
@@ -194,7 +231,7 @@ describe('the attendance adapter', () => {
     expect(outlet).not.toBeNull()
 
     const today = resolveBusinessDate(new Date(), outlet!.business_day_cutover)
-    const existing = await attendance.getDay(STAFF_KAL, today, KALYANI)
+    const existing = await attendance.getDay(STAFF_KAL, today)
 
     const record =
       existing ??
@@ -227,7 +264,7 @@ describe('the attendance adapter', () => {
 
     // Survives a re-run against the same reset: the manual check-in is read
     // back rather than made twice.
-    const existing = await attendance.getDay(PENDING_STAFF_KAL, today, KALYANI)
+    const existing = await attendance.getDay(PENDING_STAFF_KAL, today)
     const record =
       existing?.checkIn?.source === 'manual'
         ? existing
@@ -257,7 +294,7 @@ describe('the attendance adapter', () => {
     const outlet = await outlets.getOutlet(OUTLET_KALYANI)
     const today = resolveBusinessDate(new Date(), outlet!.business_day_cutover)
 
-    const day = await attendance.listOutletDay(OUTLET_KALYANI, today)
+    const day = await attendance.listOutletDay([OUTLET_KALYANI], today)
     const waiting = day.filter(
       (record) => record.checkIn !== null && record.approval === null && record.status === 'absent',
     )
@@ -293,7 +330,7 @@ describe('the attendance adapter', () => {
 
   it('refuses an off-site approval with no reason, in words a counter can read', async () => {
     const attendance = createSupabaseAttendanceAdapter(managerClient)
-    const day = await attendance.listOutletDay(OUTLET_KALYANI, yesterday())
+    const day = await attendance.listOutletDay([OUTLET_KALYANI], yesterday())
     const target = day.find((record) => record.checkIn !== null)!
 
     // Yesterday is a closed business day, so the rule wants a reason whatever
@@ -316,7 +353,7 @@ describe('the attendance adapter', () => {
     // An employee attempting to approve their own day: the guard raises, and
     // the adapter must not surface a raw Postgres message.
     const attendance = createSupabaseAttendanceAdapter(employeeClient)
-    const day = await attendance.getDay(STAFF_KAL, yesterday(), KALYANI)
+    const day = await attendance.getDay(STAFF_KAL, yesterday())
 
     await expect(
       attendance.approve([day!.id], {

@@ -63,10 +63,13 @@ export const outletFixtures: Tables<'outlets'>[] = [
     business_day_cutover: '04:00:00',
     // Not the 13:00 default, mirroring supabase/seed.sql: a demo where both
     // shops share the deadline could not show a surface reading the outlet's
-    // own rule rather than a constant. Late in the evening because the demo's
-    // split-shift person works an EVENING here — one deadline per outlet cannot
-    // describe two shifts, and a tighter value would demonstrate that
-    // limitation instead of the rule (docs/LIMITATIONS.md).
+    // own rule rather than a constant. That matters twice over since
+    // attendance-one-day-per-person — a combined roll-call puts both shops'
+    // rows in one list, and a differing deadline is what proves each row is
+    // judged by its own outlet's clock. Late in the evening so the demo's
+    // 15:10 arrival here does not read as late, which would demonstrate the
+    // one-deadline-per-outlet limitation instead of the rule
+    // (docs/LIMITATIONS.md).
     arrival_deadline: '20:00:00',
     is_active: true,
     created_at: FIXTURE_CREATED_AT,

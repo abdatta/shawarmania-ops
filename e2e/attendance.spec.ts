@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { DEMO_RUNNER_ACCOUNT_ID } from '../src/data-access/mock/fixtures/accounts'
-import { OUTLET_KANCHRAPARA_ID } from '../src/data-access/mock/fixtures/outlets'
+import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '../src/data-access/mock/fixtures/outlets'
 import { DEMO_OWNER_ID } from '../src/data-access/mock/fixtures/personas'
 
 /**
@@ -113,8 +113,8 @@ test('a manager standing at the counter approves a waiting day in one tap', asyn
   await page.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`).click()
 
   const card = page.getByTestId(`day-${DEMO_RUNNER_ACCOUNT_ID}`)
-  await expect(card.getByTestId('approval-note')).toContainText('Approved by Demo Manager')
-  await expect(card.getByTestId('approver-place')).toContainText('They were at the outlet')
+  await expect(card.getByTestId('approval-note')).toContainText('Demo Manager,')
+  await expect(card.getByTestId('approver-place')).toContainText('on site')
   await expect(page.getByLabel('Why are you approving this?')).toHaveCount(0)
 })
 
@@ -136,7 +136,9 @@ test('approving from away from the outlet costs a reason, and records it', async
 
   const card = page.getByTestId(`day-${DEMO_RUNNER_ACCOUNT_ID}`)
   await expect(card.getByTestId('approval-note')).toContainText('At the counter, phone signal poor')
-  await expect(card.getByTestId('approver-place')).toContainText('from the outlet')
+  // The chip names itself to a screen reader and shows the distance to
+  // everybody else, since the card became chips (design D9).
+  await expect(card.getByTestId('approver-place')).toContainText('Approver:')
 })
 
 test('the navigation carries the count, and doing the work takes it away', async ({ page }) => {
@@ -235,7 +237,7 @@ test('a manager reads one person’s month, and the figures reconcile with the d
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
 
-  await page.getByTestId('axis-person').click()
+  await page.getByTestId('axis-staff').click()
   await page.getByTestId('person-picker').selectOption('d1000000-0000-4000-a000-000000000004')
 
   // The pattern, which reading one day at a time cannot show: present days, a
@@ -264,11 +266,13 @@ test('a manager records a manual entry, and the row names who typed it in', asyn
   await page.getByRole('button', { name: 'Record it under my name' }).click()
 
   const card = page.getByTestId(`day-${staffId}`)
-  await expect(card.getByTestId('entered-by')).toContainText('Entered by Demo Manager')
-  await expect(card.getByText('manual entry')).toBeVisible()
+  await expect(card.getByTestId('entered-by')).toContainText('Entered by: Demo Manager')
+  // Visibly not a self check-in: the enterer stamp stands where the evidence
+  // would be, and no phone or distance chip appears at all.
+  await expect(card.getByText('phone')).toHaveCount(0)
   // Recording it settled it: the enterer's stamp is the decision, so nobody has
   // to approve their own typing.
-  await expect(card.getByTestId('approval-note')).toContainText('Approved by Demo Manager')
+  await expect(card.getByTestId('approval-note')).toContainText('Demo Manager,')
 })
 
 test('a seeded manual arrival is visibly not a self check-in, on both sides', async ({ page }) => {
@@ -280,8 +284,8 @@ test('a seeded manual arrival is visibly not a self check-in, on both sides', as
 
   const grillerId = 'd1000000-0000-4000-a000-000000000006'
   const card = page.getByTestId(`day-${grillerId}`)
-  await expect(card.getByTestId('entered-by')).toContainText('Entered by Demo Manager')
-  await expect(card.getByText('manual entry')).toBeVisible()
+  await expect(card.getByTestId('entered-by')).toContainText('Entered by: Demo Manager')
+  await expect(card.getByText('phone')).toHaveCount(0)
 })
 
 test('an employee’s own history shows the approval, where the approver was, and why', async ({
@@ -294,7 +298,7 @@ test('an employee’s own history shows the approval, where the approver was, an
   await expect(history).toBeVisible()
   // The same facts a manager sees about the same day — the symmetry the
   // proposal insists on, including the new one: whether the manager was there.
-  await expect(history.getByText(/Approved by Demo Manager/).first()).toBeVisible()
+  await expect(history.getByText(/Demo Manager, /).first()).toBeVisible()
   await expect(history.getByText(/Signal drift by the main road/)).toBeVisible()
   await expect(history.getByTestId('late-tag').first()).toBeVisible()
   await expect(history.getByTestId('derived-absent').first()).toBeVisible()
@@ -373,13 +377,26 @@ test('the employee shell offers its attendance surfaces in navigation', async ({
 test('a person assigned to two outlets sees each day named, and picks no outlet', async ({
   page,
 }) => {
+  // Pinned mid-month for the same reason the other range specs are: the month
+  // defaults to the current one and the fixtures are days back from today, so
+  // on the 1st the pattern sits in the previous month.
+  await page.clock.setFixedTime(MID_MONTH)
   await page.goto('demo/staff/my-attendance')
 
-  // Their own history spans both shops, and each day says which — a question
-  // that did not exist while a person had one outlet, and cannot be answered
-  // from context once they have two.
+  // Their own history spans both shops, and each day worked says which — a
+  // question that did not exist while a person had one outlet, and cannot be
+  // answered from context once they have two. A day nobody recorded names no
+  // outlet at all, because it was worked nowhere
+  // (attendance-one-day-per-person).
   await expect(page.getByText('Shawarmania Kalyani').first()).toBeVisible()
   await expect(page.getByText('Shawarmania Kanchrapara').first()).toBeVisible()
+
+  // And each business date appears exactly once, rather than once per outlet
+  // with half of them absences on days they were at work.
+  const dates = await page
+    .getByTestId(/^range-day-/)
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-testid')))
+  expect(new Set(dates).size).toBe(dates.length)
 
   await page.goto('demo/staff')
   await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
@@ -417,7 +434,11 @@ test('the owner settles a day at an outlet they are not assigned to', async ({ p
   await expect(page).toHaveURL(/demo\/owner\/attendance$/)
   await expect(page.getByTestId('attendance-day')).toBeVisible()
 
-  await page.getByTestId('surface-outlet').selectOption(OUTLET_KANCHRAPARA_ID)
+  // The selector takes several since attendance-one-day-per-person, so
+  // switching outlet is add-the-other then drop-this-one. The last selected
+  // outlet cannot be cleared, which is why the order matters.
+  await page.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`).click()
+  await page.getByTestId(`surface-outlet-${OUTLET_KALYANI_ID}`).click()
   await expect(page.getByText(/Shawarmania Kanchrapara/).first()).toBeVisible()
 
   // Nobody records the owner's own arrival, so they are not on the roll-call
@@ -440,7 +461,10 @@ test('the owner settles a day at an outlet they are not assigned to', async ({ p
   // And the shop they were looking at is the one the next surface opens on
   // (design D6): a reload, then a different surface entirely.
   await page.reload()
-  await expect(page.getByTestId('surface-outlet')).toHaveValue(OUTLET_KANCHRAPARA_ID)
+  await expect(page.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
   await page.goto('demo/owner/cash')
   await expect(page.getByTestId('surface-outlet')).toHaveValue(OUTLET_KANCHRAPARA_ID)
 

@@ -168,7 +168,7 @@ export function createMockInsightsAdapter(
             .reduce((running, withdrawal) => running + withdrawal.amount_paise, 0),
         })
 
-    const roster = await attendance.listOutletDay(outletId, businessDate)
+    const roster = await attendance.listOutletDay([outletId], businessDate)
 
     return {
       outletId,

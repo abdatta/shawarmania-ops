@@ -19,7 +19,7 @@ select * from no_plan();
 -- Independence from whatever ran before, on the same terms 06 takes it: the REST
 -- suite writes real check-ins to this database on today's business date for the
 -- same seeded people, so a manual entry below would otherwise collide on the
--- one-row-per-person-per-outlet-per-day constraint. Scoped so it cannot reach a
+-- one-row-per-person-per-day constraint. Scoped so it cannot reach a
 -- seeded row — everything in seed.sql is dated yesterday or the day before — and
 -- the file rolls back regardless.
 alter table public.attendance disable trigger attendance_no_delete;

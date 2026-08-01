@@ -22,7 +22,7 @@ import { liveAssignment, personaFixtures } from './personas'
  *     state, not a column.
  *   * `DEMO_PREP_COOK_ACCOUNT_ID` is **deactivated while still assigned** —
  *     the panic-button state. Access cut, still on today's attendance day.
- *   * `DEMO_SPLIT_SHIFT_ACCOUNT_ID` works at **both outlets**, and
+ *   * `DEMO_TWO_OUTLETS_ACCOUNT_ID` works at **both outlets**, and
  *     `DEMO_RETURNER_ACCOUNT_ID` **used to** work at the second one — one
  *     assignment ended, the other still running.
  *
@@ -41,7 +41,7 @@ export const DEMO_PREP_COOK_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000013'
 /** Today's blocked check-in awaiting a decision belongs to this person. */
 export const DEMO_RUNNER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000014'
 /** One login, two outlets — the person this whole change exists for. */
-export const DEMO_SPLIT_SHIFT_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000015'
+export const DEMO_TWO_OUTLETS_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000015'
 /** Still at Kalyani; their Kanchrapara assignment ended in the spring. */
 export const DEMO_RETURNER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000016'
 /**
@@ -147,8 +147,8 @@ const colleagues = [
     created_at: FIXTURE_CREATED_AT,
   },
   {
-    id: DEMO_SPLIT_SHIFT_ACCOUNT_ID,
-    full_name: 'Demo Split Shift',
+    id: DEMO_TWO_OUTLETS_ACCOUNT_ID,
+    full_name: 'Demo Both Outlets',
     phone: null,
     is_active: true,
     role_title: 'Counter staff',
@@ -266,9 +266,10 @@ export const assignmentFixtures: Readonly<Record<string, Assignment[]>> = {
       '2026-05-05',
     ),
   ],
-  // Two live assignments, one login. Their attendance shows a morning at
-  // Kalyani and an evening at Kanchrapara on the same business day.
-  [DEMO_SPLIT_SHIFT_ACCOUNT_ID]: [
+  // Two live assignments, one login. Their attendance shows a day at Kalyani
+  // and a day at Kanchrapara — on different dates, because one person has one
+  // day (attendance-one-day-per-person).
+  [DEMO_TWO_OUTLETS_ACCOUNT_ID]: [
     liveAssignment(
       'da000000-0000-4000-a000-000000000020',
       'employee',

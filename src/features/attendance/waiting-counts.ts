@@ -30,13 +30,29 @@ export function useWaitingCounts(): {
   return { counts: value, reread }
 }
 
-/** How many waiting arrivals sit on one outlet, from counts already read. */
+/**
+ * How many waiting arrivals sit across a set of outlets, from counts already
+ * read, with the extreme dates of the whole set.
+ *
+ * A set rather than one outlet since attendance-one-day-per-person: the day
+ * controls mark "there is work that way" for the outlets **in scope**, and with
+ * two selected that is the earliest of either and the latest of either. An
+ * outlet outside the selection still cannot mark them, which is the property
+ * that mattered and is now true by construction of this function rather than by
+ * a filter each caller remembers.
+ */
 export function waitingAt(
   counts: readonly WaitingCount[] | null,
-  outletId: string | null,
-): WaitingCount | null {
-  if (counts === null || outletId === null) return null
-  return counts.find((count) => count.outletId === outletId) ?? null
+  outletIds: readonly string[],
+): { waiting: number; oldest: string; newest: string } | null {
+  if (counts === null) return null
+  const scoped = counts.filter((count) => outletIds.includes(count.outletId))
+  if (scoped.length === 0) return null
+  return {
+    waiting: scoped.reduce((sum, count) => sum + count.waiting, 0),
+    oldest: scoped.reduce((min, c) => (c.oldest < min ? c.oldest : min), scoped[0]!.oldest),
+    newest: scoped.reduce((max, c) => (c.newest > max ? c.newest : max), scoped[0]!.newest),
+  }
 }
 
 /** The sentence a badge of this size is read as. */

@@ -326,7 +326,7 @@ describe('the check-in the whole chain existed for', () => {
     await createSupabaseOutletsAdapter(owner).updateOutlet(outletId, { isActive: false })
 
     const attendance = createSupabaseAttendanceAdapter(manager)
-    const day = await attendance.getDay(employeeProfileId, businessDate, outletId)
+    const day = await attendance.getDay(employeeProfileId, businessDate)
     // A day worked before the outlet closed must still be settleable afterwards,
     // or closing a shop would silently cost somebody a day's pay. The outlet was
     // never surveyed here, so the approver's position can vouch for nobody and
@@ -361,7 +361,6 @@ describe('the check-in the whole chain existed for', () => {
     const day = await createSupabaseAttendanceAdapter(manager).getDay(
       employeeProfileId,
       businessDate,
-      outletId,
     )
     expect(day?.checkIn).not.toBeNull()
     expect(day?.approval).not.toBeNull()

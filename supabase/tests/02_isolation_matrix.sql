@@ -169,18 +169,18 @@ select is((select count(*) from public.profiles
             where id in ('10000000-0000-4000-a000-000000000006',
                          '20000000-0000-4000-a000-000000000002')), 2::bigint,
   'fa_kalyani sees both seeded Kalyani staff accounts');
--- The split-shift person works at Kalyani too, so their profile is visible —
+-- The two-outlet person works at Kalyani too, so their profile is visible —
 -- but only their KALYANI assignment is. Seeing that they also work elsewhere
 -- would be the other outlet's data.
 select is((select count(*) from public.profiles
             where id = '10000000-0000-4000-a000-00000000000e'), 1::bigint,
-  'fa_kalyani sees the split-shift person, who works at their outlet');
+  'fa_kalyani sees the two-outlet person, who works at their outlet');
 select is((select count(*) from public.assignments
             where person_id = '10000000-0000-4000-a000-00000000000e'), 1::bigint,
-  'fa_kalyani sees only the split-shift person''s own-outlet assignment');
+  'fa_kalyani sees only the two-outlet person''s own-outlet assignment');
 select is((select count(*) from public.attendance
             where person_id = '10000000-0000-4000-a000-00000000000e'), 1::bigint,
-  'fa_kalyani sees only the day the split-shift person worked at Kalyani');
+  'fa_kalyani sees only the day the two-outlet person worked at Kalyani');
 -- The per-person range read, hand-crafted to name the other outlet. This is the
 -- shape that leaks if the outlet is left implicit (design D7): the surface always
 -- passes its own outlet, and the policy refuses this even when it does not.
@@ -221,21 +221,21 @@ select ok((select count(*) from public.attendance) >= 1,
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000e'::uuid);
 
 select is((select count(distinct outlet_id) from public.attendance), 2::bigint,
-  'split_shift sees their own attendance at both assigned outlets');
+  'two_outlets sees their own attendance at both assigned outlets');
 select is((select count(*) from public.attendance), 2::bigint,
-  'split_shift sees only their own rows — no colleague at either outlet');
+  'two_outlets sees only their own rows — no colleague at either outlet');
 select is((select count(*) from public.attendance
             where person_id <> '10000000-0000-4000-a000-00000000000e'), 0::bigint,
-  'split_shift reads no colleague''s attendance by naming them explicitly');
+  'two_outlets reads no colleague''s attendance by naming them explicitly');
 select is((select count(*) from public.outlets), 2::bigint,
-  'split_shift reads both outlet rows, because they work at both');
+  'two_outlets reads both outlet rows, because they work at both');
 select is((select count(*) from public.assignments), 2::bigint,
-  'split_shift sees both of their own assignments and nobody else''s');
+  'two_outlets sees both of their own assignments and nobody else''s');
 -- Still an Employee at both: no manager surface opens anywhere.
 select is((select count(*) from public.expenses), 0::bigint,
-  'split_shift reads no expenses at either outlet');
+  'two_outlets reads no expenses at either outlet');
 select is((select count(*) from public.inventory_items), 0::bigint,
-  'split_shift reads no stock at either outlet');
+  'two_outlets reads no stock at either outlet');
 
 reset role;
 

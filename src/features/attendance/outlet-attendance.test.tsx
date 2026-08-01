@@ -10,6 +10,7 @@ import {
   createMockAdapters,
   DEMO_GRILLER_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
+  DEMO_TWO_OUTLETS_ACCOUNT_ID,
   OUTLET_KALYANI_ID,
   OUTLET_KANCHRAPARA_ID,
 } from '@/data-access/mock'
@@ -151,7 +152,7 @@ describe('the outlet attendance day', () => {
     const day = await screen.findByTestId('attendance-day')
     const card = within(day).getByTestId(`day-d1000000-0000-4000-a000-000000000013`)
     expect(within(card).getByText(/Demo Prep Cook/)).toBeInTheDocument()
-    expect(within(card).getByText(/account deactivated/)).toBeInTheDocument()
+    expect(within(card).getByText(/deactivated/)).toBeInTheDocument()
   })
 
   it('distinguishes arrivals waiting for approval, and counts them', async () => {
@@ -206,13 +207,9 @@ describe('the outlet attendance day', () => {
 
     const card = await screen.findByTestId(`day-${DEMO_RUNNER_ACCOUNT_ID}`)
     await waitFor(() =>
-      expect(within(card).getByTestId('approval-note')).toHaveTextContent(
-        'Approved by Demo Manager',
-      ),
+      expect(within(card).getByTestId('approval-note')).toHaveTextContent(/Demo Manager, /),
     )
-    expect(within(card).getByTestId('approver-place')).toHaveTextContent(
-      'Approver was at the outlet',
-    )
+    expect(within(card).getByTestId('approver-place')).toHaveTextContent('Approver: on site')
   })
 
   it('asks for a reason when the manager is away from the outlet', async () => {
@@ -243,7 +240,7 @@ describe('the outlet attendance day', () => {
       ),
     )
     // Recorded, not refused — and the row says the approver was not there.
-    expect(within(card).getByTestId('approver-place')).toHaveTextContent('from the outlet')
+    expect(within(card).getByTestId('approver-place')).toHaveTextContent(/Approver: [\d.]+ m/)
   })
 
   it('asks for a reason when no position could be read at all', async () => {
@@ -359,9 +356,7 @@ describe('the outlet attendance day', () => {
     expect(await screen.findByTestId('earlier-days-waiting')).toBeInTheDocument()
     // The dot says which way to go and says it out loud, because a dot that only
     // works for people who can see the accent colour is not a signal.
-    expect(
-      screen.getByText('Earlier days at this outlet hold arrivals waiting for approval'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Earlier days hold arrivals waiting for approval')).toBeInTheDocument()
     // Nothing after today, and today is where the view opens.
     expect(screen.queryByTestId('later-days-waiting')).not.toBeInTheDocument()
   })
@@ -487,22 +482,24 @@ describe('the outlet attendance day', () => {
 
     const card = await screen.findByTestId(`day-${staffId}`)
     await waitFor(() =>
-      expect(within(card).getByTestId('entered-by')).toHaveTextContent('Entered by Demo Manager'),
+      expect(within(card).getByTestId('entered-by')).toHaveTextContent('Entered by: Demo Manager'),
     )
-    expect(within(card).getByText('manual entry')).toBeInTheDocument()
+    // Visibly not a self check-in: the enterer stamp stands where the GPS
+    // evidence would be, and no phone or distance chip appears at all.
+    expect(within(card).queryByText('phone')).not.toBeInTheDocument()
     // Recording it settled it: the enterer's stamp IS the decision, so the day
     // is not left waiting for its own author to approve it.
-    expect(within(card).getByTestId('approval-note')).toHaveTextContent('Approved by Demo Manager')
+    expect(within(card).getByTestId('approval-note')).toHaveTextContent(/Demo Manager, /)
     expect(within(card).queryByTestId('approver-place')).not.toBeInTheDocument()
   })
 
-  it('asks the outlet only for its own day', async () => {
+  it('asks only for the outlets in scope, as a set', async () => {
     const adapters = createMockAdapters()
     const list = vi.spyOn(adapters.attendance, 'listOutletDay')
     renderDay(adapters)
 
     await screen.findByTestId('attendance-day')
-    expect(list).toHaveBeenCalledWith(OUTLET_KALYANI_ID, expect.any(String))
+    expect(list).toHaveBeenCalledWith([OUTLET_KALYANI_ID], expect.any(String))
   })
 })
 
@@ -527,23 +524,29 @@ describe('the outlet attendance person view', () => {
     vi.useRealTimers()
   })
 
-  it('names its outlet on every read, rather than resolving it from the session', async () => {
+  it('names no outlet at all, so the policy decides what comes back', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()
     const range = vi.spyOn(adapters.attendance, 'listPersonRange')
     renderDay(adapters)
 
-    await user.click(await screen.findByTestId('axis-person'))
+    await user.click(await screen.findByTestId('axis-staff'))
 
+    // Person and dates, and nothing else (attendance-one-day-per-person,
+    // design D4). "Every outlet this reader may see" is the intended meaning,
+    // and it is resolved in the database from their own live assignments — so
+    // naming a set here could only duplicate the policy or contradict it.
     await waitFor(() => expect(range).toHaveBeenCalled())
-    expect(range.mock.calls[0]?.[1]).toBe(OUTLET_KALYANI_ID)
+    expect(range.mock.calls[0]).toHaveLength(3)
+    expect(range.mock.calls[0]?.[1]).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(range.mock.calls[0]?.[2]).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
   it('summarises the range and lists its days, derived absences included', async () => {
     const user = userEvent.setup()
     renderDay()
 
-    await user.click(await screen.findByTestId('axis-person'))
+    await user.click(await screen.findByTestId('axis-staff'))
     await user.selectOptions(
       await screen.findByTestId('person-picker'),
       personaFixtures.employee.profile.id,
@@ -565,13 +568,15 @@ describe('the outlet attendance person view', () => {
     const range = vi.spyOn(adapters.attendance, 'listPersonRange')
     renderDay(adapters)
 
-    await user.click(await screen.findByTestId('axis-person'))
+    await user.click(await screen.findByTestId('axis-staff'))
     await screen.findByTestId('range-picker')
     const before = range.mock.calls.length
     await user.click(screen.getByRole('button', { name: 'Previous month' }))
 
     await waitFor(() => expect(range.mock.calls.length).toBeGreaterThan(before))
-    expect(range.mock.calls.at(-1)?.[1]).toBe(OUTLET_KALYANI_ID)
+    // A different month, and still no outlet named.
+    expect(range.mock.calls.at(-1)).toHaveLength(3)
+    expect(range.mock.calls.at(-1)?.[1]).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 })
 
@@ -656,18 +661,27 @@ describe("the owner's stranded days", () => {
 
     // The outlet in scope is stated rather than offered: there is nowhere to go.
     const here = await screen.findByTestId(`stranded-${OUTLET_KALYANI_ID}`)
-    expect(here).toHaveTextContent('this outlet')
+    expect(here).toHaveTextContent('selected')
     expect(here.tagName).not.toBe('BUTTON')
 
     await user.click(screen.getByTestId(`stranded-${OUTLET_KANCHRAPARA_ID}`))
 
     // One gesture from noticing to acting, rather than a count followed by
-    // hunting through the picker.
+    // hunting through the picker. Following a chip REPLACES the selection
+    // rather than adding to it: the point of the row is "the unsettled days are
+    // over there", so it takes you there.
     await waitFor(() =>
-      expect(screen.getByTestId('surface-outlet')).toHaveValue(OUTLET_KANCHRAPARA_ID),
+      expect(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    )
+    expect(screen.getByTestId(`surface-outlet-${OUTLET_KALYANI_ID}`)).toHaveAttribute(
+      'aria-pressed',
+      'false',
     )
     expect(await screen.findByTestId(`stranded-${OUTLET_KANCHRAPARA_ID}`)).toHaveTextContent(
-      'this outlet',
+      'selected',
     )
   })
 
@@ -802,7 +816,7 @@ describe('the roll-call is the outlet’s staff', () => {
     renderDay()
 
     await screen.findByTestId('attendance-day')
-    await user.click(screen.getByTestId('axis-person'))
+    await user.click(screen.getByTestId('axis-staff'))
 
     const picker = await screen.findByTestId('person-picker')
     const names = within(picker)
@@ -813,5 +827,189 @@ describe('the roll-call is the outlet’s staff', () => {
     // nothing (design D5).
     expect(names).not.toContain('Demo Manager')
     expect(names).not.toContain('Demo Owner')
+  })
+})
+
+/**
+ * One day per person, read across a selection of outlets
+ * (attendance-one-day-per-person).
+ *
+ * The bug this replaced: somebody staffed at two shops who worked at one of them
+ * was derived ABSENT at the other, on the manager's day, on the by-staff view
+ * and in their own history. That is a false statement about a day somebody is
+ * paid for, so it is asserted from both sides here — the outlet they went to and
+ * the one they did not.
+ */
+describe('a person who works at two outlets', () => {
+  const ownerSession: Session = {
+    mode: 'demo',
+    userId: personaFixtures.super_admin.profile.id,
+    assignments: personaFixtures.super_admin.assignments,
+    ...deriveSessionScope(personaFixtures.super_admin.assignments),
+    displayName: personaFixtures.super_admin.profile.full_name,
+    persona: personaFixtures.super_admin,
+  }
+
+  function renderAsOwner(adapters: DataAdapters = createMockAdapters()) {
+    return render(
+      <MemoryRouter>
+        <SessionContext.Provider value={ownerSession}>
+          <AdaptersContext.Provider value={adapters}>
+            <OutletAttendance />
+          </AdaptersContext.Provider>
+        </SessionContext.Provider>
+      </MemoryRouter>,
+    )
+  }
+
+  /** Step the day picker back from the day the view opened on. */
+  async function goBack(user: ReturnType<typeof userEvent.setup>, days: number) {
+    for (let step = 0; step < days; step += 1) {
+      await user.click(screen.getByRole('button', { name: 'Previous day' }))
+    }
+  }
+
+  it('reads as working at another outlet, not absent, at the one they missed', async () => {
+    const user = userEvent.setup()
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    // Two days back they worked at Kanchrapara. Kalyani's manager cannot see
+    // that row at all, so without the database answering the one-bit question
+    // they would read as absent (design D3).
+    await goBack(user, 2)
+
+    const card = await screen.findByTestId(`day-${DEMO_TWO_OUTLETS_ACCOUNT_ID}`)
+    await waitFor(() => expect(within(card).getByTestId('working-elsewhere')).toBeInTheDocument())
+    expect(within(card).queryByTestId('derived-absent')).not.toBeInTheDocument()
+    // And nothing about where, when, or whether anybody approved it.
+    expect(card).not.toHaveTextContent('Kanchrapara')
+    expect(within(card).queryByTestId('approval-note')).not.toBeInTheDocument()
+    // Nor an offer to type in an arrival for a day that is already taken.
+    expect(screen.queryByTestId(`manual-${DEMO_TWO_OUTLETS_ACCOUNT_ID}`)).not.toBeInTheDocument()
+  })
+
+  it('reads as absent when they were at neither outlet', async () => {
+    const user = userEvent.setup()
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    // Four days back holds nothing for them anywhere. A genuine absence has to
+    // survive this change, or the fix would simply have hidden every absence.
+    await goBack(user, 4)
+
+    const card = await screen.findByTestId(`day-${DEMO_TWO_OUTLETS_ACCOUNT_ID}`)
+    await waitFor(() => expect(within(card).getByTestId('derived-absent')).toBeInTheDocument())
+  })
+
+  it('shows the real row instead once both outlets are selected', async () => {
+    const user = userEvent.setup()
+    renderAsOwner()
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
+    await goBack(user, 2)
+
+    // Their actual day, at the outlet they attended, listed once — and no
+    // working-elsewhere line, because the selection covers where they went.
+    const card = await screen.findByTestId(`day-${DEMO_TWO_OUTLETS_ACCOUNT_ID}`)
+    await waitFor(() =>
+      expect(within(card).getByTestId('outlet-chip')).toHaveTextContent('Shawarmania Kanchrapara'),
+    )
+    expect(within(card).queryByTestId('working-elsewhere')).not.toBeInTheDocument()
+    expect(screen.getAllByTestId(`day-${DEMO_TWO_OUTLETS_ACCOUNT_ID}`)).toHaveLength(1)
+  })
+
+  it('asks the day for the whole selection, as one read', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters()
+    const list = vi.spyOn(adapters.attendance, 'listOutletDay')
+    renderAsOwner(adapters)
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
+
+    await waitFor(() =>
+      expect(list.mock.calls.at(-1)?.[0]).toEqual(
+        expect.arrayContaining([OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID]),
+      ),
+    )
+  })
+
+  it('refuses to clear the last selected outlet', async () => {
+    renderAsOwner()
+    await screen.findByTestId('attendance-day')
+
+    // An empty selection is a blank surface asking a question nobody asked for,
+    // so the control says so before the press rather than swallowing it after.
+    const only = screen.getByTestId(`surface-outlet-${OUTLET_KALYANI_ID}`)
+    expect(only).toHaveAttribute('aria-pressed', 'true')
+    expect(only).toBeDisabled()
+  })
+
+  it('offers no outlet picker on the by-staff axis', async () => {
+    const user = userEvent.setup()
+    renderAsOwner()
+
+    // By outlet has one, because it is a filter within what they may already
+    // see. By staff must not: its scope is the database's answer to who they
+    // are, not a choice (design D4).
+    await screen.findByTestId('attendance-day')
+    expect(screen.getByTestId('surface-outlets')).toBeInTheDocument()
+    await user.click(screen.getByTestId('axis-staff'))
+    expect(screen.queryByTestId('surface-outlets')).not.toBeInTheDocument()
+  })
+
+  it('counts each business date once across both outlets', async () => {
+    const user = userEvent.setup()
+    renderAsOwner()
+
+    await user.click(await screen.findByTestId('axis-staff'))
+    await user.selectOptions(
+      await screen.findByTestId('person-picker'),
+      DEMO_TWO_OUTLETS_ACCOUNT_ID,
+    )
+
+    const range = await screen.findByTestId('attendance-range')
+    const dates = within(range)
+      .getAllByTestId(/^range-day-/)
+      .map((card) => card.dataset.testid)
+    // One card per date. Assembled per outlet this list would hold each date
+    // twice, half of them absences on days the person was at work.
+    expect(new Set(dates).size).toBe(dates.length)
+  })
+
+  it('shows a placeholder rather than the previous selection’s rows', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters()
+
+    // The second read is held open, so the in-flight moment is observable
+    // rather than a race the test hopes to catch.
+    let release: (rows: never[]) => void = () => undefined
+    const real = adapters.attendance.listOutletDay.bind(adapters.attendance)
+    let first = true
+    vi.spyOn(adapters.attendance, 'listOutletDay').mockImplementation(async (ids, date) => {
+      if (first) {
+        first = false
+        return real(ids, date)
+      }
+      return new Promise((resolve) => {
+        release = resolve as (rows: never[]) => void
+      })
+    })
+
+    renderAsOwner(adapters)
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
+
+    // The previous selection's rows are gone before anything renders under the
+    // new one's name, and the space they will occupy is reserved (design D8).
+    const loading = await screen.findByTestId('day-loading')
+    expect(loading).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByTestId('attendance-day')).not.toBeInTheDocument()
+
+    release([])
+    await waitFor(() => expect(screen.queryByTestId('day-loading')).not.toBeInTheDocument())
   })
 })

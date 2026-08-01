@@ -13,7 +13,7 @@ import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
 
-import { forgetRememberedOutlets, readRememberedOutlet } from './remembered-outlet'
+import { forgetRememberedOutlets, readRememberedOutlets } from './remembered-outlet'
 
 /**
  * The outlet in scope, remembered (owner-reaches-every-outlet, design D6 and D7).
@@ -104,7 +104,7 @@ describe('the outlet in scope, remembered', () => {
     expect((selector as HTMLSelectElement).value).toBe(OUTLET_KALYANI_ID)
     // …and the dead value is written over, so the next surface does not
     // rediscover it.
-    await waitFor(() => expect(readRememberedOutlet(ownerSession)).toBe(OUTLET_KALYANI_ID))
+    await waitFor(() => expect(readRememberedOutlets(ownerSession)).toEqual([OUTLET_KALYANI_ID]))
   })
 
   it('is forgotten when a session ends', async () => {
@@ -114,7 +114,7 @@ describe('the outlet in scope, remembered', () => {
 
     // What signing out does, on a phone that gets handed over.
     forgetRememberedOutlets()
-    expect(readRememberedOutlet(ownerSession)).toBeNull()
+    expect(readRememberedOutlets(ownerSession)).toEqual([])
 
     renderSurface(ExpensesSurface)
     expect(await screen.findByTestId('surface-outlet')).toHaveValue(OUTLET_KALYANI_ID)
@@ -134,7 +134,7 @@ describe('the outlet in scope, remembered', () => {
       ...deriveSessionScope(ownerAssignments),
       displayName: ownerSession.displayName,
     }
-    expect(readRememberedOutlet(realSession)).toBeNull()
+    expect(readRememberedOutlets(realSession)).toEqual([])
   })
 
   it('remembers a filter and nothing more — the outlet is still not theirs to run', async () => {
@@ -165,7 +165,7 @@ describe('the outlet in scope, remembered', () => {
 
     await screen.findByTestId('cash-figures')
     expect(screen.queryByTestId('surface-outlet')).not.toBeInTheDocument()
-    expect(readRememberedOutlet(managerSession)).toBeNull()
+    expect(readRememberedOutlets(managerSession)).toEqual([])
   })
 
   it('offers the owner every outlet to remember, and no more', async () => {

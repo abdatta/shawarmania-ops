@@ -111,10 +111,10 @@ function toRecord(row: JoinedRow): AttendanceRecord {
 function toActionError(error: PostgrestError): AttendanceActionError {
   const detail = `${error.message} ${error.details ?? ''}`
 
-  if (detail.includes('attendance_one_per_person_outlet_day')) {
+  if (detail.includes('attendance_one_per_person_day')) {
     return new AttendanceActionError(
       'already_started',
-      'Your day has already been started. Reload to see today’s status.',
+      'This day has already been recorded, here or at another outlet. Reload to see it.',
     )
   }
   if (detail.includes('outlet is not trading')) {
@@ -194,12 +194,13 @@ export function createSupabaseAttendanceAdapter(
   }
 
   return {
-    async getDay(personId, businessDate, outletId) {
+    async getDay(personId, businessDate) {
+      // No outlet filter: one person holds one row a business date, so naming
+      // an outlet could only hide the row that exists.
       const { data, error } = await table()
         .select(COLUMNS)
         .eq('person_id', personId)
         .eq('business_date', businessDate)
-        .eq('outlet_id', outletId)
         .maybeSingle()
       if (error) throw toActionError(error)
       return data ? toRecord(data as unknown as JoinedRow) : null
@@ -217,15 +218,17 @@ export function createSupabaseAttendanceAdapter(
     },
 
     /**
-     * The outlet is filtered here as well as by policy. A read shaped by person
-     * is the one that leaks, and a query should mean one thing rather than
-     * quietly widening to whatever RLS happens to allow the caller (design D7).
+     * No outlet filter, on purpose (attendance-one-day-per-person, design D4).
+     * The question this answers is "how many days did this person work", and
+     * the honest scope for it is every outlet the reader may see — which is
+     * exactly what `attendance_select` already resolves from their live
+     * assignments. Naming a set here would either restate the policy or
+     * disagree with it.
      */
-    async listPersonRange(personId, outletId, from, to) {
+    async listPersonRange(personId, from, to) {
       const { data, error } = await table()
         .select(COLUMNS)
         .eq('person_id', personId)
-        .eq('outlet_id', outletId)
         .gte('business_date', from)
         .lte('business_date', to)
         .order('business_date', { ascending: false })
@@ -233,15 +236,32 @@ export function createSupabaseAttendanceAdapter(
       return (data as unknown as JoinedRow[]).map(toRecord)
     },
 
-    async listOutletDay(outletId, businessDate) {
+    async listOutletDay(outletIds, businessDate) {
+      if (outletIds.length === 0) return []
       const { data, error } = await table()
         .select(COLUMNS)
-        .eq('outlet_id', outletId)
+        .in('outlet_id', outletIds as string[])
         .eq('business_date', businessDate)
       if (error) throw toActionError(error)
       return (data as unknown as JoinedRow[])
         .map(toRecord)
         .sort((a, b) => a.personName.localeCompare(b.personName))
+    },
+
+    /**
+     * The one bit that crosses the outlet boundary, asked of the database
+     * because RLS means the client cannot work it out (design D3). The function
+     * intersects the named set with what the caller may actually see, so this
+     * widens nothing that selecting an outlet did not already.
+     */
+    async listElsewhere(outletIds, businessDate) {
+      if (outletIds.length === 0) return []
+      const { data, error } = await client.rpc('attendance_elsewhere', {
+        p_outlets: outletIds as string[],
+        p_business_date: businessDate,
+      })
+      if (error) throw toActionError(error)
+      return data ?? []
     },
 
     /**
@@ -317,16 +337,25 @@ export function createSupabaseAttendanceAdapter(
      * writing session for both and would overwrite anything supplied.
      */
     async recordManualEntry({ personId, outletId, businessDate, at }) {
-      // One row per person per outlet per day, so the day may already exist as
-      // an absent or leave row. Amend it rather than colliding with it; the
-      // guard still refuses replacing a check-in that is already recorded.
+      // One row per person per day, so the day may already exist as an absent
+      // or leave row. Amend it rather than colliding with it; the guard still
+      // refuses replacing a check-in that is already recorded.
       const { data: existing, error: findError } = await table()
-        .select('id')
+        .select('id, outlet_id')
         .eq('person_id', personId)
-        .eq('outlet_id', outletId)
         .eq('business_date', businessDate)
         .maybeSingle()
       if (findError) throw toActionError(findError)
+
+      // The row is theirs but it belongs to another shop. Moving a recorded day
+      // between outlets is not what this action is for, and quietly amending
+      // the other outlet's row would be worse than refusing.
+      if (existing && existing.outlet_id !== outletId) {
+        throw new AttendanceActionError(
+          'recorded_elsewhere',
+          'This person already has a day recorded at another outlet. One day belongs to one outlet.',
+        )
+      }
 
       if (existing) {
         const { error } = await table()

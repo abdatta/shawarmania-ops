@@ -560,42 +560,49 @@ export class AttendanceActionError extends DataActionError {
 
 export interface AttendanceAdapter {
   /**
-   * One person's record for a business date **at one outlet**, or null if they
-   * have not started there. The person and the outlet are both explicit rather
-   * than implied by the session: a query should mean one thing, and RLS should
-   * be the second line of defence rather than the only thing that makes it
-   * correct. The outlet became a parameter with multi-outlet-people, because a
-   * person may hold a row at each of two outlets on one business date.
+   * One person's record for a business date, or null if they have not started.
+   *
+   * The outlet is no longer a parameter: since attendance-one-day-per-person a
+   * person holds at most one row per business date across every outlet, so
+   * naming one could only ever hide the row that exists.
    */
-  getDay(personId: string, businessDate: string, outletId: string): Promise<AttendanceRecord | null>
+  getDay(personId: string, businessDate: string): Promise<AttendanceRecord | null>
   /**
    * One person's OWN history, most recent business date first, spanning every
    * outlet they work or worked at — each day naming its outlet, because a
-   * person may hold a morning at one and an evening at another.
-   *
-   * This is the read a person makes about themselves. A manager reading
-   * somebody else uses `listPersonRange`, which names its outlet, because a
-   * read shaped by person is the shape that leaks when the outlet is left
-   * implicit (design D7).
+   * person may work some days at one and some at another.
    */
   listHistory(personId: string, from: string, to: string): Promise<AttendanceRecord[]>
   /**
-   * One person's days at ONE named outlet over a range of business dates, for a
-   * manager reading a pattern rather than a roll-call.
+   * One person's days over a range of business dates, for a manager reading a
+   * pattern rather than a roll-call.
    *
-   * The outlet is required and never resolved from the session. A Franchise
-   * Admin therefore cannot even express "this person's days everywhere", and
-   * the policy refuses it as well — RLS is the second line of defence here, not
-   * the only thing making the query correct.
+   * **The scope is the policy's** (attendance-one-day-per-person, design D4).
+   * #28's D7 pinned an explicit outlet here so the query would mean one thing
+   * rather than quietly widening to whatever RLS allowed. That held while the
+   * intended meaning was one outlet; the intended meaning is now exactly the set
+   * the policy computes — one outlet for a single-outlet Franchise Admin, their
+   * own for a multi-outlet one, all of them for the owner — so naming a set
+   * client-side would either duplicate the policy or contradict it. Asserted in
+   * supabase/tests/18_attendance_elsewhere.sql rather than assumed.
    */
-  listPersonRange(
-    personId: string,
-    outletId: string,
-    from: string,
-    to: string,
-  ): Promise<AttendanceRecord[]>
-  /** One outlet's day, for a manager. */
-  listOutletDay(outletId: string, businessDate: string): Promise<AttendanceRecord[]>
+  listPersonRange(personId: string, from: string, to: string): Promise<AttendanceRecord[]>
+  /**
+   * The day across a set of outlets, for a manager. One list, each record
+   * carrying its own outlet, a person appearing once.
+   */
+  listOutletDay(outletIds: readonly string[], businessDate: string): Promise<AttendanceRecord[]>
+  /**
+   * Which people on these outlets' staff lists are accounted for somewhere the
+   * caller cannot see, on this business date (design D3).
+   *
+   * Person ids and nothing else. Not which outlet, not the time, not the
+   * status, not the evidence, not the approver. It exists because a Franchise
+   * Admin cannot read another outlet's rows and therefore cannot work out for
+   * themselves that somebody missing from their roll-call was at work — without
+   * it the surface would call them absent on a day they were paid for.
+   */
+  listElsewhere(outletIds: readonly string[], businessDate: string): Promise<string[]>
   /**
    * How many days are waiting for approval at each outlet the caller can reach,
    * so the owner learns where days are stranded without opening every outlet in

@@ -1218,6 +1218,10 @@ export type Database = {
       }
       app_username_from_auth_alias: { Args: { input: string }; Returns: string }
       app_username_valid: { Args: { input: string }; Returns: boolean }
+      attendance_elsewhere: {
+        Args: { p_business_date: string; p_outlets: string[] }
+        Returns: string[]
+      }
       close_business_day: {
         Args: {
           p_actual_closing_paise: number

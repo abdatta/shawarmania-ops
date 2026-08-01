@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
+import { LoadingList } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
 import type { AttendanceRecord } from '@/data-access/adapters'
 import { resolveBusinessDate } from '@/domain'
@@ -25,9 +26,11 @@ import { useOwnAttendance } from './use-own-attendance'
  * renderers would drift apart the first time one of them gained a field.
  *
  * The range spans every outlet they work at, because a person's own history
- * always has. A day with nothing recorded reads as absent per outlet, which is
- * what the row model means: somebody who works at two shops and turned up at
- * neither was absent at both.
+ * always has. **Each business date appears once** since
+ * attendance-one-day-per-person: the range used to be assembled once per outlet
+ * and the results concatenated, so somebody who worked at one shop read as
+ * present there and absent at the other on the same day. There is one day, and
+ * it names the outlet it was worked at.
  */
 export function MyAttendance() {
   const session = useSession()
@@ -38,11 +41,14 @@ export function MyAttendance() {
   const [chosenRange, setChosenRange] = useState<DateRange | null>(null)
 
   const personId = own.status === 'ready' ? session.userId : null
-  // Their first outlet's reckoning of today. Only used to bound the picker; each
-  // day is assembled against its own outlet's clock below.
+  const outlets = own.status === 'ready' ? own.outlets : null
+  // Today as their outlets reckon it — the later, where cutovers disagree, so a
+  // day that has started at one of their shops is not hidden.
   const today =
-    own.status === 'ready' && own.days[0]
-      ? resolveBusinessDate(new Date(), own.days[0].outlet.business_day_cutover)
+    outlets && outlets.length > 0
+      ? outlets
+          .map((outlet) => resolveBusinessDate(new Date(), outlet.business_day_cutover))
+          .reduce((latest, candidate) => (candidate > latest ? candidate : latest), '')
       : null
 
   // Derived rather than set from an effect once `today` is known: an effect that
@@ -72,35 +78,29 @@ export function MyAttendance() {
   }, [attendance, personId, range])
 
   const days: DayRow[] = useMemo(() => {
-    if (own.status !== 'ready' || !records || !range) return []
-    return own.days
-      .flatMap(({ outlet }) =>
-        assembleRange({
-          records: records.filter((record) => record.outletId === outlet.id),
-          outlet,
-          range,
-          // The session's own assignments, so a range reaching before they were
-          // hired paints nothing there.
-          windows: session.assignments
-            .filter((assignment) => assignment.outletId === outlet.id)
-            .map(({ startedOn, endedOn }) => ({ startedOn, endedOn })),
-        }),
-      )
-      .sort(
-        (a, b) =>
-          b.businessDate.localeCompare(a.businessDate) ||
-          (a.outletName ?? '').localeCompare(b.outletName ?? ''),
-      )
-  }, [own, records, range, session.assignments])
+    if (!outlets || !records || !range) return []
+    return assembleRange({
+      records,
+      outlets,
+      range,
+      // The session's own assignments, so a range reaching before they were
+      // hired paints nothing there.
+      windows: session.assignments
+        .filter((assignment) => assignment.outletId !== null)
+        .map(({ outletId, startedOn, endedOn }) => ({
+          outletId: outletId as string,
+          startedOn,
+          endedOn,
+        })),
+    })
+  }, [outlets, records, range, session.assignments])
 
-  const multiOutlet = own.status === 'ready' && own.days.length > 1
+  const multiOutlet = (outlets?.length ?? 0) > 1
   // The radius each row was judged against is that row's own outlet's — a person
-  // may have worked a morning at one and an evening at another, and one number
-  // for both would mislabel one of them.
+  // may have worked some days at one and some at another, and one number for
+  // both would mislabel half of them.
   const radiusFor = (row: DayRow) =>
-    own.status === 'ready'
-      ? (own.days.find((day) => day.outlet.id === row.outletId)?.outlet.geofence_radius_m ?? 0)
-      : 0
+    outlets?.find((outlet) => outlet.id === row.outletId)?.geofence_radius_m ?? 0
 
   return (
     <div className="mx-auto max-w-md">
@@ -111,7 +111,7 @@ export function MyAttendance() {
       />
 
       {(own.status === 'loading' || (own.status === 'ready' && records === null && !failed)) && (
-        <p className="text-sm text-content-muted">Loading…</p>
+        <LoadingList label="your attendance" data-testid="my-attendance-loading" />
       )}
 
       {(own.status === 'error' || failed) && (

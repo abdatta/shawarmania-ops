@@ -233,12 +233,9 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
     record.businessDate >= from && record.businessDate <= to
 
   return {
-    async getDay(personId, businessDate, outletId) {
+    async getDay(personId, businessDate) {
       const record = records.find(
-        (candidate) =>
-          candidate.personId === personId &&
-          candidate.businessDate === businessDate &&
-          candidate.outletId === outletId,
+        (candidate) => candidate.personId === personId && candidate.businessDate === businessDate,
       )
       return record ? clone(record) : null
     },
@@ -250,23 +247,48 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         .map(clone)
     },
 
-    async listPersonRange(personId, outletId, from, to) {
+    /**
+     * No outlet filter, matching the real adapter: the demo's owner reads every
+     * outlet, which is the whole point of the by-staff axis.
+     */
+    async listPersonRange(personId, from, to) {
       return records
-        .filter(
-          (record) =>
-            record.personId === personId &&
-            record.outletId === outletId &&
-            inRange(record, from, to),
-        )
+        .filter((record) => record.personId === personId && inRange(record, from, to))
         .sort((a, b) => b.businessDate.localeCompare(a.businessDate))
         .map(clone)
     },
 
-    async listOutletDay(outletId, businessDate) {
+    async listOutletDay(outletIds, businessDate) {
       return records
-        .filter((record) => record.outletId === outletId && record.businessDate === businessDate)
+        .filter(
+          (record) => outletIds.includes(record.outletId) && record.businessDate === businessDate,
+        )
         .sort((a, b) => a.personName.localeCompare(b.personName))
         .map(clone)
+    },
+
+    /**
+     * The demo's stand-in for `attendance_elsewhere`. It reproduces the bound
+     * rather than the query: only people on a selected outlet's staff list, only
+     * the fact, and nothing when the row is already inside the selection. A mock
+     * that answered more generously would demo a disclosure the database refuses.
+     */
+    async listElsewhere(outletIds, businessDate) {
+      const onStaffHere = (personId: string) =>
+        assignedOutlets(assignmentFixtures[personId] ?? []).some((id) => outletIds.includes(id))
+
+      return [
+        ...new Set(
+          records
+            .filter(
+              (record) =>
+                record.businessDate === businessDate &&
+                !outletIds.includes(record.outletId) &&
+                onStaffHere(record.personId),
+            )
+            .map((record) => record.personId),
+        ),
+      ]
     },
 
     async countWaitingByOutlet() {
@@ -297,16 +319,22 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
     },
 
     async checkIn({ personId, outletId, businessDate, reading }) {
+      // Matched on person and date alone, mirroring
+      // `attendance_one_per_person_day`: a day started at the other outlet is
+      // the same day, and a second row for it is what the database refuses.
       const existing = records.find(
-        (candidate) =>
-          candidate.personId === personId &&
-          candidate.outletId === outletId &&
-          candidate.businessDate === businessDate,
+        (candidate) => candidate.personId === personId && candidate.businessDate === businessDate,
       )
       if (existing?.checkIn) {
         throw new AttendanceActionError(
           'already_started',
-          'Your day has already been started. Reload to see today’s status.',
+          'This day has already been recorded, here or at another outlet. Reload to see it.',
+        )
+      }
+      if (existing && existing.outletId !== outletId) {
+        throw new AttendanceActionError(
+          'recorded_elsewhere',
+          'This day is already recorded at another outlet. One day belongs to one outlet.',
         )
       }
 
@@ -352,15 +380,18 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       const outlet = outletFor(outletId)
 
       const existing = records.find(
-        (candidate) =>
-          candidate.personId === personId &&
-          candidate.outletId === outletId &&
-          candidate.businessDate === businessDate,
+        (candidate) => candidate.personId === personId && candidate.businessDate === businessDate,
       )
       if (existing?.checkIn) {
         throw new AttendanceActionError(
           'already_checked_in',
           'A check-in is already recorded for this day.',
+        )
+      }
+      if (existing && existing.outletId !== outletId) {
+        throw new AttendanceActionError(
+          'recorded_elsewhere',
+          'This person already has a day recorded at another outlet. One day belongs to one outlet.',
         )
       }
 

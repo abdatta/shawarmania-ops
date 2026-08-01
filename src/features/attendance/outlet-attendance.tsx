@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { LoadingBlock, LoadingList } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { useAdapters, type Tables } from '@/data-access'
@@ -29,69 +30,91 @@ import { useOutletScope } from '@/features/outlet-scope'
 import { isLate, readDay, tallyDays, type DayReading } from './attendance-record'
 import { assembleRange, monthRange, type DateRange, type DayRow } from './attendance-range'
 import { RangeDayList, TallySummary } from './day-range-list'
-import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence } from './evidence'
+import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence, OutletChip } from './evidence'
 import { RangePicker } from './range-picker'
 import { useWaitingCounts, waitingAt, waitingLabel } from './waiting-counts'
 
 /**
- * The outlet's attendance, along two axes (docs/SCREENS.md).
+ * Attendance, along two axes (docs/SCREENS.md).
  *
- * **By day** is the roll-call: who arrived, when, from where, whether they were
- * late, and which days are still waiting for a decision — with the approval and
- * the manual entry made from here. Every current staff member appears, including
- * those with nothing recorded and those whose account is deactivated; cutting
- * access does not falsify the day. A view that listed only the rows that exist
- * would quietly hide the people who never turned up, which is the one thing a
- * manager most needs to see.
+ * **By outlet** is the roll-call: who arrived, when, from where, whether they
+ * were late, and which days are still waiting for a decision — with the approval
+ * and the manual entry made from here. Every current staff member appears,
+ * including those with nothing recorded and those whose account is deactivated;
+ * cutting access does not falsify the day. A view that listed only the rows that
+ * exist would quietly hide the people who never turned up, which is the one
+ * thing a manager most needs to see.
  *
- * **By person** is the pattern: one staff member over a range of dates, with the
- * counts. A pattern is what tells a manager something, and reading it one day at
- * a time is not reading it at all.
+ * **By staff** is the pattern: one person over a range of dates, with the counts.
+ * A pattern is what tells a manager something, and reading it one day at a time
+ * is not reading it at all. The counts exist so somebody can work out pay by
+ * hand, which is why each business date counts once.
+ *
+ * **The axis is chosen before the outlet** (attendance-one-day-per-person). It
+ * used to be the other way round, which made the owner's actual question —
+ * "how many days did this person work in August" — impossible to ask, because
+ * every read started by naming one shop. The outlet choice now belongs to the
+ * by-outlet axis alone, and it selects as many as the reader may see. By staff
+ * takes its scope from the database instead (design D4).
  *
  * Departed people (`left_on` set) are not offered for new days; their recorded
- * rows remain readable through the person view over a range that covers them.
+ * rows remain readable through the by-staff axis over a range that covers them.
  */
 export function OutletAttendance() {
-  const { outlets, accounts } = useAdapters()
+  const { outlets: outletsAdapter, accounts } = useAdapters()
 
-  const [outlet, setOutlet] = useState<Tables<'outlets'> | null>(null)
-  const [people, setPeople] = useState<AccountSummary[]>([])
-  const [axis, setAxis] = useState<'day' | 'person'>('day')
+  const [axis, setAxis] = useState<'outlet' | 'staff'>('outlet')
   const [error, setError] = useState<string | null>(null)
 
-  // Which outlet this surface is about. One for nearly everybody; a
-  // per-surface choice for somebody who manages more than one, which
-  // confers nothing — the database decides every write from the
-  // assignment (multi-outlet-people, design D6).
-  const { outletId, selector: outletSelector, choose } = useOutletScope()
+  // Which outlets this surface is about. One for nearly everybody; several for
+  // somebody who may see several, which confers nothing — the database decides
+  // every read and every write from the assignment (multi-outlet-people, D6).
+  const { outletIds, selector: outletSelector, choose } = useOutletScope({ multiple: true })
+  const scopeKey = [...outletIds].sort().join(',')
 
-  // The outlet and its people: fetched once, independent of which day is shown.
+  // The outlets and their people. Keyed by the scope that produced them, so a
+  // result for the previous selection reads as loading rather than rendering
+  // under the new one's name (design D8).
+  const [loaded, setLoaded] = useState<{
+    key: string
+    outlets: Tables<'outlets'>[]
+    people: AccountSummary[]
+  } | null>(null)
+
   useEffect(() => {
-    if (!outletId) return
+    if (scopeKey === '') return
     let active = true
-    void Promise.all([outlets.getOutlet(outletId), accounts.listAccounts()])
+    const ids = scopeKey.split(',')
+    void Promise.all([
+      Promise.all(ids.map((id) => outletsAdapter.getOutlet(id))),
+      accounts.listAccounts(),
+    ])
       .then(([found, list]) => {
-        if (!active || !found) return
-        setOutlet(found)
-        setPeople(
-          list
-            // Everybody on THIS outlet's staff — the people whose arrival it
-            // tracks (design D3) — whether or not they also work at another.
-            // Their other outlet's assignment is not visible here, and should
-            // not be: it is the other outlet's business.
-            .filter((account) => isStaffAt(account, outletId))
+        if (!active) return
+        const outlets = found.filter((outlet): outlet is Tables<'outlets'> => outlet !== null)
+        setLoaded({
+          key: scopeKey,
+          outlets,
+          people: list
+            // Everybody on a SELECTED outlet's staff list — the people whose
+            // arrival those outlets track (design D3) — listed once however
+            // many of them they work at.
+            .filter((account) => ids.some((id) => isStaffAt(account, id)))
             .sort((a, b) => a.fullName.localeCompare(b.fullName)),
-        )
+        })
+        setError(null)
       })
       .catch(() => {
-        if (active) setError('Could not load this outlet. Try again in a moment.')
+        if (active) setError('Could not load these outlets. Try again in a moment.')
       })
     return () => {
       active = false
     }
-  }, [outletId, outlets, accounts])
+  }, [scopeKey, outletsAdapter, accounts])
 
-  if (!outletId) {
+  const scope = loaded?.key === scopeKey ? loaded : null
+
+  if (outletIds.length === 0) {
     return (
       <div className="mx-auto max-w-2xl">
         <PageHeader title="Attendance" />
@@ -100,44 +123,49 @@ export function OutletAttendance() {
     )
   }
 
+  const unsurveyed = scope?.outlets.filter((outlet) => outlet.latitude === null) ?? []
+
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader
-        scope={outletSelector}
-        title="Attendance"
-        subtitle={outlet ? `${outlet.name} — who was here, and where they were.` : undefined}
-      />
+      <PageHeader title="Attendance" subtitle="Who was here, and where they were." />
 
-      <StrandedDays currentOutletId={outletId} onChoose={choose} />
+      <StrandedDays selected={outletIds} onChoose={choose} />
 
+      {/*
+        The axis first, then what it needs. By outlet needs to know which shops;
+        by staff does not, because the database already knows which shops this
+        reader may see and that is exactly the right answer (design D4).
+      */}
       <div className="mb-3 flex gap-2" role="tablist" aria-label="Read attendance by">
         <Button
           role="tab"
-          aria-selected={axis === 'day'}
-          variant={axis === 'day' ? 'primary' : 'secondary'}
+          aria-selected={axis === 'outlet'}
+          variant={axis === 'outlet' ? 'primary' : 'secondary'}
           size="phone"
-          data-testid="axis-day"
-          onClick={() => setAxis('day')}
+          data-testid="axis-outlet"
+          onClick={() => setAxis('outlet')}
         >
-          By day
+          By outlet
         </Button>
         <Button
           role="tab"
-          aria-selected={axis === 'person'}
-          variant={axis === 'person' ? 'primary' : 'secondary'}
+          aria-selected={axis === 'staff'}
+          variant={axis === 'staff' ? 'primary' : 'secondary'}
           size="phone"
-          data-testid="axis-person"
-          onClick={() => setAxis('person')}
+          data-testid="axis-staff"
+          onClick={() => setAxis('staff')}
         >
-          By person
+          By staff
         </Button>
       </div>
 
-      {outlet?.latitude === null && (
+      {axis === 'outlet' && outletSelector && <div className="mb-3">{outletSelector}</div>}
+
+      {unsurveyed.length > 0 && (
         <p className="mb-3 rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted">
-          This outlet has no captured position, so no check-in here can be measured against a
-          geofence and no approval here can show that a manager was on site. The owner captures it
-          standing at the counter.
+          {unsurveyed.map((outlet) => outlet.name).join(' and ')} has no captured position, so no
+          check-in there can be measured against a geofence and no approval there can show that a
+          manager was on site. The owner captures it standing at the counter.
         </p>
       )}
 
@@ -151,12 +179,18 @@ export function OutletAttendance() {
         </p>
       )}
 
-      {outlet &&
-        (axis === 'day' ? (
-          <DayAxis outlet={outlet} people={people} onError={setError} />
-        ) : (
-          <PersonAxis outlet={outlet} people={people} onError={setError} />
-        ))}
+      {scope === null ? (
+        <LoadingList label="attendance" data-testid="attendance-loading" />
+      ) : axis === 'outlet' ? (
+        <OutletAxis
+          key={scopeKey}
+          outlets={scope.outlets}
+          people={scope.people}
+          onError={setError}
+        />
+      ) : (
+        <StaffAxis outlets={scope.outlets} people={scope.people} onError={setError} />
+      )}
     </div>
   )
 }
@@ -178,18 +212,18 @@ export function OutletAttendance() {
  * unsettled days behind it.
  *
  * Choosing another outlet brings the view to it, so noticing and acting are one
- * gesture. The outlet already in scope is stated rather than offered, because
- * there is nowhere to go — and it is stated only when there is somewhere else
- * to compare it against. When it is the only outlet holding work the whole row
- * goes: the header already names the outlet and the day controls already say
- * there is more behind, so a lone chip about where you already are is a
- * sentence repeating two others.
+ * gesture. An outlet already in the selection is stated rather than offered,
+ * because there is nowhere to go — and it is stated only when there is somewhere
+ * else to compare it against. When the selection already covers every outlet
+ * holding work the whole row goes: the selector already names them and the day
+ * controls already say there is more behind, so a chip about where you already
+ * are is a sentence repeating two others.
  */
 function StrandedDays({
-  currentOutletId,
+  selected,
   onChoose,
 }: {
-  currentOutletId: string | null
+  selected: readonly string[]
   onChoose: (outletId: string) => void
 }) {
   const session = useSession()
@@ -198,9 +232,9 @@ function StrandedDays({
   // and one read serves them. A failed read keeps the last known counts.
   const { counts } = useWaitingCounts()
 
-  // Nothing to say unless some OTHER outlet is holding work. This is the whole
-  // job of the row: reaching a shop nobody opened.
-  const elsewhere = counts?.some((count) => count.outletId !== currentOutletId) ?? false
+  // Nothing to say unless some outlet OUTSIDE the selection is holding work.
+  // This is the whole job of the row: reaching a shop nobody opened.
+  const elsewhere = counts?.some((count) => !selected.includes(count.outletId)) ?? false
   if (!isOwner || !counts || !elsewhere) return null
 
   return (
@@ -210,7 +244,7 @@ function StrandedDays({
         // The chip already says which outlet, so the badge does not repeat it.
         const badge = <Badge count={count.waiting} label={waitingLabel(count.waiting)} />
 
-        if (count.outletId === currentOutletId) {
+        if (selected.includes(count.outletId)) {
           return (
             <span
               key={count.outletId}
@@ -218,7 +252,7 @@ function StrandedDays({
               className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 py-1 text-sm font-semibold text-content"
             >
               {name}
-              <span className="font-normal text-content-muted">(this outlet)</span>
+              <span className="font-normal text-content-muted">(selected)</span>
               {badge}
             </span>
           )
@@ -248,6 +282,11 @@ function StrandedDays({
  * exactly how stale that evidence is allowed to be. It is also the abuse bound:
  * longer would let a manager take one reading inside the fence, walk away, and
  * keep collecting one-tap no-reason approvals against it.
+ *
+ * **Keyed per outlet** since the view stopped being about one
+ * (attendance-one-day-per-person, design D6). One reading cannot vouch for
+ * standing in two places, so reusing it across outlets would be writing evidence
+ * that says somebody was somewhere they were not.
  */
 const POSITION_CACHE_MS = 60_000
 
@@ -256,7 +295,8 @@ const READING_RANK: Record<DayReading['kind'], number> = {
   waiting: 0,
   'not-yet-arrived': 1,
   absent: 2,
-  recorded: 3,
+  elsewhere: 3,
+  recorded: 4,
 }
 
 /** What an approval is waiting on, once the manager's position is known. */
@@ -272,12 +312,22 @@ type ApprovalFlow =
     }
   | { kind: 'saving' }
 
-function DayAxis({
-  outlet,
+/** One person on the roll-call, and everything the row needs about them. */
+interface RollCallRow {
+  person: RollCallPerson
+  record: AttendanceRecord | null
+  reading: DayReading
+  late: boolean
+  /** The outlet this row is judged against: where they worked, or where they are staff. */
+  outlet: Tables<'outlets'> | null
+}
+
+function OutletAxis({
+  outlets,
   people,
   onError,
 }: {
-  outlet: Tables<'outlets'>
+  outlets: readonly Tables<'outlets'>[]
   people: AccountSummary[]
   onError: (message: string | null) => void
 }) {
@@ -287,43 +337,60 @@ function DayAxis({
   // three agree and the read is made once (design D4).
   const { counts } = useWaitingCounts()
 
-  const today = resolveBusinessDate(new Date(), outlet.business_day_cutover)
+  // Today as each selected outlet reckons it. Where the cutovers disagree the
+  // later one is used, so a day that has started somewhere is openable rather
+  // than hidden behind a disabled arrow (design D7).
+  const today = outlets
+    .map((outlet) => resolveBusinessDate(new Date(), outlet.business_day_cutover))
+    .reduce((latest, candidate) => (candidate > latest ? candidate : latest), '')
+
   const [businessDate, setBusinessDate] = useState(today)
-  const [records, setRecords] = useState<AttendanceRecord[]>([])
-  const [loadedDate, setLoadedDate] = useState<string | null>(null)
   const [flow, setFlow] = useState<ApprovalFlow>({ kind: 'idle' })
   const [manualFor, setManualFor] = useState<AccountSummary | null>(null)
 
-  // A position reading, reused for a minute so approving one at a time is not one
-  // GPS read per person (design D11). In memory only, so a reload asks again.
-  const cachedPosition = useRef<{ reading: PositionReading; at: number } | null>(null)
+  const outletIds = useMemo(() => outlets.map((outlet) => outlet.id), [outlets])
+  const scopeKey = `${[...outletIds].sort().join(',')}|${businessDate}`
 
-  // The day exactly as it loaded, kept beside the live records purely to order the
-  // roll-call (design D12). Approvals update `records` and never this, so settling
-  // a row cannot move the list; reloading the day replaces it and re-sorts.
-  const [orderSeed, setOrderSeed] = useState<{
-    records: readonly AttendanceRecord[]
+  /**
+   * The day, and who the database says is accounted for out of sight, keyed by
+   * the scope that produced them. Loading is derived from that key lagging what
+   * is being asked for rather than blanked in the effect, which is what stops
+   * the previous selection's rows rendering under the new one (design D8).
+   */
+  const [loaded, setLoaded] = useState<{
+    key: string
+    records: AttendanceRecord[]
+    elsewhere: string[]
+    /**
+     * The day exactly as it arrived, kept beside the live records purely to
+     * order the roll-call (design D12). Approvals update `records` and never
+     * this, so settling a row cannot move the list; reloading the day replaces
+     * both and re-sorts.
+     */
+    seed: readonly AttendanceRecord[]
     at: Date
   } | null>(null)
 
-  // A reading taken at one outlet says nothing about standing at another.
+  // Position readings, one per outlet. A reading taken at one says nothing about
+  // standing at another, so they never share a slot (design D6).
+  const cachedPositions = useRef(new Map<string, { reading: PositionReading; at: number }>())
   useEffect(() => {
-    cachedPosition.current = null
-  }, [outlet.id])
+    cachedPositions.current.clear()
+  }, [scopeKey])
 
   useEffect(() => {
     let active = true
     void (async () => {
       try {
-        const rows = await attendance.listOutletDay(outlet.id, businessDate)
+        const [rows, away] = await Promise.all([
+          attendance.listOutletDay(outletIds, businessDate),
+          attendance.listElsewhere(outletIds, businessDate),
+        ])
         if (!active) return
-        setRecords(rows)
-        setOrderSeed({ records: rows, at: new Date() })
+        setLoaded({ key: scopeKey, records: rows, elsewhere: away, seed: rows, at: new Date() })
         onError(null)
       } catch {
         if (active) onError('Could not load that day. Try again in a moment.')
-      } finally {
-        if (active) setLoadedDate(businessDate)
       }
     })()
     return () => {
@@ -332,47 +399,59 @@ function DayAxis({
     // `onError` is a setState updater and stable; listing it would re-fetch the
     // day every time the parent re-rendered.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attendance, outlet.id, businessDate])
+  }, [attendance, scopeKey, outletIds, businessDate])
 
-  const loading = loadedDate !== businessDate
+  const day = loaded?.key === scopeKey ? loaded : null
+  const records = day?.records ?? []
 
   function upsert(updated: readonly AttendanceRecord[]) {
-    setRecords((current) => {
-      const byId = new Map(current.map((record) => [record.id, record]))
+    setLoaded((current) => {
+      if (current === null) return current
+      const byId = new Map(current.records.map((record) => [record.id, record]))
       for (const record of updated) byId.set(record.id, record)
-      return [...byId.values()]
+      return { ...current, records: [...byId.values()] }
     })
   }
 
+  const outletOf = (outletId: string | null) =>
+    outlets.find((outlet) => outlet.id === outletId) ?? null
+
   /**
-   * Read the manager's position once, then decide whether the rule wants a
-   * reason. Inside the fence on the row's own business day is one tap; anywhere
-   * or any day else costs a sentence, and the database refuses the write without
-   * one whatever this decides.
+   * Read the manager's position once **per outlet**, then decide whether the
+   * rule wants a reason. Inside that outlet's fence on the row's own business
+   * day is one tap; anywhere or any day else costs a sentence, and the database
+   * refuses the write without one whatever this decides.
    */
-  async function beginApprove(ids: string[]) {
+  async function beginApprove(ids: string[], outlet: Tables<'outlets'>) {
     if (ids.length === 0) return
 
     // A reading from the last minute stands in for a fresh one; anything older is
     // no longer a claim about where this manager is now.
-    const cached = cachedPosition.current
-    const fresh = cached !== null && Date.now() - cached.at < POSITION_CACHE_MS
-    if (fresh) return decideApproval(ids, cached.reading)
+    const cached = cachedPositions.current.get(outlet.id)
+    if (cached && Date.now() - cached.at < POSITION_CACHE_MS) {
+      return decideApproval(ids, outlet, cached.reading)
+    }
 
     setFlow({ kind: 'locating', ids })
     const result = await readPosition()
     const reading = result.ok ? result.reading : null
     // Only a real reading is worth keeping. A failure is not cached, so the next
     // approval asks again rather than inheriting a silence.
-    cachedPosition.current = reading === null ? null : { reading, at: Date.now() }
-    return decideApproval(ids, reading)
+    if (reading === null) cachedPositions.current.delete(outlet.id)
+    else cachedPositions.current.set(outlet.id, { reading, at: Date.now() })
+    return decideApproval(ids, outlet, reading)
   }
 
   /**
    * Decide what an approval costs, given a position reading that may have just
-   * been taken or may be up to a minute old.
+   * been taken or may be up to a minute old, judged against **the row's own**
+   * outlet's fence and clock (design D6, D7).
    */
-  async function decideApproval(ids: string[], reading: PositionReading | null) {
+  async function decideApproval(
+    ids: string[],
+    outlet: Tables<'outlets'>,
+    reading: PositionReading | null,
+  ) {
     const inside =
       reading !== null &&
       evaluateFence(
@@ -383,7 +462,7 @@ function DayAxis({
         },
         reading,
       ).kind === 'inside'
-    const sameDay = businessDate === today
+    const sameDay = businessDate === resolveBusinessDate(new Date(), outlet.business_day_cutover)
 
     if (inside && sameDay) {
       await submitApproval(ids, null, reading)
@@ -426,12 +505,12 @@ function DayAxis({
     }
   }
 
-  async function recordManual(person: AccountSummary, at: string) {
+  async function recordManual(person: AccountSummary, outletId: string, at: string) {
     try {
       upsert([
         await attendance.recordManualEntry({
           personId: person.id,
-          outletId: outlet.id,
+          outletId,
           businessDate,
           at,
           enteredBy: session.userId,
@@ -450,12 +529,13 @@ function DayAxis({
     }
   }
 
-  const radius = outlet.geofence_radius_m
-  // Manual entries belong to the current business day — the database refuses
-  // anything else, so a past day simply does not offer the action.
-  const manualDay = businessDate === today
-  const onStaff = people.map((person) => {
+  const onStaff: RollCallRow[] = people.map((person) => {
     const record = records.find((candidate) => candidate.personId === person.id) ?? null
+    // Only the selected outlets this person is actually staff at get to decide
+    // whether they are late arriving. Their day is judged against those clocks
+    // and no others (design D7).
+    const theirs = outlets.filter((outlet) => isStaffAt(person, outlet.id))
+    const worked = outletOf(record?.outletId ?? null)
     return {
       person: {
         id: person.id,
@@ -465,14 +545,17 @@ function DayAxis({
         offList: false,
       },
       record,
-      reading: readDay(record, outlet, businessDate),
-      late: record !== null && isLate(record, outlet.business_day_cutover),
+      reading: readDay(record, theirs, businessDate, {
+        accountedForElsewhere: day?.elsewhere.includes(person.id) ?? false,
+      }),
+      late: record !== null && worked !== null && isLate(record, worked.business_day_cutover),
+      outlet: worked ?? theirs[0] ?? null,
     }
   })
 
   /**
-   * Anybody carrying a record on this day who is not on the staff list
-   * (design D4).
+   * Anybody carrying a record on this day who is not on a selected outlet's
+   * staff list (design D4).
    *
    * Waiting counts are computed from rows, not from this list, so narrowing the
    * roll-call alone would leave a manager's own recorded row inside the count and
@@ -480,20 +563,24 @@ function DayAxis({
    * day's records are already loaded and each one carries its person's name, so
    * the row renders from itself with no extra read.
    */
-  const offList = records
+  const offList: RollCallRow[] = records
     .filter((record) => !people.some((person) => person.id === record.personId))
-    .map((record) => ({
-      person: {
-        id: record.personId,
-        fullName: record.personName,
-        note: 'not on this outlet’s staff list',
-        deactivated: false,
-        offList: true,
-      },
-      record,
-      reading: readDay(record, outlet, businessDate),
-      late: isLate(record, outlet.business_day_cutover),
-    }))
+    .map((record) => {
+      const worked = outletOf(record.outletId)
+      return {
+        person: {
+          id: record.personId,
+          fullName: record.personName,
+          note: 'not on this outlet’s staff list',
+          deactivated: false,
+          offList: true,
+        },
+        record,
+        reading: readDay(record, worked ? [worked] : [], businessDate),
+        late: worked !== null && isLate(record, worked.business_day_cutover),
+        outlet: worked,
+      }
+    })
     .sort((a, b) => a.person.fullName.localeCompare(b.person.fullName))
 
   const unordered = [...onStaff, ...offList]
@@ -502,67 +589,81 @@ function DayAxis({
   // than as it now stands, so approving a row cannot drop it down the list and
   // slide the next person's Approve button under a moving thumb (design D12).
   // The sort is stable, so `people`'s alphabetical order survives inside each rank.
-  const rankAtLoad = (personId: string): number => {
-    if (orderSeed === null) return READING_RANK.recorded
-    const asLoaded = orderSeed.records.find((row) => row.personId === personId) ?? null
-    return READING_RANK[readDay(asLoaded, outlet, businessDate, orderSeed.at).kind]
+  const rankAtLoad = (row: RollCallRow): number => {
+    if (day === null) return READING_RANK.recorded
+    const asLoaded = day.seed.find((record) => record.personId === row.person.id) ?? null
+    return READING_RANK[
+      readDay(asLoaded, row.outlet ? [row.outlet] : [], businessDate, {
+        now: day.at,
+        accountedForElsewhere: day.elsewhere.includes(row.person.id),
+      }).kind
+    ]
   }
   const rows =
-    orderSeed === null
-      ? unordered
-      : [...unordered].sort((a, b) => rankAtLoad(a.person.id) - rankAtLoad(b.person.id))
+    day === null ? unordered : [...unordered].sort((a, b) => rankAtLoad(a) - rankAtLoad(b))
   const waitingIds = rows
     .filter((row) => row.reading.kind === 'waiting')
     .map((row) => row.record?.id)
     .filter((id): id is string => id !== undefined)
   const busy = flow.kind === 'locating' || flow.kind === 'saving'
 
-  // Whether this outlet holds unsettled arrivals on days other than the one on
-  // screen — the two extremes of its waiting dates, against the day shown. Read
-  // from the entry for THIS outlet only, so another outlet's backlog cannot mark
-  // these controls; that is true by construction rather than by a filter
-  // somebody has to remember (design D3).
+  // Whether the outlets IN SCOPE hold unsettled arrivals on days other than the
+  // one on screen — the two extremes of their waiting dates, against the day
+  // shown. Read from the entries for the selection only, so an outlet nobody
+  // selected cannot mark these controls (design D3).
   //
   // There is no approve-all above the list, deliberately (design D8). Approving
   // is meant to be the moment somebody remembers this person turning up for this
   // shift, and one button settling the lot is how an unseen arrival gets counted.
-  const scoped = waitingAt(counts, outlet.id)
+  const scoped = waitingAt(counts, outletIds)
+  const named = outlets.length > 1
 
   return (
     <>
       <DayPicker
         businessDate={businessDate}
+        today={today}
         onChange={setBusinessDate}
-        cutover={outlet.business_day_cutover}
         waiting={waitingIds.length}
         earlier={scoped !== null && scoped.oldest < businessDate}
         later={scoped !== null && scoped.newest > businessDate}
       />
 
-      {loading ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+      {day === null ? (
+        <LoadingList label="this day’s roll-call" data-testid="day-loading" />
       ) : rows.length === 0 ? (
         <EmptyState
           icon={CalendarCheck}
-          title="Nobody is on this outlet's staff list yet. Add people under People."
+          title="Nobody is on these outlets' staff lists yet. Add people under People."
         />
       ) : (
-        <div data-testid="attendance-day" className="space-y-3">
-          {rows.map(({ person, record, reading, late }) => (
+        <div data-testid="attendance-day" className="space-y-2">
+          {rows.map((row) => (
             <PersonDay
-              key={person.id}
-              person={person}
-              record={record}
-              reading={reading}
-              late={late}
-              radiusMetres={radius}
+              key={row.person.id}
+              person={row.person}
+              record={row.record}
+              reading={row.reading}
+              late={row.late}
+              radiusMetres={row.outlet?.geofence_radius_m ?? 0}
+              outletName={named ? (row.outlet?.name ?? null) : null}
               busy={busy}
               // Never for somebody listed only because a row exists: they have
-              // the one thing this action would create.
-              offerManual={manualDay && !person.offList && record?.checkIn == null}
-              onApprove={() => record && void beginApprove([record.id])}
+              // the one thing this action would create. Nor for somebody
+              // accounted for elsewhere: their day is taken, and the database
+              // would refuse a second one.
+              offerManual={
+                businessDate === today &&
+                !row.person.offList &&
+                row.record?.checkIn == null &&
+                row.reading.kind !== 'elsewhere'
+              }
+              onApprove={() => {
+                const outlet = outletOf(row.record?.outletId ?? null)
+                if (row.record && outlet) void beginApprove([row.record.id], outlet)
+              }}
               onManual={() => {
-                const staff = people.find((candidate) => candidate.id === person.id)
+                const staff = people.find((candidate) => candidate.id === row.person.id)
                 if (staff) setManualFor(staff)
               }}
             />
@@ -583,11 +684,13 @@ function DayAxis({
       <ManualEntrySheet
         key={manualFor?.id ?? 'no-manual'}
         person={manualFor}
-        cutover={outlet.business_day_cutover}
+        // Only the selected outlets they are staff at: with one of those the
+        // target is resolved and nothing is asked (design D10).
+        outlets={manualFor ? outlets.filter((outlet) => isStaffAt(manualFor, outlet.id)) : []}
         businessDate={businessDate}
         onClose={() => setManualFor(null)}
-        onRecord={(at) => {
-          if (manualFor) void recordManual(manualFor, at)
+        onRecord={(outletId, at) => {
+          if (manualFor) void recordManual(manualFor, outletId, at)
         }}
       />
     </>
@@ -597,32 +700,31 @@ function DayAxis({
 /**
  * Which day, and where else the work is.
  *
- * Three badges, all about the outlet in scope. The day's own count sits beside
+ * Three badges, all about the outlets in scope. The day's own count sits beside
  * its name, from the rows already on screen. The two arrows carry a bare dot
- * when this outlet has unapproved arrivals before or after the day shown — a
+ * when the selection has unapproved arrivals before or after the day shown — a
  * number there would be a number about a day nobody is looking at, and the only
  * thing worth saying is "there is something that way".
  */
 function DayPicker({
   businessDate,
-  cutover,
+  today,
   onChange,
   waiting,
   earlier,
   later,
 }: {
   businessDate: string
-  cutover: string
+  /** Today as the selection reckons it — the latest, where cutovers disagree. */
+  today: string
   onChange: (date: string) => void
   /** Arrivals waiting for approval on the day shown. */
   waiting: number
-  /** This outlet holds unapproved arrivals on some earlier business day. */
+  /** The selection holds unapproved arrivals on some earlier business day. */
   earlier: boolean
   /** …and on some later one. */
   later: boolean
 }) {
-  const today = resolveBusinessDate(new Date(), cutover)
-
   return (
     <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface p-2">
       <span className="relative inline-flex">
@@ -638,7 +740,7 @@ function DayPicker({
           <span className="pointer-events-none absolute right-1 top-1">
             <BadgeDot
               data-testid="earlier-days-waiting"
-              label="Earlier days at this outlet hold arrivals waiting for approval"
+              label="Earlier days hold arrivals waiting for approval"
             />
           </span>
         )}
@@ -669,7 +771,7 @@ function DayPicker({
           <span className="pointer-events-none absolute right-1 top-1">
             <BadgeDot
               data-testid="later-days-waiting"
-              label="Later days at this outlet hold arrivals waiting for approval"
+              label="Later days hold arrivals waiting for approval"
             />
           </span>
         )}
@@ -699,6 +801,7 @@ function PersonDay({
   reading,
   late,
   radiusMetres,
+  outletName,
   busy,
   offerManual,
   onApprove,
@@ -709,6 +812,8 @@ function PersonDay({
   reading: DayReading
   late: boolean
   radiusMetres: number
+  /** Which shop this row belongs to. Null while only one is in scope. */
+  outletName: string | null
   busy: boolean
   /** Can an arrival still be typed in for this person on this day? */
   offerManual: boolean
@@ -720,15 +825,17 @@ function PersonDay({
   return (
     <Card
       data-testid={`day-${person.id}`}
-      className={waiting ? 'space-y-2 border-warning' : 'space-y-2'}
+      className={waiting ? 'space-y-1.5 p-3 border-warning' : 'space-y-1.5 p-3'}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
         <h2 className="text-sm font-bold text-content">
-          {person.fullName}{' '}
-          <span className="font-normal text-content-muted">
-            {person.note}
-            {person.deactivated ? ' · account deactivated' : ''}
-          </span>
+          {person.fullName}
+          {(person.note || person.deactivated) && (
+            <span className="ml-1 text-xs font-normal text-content-muted">
+              {person.note}
+              {person.deactivated ? ' · deactivated' : ''}
+            </span>
+          )}
         </h2>
         <span className="text-sm">
           {record ? (
@@ -739,37 +846,52 @@ function PersonDay({
         </span>
       </div>
 
+      {/*
+        The outlet chip sits with the evidence rather than the name, because it
+        is a fact about the day rather than about the person: somebody staffed at
+        two shops is not "a Kalyani person", they worked at Kalyani that day.
+      */}
       {record && (
         <>
-          <EventEvidence label="In" event={record.checkIn} radiusMetres={radiusMetres} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <OutletChip name={outletName} />
+            <EventEvidence label="Arrived" event={record.checkIn} radiusMetres={radiusMetres} />
+          </div>
           <ApprovalNote record={record} radiusMetres={radiusMetres} />
         </>
       )}
+      {!record && outletName && reading.kind !== 'elsewhere' && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <OutletChip name={outletName} />
+        </div>
+      )}
 
-      <div className="flex flex-wrap gap-2">
-        {waiting && (
-          <Button
-            size="phone"
-            disabled={busy}
-            onClick={onApprove}
-            data-testid={`approve-${person.id}`}
-          >
-            <ShieldCheck aria-hidden size={14} />
-            Approve
-          </Button>
-        )}
-        {offerManual && (
-          <Button
-            variant="secondary"
-            size="phone"
-            onClick={onManual}
-            data-testid={`manual-${person.id}`}
-          >
-            <PencilLine aria-hidden size={14} />
-            Record arrival
-          </Button>
-        )}
-      </div>
+      {(waiting || offerManual) && (
+        <div className="flex flex-wrap gap-2 pt-0.5">
+          {waiting && (
+            <Button
+              size="phone"
+              disabled={busy}
+              onClick={onApprove}
+              data-testid={`approve-${person.id}`}
+            >
+              <ShieldCheck aria-hidden size={14} />
+              Approve
+            </Button>
+          )}
+          {offerManual && (
+            <Button
+              variant="secondary"
+              size="phone"
+              onClick={onManual}
+              data-testid={`manual-${person.id}`}
+            >
+              <PencilLine aria-hidden size={14} />
+              Record arrival
+            </Button>
+          )}
+        </div>
+      )}
     </Card>
   )
 }
@@ -869,26 +991,34 @@ function ReasonSheet({
  * happened, and the row permanently shows who typed it in. Past times only, on
  * today's business day; the database enforces both, and recording it settles the
  * day without a second decision.
+ *
+ * **Which outlet is asked only when it is genuinely ambiguous** (design D10):
+ * more than one selected outlet where this person is staff. With one, it is
+ * resolved and nothing is asked.
  */
 function ManualEntrySheet({
   person,
-  cutover,
+  outlets,
   businessDate,
   onClose,
   onRecord,
 }: {
   person: AccountSummary | null
-  cutover: string
+  /** The selected outlets this person is staff at. */
+  outlets: readonly Tables<'outlets'>[]
   businessDate: string
   onClose: () => void
-  onRecord: (at: string) => void
+  onRecord: (outletId: string, at: string) => void
 }) {
   const [time, setTime] = useState('')
+  const [chosen, setChosen] = useState('')
+  const outletId = chosen || (outlets[0]?.id ?? '')
+  const outlet = outlets.find((candidate) => candidate.id === outletId) ?? null
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (!time) return
-    onRecord(instantOnBusinessDay(businessDate, time, cutover))
+    if (!time || !outlet) return
+    onRecord(outlet.id, instantOnBusinessDay(businessDate, time, outlet.business_day_cutover))
   }
 
   return (
@@ -900,7 +1030,7 @@ function ManualEntrySheet({
         <button
           type="submit"
           form="manual-entry"
-          disabled={!time}
+          disabled={!time || !outlet}
           className={`${buttonVariants({ size: 'phone' })} w-full`}
         >
           Record it under my name
@@ -914,6 +1044,25 @@ function ManualEntrySheet({
             will permanently show that you entered it — it is not a self check-in, it carries no
             location, and recording it counts the day without a separate approval.
           </p>
+        )}
+        {outlets.length > 1 && (
+          <label className="block text-sm font-semibold">
+            Which outlet were they at?
+            <Select
+              data-testid="manual-outlet"
+              value={outletId}
+              onChange={(event) => setChosen(event.target.value)}
+            >
+              {outlets.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.name}
+                </option>
+              ))}
+            </Select>
+            <span className="mt-1 block text-xs font-normal text-content-muted">
+              They are staff at both, and one day belongs to one outlet.
+            </span>
+          </label>
         )}
         <div className="space-y-1">
           <label htmlFor="manual-time" className="block text-sm font-semibold">
@@ -938,22 +1087,30 @@ function ManualEntrySheet({
 /**
  * One person, a range of dates, and the counts.
  *
- * The outlet is passed to the read explicitly rather than resolved from the
- * session (design D7). A Franchise Admin therefore cannot even express "this
- * person's days everywhere", and somebody who works at both shops shows only the
- * days worked here — the other outlet's days are the other outlet's data.
+ * **No outlet picker on this axis** (attendance-one-day-per-person, design D4).
+ * The read names no outlet at all, so what comes back is every outlet the reader
+ * may see, resolved in the database from their own live assignments: one outlet
+ * for a single-outlet Franchise Admin, their own for a multi-outlet one, all of
+ * them for the owner. That is the question this axis exists to answer — how many
+ * days did this person work — and a filter here could only ever make the answer
+ * wrong.
+ *
+ * This revisits #28's D7, which pinned an explicit outlet on the read. That was
+ * right while the intended meaning was one outlet. It is not the meaning now.
  */
-function PersonAxis({
-  outlet,
+function StaffAxis({
+  outlets,
   people,
   onError,
 }: {
-  outlet: Tables<'outlets'>
+  outlets: readonly Tables<'outlets'>[]
   people: AccountSummary[]
   onError: (message: string | null) => void
 }) {
   const { attendance } = useAdapters()
-  const today = resolveBusinessDate(new Date(), outlet.business_day_cutover)
+  const today = outlets
+    .map((outlet) => resolveBusinessDate(new Date(), outlet.business_day_cutover))
+    .reduce((latest, candidate) => (candidate > latest ? candidate : latest), '')
 
   const [chosenPersonId, setChosenPersonId] = useState<string>('')
   const [range, setRange] = useState<DateRange>(() => monthRange(today))
@@ -968,14 +1125,14 @@ function PersonAxis({
   // Which read `loaded` actually holds. Loading is derived from it lagging what
   // is being asked for, rather than blanked at the top of the effect — the same
   // shape the day view uses, and for the same reason.
-  const key = `${personId}|${outlet.id}|${range.from}|${range.to}`
+  const key = `${personId}|${range.from}|${range.to}`
   const records = loaded?.key === key ? loaded.records : null
 
   useEffect(() => {
     if (!personId) return
     let active = true
     void attendance
-      .listPersonRange(personId, outlet.id, range.from, range.to)
+      .listPersonRange(personId, range.from, range.to)
       .then((rows) => {
         if (active) setLoaded({ key, records: rows })
       })
@@ -988,30 +1145,37 @@ function PersonAxis({
     // `onError` is a stable setState updater; listing it would re-read on every
     // parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attendance, key, personId, outlet.id, range.from, range.to])
+  }, [attendance, key, personId, range.from, range.to])
 
   const days: DayRow[] = useMemo(() => {
     if (!records || !person) return []
     return assembleRange({
       records,
-      outlet,
+      outlets,
       range,
-      // Bounded by what this outlet can see of the person's assignments, which
-      // for a Franchise Admin is only their own outlet's rows anyway.
+      // Every outlet this reader may see, so a person who moved between two of
+      // them has one continuous month rather than two half ones.
       windows: person.assignments
-        .filter((assignment) => assignment.outletId === outlet.id)
-        .map(({ startedOn, endedOn }) => ({ startedOn, endedOn })),
+        .filter((assignment) => assignment.outletId !== null)
+        .map(({ outletId, startedOn, endedOn }) => ({
+          outletId: outletId as string,
+          startedOn,
+          endedOn,
+        })),
     })
-  }, [records, person, outlet, range])
+  }, [records, person, outlets, range])
 
   if (people.length === 0) {
     return (
       <EmptyState
         icon={CalendarCheck}
-        title="Nobody is on this outlet's staff list yet. Add people under People."
+        title="Nobody is on these outlets' staff lists yet. Add people under People."
       />
     )
   }
+
+  const radiusFor = (row: DayRow) =>
+    outlets.find((outlet) => outlet.id === row.outletId)?.geofence_radius_m ?? 0
 
   return (
     <div data-testid="attendance-person">
@@ -1033,11 +1197,14 @@ function PersonAxis({
       <RangePicker range={range} today={today} onChange={setRange} />
 
       {records === null ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        <>
+          <LoadingBlock label="the summary" className="mb-3" />
+          <LoadingList label="this person’s days" data-testid="range-loading" />
+        </>
       ) : (
         <>
           <TallySummary tally={tallyDays(days)} />
-          <RangeDayList rows={days} radiusFor={() => outlet.geofence_radius_m} />
+          <RangeDayList rows={days} radiusFor={radiusFor} showOutlet={outlets.length > 1} />
         </>
       )}
     </div>

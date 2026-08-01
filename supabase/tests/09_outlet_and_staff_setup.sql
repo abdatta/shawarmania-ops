@@ -346,7 +346,7 @@ select lives_ok($q$
    where person_id = '10000000-0000-4000-a000-00000000000e'
      and outlet_id = '00000000-0000-4000-a000-000000000001'
      and ended_on is null
-$q$, 'the split-shift person''s Kalyani assignment is ended');
+$q$, 'the two-outlet person''s Kalyani assignment is ended');
 
 -- Read the consequences as the owner: a Kalyani manager is — correctly — no
 -- longer able to see this person at all, which is the isolation working rather

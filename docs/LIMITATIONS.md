@@ -121,12 +121,36 @@ the deadline is set late enough for the evening and stops measuring the morning
 at all, which is the same problem facing the other way.
 
 This is visible in the local seed: Kanchrapara's deadline is 20:00 rather than
-something tighter, purely so the split-shift person's 19:05 evening arrival does
-not read as late. That is a workaround, not a design.
+something tighter, so an evening arrival there does not read as late. That is a
+workaround, not a design. (It now earns its keep twice over: a combined roll-call
+puts two outlets' rows in one list, and a deadline that differs between them is
+what proves each row is judged by its own outlet's clock.)
 
 The fix is the same one as below — a roster knows which shift somebody was
 expected on, and the deadline follows from that rather than from the outlet. Both
 are recorded together in `openspec/todos/rostering-and-weekly-offs.md`.
+
+### A day cannot be split across two outlets
+
+A person holds **at most one attendance row per business date**, across every
+outlet, enforced by a unique constraint (`attendance-one-day-per-person`, #29).
+So somebody who genuinely worked a morning at Kalyani and an evening at
+Kanchrapara on the same date cannot have both recorded — not from their phone,
+and not by an admin typing it in either. The second write is refused by the
+database, and the manual-entry sheet does not offer it.
+
+This is deliberate rather than an oversight. The owner's account of the real case
+is that a person staffed at two shops works at **one of them** on any given day
+and the month is a mix; #22 had assumed otherwise, and the cost of that
+assumption was a phantom absence at the other shop on every day somebody worked,
+which made a month unusable for the one thing it is read for. Production had
+never produced a split day.
+
+If it is ever wanted, the way back is two migration statements (swap
+`attendance_one_per_person_day` for `attendance_one_per_person_outlet_day`) plus
+one module, `src/features/attendance/attendance-record.ts`, whose header records
+what reversing costs. Rows written under the current rule already satisfy the old
+one, so nothing needs repairing.
 
 ### A genuine day off reads as absent
 

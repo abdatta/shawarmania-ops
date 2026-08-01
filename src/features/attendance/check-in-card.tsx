@@ -64,12 +64,20 @@ type Attempt =
     }
   | { kind: 'unlocatable'; failure: GeolocationFailureKind }
   /**
-   * No position at all, and more than one outlet to choose between. The one
-   * place a multi-outlet person is ever stopped (design D5) — nothing can
-   * honestly resolve where they are, so they are handed to a human rather than
-   * to a control they would have to understand.
+   * No position at all, and more than one outlet it could be. The one place
+   * anybody is ever asked which shop they are at
+   * (attendance-one-day-per-person, design D5).
+   *
+   * #28 refused the check-in outright here, reasoning that the fence must be the
+   * only chooser. That reasoning is kept everywhere a reading exists — inside
+   * one fence, inside several, or outside all of them — but it does not reach
+   * this case: there is no ambiguity to resolve, there is no data, and a
+   * question is the only honest input left. The safety cost is nil, because a
+   * row written this way carries no coordinates, is already unverifiable, and
+   * already needs a reasoned approval. The answer decides only whose queue it
+   * lands in, and a manager who did not see that person does not approve it.
    */
-  | { kind: 'unresolvable' }
+  | { kind: 'which-outlet'; failure: GeolocationFailureKind }
   | { kind: 'error'; message: string }
 
 /**
@@ -107,7 +115,6 @@ export function CheckInCard({
   outlets,
   outlet,
   record,
-  canStartElsewhere = false,
   onChange,
 }: {
   /** Whose day this is — the signed-in session's own account id. */
@@ -118,17 +125,11 @@ export function CheckInCard({
    */
   outlets: readonly Tables<'outlets'>[]
   /**
-   * The outlet the card is currently *about* — the one with an open day, or
-   * the only one they work at. What today's status is rendered against.
+   * The outlet the card is currently *about* — the one today's row was worked
+   * at, or the only one they work at. What today's status is rendered against.
    */
   outlet: Tables<'outlets'>
   record: AttendanceRecord | null
-  /**
-   * Is there another outlet they work at with nothing recorded today? A
-   * completed day usually ends the screen; for somebody who works at two it
-   * does not, because the evening shift is at the other shop.
-   */
-  canStartElsewhere?: boolean
   onChange: (record: AttendanceRecord) => void
 }) {
   const { attendance } = useAdapters()
@@ -182,13 +183,13 @@ export function CheckInCard({
     if (!result.ok) {
       // With one outlet there is nothing to resolve, so a missing position is
       // the state it always was: the row is written, the fence declines to
-      // judge it, and a manager clears it. With several, nothing can honestly
-      // choose — and guessing would put somebody's day at the wrong shop.
-      if (outlets.length > 1) {
-        setAttempt({ kind: 'unresolvable' })
-        return
-      }
-      setAttempt({ kind: 'unlocatable', failure: result.kind })
+      // judge it, and a manager clears it. With several, nothing can choose —
+      // so the person is asked, and nothing is recorded until they answer.
+      setAttempt(
+        outlets.length > 1
+          ? { kind: 'which-outlet', failure: result.kind }
+          : { kind: 'unlocatable', failure: result.kind },
+      )
       return
     }
 
@@ -258,24 +259,14 @@ export function CheckInCard({
         />
       )}
 
-      {attempt.kind === 'unresolvable' && (
-        <div
-          role="alert"
-          data-testid="attendance-unresolvable"
-          className="space-y-2 rounded-lg border border-warning bg-surface-raised p-3"
-        >
-          <p className="text-sm font-semibold text-content">
-            We could not work out which shop you are at
-          </p>
-          <p className="text-sm text-content-muted">
-            You work at more than one, and without a position there is no way to tell them apart —
-            so nothing has been recorded. Try again outside, or ask your manager to record today for
-            you.
-          </p>
-          <Button size="phone" variant="secondary" onClick={() => void onCheckIn()}>
-            Try again
-          </Button>
-        </div>
+      {attempt.kind === 'which-outlet' && (
+        <WhichOutletState
+          failure={attempt.failure}
+          outlets={outlets}
+          busy={busy}
+          onChoose={(chosen) => void submitCheckIn(chosen, null)}
+          onRetry={() => void onCheckIn()}
+        />
       )}
 
       {attempt.kind === 'error' && (
@@ -296,9 +287,8 @@ export function CheckInCard({
         blocked={
           attempt.kind === 'blocked' ||
           attempt.kind === 'unlocatable' ||
-          attempt.kind === 'unresolvable'
+          attempt.kind === 'which-outlet'
         }
-        canStartElsewhere={canStartElsewhere}
         onCheckIn={() => void onCheckIn()}
       />
     </Card>
@@ -333,7 +323,6 @@ function PrimaryAction({
   locating,
   busy,
   blocked,
-  canStartElsewhere = false,
   onCheckIn,
 }: {
   phase: CardPhase
@@ -342,7 +331,6 @@ function PrimaryAction({
   locating: boolean
   busy: boolean
   blocked: boolean
-  canStartElsewhere?: boolean
   onCheckIn: () => void
 }) {
   if (locating || busy) {
@@ -355,44 +343,30 @@ function PrimaryAction({
   }
 
   if (phase === 'recorded') {
+    /*
+      Never "your day is done". A recorded arrival counts as nothing until a
+      manager approves it, and a screen that implied otherwise would be the one
+      thing this change exists to stop.
+
+      And no second action, for anybody. A day belongs to the person, so
+      somebody who works at two shops has one day like everybody else, and an
+      offer to start another would invite a row the database refuses
+      (attendance-one-day-per-person).
+    */
     return (
-      <div className="space-y-3">
-        {/*
-          Never "your day is done". A recorded arrival counts as nothing until a
-          manager approves it, and a screen that implied otherwise would be the
-          one thing this change exists to stop.
-        */}
-        <p
-          data-testid={waiting ? 'attendance-waiting' : 'attendance-approved'}
-          className={
-            waiting
-              ? 'flex items-center justify-center gap-2 rounded-lg border border-warning bg-surface-raised px-4 py-3 text-sm font-semibold text-content'
-              : 'flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised px-4 py-3 text-sm font-semibold text-content'
-          }
-        >
-          <Hourglass aria-hidden size={16} />
-          {waiting
-            ? 'Your arrival is recorded and is waiting for your manager to approve it.'
-            : `Your manager has approved today${canStartElsewhere ? ' here.' : '. Nothing more to do.'}`}
-        </p>
-        {/*
-          A recorded day is the end of it for somebody who works at one shop.
-          For somebody who works at two it is not: the evening shift is at the
-          other one, and the fence will resolve which when they press this
-          (multi-outlet-people, design D5).
-        */}
-        {canStartElsewhere && (
-          <Button
-            size="phone"
-            data-testid="attendance-action"
-            onClick={onCheckIn}
-            disabled={blocked}
-          >
-            <LogIn aria-hidden size={20} />
-            Check in at another outlet
-          </Button>
-        )}
-      </div>
+      <p
+        data-testid={waiting ? 'attendance-waiting' : 'attendance-approved'}
+        className={
+          waiting
+            ? 'flex items-center justify-center gap-2 rounded-lg border border-warning bg-surface-raised px-4 py-3 text-sm font-semibold text-content'
+            : 'flex items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised px-4 py-3 text-sm font-semibold text-content'
+        }
+      >
+        <Hourglass aria-hidden size={16} />
+        {waiting
+          ? 'Your arrival is recorded and is waiting for your manager to approve it.'
+          : 'Your manager has approved today. Nothing more to do.'}
+      </p>
     )
   }
 
@@ -522,6 +496,72 @@ function UnlocatableState({
           Record it and ask my manager
         </Button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * No position, and more than one shop it could be — so ask.
+ *
+ * The only place anybody chooses an outlet, and only because nothing else can
+ * (design D5). Nothing is recorded until they press one: an abandoned attempt
+ * leaves no row, exactly as a refused fence does. Each button says plainly what
+ * pressing it means, because the row it writes carries no evidence at all and
+ * their manager will be asked to vouch for it on their word.
+ */
+function WhichOutletState({
+  failure,
+  outlets,
+  busy,
+  onChoose,
+  onRetry,
+}: {
+  failure: GeolocationFailureKind
+  outlets: readonly Tables<'outlets'>[]
+  busy: boolean
+  onChoose: (outlet: Tables<'outlets'>) => void
+  onRetry: () => void
+}) {
+  const copy = FAILURE_COPY[failure]
+
+  return (
+    <div
+      role="group"
+      aria-label="Which outlet are you at?"
+      data-testid="attendance-which-outlet"
+      data-failure={failure}
+      className="space-y-3 rounded-xl border border-warning bg-surface-raised p-3"
+    >
+      <p className="flex items-center gap-2 font-semibold text-content">
+        <MapPinOff aria-hidden size={18} className="text-warning" />
+        {copy.title}
+      </p>
+      <p className="text-xs text-content-muted">{copy.advice}</p>
+      <p className="text-sm text-content">
+        You work at more than one shop, so tell us which one you are at. Nothing is recorded until
+        you choose.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {outlets.map((candidate) => (
+          <Button
+            key={candidate.id}
+            size="phone"
+            disabled={busy}
+            data-testid={`choose-outlet-${candidate.id}`}
+            onClick={() => onChoose(candidate)}
+          >
+            <LogIn aria-hidden size={16} />
+            {candidate.name}
+          </Button>
+        ))}
+        <Button variant="ghost" size="phone" onClick={onRetry} disabled={busy}>
+          Try again
+        </Button>
+      </div>
+      <p className="text-xs text-content-muted">
+        With no position there is nothing to show you were there, so your manager at the shop you
+        pick will have to give a reason when they approve it.
+      </p>
     </div>
   )
 }

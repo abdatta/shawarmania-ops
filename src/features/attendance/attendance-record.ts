@@ -10,6 +10,23 @@ import { instantOnBusinessDay } from '@/domain'
  * outcomes rather than process states (design D1). They must read identically
  * on the manager's day view, on the person view and on the employee's own
  * history, so all three ask here.
+ *
+ * **A day belongs to the person, not to the shop**
+ * (attendance-one-day-per-person, design D2). Since that change a person holds
+ * at most one attendance row per business date across every outlet, and this
+ * module is the only place that knows it. No view derives absence, collapses
+ * rows, or reasons about outlets on its own.
+ *
+ * That is deliberate, because the owner accepted the rule on the condition that
+ * restoring split shifts later stays cheap. **What reversing it costs:** two
+ * migration statements (swap `attendance_one_per_person_day` back to
+ * `attendance_one_per_person_outlet_day`, the mirror of what
+ * 20260801000001 did) plus this module — `readDay` goes back to judging one
+ * outlet at a time, `elsewhere` and `tallyDays`' per-date collapse come out, and
+ * the `attendance_elsewhere` function loses its only caller. Rows written under
+ * one-per-person-per-day already satisfy one-per-person-per-outlet-per-day, so
+ * nothing needs repairing. The cost is here on purpose: it is one file, and a
+ * grep for `DayReading` finds every screen that would need re-rendering.
  */
 
 export function isOutOfFence(event: AttendanceEvent | null, radiusMetres: number): boolean {
@@ -89,32 +106,84 @@ export function isLate(record: AttendanceRecord, cutover: string): boolean {
  * leave.
  */
 export type DayReading =
-  /** Nothing recorded, and the outlet's deadline for this day has not passed. */
+  /** Nothing recorded, and no deadline that could still see them has passed. */
   | { kind: 'not-yet-arrived' }
-  /** Nothing recorded, and it has. Derived at read time; no row exists. */
+  /** Nothing recorded anywhere, and every deadline has passed. No row exists. */
   | { kind: 'absent' }
+  /**
+   * Nothing recorded at the outlets in scope, and the database says they hold a
+   * row somewhere the reader cannot see. Carries no outlet, time or evidence,
+   * because the answer behind it carries none (design D3).
+   */
+  | { kind: 'elsewhere' }
   /** Recorded, and waiting for a manager to settle it. */
   | { kind: 'waiting'; record: AttendanceRecord }
   /** Recorded and settled. The row's own status is the answer. */
   | { kind: 'recorded'; record: AttendanceRecord }
 
+/** Everything about an outlet that bears on how a day reads. */
+export interface OutletClock {
+  arrival_deadline: string
+  business_day_cutover: string
+}
+
+/**
+ * The last moment any of these outlets could still see this person arrive.
+ *
+ * With one outlet this is just its deadline. With several it is the latest of
+ * them, which is the only honest answer: somebody staffed at a shop that closes
+ * its arrivals at 20:00 has not failed to turn up at 13:30 merely because the
+ * other shop they sometimes work at had given up by then. Nothing global is
+ * assumed about the clocks (design D7) even though production's two outlets
+ * currently agree.
+ */
+function lastDeadline(clocks: readonly OutletClock[], businessDate: string): string | null {
+  let latest: string | null = null
+  for (const clock of clocks) {
+    const at = instantOnBusinessDay(
+      businessDate,
+      clock.arrival_deadline,
+      clock.business_day_cutover,
+    )
+    if (latest === null || at > latest) latest = at
+  }
+  return latest
+}
+
+/** What the caller knows beyond the row itself. */
+export interface DayContext {
+  now?: Date
+  /**
+   * Does the database say this person holds a row at an outlet outside the
+   * reader's scope on this date (design D3)? Only ever true when `record` is
+   * null, because one person holds one row a day.
+   */
+  accountedForElsewhere?: boolean
+}
+
+/**
+ * @param clocks every outlet whose deadline could still see this person arrive
+ *   on this date — for a roll-call, the outlets in scope they are staff at. A
+ *   day is not about one shop, so this is plural even where the caller has one.
+ */
 export function readDay(
   record: AttendanceRecord | null,
-  outlet: { arrival_deadline: string; business_day_cutover: string },
+  clocks: readonly OutletClock[],
   businessDate: string,
-  now: Date = new Date(),
+  { now = new Date(), accountedForElsewhere = false }: DayContext = {},
 ): DayReading {
   if (record) {
     return isWaitingForApproval(record) ? { kind: 'waiting', record } : { kind: 'recorded', record }
   }
-  // No row means no stamped deadline, so the outlet's current one is used.
+  // Ahead of the deadline, because it beats "not yet arrived" as well as
+  // "absent": they have arrived, just not here. Saying otherwise would be a
+  // false statement about a day somebody is paid for.
+  if (accountedForElsewhere) return { kind: 'elsewhere' }
+  // No row means no stamped deadline, so the outlets' current ones are used.
   // Acceptable and stated in the spec: whether somebody turned up does not turn
   // on the exact minute the rule was set to.
-  const deadline = instantOnBusinessDay(
-    businessDate,
-    outlet.arrival_deadline,
-    outlet.business_day_cutover,
-  )
+  const deadline = lastDeadline(clocks, businessDate)
+  if (deadline === null) return { kind: 'not-yet-arrived' }
   return now.toISOString() > deadline ? { kind: 'absent' } : { kind: 'not-yet-arrived' }
 }
 
@@ -145,6 +214,10 @@ export function describeReading(reading: DayReading): string {
       return 'Not yet arrived'
     case 'absent':
       return 'Absent'
+    // No outlet is named, and none can be: the fact crossing the boundary is
+    // one bit wide (design D3).
+    case 'elsewhere':
+      return 'Working at another outlet'
     default:
       return describeDay(reading.record)
   }
@@ -158,11 +231,29 @@ export interface AttendanceTally {
   waiting: number
 }
 
+/**
+ * Counted once per business date, whatever outlet each day was worked at.
+ *
+ * The summary exists so somebody can compute pay by hand, and a day worked is
+ * one day however many shops the month touched. The rows are already one per
+ * date since the collapse, so the guard below is belt and braces rather than
+ * the mechanism — but it is the difference between a summary that is a day
+ * count and one that is a row count, and only one of those is payable.
+ *
+ * A day read as `elsewhere` counts as nothing here, deliberately. It is not a
+ * present day (this reader cannot see that it was approved) and it is certainly
+ * not an absent one. In practice it never reaches a tally at all: the by-staff
+ * read already spans every outlet the reader may see, so there is no elsewhere
+ * left to point at.
+ */
 export function tallyDays(
-  readings: readonly { reading: DayReading; late: boolean }[],
+  readings: readonly { businessDate: string; reading: DayReading; late: boolean }[],
 ): AttendanceTally {
   const tally: AttendanceTally = { present: 0, late: 0, absent: 0, waiting: 0 }
-  for (const { reading, late } of readings) {
+  const counted = new Set<string>()
+  for (const { businessDate, reading, late } of readings) {
+    if (counted.has(businessDate)) continue
+    counted.add(businessDate)
     if (late) tally.late += 1
     if (reading.kind === 'absent') {
       tally.absent += 1

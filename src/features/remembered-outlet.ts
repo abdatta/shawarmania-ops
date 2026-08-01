@@ -45,26 +45,33 @@ function store(): Storage | null {
 }
 
 /**
- * The outlet this person last chose, or null.
+ * The outlets this person last chose, most likely one.
+ *
+ * A list since attendance-one-day-per-person, where a surface that can
+ * meaningfully read several outlets at once gained a multi-select. Stored
+ * comma-separated, which reads a value written by the old single-outlet code
+ * as the one-element list it is — so nobody's remembered shop is lost to the
+ * upgrade.
  *
  * Never trusted on its own: the caller checks it against the outlets that person
  * may currently see, because an outlet can close, be deleted, or stop being
  * theirs between one visit and the next.
  */
-export function readRememberedOutlet(session: Session): string | null {
+export function readRememberedOutlets(session: Session): string[] {
   try {
-    return store()?.getItem(keyFor(session.mode, session.userId)) ?? null
+    const raw = store()?.getItem(keyFor(session.mode, session.userId)) ?? ''
+    return raw.split(',').filter((id) => id !== '')
   } catch {
-    return null
+    return []
   }
 }
 
-/** Remember this outlet for this person, or forget it when it is null. */
-export function rememberOutlet(session: Session, outletId: string | null): void {
+/** Remember these outlets for this person, or forget them when the list is empty. */
+export function rememberOutlets(session: Session, outletIds: readonly string[]): void {
   const key = keyFor(session.mode, session.userId)
   try {
-    if (outletId === null) store()?.removeItem(key)
-    else store()?.setItem(key, outletId)
+    if (outletIds.length === 0) store()?.removeItem(key)
+    else store()?.setItem(key, outletIds.join(','))
   } catch {
     // A refused write means the next visit defaults, which is what it used to do.
   }

@@ -6,7 +6,7 @@ import { formatBusinessDate } from '@/domain'
 
 import type { AttendanceTally } from './attendance-record'
 import type { DayRow } from './attendance-range'
-import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence } from './evidence'
+import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence, OutletChip } from './evidence'
 
 /**
  * A span of days, rendered once for both surfaces that show one.
@@ -68,10 +68,13 @@ export function RangeDayList({
   }
 
   return (
-    <div data-testid="attendance-range" className="space-y-3">
+    <div data-testid="attendance-range" className="space-y-2">
       {rows.map((row) => (
+        // Keyed on the date alone since attendance-one-day-per-person: a
+        // business date appears once, so anything else in the key would be
+        // saying it might not.
         <RangeDayCard
-          key={`${row.outletId}-${row.businessDate}`}
+          key={row.businessDate}
           row={row}
           radiusMetres={radiusFor(row)}
           outletName={showOutlet ? row.outletName : null}
@@ -96,15 +99,12 @@ export function RangeDayCard({
   return (
     <Card
       data-testid={`range-day-${row.businessDate}`}
-      className={row.reading.kind === 'waiting' ? 'space-y-2 border-warning' : 'space-y-2'}
+      className={
+        row.reading.kind === 'waiting' ? 'space-y-1.5 p-3 border-warning' : 'space-y-1.5 p-3'
+      }
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-bold text-content">
-          {formatBusinessDate(row.businessDate)}
-          {outletName && (
-            <span className="block text-xs font-normal text-content-muted">{outletName}</span>
-          )}
-        </h3>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+        <h3 className="text-sm font-bold text-content">{formatBusinessDate(row.businessDate)}</h3>
         <span className="text-sm">
           {record ? (
             <DayVerdict record={record} late={row.late} />
@@ -117,11 +117,15 @@ export function RangeDayCard({
       {/*
         A derived day has nothing to render beneath its verdict, and that is the
         honest amount: no row exists, so there is no evidence and no approval to
-        show (design D6).
+        show (design D6). It has no outlet either — a day nobody recorded was
+        worked nowhere, and naming a shop beside it would invent a fact.
       */}
       {record && (
         <>
-          <EventEvidence label="In" event={record.checkIn} radiusMetres={radiusMetres} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <OutletChip name={outletName} />
+            <EventEvidence label="Arrived" event={record.checkIn} radiusMetres={radiusMetres} />
+          </div>
           <ApprovalNote record={record} radiusMetres={radiusMetres} />
         </>
       )}

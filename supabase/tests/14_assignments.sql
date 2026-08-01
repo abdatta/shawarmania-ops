@@ -85,7 +85,7 @@ savepoint ending;
 select is(pg_temp.rows_touched(format($q$
   update public.assignments set ended_on = current_date
    where person_id = %L and outlet_id = %L and ended_on is null $q$, :'SPLIT', :'KAL')),
-  1::bigint, 'the owner ends one of the split-shift person''s assignments');
+  1::bigint, 'the owner ends one of the two-outlet person''s assignments');
 
 select is((select count(*) from public.assignments
             where person_id = :'SPLIT' and ended_on is null), 1::bigint,

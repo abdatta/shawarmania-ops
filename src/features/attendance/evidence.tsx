@@ -2,10 +2,14 @@ import {
   CheckCircle2,
   CircleSlash,
   Clock,
+  Crosshair,
   MapPin,
   MapPinOff,
   PencilLine,
   ShieldCheck,
+  Smartphone,
+  Store,
+  Tablet,
   TriangleAlert,
 } from 'lucide-react'
 
@@ -27,7 +31,61 @@ import {
  * the *same* components deliberately. Asymmetric visibility in a monitoring
  * feature is how it becomes something staff resent, and the cheapest way to keep
  * three views honest is to give them one implementation.
+ *
+ * **Chips rather than sentences since attendance-one-day-per-person**
+ * (design D9). A row used to spend three lines of prose on four short facts, and
+ * a combined roll-call across two outlets makes that a page of scrolling. What
+ * compressed is the presentation and nothing else: every fact the spec requires
+ * is still here, every icon still carries a name, and colour is still never the
+ * only signal. Because these components are shared, the employee's own screen
+ * got the same redesign — which is correct, and is why they are shared.
  */
+
+/**
+ * One short fact, with its icon and a name for the icon.
+ *
+ * `name` is not decoration. A chip reading "127 m" tells a sighted reader what
+ * it is from the pin beside it and tells a screen reader nothing at all, so the
+ * name is read first and the value second.
+ */
+function Chip({
+  icon: Icon,
+  name,
+  children,
+  warn = false,
+  ...rest
+}: {
+  icon: typeof MapPin
+  name: string
+  children: React.ReactNode
+  /** Something a manager should weigh. Never the only signal — the icon changes too. */
+  warn?: boolean
+} & { 'data-testid'?: string }) {
+  return (
+    <span
+      className={
+        warn
+          ? 'inline-flex items-center gap-1 rounded-md border border-warning px-1.5 py-0.5 font-semibold text-warning'
+          : 'inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-content-muted'
+      }
+      {...rest}
+    >
+      <Icon aria-hidden size={11} />
+      <span className="sr-only">{name}: </span>
+      {children}
+    </span>
+  )
+}
+
+/** Which shop a row belongs to. Rendered only where more than one is in scope. */
+export function OutletChip({ name }: { name: string | null }) {
+  if (!name) return null
+  return (
+    <Chip icon={Store} name="Outlet" data-testid="outlet-chip">
+      {name}
+    </Chip>
+  )
+}
 
 /** Where a reading was taken, how good it was, and what recorded it. */
 export function EventEvidence({
@@ -41,56 +99,55 @@ export function EventEvidence({
 }) {
   if (!event) {
     return (
-      <div className="text-sm">
-        <span className="font-semibold text-content">{label}</span>{' '}
-        <span className="text-content-muted">— not recorded</span>
-      </div>
+      <p className="text-xs text-content-muted">
+        <span className="font-semibold text-content">{label}</span> not recorded
+      </p>
     )
   }
 
   const outside = isOutOfFence(event, radiusMetres)
-
-  // A manual entry has no evidence to show — the admin typed it in, and the
-  // enterer stamp is the accountability in evidence's place. It must read as
-  // visibly not a self check-in wherever attendance is rendered.
-  if (event.source === 'manual') {
-    return (
-      <div className="text-sm">
-        <span className="font-semibold text-content">{label}</span>{' '}
-        <span className="text-content">{formatTime(event.at)}</span>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-content-muted">
-          <span data-testid="entered-by" className="inline-flex items-center gap-1 font-semibold">
-            <PencilLine aria-hidden size={12} />
-            Entered by {event.enteredByName ?? 'a manager'}
-          </span>
-          <span>manual entry</span>
-        </div>
-      </div>
-    )
-  }
+  const manual = event.source === 'manual'
 
   return (
-    <div className="text-sm">
-      <span className="font-semibold text-content">{label}</span>{' '}
-      <span className="text-content">{formatTime(event.at)}</span>
-      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-content-muted">
-        <span className="inline-flex items-center gap-1">
-          <MapPin aria-hidden size={12} />
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      <span className="text-sm font-semibold text-content">{formatTime(event.at)}</span>
+      <span className="sr-only">{label}</span>
+
+      {/*
+        A manual entry has no evidence to show — the admin typed it in, and the
+        enterer stamp is the accountability in evidence's place. It must read as
+        visibly not a self check-in wherever attendance is rendered, which is why
+        it gets its own icon rather than a quieter version of the same chip.
+      */}
+      {manual ? (
+        <Chip icon={PencilLine} name="Entered by" data-testid="entered-by">
+          {event.enteredByName ?? 'a manager'}
+        </Chip>
+      ) : (
+        <>
           {event.latitude === null ? (
-            <span>No position was recorded from the device</span>
+            <Chip icon={MapPinOff} name="Position" warn>
+              no position
+            </Chip>
           ) : event.distanceMetres === null ? (
-            <span>Distance unknown — this outlet has no captured position</span>
+            <Chip icon={MapPinOff} name="Distance from the outlet">
+              not measured
+            </Chip>
           ) : (
-            <span className={outside ? 'font-semibold text-warning' : undefined}>
-              {formatMetres(event.distanceMetres)} from the outlet
-            </span>
+            <Chip icon={MapPin} name="Distance from the outlet" warn={outside}>
+              {formatMetres(event.distanceMetres)}
+            </Chip>
           )}
-        </span>
-        {event.accuracyMetres !== null && (
-          <span>±{formatMetres(event.accuracyMetres)} accuracy</span>
-        )}
-        <span>{event.source === 'counter_tablet' ? 'counter tablet' : 'phone'}</span>
-      </div>
+          {event.accuracyMetres !== null && (
+            <Chip icon={Crosshair} name="Reading accuracy">
+              ±{formatMetres(event.accuracyMetres)}
+            </Chip>
+          )}
+          <Chip icon={event.source === 'counter_tablet' ? Tablet : Smartphone} name="Recorded on">
+            {event.source === 'counter_tablet' ? 'tablet' : 'phone'}
+          </Chip>
+        </>
+      )}
     </div>
   )
 }
@@ -99,6 +156,10 @@ export function EventEvidence({
  * Who settled this day, whether they were standing at the outlet when they did,
  * and any reason they gave. Shown to the employee it concerns, because a record
  * that vouches for somebody should be readable by them.
+ *
+ * One line, plus a second only when a reason exists. It used to be three lines
+ * in a bordered panel; a reason is the only part of it that is ever more than a
+ * few words, so it is the only part that gets a line of its own.
  */
 export function ApprovalNote({
   record,
@@ -114,38 +175,35 @@ export function ApprovalNote({
   const manual = record.checkIn?.source === 'manual'
 
   return (
-    <div
-      data-testid="approval-note"
-      className="mt-2 rounded-lg border border-border bg-surface-raised p-2 text-xs flex flex-col"
-    >
-      <p className="inline-flex items-center gap-1 font-semibold text-content">
-        <ShieldCheck aria-hidden size={13} />
-        Approved by {approval.byName ?? 'a manager'}, {formatTime(approval.at)}
-      </p>
-      {/*
-        A manual entry was settled by the act of recording it, so there is no
-        approver position to report — claiming "not at the outlet" about somebody
-        who never took a reading would be a fact the row does not hold.
-      */}
-      {!manual && (
-        <p
-          data-testid="approver-place"
-          className={
-            onSite
-              ? 'mt-0.5 inline-flex items-center gap-1 text-content-muted'
-              : 'mt-0.5 inline-flex items-center gap-1 font-semibold text-warning'
-          }
-        >
-          {onSite ? <MapPin aria-hidden size={12} /> : <MapPinOff aria-hidden size={12} />}
-          {onSite
-            ? 'Approver was at the outlet'
-            : approval.distanceMetres === null
-              ? "Approver's position was not recorded"
-              : `Approver was ${formatMetres(approval.distanceMetres)} from the outlet`}
-        </p>
-      )}
+    <div data-testid="approval-note" className="space-y-1 text-xs">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 text-content-muted">
+          <ShieldCheck aria-hidden size={12} />
+          {approval.byName ?? 'a manager'}, {formatTime(approval.at)}
+        </span>
+        {/*
+          A manual entry was settled by the act of recording it, so there is no
+          approver position to report — claiming "not at the outlet" about
+          somebody who never took a reading would be a fact the row does not
+          hold.
+        */}
+        {!manual &&
+          (onSite ? (
+            <Chip icon={MapPin} name="Approver" data-testid="approver-place">
+              on site
+            </Chip>
+          ) : (
+            <Chip icon={MapPinOff} name="Approver" warn data-testid="approver-place">
+              {approval.distanceMetres === null
+                ? 'position not recorded'
+                : formatMetres(approval.distanceMetres)}
+            </Chip>
+          ))}
+      </div>
       {approval.reason && (
-        <p className="mt-0.5 text-content-muted">Approval Reason: “{approval.reason}”</p>
+        <p className="text-content-muted">
+          <span className="sr-only">Approval reason: </span>“{approval.reason}”
+        </p>
       )}
     </div>
   )
@@ -224,6 +282,23 @@ export function DerivedVerdict({ reading }: { reading: DayReading }) {
       >
         <CircleSlash aria-hidden size={14} />
         Absent
+      </span>
+    )
+  }
+  /*
+    Accounted for at an outlet this reader cannot see (design D3). Neutral, not
+    warning: nothing is wrong and nothing is waiting on anybody here. The outlet
+    is not named because the database does not disclose it — one bit crossed the
+    boundary, and this is that bit rendered.
+  */
+  if (reading.kind === 'elsewhere') {
+    return (
+      <span
+        data-testid="working-elsewhere"
+        className="inline-flex items-center gap-1 text-content-muted"
+      >
+        <Store aria-hidden size={14} />
+        Working at another outlet
       </span>
     )
   }

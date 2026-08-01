@@ -30,7 +30,7 @@ export function StaffHome() {
         title={`Hello, ${session.displayName}`}
         subtitle={
           own.status === 'ready'
-            ? `Assigned to ${own.days.map((day) => day.outlet.name).join(' and ')}`
+            ? `Assigned to ${own.outlets.map((outlet) => outlet.name).join(' and ')}`
             : undefined
         }
         action={
@@ -63,13 +63,11 @@ export function StaffHome() {
       {own.status === 'ready' && (
         <CheckInCard
           personId={session.userId}
-          outlets={own.days.map((day) => day.outlet)}
-          // The day waiting on a manager, if there is one; otherwise their first
-          // outlet, which is what today's status is rendered against until the
-          // fence picks one.
-          outlet={(own.current ?? own.days[0])!.outlet}
-          record={own.current?.record ?? null}
-          canStartElsewhere={own.canStartElsewhere}
+          outlets={own.outlets}
+          // Where today's row was worked, or their first outlet while there is
+          // no row and the fence has had nothing to judge.
+          outlet={own.outlet}
+          record={own.record}
           onChange={own.setRecord}
         />
       )}

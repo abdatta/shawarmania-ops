@@ -121,7 +121,7 @@ describe('the employee home', () => {
       ),
     )
     expect(screen.getByText('Waiting for a manager to approve')).toBeInTheDocument()
-    expect(screen.getByText(/12 m from the outlet/)).toBeInTheDocument()
+    expect(screen.getByText(/^12 m$/)).toBeInTheDocument()
     expect(screen.queryByTestId('attendance-blocked')).not.toBeInTheDocument()
   })
 
@@ -314,21 +314,47 @@ describe('an employee assigned to two outlets', () => {
     expect(screen.getByTestId('request-override')).toBeInTheDocument()
   })
 
-  it('refuses rather than guesses when the phone can supply no position', async () => {
+  it('asks which outlet when the phone can supply no position', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()
     const checkIn = vi.spyOn(adapters.attendance, 'checkIn')
-    positionFails(1)
+    positionFails(2)
     renderHome(adapters, bothOutletsSession)
 
     await user.click(await screen.findByTestId('attendance-action'))
 
-    // The one place a multi-outlet person is ever stopped (design D5): nothing
-    // can honestly resolve where they are, so nothing is written and they are
-    // handed to a human rather than to a control they would have to learn.
-    expect(await screen.findByTestId('attendance-unresolvable')).toHaveTextContent(
-      /ask your manager to record today/i,
-    )
+    // The one place anybody is ever asked which shop they are at
+    // (attendance-one-day-per-person, design D5). #28 refused outright here;
+    // there is no ambiguity to resolve and no data, so a question is the only
+    // honest input left. Nothing is recorded until they answer.
+    const asked = await screen.findByTestId('attendance-which-outlet')
+    expect(asked).toHaveTextContent(/which one you are at/i)
     expect(checkIn).not.toHaveBeenCalled()
+
+    // Both shops are offered, and neither is pre-selected.
+    expect(await screen.findByTestId(`choose-outlet-${OUTLET_KALYANI_ID}`)).toBeInTheDocument()
+    await user.click(screen.getByTestId(`choose-outlet-${OUTLET_KANCHRAPARA_ID}`))
+
+    // Recorded at the shop they picked, with no coordinates at all — so it
+    // waits for that outlet's manager, who must give a reason to settle it.
+    await waitFor(() => expect(checkIn).toHaveBeenCalledTimes(1))
+    expect(checkIn.mock.calls[0]?.[0]).toMatchObject({
+      outletId: OUTLET_KANCHRAPARA_ID,
+      reading: null,
+    })
+    expect(await screen.findByTestId('attendance-waiting')).toBeInTheDocument()
+  })
+
+  it('never asks somebody who works at one shop', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters()
+    positionFails(1)
+    renderHome(adapters)
+
+    await user.click(await screen.findByTestId('attendance-action'))
+
+    // Nothing to resolve, so nothing to ask: the flow is exactly what it was.
+    expect(await screen.findByTestId('attendance-unlocatable')).toBeInTheDocument()
+    expect(screen.queryByTestId('attendance-which-outlet')).not.toBeInTheDocument()
   })
 })

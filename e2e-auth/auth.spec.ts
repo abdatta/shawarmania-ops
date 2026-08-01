@@ -316,26 +316,38 @@ test.describe('username sign-in and role routing', () => {
     await signIn(page, PERSONAS.owner.username)
     await page.goto('owner/attendance')
 
-    const picker = page.getByTestId('surface-outlet')
+    // Attendance takes several outlets at once since
+    // attendance-one-day-per-person, so its selector is a toggle per outlet
+    // rather than a dropdown. What is remembered is the whole selection.
+    const picker = page.getByTestId('surface-outlets')
     await expect(picker).toBeVisible()
-    const opened = await picker.inputValue()
-    const values = await picker
-      .locator('option')
-      .evaluateAll((options) => (options as HTMLOptionElement[]).map((option) => option.value))
-    const other = values.find((value) => value !== opened)
+    const toggles = picker.getByRole('button')
+    const ids = await toggles.evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        id: node.getAttribute('data-testid') ?? '',
+        on: node.getAttribute('aria-pressed') === 'true',
+      })),
+    )
+    const opened = ids.find((entry) => entry.on)?.id
+    const other = ids.find((entry) => !entry.on)?.id
     expect(other, 'the owner sees more than one outlet to choose between').toBeTruthy()
-    await picker.selectOption(other!)
+
+    // Add the other, drop the first: the last selected outlet cannot be cleared,
+    // so switching is two presses in that order.
+    await page.getByTestId(other!).click()
+    await page.getByTestId(opened!).click()
 
     // It survives a reload. Carrying across *surfaces* is covered by the unit
     // tests, which can render two of them: in real mode the other outlet-scoped
     // surfaces are still demo-gated, so there is only one to walk here.
     await page.reload()
-    await expect(page.getByTestId('surface-outlet')).toHaveValue(other!)
+    await expect(page.getByTestId(other!)).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId(opened!)).toHaveAttribute('aria-pressed', 'false')
 
     await signOut(page)
     await signIn(page, PERSONAS.owner.username)
     await page.goto('owner/attendance')
-    await expect(page.getByTestId('surface-outlet')).toHaveValue(opened)
+    await expect(page.getByTestId(opened!)).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('another role path redirects to the live assignment shell', async ({ page }) => {

@@ -462,9 +462,14 @@ select is((select count(*) from public.alerts), 0::bigint,
   'employees see no alerts');
 
 -- ---------------------------------------------------------------------------
--- The split day (multi-outlet-people): one person, one business date, two
--- outlets. This is the pair the old `(person_id, business_date)` uniqueness
--- made impossible.
+-- One day per person, whatever outlet it was worked at
+-- (attendance-one-day-per-person, design D1).
+--
+-- #28 modelled a split day across two outlets as two rows. It is not a thing
+-- that happens: somebody staffed at two outlets works at one of them on a given
+-- day. A second row anywhere is now refused, and this is the only place the rule
+-- can hold — `checkIn` is a direct insert from the browser, so there is no
+-- server-side layer between a hand-crafted request and the table.
 
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000e'::uuid);
 
@@ -475,35 +480,17 @@ select lives_ok($q$
   values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000e',
           public.app_business_date(now(), time '04:00'), 'present',
           now(), 22.97501, 88.43451, 12, 'phone')
-$q$, 'the split-shift person checks in at Kalyani from their own phone');
+$q$, 'the two-outlet person checks in at Kalyani from their own phone');
 
-select lives_ok($q$
+select throws_ok($q$
   insert into public.attendance
     (outlet_id, person_id, business_date, status,
      check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
   values ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-00000000000e',
           public.app_business_date(now(), time '04:00'), 'present',
           now(), 22.94501, 88.43301, 12, 'phone')
-$q$, 'and at Kanchrapara on the same business date, from the same phone');
-
-select is(
-  (select count(*) from public.attendance
-    where person_id = '10000000-0000-4000-a000-00000000000e'
-      and business_date = public.app_business_date(now(), time '04:00')),
-  2::bigint,
-  'both rows exist, one per outlet, each recording exactly who');
-
--- Both inside their own outlet's fence, and both still counting for nothing:
--- standing at the counter is evidence, and each half of the split day needs the
--- manager of the shop it was worked at to vouch for it separately.
-select is(
-  (select count(*) from public.attendance
-    where person_id = '10000000-0000-4000-a000-00000000000e'
-      and business_date = public.app_business_date(now(), time '04:00')
-      and status = 'absent'
-      and approved_by is null),
-  2::bigint,
-  'and each waits for the manager of its own outlet, in-fence or not');
+$q$, '23505', null,
+  'and a second row at the OTHER outlet on the same date is refused by the database');
 
 select throws_ok($q$
   insert into public.attendance
@@ -512,7 +499,26 @@ select throws_ok($q$
   values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000e',
           public.app_business_date(now(), time '04:00'), 'present',
           now(), 22.97501, 88.43451, 12, 'phone')
-$q$, '23505', null, 'a second row at the SAME outlet on the same date is still refused');
+$q$, '23505', null, 'as is a second row at the SAME outlet, exactly as before');
+
+select is(
+  (select count(*) from public.attendance
+    where person_id = '10000000-0000-4000-a000-00000000000e'
+      and business_date = public.app_business_date(now(), time '04:00')),
+  1::bigint,
+  'one row stands for the day, at the outlet they actually attended');
+
+-- Different dates at different outlets are the ordinary case, and stay allowed:
+-- the constraint is about a day belonging to one person, not about a person
+-- belonging to one shop.
+select lives_ok($q$
+  insert into public.attendance
+    (outlet_id, person_id, business_date, status,
+     check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
+  values ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-00000000000e',
+          public.app_business_date(now() - interval '4 days', time '04:00'), 'present',
+          now() - interval '4 days', 22.94501, 88.43301, 12, 'phone')
+$q$, 'the same person records a different date at the other outlet');
 
 -- A single-outlet person is unchanged: they cannot check in where they do not
 -- work, however the request is crafted.
@@ -527,22 +533,24 @@ select throws_ok($q$
           now(), 22.94501, 88.43301, 12, 'phone')
 $q$, '42501', null, 'an employee cannot check in at an outlet they hold no assignment at');
 
--- Each manager sees only the half of the split day worked at their own outlet.
+-- The outlet they attended sees the row; the other one sees nothing at all,
+-- which is what makes `attendance_elsewhere` necessary rather than decorative
+-- (design D3, asserted in 18_attendance_elsewhere.sql).
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 select is(
   (select count(*) from public.attendance
     where person_id = '10000000-0000-4000-a000-00000000000e'
       and business_date = public.app_business_date(now(), time '04:00')),
   1::bigint,
-  'the Kalyani manager sees only the Kalyani half of the split day');
+  'the Kalyani manager sees the day, because it was worked at Kalyani');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000003'::uuid);
 select is(
   (select count(*) from public.attendance
     where person_id = '10000000-0000-4000-a000-00000000000e'
       and business_date = public.app_business_date(now(), time '04:00')),
-  1::bigint,
-  'and the Kanchrapara manager only theirs');
+  0::bigint,
+  'and the Kanchrapara manager sees no row for that person that day');
 
 reset role;
 

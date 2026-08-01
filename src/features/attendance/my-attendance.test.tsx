@@ -75,7 +75,9 @@ describe('my attendance', () => {
     const history = await screen.findByTestId('attendance-history')
     // The fixture month: approved days, a leave day, a waiting one, a late one,
     // and days with nothing recorded at all.
-    expect(within(history).getAllByText('In').length).toBeGreaterThan(0)
+    // "Arrived" is the accessible name of the time chip row; the visible part
+    // is the time itself, since the card became chips (design D9).
+    expect(within(history).getAllByText('Arrived').length).toBeGreaterThan(0)
     expect(within(history).getByText('Leave')).toBeInTheDocument()
     expect(within(history).getByTestId('attendance-tally')).toBeInTheDocument()
     // Never a check-out, anywhere, ever again.
@@ -86,19 +88,21 @@ describe('my attendance', () => {
     renderWith('employee', <MyAttendance />, createMockAdapters())
 
     const history = await screen.findByTestId('attendance-history')
-    expect(within(history).getAllByText(/Approved by Demo Manager/).length).toBeGreaterThan(0)
+    expect(within(history).getAllByText(/Demo Manager, /).length).toBeGreaterThan(0)
     // The off-site approval: the reason it cost, and the fact that the manager
     // was not at the outlet — both readable by the person the day is about.
     expect(within(history).getByText(/Signal drift by the main road/)).toBeInTheDocument()
+    // The chip names itself to a screen reader ("Approver") and shows the
+    // distance to everybody else, so neither reader has to infer it from an icon.
     expect(
       within(history)
         .getAllByTestId('approver-place')
-        .some((node) => /from the outlet/.test(node.textContent ?? '')),
+        .some((node) => /Approver: \d/.test(node.textContent ?? '')),
     ).toBe(true)
     expect(
       within(history)
         .getAllByTestId('approver-place')
-        .some((node) => /Approver was at the outlet/.test(node.textContent ?? '')),
+        .some((node) => /Approver: on site/.test(node.textContent ?? '')),
     ).toBe(true)
   })
 
@@ -139,7 +143,8 @@ describe('my attendance', () => {
 
     // Whatever the manager is told about distance, accuracy and source, the
     // person it is about is told too.
-    for (const fact of managerSays.match(/\d+ m from the outlet|±\d+ m|phone/g) ?? []) {
+    for (const fact of managerSays.match(/Distance from the outlet: [\d.]+ m|±[\d.]+ m|phone/g) ??
+      []) {
       expect(employeeSays).toContain(fact)
     }
   })

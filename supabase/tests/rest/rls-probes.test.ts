@@ -62,8 +62,8 @@ const PERSONAS = {
   },
   // One login, live assignments at BOTH outlets — the case that did not exist
   // before multi-outlet-people.
-  splitShift: {
-    email: 'split.shift@login.shawarmania.invalid',
+  twoOutlets: {
+    email: 'two.outlets@login.shawarmania.invalid',
     sub: '10000000-0000-4000-a000-00000000000e',
   },
 } as const
@@ -121,7 +121,7 @@ describe('a person assigned to two outlets', () => {
   let split: Client
 
   beforeAll(async () => {
-    split = (await signIn(PERSONAS.splitShift.email)).client
+    split = (await signIn(PERSONAS.twoOutlets.email)).client
   })
 
   it('reads their own attendance at both outlets, from one login', async () => {
@@ -130,7 +130,7 @@ describe('a person assigned to two outlets', () => {
     expect(new Set(data?.map((row) => row.outlet_id))).toEqual(
       new Set([OUTLETS.kalyani, OUTLETS.kanchrapara]),
     )
-    expect(data?.every((row) => row.person_id === PERSONAS.splitShift.sub)).toBe(true)
+    expect(data?.every((row) => row.person_id === PERSONAS.twoOutlets.sub)).toBe(true)
   })
 
   it('sees both outlet rows, because the fence has to judge them at either', async () => {
@@ -145,7 +145,7 @@ describe('a person assigned to two outlets', () => {
     const { data, error } = await split.from('assignments').select('person_id, outlet_id')
     expect(error).toBeNull()
     expect(data).toHaveLength(2)
-    expect(data?.every((row) => row.person_id === PERSONAS.splitShift.sub)).toBe(true)
+    expect(data?.every((row) => row.person_id === PERSONAS.twoOutlets.sub)).toBe(true)
   })
 
   it('is still only an Employee at each, so no manager surface opens anywhere', async () => {
@@ -160,7 +160,7 @@ describe('a person assigned to two outlets', () => {
     const { data, error } = await split
       .from('attendance')
       .select('id')
-      .neq('person_id', PERSONAS.splitShift.sub)
+      .neq('person_id', PERSONAS.twoOutlets.sub)
     expect(error).toBeNull()
     expect(data).toEqual([])
   })

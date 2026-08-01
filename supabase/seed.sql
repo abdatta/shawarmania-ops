@@ -38,11 +38,11 @@ values
    9, now() - interval '3 days'),
   -- Kanchrapara keeps a deadline that is NOT the 13:00 default, so every
   -- surface and test that judges lateness has to read the outlet's own rule
-  -- rather than a constant it happens to share with the other shop. 20:00
-  -- rather than something tighter because the split-shift person works an
-  -- EVENING here: one deadline per outlet cannot describe two shifts, and a
-  -- value that made a 19:05 arrival read late would be demonstrating that
-  -- limitation rather than the rule (docs/LIMITATIONS.md).
+  -- rather than a constant it happens to share with the other shop. That
+  -- matters more since attendance-one-day-per-person: a combined roll-call puts
+  -- two outlets' rows in one list, and a view that reached for one clock would
+  -- mislabel half of them. Production's two outlets currently agree on 04:00
+  -- and 13:00, which is exactly why the seed must not.
   ('00000000-0000-4000-a000-000000000002', 'kanchrapara', 'Shawarmania Kanchrapara',
    'Kanchrapara', '281, K G Path (N), Near Joramandir Bus Stand',
    'Kanchrapara', 'North 24 Parganas', '743145', '+91 89815 24778',
@@ -83,12 +83,14 @@ begin
       -- owner-approved usernames replace every placeholder identity.
       ('20000000-0000-4000-a000-000000000002'::uuid, 'griller.kalyani@login.shawarmania.invalid'),
       ('20000000-0000-4000-a000-000000000004'::uuid, 'griller.kanchrapara@login.shawarmania.invalid'),
-      -- The split-shift person: one login, live assignments at BOTH outlets.
+      -- The two-outlet person: one login, live assignments at BOTH outlets.
       -- Multi-outlet is the case that has to be seeded rather than assumed —
       -- every isolation persona below is single-outlet, and a model that only
       -- ever sees single-outlet people is a model whose second outlet is
-      -- untested (multi-outlet-people).
-      ('10000000-0000-4000-a000-00000000000e'::uuid, 'split.shift@login.shawarmania.invalid')
+      -- untested (multi-outlet-people). They worked SOME days at one and some
+      -- at the other, never both on one date: a day belongs to the person
+      -- (attendance-one-day-per-person).
+      ('10000000-0000-4000-a000-00000000000e'::uuid, 'two.outlets@login.shawarmania.invalid')
     ) as p (id, email)
   loop
     insert into auth.users
@@ -138,7 +140,7 @@ values
   ('10000000-0000-4000-a000-00000000000b', 'Synthetic Biller Kpa',   '911111111011', true,  null),
   ('10000000-0000-4000-a000-00000000000c', 'Pending Staff Kal',      '911111111014', true,  'Prep'),
   ('10000000-0000-4000-a000-00000000000d', 'Pending Staff Kpa',      '911111111015', true,  'Prep'),
-  ('10000000-0000-4000-a000-00000000000e', 'Synthetic Split Shift',  '911111111016', true,  'Counter staff'),
+  ('10000000-0000-4000-a000-00000000000e', 'Synthetic Two Outlets',  '911111111016', true,  'Counter staff'),
   -- The grillers: staff accounts carrying the facts their roster rows held.
   ('20000000-0000-4000-a000-000000000002', 'Synthetic Griller Kal',  '911111111012', true,  'Grill'),
   ('20000000-0000-4000-a000-000000000004', 'Synthetic Griller Kpa',  '911111111013', true,  'Grill');
@@ -147,9 +149,9 @@ values
 -- Assignments: person × role × outlet. One live row per person per outlet.
 --
 -- Every isolation persona below is deliberately single-outlet, so the sweeps
--- keep meaning what they meant. `Synthetic Split Shift` is the exception and
+-- keep meaning what they meant. `Synthetic Two Outlets` is the exception and
 -- the point: one login, an Employee assignment at each outlet, and a day
--- worked at each — the case that did not exist before this change.
+-- worked at each — on two different dates, because one person has one day.
 --
 -- The owner and private account email are seeded as one transaction. The
 -- deferred invariant makes either row without the other impossible, including
@@ -595,12 +597,18 @@ values
    current_date - 1, 'absent',
    ((current_date - 1) + time '09:40') at time zone 'Asia/Kolkata', 22.94120, 88.42880, 28, 'phone',
    null, null, null, null, null, null),
-  -- The split day: ONE person, ONE business date, TWO outlets. Morning at
-  -- Kalyani, evening at Kanchrapara, each check-in inside its own fence and
-  -- neither aware of the other. This pair is exactly what the old
-  -- `(person_id, business_date)` uniqueness made impossible, and what
-  -- `(person_id, outlet_id, business_date)` exists to allow. Kanchrapara's
-  -- 20:00 deadline is why a 15:10 evening arrival there is not late.
+  -- The two-outlet person: ONE person, TWO outlets, and never both on one date.
+  -- Yesterday at Kalyani, the day before at Kanchrapara, each check-in inside
+  -- its own fence. This pair is what a month actually looks like for somebody
+  -- staffed at two shops, and it is deliberately readable from both sides:
+  --
+  --   D-1  a row at Kalyani, and NOTHING at Kanchrapara — so Kanchrapara's
+  --        manager must read them as working at another outlet, not absent
+  --   D-2  the mirror, so neither outlet is the privileged one
+  --
+  -- A pair on the SAME date is what the unique constraint now refuses
+  -- (attendance-one-day-per-person). Kanchrapara's 20:00 deadline is why its
+  -- 15:10 arrival is not late.
   ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-00000000000e',
    current_date - 1, 'present',
    ((current_date - 1) + time '08:55') at time zone 'Asia/Kolkata', 22.97495, 88.43443, 15, 'phone',
@@ -608,10 +616,10 @@ values
    ((current_date - 1) + time '09:15') at time zone 'Asia/Kolkata',
    22.97500, 88.43450, 11),
   ('00000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-00000000000e',
-   current_date - 1, 'present',
-   ((current_date - 1) + time '15:10') at time zone 'Asia/Kolkata', 22.94508, 88.43312, 19, 'phone',
+   current_date - 2, 'present',
+   ((current_date - 2) + time '15:10') at time zone 'Asia/Kolkata', 22.94508, 88.43312, 19, 'phone',
    '10000000-0000-4000-a000-000000000003', null,
-   ((current_date - 1) + time '15:22') at time zone 'Asia/Kolkata',
+   ((current_date - 2) + time '15:22') at time zone 'Asia/Kolkata',
    22.94503, 88.43305, 16);
 
 -- ---------------------------------------------------------------------------
