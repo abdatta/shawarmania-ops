@@ -70,10 +70,10 @@ Include the OpenSpec number when the commit belongs to a numbered change.
 Use the matching shape:
 
 ```text
-<Capability> (#N): <decisive observable outcome>
-Seed <change> (#N): <compact gate or decision>
-Propose <change> (#N)
-Archive #N, <what became durable>
+<Capability>: <decisive observable outcome>
+Seed <change>: <compact gate or decision>
+Propose <change heading>, <what became durable>
+Archive <change-slug>, <what became durable>
 <Direct maintenance outcome>
 The <thing> stops <incorrect behavior>
 ```
@@ -81,11 +81,11 @@ The <thing> stops <incorrect behavior>
 Representative examples of the encoded style:
 
 ```text
-Multi-outlet people (#22): authority becomes an assignment
-Seed multi-outlet-hiring (#23): one hire, several outlets, one code that lives
-Drop the access-token hook now that nothing registers it
+Multi-outlet people: authority becomes an assignment
+Seed multi-outlet-hiring: one hire, several outlets, one code that lives
+Propose dropping the access-token hook now that nothing registers it
 The cutover field stops reading like an opening time
-Archive #21, merging staff-as-accounts into specs and docs
+Archive staff-as-accounts, merging it into specs and docs
 ```
 
 Prefer a colon when the left side names a capability and the right side states

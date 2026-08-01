@@ -34,10 +34,14 @@ approved, when, where they were, and, where the rule requires one, why.
 
 ### Requirement: One attendance row per person per outlet per business day
 
-The database SHALL enforce at most one attendance row per person per outlet per
-business date. A person may therefore hold two rows for one business date when
-they worked a morning at one outlet and an evening at another, and may not hold
-two rows for the same outlet on the same date.
+The database SHALL enforce at most one attendance row per person per business
+date, across every outlet. A person assigned to more than one outlet works at one
+of them on any given day, so a day belongs to the person rather than to the shop,
+and a second row for the same person on the same date SHALL be refused whatever
+outlet it names.
+
+Recording a genuine split day across two outlets is therefore not possible. This
+is deliberate and is recorded as a limitation, not a defect.
 
 #### Scenario: A duplicate attendance row at the same outlet
 
@@ -45,19 +49,25 @@ two rows for the same outlet on the same date.
   business date
 - **THEN** the database rejects it with a constraint violation
 
-#### Scenario: A split day across two outlets is permitted
+#### Scenario: A second row at a different outlet on the same date
 
-- **WHEN** a person assigned to both outlets has a row at one outlet for a
+- **WHEN** a person assigned to both outlets holds a row at one outlet for a
   business date and a row is inserted at the other outlet for the same date
+- **THEN** the database rejects it with a constraint violation
+
+#### Scenario: The same person on different dates at different outlets
+
+- **WHEN** a person assigned to both outlets holds a row at one outlet on one
+  business date and a row is inserted at the other outlet on a different date
 - **THEN** the database accepts it
 
 ### Requirement: Attendance belongs to the person's account
 
 An attendance row SHALL reference the person's account record directly, with
-one row per person per outlet per business day. Rows SHALL survive the ending
-of the assignment they were worked under, the person's departure and the
-account's deactivation — the days were worked — and recorded attendance SHALL
-block deletion of the account it belongs to.
+one row per person per business day. Rows SHALL survive the ending of the
+assignment they were worked under, the person's departure and the account's
+deactivation, because the days were worked, and recorded attendance SHALL block
+deletion of the account it belongs to.
 
 #### Scenario: Departure does not touch the record
 
@@ -66,10 +76,10 @@ block deletion of the account it belongs to.
 - **THEN** every attendance row remains, attributed to the same person at the
   same outlet
 
-#### Scenario: One row per person per outlet per day
+#### Scenario: One row per person per day
 
-- **WHEN** a second check-in is recorded for a person at an outlet on a
-  business day that already holds their row for that outlet
+- **WHEN** a second check-in is recorded for a person on a business day that
+  already holds their row
 - **THEN** the existing row is updated; no second row is created
 
 ### Requirement: A closed outlet accepts no new check-ins
@@ -110,6 +120,11 @@ the source.
 A recorded check-in SHALL count as nothing until a manager approves it, and
 the screen SHALL say so plainly rather than implying the day is done.
 
+Once a day is recorded, the screen SHALL offer no further check-in for that day
+at any outlet. A person assigned to several outlets has one day like everybody
+else, and an action offering to start another one would invite a row the database
+refuses.
+
 #### Scenario: An employee checks in inside the fence
 
 - **WHEN** an Employee taps check-in and the device reports a position within the outlet's geofence radius
@@ -119,6 +134,12 @@ the screen SHALL say so plainly rather than implying the day is done.
 
 - **WHEN** an Employee who has already checked in today opens their home screen
 - **THEN** the screen shows the recorded arrival and its waiting or approved state, and offers no second check-in at that outlet
+
+#### Scenario: A multi-outlet person is offered no second outlet
+
+- **WHEN** a person assigned to two outlets has a recorded arrival today and
+  opens their home screen
+- **THEN** no action is offered to check in at another outlet
 
 ### Requirement: An outlet has an arrival deadline, and every check-in records the one that applied
 
@@ -181,12 +202,16 @@ remains a manager's decision recorded in the status.
 
 ### Requirement: No check-in by the deadline reads absent
 
-A person holding a live assignment at an outlet SHALL read as absent on every
+A person holding a live assignment SHALL read as absent on every
 surface — the manager's day, the person view, the employee's own history, and
 every count derived from them — once that outlet's arrival deadline for a
-business day has passed with no attendance row recorded for them that day.
-Before that deadline has passed, the same person SHALL read as not yet
+business day has passed with no attendance row recorded for them **anywhere**
+that day. Before that deadline has passed, the same person SHALL read as not yet
 arrived.
+
+Absence SHALL be judged once per person per business date, never once per outlet.
+A person carrying a row at one outlet SHALL NOT read as absent at another on the
+same date, on any surface or in any count.
 
 A stored row SHALL always take precedence: a day recorded as leave, half day
 or anything else stays what it was recorded as.
@@ -194,15 +219,20 @@ or anything else stays what it was recorded as.
 This state SHALL be derived from the stored rows and the outlet's clock. No
 scheduled process SHALL manufacture attendance rows.
 
-A day SHALL only be read this way inside the person's assignment window at
-that outlet, so days before they joined or after they left are not counted at
-all.
+A day SHALL only be read this way inside the person's assignment window, so days
+before they joined or after they left are not counted at all.
 
 #### Scenario: Nobody checked in, and the deadline passed
 
 - **WHEN** a manager opens a business day whose arrival deadline has passed and
   a staff member has no attendance row
 - **THEN** that person reads as absent for the day
+
+#### Scenario: A day worked at another outlet is not absent
+
+- **WHEN** a person assigned to two outlets holds a recorded arrival at one of
+  them, and the other outlet's deadline for that date passes
+- **THEN** that person does not read as absent, and the day is counted once
 
 #### Scenario: The deadline has not passed yet
 
@@ -230,7 +260,7 @@ all.
 #### Scenario: Days outside the assignment are not counted
 
 - **WHEN** a person's days are read over a range extending before they were
-  assigned to the outlet or after their assignment ended
+  assigned or after their assignment ended
 - **THEN** those days are not shown or counted as absent
 
 ### Requirement: The geofence verdict is computed by the database from the stored evidence
@@ -325,7 +355,9 @@ deliberate act per person rather than a rubber stamp.
 The approving device's position reading MAY be reused across approvals given in
 quick succession, for no longer than 60 seconds, so that approving one at a
 time does not mean one location read per person. A reading that could not be
-taken SHALL NOT be reused.
+taken SHALL NOT be reused. A reading SHALL NOT be reused across rows belonging
+to different outlets, because one reading cannot vouch for standing in two
+places; each outlet's rows SHALL be judged against a reading of their own.
 
 #### Scenario: A manager approves a waiting day
 
@@ -354,6 +386,13 @@ taken SHALL NOT be reused.
 - **WHEN** a Franchise Admin opens a day on which several arrivals are waiting
 - **THEN** the count of waiting days is stated, no control settles more than one
   of them, and each is approved on its own
+
+#### Scenario: A reading is not reused across outlets
+
+- **WHEN** a manager viewing two outlets at once approves a row at one outlet
+  and then a row at the other within the same minute
+- **THEN** the second approval does not reuse the first reading, and the second
+  row is judged against its own outlet's fence
 
 #### Scenario: A run of approvals reads the position once
 
@@ -440,16 +479,20 @@ its approver, whether that approver was on site, and any reason they gave.
 
 ### Requirement: A manager reviews the outlet's attendance day
 
-A Franchise Admin SHALL be able to view their own outlet's attendance for a
-chosen business day, showing for each person listed the check-in time, the
+A Franchise Admin SHALL be able to view attendance for a chosen business day
+across one or more of the outlets they hold a live assignment at, showing for
+each person listed the check-in time, the
 distance and accuracy of the reading, the source, whether it was late, whether
 it is waiting for approval, and any flags, and SHALL be able to approve waiting
 days and record manual entries from that view. A Super Admin SHALL be able to
-view any outlet's day on the same terms, whether or not they hold an assignment
-there.
+view any outlets on the same terms, whether or not they hold an assignment there.
+
+Where more than one outlet is in scope, each listed row SHALL name the outlet it
+belongs to, and a person appearing at one of the selected outlets SHALL be listed
+once rather than once per outlet.
 
 **Who is listed is a question about staff.** The view SHALL list every person
-holding a live **staff** assignment at that outlet, and SHALL NOT list a person
+holding a live **staff** assignment at an outlet in scope, and SHALL NOT list a person
 merely because they hold a manager or counter assignment there: attendance is
 recorded for the people whose arrival the outlet tracks, and a manager or an
 owner is not one of them. A person holding a staff assignment alongside any other
@@ -465,10 +508,10 @@ The count of days waiting for approval SHALL be stated on the view as a badge
 against the business day it belongs to, so a manager learns of them without
 reading every row.
 
-The view SHALL also state whether **the outlet in scope** holds unapproved
+The view SHALL also state whether **the outlets in scope** hold unapproved
 arrivals on business days other than the one on screen, as a mark on the control
 that moves to earlier days and on the control that moves to later ones. That
-mark SHALL reflect only the outlet in scope: another outlet's unsettled days
+mark SHALL reflect only the outlets in scope: an outlet outside the selection
 SHALL NOT mark these controls.
 
 Days waiting for approval SHALL be listed first, since they are the only rows
@@ -483,6 +526,12 @@ chosen day changes, so that settling a day never moves the rows beneath it.
   record for that day listed with the time, evidence, late tag and flags; rows
   waiting for approval are distinguished, counted, and listed above the rest;
   and manually entered events show who entered them
+
+#### Scenario: Two outlets are read together
+
+- **WHEN** a reader who may see two outlets selects both and opens a business day
+- **THEN** one list is shown covering both, each row naming its outlet, and a
+  person who attended one of them appears once
 
 #### Scenario: A manager who is not staff is not on the roll-call
 
@@ -531,21 +580,30 @@ chosen day changes, so that settling a day never moves the rows beneath it.
 
 ### Requirement: Attendance is readable by person over a range, not only by day
 
-A Franchise Admin SHALL be able to select one person holding a live staff
-assignment at their outlet and read every day that person worked at **that
-outlet** over a chosen range of business dates, defaulting to the current month,
-with a summary of how many days were present, late, absent and waiting for
-approval.
+Attendance SHALL be readable along two axes: **by outlet**, which is the day
+roll-call above, and **by staff**, which is one person over a range of business
+dates defaulting to the current month, with a summary of how many days were
+present, late, absent and waiting for approval. Choosing the axis SHALL come
+before choosing an outlet, and the outlet choice SHALL belong to the by-outlet
+axis alone.
 
-A person who holds no staff assignment at the outlet SHALL NOT be offered here
-even if they carry recorded rows there. Such rows are read on the business day
-they belong to, which is where anybody settling one needs them; a range of days
-for somebody whose days are not tracked would be a pattern of nothing.
+The by-staff read SHALL span every outlet the reader may see, and the set of
+those outlets SHALL be resolved in the database from the reader's own live
+assignments rather than from anything the request names. A Franchise Admin
+holding one assignment therefore reads that outlet, a Franchise Admin holding
+several reads exactly those, and a Super Admin reads all of them. A reader SHALL
+NOT be able to obtain a person's days at an outlet they hold no live assignment
+at, by the surface or by a hand-crafted request.
 
-The read SHALL name its outlet explicitly rather than resolving it from the
-session, and a Franchise Admin SHALL NOT be able to obtain a person's days at
-any other outlet, by the surface or by a hand-crafted request. A Super Admin
-SHALL be able to read any outlet on the same terms.
+A person's days SHALL be counted once per business date in that summary, whatever
+outlet each was worked at, because the summary exists to count days somebody
+worked so their pay can be computed by hand.
+
+A person who holds no staff assignment at any outlet the reader may see SHALL NOT
+be offered here even if they carry recorded rows there. Such rows are read on the
+business day they belong to, which is where anybody settling one needs them; a
+range of days for somebody whose days are not tracked would be a pattern of
+nothing.
 
 A person reading their own attendance SHALL be offered the same range control,
 and their own history SHALL continue to span every outlet they work or worked
@@ -558,6 +616,20 @@ at, each day naming its outlet.
   listed with its status, arrival time, late tag and approval, and the summary
   counts present, late, absent and waiting days
 
+#### Scenario: The owner reads a month across outlets
+
+- **WHEN** a Super Admin selects a person who worked at two outlets during the
+  month and reads their range
+- **THEN** every day is listed once, each naming the outlet it was worked at,
+  and no day is counted twice or shown as absent because it was worked elsewhere
+
+#### Scenario: A multi-outlet manager reads their own outlets and no others
+
+- **WHEN** a Franchise Admin holding live assignments at two outlets reads a
+  person's range, and that person also worked at a third outlet
+- **THEN** the days at the two outlets are listed and the third outlet's days
+  are not returned
+
 #### Scenario: The two views agree
 
 - **WHEN** the same business day is read through the day view and through the
@@ -566,9 +638,9 @@ at, each day naming its outlet.
 
 #### Scenario: A manager cannot read another outlet's days for the same person
 
-- **WHEN** a Franchise Admin requests a range of days for a person who also
-  works at another outlet, hand-crafting the request to name that outlet
-- **THEN** no rows are returned
+- **WHEN** a Franchise Admin hand-crafts a request for a person's days naming an
+  outlet they hold no live assignment at
+- **THEN** no rows are returned for that outlet
 
 #### Scenario: An employee reads their own month across outlets
 
@@ -630,6 +702,10 @@ time on the outlet's current business day — never a future time. This is the
 escape hatch that keeps a hard arrival rule humane: the phone died, the person
 forgot, the network was down.
 
+Where more than one outlet is in scope and the person holds a staff assignment
+at more than one of them, the entry SHALL ask which outlet it is being recorded
+against. Where the outlet is unambiguous, nothing SHALL be asked.
+
 A manual entry SHALL be stamped by the database with who entered it — the
 enterer's id and a snapshot of their name, never client-supplied — and with a
 source that names it manual. It SHALL carry no coordinates, because the admin
@@ -648,6 +724,17 @@ database, not only by the absence of a control.
 - **THEN** the row holds that time, source manual, and the admin's identity
   and name as enterer, stamped by the database, and the day is settled without
   a separate approval
+
+#### Scenario: The outlet is asked for when it is ambiguous
+
+- **WHEN** an admin records an arrival for a person holding staff assignments at
+  two outlets, both of which are in scope
+- **THEN** the entry asks which outlet the arrival is being recorded against
+
+#### Scenario: The outlet is not asked for when it is not ambiguous
+
+- **WHEN** an admin records an arrival while one outlet is in scope
+- **THEN** no outlet question is shown and the arrival is recorded there
 
 #### Scenario: A manual entry is visibly not a self check-in
 
@@ -751,8 +838,9 @@ employee's.
 ### Requirement: The geofence decides which outlet a person is checking in at
 
 A person holding live assignments at more than one outlet SHALL check in from
-the same single action as everybody else. The outlet SHALL be resolved from
-where they are standing, never chosen by them:
+the same single action as everybody else. Wherever a position reading exists, the
+outlet SHALL be resolved from where they are standing and SHALL NOT be chosen by
+them:
 
 - Holding one assignment, that outlet is used — unchanged from single-outlet
   behaviour.
@@ -762,14 +850,16 @@ where they are standing, never chosen by them:
   used, and the check-in is handled exactly as any other out-of-fence reading,
   waiting for that outlet's manager.
 
-No outlet picker, role switcher, or session-scoped mode SHALL be offered
-anywhere in this flow.
+No outlet picker, role switcher, or session-scoped mode SHALL be offered in any
+of those cases: where a reading exists, the fence is the only chooser.
 
 Where no position can be obtained at all and the person holds more than one
-assignment, the check-in SHALL be refused with an explanation, because nothing
-can honestly resolve the outlet; the person SHALL be directed to the manual
-entry an admin can record. With a single assignment this case SHALL behave
-exactly as it does today.
+assignment, the person SHALL be asked which outlet they are at, because nothing
+else can resolve it and there is no reading for the fence to judge. The resulting
+row SHALL be recorded at the chosen outlet with no coordinates, and SHALL wait for
+that outlet's manager on the same terms as any other unlocated check-in, which
+requires a reasoned approval. With a single assignment this case SHALL behave
+exactly as it does today, with no question asked.
 
 #### Scenario: A person assigned to two outlets checks in at one of them
 
@@ -793,26 +883,96 @@ exactly as it does today.
   absent, and the manager of that outlet can settle it with a reasoned
   approval
 
-#### Scenario: No position and several assignments refuses rather than guesses
+#### Scenario: No position and several assignments asks which outlet
 
 - **WHEN** a person assigned to two outlets taps check-in and the device can
   supply no position at all
-- **THEN** the check-in is refused with an explanation that their outlet cannot
-  be determined, and they are told an admin can record it for them
+- **THEN** the screen states that their position could not be read and asks
+  which outlet they are at, and no row is recorded until they choose
+
+#### Scenario: The chosen outlet is recorded and still waits for a manager
+
+- **WHEN** that person chooses an outlet
+- **THEN** the row is recorded at that outlet with no coordinates and status
+  absent, and its manager must give a reason to approve it
+
+#### Scenario: A single assignment is never asked
+
+- **WHEN** a person holding one assignment taps check-in and the device can
+  supply no position at all
+- **THEN** no outlet question is shown, and the flow is unchanged
 
 ### Requirement: A person's own attendance spans every outlet they work at
 
 The person's own attendance history SHALL list the days they worked at every
-outlet they hold or held an assignment at, each entry naming its outlet. A
-person who has only ever worked at one outlet SHALL see what they see today.
+outlet they hold or held an assignment at, each entry naming its outlet, as one
+combined history rather than one list per outlet. A person who has only ever
+worked at one outlet SHALL see what they see today.
 
-#### Scenario: A split day shows both outlets
+A business date SHALL appear once in that history and SHALL be counted once in
+its summary, so a person who works at two outlets never reads as present at one
+and absent at another on the same day.
 
-- **WHEN** a person checks in at one outlet in the morning and at the other in
-  the evening of the same business day, and opens their own attendance
-- **THEN** both days' rows are listed, each naming the outlet it was worked at
+#### Scenario: A day worked at one of two outlets appears once
+
+- **WHEN** a person assigned to two outlets checks in at one of them and opens
+  their own attendance
+- **THEN** the day appears once, naming the outlet it was worked at, and does
+  not also appear as absent at the other
+
+#### Scenario: A month mixes outlets without duplicating days
+
+- **WHEN** a person works some days at one outlet and other days at the other,
+  and reads the month
+- **THEN** each business date appears once with the outlet it was worked at, and
+  the summary counts each day once
 
 #### Scenario: A single-outlet person sees no new chrome
 
 - **WHEN** a person who holds one assignment opens their own attendance
 - **THEN** the view is as it was, with the outlet named but nothing to choose
+
+### Requirement: A person accounted for at another outlet reads as elsewhere, not absent
+
+The database SHALL answer, for an outlet and a business date, which people **on
+that outlet's own staff list** hold an attendance row at some other outlet that
+day. This exists because a reader who may see one outlet cannot see rows written
+at another, and so cannot themselves tell a person who was absent from a person
+who worked elsewhere. Without it, the surface would state that somebody was
+absent on a day they worked, which is a false claim about their pay.
+
+That answer SHALL disclose nothing beyond the fact itself. It SHALL NOT reveal
+which outlet, the arrival time, the status, the location evidence, the approver,
+or whether the day was approved, and it SHALL be limited to people the reader
+already sees on their own outlet's staff list.
+
+The surface SHALL render such a person as working at another outlet that day,
+without naming the outlet, and SHALL NOT show them as absent, as not yet arrived,
+or as carrying a row. Where the reader's selection already covers the outlet the
+person attended, their real row SHALL be shown instead and no elsewhere reading
+SHALL appear.
+
+#### Scenario: A single-outlet manager sees why somebody is not on their day
+
+- **WHEN** a person staffed at two outlets checks in at one of them, and the
+  other outlet's Franchise Admin opens that business day
+- **THEN** that person is listed as working at another outlet that day, is not
+  shown as absent, and no outlet name, time or evidence is shown for them
+
+#### Scenario: The detail behind the fact is still refused
+
+- **WHEN** that same Franchise Admin hand-crafts a request for the attendance row
+  itself at the other outlet
+- **THEN** the database returns no row
+
+#### Scenario: Selecting both outlets shows the real row instead
+
+- **WHEN** a reader who may see both outlets selects both and opens that day
+- **THEN** the person is listed once with their actual row at the outlet they
+  attended, and no working-elsewhere line is shown
+
+#### Scenario: A genuine absence still reads absent
+
+- **WHEN** a person staffed at two outlets holds no row at any outlet on a
+  business date whose deadline has passed
+- **THEN** they read as absent, once
