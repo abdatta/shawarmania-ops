@@ -77,16 +77,6 @@ function Chip({
   )
 }
 
-/** Which shop a row belongs to. Rendered only where more than one is in scope. */
-export function OutletChip({ name }: { name: string | null }) {
-  if (!name) return null
-  return (
-    <Chip icon={Store} name="Outlet" data-testid="outlet-chip">
-      {name}
-    </Chip>
-  )
-}
-
 /** Where a reading was taken, how good it was, and what recorded it. */
 export function EventEvidence({
   label,

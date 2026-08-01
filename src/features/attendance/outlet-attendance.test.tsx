@@ -9,6 +9,8 @@ import { resolveBusinessDate } from '@/domain'
 import {
   createMockAdapters,
   DEMO_GRILLER_ACCOUNT_ID,
+  DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
+  DEMO_PREP_COOK_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
   DEMO_TWO_OUTLETS_ACCOUNT_ID,
   OUTLET_KALYANI_ID,
@@ -933,6 +935,39 @@ describe('a person who works at two outlets', () => {
       expect(list.mock.calls.at(-1)?.[0]).toEqual(
         expect.arrayContaining([OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID]),
       ),
+    )
+  })
+
+  it('does not reuse one position reading across two outlets', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters()
+    atPosition(AT_COUNTER)
+    renderAsOwner(adapters)
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
+    await screen.findByTestId('attendance-day')
+
+    // Kalyani's waiting rows first: standing at that counter, each is one tap
+    // and they share a single reading (design D11).
+    await user.click(await screen.findByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await waitFor(() => expect(getCurrentPosition).toHaveBeenCalledTimes(1))
+    await user.click(await screen.findByTestId(`approve-${DEMO_PREP_COOK_ACCOUNT_ID}`))
+    await waitFor(() =>
+      expect(screen.queryByTestId(`approve-${DEMO_PREP_COOK_ACCOUNT_ID}`)).not.toBeInTheDocument(),
+    )
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1)
+
+    // The Kanchrapara row, in the same minute. One reading cannot vouch for
+    // standing in two places, so the window is keyed per outlet and this one
+    // costs a read of its own (design D6).
+    await user.click(await screen.findByTestId(`approve-${DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID}`))
+    await waitFor(() => expect(getCurrentPosition).toHaveBeenCalledTimes(2))
+
+    // And it is judged against its own outlet's fence: the manager is standing
+    // at Kalyani, so approving Kanchrapara's row asks for a reason.
+    expect(await screen.findByTestId('reason-required')).toHaveTextContent(
+      'You are not at the outlet',
     )
   })
 

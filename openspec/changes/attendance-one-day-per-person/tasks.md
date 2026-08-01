@@ -168,21 +168,35 @@ rewritten to assert its refusal.
 
 ## 9. Verification
 
-- [ ] 9.1 `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`,
-  `npm run contrast`, `npm run build`, `npm run test:e2e`.
-- [ ] 9.2 Docker-backed: `npm run db:start && npm run db:reset`, then
+- [x] 9.1 `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`,
+  `npm run contrast`, `npm run build`, `npm run test:e2e`. All pass: 719 unit and
+  component tests, 170 e2e, 50 contrast pairs. Two pre-existing failures on `main`
+  were fixed on the way: `src/components/build-version.tsx` was failing
+  `format:check`, and `e2e/attendance.spec.ts` asserted approval wording the app
+  had never used.
+- [x] 9.2 Docker-backed: `npm run db:start && npm run db:reset`, then
   `npm run test:db`, `npm run test:rls`, `npm run test:e2e:auth`. The auth suite
   is in the blast radius: this change moves what an outlet-scoped read resolves to.
-- [ ] 9.3 Run the app on a phone viewport and a tablet viewport, in both themes:
+  650 pgTAP assertions, 122 REST-level probes, 16 auth e2e. The auth suite needed
+  one edit: the remembered-outlet walk drove a dropdown that is now a toggle set.
+- [x] 9.3 Run the app on a phone viewport and a tablet viewport, in both themes:
   the employee's no-position outlet question, the combined roll-call across two
   outlets, By Staff for a multi-outlet person, and the loading placeholder on
-  every filter change.
-- [ ] 9.4 Confirm the migration applies to production with no backfill and no
-  constraint violation, on the owner's authorisation.
+  every filter change. Walked at 375×812 light and 768×1024 dark: no console
+  errors, no horizontal overflow, chips legible in both themes. The no-position
+  outlet question is covered by component tests rather than by hand, because the
+  browser pane cannot revoke a granted geolocation permission mid-session.
+- [x] 9.4 Confirm the migration applies to production with no backfill and no
+  constraint violation, on the owner's authorisation. Authorised and applied
+  2026-08-01. Verified read-only afterwards: the only unique constraint on
+  `attendance` is `attendance_one_per_person_day UNIQUE (person_id,
+  business_date)`; `attendance_elsewhere(uuid[], date)` exists, is `security
+  definer`, and is executable by `authenticated` and not by `anon`; 7 rows and 5
+  people unchanged; 0 violations; the three attendance policies untouched.
 
 ## 10. PHASE GATE
 
-- [ ] 10.1 **Gate**: a person staffed at two outlets checks in at one of them and
+- [x] 10.1 **Gate**: a person staffed at two outlets checks in at one of them and
   is nowhere shown absent at the other, on the manager's day, on the by-staff
   view and in their own history; the other outlet's Franchise Admin sees them as
   working at another outlet with no outlet name, time or evidence, and is refused
@@ -197,3 +211,22 @@ rewritten to assert its refusal.
   change shows a placeholder rather than the previous outlet's rows under the new
   name; no new colour pair enters the contrast validator; and the four-role demo
   walkthrough still walks.
+
+  Every clause holds. Where each is proved:
+
+  | Clause | Proof |
+  | --- | --- |
+  | Never absent at the other outlet, on all three surfaces | `attendance-record.test.ts`, `outlet-attendance.test.tsx`, `my-attendance.test.tsx` |
+  | Reads as working elsewhere, with nothing else disclosed | `18_attendance_elsewhere.sql`, `outlet-attendance.test.tsx`, and walked on the deployed site |
+  | The underlying row still refused to a hand-crafted request | `18_attendance_elsewhere.sql` |
+  | A second row anywhere on that date refused by the database | `06_write_contract_attendance_alerts.sql` |
+  | No GPS and two assignments asks; one assignment never does | `check-in-card.test.tsx` |
+  | Combined day, person once, fence judged per row | `outlet-attendance.test.tsx`, including that a reading is not reused across outlets |
+  | The month counts each date once | `outlet-attendance.test.tsx`, `attendance-adapter.test.ts` |
+  | A placeholder, never the previous selection's rows | `outlet-attendance.test.tsx`, `loading.test.tsx` |
+  | No new colour pair | `npm run contrast`: 50 pairs, unchanged |
+  | The four-role walkthrough still walks | `npm run test:e2e`: 170 passed |
+
+  Adding "a reading is not reused across outlets" to the component suite was the
+  only gap this gate found: the per-outlet keying was written and the spec
+  scenario existed, but nothing asserted the second read actually happened.

@@ -30,7 +30,7 @@ import { useOutletScope } from '@/features/outlet-scope'
 import { isLate, readDay, tallyDays, type DayReading } from './attendance-record'
 import { assembleRange, monthRange, type DateRange, type DayRow } from './attendance-range'
 import { RangeDayList, TallySummary } from './day-range-list'
-import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence, OutletChip } from './evidence'
+import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence } from './evidence'
 import { RangePicker } from './range-picker'
 import { useWaitingCounts, waitingAt, waitingLabel } from './waiting-counts'
 
@@ -831,9 +831,10 @@ function PersonDay({
         <h2 className="text-sm font-bold text-content">
           {person.fullName}
           {(person.note || person.deactivated) && (
-            <span className="ml-1 text-xs font-normal text-content-muted">
-              {person.note}
-              {person.deactivated ? ' · deactivated' : ''}
+            <span className="ml-2 text-xs font-normal text-content-muted">
+              {[person.note, outletName, person.deactivated && 'deactivated']
+                .filter(Boolean)
+                .join(' · ')}
             </span>
           )}
         </h2>
@@ -854,16 +855,10 @@ function PersonDay({
       {record && (
         <>
           <div className="flex flex-wrap items-center gap-1.5">
-            <OutletChip name={outletName} />
             <EventEvidence label="Arrived" event={record.checkIn} radiusMetres={radiusMetres} />
           </div>
           <ApprovalNote record={record} radiusMetres={radiusMetres} />
         </>
-      )}
-      {!record && outletName && reading.kind !== 'elsewhere' && (
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <OutletChip name={outletName} />
-        </div>
       )}
 
       {(waiting || offerManual) && (

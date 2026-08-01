@@ -6,7 +6,7 @@ import { formatBusinessDate } from '@/domain'
 
 import type { AttendanceTally } from './attendance-record'
 import type { DayRow } from './attendance-range'
-import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence, OutletChip } from './evidence'
+import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence } from './evidence'
 
 /**
  * A span of days, rendered once for both surfaces that show one.
@@ -104,7 +104,12 @@ export function RangeDayCard({
       }
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
-        <h3 className="text-sm font-bold text-content">{formatBusinessDate(row.businessDate)}</h3>
+        <h3 className="text-sm font-bold text-content">
+          {formatBusinessDate(row.businessDate)}
+          {outletName && (
+            <span className="ml-2 text-xs font-normal text-content-muted">{outletName}</span>
+          )}
+        </h3>
         <span className="text-sm">
           {record ? (
             <DayVerdict record={record} late={row.late} />
@@ -123,7 +128,6 @@ export function RangeDayCard({
       {record && (
         <>
           <div className="flex flex-wrap items-center gap-1.5">
-            <OutletChip name={outletName} />
             <EventEvidence label="Arrived" event={record.checkIn} radiusMetres={radiusMetres} />
           </div>
           <ApprovalNote record={record} radiusMetres={radiusMetres} />

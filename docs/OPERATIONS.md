@@ -109,6 +109,8 @@ Privatising the repo at the same time needs a paid GitHub plan for Pages, or a m
 
 Database changes deploy as migrations, applied to staging first and then production. **Migrations are forward-only**; a mistake is corrected by a new migration, not by editing a released one.
 
+**The migration goes first, then the front end.** They are two separate acts: `npx supabase db push` applies the schema, and pushing to `main` publishes the bundle through Pages. Nothing coordinates them, and CI does not touch the production database. A bundle that reaches the browser before its migration will call a function or column that does not exist yet, which is a broken screen for whoever is at the counter — so run `db push`, confirm it took, and only then push the commit. Where a change cannot survive that ordering in either direction, it needs splitting into a migration that is safe alone and a front end that is safe alone.
+
 ### Installing the app
 
 Open `https://ops.shawarmania.in/` in the browser. When the browser confirms
