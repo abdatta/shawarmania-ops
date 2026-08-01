@@ -1,3 +1,5 @@
+import { FunctionsFetchError, isAuthRetryableFetchError } from '@supabase/supabase-js'
+
 import type { Assignment } from './adapters'
 import type { Tables } from './database.types'
 import { getSupabaseClient } from './supabase'
@@ -27,7 +29,7 @@ export interface AuthedUser {
 /** A sign-in refusal the screen can phrase for a person. */
 export class SignInError extends Error {
   constructor(
-    readonly code: 'invalid_credentials' | 'unavailable',
+    readonly code: 'invalid_credentials' | 'unavailable' | 'unreachable',
     message: string,
   ) {
     super(message)
@@ -56,6 +58,28 @@ export class ActivationError extends Error {
 
 export const MIN_PASSWORD_LENGTH = 10
 
+const INVALID_CREDENTIALS = 'Those sign-in details are not right.'
+const UNREACHABLE =
+  "Could not reach Shawarmania. Check this device's internet connection and try again."
+
+/**
+ * Positive transport evidence only. Supabase also uses a retryable Auth error
+ * for received 5xx responses, so the type alone is not enough: status 0 (or a
+ * missing status on an equivalent provider object) means no HTTP response.
+ * Edge Function fetch failures are already a dedicated no-response type.
+ */
+function isUnreachable(error: unknown): boolean {
+  if (error instanceof FunctionsFetchError) return true
+  if (!isAuthRetryableFetchError(error)) return false
+  return error.status == null || error.status === 0
+}
+
+function signInFailure(error: unknown): SignInError {
+  return isUnreachable(error)
+    ? new SignInError('unreachable', UNREACHABLE)
+    : new SignInError('invalid_credentials', INVALID_CREDENTIALS)
+}
+
 function accountEmail(input: string): string | null {
   const email = input.trim().toLowerCase()
   if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -68,7 +92,7 @@ export async function signIn(identifier: string, password: string): Promise<Auth
   const authAlias = usernameToAuthAlias(identifier)
   const email = accountEmail(identifier)
   if (!authAlias && !email) {
-    throw new SignInError('invalid_credentials', 'Those sign-in details are not right.')
+    throw new SignInError('invalid_credentials', INVALID_CREDENTIALS)
   }
 
   const client = getSupabaseClient()
@@ -80,6 +104,7 @@ export async function signIn(identifier: string, password: string): Promise<Auth
     if (!error && data.user) {
       return { userId: data.user.id, username: authAliasToUsername(data.user.email) }
     }
+    if (error) throw signInFailure(error)
   } else {
     const { data, error } = await client.functions.invoke<{
       accessToken?: string
@@ -98,11 +123,13 @@ export async function signIn(identifier: string, password: string): Promise<Auth
           username: authAliasToUsername(sessionData.user.email),
         }
       }
+      if (sessionError) throw signInFailure(sessionError)
     }
+    if (error) throw signInFailure(error)
   }
 
   // One message for an unknown identifier and a wrong password alike.
-  throw new SignInError('invalid_credentials', 'Those sign-in details are not right.')
+  throw new SignInError('invalid_credentials', INVALID_CREDENTIALS)
 }
 
 export async function signOut(): Promise<void> {
@@ -175,7 +202,8 @@ const DEAD_CODE =
 const TOO_MANY =
   'Too many activation attempts from this connection. Wait a few minutes and try again.'
 
-function activationFailure(reason: string | null): ActivationError {
+function activationFailure(reason: string | null, error?: unknown): ActivationError {
+  if (isUnreachable(error)) return new ActivationError('unavailable', UNREACHABLE)
   if (reason === 'weak_password') {
     return new ActivationError(
       'weak_password',
@@ -207,7 +235,7 @@ export async function previewInvite(code: string): Promise<string> {
     'redeem-invite',
     { body: { action: 'preview', code } },
   )
-  if (error) throw activationFailure(await failureCode(error))
+  if (error) throw activationFailure(await failureCode(error), error)
   if (!data?.username) throw activationFailure('invalid_code')
   return data.username
 }
@@ -231,7 +259,7 @@ export async function redeemInvite(
   const { error } = await getSupabaseClient().functions.invoke('redeem-invite', {
     body: { action: 'redeem', code, username, password },
   })
-  if (error) throw activationFailure(await failureCode(error))
+  if (error) throw activationFailure(await failureCode(error), error)
 }
 
 /**

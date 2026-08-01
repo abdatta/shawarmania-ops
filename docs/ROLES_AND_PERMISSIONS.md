@@ -168,6 +168,13 @@ abuse limits, uses a request-local public-key Supabase client for the password
 grant, and returns only Supabase session tokens; it does not verify, retain, or
 log the password or mint a custom session.
 
+Sign-in remains enumeration-safe when it fails. An unknown username, an
+unknown or unassociated email, and a wrong password all show the same refusal.
+Only positive evidence that the browser received no Auth response produces
+connection guidance; provider wording is never inspected or shown. Activation
+uses the same transport distinction, and a connection failure does not consume
+the one-time code.
+
 Accounts are **admin-provisioned**: an admin enters name, username, role and
 role-appropriate outlets; phone, title and joining date remain optional. Only
 a Super Admin additionally requires a real account email. The system creates

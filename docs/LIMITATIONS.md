@@ -190,6 +190,15 @@ Supported, but shift overlaps are flagged for a human rather than resolved autom
 
 ## Operational gaps
 
+### Sign-in and activation require a connection
+
+There is no offline password validation or cached sign-in. Opening a new
+session and activating a one-time code both require a reachable authentication
+backend. When no backend response arrives, the app names the connection problem
+and asks the person to check the device's internet connection; it does not
+mislabel that failure as a wrong username or password. A backend refusal still
+uses one indistinguishable credential message.
+
 ### Forgotten-password recovery requires an administrator
 
 Every role, including Super Admin, intentionally has no self-service email

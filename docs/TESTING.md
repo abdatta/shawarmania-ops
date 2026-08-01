@@ -25,7 +25,7 @@ npm run auth:readiness # hosted read-only pre-publication identity readiness pro
 
 `test:db`, `test:rls` and `test:e2e:auth` need the local stack running with the seed applied (`db:start`, then `db:reset`). They are excluded from plain `npm test` so unit feedback stays instant; CI runs them in their own job against a fresh stack.
 
-`test:e2e:auth` has its own Playwright config and its own port, because it is the one browser suite that needs a **real backend** — everything in `e2e/` runs against a build wired to a deliberately unreachable Supabase, which is what lets `npm run test:e2e` work on a laptop with no Docker. Keeping the ports apart means a preview server left running by one suite can never be reused by the other.
+`test:e2e:auth` has its own Playwright config and its own port, because it is the one browser suite that needs a **real backend** — everything in `e2e/` runs against a build wired to a deliberately unreachable Supabase, which is what lets `npm run test:e2e` work on a laptop with no Docker. That unreachable build also proves sign-in shows connection guidance without implying whether an identifier or password is valid. The real-backend suite separately proves unknown usernames and wrong passwords keep identical refusal copy. Keeping the ports apart means a preview server left running by one suite can never be reused by the other.
 
 **Editing an Edge Function? Restart the runtime.** The bundled edge-runtime container caches function modules, so a change to anything under `supabase/functions/` is invisible until `docker restart supabase_edge_runtime_shawarmania-ops` (or a full `db:stop`/`db:start`). A test that keeps failing against code you have already fixed is almost always this.
 
@@ -111,8 +111,11 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
 - **Schema changes**: migrations apply cleanly to a fresh database *and* to a copy with existing data.
 - **Authentication/identity changes**: run username and associated-email sign-in, three-field
   activation, admin reset, alias-rename/session-survival, hand-crafted
-  email-change refusal, uniform email-sign-in failure, and all-role browser
-  paths. A migration release additionally runs the local
+  email-change refusal, uniform email-sign-in failure, no-response transport
+  classification, and all-role browser paths. Transport tests use provider
+  error types and response status rather than matching provider message text;
+  they prove a received refusal is not mislabeled as unreachable. A migration
+  release additionally runs the local
   `auth:usernames:rehearse` sequence, proves the readiness invariant refuses
   legacy/misaligned identity states and missing owner email, records the
   production postflight, and requires `auth:readiness` before static upload.

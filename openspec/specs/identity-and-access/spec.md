@@ -253,7 +253,9 @@ refresh token.
 
 Unknown username, unknown email, unassociated email, inactive account, malformed
 identifier, rate-limited email, and wrong password SHALL remain
-indistinguishable in the product.
+indistinguishable in the product. A request that receives no response from the
+authentication backend SHALL instead report that the service could not be
+reached and SHALL NOT imply that either credential was wrong.
 
 #### Scenario: A provisioned account signs in
 
@@ -299,6 +301,18 @@ indistinguishable in the product.
   submitted after migration
 - **THEN** no session is established and the standard credential refusal is
   returned
+
+#### Scenario: The authentication backend is unreachable
+
+- **WHEN** sign-in receives no HTTP response because the backend cannot be reached
+- **THEN** no session is established and the screen names the connection problem
+  without saying whether the identifier or password is valid
+
+#### Scenario: Activation cannot reach its backend
+
+- **WHEN** activation receives no HTTP response from its backend
+- **THEN** no code is consumed and the screen asks the person to check the
+  connection and try again
 
 ### Requirement: Each role lands on a shell it holds an assignment for
 

@@ -99,6 +99,25 @@ describe('sign in', () => {
     )
   })
 
+  it('names a connection problem without commenting on the credentials', async () => {
+    const user = userEvent.setup()
+    auth.signIn.mockRejectedValue(
+      new auth.SignInError(
+        'unreachable',
+        "Could not reach Shawarmania. Check this device's internet connection and try again.",
+      ),
+    )
+
+    renderAt('/sign-in')
+    await user.type(screen.getByLabelText('Username or email'), 'nobody')
+    await user.type(screen.getByLabelText('Password'), 'whatever-goes')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    const error = await screen.findByTestId('signin-error')
+    expect(error).toHaveTextContent("Check this device's internet connection and try again.")
+    expect(error).not.toHaveTextContent(/username|password|details are not right/i)
+  })
+
   it('refuses @-prefixed handles before asking the backend', async () => {
     const user = userEvent.setup()
     renderAt('/sign-in')
@@ -231,6 +250,44 @@ describe('activation', () => {
     )
     expect(screen.queryByLabelText('New password')).not.toBeInTheDocument()
     expect(auth.signIn).not.toHaveBeenCalled()
+  })
+
+  it('asks the person to check the connection when activation cannot reach the backend', async () => {
+    auth.previewInvite.mockRejectedValue(
+      new auth.ActivationError(
+        'unavailable',
+        "Could not reach Shawarmania. Check this device's internet connection and try again.",
+      ),
+    )
+
+    renderAt(LINK)
+
+    const error = await screen.findByTestId('activate-error')
+    expect(error).toHaveTextContent("Check this device's internet connection and try again.")
+    expect(error).not.toHaveTextContent(/expired|already been used/i)
+  })
+
+  it('keeps connection guidance on the activation form when redemption cannot connect', async () => {
+    const user = userEvent.setup()
+    auth.previewInvite.mockResolvedValue('new.staff')
+    auth.redeemInvite.mockRejectedValue(
+      new auth.ActivationError(
+        'unavailable',
+        "Could not reach Shawarmania. Check this device's internet connection and try again.",
+      ),
+    )
+    renderAt(LINK)
+    await screen.findByTestId('activate-username')
+
+    await user.type(screen.getByLabelText('Username'), 'new.staff')
+    await user.type(screen.getByLabelText('New password'), 'a-real-password')
+    await user.type(screen.getByLabelText('Re-type password'), 'a-real-password')
+    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
+
+    expect(await screen.findByTestId('activate-error')).toHaveTextContent(
+      "Check this device's internet connection and try again.",
+    )
+    expect(screen.getByLabelText('New password')).toBeInTheDocument()
   })
 
   it('takes the one-time code by hand when there is no link', async () => {
