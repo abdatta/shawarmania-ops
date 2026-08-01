@@ -109,12 +109,27 @@ select is(
 
 -- A manual entry at that outlet: past time, the outlet's current business day,
 -- and the enterer stamped by the database rather than supplied.
+--
+-- "Two hours ago, or the moment this business day opened, whichever is later."
+-- Both halves of the row are read from one clock that way. A flat
+-- `now() - interval '2 hours'` is a time on the PREVIOUS business day for the
+-- two hours after the 04:00 cutover, so validate_business_date reads the
+-- timestamp as one day and the stated business date as the next and refuses
+-- them, and the guard's own rule that a manual entry belongs to the outlet's
+-- current business day would refuse the alternative. That is the database being
+-- right on both counts: back-filling a closed day is deliberately out of scope
+-- (20260729000003_manual_attendance_entry.sql), so the entry this test records
+-- has to sit inside the day it names.
 select lives_ok(
   format($q$
     insert into public.attendance
       (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
     values (%L, %L, public.app_business_date(now(), time '04:00'), 'present',
-            now() - interval '2 hours', 'manual') $q$,
+            greatest(
+              now() - interval '2 hours',
+              (public.app_business_date(now(), time '04:00') + time '04:00')
+                at time zone 'Asia/Kolkata'),
+            'manual') $q$,
     :'KPA', :'STAFF_KPA'),
   'the owner records a manual arrival at an outlet they are not assigned to');
 

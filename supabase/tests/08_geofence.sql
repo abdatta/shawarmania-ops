@@ -165,37 +165,48 @@ select is((select arrival_deadline from public.attendance
 
 -- The same claim from INSIDE the fence, which used to survive as present. It no
 -- longer does: standing at the counter is evidence, not a witness.
+--
+-- Backdated rows below state the business date they belong to and build the
+-- arrival from it, rather than shifting `now()` and letting the trigger derive
+-- the date. `current_date` is the database's UTC calendar date; a business date
+-- is an IST day that opens at the outlet's 04:00 cutover, so for the ninety
+-- minutes between 04:00 and 05:30 IST the two are a day apart.
+-- `app_business_date(now() - interval '3 days', ...)` lands on `current_date - 2`
+-- for that hour and a half every night, which is the seeded Kalyani day this
+-- same person already holds, and one row per person per day refuses the second
+-- one. A date that is stated cannot drift into another day's, and a 09:00 IST
+-- arrival is past the 04:00 cutover both seeded outlets keep, so
+-- validate_business_date agrees the timestamp and the date describe one day.
 select lives_ok($q$
   insert into public.attendance
     (outlet_id, person_id, business_date, status,
      check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
   values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
-          public.app_business_date(now() - interval '3 days', time '04:00'), 'present',
-          now() - interval '3 days', 22.97505, 88.43460, 14, 'phone')
+          current_date - 3, 'present',
+          ((current_date - 3) + time '09:00') at time zone 'Asia/Kolkata',
+          22.97505, 88.43460, 14, 'phone')
 $q$, 'an employee checks in from inside the fence');
 
 select is((select status::text from public.attendance
             where person_id = '10000000-0000-4000-a000-000000000006'
-              and business_date = public.app_business_date(now() - interval '3 days', time '04:00')),
+              and business_date = current_date - 3),
   'absent',
   'and an in-fence present claim is stored absent too — only an approval settles a day');
 
 -- A phone check-in with no coordinates at all cannot be judged, so it is not
 -- counted present either — otherwise refusing location permission would be the
 -- simplest way to defeat the fence.
--- Backdated by five days, timestamp and business date together: the
--- validate_business_date trigger checks that the two agree.
 select lives_ok($q$
   insert into public.attendance
     (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
   values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
-          public.app_business_date(now() - interval '5 days', time '04:00'), 'present',
-          now() - interval '5 days', 'phone')
+          current_date - 5, 'present',
+          ((current_date - 5) + time '09:00') at time zone 'Asia/Kolkata', 'phone')
 $q$, 'a phone check-in with no position is accepted as a record');
 
 select is((select status::text from public.attendance
             where person_id = '10000000-0000-4000-a000-000000000006'
-              and business_date = public.app_business_date(now() - interval '5 days', time '04:00')),
+              and business_date = current_date - 5),
   'absent',
   'but a phone check-in with no coordinates is not counted present');
 

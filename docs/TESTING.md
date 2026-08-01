@@ -129,6 +129,7 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
 - **Never use real customer or employee data.** Seed data is synthetic: invented names, obviously fake phone numbers.
 - The seed set covers the real menu and both real outlets, because those are business facts rather than personal data.
 - Seeds must produce at least two outlets. A single-outlet fixture set cannot catch isolation bugs, which is the whole point of having them.
+- **Give a dated row one clock.** `current_date` is the database's UTC calendar date; a business date is an IST day that opens at the outlet's 04:00 cutover. For the ninety minutes between 04:00 and 05:30 IST the two are a day apart, so a row that takes its `business_date` from `app_business_date(now(), …)` and its timestamp from `now() - interval 'N days'` is describing two different days for that hour and a half every night. `validate_business_date` refuses the mismatch, or the row lands on a date the seed already holds and one row per person per day refuses it instead. State the business date the row belongs to and build its timestamp from that date, or take both from the same call. A suite that is green at 17:00 and red at 04:30 is a suite that fails whenever somebody pushes late.
 
 ## Honesty
 
