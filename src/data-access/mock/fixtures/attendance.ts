@@ -1,6 +1,7 @@
 import type { AttendanceStatus } from '../../adapters'
 import {
   DEMO_GRILLER_ACCOUNT_ID,
+  DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
   DEMO_PREP_COOK_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
   DEMO_SPLIT_SHIFT_ACCOUNT_ID,
@@ -263,5 +264,17 @@ export const attendanceSeeds: AttendanceSeed[] = [
     status: 'present',
     checkIn: { time: '08:50', ...AT_COUNTER },
     approval: { byName: DEMO_MANAGER.full_name, time: '09:06', ...APPROVED_AT_COUNTER },
+  },
+  // Kanchrapara, today, waiting for somebody — and the owner holds no assignment
+  // there (owner-reaches-every-outlet). This is the row that makes the owner's
+  // reach walkable rather than asserted: they open the other shop's day, see an
+  // arrival nobody has settled, and settle it. Left unapproved on purpose, so a
+  // reset always returns the demo to a shop with work outstanding in it.
+  {
+    personId: DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
+    outletId: OUTLET_KANCHRAPARA_ID,
+    daysAgo: 0,
+    status: 'present',
+    checkIn: { time: '10:40', ...AT_KANCHRAPARA },
   },
 ]

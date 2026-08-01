@@ -126,6 +126,8 @@ Tap **Compare outlets**, switch the basis from cash to consumption, and note tha
 
 Go back and open **Alerts**. The high-priority one is about pita bread. Leave it open — you are coming back to it.
 
+Then open **Attendance** from the owner's own navigation — no appointment, no switching, and the address stays inside the owner's shell. Use the outlet selector to move to **Kanchrapara**, the shop this owner holds no assignment at: one arrival is waiting there, and they settle it. The demo's emulated position is at Kalyani, so the rule asks for a reason first and records that the approver was not on site — the same rule the outlet's own manager answers to. Note who is *not* on that roll-call: the owner and the manager are not staff there, so nobody is pretending to record their arrival. Then open **Cash** at the same outlet: the day is all there, and the close and the withdrawal are not, because the drawer comes from the assignment. Switch the selector back to Kalyani, where the owner *is* the manager, and the same screen offers both — which is the whole boundary in one gesture. The outlet you last picked is where the next screen opens, so nobody answers that question twice.
+
 **2 — The manager, where the numbers come from** (Admin in the banner)
 
 **Stock** — pita bread is marked *Low stock*, in words and with an icon. Open its ledger: the quantity on the list is the sum of that ledger, including a packet dropped on the floor last night. This is the row behind the alert you just read.

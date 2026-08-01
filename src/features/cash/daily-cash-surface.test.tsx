@@ -44,6 +44,39 @@ function renderCash(adapters: DataAdapters = createMockAdapters('franchise_admin
   }
 }
 
+/**
+ * An owner holding no outlet assignment at all — the shape
+ * owner-reaches-every-outlet made real. They reach this surface at every outlet
+ * and manage none of them, so the drawer is nobody's but the manager's.
+ */
+const unassignedOwnerSession: Session = {
+  mode: 'demo',
+  userId: personaFixtures.super_admin.profile.id,
+  assignments: [
+    { id: 'a1', role: 'super_admin', outletId: null, startedOn: '2025-06-01', endedOn: null },
+  ],
+  ...deriveSessionScope([
+    { id: 'a1', role: 'super_admin', outletId: null, startedOn: '2025-06-01', endedOn: null },
+  ]),
+  displayName: personaFixtures.super_admin.profile.full_name,
+  persona: personaFixtures.super_admin,
+}
+
+function renderCashAsOwner(adapters: DataAdapters = createMockAdapters('super_admin')) {
+  return {
+    adapters,
+    ...render(
+      <MemoryRouter>
+        <SessionContext.Provider value={unassignedOwnerSession}>
+          <AdaptersContext.Provider value={adapters}>
+            <DailyCashSurface />
+          </AdaptersContext.Provider>
+        </SessionContext.Provider>
+      </MemoryRouter>,
+    ),
+  }
+}
+
 /** `₹2,561` back to 2561, so a test can type one rupee less than expected. */
 function rupeesFrom(text: string): number {
   return Number(text.replace(/[₹,]/g, ''))
@@ -203,5 +236,47 @@ describe('DailyCashSurface — yesterday, closed with a mismatch', () => {
     const day = await adapters.dailyCash.getDay(managerSession.outletId!, yesterday)
     expect(day.closed!.cash_sales_paise).toBe(day.cashSalesPaise)
     expect(day.exceptions).toHaveLength(1)
+  })
+})
+
+/**
+ * The owner, reaching a drawer that is not theirs
+ * (owner-reaches-every-outlet, design D2).
+ *
+ * Reaching this surface is not managing the outlet: the bound is the database's
+ * — `cash_withdrawals_insert` and `close_business_day` carry no owner branch at
+ * all — and what is asserted here is that the screen never offers what would be
+ * refused, while still showing the figures. An owner who cannot see the day
+ * cannot oversee it.
+ */
+describe('DailyCashSurface — an owner assigned nowhere', () => {
+  it('shows the day and offers neither the close nor a withdrawal', async () => {
+    renderCashAsOwner()
+
+    // The figures are there.
+    expect(await screen.findByTestId('expected-closing')).toBeInTheDocument()
+
+    // The two writes are not, and the screen says whose they are.
+    expect(screen.queryByTestId('close-day-button')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('add-withdrawal')).not.toBeInTheDocument()
+    expect(screen.getByTestId('drawer-not-yours')).toHaveTextContent(
+      /belongs to this outlet’s manager/i,
+    )
+  })
+
+  it('says the same at every outlet, because the reason is the assignment', async () => {
+    const user = userEvent.setup()
+    renderCashAsOwner()
+
+    await screen.findByTestId('expected-closing')
+    const selector = await screen.findByTestId('surface-outlet')
+    const otherOutlet = within(selector)
+      .getAllByRole('option')
+      .map((option) => (option as HTMLOptionElement).value)
+      .find((value) => value !== (selector as HTMLSelectElement).value)
+    await user.selectOptions(selector, otherOutlet!)
+
+    expect(await screen.findByTestId('drawer-not-yours')).toBeInTheDocument()
+    expect(screen.queryByTestId('close-day-button')).not.toBeInTheDocument()
   })
 })

@@ -513,6 +513,18 @@ describe('the outlet attendance day', () => {
  * so the surface passing it explicitly is worth asserting rather than assuming.
  */
 describe('the outlet attendance person view', () => {
+  // Same calendar trap as the employee's own month: the range defaults to this
+  // month and the fixtures are days back from today, so the first of a month
+  // leaves nothing in range. Only `Date` is faked; timers stay real.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-07-20T12:00:00+05:30'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('names its outlet on every read, rather than resolving it from the session', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()
@@ -690,5 +702,114 @@ describe("the owner's stranded days", () => {
 
     await screen.findByTestId('attendance-day')
     expect(screen.queryByTestId('stranded-days')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Who the roll-call is about (owner-reaches-every-outlet, design D3 and D4).
+ *
+ * Attendance is recorded for the people whose arrival the outlet tracks, so a
+ * manager or an owner is on it only when they are also staff there. The one
+ * exception is somebody who already carries a row on the day: the waiting counts
+ * are computed from rows, and a row inside the count and outside the screen would
+ * be a badge nobody could clear.
+ */
+describe('the roll-call is the outlet’s staff', () => {
+  const DEMO_MANAGER_ID = personaFixtures.franchise_admin.profile.id
+
+  it('leaves a manager who holds no staff assignment off the day', async () => {
+    renderDay()
+
+    // Demo Manager runs Kalyani and Demo Owner day-runs it too. Neither one's
+    // arrival is recorded by anybody, so neither has a row of their own.
+    //
+    // Asserted on the cards rather than on the text: a manager's name legitimately
+    // appears on somebody else's row, as the person who typed their arrival in.
+    await screen.findByTestId('attendance-day')
+    expect(screen.queryByTestId(`day-${DEMO_MANAGER_ID}`)).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId(`day-${personaFixtures.super_admin.profile.id}`),
+    ).not.toBeInTheDocument()
+  })
+
+  it('lists a manager who is also staff at the outlet', async () => {
+    const adapters = createMockAdapters()
+    const real = await adapters.accounts.listAccounts()
+    vi.spyOn(adapters.accounts, 'listAccounts').mockResolvedValue(
+      real.map((account) =>
+        account.id === DEMO_MANAGER_ID
+          ? {
+              ...account,
+              assignments: [
+                ...account.assignments,
+                {
+                  id: 'da000000-0000-4000-a000-0000000000fe',
+                  role: 'employee' as const,
+                  outletId: OUTLET_KALYANI_ID,
+                  startedOn: '2026-07-01',
+                  endedOn: null,
+                },
+              ],
+            }
+          : account,
+      ),
+    )
+    renderDay(adapters)
+
+    // Their attendance is a real thing now, and it is the staff assignment that
+    // makes it one — not the fact that they manage the place.
+    const card = await screen.findByTestId(`day-${DEMO_MANAGER_ID}`)
+    expect(within(card).getByRole('heading')).toHaveTextContent('Demo Manager')
+    // Listed as staff, so nothing calls them a stranger to the list.
+    expect(within(card).queryByText(/not on this outlet’s staff list/)).not.toBeInTheDocument()
+  })
+
+  it('lists somebody off the staff list who carries a row, and lets the day be settled', async () => {
+    const adapters = createMockAdapters()
+    const businessDate = await todayAt(adapters, OUTLET_KALYANI_ID)
+    // A manager's own arrival, recorded before the roll-call narrowed. Written
+    // through the adapter, so it is counted exactly as any other row is.
+    await adapters.attendance.checkIn({
+      personId: DEMO_MANAGER_ID,
+      outletId: OUTLET_KALYANI_ID,
+      businessDate,
+      reading: { ...AT_COUNTER, accuracyMetres: AT_COUNTER.accuracy, at: new Date().toISOString() },
+    })
+    const user = userEvent.setup()
+    atPosition(AT_COUNTER)
+    renderDay(adapters)
+
+    const card = await screen.findByTestId(`day-${DEMO_MANAGER_ID}`)
+    expect(within(card).getByText(/Demo Manager/)).toBeInTheDocument()
+    // Said, rather than left as a mystery row on a list of staff.
+    expect(within(card).getByText(/not on this outlet’s staff list/)).toBeInTheDocument()
+    // And no way to type in an arrival for somebody who already has one.
+    expect(screen.queryByTestId(`manual-${DEMO_MANAGER_ID}`)).not.toBeInTheDocument()
+
+    // Three waiting now: the fixtures' two, and this one.
+    expect(await screen.findByTestId('day-waiting')).toHaveTextContent('3')
+    await user.click(within(card).getByTestId(`approve-${DEMO_MANAGER_ID}`))
+
+    // The count that named them can be cleared, which is the whole reason the
+    // row is still here.
+    await waitFor(() => expect(screen.getByTestId('day-waiting')).toHaveTextContent('2'))
+  })
+
+  it('offers only staff in the by-person picker', async () => {
+    const user = userEvent.setup()
+    renderDay()
+
+    await screen.findByTestId('attendance-day')
+    await user.click(screen.getByTestId('axis-person'))
+
+    const picker = await screen.findByTestId('person-picker')
+    const names = within(picker)
+      .getAllByRole('option')
+      .map((option) => option.textContent)
+    expect(names).toContain('Demo Griller')
+    // A range of days for somebody whose days are not tracked is a pattern of
+    // nothing (design D5).
+    expect(names).not.toContain('Demo Manager')
+    expect(names).not.toContain('Demo Owner')
   })
 })

@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
@@ -21,6 +21,26 @@ import { OutletAttendance } from './outlet-attendance'
  * how it becomes something staff resent. So the test renders one day through
  * both surfaces and compares what each says about it.
  */
+
+/**
+ * The clock is pinned mid-month, and that is load-bearing rather than tidy.
+ *
+ * Every attendance fixture is authored as *business days back from today*, and
+ * both person views default to **this month** — so on the first day or two of a
+ * month the pattern sits almost entirely in the previous one and these surfaces
+ * are legitimately empty. The tests then fail for a calendar reason with nothing
+ * to do with the code, which is exactly what happened on 1 August 2026.
+ *
+ * Only `Date` is faked; timers stay real, so `userEvent` behaves normally.
+ */
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-07-20T12:00:00+05:30'))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 function sessionFor(role: 'employee' | 'franchise_admin'): Session {
   const persona = personaFixtures[role]

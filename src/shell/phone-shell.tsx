@@ -6,7 +6,7 @@ import { NavAttentionBadge } from '@/features/attention/nav-badge'
 import { visibleSurfaces, type Surface } from '@/gates/registry'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
-import { heldRoles, ROLE_SEGMENTS, type Role } from '@/session/session'
+import { heldRoles, reachableRoles, ROLE_SEGMENTS, type Role } from '@/session/session'
 
 /**
  * The shell for the phone-first roles — Super Admin, Franchise Admin,
@@ -27,18 +27,38 @@ export function PhoneShell({
   installAction?: ReactNode
 }) {
   const session = useSession()
-  // Every role the person holds, not just the one whose shell they are in: a
-  // manager who also grills at the other outlet reaches both sets of surfaces
-  // without switching anything (multi-outlet-people, design D6).
-  const items = visibleSurfaces(heldRoles(session), session.mode)
+  // Every role the person can reach, not just the one whose shell they are in:
+  // a manager who also grills at the other outlet reaches both sets of surfaces
+  // without switching anything (multi-outlet-people, design D6), and the owner
+  // reaches the outlet-level surfaces holding no assignment at all
+  // (owner-reaches-every-outlet, design D1). What they HOLD still decides which
+  // homes are theirs.
+  const held = heldRoles(session)
+  const items = visibleSurfaces(reachableRoles(session), session.mode, held)
+  const home = held[0]
 
   const baseFor = (role: Role) => {
     const segment = ROLE_SEGMENTS[role]
     return session.mode === 'demo' ? `/demo/${segment}` : `/${segment}`
   }
 
+  /**
+   * A navigation entry stays **inside the shell you are in** (design D1a): the
+   * owner's Attendance is `/owner/attendance`, not `/admin/attendance`. Every
+   * role branch mounts the same surface routes, and the gate resolves a path
+   * against the roles the session can reach, so the surface is the same either
+   * way — what differs is that one address keeps the reader where they are and
+   * the other reads as though they had become somebody else. In demo mode it is
+   * not merely cosmetic: the role lives in the URL there, so a link into another
+   * role's segment would swap the persona mid-walk. The counter shell has always
+   * done it this way; this is the phone shell agreeing with it.
+   *
+   * A home is the exception, because two of them cannot share one address: an
+   * index surface keeps its own role's segment. Only a role the person holds
+   * contributes one, so both addresses are always theirs.
+   */
   const linkFor = (surface: Surface) => {
-    const base = baseFor(surface.role)
+    const base = baseFor(surface.path === '' ? surface.role : (home ?? surface.role))
     return surface.path === '' ? base : `${base}/${surface.path}`
   }
 

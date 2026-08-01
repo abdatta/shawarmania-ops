@@ -127,3 +127,46 @@ describe('the demo’s front door', () => {
     expect(screen.queryByText('Link copied.')).not.toBeInTheDocument()
   })
 })
+
+/**
+ * The menu states what somebody **holds**, and reaching a surface is not holding
+ * a role (owner-reaches-every-outlet, design D1). An owner who manages no outlet
+ * reaches every outlet's manager surfaces and is a manager of none of them; the
+ * one place in the app that names a person's roles must say so.
+ */
+describe('what the account menu says you hold', () => {
+  it('names the owner role only, for an owner who manages no outlet', () => {
+    const { profile } = personaFixtures.super_admin
+    const ownerOnly: Session = {
+      mode: 'real',
+      userId: profile.id,
+      assignments: [
+        { id: 'a1', role: 'super_admin', outletId: null, startedOn: '2025-06-01', endedOn: null },
+      ],
+      ...deriveSessionScope([
+        { id: 'a1', role: 'super_admin', outletId: null, startedOn: '2025-06-01', endedOn: null },
+      ]),
+      displayName: profile.full_name,
+    }
+
+    render(
+      <MemoryRouter>
+        <SessionContext.Provider value={ownerOnly}>
+          <AdaptersContext.Provider value={createMockAdapters('super_admin')}>
+            <AccountMenu onSignOut={() => undefined} />
+          </AdaptersContext.Provider>
+        </SessionContext.Provider>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Owner')).toBeInTheDocument()
+    expect(screen.queryByText(/Admin/)).not.toBeInTheDocument()
+  })
+
+  it('names both, for an owner who does manage one', () => {
+    renderMenu('super_admin')
+
+    // The demo owner day-runs Kalyani, and that assignment is a fact about them.
+    expect(screen.getByText(/Owner · Admin/)).toBeInTheDocument()
+  })
+})

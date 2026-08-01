@@ -44,6 +44,12 @@ export const DEMO_RUNNER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000014'
 export const DEMO_SPLIT_SHIFT_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000015'
 /** Still at Kalyani; their Kanchrapara assignment ended in the spring. */
 export const DEMO_RETURNER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000016'
+/**
+ * Kanchrapara's own staff. Their arrival today is waiting, and the owner holds
+ * no assignment at that shop — which is the walk `owner-reaches-every-outlet`
+ * exists for.
+ */
+export const DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000012'
 /** Holds no live assignment at all: the person who has left the business. */
 export const DEMO_FORMER_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000009'
 
@@ -114,7 +120,7 @@ const colleagues = [
     created_at: FIXTURE_CREATED_AT,
   },
   {
-    id: 'd1000000-0000-4000-a000-000000000012',
+    id: DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
     full_name: 'Demo Kanchrapara Staff',
     phone: null,
     is_active: true,
@@ -236,7 +242,7 @@ export const assignmentFixtures: Readonly<Record<string, Assignment[]>> = {
       '2026-04-20',
     ),
   ],
-  'd1000000-0000-4000-a000-000000000012': [
+  [DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID]: [
     liveAssignment(
       'da000000-0000-4000-a000-000000000017',
       'employee',

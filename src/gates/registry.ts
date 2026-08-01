@@ -301,21 +301,34 @@ export function isRenderable(state: GateState, mode: SessionMode): boolean {
 /**
  * The navigation for a session in one mode.
  *
- * Takes the roles the person actually holds, most senior first, and returns
- * the **union** of their surfaces — because since multi-outlet-people one
- * person may manage an outlet and work at another, and the proposal ruled out
- * anything they would have to switch. Entries keep their own role, so a link
- * can be built against that role's path segment.
+ * Takes the roles whose surfaces the person may **reach**, most senior first,
+ * and returns the **union** of those surfaces — because since
+ * multi-outlet-people one person may manage an outlet and work at another, and
+ * the proposal ruled out anything they would have to switch. Entries keep their
+ * own role, so a link can be built against that role's path segment.
  *
  * Deduplicated by navigation label: `admin-people` and `owner-people` are the
  * same door with the same word on it, and two tabs reading "People" is a
  * question nobody should have to answer. The more senior role's entry wins,
  * because it is the one whose surface reaches further.
  *
+ * `held` is the narrower list of roles the person actually holds, and it governs
+ * exactly one thing: **a home belongs to a role you hold**. An index surface
+ * (`path: ''`) of a role that is merely reachable is left out, because a home is
+ * the address a shell opens on and two of them cannot share one
+ * (owner-reaches-every-outlet, design D1a). So the owner keeps one Overview
+ * rather than gaining a second dashboard tab pointing at the same place. It
+ * defaults to `roles`, which is the answer for every session that reaches
+ * exactly what it holds.
+ *
  * Surfaces without nav metadata (sub-surfaces reached from elsewhere) are
  * excluded regardless of state.
  */
-export function visibleSurfaces(roles: readonly Role[], mode: SessionMode): Surface[] {
+export function visibleSurfaces(
+  roles: readonly Role[],
+  mode: SessionMode,
+  held: readonly Role[] = roles,
+): Surface[] {
   const seen = new Set<string>()
   const out: Surface[] = []
 
@@ -327,6 +340,9 @@ export function visibleSurfaces(roles: readonly Role[], mode: SessionMode): Surf
       .sort((a, b) => (a.nav?.order ?? 0) - (b.nav?.order ?? 0))
 
     for (const surface of forRole) {
+      // A home for a role they do not hold is a second front door on somebody
+      // else's address.
+      if (surface.path === '' && !held.includes(surface.role)) continue
       const label = surface.nav?.label ?? surface.id
       if (seen.has(label)) continue
       seen.add(label)

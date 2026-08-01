@@ -24,6 +24,30 @@ remotely can move a drawer somebody else is responsible for counting. An owner
 who genuinely needs the cash path takes an assignment as that outlet's manager,
 which is a visible, recorded act.
 
+The bound survived the owner gaining every outlet's manager screens without an
+assignment (#28): they reach the cash screen at any outlet, read the whole day
+there, and are offered neither of the two writes. Whether an outlet with no
+dedicated manager should hand its drawer to the owner is an open design question
+in `daily-cash-live` (#12).
+
+## A remembered outlet is per device and per browser profile
+
+The outlet an outlet-scoped screen opens on is remembered for the signed-in
+person, on that device, in that browser profile. It does not follow them to
+another phone, does not survive clearing site data, and is deliberately not
+stored server-side — it is a filter on a screen, not a setting. A browser that
+refuses local storage simply defaults every time, which is what the app did
+before it was remembered at all.
+
+## A non-staff person's attendance row is reachable by day, not by person
+
+An outlet's attendance day lists its staff, plus anybody who already carries a
+record on the day shown — so a manager's own recorded arrival stays visible and
+approvable where it happened. The by-person view offers **staff only**, so those
+records cannot be read as a range. It is the honest trade: a pattern of days for
+somebody whose days are not tracked is a pattern of nothing, and the day view is
+where anybody settling one is already standing.
+
 ## Only a Super Admin may assign themselves
 
 Self-assignment is refused for everyone except a Super Admin placing themselves

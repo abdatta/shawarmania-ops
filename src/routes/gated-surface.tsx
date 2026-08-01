@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 import { isRenderable, surfaces } from '@/gates/registry'
 import { useSession } from '@/session/context'
-import { heldRoles } from '@/session/session'
+import { reachableRoles } from '@/session/session'
 
 import { NotFound } from './not-found'
 
@@ -19,13 +19,15 @@ import { NotFound } from './not-found'
  */
 export function GatedSurface({ path, children }: { path: string; children: ReactNode }) {
   const session = useSession()
-  // Resolved against every role the session HOLDS, not just the shell it is
+  // Resolved against every role the session can REACH, not just the shell it is
   // standing in: since multi-outlet-people a person may hold several, and the
-  // routes for each are branches of the same tree. A role they do not hold
-  // still finds nothing, which is the property this file exists for.
-  const held = heldRoles(session)
+  // routes for each are branches of the same tree; since
+  // owner-reaches-every-outlet the owner also reaches the outlet-level ones. A
+  // role they can neither hold nor reach still finds nothing, which is the
+  // property this file exists for.
+  const reachable = reachableRoles(session)
   const surface = surfaces.find(
-    (candidate) => held.includes(candidate.role) && candidate.path === path,
+    (candidate) => reachable.includes(candidate.role) && candidate.path === path,
   )
   if (!surface || !isRenderable(surface.state, session.mode)) return <NotFound />
   return <>{children}</>

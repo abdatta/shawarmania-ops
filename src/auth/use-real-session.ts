@@ -9,6 +9,7 @@ import {
   signOut,
   type Profile,
 } from '@/data-access/auth'
+import { forgetRememberedOutlets } from '@/features/remembered-outlet'
 import { deriveSessionScope, type Session } from '@/session/session'
 
 /**
@@ -154,6 +155,10 @@ export function useRealSession(): RealSession {
 
   const endSession = useCallback(async () => {
     await signOut()
+    // The outlet somebody was looking at goes with their session
+    // (owner-reaches-every-outlet, design D6). These are shared phones, and the
+    // next person should open on their own shop rather than on the last one's.
+    forgetRememberedOutlets()
     setState({ status: 'anonymous' })
   }, [])
 

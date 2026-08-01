@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
+import { readRememberedOutlet, rememberOutlet } from '@/features/remembered-outlet'
 import { useSession } from '@/session/context'
 import { holdsRole, sessionOutlets, sessionOutletsFor } from '@/session/session'
 
@@ -24,6 +25,16 @@ import { holdsRole, sessionOutlets, sessionOutletsFor } from '@/session/session'
  * already has. It is deliberately *not* the session-scoped "active outlet" the
  * proposal rejected: there is no active anything, and nothing to switch.
  *
+ * **Since owner-reaches-every-outlet the choice is remembered** for one
+ * signed-in person and shared by every outlet-scoped surface, so choosing an
+ * outlet on one is the outlet the next one opens on and a reload opens where
+ * they left off (design D6). That reverses half of the earlier decision, on
+ * purpose and on the record (design D7): the owner now reaches these surfaces at
+ * every outlet, and re-answering the same question on each of them is the cost
+ * that made per-surface state wrong. Everything above still holds — it is a
+ * filter, it is not session state, and it confers nothing. See
+ * `remembered-outlet.ts` for where it is kept and why.
+ *
  * A person with one outlet — which is nearly everybody — gets that outlet and
  * no control at all, exactly as before.
  *
@@ -44,6 +55,15 @@ export function useOutletScope(): {
    * the owner's remote path is non-cash expenses and stock corrections, and
    * nothing that touches a drawer. **It is not the boundary** — the policies
    * are — it is how the bound is read rather than discovered by being refused.
+   *
+   * **Reaching a surface is not managing the outlet**
+   * (owner-reaches-every-outlet, design D2). Since that change the owner reaches
+   * every outlet's manager surfaces holding no assignment, and this stays a
+   * question about assignments, because the database's answer did not move:
+   * `cash_withdrawals_insert` and `close_business_day` carry no owner branch at
+   * all. Whether that should change is a design question in `daily-cash-live`
+   * (#12), and until it does, widening this would only produce a control the
+   * database refuses.
    */
   managed: boolean
   /** Render this in the surface's header. Null when there is nothing to choose. */
@@ -68,10 +88,24 @@ export function useOutletScope(): {
   // The owner chooses from every outlet; everybody else from theirs.
   const needsList = isOwner || mine.length > 1
 
+  // Where they left off, if anywhere. Believed only once the outlet list has
+  // arrived to check it against — an outlet can close, be deleted, or stop being
+  // theirs between one visit and the next.
   const [chosen, setChosen] = useState<string | null>(
-    !needsList ? (mine[0] ?? null) : (manages[0] ?? mine[0] ?? null),
+    !needsList
+      ? (mine[0] ?? null)
+      : (readRememberedOutlet(session) ?? manages[0] ?? mine[0] ?? null),
   )
   const [outlets, setOutlets] = useState<Tables<'outlets'>[]>([])
+
+  /** Choosing an outlet, and remembering it for the next surface. */
+  const choose = useCallback(
+    (outletId: string) => {
+      setChosen(outletId)
+      rememberOutlet(session, outletId)
+    },
+    [session],
+  )
 
   useEffect(() => {
     if (!needsList) return
@@ -82,17 +116,22 @@ export function useOutletScope(): {
         if (!active) return
         const ours = isOwner ? all : all.filter((outlet) => mine.includes(outlet.id))
         setOutlets(ours)
-        // Default to the first, so the surface opens on something rather than
-        // on a question. Choosing is a correction, not a required step.
         // Default to an outlet they actually run, so the owner opens on their
-        // own shop rather than on somebody else's books.
-        setChosen(
-          (current) =>
-            current ??
-            ours.find((outlet) => manages.includes(outlet.id))?.id ??
-            ours[0]?.id ??
-            null,
-        )
+        // own shop rather than on somebody else's books — and to the first one
+        // otherwise, so the surface opens on something rather than on a question.
+        // Choosing is a correction, not a required step.
+        const fallback =
+          ours.find((outlet) => manages.includes(outlet.id))?.id ?? ours[0]?.id ?? null
+        const usable = (candidate: string | null) =>
+          candidate !== null && ours.some((outlet) => outlet.id === candidate)
+
+        setChosen((current) => (usable(current) ? current : fallback))
+        // A remembered outlet they may no longer see is replaced rather than
+        // shown, and the replacement is written back, so the next surface does
+        // not re-discover the same dead value.
+        if (!usable(readRememberedOutlet(session)) && fallback !== null) {
+          rememberOutlet(session, fallback)
+        }
       })
       .catch(() => {
         // A failed list leaves the surface with no scope, which the surface
@@ -101,7 +140,7 @@ export function useOutletScope(): {
     return () => {
       active = false
     }
-  }, [needsList, isOwner, mine, manages, outletsAdapter])
+  }, [needsList, isOwner, mine, manages, outletsAdapter, session])
 
   if (!needsList) {
     const only = mine[0] ?? null
@@ -116,7 +155,7 @@ export function useOutletScope(): {
   return {
     outletId: chosen,
     managed: chosen !== null && manages.includes(chosen),
-    choose: setChosen,
+    choose,
     selector:
       outlets.length > 1 ? (
         <label className="flex items-center gap-2 text-sm text-content-muted">
@@ -125,7 +164,7 @@ export function useOutletScope(): {
             aria-label="Outlet"
             data-testid="surface-outlet"
             value={chosen ?? ''}
-            onChange={(event) => setChosen(event.target.value)}
+            onChange={(event) => choose(event.target.value)}
           >
             {outlets.map((outlet) => (
               <option key={outlet.id} value={outlet.id}>

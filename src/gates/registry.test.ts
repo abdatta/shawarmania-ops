@@ -85,6 +85,29 @@ describe('gate registry', () => {
     }
   })
 
+  it('gives a reachable role its surfaces but not its home', () => {
+    // The owner reaches the manager surfaces without holding a manager
+    // assignment (owner-reaches-every-outlet, design D1). `admin-dashboard` is
+    // the manager's home, and a home belongs to a role you hold — otherwise the
+    // owner collects a second dashboard tab pointing at the same shell.
+    const reached = visibleSurfaces(['super_admin', 'franchise_admin'], 'real', ['super_admin'])
+
+    expect(reached.map((surface) => surface.id)).toContain('admin-attendance')
+    expect(reached.map((surface) => surface.id)).not.toContain('admin-dashboard')
+    expect(reached.filter((surface) => surface.path === '').map((surface) => surface.id)).toEqual([
+      'owner-dashboard',
+    ])
+  })
+
+  it('keeps both homes when both roles are held', () => {
+    const held = visibleSurfaces(['franchise_admin', 'employee'], 'real')
+
+    expect(held.filter((surface) => surface.path === '').map((surface) => surface.id)).toEqual([
+      'admin-dashboard',
+      'staff-home',
+    ])
+  })
+
   it('declares index paths only for home surfaces', () => {
     const indexSurfaces = surfaces.filter((surface) => surface.path === '')
     expect(indexSurfaces.map((surface) => surface.id).sort()).toEqual([

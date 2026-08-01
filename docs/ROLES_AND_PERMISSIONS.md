@@ -42,9 +42,25 @@ A person may hold more than one of these, at different outlets. They land in
 the shell of the highest role they hold, and their navigation is the union of
 what those assignments entitle them to — nothing to switch between.
 
-**The owner who runs a shop** is simply assigned as its Franchise Admin, and
-writes there like any manager. That authority comes from the assignment rather
-than from being the owner, which is exactly why it stops at that outlet.
+**The Super Admin reaches every outlet's manager surfaces without being
+assigned to one** (`owner-reaches-every-outlet`, #28). Running every outlet is
+what the role is, and the policies have always answered it that way: every
+outlet-scoped policy carries an owner branch, and the attendance guard reads
+"an admin here" as *the owner, or a manager at this outlet*. Until #28 the
+shell asked a narrower question — which roles do you **hold** — so the owner had
+to grant themselves a manager assignment at each outlet to see its attendance,
+which is authority they already had. Nothing is written to `assignments` to
+reach these surfaces, and a navigation entry keeps the reader in their own
+shell rather than reading as though they had become the manager.
+
+**Reaching a surface confers nothing.** What the owner may write there is still
+the database's answer, which is why they reach an outlet's cash surface and are
+offered neither its day close nor a withdrawal. See the drawer note below.
+
+**The owner who runs a shop** is still assigned as its Franchise Admin, and
+writes there like any manager — including the drawer. That authority comes from
+the assignment rather than from being the owner, which is exactly why it stops
+at that outlet, and it is the reason the carve-out below survives #28.
 
 **Self-assignment** is refused, with one deliberate carve-out: a Super Admin
 may place *themselves* at an outlet. The principle behind it is the owner's
@@ -92,7 +108,8 @@ assignment cannot be ended by anyone, including its holder.
 | View | R all | ✓ own outlet | — | — |
 | Record | — | ✓ own outlet | — | — |
 | **Attendance** |
-| Check in / out | — | ✓ self | — | ✓ self |
+| Appear on an outlet's attendance day | only if also staff there | only if also staff there | — | ✓ |
+| Check in | — | only if also staff there | — | ✓ self |
 | Enter attendance for someone (past time, today) | ✓ any outlet | ✓ own outlet | — | — |
 | View attendance | R all | ✓ own outlet | — | R self |
 | Override a failed geofence check | ✓ | ✓ own outlet | — | — |
@@ -107,6 +124,25 @@ assignment cannot be ended by anyone, including its holder.
 | View and respond | ✓ all | R own alerts | — | — |
 
 **Deleting an outlet is the only delete anybody has.** Every other record in the system is voided, deactivated or corrected — the database grants `DELETE` to no client role on any other table. The exception is bounded by a precondition Postgres enforces rather than the screen: an outlet goes only while nothing anywhere references it, so one that ever traded cannot be deleted at all. It is for a shop created by mistake, and the app offers it only after the outlet is marked closed, so the reversible action always comes first.
+
+**Attendance is recorded for staff, and a manager is not staff.** An outlet's
+attendance day lists the people holding a live Employee assignment there, so a
+Franchise Admin or Super Admin appears only when they hold one too — which is
+exactly the case where their attendance is a real thing. Nobody records a
+manager's arrival, and a roll-call that listed them was a list to read past. The
+day additionally keeps a row for **anybody who already has a record on it**,
+whatever they hold: the waiting counts are computed from rows, so a row inside a
+count and outside the screen would be a badge nobody could clear. A person off
+the staff list appears only on the day their record belongs to, and not in the
+by-person view, where a range of days for somebody whose days are not tracked
+would be a pattern of nothing.
+
+**The drawer survives the owner's reach.** Cash closing and withdrawals are
+granted only by a live Franchise Admin assignment at that outlet, so the owner
+reaching an outlet's cash surface still gets the figures and neither write; the
+screen says whose they are rather than leaving it to be discovered by refusal.
+Whether that should change where an outlet has no dedicated manager is an open
+design question in `daily-cash-live` (#12), which builds the drawer.
 
 Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to an enrolled device and a shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it.
 
@@ -259,6 +295,7 @@ Every attendance row stores the captured coordinates, the GPS accuracy, the comp
 ## Implementation notes
 
 - **No authority is carried in the access token.** `multi-outlet-people` dropped both claim helpers and emptied the custom access-token hook to a no-op; the hook function itself went once the project stopped registering it (2026-07-30), so no code path remains by which a token could be handed authority. Policies resolve scope from `public.assignments` through stable `security definer` helpers — `app_is_owner()`, `app_outlets_for(role)`, `app_has_role_at(role, outlet)` — whose definer rights are what keep a policy on `assignments` from recursing into itself (see the RLS recursion trap in [Architecture](ARCHITECTURE.md)). `app_outlets_for` is set-returning on purpose: `outlet_id in (select public.app_outlets_for('franchise_admin'))` is non-correlated, so Postgres hoists it to one lookup per query rather than the per-row profile sub-query the old claims existed to avoid.
+- **Held roles and reachable roles are two questions, and the code keeps them apart** (`owner-reaches-every-outlet`). `heldRoles(session)` answers what a person's live assignments confer, and it is what the account menu states — an owner who manages no outlet must never be told they do. `reachableRoles(session)` is held roles plus the outlet-level surfaces for the owner role, and it decides only which shells and navigation entries exist. It is not a role hierarchy: one specific reach for one specific role, and a manager assignment at Kalyani still confers nothing at Kanchrapara. Because reaching confers nothing, no policy changed for it and no migration was needed; the isolation suite gained the cases instead, so an owner-branch edited away fails a test rather than a screen.
 - Outstanding invitations belong to the account, not to one outlet. They have their own policy and isolation cases, are written only by privileged functions, and are readable only by admins who may manage the whole account.
 - Issuing and redeeming a code are each a **single database function**, so "supersede then insert" and "check then consume" happen in one transaction. Assignment grant/end use service-role-only functions that preserve the supersession trigger and conditionally issue the visible replacement in that same transaction. Doing either sequence across several round trips from an Edge Function would leave a race, and the race is the attack.
 - Everything needing immediate effect — an assignment change, deactivating an account, revoking a device — is a lookup inside the policy. Nothing waits for a token.

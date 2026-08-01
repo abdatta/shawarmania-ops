@@ -71,10 +71,47 @@ export function holdsRole(session: Session, role: Role): boolean {
   return liveAssignments(session.assignments).some((a) => a.role === role)
 }
 
-/** Every role this session holds live, most senior first. */
+/**
+ * Every role this session holds live, most senior first.
+ *
+ * This is the honest answer to "which roles does this person hold", and it is
+ * what any surface *stating* somebody's roles must use — the account menu does.
+ * For deciding which shells and navigation entries exist, see
+ * `reachableRoles`, which is a different question.
+ */
 export function heldRoles(session: Session): Role[] {
   const held = new Set(liveAssignments(session.assignments).map((a) => a.role))
   return ROLE_ORDER.filter((role) => held.has(role))
+}
+
+/**
+ * Every role whose surfaces this session may **reach**, most senior first.
+ *
+ * Held roles, plus one addition: **a session holding the owner role reaches the
+ * outlet-level surfaces, at every outlet, holding no assignment at any of them**
+ * (owner-reaches-every-outlet, design D1). Running every outlet is what that
+ * role is, and the database has always answered it that way — every
+ * outlet-scoped policy carries an owner branch, and the attendance guard reads
+ * "an admin here" as *the owner, or a manager at this outlet*. Before this,
+ * navigation and routing asked `heldRoles`, so the owner had to grant themselves
+ * a manager assignment at each outlet to see its attendance, which is authority
+ * they already had.
+ *
+ * Three things this deliberately is not:
+ *
+ *   * **Not a role hierarchy.** The owner reaches one further set of surfaces;
+ *     no role inherits another's authority, and a manager assignment at Kalyani
+ *     still confers nothing at Kanchrapara (owner, 2026-07-28).
+ *   * **Not a claim about assignments.** `heldRoles` stays the answer to what
+ *     somebody holds, so an owner who manages no outlet is never told they do.
+ *   * **Not authority.** Reaching a surface confers nothing: the database
+ *     decides every write from the assignment, which is why the owner reaches
+ *     an outlet's cash surface and is still refused its drawer (design D2).
+ */
+export function reachableRoles(session: Session): Role[] {
+  const reachable = new Set(heldRoles(session))
+  if (reachable.has('super_admin')) reachable.add('franchise_admin')
+  return ROLE_ORDER.filter((role) => reachable.has(role))
 }
 
 /** The outlets this session may act at in the given role. */

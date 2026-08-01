@@ -12,7 +12,7 @@ import { Select } from '@/components/ui/select'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { useAdapters, type Tables } from '@/data-access'
 import type { AccountSummary, AttendanceRecord } from '@/data-access/adapters'
-import { AttendanceActionError, worksAt } from '@/data-access/adapters'
+import { AttendanceActionError, isStaffAt } from '@/data-access/adapters'
 import { attentionChanged } from '@/features/attention/attention'
 import {
   evaluateFence,
@@ -75,10 +75,11 @@ export function OutletAttendance() {
         setOutlet(found)
         setPeople(
           list
-            // Everybody live at THIS outlet, whether or not they also work at
-            // another. Their other outlet's assignment is not visible here, and
-            // should not be — it is the other outlet's business.
-            .filter((account) => worksAt(account, outletId))
+            // Everybody on THIS outlet's staff — the people whose arrival it
+            // tracks (design D3) — whether or not they also work at another.
+            // Their other outlet's assignment is not visible here, and should
+            // not be: it is the other outlet's business.
+            .filter((account) => isStaffAt(account, outletId))
             .sort((a, b) => a.fullName.localeCompare(b.fullName)),
         )
       })
@@ -453,15 +454,49 @@ function DayAxis({
   // Manual entries belong to the current business day — the database refuses
   // anything else, so a past day simply does not offer the action.
   const manualDay = businessDate === today
-  const unordered = people.map((person) => {
+  const onStaff = people.map((person) => {
     const record = records.find((candidate) => candidate.personId === person.id) ?? null
     return {
-      person,
+      person: {
+        id: person.id,
+        fullName: person.fullName,
+        note: person.roleTitle,
+        deactivated: !person.isActive,
+        offList: false,
+      },
       record,
       reading: readDay(record, outlet, businessDate),
       late: record !== null && isLate(record, outlet.business_day_cutover),
     }
   })
+
+  /**
+   * Anybody carrying a record on this day who is not on the staff list
+   * (design D4).
+   *
+   * Waiting counts are computed from rows, not from this list, so narrowing the
+   * roll-call alone would leave a manager's own recorded row inside the count and
+   * outside the screen — a badge nobody could ever clear. It costs nothing: the
+   * day's records are already loaded and each one carries its person's name, so
+   * the row renders from itself with no extra read.
+   */
+  const offList = records
+    .filter((record) => !people.some((person) => person.id === record.personId))
+    .map((record) => ({
+      person: {
+        id: record.personId,
+        fullName: record.personName,
+        note: 'not on this outlet’s staff list',
+        deactivated: false,
+        offList: true,
+      },
+      record,
+      reading: readDay(record, outlet, businessDate),
+      late: isLate(record, outlet.business_day_cutover),
+    }))
+    .sort((a, b) => a.person.fullName.localeCompare(b.person.fullName))
+
+  const unordered = [...onStaff, ...offList]
 
   // Put the waiting arrivals first. Ranked against the day as it loaded rather
   // than as it now stands, so approving a row cannot drop it down the list and
@@ -522,9 +557,14 @@ function DayAxis({
               late={late}
               radiusMetres={radius}
               busy={busy}
-              offerManual={manualDay && record?.checkIn == null}
+              // Never for somebody listed only because a row exists: they have
+              // the one thing this action would create.
+              offerManual={manualDay && !person.offList && record?.checkIn == null}
               onApprove={() => record && void beginApprove([record.id])}
-              onManual={() => setManualFor(person)}
+              onManual={() => {
+                const staff = people.find((candidate) => candidate.id === person.id)
+                if (staff) setManualFor(staff)
+              }}
             />
           ))}
         </div>
@@ -638,6 +678,21 @@ function DayPicker({
   )
 }
 
+/**
+ * One row of the roll-call. Deliberately not an `AccountSummary`: a person listed
+ * only because they carry a record on this day (design D4) has no account behind
+ * them here, and the row renders from the record itself.
+ */
+interface RollCallPerson {
+  id: string
+  fullName: string
+  /** The job title, or why somebody off the staff list is on this day. */
+  note: string | null
+  deactivated: boolean
+  /** Listed because a record exists rather than because they are staff here. */
+  offList: boolean
+}
+
 function PersonDay({
   person,
   record,
@@ -649,7 +704,7 @@ function PersonDay({
   onApprove,
   onManual,
 }: {
-  person: AccountSummary
+  person: RollCallPerson
   record: AttendanceRecord | null
   reading: DayReading
   late: boolean
@@ -671,8 +726,8 @@ function PersonDay({
         <h2 className="text-sm font-bold text-content">
           {person.fullName}{' '}
           <span className="font-normal text-content-muted">
-            {person.roleTitle}
-            {person.isActive ? '' : ' · account deactivated'}
+            {person.note}
+            {person.deactivated ? ' · account deactivated' : ''}
           </span>
         </h2>
         <span className="text-sm">

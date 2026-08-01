@@ -269,6 +269,75 @@ test.describe('username sign-in and role routing', () => {
     await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
   })
 
+  /**
+   * The owner's reach, against a real backend (owner-reaches-every-outlet).
+   *
+   * The seeded owner holds `super_admin` and no outlet assignment, which is the
+   * shape this change made ordinary — so this is the one place the claim is made
+   * against real policies rather than against a mock.
+   */
+  test('the owner reaches an outlet-level surface with no assignment', async ({ page }) => {
+    await signIn(page, PERSONAS.owner.username)
+    await expect(PERSONAS.owner.lands(page)).toBeVisible()
+
+    // Their own navigation carries it, addressed inside their own shell.
+    const attendance = page
+      .getByRole('navigation', { name: 'Primary' })
+      .first()
+      .getByRole('link', { name: /Attendance/ })
+    await expect(attendance).toHaveAttribute('href', /\/owner\/attendance$/)
+    await attendance.click()
+    await expect(page).toHaveURL(/\/owner\/attendance$/)
+    await expect(page.getByRole('heading', { name: 'Attendance' })).toBeVisible()
+
+    // One home, not two: `admin-dashboard` belongs to a role they do not hold.
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Primary' })
+        .first()
+        .getByRole('link', { name: /^Today/ }),
+    ).toHaveCount(0)
+
+    // The manager's own address still renders for them rather than redirecting,
+    // because they can reach that role's surfaces.
+    await page.goto('admin/attendance')
+    await expect(page).toHaveURL(/\/admin\/attendance$/)
+    await expect(page.getByRole('heading', { name: 'Attendance' })).toBeVisible()
+    await signOut(page)
+  })
+
+  /**
+   * The remembered outlet, and the end of it (owner-reaches-every-outlet,
+   * design D6). The store itself is unit-tested; what is walked here is the part
+   * that only exists in a real session — signing out forgets it, because these
+   * are phones that get handed over.
+   */
+  test('the outlet in scope is remembered, and a sign-out forgets it', async ({ page }) => {
+    await signIn(page, PERSONAS.owner.username)
+    await page.goto('owner/attendance')
+
+    const picker = page.getByTestId('surface-outlet')
+    await expect(picker).toBeVisible()
+    const opened = await picker.inputValue()
+    const values = await picker
+      .locator('option')
+      .evaluateAll((options) => (options as HTMLOptionElement[]).map((option) => option.value))
+    const other = values.find((value) => value !== opened)
+    expect(other, 'the owner sees more than one outlet to choose between').toBeTruthy()
+    await picker.selectOption(other!)
+
+    // It survives a reload. Carrying across *surfaces* is covered by the unit
+    // tests, which can render two of them: in real mode the other outlet-scoped
+    // surfaces are still demo-gated, so there is only one to walk here.
+    await page.reload()
+    await expect(page.getByTestId('surface-outlet')).toHaveValue(other!)
+
+    await signOut(page)
+    await signIn(page, PERSONAS.owner.username)
+    await page.goto('owner/attendance')
+    await expect(page.getByTestId('surface-outlet')).toHaveValue(opened)
+  })
+
   test('another role path redirects to the live assignment shell', async ({ page }) => {
     await signIn(page, PERSONAS.staff.username)
     await page.goto('owner')

@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { DEMO_RUNNER_ACCOUNT_ID } from '../src/data-access/mock/fixtures/accounts'
+import { OUTLET_KANCHRAPARA_ID } from '../src/data-access/mock/fixtures/outlets'
+import { DEMO_OWNER_ID } from '../src/data-access/mock/fixtures/personas'
 
 /**
  * The attendance walk, against a production build and a real browser.
@@ -18,6 +20,23 @@ const AT_COUNTER = { latitude: 22.97505, longitude: 88.4346 }
 const DOWN_THE_ROAD = { latitude: 22.9765, longitude: 88.4362 }
 
 test.use({ permissions: ['geolocation'], geolocation: AT_COUNTER })
+
+/**
+ * A fixed mid-month instant, for the two specs that read a **range** of days.
+ *
+ * Both person views default to the current month, deliberately (owner,
+ * 2026-08-01): on the first of a month that month really is empty, and saying so
+ * is the honest answer rather than a bug. But the demo's attendance fixtures are
+ * authored as business days back from today, so on the 1st the pattern sits in
+ * the previous month and these specs would assert against an empty — and
+ * correct — screen.
+ *
+ * So the test owns the clock instead of the product bending to the test.
+ * `setFixedTime` pins `Date` only; timers keep running, so nothing in the app
+ * stalls. Anything asserting *today* is left alone: those specs are about a day,
+ * and a day is never empty of meaning.
+ */
+const MID_MONTH = new Date('2026-07-20T12:00:00+05:30')
 
 async function openStaffHome(page: Page) {
   await page.goto('demo/staff')
@@ -212,6 +231,7 @@ test('a manager settles a waiting morning one day at a time, and the list holds 
 test('a manager reads one person’s month, and the figures reconcile with the day', async ({
   page,
 }) => {
+  await page.clock.setFixedTime(MID_MONTH)
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
 
@@ -267,6 +287,7 @@ test('a seeded manual arrival is visibly not a self check-in, on both sides', as
 test('an employee’s own history shows the approval, where the approver was, and why', async ({
   page,
 }) => {
+  await page.clock.setFixedTime(MID_MONTH)
   await page.goto('demo/staff/my-attendance')
 
   const history = page.getByTestId('attendance-history')
@@ -370,4 +391,61 @@ test('a person assigned to two outlets sees each day named, and picks no outlet'
   // outlet select, nothing session-scoped — the fence resolves it (design D5).
   await expect(page.getByTestId('attendance-action')).toBeVisible()
   await expect(page.getByRole('combobox')).toHaveCount(0)
+})
+
+/**
+ * The owner, at a shop they hold no assignment at
+ * (owner-reaches-every-outlet).
+ *
+ * The whole walk in one test, because it is one gesture in practice: the owner's
+ * own navigation carries Attendance, it keeps them in their own shell, the outlet
+ * picker offers every shop, the day there can be settled, and the shop they
+ * picked is where the next surface opens.
+ */
+test('the owner settles a day at an outlet they are not assigned to', async ({ page }) => {
+  await page.goto('demo/owner')
+
+  // Their own tab, in their own shell. A link into the manager's segment would
+  // hand the walk to the manager persona (design D1a).
+  // The badge's own label sits inside the link, so the accessible name is
+  // "Attendance" plus whatever is waiting.
+  await page
+    .getByRole('navigation', { name: 'Primary' })
+    .first()
+    .getByRole('link', { name: /Attendance/ })
+    .click()
+  await expect(page).toHaveURL(/demo\/owner\/attendance$/)
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  await page.getByTestId('surface-outlet').selectOption(OUTLET_KANCHRAPARA_ID)
+  await expect(page.getByText(/Shawarmania Kanchrapara/).first()).toBeVisible()
+
+  // Nobody records the owner's own arrival, so they are not on the roll-call
+  // here or anywhere.
+  await expect(page.getByTestId(`day-${DEMO_OWNER_ID}`)).toHaveCount(0)
+
+  // One arrival is waiting at this shop, and the owner can settle it — from an
+  // emulated position at the *other* outlet, so the rule asks for a reason and
+  // records that they were not there.
+  await expect(page.getByTestId('day-waiting')).toContainText('1 arrival waiting for approval')
+  await page
+    .getByTestId(/^approve-[0-9a-f-]{36}$/)
+    .first()
+    .click()
+  await expect(page.getByTestId('reason-required')).toContainText('You are not at the outlet')
+  await page.getByLabel('Why are you approving this?').fill('Called the manager, they confirmed it')
+  await page.getByRole('button', { name: /Approve and record my reason/ }).click()
+  await expect(page.getByTestId('day-waiting')).toHaveCount(0)
+
+  // And the shop they were looking at is the one the next surface opens on
+  // (design D6): a reload, then a different surface entirely.
+  await page.reload()
+  await expect(page.getByTestId('surface-outlet')).toHaveValue(OUTLET_KANCHRAPARA_ID)
+  await page.goto('demo/owner/cash')
+  await expect(page.getByTestId('surface-outlet')).toHaveValue(OUTLET_KANCHRAPARA_ID)
+
+  // Reaching the surface is not managing the outlet: the drawer stays the
+  // manager's, and the screen says so rather than offering a refused control.
+  await expect(page.getByTestId('drawer-not-yours')).toBeVisible()
+  await expect(page.getByTestId('close-day-button')).toHaveCount(0)
 })

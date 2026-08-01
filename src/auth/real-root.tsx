@@ -10,7 +10,7 @@ import { NotFound } from '@/routes/not-found'
 import { CounterShell } from '@/shell/counter-shell'
 import { PhoneShell } from '@/shell/phone-shell'
 import { SessionContext } from '@/session/context'
-import { heldRoles, roleFromSegment, ROLE_SEGMENTS } from '@/session/session'
+import { heldRoles, reachableRoles, roleFromSegment, ROLE_SEGMENTS } from '@/session/session'
 
 import { AccountMenu } from './account-menu'
 import { useRealSession } from './use-real-session'
@@ -97,8 +97,9 @@ export function RealRoot() {
   // ever were, saying so beats rendering a shell whose every read would throw.
   if (!adapters) return <NotFound />
 
-  const held = heldRoles(session)
-  const [primary] = held
+  // Home comes from what they HOLD: the owner lands on the owner's shell, not
+  // on the manager shell they can also reach.
+  const [primary] = heldRoles(session)
 
   // Nothing to be in: a person with no live assignment is signed in and placed
   // nowhere. A real state — hired, not yet placed — and one to say rather than
@@ -108,9 +109,14 @@ export function RealRoot() {
   const homeSegment = ROLE_SEGMENTS[primary]
   const asked = roleFromSegment(roleSegment)
 
-  // A role they do not hold: go to their own rather than render it. RLS would
-  // have refused to fill it anyway; this only stops the shell lying.
-  if (!asked || !held.includes(asked)) return <Navigate to={`/${homeSegment}`} replace />
+  // A role they cannot reach: go to their own rather than render it. RLS would
+  // have refused to fill it anyway; this only stops the shell lying. The owner
+  // reaches the manager shell without an assignment there
+  // (owner-reaches-every-outlet, design D1), and what they may write in it is
+  // still the database's answer rather than this gate's.
+  if (!asked || !reachableRoles(session).includes(asked)) {
+    return <Navigate to={`/${homeSegment}`} replace />
+  }
 
   const Shell = asked === 'biller' ? CounterShell : PhoneShell
 

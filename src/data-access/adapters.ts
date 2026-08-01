@@ -275,20 +275,30 @@ export type StaffFactsPatch = Partial<{
 }>
 
 /**
- * The roles that are people at an outlet — on staff lists and attendance days.
- * A person qualifies if any live assignment does, so somebody who manages one
- * outlet and grills at another is an outlet person at both.
+ * Is this person **staff** at this outlet — somebody whose arrival the outlet
+ * tracks (owner-reaches-every-outlet, design D3)?
+ *
+ * This is the attendance roll-call's question, and it is deliberately narrower
+ * than "is assigned here". It used to count a Franchise Admin assignment too,
+ * which put every manager on their own outlet's roll-call and put the owner
+ * there the moment they granted themselves a manager assignment to see the
+ * screen at all. Nobody records a manager's arrival, and a list of people who
+ * are not being tracked is a list a manager has to read past.
+ *
+ * A manager or an owner who **also** holds a staff assignment here qualifies
+ * through that assignment, which is exactly the case where their attendance is a
+ * real thing.
+ *
+ * Stated as a rule rather than as a list of roles that are not staff, so a role
+ * added to the enum does not silently join the roll-call.
+ *
+ * The people surfaces ask no such question: what they may see is decided by the
+ * policies, and a manager belongs on their outlet's people list whether or not
+ * anybody records their arrival.
  */
-export function isOutletPerson(account: Pick<AccountSummary, 'assignments'>): boolean {
+export function isStaffAt(account: Pick<AccountSummary, 'assignments'>, outletId: string): boolean {
   return liveAssignments(account.assignments).some(
-    (a) => a.outletId !== null && (a.role === 'employee' || a.role === 'franchise_admin'),
-  )
-}
-
-/** Is this person an outlet person *at this outlet* specifically? */
-export function worksAt(account: Pick<AccountSummary, 'assignments'>, outletId: string): boolean {
-  return liveAssignments(account.assignments).some(
-    (a) => a.outletId === outletId && (a.role === 'employee' || a.role === 'franchise_admin'),
+    (a) => a.outletId === outletId && a.role === 'employee',
   )
 }
 
