@@ -71,38 +71,6 @@ registry change rather than a shell change.
   nothing waiting
 - **THEN** the navigation entry renders exactly as an unbadged entry does
 
-### Requirement: A navigation entry keeps the reader in the shell they are in
-
-A navigation entry SHALL address its surface within the shell the reader is
-currently in, rather than within the shell of the role the surface belongs to, so
-that following an entry never reads as becoming somebody else. Every role branch
-mounts the same surfaces and the gate resolves a path against the roles the
-session can reach, so the surface reached is the same either way.
-
-A **home** is the exception: an index surface SHALL keep its own role's segment,
-because two homes cannot share one address. Only a role the session **holds**
-SHALL contribute a home to navigation, so that a merely reachable role adds no
-second home on a shell that already has one.
-
-#### Scenario: The owner's manager surface stays in the owner's shell
-
-- **WHEN** a Super Admin holding no outlet assignment follows their attendance
-  entry
-- **THEN** the address is within their own shell, and the outlet's attendance is
-  shown there
-
-#### Scenario: A reachable role contributes no second home
-
-- **WHEN** a Super Admin holding no outlet assignment reads their navigation
-- **THEN** it contains exactly one home entry, their own
-
-#### Scenario: Two held roles keep two homes
-
-- **WHEN** a person holding a Franchise Admin assignment at one outlet and an
-  Employee assignment at another reads their navigation
-- **THEN** both homes are present at their own addresses, so the surface carrying
-  their own check-in stays reachable
-
 ### Requirement: An outlet-scoped surface picks its outlet on the surface, never in the session
 
 A surface that operates on one outlet SHALL take that outlet from a selector on
@@ -157,3 +125,37 @@ assignment, regardless of what is selected.
 - **WHEN** a request is crafted naming an outlet the person holds no live
   assignment at, whatever the surface selector shows
 - **THEN** the database refuses it
+
+## ADDED Requirements
+
+### Requirement: A navigation entry keeps the reader in the shell they are in
+
+A navigation entry SHALL address its surface within the shell the reader is
+currently in, rather than within the shell of the role the surface belongs to, so
+that following an entry never reads as becoming somebody else. Every role branch
+mounts the same surfaces and the gate resolves a path against the roles the
+session can reach, so the surface reached is the same either way.
+
+A **home** is the exception: an index surface SHALL keep its own role's segment,
+because two homes cannot share one address. Only a role the session **holds**
+SHALL contribute a home to navigation, so that a merely reachable role adds no
+second home on a shell that already has one.
+
+#### Scenario: The owner's manager surface stays in the owner's shell
+
+- **WHEN** a Super Admin holding no outlet assignment follows their attendance
+  entry
+- **THEN** the address is within their own shell, and the outlet's attendance is
+  shown there
+
+#### Scenario: A reachable role contributes no second home
+
+- **WHEN** a Super Admin holding no outlet assignment reads their navigation
+- **THEN** it contains exactly one home entry, their own
+
+#### Scenario: Two held roles keep two homes
+
+- **WHEN** a person holding a Franchise Admin assignment at one outlet and an
+  Employee assignment at another reads their navigation
+- **THEN** both homes are present at their own addresses, so the surface carrying
+  their own check-in stays reachable
