@@ -179,6 +179,33 @@ A push to the `main` branch SHALL produce a static production deployment of the 
 - **WHEN** a commit lands on `main`
 - **THEN** the hosting platform builds and publishes it, and the stable URL serves the new build identifier
 
+### Requirement: Production uses the Shawarmania operations hostname
+
+The canonical production origin SHALL be `https://ops.shawarmania.in/`.
+Production SHALL be built with `/` as its base, and the DNS record, GitHub
+Pages custom-domain setting, and deployed `CNAME` artifact SHALL name that same
+host. The landing page at `shawarmania.in` SHALL remain independently hosted
+and unchanged by the operations deployment.
+
+#### Scenario: The production root serves the PWA
+
+- **WHEN** a user opens `https://ops.shawarmania.in/`
+- **THEN** GitHub Pages serves the root-base production build over HTTPS, with
+  its scripts, styles, manifest, icons, and service worker on the same origin
+
+#### Scenario: A production deep link boots the app
+
+- **WHEN** a user directly opens a valid nested route at
+  `https://ops.shawarmania.in/`
+- **THEN** the Pages fallback boots the shell and the router interprets the path
+  relative to `/`
+
+#### Scenario: The landing page is not displaced
+
+- **WHEN** the operations hostname is configured
+- **THEN** the apex `shawarmania.in` and its `www` alias continue serving the
+  separate landing-page deployment
+
 ### Requirement: The app works under a deployment sub-path
 
 The app SHALL function when served from a sub-path (a project site at `/<repo>/`) as well as from a domain root, with the path supplied at build time by a single `BASE_PATH` variable. No asset URL, router path, service-worker scope, or manifest field SHALL assume the root.
