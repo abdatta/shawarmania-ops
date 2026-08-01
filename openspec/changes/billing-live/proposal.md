@@ -1,33 +1,70 @@
-# Proposal: billing-live
+# Proposal: Billing Live
 
-> **Model**: Fable · **Wave**: D · **Depends on**: #6, #7, #9 · **Gate**: a real order settles both online and offline; totals match the domain tests; per-outlet bill numbers are server-assigned with no gaps or collisions across two devices; a 00:20 bill carries the previous business date; a Biller sees only their own shift's bills; a void never mutates the original; surfaces promoted `demo → live`.
-
-**This is a `*-live` change.** Its job is to make the screens from #6 and #7 real and promote their gates. It does **not** redesign them — if it finds itself rebuilding UI, the mock was the wrong shape; fix the mock and record why.
+> **Model**: Opus · **Wave**: D · **Depends on**: #7, #9, #30, #31, #32, #33 · **Gate**: one registered device at each outlet takes immediate and deferred payments; every accepted write commits locally before UI success and lands exactly once; pending writes survive logout/restart; official numbers do not collide; history and recovery reconcile; only a resolved online queue receives the device-day seal; gates promote `demo → live`.
 
 ## Why
 
-**The counter starts taking real money.** Every bill the business ever rings inherits this change's contract — snapshots, totals, numbering, business-date resolution — which is why it gets more design care than anything else in the wave.
+This final integration lets both counters take real money. The UI, device/session
+boundary, customer identity, and transaction contract land first so this remains
+a true `*-live` adapter swap rather than a redesign during rollout.
 
-Menu, billing and bill history ship together because they are one user-visible capability: a counter you cannot review or correct is not usable in a real shop, and void semantics are needed before daily cash reconciliation in #12.
+## What Changes
 
-## Scope
+- Connect counter, open-order, customer lookup, history, void, correction,
+  device recovery, and manager recovery adapters to real contracts.
+- Read the latest menu while reachable and retain the active session's menu
+  snapshot so a transient request failure does not interrupt an already-open counter.
+- Commit every accepted counter command to IndexedDB before clearing its form,
+  never await the network, and retry through one page leader with backoff.
+- Preserve pending operations through logout, restart, cutoff, and app updates;
+  a restart may drain old work but starting or resuming billing requires online sign-in.
+- Show an offline banner, classify actual request results instead of trusting
+  `navigator.onLine`, and stop new work at cutoff until online authentication succeeds.
+- Treat exact replay as success, UUID reuse with different content as conflict,
+  and permanent rejection as quarantine with the approved correction/discard flow.
+- Sync valid pre-cutoff commands later and recover valid pre-revocation writes
+  through the authenticated upload-only path, with admin-visible flags.
+- Let the counter finish a business date only after its queue is resolved, end
+  the grant, and write the current device-day seal consumed by #12 sign-off.
+- Enforce exactly one active registered billing device at each outlet while
+  retaining concurrency-safe server numbering/idempotency for later expansion.
+- Promote billing, menu, history, customer, and device surfaces from `demo` to
+  `live` while preserving the synthetic demo walkthrough.
 
-**Menu live** — Franchise Admin edits real prices and toggles availability; Biller reads and provably cannot edit; Super Admin reads across outlets. A price change applies to future bills only.
+## Capabilities
 
-**Billing live** — bill and bill-item writes through the outbox, with **snapshotted** item name and unit price. Server-side per-outlet bill number allocation via an Edge Function, with the provisional local reference until it returns. Money arithmetic in the domain layer over integer paise, unit-tested independently of the UI.
+### New Capabilities
 
-**History and void** — the Biller's shift view (own shift only, running totals by payment method), the Franchise Admin's outlet bill history with filters, and the void flow: reason captured, `voided_by` and `voided_at` recorded, original totals untouched, voided bills excluded from every sales and cash figure.
+- `billing-delivery`: Billing-specific local envelopes, retry ordering, exact
+  replay, cutoff behavior, quarantine, and recovery for transient failures.
+
+### Modified Capabilities
+
+- `counter-billing`: Immediate/deferred payment operates on real data with
+  durable local acknowledgement and one-device ownership.
+- `menu-management`: Billing reads the latest live menu and uses the active
+  session snapshot only after real backend failure.
+- `demo-mode`: Promoted surfaces retain their coherent synthetic adapter path.
+- `app-shell`: Device, billing, history, and recovery gates reach final live
+  states without exposing personal-role navigation on the counter.
+
+## Impact
+
+Dexie dependency/schema, billing/menu/customer/history adapters, feature
+registry, sync indicators, recovery wiring, page lifecycle coordination,
+device-day finish/seal wiring, integration tests, transient-failure Playwright
+tests, and live gates change.
 
 ## Non-goals
 
-- **Record-only.** No printing, GST, or digital share. All three are anticipated in the schema and tracked in `openspec/todos/`; adding any here is scope creep against an explicit decision.
-- No editing a settled bill, ever. Corrections are voids plus new bills.
-- No discounts beyond a simple bill-level amount, unless the business asks.
+- Multiple active devices at one outlet; roadmap change #35 adds them after V1.
+- Deliberate offline restart and extended-outage operation; roadmap change #34 adds them after V1.
+- Redesigning #31 or weakening #9/#32/#33 contracts.
+- Attendance, emergency personal-device billing, printing, GST, digital sharing,
+  partial payments, or split tender.
 
-## Watch out for
+## Docs to update before archive
 
-The Biller does not see the outlet's full history. Reviewing the day is a manager's job, and a shared tablet should not expose the outlet's takings to whoever is standing at it.
-
-## Docs to update before archiving
-
-`docs/SCREENS.md`, `docs/DATA_MODEL.md` (billing section), `docs/LIMITATIONS.md` (confirm the record-only note still describes reality).
+`docs/ARCHITECTURE.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/SCREENS.md`,
+`docs/DEMO_MODE.md`, `docs/OPERATIONS.md`, `docs/TESTING.md`, and
+`docs/LIMITATIONS.md`.

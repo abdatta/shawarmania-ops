@@ -18,13 +18,14 @@ Keep entries behavior-focused:
 | [Bill Digital Share](./bill-digital-share.md) | Feature | Anticipated | Billing | The owner wants digital receipts, or paper is being skipped anyway |
 | [Aggregator Settlement](./aggregator-settlement.md) | Feature | Anticipated | Reporting | Aggregator volume grows enough to distort a decision |
 | [Shared Menu Catalogue](./shared-menu-catalogue.md) | Feature | Anticipated | Menu | Per-outlet menu drift becomes a brand consistency problem |
-| [Cross-Outlet Customer Identity](./cross-outlet-customer-identity.md) | Feature | **Parked** | Customers | A loyalty feature with real value — and the design question settled first |
+| [Customer Loyalty And Cross-Outlet Insights](./customer-loyalty-and-cross-outlet-insights.md) | Feature | Anticipated | Customers | A concrete loyalty or repeat-customer decision needs activity across outlets |
 | [Audit Log](./audit-log.md) | Feature | Anticipated | Security | The first franchise dispute, or headcount outgrowing "a small trusted team" |
 | [Data Retention Policy](./data-retention-policy.md) | Feature | Anticipated | Security | **A quarter of real attendance data in production** — sooner than customer volume |
 | [Self-Service Account Settings](./self-service-account-settings.md) | Feature | Deferred by decision | Auth | The shared Profile/Settings surface is built or the first real request arrives |
 | [Super Admin Email Recovery](./super-admin-email-recovery.md) | Feature | Deferred by decision | Auth | Core live operations are complete, repeated owner lockouts make admin-issued reset painful, or future MFA needs security mail |
 | [Workbox Build-Chain Advisories](./workbox-build-advisories.md) | Investigation | Accepted | Build tooling | A fixed `workbox-build` ships, or an advisory becomes runtime-reachable |
-| [Unreachable Backend Blames The Password](./unreachable-backend-blames-the-password.md) | **Defect** | Open | Auth | Anyone signs in on a bad connection — so, any shift |
+| [`test:rls` Is Not Independent Of Reruns](./rls-suite-not-independent-of-reruns.md) | Verification gap | Open | Testing | A repeated local run wastes time or one clean run approaches the shared rate bound |
+| [Emergency Billing Continuity](./emergency-billing-continuity.md) | Feature | Deferred by decision | Billing | A registered device is actually lost/unusable, or the owner explicitly accepts a personal-device break-glass authority path |
 | [Rostering And Weekly Offs](./rostering-and-weekly-offs.md) | Feature | Anticipated | Attendance | Somebody asks why the figures show absences on days off, manual leave-marking stops being kept up, or an outlet genuinely runs two shifts |
 | [Pending Approval Notification](./pending-approval-notification.md) | Feature | Anticipated | Attendance | The first waiting day that survives its own business date and is noticed by somebody other than the manager |
 | [Attendance Gate: Two Clauses Never Walked](./attendance-gate-unwalked-clauses.md) | Verification gap | Accepted at archive | Attendance | The first real staff member checks in at a live outlet |
@@ -35,7 +36,6 @@ The three billing items are grouped deliberately: v1 ships bills as **record-onl
 
 Two entries carry a status worth reading before the trigger column:
 
-- **Cross-Outlet Customer Identity is parked on principle, not priority.** It requires reading across the isolation boundary the security model exists to enforce. It stays parked until someone has decided *what* is being unified — the identity, or only the aggregates.
 - **Data Retention Policy has a nearer trigger than the roadmap states.** Employee location history begins accumulating the day attendance goes live, which is the sharpest exposure in the system and arrives well before meaningful customer volume. It now accrues about the approving manager too, not only about staff (#26).
 - **The two attendance items above are both costs #26 took deliberately**, not oversights: a day off reads as absent because nothing knows a roster, and a forgotten approval surfaces only as a count on a screen because there is no notification channel in the app to put it through. Each is recorded with what already exists for it, so promoting one is narrowing a function rather than starting a design.
 
@@ -48,3 +48,5 @@ Two entries carry a status worth reading before the trigger column:
 | Owner Break-Glass Writes | Folded into `multi-outlet-people` (#22) by owner decision on 2026-07-29 — the two todos were one feature seen from two ends. The boundary carries over intact: non-cash only, always visibly the owner's, the drawer stays the Franchise Admin's alone. |
 | Two Ways To Draw A Dropdown | Completed by `staff-as-accounts` (#21): the People surface adopted the `Select` primitive and the roster surface was deleted, so the primitive is now the only `<select>` in the app. |
 | Self-Service Password Reset | The admin-issued reset baseline is completed by `username-sign-in-and-owner-recovery` (#24) for every role. Automated email recovery was deliberately deferred into [Super Admin Email Recovery](./super-admin-email-recovery.md). |
+| Cross-Outlet Customer Identity | The identity half graduated into [`global-customer-identity`](../changes/global-customer-identity/proposal.md) (#32) during Billing V1 design. One normalized phone identifies a minimal global customer; exact full-phone lookup is non-enumerable and outlet bill/order history remains isolated. Loyalty and cross-outlet activity remain in [Customer Loyalty And Cross-Outlet Insights](./customer-loyalty-and-cross-outlet-insights.md). |
+| Unreachable Backend Blames The Password | Graduated into [`unreachable-backend-sign-in-error`](../changes/unreachable-backend-sign-in-error/proposal.md) (#30) as a prerequisite for online daily counter reauthentication. |

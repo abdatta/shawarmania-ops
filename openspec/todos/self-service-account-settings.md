@@ -34,10 +34,11 @@ that has an associated email can already use it as an alternate sign-in.
 ## Why it is deferred
 
 The admin correction/reset paths cover access emergencies. A convenience
-surface is useful but does not need to delay the identity migration, and the
-Biller portion should be decided only after `counter-devices-and-offline` (#9)
-makes the tablet credential belong to the device rather than to the person
-standing at it.
+surface is useful but does not need to delay the identity migration. Billing
+planning has now settled the Biller boundary: a Biller remains a personal human
+account with Employee/staff capabilities, while an enrolled tablet has a separate
+machine context and verifies eligible operators with their normal credentials.
+There is no counter PIN.
 
 ## What already exists for it
 
@@ -56,9 +57,8 @@ standing at it.
 - If approval is required, where does the request appear and how is the person
   told that it was accepted or refused without adding a messaging system?
 - Must a known-password change end other personal-phone sessions? If yes, how
-  is the future enrolled counter device excluded from that blast radius?
-- Does a Biller have any personal credential setting after #9, or is the
-  device enrollment plus shift PIN the whole counter identity?
+  are already-issued daily billing grants treated without confusing them with
+  the enrolled device's independent machine session?
 - Should the screen permit a person to request a change to their associated
   email, and what recent-authentication proof and administrator approval are
   required before that high-value change?
@@ -68,5 +68,5 @@ standing at it.
 The shared Profile/Settings surface being built for any other reason, or the
 first real request to change a username or known password.
 
-**Dependencies when seeded**: `username-sign-in-and-owner-recovery` (#24).
-Re-evaluate Biller behavior after `counter-devices-and-offline` (#9).
+**Dependencies when seeded**: `username-sign-in-and-owner-recovery` (#24) and
+the settled account/device/grant boundary from `counter-devices-and-offline` (#9).

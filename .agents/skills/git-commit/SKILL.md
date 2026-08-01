@@ -152,11 +152,13 @@ End a material commit with exactly one blank line and one truthful trailer:
 ```text
 Co-Authored-By: <agent identity> <noreply address>
 ```
-
+Do not use generic trailers like: "Co-Authored-By: Codex GPT-5". Use exact version, like the examples below.
 Known repository identities:
 
 ```text
 Codex GPT-5.6 Sol <noreply@openai.com>
+Codex GPT-5.6 Terra <noreply@openai.com>
+Codex GPT-5.6 Luna <noreply@openai.com>
 Claude Fable 5 <noreply@anthropic.com>
 Claude Opus 5 <noreply@anthropic.com>
 Claude Sonnet 5 <noreply@anthropic.com>

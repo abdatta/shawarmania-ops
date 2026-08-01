@@ -1,6 +1,6 @@
 # Proposal: owner-console-live
 
-> **Model**: Opus · **Wave**: E · **Depends on**: #8, #10, #11, #12 · **Gate**: both P&L modes compute on real data and **a test proves raw materials are not double-counted**; the owner compares two real outlets over a period; the outlet switcher never leaks a third outlet's data; reports reconcile exactly to on-screen figures; a real alert round-trips; surfaces promoted `demo → live`.
+> **Model**: Opus · **Wave**: E · **Depends on**: #8, #10, #11, #12 · **Gate**: both P&L modes compute on real data and **a test proves raw materials are not double-counted**; revenue follows original order business date while drawer/payment reports follow payment business date; the owner compares two real outlets over a period; the outlet switcher never leaks a third outlet's data; reports reconcile exactly to on-screen figures; a real alert round-trips; surfaces promoted `demo → live`.
 
 **This is a `*-live` change.** Its job is to make the screens from #8 real and promote their gates, not to redesign them.
 
@@ -10,11 +10,22 @@ The owner's whole view becomes real at once — profit, comparison, reports and 
 
 ## Scope
 
-**Profit and loss** — outlet-level, for a chosen period, in **two explicit modes** per `docs/DATA_MODEL.md`:
-- *Cash basis*: `sales − all expenses`. Matches the drawer.
-- *Consumption basis*: `sales − non-raw-material expenses − inventory consumed`. Does not punish a period for a bulk purchase.
+**Profit and loss** — outlet-level, for a chosen period, in **two explicit expense modes** per `docs/DATA_MODEL.md`:
+- *Purchase basis* (rename the misleading demo label *Cash basis*):
+  `revenue − all expenses`. Revenue follows the order's original business date;
+  this mode does **not** claim to match drawer movement when an order is paid later.
+- *Consumption basis*: `revenue − non-raw-material expenses − inventory consumed`. Does not punish a period for a bulk purchase.
 
-The active basis is stated on screen, always. Neither is more correct in general; silently mixing them is always wrong. A test fails if raw materials are counted in both places.
+The active expense basis is stated on screen, always. Neither is more correct in
+general; silently mixing them is always wrong. A test fails if raw materials are
+counted in both places.
+
+**Revenue and payment clocks** — sales/revenue reports group an immutable bill by
+the originating order `business_date`, including an order paid after cutoff.
+Drawer, payment-method, and cash-movement reports group it by
+`payment_business_date`. Reports that span either side expose late-payment and
+late-sync flags and reconcile each clock independently rather than forcing one
+date to serve both.
 
 **Owner console** — the cross-outlet dashboard, the outlet switcher into a read-only Franchise Admin view, two-outlet comparison over a period, outlet CRUD (including coordinates, geofence radius and business-day cutover), and people management across outlets.
 
@@ -53,6 +64,10 @@ policy branch and an enum value, drop it rather than growing this change.
 **Exports leave the system's protection.** Customer phone numbers are excluded by default and included only on an explicit choice. A CSV of customer data in someone's downloads folder is the most likely PII incident this app will ever have.
 
 Reports that disagree with the dashboard destroy trust in both.
+
+The original demo's “Cash basis matches the drawer” wording must not survive.
+Once deferred payment exists, purchase timing, revenue timing, and drawer timing
+are three separate facts; the renamed mode changes expense treatment only.
 
 ## Docs to update before archiving
 

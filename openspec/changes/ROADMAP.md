@@ -8,7 +8,7 @@
 
 ## This Roadmap Is Deliberately Small
 
-Fifteen changes is a **starting position, not a forecast.** Real work surfaces as you build: a gate fails and reveals a missing capability, a demo exposes a screen nobody thought about, a real franchisee asks for something. Planning that work now would mean deciding it with the least information anyone will ever have about it.
+The original fifteen changes were a **starting position, not a forecast.** Real work surfaces as you build: a gate fails and reveals a missing capability, a demo exposes a screen nobody thought about, a real franchisee asks for something. Planning that work too early would mean deciding it with the least information anyone will ever have about it.
 
 So this roadmap plans the spine and leaves the branches to be discovered. Expect it to grow — probably to twice this size before the app is finished. That growth is the system working, not the plan failing.
 
@@ -65,29 +65,53 @@ Promoting a surface from `demo` to `live` is the visible outcome of every `*-liv
 | ✅ | 27 | D | `notification-badges` | Opus | **archived 2026-07-31** | **#26** | **a manager with unapproved arrivals sees a count on the Attendance nav item from another screen**, opens it, and finds those arrivals listed first; the day controls are marked only for that outlet's other unsettled days and **not** for another outlet's, proved by switching outlets and watching the marks change; the owner sees a count per outlet and reaches a stranded outlet in one tap; approving the last waiting day removes every badge rather than showing zero; a count is stale after backgrounding and correct again on return; no new colour pair enters the contrast validator; and the four-role demo walkthrough still walks |
 | ✅ | 28 | D | `owner-reaches-every-outlet` | Opus | **archived 2026-08-01** | #22, #26, **#27** | **a Super Admin holding no outlet assignment opens any outlet's attendance from their own navigation**, approves a waiting day there and records a manual entry there; the same session is offered neither a day close nor a withdrawal at that outlet and the database refuses both, proved by a hand-crafted request; no Super Admin or Franchise Admin appears on an outlet's attendance day unless they hold a staff assignment at it, while a person carrying a recorded row on the day shown still appears so the count that named them can be cleared; an outlet chosen on one outlet-scoped surface is the outlet every other one opens on, after a reload, and is gone after signing out; and the four-role demo walkthrough still walks |
 | ✅ | 29 | D | `attendance-one-day-per-person` | Opus | **archived 2026-08-02** | #22, #26, #27, **#28** | **a person staffed at two outlets checks in at one and is nowhere shown absent at the other** — on the manager's day, the by-staff view and their own history; the other outlet's FA sees them as working elsewhere with no outlet name, time or evidence, and is refused the underlying row by a hand-crafted request; a second row for that person on that date at either outlet is **refused by the database**, proved by a hand-crafted request; that person with no GPS and two assignments is asked which outlet and their choice waits for that outlet's manager, while a single-outlet person is never asked; the owner selects both outlets, reads one combined day where that person appears once, and approves a row at each with the fence judged per row; the owner reads that person's month and the day count reconciles exactly with the same days read by day; every filter change shows a placeholder rather than the previous outlet's rows under the new name; no new colour pair enters the contrast validator; and the four-role demo walkthrough still walks |
-|  | 9 | D | `counter-devices-and-offline` | **Fable** | seeded | #4, #21, #22, #24, **#26** | an enrolled tablet reaches only its own outlet and revoke is immediate; offline → 20 bills → online → exactly 20 rows, zero duplicates; queue survives restart; a replayed UUID inserts once |
-|  | 10 | D | `billing-live` | **Fable** | seeded | #6, #7, #9 | a real order settles online and offline; totals match the domain tests; per-outlet bill numbers server-assigned with no gaps or collisions across two devices; a 00:20 bill carries the previous business date; a void never mutates the original |
-|  | 11 | E | `expenses-and-inventory-live` | Opus | seeded | #4, #7 | a cash expense moves the day's cash figures and a UPI expense does not; the movements ledger reconciles exactly to current quantity; a correction is a movement with a note; low-stock fires at threshold |
-|  | 12 | E | `daily-cash-live` | **Fable** | seeded | #10, #11 | expected closing matches the invariant from snapshotted inputs; the difference shows with the correct sign; **a bill syncing after close raises a reconciliation exception instead of rewriting a signed-off day** |
-|  | 13 | E | `owner-console-live` | Opus | seeded | #8, #10, #11, #12 | both P&L modes compute on real data and **a test proves raw materials are not double-counted**; the owner compares two real outlets; the outlet switcher never leaks a third; reports reconcile exactly to on-screen figures |
-|  | 14 | F | `outlet-onboarding` | Opus | seeded | #13 | a third outlet is created, staffed, tablet-enrolled and verified isolated **entirely through the UI, with zero code changes**; the runbook in `docs/OPERATIONS.md` matches what actually happened |
+| 📝 | 30 | D | `unreachable-backend-sign-in-error` | **GPT-5.6 Sol** | proposed | #24 | an unreachable Auth host produces connection guidance while an unknown username and wrong password remain indistinguishable |
+| 📝 | 32 | D | `global-customer-identity` | **Opus** | proposed | #2, #22 | one normalized phone identifies one business-wide customer; outlet roles retrieve only an exact full-phone match, cannot enumerate the directory or read another outlet's bills, and database tests prove the boundary |
+| 📝 | 9 | D | `counter-devices-and-offline` | **Fable** | proposed | #4, #21, #22, #24, #26, **#30** | each outlet enrols exactly one billing device; normal eligible credentials create a daily billing-only grant without retaining personal authority; revoke is immediate; every accepted command commits locally and survives logout/restart |
+| 📝 | 33 | D | `billing-transaction-contract` | **Fable** | proposed | #9, #32 | direct and deferred payment produce the same immutable bill; orders are device-owned/versioned; revenue and drawer dates remain distinct; retries are exact and bill plus lines commit atomically under concurrency |
+| 📝 | 31 | D | `ui-billing-lifecycle` | **GPT-5.6 Sol** | proposed | #6, #7, #9, #32, **#33** | the complete immediate/deferred billing lifecycle, exact-phone autofill, history, correction, quarantine, and stranded-order recovery are walkable in demo mode without touching Supabase |
+| 📝 | 10 | D | `billing-live` | **Opus** | proposed | #7, #9, #30, #31, #32, **#33** | **Billing V1:** one device at each outlet takes real immediate/deferred payments; every accepted command commits locally before UI success, survives logout/restart, lands exactly once after response loss, and only a resolved online queue can receive the device-day seal consumed by #12 |
+| 📝 | 34 | D | `extended-offline-billing` | **Opus** | proposed | **#10** | **Billing V2.1:** after one online daily sign-in, the device reloads and continues through an extended outage until cutoff; twenty commands survive restart, block sign-off until reconciled, and later land exactly once; the next day still requires online reauthentication |
+| 📝 | 35 | D | `multiple-billing-devices` | **Opus** | proposed | **#34** | **Billing V2.2:** two devices at one outlet bill concurrently online/offline with device-owned orders, unique sequential server numbers, isolated queues, audited transfer, independent revocation, all-device settlement seals, and proven outlet isolation |
+|  | 11 | E | `expenses-and-inventory-live` | **Opus** | seeded | #4, #7 | a cash expense moves the day's cash figures and a UPI expense does not; the movements ledger reconciles exactly to current quantity; a correction is a movement with a note; low-stock fires at threshold |
+|  | 12 | E | `daily-cash-live` | **Opus** | seeded | #10, #11 | a date cannot be signed off until every order is paid/cancelled, no grant remains live, and every participating device has a current resolved-queue seal; expected cash uses payment business date; the difference shows with the correct sign; a post-seal command invalidates readiness rather than rewriting a signed-off day |
+|  | 13 | E | `owner-console-live` | **Opus** | seeded | #8, #10, #11, #12 | both expense-basis P&L modes compute on real data and **a test proves raw materials are not double-counted**; revenue uses original order business date while drawer/payment reports use payment business date; the owner compares two real outlets; isolation and report reconciliation hold |
+|  | 14 | F | `outlet-onboarding` | **Opus** | seeded | #13 | a third outlet is created, staffed, tablet-enrolled and verified isolated **entirely through the UI, with zero code changes**; the runbook in `docs/OPERATIONS.md` matches what actually happened |
 
 **Wave column** — which [execution wave](#execution-waves) the change belongs to. The same letter appears in the change's own proposal banner (`> **Model**: … · **Wave**: …`), and the validator checks the two agree. Unlike the status cells this one is **authored, not derived**: `npm run roadmap:sync` never touches it, so a row added later must carry its own letter — and it may well be an *earlier* letter than its neighbours, since new work is numbered by arrival, not by wave. Waves are readability; **the dependency cells are law**. Where they permit more parallelism than the letters suggest, the wave notes below say so.
 
-**Model column** — the model recommended to drive each change's `/opsx:propose` and implementation session. **Opus is the default.**
+**Model column** — the model recommended to drive each change's `/opsx:propose`
+and implementation session. Archived rows retain their historical assignment;
+the policy below applies to remaining work. **Opus is the default, GPT-5.6 Sol
+handles bounded work, and Fable is an exceptional choice because it is very
+expensive. Use it only where a mistake would corrupt a foundational security or
+money contract inherited by every later billing change.**
 
-**Fable** for the changes where irreversible design judgment concentrates and a wrong call means a rewrite rather than a fix — plus billing, which every future transaction inherits:
+**Only #9 and #33 currently clear that Fable threshold:**
 
-- **#2** — the schema and RLS model is the system's foundation; every table, policy and query inherits it, and getting tenancy wrong is a security incident.
-- **#3** — the adapter seam and gating contract are inherited by every remaining change, so a bad seam means rewriting every screen twice.
-- **#9** — exactly-once semantics under partial failure are subtle to get right and brutal to retrofit onto a shipped queue.
-- **#10** — the billing contract: snapshots, totals, numbering, business-date resolution. Every bill the business ever rings inherits it.
-- **#12** — cash reconciliation invariants and the "never silently rewrite a signed-off number" rule.
-- **#21** — the identity merge: collapsing the roster into accounts is a one-way restatement of the people model, carried out against live production data.
+- **#9** — the machine/human authority split, device revocation, daily grants,
+  and durable local-acceptance boundary.
+- **#33** — atomic orders/bills, idempotency, numbering, snapshots, settlement
+  readiness, and both accounting clocks.
 
-**GPT-5.6 Sol** drives **#23 and #24** — owner decisions of 2026-07-30 and the first changes driven by a non-Claude agent. Their proposals are written fully self-contained for exactly that reason: a fresh driver receives the people model, privileged path, adapter seam, migration boundary, and verification commands it needs rather than depending on conversation memory. The repo's Codex skills (ported 2026-07-30) give both changes the same `/opsx` workflow.
+**Opus drives #32, #10, #34, #35, #11, #12, #13, and #14.** These still require
+substantial security, offline, accounting, or integration judgment, but they
+build on the authority and transaction contracts fixed by #9/#33: global customer
+access (#32), Billing V1 integration (#10), extended-offline operation (#34),
+multi-device coordination (#35), expenses/inventory (#11), cash sign-off (#12),
+owner reporting/P&L (#13), and end-to-end third-outlet onboarding (#14). Revisit
+Fable only if proposing or implementing one of these exposes a genuinely new
+foundational invariant that #9/#33 did not settle.
 
-**Opus** drives the rest — including **#22**, deliberately: it was assigned Fable while sketched as a session-contract redesign (grants, active hats), but the owner's 2026-07-29 simplification to plain membership-checked assignments removed the concentrated design judgment, and what remains is broad-but-uniform execution under the isolation suite's protection. If `/opsx:propose` surfaces something genuinely novel there, flipping this cell back is the escalation. Since consolidation, no change is small enough to be purely mechanical: each bundles enough scope that real judgment is involved, which is why **no change is assigned Sonnet**. If a change turns out to be trivial once expanded, that is worth noticing — it may belong merged into a neighbour.
+**GPT-5.6 Sol drives #30 and #31.** The unreachable-backend classification (#30)
+is narrow and heavily testable. The billing-lifecycle UI (#31) is broad but bounded
+to typed mocks and existing design-system/adapters, with no real money write or
+new authority boundary. Their complete proposals make both suitable for an
+agentic coding model without paying the Fable premium.
+
+Archived labels are not rewritten to this policy: for example, #23 and #24 remain
+recorded as GPT-5.6 Sol, while earlier Opus/Fable rows remain evidence of the model
+actually prescribed when those changes were delivered.
 
 **Status icon (leading column) & Status column** — a human-readable projection of each change's lifecycle, shown twice: a glyph in the unlabeled leading column that reads like a to-do list filling in left to right, and the same state as a word in the Status column. The four states progress from `seeded` (blank cell — proposal seed only) → `📝 proposed` (`tasks.md` present) → `🔄 active` (a task checked) → `✅ **archived YYYY-MM-DD**` (folder under `archive/`). The **source of truth is the openspec files and folders**, never these cells; both are *derived*. Every lifecycle skill runs the shared reconciler `npm run roadmap:sync` (`openspec/tools/sync-roadmap-status.mjs`), which writes the icon and the word from one derivation so they cannot drift. It self-corrects manual drift and works identically from Claude, Codex, or a plain shell.
 
@@ -129,14 +153,30 @@ graph TD
     C21 --> C26
     C22 --> C26
     C26 --> C27[27 notification-badges]
+    C24 --> C30[30 unreachable-backend-sign-in-error]
+    C2 --> C32[32 global-customer-identity]
+    C22 --> C32
     C4 --> C9[9 counter-devices-and-offline]
     C21 --> C9
     C22 --> C9
     C24 --> C9
     C26 --> C9
-    C6 --> C10[10 billing-live]
+    C30 --> C9
+    C9 --> C33[33 billing-transaction-contract]
+    C32 --> C33
+    C6 --> C31[31 ui-billing-lifecycle]
+    C7 --> C31
+    C9 --> C31
+    C32 --> C31
+    C33 --> C31
     C7 --> C10
     C9 --> C10
+    C30 --> C10
+    C31 --> C10
+    C32 --> C10
+    C33 --> C10
+    C10 --> C34[34 extended-offline-billing]
+    C34 --> C35[35 multiple-billing-devices]
     C4 --> C11[11 expenses-and-inventory-live]
     C7 --> C11
     C10 --> C12[12 daily-cash-live]
@@ -160,7 +200,7 @@ Changes within a wave can run in any order or in parallel; a wave starts when it
 
 - **Wave C — the full experience, demo-gated (#6–#8)**: `ui-billing-counter` and `ui-outlet-operations` are **fully parallel** — each builds on the shell from #3 and touches no shared state, and since they depend only on #3 they **may run alongside Wave B** if bandwidth allows. `ui-owner-console-and-demo` follows, because the scenario dataset it builds must reconcile across every surface. Its dependency on #5 is about the attendance *surfaces and fixtures*, not the production rollout — #8 may start while #5's only open items are the 🧍 live-verification gates. **This wave ends with the demo milestone**: a deployed URL where the entire four-role experience walks through coherently.
 
-- **Wave D — the counter takes money (#21, #22, #23, #24, #9, #10)**: `staff-as-accounts`, then `multi-outlet-people`, `multi-outlet-hiring`, `username-sign-in-and-owner-recovery`, `counter-devices-and-offline`, and finally `billing-live`. **#21 opens the wave** by collapsing the staff roster into accounts while production data is still at baseline. **#22 follows** with plain assignment membership for people who work at several outlets; no role switching and nothing authority-bearing in the token. **#23 then closes the onboarding trap** where create-then-assign silently killed the activation code just issued, making one multi-outlet hire and one handover atomic. **#24 is deliberately next** (owner decision 2026-07-30): ordinary staff may not have email, so every account moves to an admin-chosen username before more people are onboarded and before #9 encodes the temporary personal Biller login into device enrollment. A private associated email remains a permanent alternate sign-in when present and is required for every live Super Admin as a future recovery/security foundation; forgotten passwords for every role use an admin-issued link for now, and every existing account and attendance row migrates in place. **#26 then restates attendance itself** (owner decisions 2026-07-31): a check-in becomes a claim that an on-site manager approves, check-out is removed entirely, and an arrival deadline makes lateness and absence readable. It lands before #9 deliberately, so a counter-tablet check-in is designed against approval rather than retrofitted to it, and while production attendance is still a few weeks old. #9 follows with outlet-enrolled tablets and offline exactly-once writes, and #10 follows #9 because billing is offline-first by specification rather than an online settlement path with a queue retrofitted later.
+- **Wave D — the counter takes money (#21–#24, #26–#30, #32, #9, #33, #31, #10, #34, #35)**: the people/account/attendance foundation is already complete. **#30 fixes transport-aware sign-in before credentials become the counter's daily unlock. #32 creates global customer identity without granting outlet-wide directory browse. #9 then enrols exactly one device at each outlet and establishes the billing-only daily grant plus durable local acceptance. #33 lands the atomic order/bill command contract before #31 extends the existing demo UI to the approved unpaid-order, customer, history, correction, quarantine, and recovery lifecycle. #10 is the Billing V1 milestone:** real billing goes live on one device per outlet with local-save-and-retry protection, but restart into an outage still requires online resumption. **Billing V2 is deliberately after that live milestone:** #34 adds offline restart and extended-outage work within the already-verified daily grant; #35 then removes the one-device enrollment limit after both the transaction and offline contracts are proven. #11 may still proceed independently, but #12/#13 need only Billing V1 and do not hold V1 hostage to V2.
 
 - **Wave E — operations and insight go live (#11–#13)**: `expenses-and-inventory-live`, `daily-cash-live`, `owner-console-live`. **#12 is the payoff of the whole billing chain** — the screen that answers "is the drawer right?" — and needs both real bills and real cash expenses to mean anything. #11 depends only on #4 and #7, so it **may start alongside Wave D**.
 
@@ -181,8 +221,13 @@ Every live capability needs configuration rows before it does anything, and **a 
 | Employee roster rows | #5 attendance | #5 — **merged into accounts by #21**, which replaces this row and the next with a one-step People flow |
 | **Account ↔ roster link** | #5 check-in | **#15** — **removed by #21**: the account *is* the staff record |
 | Menu categories and items | #10 billing | #7 demo → **#10 makes it real** |
+| Global customer identity by normalized phone | #10 customer reuse | **#32**, created automatically from a new exact phone; outlet roles cannot browse it |
 | Inventory items and thresholds | #11 | #7 demo → #11 makes it real |
-| Counter device enrolment | #9, #10 | #9 |
+| First counter device enrolment | #9, #10 | **#9**, exactly one active device per outlet for V1 |
+| Additional counter devices | #35 | **#35**, after single-device V1 and extended-offline V2.1 are proven |
+| Daily billing operator grant | #10, #34, #35 | **#9**, created only by online eligible-account authentication and expiring at cutoff |
+| Persisted offline bootstrap generation | #34 | **#34**, hydrated automatically after a successful online counter load |
+| Device-day settlement seal | #12 sign-off | **#33 contract + #10 device flow**; one per participating device/date after online queue resolution |
 | Opening cash float | #12 | #12 |
 
 ## Standing Principles
@@ -208,8 +253,9 @@ Every item below is written up in [`openspec/todos/`](../todos/README.md) with i
 - **[`bill-thermal-printing`](../todos/bill-thermal-printing.md), [`bill-gst-breakup`](../todos/bill-gst-breakup.md), [`bill-digital-share`](../todos/bill-digital-share.md)** — the three anticipated billing extensions. The schema already carries `pricing_mode`, `tax_paise`, per-outlet `bill_number`, line-item snapshots and `customer_phone` specifically so none of these needs a historical migration. **Triggers**: a customer or regulator asks for a printed or GST bill; or the owner wants digital receipts. Deps when seeded: #10.
 - **[`aggregator-settlement`](../todos/aggregator-settlement.md)** — Swiggy/Zomato revenue is recorded at order value, not net of commission, making it the largest known inaccuracy in the P&L. **Trigger**: aggregator volume grows enough to distort a decision. Deps: #13, #22 — settlement figures enter through the owner's non-cash write path built there.
 - **[`shared-menu-catalogue`](../todos/shared-menu-catalogue.md)** — a brand-wide master menu that outlets inherit and override. **Trigger**: enough franchises that per-outlet menu drift becomes a consistency problem; the business markets lab-tested consistency, so this carries real brand weight. Deps: #10, #14.
-- **[`cross-outlet-customer-identity`](../todos/cross-outlet-customer-identity.md)** — unify a customer who visits both outlets. Deliberately parked: it requires reading across the isolation boundary the security model exists to enforce. **Trigger**: a loyalty or repeat-customer feature with real business value behind it.
+- **[`customer-loyalty-and-cross-outlet-insights`](../todos/customer-loyalty-and-cross-outlet-insights.md)** — #32 provides one safe global identity but deliberately no cross-outlet history, visit/spend aggregate, marketing, or reward behavior. **Trigger**: a concrete loyalty or repeat-customer decision needs activity across outlets, with its audience and franchise/privacy boundary decided first. Deps when seeded: #32, #10, and likely #13.
 - **[`audit-log`](../todos/audit-log.md)** — an immutable trail beyond the `voided_by` / `override_by` / `recorded_by` columns already on the rows. **Trigger**: the first franchise dispute, or headcount where "a small trusted team" stops being accurate.
 - **[`data-retention-policy`](../todos/data-retention-policy.md)** — customer PII and attendance location data currently accumulate indefinitely. **Trigger**: meaningful customer volume, or a franchise agreement specifying retention — but see the todo, which argues a quarter of real attendance data in production fires first and matters more.
-- **[`self-service-account-settings`](../todos/self-service-account-settings.md)** — a signed-in person can request a username change or change a password they still know from a shared Profile/Settings surface. Forgotten passwords remain on the admin-issued one-time-link path for every role. **Trigger**: the shared Profile/Settings surface is built or the first real request arrives. Deps: #24; Biller behavior must be rechecked after #9.
+- **[`self-service-account-settings`](../todos/self-service-account-settings.md)** — a signed-in person can request a username change or change a password they still know from a shared Profile/Settings surface. Forgotten passwords remain on the admin-issued one-time-link path for every role. The Biller boundary is settled: their personal account keeps staff capabilities; the enrolled counter uses a separate machine session and normal credentials to issue a daily grant, with no PIN. **Trigger**: the shared Profile/Settings surface is built or the first real request arrives. Deps: #24 and #9.
 - **[`super-admin-email-recovery`](../todos/super-admin-email-recovery.md)** — add automated, enumeration-safe email recovery only after choosing and operating a real transactional-mail boundary; ordinary staff remain email-optional and recovery never becomes authority. **Trigger**: core live operations are complete, repeated owner lockouts make admin-issued reset painful, or future MFA needs security mail. Deps: #24; coordinate with self-service account settings if promoted together.
+- **[`emergency-billing-continuity`](../todos/emergency-billing-continuity.md)** — a deliberately separate break-glass path for billing from an unenrolled personal device when the registered hardware is unusable. **Trigger**: a real device-loss incident or an explicit decision that the extra authority surface is worth its risk. Deps when seeded: #10, and it must not silently reuse the ordinary personal-role session.

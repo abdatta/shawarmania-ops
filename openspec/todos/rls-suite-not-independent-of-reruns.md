@@ -1,5 +1,7 @@
 # `test:rls` is not independent of a previous run
 
+**Type**: Verification gap · **Status**: Open · **Area**: Testing
+
 ## What happens
 
 Run `npm run test:rls` twice inside fifteen minutes without a `db reset`

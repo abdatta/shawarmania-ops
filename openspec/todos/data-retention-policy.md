@@ -24,7 +24,12 @@ The roadmap frames the trigger as *meaningful customer volume, or a franchise ag
 
 - **Location is captured at a check-in, an approval, and an outlet capture only.** There is no background tracking anywhere in this system, so the volume is bounded at roughly two points per person per day rather than a continuous trail — a deliberate design decision that also makes this policy much easier to write.
 - Attendance rows carry a business date, so an age-based rule has a clean key.
-- Customer records carry first-seen and last-seen timestamps, so "no visit in N months" is expressible without adding anything.
+- `global-customer-identity` (#32) will minimise the global profile to canonical
+  phone, optional name, and internal timestamps; it explicitly removes cached
+  visit/spend aggregates from that row.
+- `extended-offline-billing` (#34) owns a narrow device-cache lifetime for exact
+  customer matches and persisted projections. That operational cache cap does not
+  decide how long the authoritative global profile or historical transaction link lives.
 - Location evidence is already framed as reviewable input rather than proof, so removing it later does not invalidate a verdict that was never supposed to rest on it alone.
 
 ## Open questions
@@ -32,11 +37,13 @@ The roadmap frames the trigger as *meaningful customer volume, or a franchise ag
 - **What are the actual obligations?** India's data-protection regime places duties around retention and erasure. What applies to a business this size, and what a franchise agreement might add on top, needs a real answer from someone qualified rather than an engineering assumption.
 - **Delete or anonymise?** Deleting attendance rows destroys the record that someone worked that day, which is a payroll and dispute problem. Dropping the *location* while keeping the check-in is very likely the right split, and it is a different feature from deletion.
 - Does an employee get to see, or request removal of, their own location history? An asymmetry here is corrosive in a monitoring feature — the same principle that requires an employee's own history to show exactly what their manager sees.
-- Customer records feed visit counts and spend totals. Does removing the person keep the aggregate?
+- When a global customer is deleted or anonymised, what happens to the customer
+  foreign key and name/phone snapshots on immutable outlet-owned orders and bills?
+  Historical money must remain correct without retaining contact PII indefinitely.
 - Does the policy apply retrospectively when it lands, or only forward?
 
 ## Trigger to promote
 
 The roadmap's triggers stand — meaningful customer volume, or a franchise agreement specifying retention. Add one that fires earlier: **a full quarter of real attendance data in production**, at which point there is a genuine location history on real people with no stated lifetime and no answer for anyone who asks.
 
-**Dependencies when seeded**: `attendance` (#5) live in production — which is the point, not a blocker. Interacts with [`audit-log`](./audit-log.md) and [`cross-outlet-customer-identity`](./cross-outlet-customer-identity.md).
+**Dependencies when seeded**: `attendance` (#5) live in production — which is the point, not a blocker. Interacts with [`audit-log`](./audit-log.md) and the graduated [`global-customer-identity`](../changes/global-customer-identity/proposal.md) (#32).

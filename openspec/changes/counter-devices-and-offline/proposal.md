@@ -1,45 +1,71 @@
-# Proposal: counter-devices-and-offline
+# Proposal: Counter Device And Local Durability
 
-> **Model**: Fable · **Wave**: D · **Depends on**: #4, #21, #22, #24 · **Gate**: an enrolled tablet reaches only its own outlet's billing surface and revoke takes effect immediately; offline → 20 bills → online → exactly 20 rows, zero duplicates; the queue survives reload and restart; a replayed client UUID inserts once; a malformed entry quarantines instead of vanishing.
+> **Model**: Fable · **Wave**: D · **Depends on**: #4, #21, #22, #24, #26, #30 · **Gate**: each outlet enrolls exactly one billing device; it reaches only its billing context; normal credentials create a daily billing grant without retaining personal authority; revocation is immediate and locally accepted writes survive logout and restart.
 
 ## Why
 
-Makes the counter tablet a **trusted, offline-capable device** — the prerequisite for taking real money on it. Both halves are about the same object, and both must be right before a single real bill exists.
+The initial counter needs a trusted outlet machine without turning an FA or SA
+login into a reusable personal admin session. It also needs the smallest durable
+local foundation that prevents a transient request failure from losing money.
 
-Device trust and the outbox ship together because the outbox's security posture depends on the device session: a queued write drains under the device's credentials, and revoking a device with a pending queue has to do something sensible. Building them apart would mean designing that interaction twice.
+## What Changes
 
-Exactly-once semantics are brutal to retrofit onto a shipped queue, which is why this is proved by a harness **before** any screen depends on it.
+- Let an FA enroll the current device for their outlet and an SA enroll one for
+  any outlet; enforce at most one active registered billing device per outlet.
+- Replace the personal session after enrollment with a long-lived machine
+  credential and a billing-only shell.
+- Replace counter PINs with normal username/password verification that creates
+  a device-, outlet-, operator-, and business-day-bound billing grant without
+  persisting the person's ordinary session.
+- Preserve one assignment per person/outlet while making `biller` include
+  Employee attendance capabilities on personal devices.
+- Permit outlet Billers, that outlet's FA, and any SA to open a billing grant;
+  ordinary Employees cannot.
+- Expire the operator grant at cutoff and require online reauthentication;
+  device registration persists until revoked.
+- Add device status, last-seen and pending-count telemetry, immediate revocation,
+  and authenticated upload-only recovery for historically valid accepted writes.
+- Establish a versioned IndexedDB operation store that commits locally before
+  UI success, survives logout/restart, elects one page drain leader, retries
+  transient failures, and preserves rejected entries for review.
 
-`username-sign-in-and-owner-recovery` (#24) lands first so this change designs
-device enrollment against the durable username identity model. No personal
-staff sign-in identifier or temporary personal Biller login may leak into the
-device credential, enrollment record, PIN attribution, or recovery story.
+## Capabilities
 
-## Scope
+### New Capabilities
 
-**Device trust** — enrolment (an admin signs in on the tablet and binds it to one outlet; the device receives a long-lived session scoped by RLS to that outlet and to billing surfaces only). Revocation enforced by a `revoked_at` check *inside* the policy, so it takes effect immediately rather than at token expiry. `last_seen_at` tracking so a device gone quiet during trading hours is visible. Shift open/close by biller PIN — selecting attribution, explicitly **not** a security boundary. The Devices management screen.
+- `counter-device-sessions`: Enrollment, machine credentials, daily billing
+  grants, single-active-device enforcement, revocation, and recovery authority.
+- `offline-operation-store`: Durable device-scoped operation storage, queue
+  states, local acknowledgement, leader election, and lifecycle persistence.
 
-**The offline outbox** — Dexie/IndexedDB, durable across reload, app close and device restart. The drain loop with backoff and the full response matrix from `docs/OFFLINE_AND_SYNC.md` (2xx, 409 duplicate, other 4xx, network/5xx). Client-generated UUIDs with server-side upsert on that key — the whole duplicate-prevention story. Business-date resolution on the device at settlement, from the outlet's cutover. Menu caching with visible staleness. The sync indicator, including escalation when a backlog grows or an entry repeatedly fails.
+### Modified Capabilities
+
+- `identity-and-access`: Biller becomes an Employee-capable hierarchy role and
+  credential verification may issue a billing-only grant without a personal session.
+- `app-shell`: A registered device renders only its billing context regardless
+  of the eligible operator's personal role.
+- `outlet-tenancy`: Machine credentials and billing grants are outlet-bound;
+  revocation and recovery are enforced at the database boundary.
+- `counter-billing`: Shift opening uses account credentials instead of a PIN
+  and a shift belongs to one device and business day.
+
+## Impact
+
+Auth/session adapters, role capability helpers, enrollment/revocation functions,
+device and grant schema, RLS helpers, Counter shell routing, Devices UI,
+IndexedDB infrastructure, generated types, seeds, and auth/RLS/E2E tests change.
 
 ## Non-goals
 
-- No billing UI (#6 built it) and no real bills (#10).
-- Manager and owner screens stay online-only. A deliberate design commitment, not an omission.
-- Attendance from personal phones stays online-only: a queued check-in cannot be geofence-verified at the moment it happens, and one validated later can be gamed.
-- **No attendance kiosk on the tablet.** Rejected by the owner (2026-07-28): one shared device, usually busy billing, is the wrong place for everyone's check-in queue. The escape hatch for a phone that cannot check in is manager-entered attendance with a past timestamp, attributed to the manager — built in #21, which this change now depends on.
+- Real order/bill persistence or live menu/customer adapters.
+- More than one active billing device per outlet.
+- Deliberate offline restart or prolonged offline trading; roadmap change #34
+  adds that capability after Billing V1.
+- Attendance from the tablet, inactivity auto-lock, or emergency personal-device billing.
+- Printing, GST, digital receipts, or partial payments.
 
-## Design questions to settle during `/opsx:propose`
+## Docs to update before archive
 
-- Quarantine semantics: what a manager can actually *do* with a rejected entry, since silently dropping it and blocking the queue are both unacceptable.
-- Backoff schedule, and the threshold where a backlog becomes a visible warning rather than a quiet count.
-- Whether the drain loop is driven by the service worker or the page, given the tablet is usually foregrounded.
-- **Whether a device with a pending outbox can be revoked at all**, and what the admin is warned about — revoking a device holding unsynced bills destroys them.
-- **Who may open a shift** — dedicated billers only, or any Franchise Admin (or acting Super Admin) of the outlet? The owner leans inclusive: a manager covering the counter at rush should not need a second account, and once the device is the credential, the shift is attribution rather than authority.
-- **Emergency billing from a non-billing device** (owner-requested, 2026-07-28): when the tablet is dead or missing, an FA/SA opens a billing session from their own device with a mandatory reason; every bill from it carries that session's source and reason. Shape it like a shift — a row, not session state — so it survives the opener navigating away, and ends on close or at day close. Cash bills from such a session still land in the outlet's drawer math (the day-close sums by outlet and date, not by device).
-- **Does the biller account role survive this change at all** — or does "biller" become pure shift attribution on an enrolled device, with the account role retired?
-- **Is a biller's attendance tracked, and how?** A biller does not appear on an outlet's attendance day and cannot check in, and the roll-call is being narrowed to people holding a staff assignment at the outlet (owner, 2026-08-01). So a biller who needs attendance holds a staff assignment too, which is consistent but never decided out loud. Settle it here rather than in the attendance surface, because it depends on the question above: if the biller role becomes pure shift attribution, the question answers itself.
-- **Is a biller's attendance row a thing that should exist at all?** Checked in production on 2026-08-01, before #28 shipped: **no attendance row there has a subject who is not staff at its outlet** — not a biller's, not a manager's, not the owners'. So #28's clause that keeps such a row visible on its day (design D4) is insurance rather than something load-bearing, and the roll-call narrowing cost nothing. That also means this question is still open on a clean slate: if a biller's attendance ought to be tracked, the answer is either a staff assignment alongside their counter one, or shift attribution doing the job — and either way it should be decided here before the first biller row exists, not discovered afterwards.
-
-## Docs to update before archiving
-
-`docs/OFFLINE_AND_SYNC.md`, `docs/ROLES_AND_PERMISSIONS.md`, `docs/OPERATIONS.md` (the lost-tablet runbook), `docs/SCREENS.md`.
+`docs/ARCHITECTURE.md`, `docs/ROLES_AND_PERMISSIONS.md`,
+`docs/OFFLINE_AND_SYNC.md`, `docs/OPERATIONS.md`, `docs/SCREENS.md`,
+`docs/SECURITY_AND_PRIVACY.md`, and `docs/LIMITATIONS.md`.
