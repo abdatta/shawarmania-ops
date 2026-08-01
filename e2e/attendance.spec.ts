@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
-import { DEMO_RUNNER_ACCOUNT_ID } from '../src/data-access/mock/fixtures/accounts'
+import {
+  DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
+  DEMO_RUNNER_ACCOUNT_ID,
+} from '../src/data-access/mock/fixtures/accounts'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '../src/data-access/mock/fixtures/outlets'
 import { DEMO_OWNER_ID } from '../src/data-access/mock/fixtures/personas'
 
@@ -37,6 +40,22 @@ test.use({ permissions: ['geolocation'], geolocation: AT_COUNTER })
  * and a day is never empty of meaning.
  */
 const MID_MONTH = new Date('2026-07-20T12:00:00+05:30')
+
+/**
+ * Open every collapsed day on screen.
+ *
+ * A day is a headline until somebody opens it, unless it is waiting for a
+ * manager — those are already open, because they are the rows the screen exists
+ * to settle. Anything asserting on the evidence, the approval or the manual
+ * entry of a settled day has to ask for it first.
+ */
+async function openEveryDay(page: Page) {
+  const toggles = page.getByTestId(/^expand-/)
+  for (let index = 0; index < (await toggles.count()); index += 1) {
+    const toggle = toggles.nth(index)
+    if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click()
+  }
+}
 
 async function openStaffHome(page: Page) {
   await page.goto('demo/staff')
@@ -260,6 +279,7 @@ test('a manager records a manual entry, and the row names who typed it in', asyn
   // 04:00 is the earliest moment of any business day — the one time guaranteed
   // not to be in the future while that day is current.
   const staffId = 'd1000000-0000-4000-a000-000000000004'
+  await page.getByTestId(`expand-${staffId}`).click()
   await page.getByTestId(`manual-${staffId}`).click()
   await expect(page.getByText(/permanently show that you entered it/)).toBeVisible()
   await page.getByLabel('When did they arrive?').fill('04:00')
@@ -283,6 +303,7 @@ test('a seeded manual arrival is visibly not a self check-in, on both sides', as
   await page.getByRole('button', { name: 'Previous day' }).click()
 
   const grillerId = 'd1000000-0000-4000-a000-000000000006'
+  await page.getByTestId(`expand-${grillerId}`).click()
   const card = page.getByTestId(`day-${grillerId}`)
   await expect(card.getByTestId('entered-by')).toContainText('Entered by: Demo Manager')
   await expect(card.getByText('phone')).toHaveCount(0)
@@ -296,6 +317,7 @@ test('an employee’s own history shows the approval, where the approver was, an
 
   const history = page.getByTestId('attendance-history')
   await expect(history).toBeVisible()
+  await openEveryDay(page)
   // The same facts a manager sees about the same day — the symmetry the
   // proposal insists on, including the new one: whether the manager was there.
   await expect(history.getByText(/Demo Manager, /).first()).toBeVisible()
@@ -304,6 +326,78 @@ test('an employee’s own history shows the approval, where the approver was, an
   await expect(history.getByTestId('derived-absent').first()).toBeVisible()
   // And no check-out, anywhere, ever again.
   await expect(history.getByText('Out', { exact: true })).toHaveCount(0)
+})
+
+test('a day is a headline until it is opened, and a waiting one is already open', async ({
+  page,
+}) => {
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  // The runner is waiting for a decision: open, with Approve one tap away. The
+  // whole design of this screen is that settling a day is one deliberate act,
+  // and a chevron in front of it would be a tap that buys nothing.
+  await expect(page.getByTestId(`expand-${DEMO_RUNNER_ACCOUNT_ID}`)).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expect(page.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`)).toBeVisible()
+
+  // The griller's day is settled, so it is a headline: name, job and verdict,
+  // and the evidence only if somebody asks.
+  const grillerId = 'd1000000-0000-4000-a000-000000000006'
+  const griller = page.getByTestId(`day-${grillerId}`)
+  await expect(griller).toContainText('Demo Griller')
+  await expect(griller.getByTestId('approval-note')).toHaveCount(0)
+
+  await page.getByTestId(`expand-${grillerId}`).click()
+  await expect(griller.getByTestId('approval-note')).toBeVisible()
+})
+
+test('the outlet chips carry their own unsettled days, in one row', async ({ page }) => {
+  await page.goto('demo/owner/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  // One row of outlets, and the count sits on the chip that reaches it — there
+  // is no second row of chips saying the same names without the press.
+  await expect(page.getByTestId('stranded-days')).toHaveCount(0)
+  const kalyani = page.getByTestId(`surface-outlet-${OUTLET_KALYANI_ID}`)
+  await expect(kalyani.getByTestId(`outlet-waiting-${OUTLET_KALYANI_ID}`)).toContainText('3')
+
+  // Selecting the other one adds it rather than dropping what is in hand.
+  await page.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`).click()
+  await expect(kalyani).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+})
+
+test('the by-staff picker is not filtered by the outlet chips', async ({ page }) => {
+  await page.clock.setFixedTime(MID_MONTH)
+  await page.goto('demo/owner/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  // Kalyani alone is selected. The by-staff axis takes its scope from the
+  // database rather than from these chips, so Kanchrapara's staff are still
+  // offered — filtering them out hid a whole shop's people from a view that is
+  // not about shops.
+  await expect(page.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  )
+  await page.getByTestId('axis-staff').click()
+
+  const options = await page
+    .getByTestId('person-picker')
+    .locator('option')
+    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value))
+  expect(options).toContain(DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
+
+  // And the period is a month, with no second way to say what the period is.
+  await expect(page.getByTestId('range-picker')).toBeVisible()
+  await expect(page.getByLabel('Range starts')).toHaveCount(0)
+  await expect(page.getByLabel('Range ends')).toHaveCount(0)
 })
 
 test('the owner sees which outlets have never been surveyed', async ({ page }) => {

@@ -140,6 +140,12 @@ data as fabricated. The indicator SHALL offer no dismiss affordance and SHALL
 remain visible on every demo route, in both themes, on phone and tablet
 viewports. On the Biller shell it SHALL NOT occlude the billing actions.
 
+The indicator SHALL carry a control that **leaves the demo**, returning to the
+application root. Leaving is not dismissing: the indicator goes only because the
+fabricated data it warns about has gone with it, so every control in the
+indicator either stays within the demo or leaves it entirely, and none of them
+hides fabricated data that is still on screen.
+
 #### Scenario: The indicator is present on every demo route
 
 - **WHEN** any demo route renders, in either theme, on a phone or tablet
@@ -151,6 +157,12 @@ viewports. On the Biller shell it SHALL NOT occlude the billing actions.
 - **WHEN** a user inspects the demo indicator for controls
 - **THEN** it exposes no affordance that hides or closes it, and no
   interaction on the page removes it short of leaving demo mode
+
+#### Scenario: A visitor leaves the demo
+
+- **WHEN** a visitor uses the indicator's exit
+- **THEN** the application root is shown, the demo indicator is gone, and no
+  demo surface remains rendered
 
 ### Requirement: Demo data is obviously synthetic
 

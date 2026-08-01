@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -68,11 +69,27 @@ function renderWith(
   )
 }
 
+/**
+ * Open every day on screen.
+ *
+ * A day collapses to its headline unless it is waiting for a manager, so a test
+ * about what a day *says* has to open the days first. The employee's own screen
+ * and the manager's roll-call collapse the same way, from the same component —
+ * which is the symmetry promise holding rather than breaking.
+ */
+async function openEveryDay(user: ReturnType<typeof userEvent.setup>) {
+  for (const toggle of screen.queryAllByTestId(/^expand-/)) {
+    if (toggle.getAttribute('aria-expanded') === 'false') await user.click(toggle)
+  }
+}
+
 describe('my attendance', () => {
   it('lists the employee’s own days, with the counts for the range', async () => {
+    const user = userEvent.setup()
     renderWith('employee', <MyAttendance />, createMockAdapters())
 
     const history = await screen.findByTestId('attendance-history')
+    await openEveryDay(user)
     // The fixture month: approved days, a leave day, a waiting one, a late one,
     // and days with nothing recorded at all.
     // "Arrived" is the accessible name of the time chip row; the visible part
@@ -85,9 +102,11 @@ describe('my attendance', () => {
   })
 
   it('shows who approved a day, whether they were there, and any reason', async () => {
+    const user = userEvent.setup()
     renderWith('employee', <MyAttendance />, createMockAdapters())
 
     const history = await screen.findByTestId('attendance-history')
+    await openEveryDay(user)
     expect(within(history).getAllByText(/Demo Manager, /).length).toBeGreaterThan(0)
     // The off-site approval: the reason it cost, and the fact that the manager
     // was not at the outlet — both readable by the person the day is about.
@@ -126,12 +145,15 @@ describe('my attendance', () => {
   })
 
   it('says the same thing about a day as the manager’s view does', async () => {
+    const user = userEvent.setup()
     const adapters = createMockAdapters()
 
     // The manager's view of today, including the outlet's blocked check-in.
     // Staff are accounts, so the day card keys on the persona's own id.
     const manager = renderWith('franchise_admin', <OutletAttendance />, adapters)
-    const managerCard = await screen.findByTestId(`day-${personaFixtures.employee.profile.id}`)
+    await screen.findByTestId(`day-${personaFixtures.employee.profile.id}`)
+    await openEveryDay(user)
+    const managerCard = screen.getByTestId(`day-${personaFixtures.employee.profile.id}`)
     const managerSays = normalise(managerCard.textContent ?? '')
     manager.unmount()
 
@@ -139,6 +161,7 @@ describe('my attendance', () => {
     const employeeAdapters = createMockAdapters()
     renderWith('employee', <MyAttendance />, employeeAdapters)
     const history = await screen.findByTestId('attendance-history')
+    await openEveryDay(user)
     const employeeSays = normalise(history.textContent ?? '')
 
     // Whatever the manager is told about distance, accuracy and source, the

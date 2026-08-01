@@ -89,6 +89,19 @@ function dayCards(): HTMLElement[] {
 }
 
 /**
+ * Open one roll-call row.
+ *
+ * A row collapses to its headline unless it is waiting for a manager, so
+ * anything about the evidence, the approval or the manual-entry action on a
+ * settled row has to open it first. A row with nothing underneath has no
+ * toggle at all, and asking to open one is then a no-op rather than a failure.
+ */
+async function openRow(user: ReturnType<typeof userEvent.setup>, personId: string) {
+  const toggle = screen.queryByTestId(`expand-${personId}`)
+  if (toggle && toggle.getAttribute('aria-expanded') === 'false') await user.click(toggle)
+}
+
+/**
  * Stage what is waiting where, rather than seeding it.
  *
  * The day controls' marks are about business days other than the one on screen,
@@ -459,11 +472,14 @@ describe('the outlet attendance day', () => {
     // does not offer it. The griller already arrived today, so the person with
     // nothing recorded is the one to ask.
     const staffId = personaFixtures.employee.profile.id
+    await screen.findByTestId('attendance-day')
+    await openRow(user, staffId)
     expect(await screen.findByTestId(`manual-${staffId}`)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Previous day' }))
     await waitFor(() => expect(screen.getByTestId('day-label')).not.toHaveTextContent('Today'))
     expect(screen.getByRole('button', { name: 'Next day' })).toBeEnabled()
+    await openRow(user, staffId)
     expect(screen.queryByTestId(`manual-${staffId}`)).not.toBeInTheDocument()
   })
 
@@ -475,6 +491,8 @@ describe('the outlet attendance day', () => {
     // in. 04:00 is the earliest moment of any business day — the one time
     // guaranteed not to be in the future while that day is current.
     const staffId = personaFixtures.employee.profile.id
+    await screen.findByTestId('attendance-day')
+    await openRow(user, staffId)
     await user.click(await screen.findByTestId(`manual-${staffId}`))
     expect(
       screen.getByText(/The record will permanently show that you entered it/),
@@ -502,6 +520,94 @@ describe('the outlet attendance day', () => {
 
     await screen.findByTestId('attendance-day')
     expect(list).toHaveBeenCalledWith([OUTLET_KALYANI_ID], expect.any(String))
+  })
+})
+
+/**
+ * A row is a headline until it is opened, and a row asking for something is
+ * already open.
+ *
+ * A roll-call of eight people rendering all of its evidence puts the two rows a
+ * manager came to decide somewhere down a scroll. What must not happen is the
+ * opposite mistake: burying `Approve` behind a chevron, which would add a tap in
+ * front of the only thing this screen exists for.
+ */
+describe('the roll-call collapses to its headlines', () => {
+  it('opens a row waiting for a manager, and leaves a settled one closed', async () => {
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    // The runner is waiting: open, evidence showing, Approve reachable in one tap.
+    expect(screen.getByTestId(`expand-${DEMO_RUNNER_ACCOUNT_ID}`)).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`)).toBeInTheDocument()
+
+    // The griller's day was approved in the fixtures, so it is a headline until
+    // somebody asks for the detail.
+    const griller = screen.getByTestId(`expand-${DEMO_GRILLER_ACCOUNT_ID}`)
+    expect(griller).toHaveAttribute('aria-expanded', 'false')
+    expect(
+      within(screen.getByTestId(`day-${DEMO_GRILLER_ACCOUNT_ID}`)).queryByTestId('approval-note'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the evidence once a closed row is opened', async () => {
+    const user = userEvent.setup()
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId(`expand-${DEMO_GRILLER_ACCOUNT_ID}`))
+
+    const card = screen.getByTestId(`day-${DEMO_GRILLER_ACCOUNT_ID}`)
+    expect(within(card).getByTestId('approval-note')).toBeInTheDocument()
+    expect(within(card).getByText('Arrived')).toBeInTheDocument()
+  })
+
+  it('keeps a row open after its day is settled', async () => {
+    const user = userEvent.setup()
+    atPosition(AT_COUNTER)
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    await user.click(await screen.findByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`))
+
+    // Open state is the reader's decision, not a function of the row. Folding
+    // away under the thumb that pressed it would hide what just happened.
+    const card = await screen.findByTestId(`day-${DEMO_RUNNER_ACCOUNT_ID}`)
+    await waitFor(() => expect(within(card).getByTestId('approval-note')).toBeInTheDocument())
+    expect(screen.getByTestId(`expand-${DEMO_RUNNER_ACCOUNT_ID}`)).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+  })
+
+  it('gives no toggle to a row with nothing underneath it', async () => {
+    const user = userEvent.setup()
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    // A past day: nobody may type an arrival in, so a person with no row has no
+    // evidence, no approval and no action. A chevron opening onto nothing is
+    // worse than no chevron.
+    await user.click(screen.getByRole('button', { name: 'Previous day' }))
+    await waitFor(() => expect(screen.getByTestId('day-label')).not.toHaveTextContent('Today'))
+    await waitFor(() => expect(screen.getByTestId('attendance-day')).toBeInTheDocument())
+
+    const derived = dayCards().filter(
+      (card) =>
+        within(card).queryByTestId('derived-absent') !== null ||
+        within(card).queryByTestId('not-yet-arrived') !== null ||
+        within(card).queryByTestId('working-elsewhere') !== null,
+    )
+    expect(derived.length).toBeGreaterThan(0)
+    for (const card of derived) {
+      // No row, so nothing to open — and the verdict itself is still on the face
+      // of it rather than the row reading as a blank.
+      expect(within(card).queryByTestId(/^expand-/)).not.toBeInTheDocument()
+      expect(card.textContent).toMatch(/Absent|Not yet arrived|Working at another outlet/)
+    }
   })
 })
 
@@ -583,15 +689,15 @@ describe('the outlet attendance person view', () => {
 })
 
 /**
- * The owner's cross-outlet view of unsettled days.
+ * Where days are stranded, on the chips that reach them.
  *
  * This count spans every business day, which is why it is not the same number as
  * the waiting count on the day below it: an outlet can hold nothing today and a
- * week of unsettled days behind it. The owner is the one person who cannot notice
- * a forgotten approval by opening their own outlet, so noticing and acting are
- * made one gesture.
+ * week of unsettled days behind it. It used to be a second row of chips above the
+ * selector naming the same outlets in the same shape; the count belongs on the
+ * control that acts, so noticing a backlog and reaching it are one gesture.
  */
-describe("the owner's stranded days", () => {
+describe('the outlet chips carry their unsettled days', () => {
   const ownerSession: Session = {
     mode: 'demo',
     userId: personaFixtures.super_admin.profile.id,
@@ -636,42 +742,35 @@ describe("the owner's stranded days", () => {
     )
   }
 
-  it('gives each outlet a chip carrying its own count', async () => {
+  it('gives each outlet one chip carrying its own count', async () => {
     renderAsOwner()
 
-    const stranded = await screen.findByTestId('stranded-days')
-    const chip = within(stranded).getByTestId(`stranded-${OUTLET_KANCHRAPARA_ID}`)
+    // One row of outlets, not two. The chips that select are the chips that
+    // count, so the row does not change shape depending on the database.
+    const selector = await screen.findByTestId('surface-outlets')
+    expect(screen.queryByTestId('stranded-days')).not.toBeInTheDocument()
+
+    const chip = within(selector).getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)
     expect(chip).toHaveTextContent('Shawarmania Kanchrapara')
     expect(chip).toHaveTextContent('5')
     expect(within(chip).getByText('5 arrivals waiting for approval')).toBeInTheDocument()
+
+    // Including the one already selected: a badge here says "there is work",
+    // and the work does not stop existing because you are looking at it.
+    const here = within(selector).getByTestId(`surface-outlet-${OUTLET_KALYANI_ID}`)
+    expect(within(here).getByTestId(`outlet-waiting-${OUTLET_KALYANI_ID}`)).toHaveTextContent('2')
   })
 
-  it('no longer describes a database state, nor prints an oldest date', async () => {
-    renderAsOwner()
-
-    // The heading described what the table held rather than asking for
-    // anything, and the date it printed changed job: it now marks the
-    // earlier-days control instead (design D3).
-    const stranded = await screen.findByTestId('stranded-days')
-    expect(stranded).not.toHaveTextContent('Days waiting for a manager')
-    expect(stranded).not.toHaveTextContent('oldest')
-  })
-
-  it('follows a stranded count to the outlet it belongs to', async () => {
+  it('reaches a stranded outlet by selecting it, without dropping the one in hand', async () => {
     const user = userEvent.setup()
     renderAsOwner()
 
-    // The outlet in scope is stated rather than offered: there is nowhere to go.
-    const here = await screen.findByTestId(`stranded-${OUTLET_KALYANI_ID}`)
-    expect(here).toHaveTextContent('selected')
-    expect(here.tagName).not.toBe('BUTTON')
+    await screen.findByTestId('attendance-day')
+    await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
 
-    await user.click(screen.getByTestId(`stranded-${OUTLET_KANCHRAPARA_ID}`))
-
-    // One gesture from noticing to acting, rather than a count followed by
-    // hunting through the picker. Following a chip REPLACES the selection
-    // rather than adding to it: the point of the row is "the unsettled days are
-    // over there", so it takes you there.
+    // One gesture from noticing to acting. Adding rather than replacing: the
+    // reader is looking at one shop's day and wants the other one's work as
+    // well, and clearing the first is the same control pressed again.
     await waitFor(() =>
       expect(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)).toHaveAttribute(
         'aria-pressed',
@@ -680,14 +779,11 @@ describe("the owner's stranded days", () => {
     )
     expect(screen.getByTestId(`surface-outlet-${OUTLET_KALYANI_ID}`)).toHaveAttribute(
       'aria-pressed',
-      'false',
-    )
-    expect(await screen.findByTestId(`stranded-${OUTLET_KANCHRAPARA_ID}`)).toHaveTextContent(
-      'selected',
+      'true',
     )
   })
 
-  it('shows nothing at all when the outlet in scope is the only one waiting', async () => {
+  it('says nothing about an outlet holding nothing', async () => {
     const adapters = createMockAdapters()
     stageCounts(adapters, [
       {
@@ -708,17 +804,21 @@ describe("the owner's stranded days", () => {
       </MemoryRouter>,
     )
 
-    // The header already names the outlet and the day controls already say
-    // there is work behind this day. A chip about where the reader already is
-    // repeats both and points nowhere.
     await screen.findByTestId('attendance-day')
-    expect(screen.queryByTestId('stranded-days')).not.toBeInTheDocument()
+    // Absent rather than a nought, so an absent badge always means the same
+    // thing (notification-badges, design D5).
+    expect(screen.getByTestId(`outlet-waiting-${OUTLET_KALYANI_ID}`)).toBeInTheDocument()
+    expect(screen.queryByTestId(`outlet-waiting-${OUTLET_KANCHRAPARA_ID}`)).not.toBeInTheDocument()
   })
 
-  it('shows a manager nothing about other outlets', async () => {
+  it('shows a single-outlet manager no chips at all', async () => {
     renderDay()
 
+    // Nothing to choose between, so no selector — and with one outlet the day's
+    // own badge and the earlier/later marks already say everything a per-outlet
+    // count could.
     await screen.findByTestId('attendance-day')
+    expect(screen.queryByTestId('surface-outlets')).not.toBeInTheDocument()
     expect(screen.queryByTestId('stranded-days')).not.toBeInTheDocument()
   })
 })
@@ -980,6 +1080,29 @@ describe('a person who works at two outlets', () => {
     const only = screen.getByTestId(`surface-outlet-${OUTLET_KALYANI_ID}`)
     expect(only).toHaveAttribute('aria-pressed', 'true')
     expect(only).toBeDisabled()
+  })
+
+  it('offers every readable outlet’s staff, whatever the outlet chips say', async () => {
+    const user = userEvent.setup()
+    renderAsOwner()
+
+    // Kalyani alone is selected, and Kanchrapara's staff are still offered. The
+    // by-staff axis takes its scope from the database, so filtering its picker
+    // by the by-outlet chips would hide a whole shop's people from a view that
+    // is not about shops — the exact confusion splitting the axes ended.
+    await screen.findByTestId('attendance-day')
+    expect(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+
+    await user.click(screen.getByTestId('axis-staff'))
+    const picker = await screen.findByTestId('person-picker')
+    expect(
+      within(picker)
+        .getAllByRole('option')
+        .map((option) => (option as HTMLOptionElement).value),
+    ).toContain(DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
   })
 
   it('offers no outlet picker on the by-staff axis', async () => {

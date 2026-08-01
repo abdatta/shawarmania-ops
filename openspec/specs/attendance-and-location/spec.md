@@ -519,6 +519,38 @@ on this view carrying somebody else's request for attention. The order SHALL be
 fixed while the view is open and recomputed when it is opened again or the
 chosen day changes, so that settling a day never moves the rows beneath it.
 
+**A row SHALL open onto its detail rather than render it.** Each listed row
+SHALL show, without being opened, who it is about and what the day counts as;
+the check-in time, the evidence, the approval and the row's actions SHALL be
+reachable by opening it. A row **waiting for approval SHALL be open when the
+view is opened**, since it is the row asking for a decision and approving is
+what the view exists for. Whether a row is open SHALL be the reader's own state:
+settling a day SHALL NOT close it. A row with no evidence, no approval and no
+action SHALL offer nothing to open.
+
+#### Scenario: A settled day is a headline until it is opened
+
+- **WHEN** a Franchise Admin opens a business day holding an approved arrival
+- **THEN** that row shows the person and the day's verdict, its evidence and
+  approval are not shown, and opening the row shows them
+
+#### Scenario: A waiting day is already open
+
+- **WHEN** a Franchise Admin opens a business day holding an unapproved arrival
+- **THEN** that row is open, with its evidence and its approve action shown
+  without any further step
+
+#### Scenario: Settling a day does not close it
+
+- **WHEN** a Franchise Admin approves a waiting row
+- **THEN** the row stays open and shows the approval that was just recorded
+
+#### Scenario: A day with nothing recorded offers nothing to open
+
+- **WHEN** a business day is read for a person carrying no row, on a day where
+  no arrival may be entered
+- **THEN** the row states what the day reads as and offers no way to open it
+
 #### Scenario: A manager opens the day
 
 - **WHEN** a Franchise Admin opens attendance for a business day
@@ -581,11 +613,18 @@ chosen day changes, so that settling a day never moves the rows beneath it.
 ### Requirement: Attendance is readable by person over a range, not only by day
 
 Attendance SHALL be readable along two axes: **by outlet**, which is the day
-roll-call above, and **by staff**, which is one person over a range of business
-dates defaulting to the current month, with a summary of how many days were
+roll-call above, and **by staff**, which is one person over **one calendar
+month**, defaulting to the current one, with a summary of how many days were
 present, late, absent and waiting for approval. Choosing the axis SHALL come
 before choosing an outlet, and the outlet choice SHALL belong to the by-outlet
 axis alone.
+
+**The period is a month and there SHALL be no second way to state it.** The
+summary exists so somebody can work out pay by hand and pay is monthly; every
+absence in the list is derived from the period's bounds, so an arbitrary span
+would produce an arbitrary absence count indistinguishable from a meaningful
+one. The control SHALL move a month at a time and SHALL NOT reach a month that
+has not begun.
 
 The by-staff read SHALL span every outlet the reader may see, and the set of
 those outlets SHALL be resolved in the database from the reader's own live
@@ -594,6 +633,25 @@ holding one assignment therefore reads that outlet, a Franchise Admin holding
 several reads exactly those, and a Super Admin reads all of them. A reader SHALL
 NOT be able to obtain a person's days at an outlet they hold no live assignment
 at, by the surface or by a hand-crafted request.
+
+**The by-outlet selection SHALL NOT narrow this axis.** Who is offered here, and
+which outlets a person's month is assembled against, SHALL be everybody and
+everything the reader may see, whatever outlets are selected on the by-outlet
+axis. Narrowing it there would hide a whole outlet's people from a view that is
+not about outlets, which is the confusion separating the axes exists to end.
+
+#### Scenario: The outlet selection does not narrow the person picker
+
+- **WHEN** a reader who may see two outlets selects one of them on the by-outlet
+  axis and then reads by staff
+- **THEN** people holding staff assignments at the unselected outlet are still
+  offered, and a selected person's month still covers both outlets
+
+#### Scenario: The period cannot be stated as a loose range
+
+- **WHEN** a reader inspects the period control on either range surface
+- **THEN** it offers a month at a time and no way to enter arbitrary start and
+  end dates
 
 A person's days SHALL be counted once per business date in that summary, whatever
 outlet each was worked at, because the summary exists to count days somebody
@@ -605,9 +663,11 @@ business day they belong to, which is where anybody settling one needs them; a
 range of days for somebody whose days are not tracked would be a pattern of
 nothing.
 
-A person reading their own attendance SHALL be offered the same range control,
+A person reading their own attendance SHALL be offered the same month control,
 and their own history SHALL continue to span every outlet they work or worked
-at, each day naming its outlet.
+at, each day naming its outlet. Each day SHALL open onto its detail on the same
+terms as the roll-call's rows, since an employee sees exactly what their manager
+sees.
 
 #### Scenario: A manager reads one person's month
 
@@ -648,51 +708,55 @@ at, each day naming its outlet.
   range
 - **THEN** every day is listed, each naming the outlet it was worked at
 
-### Requirement: Days waiting for approval are visible to the owner across outlets
+### Requirement: Days waiting for approval are counted on the outlet each belongs to
 
-A Super Admin SHALL be able to see, without opening each outlet in turn, how
-many days are waiting for approval at each outlet. A day nobody settles is
-otherwise invisible until somebody queries their pay.
+A reader who may choose between outlets SHALL be able to see, without opening
+each in turn, how many days are waiting for approval at each. A day nobody
+settles is otherwise invisible until somebody queries their pay.
 
-Each outlet holding unsettled days SHALL be shown with its own count. Choosing
-one SHALL bring the view to that outlet, so noticing a stranded day and acting
-on it are one gesture rather than a count followed by hunting through a picker.
-The outlet already in scope SHALL be shown as such rather than offered as
-somewhere to go.
+**That count SHALL be carried by the outlet selector itself**, on the same chip
+that selects the outlet, so that noticing a backlog and reaching it are one
+gesture and the row of outlets does not change shape with the state of the
+database. There SHALL NOT be a second control listing the same outlets. Selecting
+an outlet from it adds it to the selection like any other selection, and does not
+displace the outlets already being read.
 
-This SHALL be shown only while some outlet **other than the one in scope** holds
-unsettled days. Where the outlet in scope is the only one, nothing SHALL be
-shown: the view already names that outlet and already states whether it holds
-work on other days, and a lone entry about where the reader already is repeats
-both while pointing nowhere.
+The counts SHALL cover exactly the outlets the reader may see, resolved by the
+attendance policies rather than by the reader's role: a Franchise Admin holding
+assignments at two outlets sees those two, and a Super Admin sees all of them. A
+reader with one outlet has nothing to choose between and SHALL be shown no
+selector and no count; the day's own badge and the earlier and later day marks
+already state everything a per-outlet count could tell them.
+
+An outlet holding nothing SHALL carry no count, so an absent count always means
+the same thing.
 
 This count is across every business day, and is therefore not the same as the
 waiting count for the day on screen: an outlet may hold nothing today and a
 week of unsettled days behind it.
 
-#### Scenario: The owner sees where days are stranded
+#### Scenario: Each outlet chip carries its own backlog
 
-- **WHEN** a Super Admin opens attendance and two outlets each hold waiting
-  days
-- **THEN** each outlet is shown with its own count of unsettled days
+- **WHEN** a reader who may see two outlets opens attendance and both hold
+  waiting days
+- **THEN** each outlet's chip in the selector carries its own count of unsettled
+  days, and no separate list of outlets is shown
 
-#### Scenario: The owner follows a stranded count to its outlet
+#### Scenario: Reaching a stranded outlet keeps the one in hand
 
-- **WHEN** a Super Admin chooses an outlet other than the one in scope from
-  that list
-- **THEN** the attendance view moves to that outlet, and the outlet in scope is
-  not offered as a destination
+- **WHEN** that reader selects an outlet carrying a count
+- **THEN** the view covers that outlet as well as the ones already selected
 
-#### Scenario: Only the outlet in scope holds unsettled days
+#### Scenario: An outlet holding nothing carries no count
 
-- **WHEN** a Super Admin opens attendance and the outlet in scope is the only
-  one holding unsettled days
-- **THEN** no cross-outlet list is shown at all
+- **WHEN** one of the outlets a reader may see holds no unsettled days
+- **THEN** its chip carries no count at all rather than a nought
 
 #### Scenario: A manager sees only their own
 
-- **WHEN** a Franchise Admin opens attendance
-- **THEN** no other outlet's unsettled days are shown to them
+- **WHEN** a Franchise Admin who may see one outlet opens attendance
+- **THEN** no outlet selector is shown, and no other outlet's unsettled days
+  are shown to them
 
 ### Requirement: An admin records attendance on someone's behalf
 

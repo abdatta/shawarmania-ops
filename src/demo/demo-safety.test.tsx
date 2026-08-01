@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -258,12 +258,18 @@ describe('demo mode safety', () => {
     renderDemo('/demo/owner')
     const banner = await screen.findByTestId('demo-banner')
 
-    // The links are the role switcher, and they all stay inside /demo.
-    const links = banner.querySelectorAll('a')
+    // The role switcher's four links all stay inside /demo.
+    const switcher = within(banner).getByRole('navigation', { name: 'Demo role switcher' })
+    const links = switcher.querySelectorAll('a')
     expect(links).toHaveLength(4)
     for (const link of links) {
       expect(link.getAttribute('href')).toMatch(/^\/demo\//)
     }
+
+    // The one link that does not is the way out, and leaving is not dismissing:
+    // it goes to the root, so the banner goes only once the demo it warns about
+    // has gone with it.
+    expect(screen.getByTestId('demo-exit')).toHaveAttribute('href', '/')
 
     // The invariant itself, rather than a proxy for it: press **every** control
     // in this strip and the strip is still there afterwards. Counting buttons
@@ -280,6 +286,20 @@ describe('demo mode safety', () => {
       if (cancel) await user.click(cancel)
     }
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
+  })
+
+  it('leaves the demo entirely rather than hiding the banner', async () => {
+    const user = userEvent.setup()
+    const { router } = renderDemo('/demo/owner')
+    await screen.findByTestId('demo-banner')
+
+    await user.click(screen.getByTestId('demo-exit'))
+
+    // Out of the demo tree, so the tripwire stands down and the banner is gone
+    // because the fabricated data is.
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+    expect(screen.queryByTestId('demo-banner')).not.toBeInTheDocument()
+    expect(isDemoScopeActive()).toBe(false)
   })
 
   it('an unknown role segment is absent, not greyed out', async () => {

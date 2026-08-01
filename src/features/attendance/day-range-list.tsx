@@ -1,9 +1,9 @@
 import { CalendarCheck } from 'lucide-react'
 
 import { EmptyState } from '@/components/layout/empty-state'
-import { Card } from '@/components/ui/card'
 import { formatBusinessDate } from '@/domain'
 
+import { AttendanceCard } from './attendance-card'
 import type { AttendanceTally } from './attendance-record'
 import type { DayRow } from './attendance-range'
 import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence } from './evidence'
@@ -95,44 +95,47 @@ export function RangeDayCard({
 }) {
   const record =
     row.reading.kind === 'waiting' || row.reading.kind === 'recorded' ? row.reading.record : null
+  const waiting = row.reading.kind === 'waiting'
 
   return (
-    <Card
-      data-testid={`range-day-${row.businessDate}`}
-      className={
-        row.reading.kind === 'waiting' ? 'space-y-1.5 p-3 border-warning' : 'space-y-1.5 p-3'
-      }
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
-        <h3 className="text-sm font-bold text-content">
+    <AttendanceCard
+      testId={`range-day-${row.businessDate}`}
+      toggleTestId={`expand-range-${row.businessDate}`}
+      heading="h3"
+      waiting={waiting}
+      defaultOpen={waiting}
+      title={
+        <span>
           {formatBusinessDate(row.businessDate)}
           {outletName && (
             <span className="ml-2 text-xs font-normal text-content-muted">{outletName}</span>
           )}
-        </h3>
-        <span className="text-sm">
-          {record ? (
-            <DayVerdict record={record} late={row.late} />
-          ) : (
-            <DerivedVerdict reading={row.reading} />
-          )}
         </span>
-      </div>
-
-      {/*
+      }
+      verdict={
+        record ? (
+          <DayVerdict record={record} late={row.late} />
+        ) : (
+          <DerivedVerdict reading={row.reading} />
+        )
+      }
+      /*
         A derived day has nothing to render beneath its verdict, and that is the
         honest amount: no row exists, so there is no evidence and no approval to
         show (design D6). It has no outlet either — a day nobody recorded was
-        worked nowhere, and naming a shop beside it would invent a fact.
-      */}
-      {record && (
-        <>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <EventEvidence label="Arrived" event={record.checkIn} radiusMetres={radiusMetres} />
-          </div>
-          <ApprovalNote record={record} radiusMetres={radiusMetres} />
-        </>
-      )}
-    </Card>
+        worked nowhere, and naming a shop beside it would invent a fact. With
+        nothing to open onto, it renders no chevron either.
+      */
+      details={
+        record ? (
+          <>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <EventEvidence label="Arrived" event={record.checkIn} radiusMetres={radiusMetres} />
+            </div>
+            <ApprovalNote record={record} radiusMetres={radiusMetres} />
+          </>
+        ) : null
+      }
+    />
   )
 }

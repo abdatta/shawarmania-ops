@@ -49,8 +49,24 @@ import { holdsRole, sessionOutlets, sessionOutletsFor } from '@/session/session'
  * read everywhere by policy, and they may record a bounded set of entries
  * anywhere (multi-outlet-people, design D8). `managed` is how a surface tells
  * the two apart — see its own doc below.
+ *
+ * **A multi-select chip may carry a badge**, through `badgeFor`. Attendance uses
+ * it for the days waiting at each outlet, which used to be a second row of chips
+ * above this one naming the same outlets in the same shape. One row of outlets
+ * wins, and it is this one, because it is the control that acts: noticing a
+ * backlog and reaching it are then the same gesture on the same chip.
  */
-export function useOutletScope(options: { multiple?: boolean } = {}): {
+export function useOutletScope(
+  options: {
+    multiple?: boolean
+    /**
+     * Something to say about one outlet, rendered inside its chip. Null for
+     * nothing, which is the usual answer. Only the multi-select variant shows
+     * it — a dropdown has nowhere to put one.
+     */
+    badgeFor?: (outletId: string, selected: boolean) => ReactNode
+  } = {},
+): {
   /**
    * The outlet in scope, or null while the outlets are still loading. The first
    * of the selection where a surface has asked for several, so a single-outlet
@@ -185,7 +201,10 @@ export function useOutletScope(options: { multiple?: boolean } = {}): {
     const only = mine[0] ?? null
     return {
       outletId: only,
-      outletIds: only ? [only] : [],
+      // `mine` itself, not a fresh array built from it: a caller memoising on
+      // this would otherwise recompute on every render, and one that fetched
+      // from it would re-read forever.
+      outletIds: mine,
       managed: only !== null && manages.includes(only),
       selector: null,
       choose: () => undefined,
@@ -202,7 +221,12 @@ export function useOutletScope(options: { multiple?: boolean } = {}): {
     selector:
       outlets.length > 1 ? (
         multiple ? (
-          <MultiSelector outlets={outlets} chosen={chosen} onToggle={toggle} />
+          <MultiSelector
+            outlets={outlets}
+            chosen={chosen}
+            onToggle={toggle}
+            badgeFor={options.badgeFor}
+          />
         ) : (
           <label className="flex items-center gap-2 text-sm text-content-muted">
             <span>Outlet</span>
@@ -236,10 +260,12 @@ function MultiSelector({
   outlets,
   chosen,
   onToggle,
+  badgeFor,
 }: {
   outlets: readonly Tables<'outlets'>[]
   chosen: readonly string[]
   onToggle: (outletId: string) => void
+  badgeFor?: ((outletId: string, selected: boolean) => ReactNode) | undefined
 }) {
   const only = chosen.length === 1
 
@@ -264,11 +290,12 @@ function MultiSelector({
             onClick={() => onToggle(outlet.id)}
             className={
               on
-                ? 'rounded-full border border-primary bg-primary px-3 py-1 text-sm font-semibold text-on-primary disabled:opacity-100'
-                : 'rounded-full border border-border bg-surface px-3 py-1 text-sm text-content hover:bg-surface-raised focus-visible:focus-ring'
+                ? 'inline-flex items-center gap-1.5 rounded-full border border-primary bg-primary px-3 py-1 text-sm font-semibold text-on-primary disabled:opacity-100'
+                : 'inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-sm text-content hover:bg-surface-raised focus-visible:focus-ring'
             }
           >
             {outlet.name}
+            {badgeFor?.(outlet.id, on)}
           </button>
         )
       })}

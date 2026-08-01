@@ -76,6 +76,20 @@ test('the demo banner is on every demo route and offers no dismissal', async ({ 
   }
 })
 
+test('the demo can be left, and leaving is not dismissing', async ({ page }) => {
+  await page.goto('demo/owner')
+  await expect(page.getByTestId('demo-banner')).toBeVisible()
+
+  // Somebody handed this link had no way out but the address bar. The exit is a
+  // link to the root, so the indicator goes only once the fabricated data it is
+  // warning about has gone with it.
+  await page.getByTestId('demo-exit').click()
+
+  await expect(page).not.toHaveURL(/\/demo/)
+  await expect(page.getByTestId('demo-banner')).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible()
+})
+
 test('a demo deep link reconstructs the same role and surface on reload', async ({ page }) => {
   await page.goto('demo/admin')
   await expect(page.getByText('Outlet details')).toBeVisible()

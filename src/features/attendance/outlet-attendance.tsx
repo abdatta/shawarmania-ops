@@ -1,18 +1,25 @@
 import { CalendarCheck, ChevronLeft, ChevronRight, PencilLine, ShieldCheck } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { Badge, BadgeDot } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { LoadingBlock, LoadingList } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { useAdapters, type Tables } from '@/data-access'
-import type { AccountSummary, AttendanceRecord } from '@/data-access/adapters'
+import type { AccountSummary, AttendanceRecord, WaitingCount } from '@/data-access/adapters'
 import { AttendanceActionError, isStaffAt } from '@/data-access/adapters'
 import { attentionChanged } from '@/features/attention/attention'
 import {
@@ -24,9 +31,10 @@ import {
 } from '@/domain'
 import { readPosition, type PositionReading } from '@/lib/geolocation'
 import { useSession } from '@/session/context'
-import { holdsRole } from '@/session/session'
+import { holdsRole, sessionOutlets } from '@/session/session'
 import { useOutletScope } from '@/features/outlet-scope'
 
+import { AttendanceCard } from './attendance-card'
 import { isLate, readDay, tallyDays, type DayReading } from './attendance-record'
 import { assembleRange, monthRange, type DateRange, type DayRow } from './attendance-range'
 import { RangeDayList, TallySummary } from './day-range-list'
@@ -57,49 +65,71 @@ import { useWaitingCounts, waitingAt, waitingLabel } from './waiting-counts'
  * by-outlet axis alone, and it selects as many as the reader may see. By staff
  * takes its scope from the database instead (design D4).
  *
+ * **So the load is not scoped by the selection, and the axes narrow it
+ * differently.** One read of `listOutlets` and one of `listAccounts`, neither
+ * naming an outlet, both already scoped by policy: what comes back is exactly
+ * every outlet this reader may see and everybody they may see. By outlet
+ * intersects that with the selection. **By staff does not** — filtering its
+ * person picker by the outlet chips is the very thing splitting the axes was
+ * meant to stop, and it hid a whole shop's people from a view that is not about
+ * shops.
+ *
  * Departed people (`left_on` set) are not offered for new days; their recorded
  * rows remain readable through the by-staff axis over a range that covers them.
  */
 export function OutletAttendance() {
   const { outlets: outletsAdapter, accounts } = useAdapters()
+  const session = useSession()
 
   const [axis, setAxis] = useState<'outlet' | 'staff'>('outlet')
   const [error, setError] = useState<string | null>(null)
 
+  // Who may see what, applied the same way `useOutletScope` applies it: the
+  // owner reads every outlet, everybody else reads the ones they are assigned
+  // to. The policies are the boundary; this is the client agreeing with them
+  // rather than discovering them by being refused.
+  const isOwner = holdsRole(session, 'super_admin')
+  const mine = useMemo(() => sessionOutlets(session), [session])
+
+  // Shared with the navigation badge and the day controls, so all three agree
+  // and one read serves them. A failed read keeps the last known counts.
+  const { counts } = useWaitingCounts()
+
   // Which outlets this surface is about. One for nearly everybody; several for
   // somebody who may see several, which confers nothing — the database decides
   // every read and every write from the assignment (multi-outlet-people, D6).
-  const { outletIds, selector: outletSelector, choose } = useOutletScope({ multiple: true })
-  const scopeKey = [...outletIds].sort().join(',')
+  //
+  // Each chip carries its own outlet's unsettled days. That used to be a second
+  // row of chips above this one, naming the same outlets in the same shape; the
+  // count belongs on the control that acts, so noticing a backlog and reaching
+  // it are one gesture on one chip.
+  const { outletIds, selector: outletSelector } = useOutletScope({
+    multiple: true,
+    badgeFor: (outletId, selected) => (
+      <WaitingChipBadge counts={counts} outletId={outletId} selected={selected} />
+    ),
+  })
 
-  // The outlets and their people. Keyed by the scope that produced them, so a
-  // result for the previous selection reads as loading rather than rendering
-  // under the new one's name (design D8).
+  // Everything the reader may see. Not keyed by the selection, because it does
+  // not depend on it.
   const [loaded, setLoaded] = useState<{
-    key: string
     outlets: Tables<'outlets'>[]
     people: AccountSummary[]
   } | null>(null)
 
   useEffect(() => {
-    if (scopeKey === '') return
     let active = true
-    const ids = scopeKey.split(',')
-    void Promise.all([
-      Promise.all(ids.map((id) => outletsAdapter.getOutlet(id))),
-      accounts.listAccounts(),
-    ])
-      .then(([found, list]) => {
+    void Promise.all([outletsAdapter.listOutlets(), accounts.listAccounts()])
+      .then(([all, list]) => {
         if (!active) return
-        const outlets = found.filter((outlet): outlet is Tables<'outlets'> => outlet !== null)
+        const outlets = isOwner ? all : all.filter((outlet) => mine.includes(outlet.id))
         setLoaded({
-          key: scopeKey,
           outlets,
+          // Everybody on some readable outlet's staff list — the people whose
+          // arrival an outlet tracks (design D3) — listed once however many of
+          // them they work at.
           people: list
-            // Everybody on a SELECTED outlet's staff list — the people whose
-            // arrival those outlets track (design D3) — listed once however
-            // many of them they work at.
-            .filter((account) => ids.some((id) => isStaffAt(account, id)))
+            .filter((account) => outlets.some((outlet) => isStaffAt(account, outlet.id)))
             .sort((a, b) => a.fullName.localeCompare(b.fullName)),
         })
         setError(null)
@@ -110,9 +140,26 @@ export function OutletAttendance() {
     return () => {
       active = false
     }
-  }, [scopeKey, outletsAdapter, accounts])
+  }, [outletsAdapter, accounts, isOwner, mine])
 
-  const scope = loaded?.key === scopeKey ? loaded : null
+  // The by-outlet axis's narrower view of the same two lists.
+  //
+  // Memoised on the scope **string**, never on `outletIds` itself: a
+  // single-outlet reader gets a fresh array from `useOutletScope` on every
+  // render, so keying on its identity would hand the day view a new outlet list
+  // each time, re-read the day, and re-rank a roll-call that is supposed to hold
+  // still while somebody is approving down it.
+  const scopeKey = [...outletIds].sort().join(',')
+  const selectedOutlets = useMemo(
+    () => loaded?.outlets.filter((outlet) => scopeKey.split(',').includes(outlet.id)) ?? [],
+    [loaded, scopeKey],
+  )
+  const selectedPeople = useMemo(
+    () =>
+      loaded?.people.filter((person) => scopeKey.split(',').some((id) => isStaffAt(person, id))) ??
+      [],
+    [loaded, scopeKey],
+  )
 
   if (outletIds.length === 0) {
     return (
@@ -123,13 +170,14 @@ export function OutletAttendance() {
     )
   }
 
-  const unsurveyed = scope?.outlets.filter((outlet) => outlet.latitude === null) ?? []
+  const unsurveyed = selectedOutlets.filter((outlet) => outlet.latitude === null)
+  // A selection that names outlets the list has not produced yet is a moment
+  // between reads, not an empty day.
+  const ready = loaded !== null && (axis === 'staff' || selectedOutlets.length > 0)
 
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title="Attendance" subtitle="Who was here, and where they were." />
-
-      <StrandedDays selected={outletIds} onChoose={choose} />
 
       {/*
         The axis first, then what it needs. By outlet needs to know which shops;
@@ -179,99 +227,66 @@ export function OutletAttendance() {
         </p>
       )}
 
-      {scope === null ? (
+      {!ready || loaded === null ? (
         <LoadingList label="attendance" data-testid="attendance-loading" />
       ) : axis === 'outlet' ? (
         <OutletAxis
           key={scopeKey}
-          outlets={scope.outlets}
-          people={scope.people}
+          outlets={selectedOutlets}
+          people={selectedPeople}
           onError={setError}
         />
       ) : (
-        <StaffAxis outlets={scope.outlets} people={scope.people} onError={setError} />
+        <StaffAxis outlets={loaded.outlets} people={loaded.people} onError={setError} />
       )}
     </div>
   )
 }
 
 /**
- * Where days are stranded, across outlets. Shown to the owner only, because they
- * are the one person who cannot notice a forgotten approval by opening their own
- * outlet — and a day nobody settles is invisible until somebody queries their
- * pay.
+ * One outlet's unsettled days, on its own chip in the selector.
  *
- * One chip per outlet holding work, each carrying its own count. It used to be a
- * paragraph headed "Days waiting for a manager", which described a database
- * state rather than asking for anything, and printed each outlet's oldest
- * waiting date. That date is not lost: it changed job, and now marks the
- * earlier-days control below (design D3).
+ * This used to be a separate row above the selector, shown to the owner alone,
+ * naming the same outlets in the same shape. Two controls for one question is
+ * one too many, and the count belongs on the one that acts: noticing a backlog
+ * and reaching it are then a single gesture on a single chip, and the row of
+ * outlets stays in the same place whatever the database holds.
+ *
+ * It is no longer owner-only, because `countWaitingByOutlet` carries no owner
+ * branch — it is scoped by the attendance policies, so a Franchise Admin running
+ * two shops gets counts for exactly their two, which is the same problem the
+ * separate row was built for. Somebody with one outlet has no selector and so no
+ * chip, and loses nothing: with one outlet the day's own badge and the
+ * earlier/later marks already say everything a per-outlet count could.
  *
  * The count spans every business day, so it is deliberately not the same number
  * as the day's own badge: an outlet can hold nothing today and a week of
  * unsettled days behind it.
  *
- * Choosing another outlet brings the view to it, so noticing and acting are one
- * gesture. An outlet already in the selection is stated rather than offered,
- * because there is nowhere to go — and it is stated only when there is somewhere
- * else to compare it against. When the selection already covers every outlet
- * holding work the whole row goes: the selector already names them and the day
- * controls already say there is more behind, so a chip about where you already
- * are is a sentence repeating two others.
+ * A selected chip is filled with `--primary`, so the badge's usual `--primary`
+ * would vanish into it. On those it inverts to the same asserted pair the other
+ * way round, which is the contrast the validator already checks.
  */
-function StrandedDays({
+function WaitingChipBadge({
+  counts,
+  outletId,
   selected,
-  onChoose,
 }: {
-  selected: readonly string[]
-  onChoose: (outletId: string) => void
+  counts: readonly WaitingCount[] | null
+  outletId: string
+  selected: boolean
 }) {
-  const session = useSession()
-  const isOwner = holdsRole(session, 'super_admin')
-  // Shared with the navigation badge and the day controls, so all three agree
-  // and one read serves them. A failed read keeps the last known counts.
-  const { counts } = useWaitingCounts()
-
-  // Nothing to say unless some outlet OUTSIDE the selection is holding work.
-  // This is the whole job of the row: reaching a shop nobody opened.
-  const elsewhere = counts?.some((count) => !selected.includes(count.outletId)) ?? false
-  if (!isOwner || !counts || !elsewhere) return null
+  const waiting = counts?.find((count) => count.outletId === outletId)?.waiting ?? 0
+  if (waiting <= 0) return null
 
   return (
-    <div data-testid="stranded-days" className="mb-3 flex flex-wrap items-center gap-2">
-      {counts.map((count) => {
-        const name = count.outletName ?? 'An outlet'
-        // The chip already says which outlet, so the badge does not repeat it.
-        const badge = <Badge count={count.waiting} label={waitingLabel(count.waiting)} />
-
-        if (selected.includes(count.outletId)) {
-          return (
-            <span
-              key={count.outletId}
-              data-testid={`stranded-${count.outletId}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-raised px-3 py-1 text-sm font-semibold text-content"
-            >
-              {name}
-              <span className="font-normal text-content-muted">(selected)</span>
-              {badge}
-            </span>
-          )
-        }
-
-        return (
-          <button
-            key={count.outletId}
-            type="button"
-            data-testid={`stranded-${count.outletId}`}
-            onClick={() => onChoose(count.outletId)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-sm font-semibold text-content hover:bg-surface-raised focus-visible:focus-ring"
-          >
-            {name}
-            {badge}
-          </button>
-        )
-      })}
-    </div>
+    <Badge
+      data-testid={`outlet-waiting-${outletId}`}
+      count={waiting}
+      // The chip already names the outlet, so the label does not repeat it.
+      label={waitingLabel(waiting)}
+      className={selected ? 'bg-on-primary text-primary' : ''}
+    />
   )
 }
 
@@ -822,72 +837,95 @@ function PersonDay({
 }) {
   const waiting = reading.kind === 'waiting'
 
+  const actions =
+    waiting || offerManual ? (
+      <div className="flex flex-wrap gap-2 pt-0.5">
+        {waiting && (
+          <Button
+            size="phone"
+            disabled={busy}
+            onClick={onApprove}
+            data-testid={`approve-${person.id}`}
+          >
+            <ShieldCheck aria-hidden size={14} />
+            Approve
+          </Button>
+        )}
+        {offerManual && (
+          <Button
+            variant="secondary"
+            size="phone"
+            onClick={onManual}
+            data-testid={`manual-${person.id}`}
+          >
+            <PencilLine aria-hidden size={14} />
+            Record arrival
+          </Button>
+        )}
+      </div>
+    ) : null
+
+  /*
+    The outlet sits with the person's job title rather than with the evidence,
+    because the header is the one line a collapsed row shows and "which shop"
+    is a question a manager scanning a two-outlet roll-call is asking. It stays
+    a fact about the day rather than about the person: somebody staffed at two
+    shops is not "a Kalyani person", they worked at Kalyani that day.
+  */
+  const notes: ReactNode[] = []
+  if (person.note) notes.push(person.note)
+  if (outletName)
+    notes.push(
+      <span key="outlet" data-testid="outlet-chip">
+        {outletName}
+      </span>,
+    )
+  if (person.deactivated) notes.push('deactivated')
+
   return (
-    <Card
-      data-testid={`day-${person.id}`}
-      className={waiting ? 'space-y-1.5 p-3 border-warning' : 'space-y-1.5 p-3'}
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
-        <h2 className="text-sm font-bold text-content">
+    <AttendanceCard
+      testId={`day-${person.id}`}
+      toggleTestId={`expand-${person.id}`}
+      waiting={waiting}
+      defaultOpen={waiting}
+      title={
+        <span>
           {person.fullName}
-          {(person.note || person.deactivated) && (
+          {notes.length > 0 && (
             <span className="ml-2 text-xs font-normal text-content-muted">
-              {[person.note, outletName, person.deactivated && 'deactivated']
-                .filter(Boolean)
-                .join(' · ')}
+              {notes.map((note, index) => (
+                <Fragment key={index}>
+                  {index > 0 && ' · '}
+                  {note}
+                </Fragment>
+              ))}
             </span>
           )}
-        </h2>
-        <span className="text-sm">
-          {record ? (
-            <DayVerdict record={record} late={late} />
-          ) : (
-            <DerivedVerdict reading={reading} />
-          )}
         </span>
-      </div>
-
-      {/*
-        The outlet chip sits with the evidence rather than the name, because it
-        is a fact about the day rather than about the person: somebody staffed at
-        two shops is not "a Kalyani person", they worked at Kalyani that day.
-      */}
-      {record && (
-        <>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <EventEvidence label="Arrived" event={record.checkIn} radiusMetres={radiusMetres} />
-          </div>
-          <ApprovalNote record={record} radiusMetres={radiusMetres} />
-        </>
-      )}
-
-      {(waiting || offerManual) && (
-        <div className="flex flex-wrap gap-2 pt-0.5">
-          {waiting && (
-            <Button
-              size="phone"
-              disabled={busy}
-              onClick={onApprove}
-              data-testid={`approve-${person.id}`}
-            >
-              <ShieldCheck aria-hidden size={14} />
-              Approve
-            </Button>
-          )}
-          {offerManual && (
-            <Button
-              variant="secondary"
-              size="phone"
-              onClick={onManual}
-              data-testid={`manual-${person.id}`}
-            >
-              <PencilLine aria-hidden size={14} />
-              Record arrival
-            </Button>
-          )}
-        </div>
-      )}
-    </Card>
+      }
+      verdict={
+        record ? <DayVerdict record={record} late={late} /> : <DerivedVerdict reading={reading} />
+      }
+      details={
+        record || actions ? (
+          <>
+            {record && (
+              <>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <EventEvidence
+                    label="Arrived"
+                    event={record.checkIn}
+                    radiusMetres={radiusMetres}
+                  />
+                </div>
+                <ApprovalNote record={record} radiusMetres={radiusMetres} />
+              </>
+            )}
+            {actions}
+          </>
+        ) : null
+      }
+    />
   )
 }
 
@@ -1092,13 +1130,21 @@ function ManualEntrySheet({
  *
  * This revisits #28's D7, which pinned an explicit outlet on the read. That was
  * right while the intended meaning was one outlet. It is not the meaning now.
+ *
+ * **And no outlet filter either.** The surface used to hand this axis the people
+ * and outlets narrowed to the by-outlet selection, so deselecting a shop above
+ * emptied a picker that has nothing to do with shops — the exact confusion
+ * splitting the axes was meant to end. `outlets` and `people` here are
+ * everything the reader may see, whatever the chips say.
  */
 function StaffAxis({
   outlets,
   people,
   onError,
 }: {
+  /** Every outlet the reader may see — never the selection. */
   outlets: readonly Tables<'outlets'>[]
+  /** Everybody staffed at one of them — never the selection. */
   people: AccountSummary[]
   onError: (message: string | null) => void
 }) {

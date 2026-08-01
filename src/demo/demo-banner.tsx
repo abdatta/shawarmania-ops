@@ -1,6 +1,6 @@
-import { RotateCcw, TriangleAlert } from 'lucide-react'
+import { LogOut, RotateCcw, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
-import { NavLink } from 'react-router'
+import { Link, NavLink } from 'react-router'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { cn } from '@/lib/cn'
@@ -24,6 +24,14 @@ const ROLES: Role[] = ['super_admin', 'franchise_admin', 'biller', 'employee']
  * walkthrough. Resetting does not dismiss anything — the banner is still here
  * afterwards, which `demo-safety.test.tsx` asserts by pressing every control in
  * this strip and checking the strip is still there.
+ *
+ * And it carries the **way out**. Somebody handed this link had no control that
+ * left the demo at all; the only exit was editing the address bar. Leaving is
+ * not dismissing, and the indicator's invariant is unweakened by it: the exit is
+ * a link to the root, so the banner goes only once the demo it is warning about
+ * has gone with it. Every control in this strip therefore either stays inside
+ * `/demo` or leaves the demo entirely, and none of them hides fabricated data
+ * while it is still on screen.
  */
 export function DemoBanner() {
   const session = useSession()
@@ -69,6 +77,15 @@ export function DemoBanner() {
           Start again
         </button>
       )}
+
+      <Link
+        to="/"
+        data-testid="demo-exit"
+        className="flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold hover:bg-on-warning/10 focus-visible:focus-ring"
+      >
+        <LogOut aria-hidden size={14} />
+        Exit demo
+      </Link>
 
       <ConfirmDialog
         open={confirming}
