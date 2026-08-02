@@ -172,70 +172,28 @@ The UI SHALL display a build version identifier (short commit SHA and build time
 
 ### Requirement: Push to main migrates then deploys, and only after verification passes
 
-A push to the `main` branch SHALL produce a static production deployment of the
-app at a stable URL, with immutable hashed assets so a rollback is redeploying a
-previous build. That deployment SHALL be gated on the whole verification suite
-continuous integration runs — including its database and authenticated
-end-to-end jobs — which SHALL complete successfully before anything is
-published. A failure anywhere in that suite SHALL stop the deployment with the
-previously published deployment still live. Producing a build artifact SHALL
-NOT be treated as permission to publish it: an artifact built for a commit that
-fails verification SHALL never reach the stable URL.
+A push to `main` SHALL run the shared verification suite, apply pending forward
+production migrations, and publish the static frontend only after both succeed.
+The production migration job SHALL use an environment-scoped, project-specific
+database credential and SHALL run migration push only. It SHALL NOT reset or
+seed production, push local configuration, expose a service-role key, or
+reverse migration history during a manual frontend rollback.
 
-After verification succeeds on a push, continuous integration SHALL apply every
-pending forward migration to the production database before publishing the
-static bundle. Publication SHALL depend on that migration job: a missing
-credential, rejected migration, failed backfill assertion or connection failure
-SHALL leave the previously published frontend live. The migration job SHALL use
-a production-database environment secret and SHALL run migration push only; it
-SHALL NOT reset the hosted database, apply seed data, push local configuration
-or expose a service-role key.
+#### Scenario: Migration precedes publication
 
-The migration SHALL run before the new frontend, so every migration committed
-with application code SHALL remain compatible with the previously published
-frontend for that short ordering window. It SHALL also be possible to trigger
-the same gated deployment manually for a chosen earlier commit. That manual
-frontend rollback SHALL NOT reverse or reapply production migration history,
-because released migrations are forward-only.
+- **WHEN** a verified commit on `main` contains a pending migration
+- **THEN** continuous integration applies it before Pages publishes that commit
 
-#### Scenario: Deployment on push
+#### Scenario: Migration failure blocks publication
 
-- **WHEN** a commit lands on `main` and the whole verification suite passes for
-  it
-- **THEN** the hosting platform builds and publishes it, and the stable URL
-  serves the new build identifier
-- **AND** every migration in that commit is recorded in production before the
-  new build is published
+- **WHEN** production migration cannot complete
+- **THEN** the prior frontend remains published and a transactional migration
+  leaves production unchanged
 
-#### Scenario: A commit that compiles but fails verification does not reach users
+#### Scenario: Manual rollback preserves forward schema
 
-- **WHEN** a commit lands on `main` whose bundle compiles but which fails any
-  job of the verification suite
-- **THEN** no deployment is produced, even though the bundle built successfully
-- **AND** the stable URL continues to serve the previously published build
-  identifier
-
-#### Scenario: A production migration fails
-
-- **WHEN** verification passes but a pending production migration cannot be
-  applied completely
-- **THEN** the static artifact is not published
-- **AND** the previous frontend remains live against the unchanged or
-  transactionally rolled-back production schema
-
-#### Scenario: A commit has no pending migration
-
-- **WHEN** verification passes and production already contains every migration
-  in the commit
-- **THEN** the migration job succeeds without changing data and publication
-  continues
-
-#### Scenario: Rollback redeploys an earlier commit
-
-- **WHEN** a deployment is triggered manually for an earlier commit
-- **THEN** that commit is verified again and redeployed
-- **AND** the stable URL serves that earlier build identifier
-- **AND** the current forward production migration history is left untouched
+- **WHEN** an earlier frontend commit is republished manually
+- **THEN** production migration history remains at its current forward version
 
 ### Requirement: One verification definition serves both the pull request and the deployment gate
 
