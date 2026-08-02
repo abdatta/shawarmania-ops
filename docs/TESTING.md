@@ -104,6 +104,7 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
 
 - `npm test` green, `npm run lint` clean, `npm run typecheck` clean. CI runs all of these, plus `npm run format:check`, `npm run contrast`, the production build, and the Playwright suite, on every push and pull request.
 - **Tenancy-touching changes**: the isolation suite passes, including new cases for any new table.
+- **Migration changes**: after `db:reset`, run `npm run db:types` and include any generated schema change. Once it is staged, `git diff --exit-code src/data-access/database.types.ts` must be clean; ordinary TypeScript checking cannot detect a stale but internally valid generated snapshot.
 - **Billing or offline changes**: the offline E2E path passes.
 - **UI changes**: run the app and look at it — phone viewport and tablet viewport, light and dark themes.
 - **PWA install changes**: check an eligible Chromium browser, iOS Safari's manual instructions, installed display mode, and an ineligible browser. The app-owned action must survive public-to-real navigation, disappear after use, and remain absent in demo mode.

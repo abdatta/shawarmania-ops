@@ -143,10 +143,13 @@ The third job needs Docker, which is why it is the easy one to skip and the one 
 ```
 npm run db:start && npm run db:reset
 npm run test:db && npm run test:rls && npm run test:e2e:auth
+npm run db:types
+git diff --exit-code src/data-access/database.types.ts
 ```
 
 - **`test:db` / `test:rls` — tenancy.** A session scoped to one outlet cannot read another's rows, for *every* outlet-scoped table; a new table without a matching test is an incomplete change. Run these whenever a migration, a policy or a table changes.
 - **`test:e2e:auth` — the four roles against a real backend.** Signing in, provisioning end to end, deactivation ending an open session. **Run it for far more than changes to sign-in.** It asserts on what each role *lands on* and on the chrome around it, so anything under `src/auth/`, any shell, any account menu, and **any surface that is a role's index** is inside its blast radius. `ui-owner-console-and-demo` rewrote the owner's index and broke this suite while every other gate stayed green; "it does not touch auth" was the wrong question.
+- **Generated types — schema parity.** After every migration change, regenerate from the reset schema and inspect the result. The final diff check must be clean once the expected generated file is staged; `typecheck` cannot detect a valid but stale schema snapshot.
 - **Billing or offline changes**: exercise the offline path — go offline, ring up bills, come back online, confirm exactly-once settlement with no duplicates.
 - **UI changes**: run the app and look at it, on a phone viewport and a tablet viewport, in both light and dark themes.
 - **Theme changes**: run the contrast validator, in both themes. AA is the floor, not the goal.

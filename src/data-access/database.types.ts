@@ -367,6 +367,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "attendance_current_attempt_same_day"
+            columns: ["current_attempt_id", "id"]
+            isOneToOne: false
+            referencedRelation: "attendance_attempts"
+            referencedColumns: ["id", "attendance_id"]
+          },
+          {
             foreignKeyName: "attendance_latest_decision_fkey"
             columns: ["latest_decision_id"]
             isOneToOne: false
@@ -374,11 +381,25 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "attendance_latest_decision_same_day"
+            columns: ["latest_decision_id", "id"]
+            isOneToOne: false
+            referencedRelation: "attendance_decisions"
+            referencedColumns: ["id", "attendance_id"]
+          },
+          {
             foreignKeyName: "attendance_outcome_attempt_fkey"
             columns: ["outcome_attempt_id"]
             isOneToOne: false
             referencedRelation: "attendance_attempts"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_outcome_attempt_same_day"
+            columns: ["outcome_attempt_id", "id"]
+            isOneToOne: false
+            referencedRelation: "attendance_attempts"
+            referencedColumns: ["id", "attendance_id"]
           },
           {
             foreignKeyName: "attendance_outlet_id_fkey"
@@ -458,6 +479,13 @@ export type Database = {
           superseded_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "attendance_attempt_canonical_day"
+            columns: ["attendance_id", "person_id", "business_date"]
+            isOneToOne: false
+            referencedRelation: "attendance"
+            referencedColumns: ["id", "person_id", "business_date"]
+          },
           {
             foreignKeyName: "attendance_attempts_attendance_id_fkey"
             columns: ["attendance_id"]
@@ -557,17 +585,34 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "attendance_decision_attempt_same_day"
+            columns: [
+              "attempt_id",
+              "attendance_id",
+              "person_id",
+              "business_date",
+            ]
+            isOneToOne: false
+            referencedRelation: "attendance_attempts"
+            referencedColumns: [
+              "id",
+              "attendance_id",
+              "person_id",
+              "business_date",
+            ]
+          },
+          {
+            foreignKeyName: "attendance_decision_canonical_day"
+            columns: ["attendance_id", "person_id", "business_date"]
+            isOneToOne: false
+            referencedRelation: "attendance"
+            referencedColumns: ["id", "person_id", "business_date"]
+          },
+          {
             foreignKeyName: "attendance_decisions_actor_id_fkey"
             columns: ["actor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attendance_decisions_attempt_id_fkey"
-            columns: ["attempt_id"]
-            isOneToOne: false
-            referencedRelation: "attendance_attempts"
             referencedColumns: ["id"]
           },
           {
