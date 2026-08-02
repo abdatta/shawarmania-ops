@@ -66,6 +66,20 @@ const PERSONAS = {
     email: 'two.outlets@login.shawarmania.invalid',
     sub: '10000000-0000-4000-a000-00000000000e',
   },
+  billerKalyani: {
+    email: 'biller.kalyani@login.shawarmania.invalid',
+    sub: '10000000-0000-4000-a000-00000000000a',
+  },
+  deviceKanchrapara: {
+    email: 'tablet.kanchrapara@login.shawarmania.invalid',
+    sub: '10000000-0000-4000-a000-000000000005',
+  },
+} as const
+
+/** The seeded customer with a bill at each outlet — the shared identity. */
+const SHARED_CUSTOMER = {
+  id: '80000000-0000-4000-a000-000000000001',
+  phone: '+919000000001',
 } as const
 
 type Client = SupabaseClient<Database>
@@ -83,6 +97,26 @@ async function signIn(email: string): Promise<{ client: Client; accessToken: str
     throw new Error(`sign-in failed for ${email}: ${error?.message ?? 'no session'}`)
   }
   return { client, accessToken: data.session.access_token }
+}
+
+/**
+ * One sign-in per persona for the whole file.
+ *
+ * GoTrue rate-limits password grants, and this suite is dominated by probes
+ * that need a session rather than by probes that need a FRESH session. Signing
+ * in per test spends that budget on nothing and makes the whole file fail with
+ * 429s once it grows — which it did, the moment the customer probes were added.
+ * Tests that are genuinely about signing in call `signIn` directly.
+ */
+const sessions = new Map<string, Promise<{ client: Client; accessToken: string }>>()
+
+function session(email: string): Promise<{ client: Client; accessToken: string }> {
+  const existing = sessions.get(email)
+  if (existing) return existing
+
+  const opened = signIn(email)
+  sessions.set(email, opened)
+  return opened
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
@@ -656,6 +690,159 @@ describe('account invitations', () => {
       .delete()
       .eq('profile_id', PERSONAS.employeeKalyani.sub)
     expect(deleted?.code).toBe('42501')
+  })
+})
+
+/**
+ * The global customer directory, probed over HTTP.
+ *
+ * `customers` is the one table in this schema that belongs to no outlet, so it
+ * is the one table where a mistake exposes the whole business at once. pgTAP
+ * proves the boundary against simulated claims; this proves it against real
+ * tokens hitting the real PostgREST — including the shapes a curious person
+ * would actually try, which is `select=*` and a `like` filter.
+ */
+describe('the global customer directory', () => {
+  it.each([
+    ['a Franchise Admin', PERSONAS.faKalyani.email],
+    ['a Biller', PERSONAS.billerKalyani.email],
+    ['a counter device', PERSONAS.deviceKalyani.email],
+    ['an Employee', PERSONAS.employeeKalyani.email],
+    ['the Super Admin', PERSONAS.superAdmin.email],
+  ])('%s cannot select the customer table at all', async (_who, email) => {
+    const client = (await session(email)).client
+    const { error } = await client.from('customers').select('*')
+    expect(error?.code).toBe('42501')
+  })
+
+  it('a prefix filter is refused by the grant, before it is a search', async () => {
+    const biller = (await session(PERSONAS.billerKalyani.email)).client
+    const { error } = await biller.from('customers').select('id').like('phone', '+9190%')
+    expect(error?.code).toBe('42501')
+  })
+
+  // "How many customers does this business have" is itself disclosure, and a
+  // HEAD request is the cheapest way to ask it. Asserted on the status and the
+  // count rather than on an error code: PostgREST answers a refused HEAD with
+  // 403 and an empty body, so there is no code to match on — and the claim
+  // being made here is precisely that no number came back.
+  it('and so is asking only for a count', async () => {
+    const fa = (await session(PERSONAS.faKalyani.email)).client
+    const result = await fa.from('customers').select('id', { count: 'exact', head: true })
+    expect(result.status).toBe(403)
+    expect(result.count).toBeNull()
+    expect(result.data).toBeNull()
+  })
+
+  it('a biller retrieves a returning customer by the complete phone, and nothing else', async () => {
+    const biller = (await session(PERSONAS.billerKalyani.email)).client
+    const { data, error } = await biller.rpc('customer_lookup_by_phone', {
+      p_phone: '9000000001',
+    })
+    expect(error).toBeNull()
+    expect(data).toEqual([
+      { id: SHARED_CUSTOMER.id, phone: SHARED_CUSTOMER.phone, name: 'Test Customer (Synthetic)' },
+    ])
+    // The whole disclosure, restated as a shape: no outlet, no bill, no spend.
+    expect(Object.keys(data?.[0] ?? {}).sort()).toEqual(['id', 'name', 'phone'])
+  })
+
+  it('every way of writing that number reaches the same one identity', async () => {
+    const biller = (await session(PERSONAS.billerKalyani.email)).client
+    for (const typed of ['90000 00001', '919000000001', '+91-90000-00001']) {
+      const { data, error } = await biller.rpc('customer_lookup_by_phone', { p_phone: typed })
+      expect(error).toBeNull()
+      expect(data?.[0]?.id).toBe(SHARED_CUSTOMER.id)
+    }
+  })
+
+  it.each([
+    ['a prefix', '900000'],
+    ['a wildcard', '9000000%'],
+    ['a SQL-ish pattern', "9000000001' or '1'='1"],
+    ['nothing at all', ''],
+  ])('%s is refused rather than matched loosely', async (_shape, input) => {
+    const biller = (await session(PERSONAS.billerKalyani.email)).client
+    const { data, error } = await biller.rpc('customer_lookup_by_phone', { p_phone: input })
+    expect(error?.code).toBe('22023')
+    expect(data).toBeNull()
+  })
+
+  it.each([
+    ['a Franchise Admin', PERSONAS.faKalyani.email],
+    ['an Employee', PERSONAS.employeeKalyani.email],
+    ['a revoked device', PERSONAS.revokedDevice.email],
+  ])('%s has no billing lookup at all', async (_who, email) => {
+    const client = (await session(email)).client
+    const { error } = await client.rpc('customer_lookup_by_phone', { p_phone: '9000000001' })
+    expect(error?.code).toBe('42501')
+  })
+
+  it('nor can they create a customer through the billing path', async () => {
+    const fa = (await session(PERSONAS.faKalyani.email)).client
+    const { error } = await fa.rpc('customer_create_or_get', {
+      p_phone: '9000000007',
+      p_name: 'Invented',
+    })
+    expect(error?.code).toBe('42501')
+  })
+
+  it('the owner reads the directory through their own separate path', async () => {
+    const sa = (await session(PERSONAS.superAdmin.email)).client
+    const { data, error } = await sa.rpc('customer_directory')
+    expect(error).toBeNull()
+    expect(data?.some((row) => row.id === SHARED_CUSTOMER.id)).toBe(true)
+  })
+
+  it.each([
+    ['a Franchise Admin', PERSONAS.faKalyani.email],
+    ['a Biller', PERSONAS.billerKalyani.email],
+    ['a counter device', PERSONAS.deviceKalyani.email],
+  ])('%s calling the owner path is refused', async (_who, email) => {
+    const client = (await session(email)).client
+    const { error } = await client.rpc('customer_directory')
+    expect(error?.code).toBe('42501')
+  })
+
+  it('the internal rate counter is callable by nobody', async () => {
+    const biller = (await session(PERSONAS.billerKalyani.email)).client
+    const { error } = await biller.rpc('customer_lookup_exceeded', {
+      p_caller: PERSONAS.billerKalyani.sub,
+    })
+    expect(error?.code).toBe('42501')
+  })
+
+  // The question the whole change turns on: a global identity must be a key to
+  // one door, not a master key.
+  it('a customer id legitimately held opens no other outlet’s bills', async () => {
+    const fa = (await session(PERSONAS.faKalyani.email)).client
+
+    const { data: own, error: ownError } = await fa
+      .from('bills')
+      .select('id, outlet_id')
+      .eq('customer_id', SHARED_CUSTOMER.id)
+    expect(ownError).toBeNull()
+    expect(own).toHaveLength(1)
+    expect(own?.[0]?.outlet_id).toBe(OUTLETS.kalyani)
+
+    const { data: theirs, error: theirsError } = await fa
+      .from('bills')
+      .select('id')
+      .eq('customer_id', SHARED_CUSTOMER.id)
+      .eq('outlet_id', OUTLETS.kanchrapara)
+    expect(theirsError).toBeNull()
+    expect(theirs).toEqual([])
+  })
+
+  it('and the same holds from the other outlet’s device, in the other direction', async () => {
+    const device = (await session(PERSONAS.deviceKanchrapara.email)).client
+    const { data, error } = await device
+      .from('bills')
+      .select('id')
+      .eq('customer_id', SHARED_CUSTOMER.id)
+      .eq('outlet_id', OUTLETS.kalyani)
+    expect(error).toBeNull()
+    expect(data).toEqual([])
   })
 })
 

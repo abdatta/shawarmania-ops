@@ -101,6 +101,12 @@ assignment cannot be ended by anyone, including its holder.
 | Create a bill | — | — | ✓ own outlet | — |
 | View bills | R all | R own outlet | R own shift | — |
 | Void a bill | ✓ | ✓ own outlet | — | — |
+| **Customers** (business-wide, see below) |
+| Retrieve a customer by their **complete** phone | — | — | ✓ | — |
+| Save a customer from a sale | — | — | ✓ | — |
+| Browse, search by prefix, or count the directory | — | — | — | — |
+| Read the directory | ✓ | — | — | — |
+| Edit or delete a customer | — | — | — | — |
 | **Inventory** |
 | View stock and low-stock warnings | R all | ✓ own outlet | — | — |
 | Record movements | — | ✓ own outlet | — | — |
@@ -122,6 +128,21 @@ assignment cannot be ended by anyone, including its holder.
 | **Alerts** |
 | Raise an alert | — | ✓ own outlet | — | — |
 | View and respond | ✓ all | R own alerts | — | — |
+
+**Customers are the one thing here that is not an outlet's.** One normalized
+phone identifies one customer for the whole business, so a returning customer is
+recognised at either counter (`global-customer-identity`, #32). That makes the
+row a business-wide list of personal data, and the access above is drawn to
+match: a counter may resolve a **complete** phone and nothing else, because a
+lookup is a question about somebody the customer just identified themselves as,
+while a browse would be the directory itself. Nobody holds `select` on the
+table — not a manager, not a device, not the owner — so the refusals above are
+the absence of a grant rather than a policy that could be widened by accident,
+and repeated lookups are rate-bounded per caller. **A customer id widens
+nothing**: knowing it opens that customer's bills only at outlets the caller
+could already read, which `supabase/tests/20_global_customer_identity.sql`
+proves with a hand-crafted request. Editing a profile is nobody's capability
+today, deliberately — see [Limitations](LIMITATIONS.md).
 
 **Deleting an outlet is the only delete anybody has.** Every other record in the system is voided, deactivated or corrected — the database grants `DELETE` to no client role on any other table. The exception is bounded by a precondition Postgres enforces rather than the screen: an outlet goes only while nothing anywhere references it, so one that ever traded cannot be deleted at all. It is for a shop created by mistake, and the app offers it only after the outlet is marked closed, so the reversible action always comes first.
 

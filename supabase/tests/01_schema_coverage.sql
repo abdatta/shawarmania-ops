@@ -52,11 +52,19 @@ classified as (
       when tbl in ('profiles', 'account_invites', 'account_emails')
         then 'person-scoped'
       when tbl = 'outlets' then 'tenancy-root'
+      -- Global: ONE row for the whole business, on purpose. The single
+      -- deliberate exception to outlet scoping (global-customer-identity), and
+      -- named here rather than inferred so that a second one has to be argued
+      -- for in this file. Classification alone proves nothing, which is why
+      -- section 6 below tests what the exception actually costs: no outlet
+      -- role holds any privilege on it at all.
+      when tbl = 'customers' then 'global'
       -- Tenant-less: belongs to no outlet at all, because the thing it counts
       -- happens before anybody has an outlet. Listed by name rather than
       -- inferred, so the next table with no outlet_id still has to be argued
       -- for here instead of quietly slipping through.
-      when tbl in ('invite_redemption_attempts', 'email_sign_in_attempts')
+      when tbl in ('invite_redemption_attempts', 'email_sign_in_attempts',
+                   'customer_lookup_attempts')
         then 'tenant-less'
     end as class
   from tables
@@ -66,7 +74,7 @@ select is(
     (select string_agg(tbl, ', ' order by tbl) from classified where class is null),
     ''),
   '',
-  'every public table is classified outlet-scoped, child-scoped, tenancy-root, or tenant-less'
+  'every public table is classified outlet-scoped, child-scoped, person-scoped, global, tenancy-root, or tenant-less'
 );
 
 -- ---------------------------------------------------------------------------
@@ -145,6 +153,79 @@ select is(
       and business_day_cutover = time '04:00' and geofence_radius_m = 150),
   2::bigint,
   'owner-confirmed cutover 04:00 and 150 m geofence on both outlets'
+);
+
+-- ---------------------------------------------------------------------------
+-- 6. What the one global table costs.
+--
+-- `customers` is the single table in this schema that belongs to no outlet, so
+-- it is the single table where a mistake leaks the whole business at once. The
+-- classification above is a label; these are the teeth. Every one of them is a
+-- catalog fact, so a later migration that quietly re-grants the table fails
+-- here by name rather than in whichever isolation test somebody remembered to
+-- write.
+
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'public' and tablename = 'customers'),
+  0::bigint,
+  'customers carries no policy: reads go through the two functions or nowhere'
+);
+
+select ok(
+  not has_table_privilege('authenticated', 'public.customers', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.customers', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.customers', 'UPDATE')
+  and not has_table_privilege('authenticated', 'public.customers', 'DELETE'),
+  'no client session holds any privilege on the global customer table'
+);
+
+select ok(
+  not has_table_privilege('authenticated', 'public.customer_lookup_attempts', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.customer_lookup_attempts', 'INSERT'),
+  'the lookup counter is readable and writable by nobody but the server'
+);
+
+-- The counter records WHO asked and WHEN. A phone column here — raw or hashed,
+-- a hash of ten digits being reversible in seconds — would turn a rate limiter
+-- into a log of every number anybody ever asked about.
+select is(
+  coalesce(
+    (select string_agg(a.attname, ', ' order by a.attname)
+       from pg_attribute a
+      where a.attrelid = 'public.customer_lookup_attempts'::regclass
+        and a.attnum > 0 and not a.attisdropped
+        and a.attname not in ('id', 'caller_id', 'attempted_at')),
+    ''),
+  '',
+  'the lookup counter stores who and when, and nothing about what was asked'
+);
+
+-- Security definer is what lets these read a table the caller cannot. Losing
+-- it would not fail loudly — it would just start returning nothing.
+select is(
+  coalesce(
+    (select string_agg(p.proname, ', ' order by p.proname)
+       from pg_proc p
+       join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname in ('customer_lookup_by_phone', 'customer_create_or_get',
+                          'customer_directory', 'app_may_look_up_customer')
+        and not p.prosecdef),
+    ''),
+  '',
+  'every customer access function is security definer'
+);
+
+select is(
+  (select count(*) from pg_proc p
+     join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in ('customer_lookup_by_phone', 'customer_create_or_get',
+                        'customer_directory', 'normalize_indian_phone',
+                        'app_may_look_up_customer')),
+  5::bigint,
+  'all five customer identity functions exist'
 );
 
 select * from finish();

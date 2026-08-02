@@ -98,9 +98,17 @@ There is no salary data anywhere in the schema or the UI — `staff-as-accounts`
 
 Each outlet owns its menu. Two outlets selling the same item means two rows. For two outlets this is fine and keeps isolation simple; at ten franchises, brand-wide menu consistency will want a master catalogue that outlets inherit from and override. Deferred until the franchise count makes it worth the complexity.
 
-### Customers are per-outlet
+### One customer identity, and deliberately nothing built on it
 
-The same person visiting both outlets is two customer records. Unifying them would mean reading across the isolation boundary — the exact thing the security model is built to prevent — for modest business value. Revisit only with a deliberate design for cross-outlet identity.
+Customers are business-wide since `global-customer-identity` (#32): one normalized phone is one person at either outlet. What that change deliberately did **not** build is anything that reads across outlets *about* them. There is no visit count, no spend total, no cross-outlet history, no loyalty, no marketing and no export — a counter that could see any of those could see the other outlet's trade through a customer both shops serve. See [`openspec/todos/customer-loyalty-and-cross-outlet-insights.md`](../openspec/todos/customer-loyalty-and-cross-outlet-insights.md), which is where that work waits for a real decision to justify it.
+
+Three consequences worth stating plainly:
+
+- **A phone is the identity.** Somebody who gives a different number is a different customer, and a reassigned number carries the old identity with it. No merge, split or reassignment flow exists; the first real case is what should design one.
+- **Several people sharing one phone are one customer.** A household ordering on one number is normal, and at launch it reads as a single identity.
+- **No screen edits a customer.** The owner can read the directory; nobody can rename or delete a profile from the app. Correction is a deliberate future flow, not something to smuggle into billing.
+
+**A shared directory is a franchise fact, not a technical detail.** Both outlets are owned today, so one directory is uncontroversial. Before `outlet-onboarding` (#14) puts a third-party franchisee on this schema, the franchise agreement must say that customer identity is shared brand-wide while every transaction stays the outlet's own.
 
 ## Real-world edges
 

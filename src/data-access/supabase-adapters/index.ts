@@ -4,6 +4,7 @@ import { createAddressLookupAdapter } from './address-lookup'
 import { createSupabaseAccountsAdapter } from './accounts'
 import { createSupabaseAttendanceAdapter } from './attendance'
 import { createSupabaseBillingAdapter } from './billing'
+import { createSupabaseCustomersAdapter } from './customers'
 import { createSupabaseMenuAdapter } from './menu'
 import {
   createSupabaseDailyCashAdapter,
@@ -30,6 +31,10 @@ export function createSupabaseAdapters(): DataAdapters {
     // Likewise not connected: #9 brings the enrolled device and the outbox, #10
     // the settlement path. See supabase-adapters/billing.ts.
     billing: createSupabaseBillingAdapter(),
+    // The exception among the not-yet-connected adapters: the global customer
+    // directory is REAL from today, because the boundary that protects it is.
+    // The billing surfaces that call it are still `demo`-gated (#31, #10).
+    customers: createSupabaseCustomersAdapter(client),
     // Nor these: #11 makes stock and expenses real, #12 the cash close.
     // See supabase-adapters/operations.ts.
     inventory: createSupabaseInventoryAdapter(),

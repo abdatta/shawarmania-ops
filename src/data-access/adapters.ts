@@ -930,6 +930,64 @@ export interface BillingAdapter {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Customers: one identity for the whole business, reachable only by phone.
+
+/**
+ * A customer as a billing context is permitted to see one.
+ *
+ * **What is absent is the design** (global-customer-identity). There is no
+ * outlet, no bill, no visit count, no spend total and no timestamp here,
+ * because a counter that could read any of those could read the OTHER outlet's
+ * trade through a customer both outlets serve. The database returns these three
+ * columns and no more; this type says the same thing in the language screens
+ * read, so a surface cannot render what it was never given.
+ */
+export interface CustomerIdentity {
+  id: string
+  /** Canonical `+91XXXXXXXXXX`. Never the string somebody typed. */
+  phone: string
+  /** The saved billing name, which plenty of customers never give. */
+  name: string | null
+}
+
+/**
+ * A refusal from the customer directory.
+ *
+ * `phone_required` and `phone_incomplete` are the form's business.
+ * `not_permitted` and `rate_limited` are the boundary's, and a counter should
+ * treat both the same way: carry on with the bill. **A customer lookup is never
+ * allowed to stop a sale** — the counter does not block.
+ */
+export class CustomerActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
+    this.name = 'CustomerActionError'
+  }
+}
+
+export interface CustomersAdapter {
+  /**
+   * Find a returning customer by their COMPLETE phone number.
+   *
+   * There is deliberately no search, prefix, or list method on this interface,
+   * and there is no database verb behind one either. Resolves `null` when the
+   * number is complete and nobody has used it — which is an answer, not a
+   * failure. An incomplete number never reaches the database at all.
+   */
+  lookupByPhone(phone: string): Promise<CustomerIdentity | null>
+  /**
+   * Save this phone against the sale, creating the identity the first time it
+   * is seen.
+   *
+   * **It never rewrites a profile that already exists.** A name typed at the
+   * counter that differs from the saved one belongs on the bill's own snapshot,
+   * which is history; changing the global profile from a till would let any
+   * counter rename anybody.
+   */
+  createOrGet(input: { phone: string; name?: string | null }): Promise<CustomerIdentity>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Stock: the ledger, and the cache the ledger maintains.
 
 export type InventoryUnit = Tables<'inventory_items'>['unit']
@@ -1338,6 +1396,7 @@ export interface DataAdapters {
   attendance: AttendanceAdapter
   menu: MenuAdapter
   billing: BillingAdapter
+  customers: CustomersAdapter
   inventory: InventoryAdapter
   expenses: ExpensesAdapter
   dailyCash: DailyCashAdapter

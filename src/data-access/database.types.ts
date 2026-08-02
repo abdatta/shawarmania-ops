@@ -917,46 +917,47 @@ export type Database = {
           },
         ]
       }
-      customers: {
+      customer_lookup_attempts: {
         Row: {
-          bill_count: number
-          first_seen_at: string
-          id: string
-          last_seen_at: string
-          name: string | null
-          outlet_id: string
-          phone: string | null
-          total_spend_paise: number
+          attempted_at: string
+          caller_id: string | null
+          id: number
         }
         Insert: {
-          bill_count?: number
-          first_seen_at?: string
-          id?: string
-          last_seen_at?: string
-          name?: string | null
-          outlet_id: string
-          phone?: string | null
-          total_spend_paise?: number
+          attempted_at?: string
+          caller_id?: string | null
+          id?: never
         }
         Update: {
-          bill_count?: number
-          first_seen_at?: string
-          id?: string
-          last_seen_at?: string
-          name?: string | null
-          outlet_id?: string
-          phone?: string | null
-          total_spend_paise?: number
+          attempted_at?: string
+          caller_id?: string | null
+          id?: never
         }
-        Relationships: [
-          {
-            foreignKeyName: "customers_outlet_id_fkey"
-            columns: ["outlet_id"]
-            isOneToOne: false
-            referencedRelation: "outlets"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      customers: {
+        Row: {
+          created_at: string
+          id: string
+          last_used_at: string
+          name: string | null
+          phone: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          name?: string | null
+          phone: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_used_at?: string
+          name?: string | null
+          phone?: string
+        }
+        Relationships: []
       }
       daily_cash_records: {
         Row: {
@@ -1474,6 +1475,7 @@ export type Database = {
         Returns: boolean
       }
       app_is_owner: { Args: never; Returns: boolean }
+      app_may_look_up_customer: { Args: never; Returns: boolean }
       app_may_manage_person: { Args: { person: string }; Returns: boolean }
       app_may_see_person: { Args: { person: string }; Returns: boolean }
       app_normalize_account_email: { Args: { input: string }; Returns: string }
@@ -1770,6 +1772,41 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      customer_create_or_get: {
+        Args: { p_name?: string; p_phone: string }
+        Returns: {
+          id: string
+          name: string
+          phone: string
+        }[]
+      }
+      customer_directory: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: string
+          last_used_at: string
+          name: string
+          phone: string
+        }[]
+      }
+      customer_lookup_by_phone: {
+        Args: { p_phone: string }
+        Returns: {
+          id: string
+          name: string
+          phone: string
+        }[]
+      }
+      customer_lookup_exceeded: {
+        Args: {
+          p_caller: string
+          p_global?: number
+          p_per_caller?: number
+          p_window?: string
+        }
+        Returns: boolean
+      }
       end_assignment_with_invite: {
         Args: {
           p_assignment_id: string
@@ -1819,6 +1856,7 @@ export type Database = {
         }
         Returns: string
       }
+      normalize_indian_phone: { Args: { p_input: string }; Returns: string }
       outlet_reference_counts: {
         Args: { p_outlet: string }
         Returns: {
@@ -1852,6 +1890,10 @@ export type Database = {
           invite_id: string
           profile_id: string
         }[]
+      }
+      record_customer_lookup: {
+        Args: { p_caller: string; p_window?: string }
+        Returns: undefined
       }
       record_invite_failure: {
         Args: { p_ip_hash: string; p_window?: string }

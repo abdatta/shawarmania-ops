@@ -12,6 +12,7 @@
 - [ ] 2.3 Implement isolated non-persisting credential verification and daily grant opening for Biller/own-FA/SA, with no retained human tokens or identifiers.
 - [ ] 2.4 Expire grants at cutover, preserve historical attribution, and require online reauthentication without revoking device registration.
 - [ ] 2.5 Add unit and real-backend auth tests proving an FA/SA counter login cannot call personal/admin adapters and an ordinary Employee cannot open a grant.
+- [ ] 2.6 Tighten `public.app_may_look_up_customer()` to require a live billing grant, not merely a `biller` assignment. **Inherited from #32**, which had to define eligibility before grants existed: it currently admits an unrevoked enrolled device or any account holding a live `biller` assignment, because that was exactly the set that could ring a bill at the time. It is a separate function precisely so this is one added conjunct in one place. Extend `supabase/tests/20_global_customer_identity.sql` with a biller who holds an assignment but no live grant and is refused.
 
 ## 3. Enrollment and device surfaces
 

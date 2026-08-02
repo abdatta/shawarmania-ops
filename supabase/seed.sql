@@ -15,6 +15,7 @@
 --   30000000-…  menu categories     31/32000000-…  menu items (kal / kpa)
 --   40000000-…  shifts              50000000-…     bills
 --   60000000-…  inventory           70000000-…     alerts
+--   80000000-…  customers (business-wide, not per outlet — see #32)
 
 -- ---------------------------------------------------------------------------
 -- Outlets. Cutover 04:00 and radius 150 m are owner-confirmed (2026-07-26).
@@ -334,6 +335,25 @@ values
    '10000000-0000-4000-a000-000000000001', current_date - 1);
 
 -- ---------------------------------------------------------------------------
+-- Customers. ONE list for the whole business — no outlet column, because since
+-- #32 a phone identifies a person, not a person-at-a-shop.
+--
+-- The first of them deliberately has a bill at BOTH outlets. That is the case
+-- the change exists for, and it is also the case the isolation suite needs: a
+-- Kalyani manager holding this customer's id must still read exactly one of
+-- those two bills.
+--
+-- Synthetic and obviously so: 9000000001 upward is not an allocated Indian
+-- mobile range. Never seed a real customer number here — docs/TESTING.md.
+
+insert into public.customers (id, phone, name, created_at, last_used_at)
+values
+  ('80000000-0000-4000-a000-000000000001', '+919000000001',
+   'Test Customer (Synthetic)', now() - interval '40 days', now() - interval '2 days'),
+  ('80000000-0000-4000-a000-000000000002', '+919000000002',
+   null, now() - interval '3 days', now() - interval '3 days');
+
+-- ---------------------------------------------------------------------------
 -- Shifts and bills. D-2 is a fully traded, reconciled day at both outlets;
 -- today has open shifts with live bills. Bill numbers are allocated by the
 -- trigger in insert order. One D-2 bill is rung at 00:20 — it belongs to the
@@ -370,42 +390,42 @@ values
 
 insert into public.bills
   (id, outlet_id, business_date, biller_profile_id, counter_device_id, shift_id,
-   customer_name, customer_phone, subtotal_paise, discount_paise, total_paise,
+   customer_id, customer_name, customer_phone, subtotal_paise, discount_paise, total_paise,
    payment_method, status, voided_by, voided_at, void_reason, created_at)
 values
   -- ------------------------------------------------ Kalyani D-2 (shift 1)
   ('50000000-0000-4000-a000-000000000001', '00000000-0000-4000-a000-000000000001',
    current_date - 2, '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000001',
-   null, null, 27800, 0, 27800, 'cash', 'settled', null, null, null,
+   null, null, null, 27800, 0, 27800, 'cash', 'settled', null, null, null,
    ((current_date - 2) + time '12:15') at time zone 'Asia/Kolkata'),
   ('50000000-0000-4000-a000-000000000002', '00000000-0000-4000-a000-000000000001',
    current_date - 2, '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000001',
-   'Test Customer (Synthetic)', '910000000001', 40900, 0, 40900, 'cash', 'settled',
+   '80000000-0000-4000-a000-000000000001', 'Test Customer (Synthetic)', '+919000000001', 40900, 0, 40900, 'cash', 'settled',
    null, null, null,
    ((current_date - 2) + time '13:40') at time zone 'Asia/Kolkata'),
   ('50000000-0000-4000-a000-000000000003', '00000000-0000-4000-a000-000000000001',
    current_date - 2, '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000001',
-   null, null, 21900, 0, 21900, 'upi', 'settled', null, null, null,
+   null, null, null, 21900, 0, 21900, 'upi', 'settled', null, null, null,
    ((current_date - 2) + time '19:05') at time zone 'Asia/Kolkata'),
   ('50000000-0000-4000-a000-000000000004', '00000000-0000-4000-a000-000000000001',
    current_date - 2, '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000001',
-   null, null, 23800, 0, 23800, 'swiggy', 'settled', null, null, null,
+   null, null, null, 23800, 0, 23800, 'swiggy', 'settled', null, null, null,
    ((current_date - 2) + time '20:30') at time zone 'Asia/Kolkata'),
   -- Rung at 00:20, after midnight: previous business day under the 04:00 cutover.
   ('50000000-0000-4000-a000-000000000005', '00000000-0000-4000-a000-000000000001',
    current_date - 2, '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000001',
-   null, null, 17900, 0, 17900, 'cash', 'settled', null, null, null,
+   null, null, null, 17900, 0, 17900, 'cash', 'settled', null, null, null,
    ((current_date - 1) + time '00:20') at time zone 'Asia/Kolkata'),
   -- A voided bill: mis-rung, corrected the honest way.
   ('50000000-0000-4000-a000-000000000006', '00000000-0000-4000-a000-000000000001',
    current_date - 2, '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000001',
-   null, null, 13900, 0, 13900, 'cash', 'void',
+   null, null, null, 13900, 0, 13900, 'cash', 'void',
    '10000000-0000-4000-a000-000000000002',
    ((current_date - 2) + time '14:05') at time zone 'Asia/Kolkata',
    'Rung twice by mistake (synthetic)',
@@ -415,48 +435,49 @@ values
    public.app_business_date(now() - interval '45 minutes', time '04:00'),
    '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000002',
-   null, null, 13900, 0, 13900, 'cash', 'settled', null, null, null,
+   null, null, null, 13900, 0, 13900, 'cash', 'settled', null, null, null,
    now() - interval '45 minutes'),
   ('50000000-0000-4000-a000-000000000012', '00000000-0000-4000-a000-000000000001',
    public.app_business_date(now() - interval '20 minutes', time '04:00'),
    '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000002',
-   null, null, 15900, 0, 15900, 'upi', 'settled', null, null, null,
+   null, null, null, 15900, 0, 15900, 'upi', 'settled', null, null, null,
    now() - interval '20 minutes'),
   -- ------------------------------------------------ Kalyani today, closed shift
   ('50000000-0000-4000-a000-000000000013', '00000000-0000-4000-a000-000000000001',
    public.app_business_date(now() - interval '4 hours', time '04:00'),
    '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000005',
-   null, null, 25000, 0, 25000, 'card', 'settled', null, null, null,
+   null, null, null, 25000, 0, 25000, 'card', 'settled', null, null, null,
    now() - interval '4 hours'),
   -- ------------------------------------------------ Kanchrapara D-2 (shift 3)
   ('50000000-0000-4000-a000-000000000021', '00000000-0000-4000-a000-000000000002',
    current_date - 2, '10000000-0000-4000-a000-00000000000b',
    '10000000-0000-4000-a000-000000000005', '40000000-0000-4000-a000-000000000003',
-   null, null, 27800, 0, 27800, 'cash', 'settled', null, null, null,
+   '80000000-0000-4000-a000-000000000001', 'Test Customer (Synthetic)', '+919000000001',
+   27800, 0, 27800, 'cash', 'settled', null, null, null,
    ((current_date - 2) + time '12:45') at time zone 'Asia/Kolkata'),
   ('50000000-0000-4000-a000-000000000022', '00000000-0000-4000-a000-000000000002',
    current_date - 2, '10000000-0000-4000-a000-00000000000b',
    '10000000-0000-4000-a000-000000000005', '40000000-0000-4000-a000-000000000003',
-   null, null, 25000, 0, 25000, 'upi', 'settled', null, null, null,
+   null, null, null, 25000, 0, 25000, 'upi', 'settled', null, null, null,
    ((current_date - 2) + time '18:10') at time zone 'Asia/Kolkata'),
   ('50000000-0000-4000-a000-000000000023', '00000000-0000-4000-a000-000000000002',
    current_date - 2, '10000000-0000-4000-a000-00000000000b',
    '10000000-0000-4000-a000-000000000005', '40000000-0000-4000-a000-000000000003',
-   null, null, 15900, 0, 15900, 'zomato', 'settled', null, null, null,
+   null, null, null, 15900, 0, 15900, 'zomato', 'settled', null, null, null,
    ((current_date - 2) + time '20:55') at time zone 'Asia/Kolkata'),
   ('50000000-0000-4000-a000-000000000024', '00000000-0000-4000-a000-000000000002',
    current_date - 2, '10000000-0000-4000-a000-00000000000b',
    '10000000-0000-4000-a000-000000000005', '40000000-0000-4000-a000-000000000003',
-   null, null, 21900, 0, 21900, 'other', 'settled', null, null, null,
+   null, null, null, 21900, 0, 21900, 'other', 'settled', null, null, null,
    ((current_date - 2) + time '21:15') at time zone 'Asia/Kolkata'),
   -- ------------------------------------------------ Kanchrapara today, open shift
   ('50000000-0000-4000-a000-000000000031', '00000000-0000-4000-a000-000000000002',
    public.app_business_date(now() - interval '30 minutes', time '04:00'),
    '10000000-0000-4000-a000-00000000000b',
    '10000000-0000-4000-a000-000000000005', '40000000-0000-4000-a000-000000000004',
-   null, null, 13900, 0, 13900, 'cash', 'settled', null, null, null,
+   null, null, null, 13900, 0, 13900, 'cash', 'settled', null, null, null,
    now() - interval '30 minutes');
 
 -- Line items: name and unit price snapshotted at sale time.

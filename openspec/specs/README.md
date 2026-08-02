@@ -65,6 +65,10 @@ Owner-facing capabilities landed with `ui-owner-console-and-demo`. These are **s
 - [`profit-estimates`](profit-estimates/spec.md) — two named bases, the basis always stated, raw materials counted exactly once, integer paise.
 - [`outlet-alerts`](outlet-alerts/spec.md) — categorised and prioritised alerts with a response thread, a one-step-at-a-time status ending terminal, and a cross-outlet inbox only the owner reads.
 
+One capability belongs to the business rather than to any outlet, landed with `global-customer-identity`. It is the single deliberate exception to outlet scoping, which is why it is called out on its own rather than filed beside the outlet contracts.
+
+- [`global-customer-identity`](global-customer-identity/spec.md) — one canonical phone is one customer business-wide, retrievable only by a complete exact phone from a billing context, with no browse or direct-table path for any role, a rate bound that logs no phone input, a separate owner read, and no widening of transaction access. `outlet-tenancy` carries the matching clause requiring the catalog to classify it as global and to keep every customer-linked transaction outlet-scoped.
+
 ## Expected capabilities
 
 The remaining domain capabilities, derived from the roadmap; each arrives as its change archives:

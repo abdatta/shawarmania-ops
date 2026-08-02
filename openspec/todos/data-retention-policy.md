@@ -24,9 +24,15 @@ The roadmap frames the trigger as *meaningful customer volume, or a franchise ag
 
 - **Location is captured at a check-in, an approval, and an outlet capture only.** There is no background tracking anywhere in this system, so the volume is bounded at roughly two points per person per day rather than a continuous trail — a deliberate design decision that also makes this policy much easier to write.
 - Attendance rows carry a business date, so an age-based rule has a clean key.
-- `global-customer-identity` (#32) will minimise the global profile to canonical
-  phone, optional name, and internal timestamps; it explicitly removes cached
-  visit/spend aggregates from that row.
+- `global-customer-identity` (#32) **has landed**, and it minimised the global
+  profile to canonical phone, optional name, and internal created/last-used
+  timestamps — the cached visit and spend aggregates are dropped columns, not
+  unused ones. So the surface a retention rule has to erase is now the smallest
+  it can be, and there is exactly ONE row per person to erase rather than one per
+  outlet they ever visited. That is a simplification for this policy and a
+  sharpening of it: the same change made the directory business-wide, so a
+  retention rule is written once for the business and there is no "the other
+  outlet still has a copy" hiding place.
 - `extended-offline-billing` (#34) owns a narrow device-cache lifetime for exact
   customer matches and persisted projections. That operational cache cap does not
   decide how long the authoritative global profile or historical transaction link lives.
@@ -40,10 +46,15 @@ The roadmap frames the trigger as *meaningful customer volume, or a franchise ag
 - When a global customer is deleted or anonymised, what happens to the customer
   foreign key and name/phone snapshots on immutable outlet-owned orders and bills?
   Historical money must remain correct without retaining contact PII indefinitely.
+  #32 makes the shape of this concrete: `customers.phone` is non-null and unique,
+  so anonymising in place is not simply nulling a column, and `bills` keeps its
+  own `customer_name` / `customer_phone` snapshots that a profile erasure does
+  not touch. Erasing the profile and leaving the snapshots would be a policy that
+  deletes the index and keeps the book.
 - Does the policy apply retrospectively when it lands, or only forward?
 
 ## Trigger to promote
 
 The roadmap's triggers stand — meaningful customer volume, or a franchise agreement specifying retention. Add one that fires earlier: **a full quarter of real attendance data in production**, at which point there is a genuine location history on real people with no stated lifetime and no answer for anyone who asks.
 
-**Dependencies when seeded**: `attendance` (#5) live in production — which is the point, not a blocker. Interacts with [`audit-log`](./audit-log.md) and the graduated [`global-customer-identity`](../changes/global-customer-identity/proposal.md) (#32).
+**Dependencies when seeded**: `attendance` (#5) live in production — which is the point, not a blocker. Interacts with [`audit-log`](./audit-log.md) and the delivered [`global-customer-identity`](../specs/global-customer-identity/spec.md) (#32), archived 2026-08-02.

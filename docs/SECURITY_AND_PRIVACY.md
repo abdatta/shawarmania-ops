@@ -35,7 +35,7 @@ The isolation test suite asserts this for every outlet-scoped table (see [Testin
 
 | Data | Whose | Why | Rules |
 |---|---|---|---|
-| Name, phone | Customer | Repeat-customer records, future digital receipts | Optional at billing. Never logged, never exported casually |
+| Name, phone | Customer | Recognising a returning customer; future digital receipts | Optional at billing. **Business-wide, not per outlet** — one canonical phone is one customer. Never logged, never exported. No client may read the table; a counter resolves a complete phone through a rate-bounded function, and only the owner reads the directory |
 | Name, phone, staff facts (code, role title, joining/leaving dates) | Staff | The staff record on their account | Visible to their outlet's admin and the owner. Never to other staff. No salary and no home address is stored anywhere |
 | Account email | Any account when explicitly associated; required for a live Super Admin | Alternate sign-in; foundation for future recovery or security features | Private, optional by default, required for Super Admin; no client table privilege; visible through the privileged owner-management response only |
 | Check-in coordinates, accuracy, distance | Employee | Attendance verification | Captured only at check-in. Never continuous |
@@ -43,12 +43,22 @@ The isolation test suite asserts this for every outlet-scoped table (see [Testin
 | Bill contents | Customer | The transaction record | Retained; identifiable only where a customer was recorded |
 | Hash of a caller's IP address | Whoever fails an activation | Bounding code guessing | Never the address itself, and only on failure. Pruned to the fifteen-minute window; readable by nobody, only counted |
 | Hash of account email and caller IP | Whoever attempts email sign-in | Enumeration-safe abuse limits | Raw input never enters the ledger or application logs; no client may read it |
+| Identity of a caller who looked a customer up | A device or biller | Bounding phone guessing | Who asked and when, never what was asked. **No phone column exists on that counter, raw or hashed** — a hash of ten digits is reversible in seconds. Pruned to the fifteen-minute window; readable by nobody |
 
 **Two external lookups, and what they see.** The outlet form's address search queries `photon.komoot.io` (OpenStreetMap) and `api.postalpincode.in` (India Post). What leaves the browser is the text an admin types while looking up **their own shop's address**, and a PIN code. No customer record, no employee record, no bill and no session token is ever sent to either, and neither is contacted from any other screen. Both are keyless: there is no account, no API key to leak, and no billing relationship. Both are optional — a failure leaves a form that is typed by hand, which is what it was before.
 
 **The address search never supplies an outlet's position.** The coordinates a geocoder returns are dropped at the adapter boundary, and the type the application carries has no field to hold them. `outlets.latitude/longitude` is read directly by the check-in trigger, so a map-search coordinate would arm the geofence against a rooftop centroid — and mark somebody absent while they stand at their own counter. Capturing a position on site is the only thing that surveys an outlet.
 
 **Customer PII is collected at the counter, optionally, under time pressure.** Two consequences: the fields must never block settling a bill, and we should not treat the resulting data as reliable enough to build anything important on.
+
+**One customer directory covers the whole business, and that is the sharpest privacy edge in this schema.** Every other personal record here belongs to one outlet, and the isolation policies do the protecting. `customers` belongs to none, so a single wrong grant would expose every customer the business has to any manager's token. Four things hold instead of a policy:
+
+- **No client session holds any privilege on the table.** Not select, not insert — not for a manager, a device, or the owner. The grant is revoked and RLS is enabled with no policy, which says it twice.
+- **The only billing path in is an exact, complete phone.** There is no prefix, wildcard, list or count verb in the database to call. A lookup answers a question about somebody who just gave their number; a browse would be the directory itself.
+- **Lookups are rate-bounded per caller**, so an exact-match oracle cannot be walked, and the counter behind that bound records no phone input in any form.
+- **The owner's directory read is a separate function with its own check**, so widening billing can never widen the owner's access and vice versa.
+
+Proved rather than asserted: `supabase/tests/20_global_customer_identity.sql` and the customer probes in `supabase/tests/rest/rls-probes.test.ts` issue the hand-crafted requests — `select=*`, a `like` filter, a HEAD count, and a customer id used to reach the other outlet's bills — and assert each is refused.
 
 ## Employee location monitoring
 
@@ -144,4 +154,4 @@ Not in the model at this scale: sophisticated external attackers, insider databa
 
 No automated deletion in v1. Operational history is small and valuable — a year of bills at this volume is trivial data, and the owner will want year-over-year comparison.
 
-Two things to revisit when the business grows: customer PII has no defined retention period, and attendance location data accumulates indefinitely. Both are noted in [Limitations](LIMITATIONS.md) rather than silently deferred.
+Two things to revisit when the business grows: customer PII has no defined retention period, and attendance location data accumulates indefinitely. Both are noted in [Limitations](LIMITATIONS.md) rather than silently deferred. Global customer identity sharpens the first without changing what it collects — a phone and an optional name, exactly as before — because the rows now accumulate in one business-wide list rather than two outlet-sized ones, and a retention rule will have to be written once for the business rather than per outlet. See [`openspec/todos/data-retention-policy.md`](../openspec/todos/data-retention-policy.md).

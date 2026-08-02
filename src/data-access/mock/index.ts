@@ -5,6 +5,7 @@ import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
 import { createMockAlertsAdapter } from './alerts'
 import { createMockAttendanceAdapter } from './attendance'
 import { createMockBillingAdapter } from './billing'
+import { createDemoCustomers, createMockCustomersAdapter } from './customers'
 import { createMockDailyCashAdapter } from './daily-cash'
 import { createMockExpensesAdapter } from './expenses'
 import { createMockInsightsAdapter } from './insights'
@@ -40,6 +41,13 @@ export interface DemoData {
   store: ReturnType<typeof createDemoStore>
   /** Holds its own state, so it belongs to the session rather than to a role. */
   attendance: ReturnType<typeof createMockAttendanceAdapter>
+  /**
+   * The global customer directory. Session-scoped rather than role-scoped for
+   * the same reason as the rest: a customer saved at the counter must still be
+   * there after a role switch, since one identity for the whole business is
+   * exactly the thing being demonstrated.
+   */
+  customers: ReturnType<typeof createDemoCustomers>
 }
 
 export function createDemoData(): DemoData {
@@ -47,6 +55,7 @@ export function createDemoData(): DemoData {
     accounts: createDemoAccounts(),
     store: createDemoStore(),
     attendance: createMockAttendanceAdapter(),
+    customers: createDemoCustomers(),
   }
 }
 
@@ -117,6 +126,9 @@ export function createMockAdapters(
     // where `menu_items_write` will refuse it.
     menu: createMockMenuAdapter(store, role),
     billing: createMockBillingAdapter(store),
+    // The role reaches the customer mock so it refuses everybody the database
+    // refuses: only a billing context may resolve a phone at all.
+    customers: createMockCustomersAdapter(data.customers, role),
     inventory: createMockInventoryAdapter(store),
     expenses: createMockExpensesAdapter(store),
     dailyCash: createMockDailyCashAdapter(store),

@@ -142,9 +142,23 @@ The snapshot is the point. `menu_item_id` is nullable and advisory — if an ite
 
 **`shifts`** — `id`, `outlet_id`, `counter_device_id`, `biller_profile_id`, `business_date`, `opened_at`, `closed_at`. A shift never spans two business dates.
 
-**`customers`** — `id`, `outlet_id`, `name`, `phone`, `first_seen_at`, `last_seen_at`, `bill_count`, `total_spend_paise`.
+**`customers`** — `id`, `phone` (canonical, unique, not null), `name` (nullable), `created_at`, `last_used_at`.
 
-Scoped per outlet, which means the same person visiting both outlets is two records. That is the correct v1 trade: cross-outlet customer identity would require reading across the isolation boundary, and the business value is small next to the risk. Noted in [Limitations](LIMITATIONS.md).
+**The one table in this schema that belongs to no outlet.** One normalized phone is one customer for the whole business, so a returning customer is recognised at either counter. `phone` is stored as `+91` plus ten digits — `public.normalize_indian_phone()` canonicalises the ten-digit, `91…` and `+91…` forms and refuses everything else — and a check constraint means the column can hold nothing but its own canonical form.
+
+It carries **identity only**. There is no `outlet_id`, no `bill_count` and no `total_spend_paise`, and their absence is the design: a cached total on a globally readable row would disclose one outlet's trade to the other through a customer they share. Anything about trading is read from `bills`, which are outlet-scoped and always were.
+
+Access is correspondingly narrow, and none of it is a table grant:
+
+| Who | May | Through |
+|---|---|---|
+| An enrolled device, or an account with a live `biller` assignment | Retrieve one customer by their **complete** phone; create one the first time a phone is seen | `customer_lookup_by_phone()`, `customer_create_or_get()` |
+| Super Admin | Read the directory | `customer_directory()` |
+| Everybody else, including a direct `select` from any role | Nothing | — |
+
+No client session holds `select` on the table itself, so there is no browse, prefix, wildcard or count path — and no database verb that could become one. `customer_create_or_get()` never overwrites a saved profile: a differing name typed at the counter goes onto that bill's own `customer_name` snapshot, which is history, and the global identity is left alone. Lookups are rate-bounded per caller through `customer_lookup_attempts`, which records who asked and when and **nothing about what was asked**.
+
+The boundary is proved rather than asserted — `supabase/tests/20_global_customer_identity.sql` and the customer probes in `supabase/tests/rest/rls-probes.test.ts`, including that a customer id legitimately held at one outlet opens none of that customer's bills at the other.
 
 ## Inventory
 
