@@ -68,8 +68,18 @@ jobs:
     permissions:
       contents: read
 
+  # Deliberately NOT behind `needs: gate`. Nothing the suite produces feeds
+  # this build, so waiting for it only delays the answer. Two things follow:
+  #
+  #   - a green push publishes ~35s sooner, since this 32s job overlaps the
+  #     4m gate instead of queuing behind it;
+  #   - `auth:readiness` is the only check that probes the live identity
+  #     backend, and it now reports at ~40s instead of ~4m50s.
+  #
+  # Running on a commit that later fails the gate costs ~40s of runner time
+  # and one read-only readiness probe. The artifact it uploads is inert:
+  # `deploy` needs both jobs, so nothing can publish it.
   build:
-    needs: gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -117,8 +127,11 @@ jobs:
         with:
           path: dist
 
+  # The single gate. Both must pass: the suite says the commit is good, and
+  # the build says there is something to publish. Either one red and this job
+  # is never created, so the current Pages deployment stays live.
   deploy:
-    needs: build
+    needs: [gate, build]
     runs-on: ubuntu-latest
     environment:
       name: github-pages

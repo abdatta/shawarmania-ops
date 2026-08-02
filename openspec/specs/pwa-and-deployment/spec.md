@@ -176,11 +176,13 @@ A push to the `main` branch SHALL produce a static production deployment of the
 app at a stable URL, with immutable hashed assets so a rollback is redeploying a
 previous build. That deployment SHALL be gated on the whole verification suite
 continuous integration runs — including its database and authenticated
-end-to-end jobs — which SHALL complete successfully before the production build
-and artifact upload are allowed to run. A failure anywhere in that suite SHALL
-stop the deployment with the previously published deployment still live. It
-SHALL also be possible to trigger the same gated deployment manually for a
-chosen earlier commit, so a rollback needs no new commit.
+end-to-end jobs — which SHALL complete successfully before anything is
+published. A failure anywhere in that suite SHALL stop the deployment with the
+previously published deployment still live. Producing a build artifact SHALL
+NOT be treated as permission to publish it: an artifact built for a commit that
+fails verification SHALL never reach the stable URL. It SHALL also be possible
+to trigger the same gated deployment manually for a chosen earlier commit, so a
+rollback needs no new commit.
 
 #### Scenario: Deployment on push
 
@@ -193,9 +195,9 @@ chosen earlier commit, so a rollback needs no new commit.
 
 - **WHEN** a commit lands on `main` whose bundle compiles but which fails any
   job of the verification suite
-- **THEN** the run stops before the production build and artifact upload
-- **AND** no deployment is produced, and the stable URL continues to serve the
-  previously published build identifier
+- **THEN** no deployment is produced, even though the bundle built successfully
+- **AND** the stable URL continues to serve the previously published build
+  identifier
 
 #### Scenario: Rollback redeploys an earlier commit
 

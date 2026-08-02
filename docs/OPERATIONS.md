@@ -80,13 +80,20 @@ that has to pass before anything is built or published. On a pull request the
 same three read `CI / verify / …`, because there is no gate there, only the
 suite.
 
-The first three exist from the start. `build` and `deploy` are created only
-once the gate passes, because GitHub creates a check when its job *starts*,
-and those two are behind `needs:`. So a commit showing three checks is still
-being decided, and a commit showing five has been decided. There is no way to
-pre-declare the last two as pending, and collapsing them into one job to keep
-the count stable would cost the parallelism between the browser and database
-jobs.
+**Four of the five start together.** The three gate jobs and `build` have no
+dependencies, so they run at once; `build` finishes first, in about half a
+minute. Only `deploy` waits, on both the gate and the build, and GitHub creates
+a check when its job *starts* — so `deploy` cannot exist until the other four
+have finished. A commit showing four checks is still being decided; five means
+decided. There is no way to pre-declare it as pending.
+
+**`build` does not wait for the tests, on purpose.** Nothing the suite produces
+feeds it, so sequencing them only delays the answer by the length of the suite.
+It also means `npm run auth:readiness` — the only check that probes the live
+identity backend, and the one most likely to fail for reasons that have nothing
+to do with the commit — reports in well under a minute rather than after five.
+The artifact it uploads on a commit that then fails the gate is inert: `deploy`
+needs both jobs, so nothing can publish it.
 
 Add a step to `verify.yml` and both callers get it. Add one anywhere else and
 only one of them does, which is the failure mode this structure exists to
@@ -123,10 +130,11 @@ already gone red — and on 2026-08-01 that is exactly what happened three times
 in one day. Attendance is in real use on staff phones, so that was live
 exposure rather than a hypothetical.
 
-**The deploy workflow now runs the whole verification suite as its first job**,
-from the same `verify.yml` a pull request uses, and the build and publish jobs
-depend on it. A failure anywhere stops the run before the production build and
-the artifact upload, so the previous Pages deployment stays live and untouched.
+**The deploy workflow now runs the whole verification suite as a job the
+publish depends on**, from the same `verify.yml` a pull request uses. The
+production build runs alongside it rather than behind it, and the publish
+itself waits on both. A failure in either one means the publish job is never
+created, so the previous Pages deployment stays live and untouched.
 
 The gate includes the Docker-backed database job, and that was a deliberate call.
 Most of that job tests the tenancy boundary, which a static bundle cannot
