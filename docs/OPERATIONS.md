@@ -41,13 +41,14 @@ Local development needs the Supabase CLI and Docker. `supabase start` brings the
 ## Continuous integration
 
 The verification suite is defined **once**, in `.github/workflows/verify.yml`,
-as a reusable workflow nothing triggers directly. It has three jobs:
+as a reusable workflow nothing triggers directly. It has three jobs, split by
+what each one needs — which is also the fastest way to guess why one is red:
 
-| Job | Steps |
-|---|---|
-| `verify` | lint → format check → typecheck → unit tests → contrast validator → production build |
-| `e2e` | Playwright, including the offline app-shell suite; uploads its report on failure |
-| `db` | fresh local Supabase stack, pgTAP, REST/RLS, authenticated Playwright, and generated-type drift |
+| Job | Needs | Steps |
+|---|---|---|
+| `lint, types, unit tests` | nothing but the repo | lint → format check → typecheck → unit tests → contrast validator → production build |
+| `e2e browser tests` | a browser | Playwright, including the offline app-shell suite; uploads its report on failure |
+| `database + auth tests` | Docker and a database | fresh local Supabase stack, pgTAP, REST/RLS, the authenticated four-role Playwright suite, and generated-type drift |
 
 Two workflows call it, and that single definition is the point — **what a pull
 request is judged on and what a publish is gated on cannot drift apart**:
@@ -59,6 +60,33 @@ request is judged on and what a publish is gated on cannot drift apart**:
 **Nothing runs it twice.** `ci.yml` deliberately does not trigger on a push to
 `main`, because the deploy workflow's gate is that run. One suite per commit,
 and on `main` it is the one that decides whether the commit reaches a counter.
+
+### Reading the checks on a commit
+
+A push to `main` produces five checks, and **they do not all appear at once**:
+
+```
+Deploy / gate / lint, types, unit tests
+Deploy / gate / e2e browser tests
+Deploy / gate / database + auth tests
+Deploy / build
+Deploy / deploy
+```
+
+**Read a check name right to left.** The last segment is the only part that
+says what that job did; the two before it say where it sits. `Deploy` is the
+workflow, which GitHub prepends to all five. `gate` is the stage — the job
+that has to pass before anything is built or published. On a pull request the
+same three read `CI / verify / …`, because there is no gate there, only the
+suite.
+
+The first three exist from the start. `build` and `deploy` are created only
+once the gate passes, because GitHub creates a check when its job *starts*,
+and those two are behind `needs:`. So a commit showing three checks is still
+being decided, and a commit showing five has been decided. There is no way to
+pre-declare the last two as pending, and collapsing them into one job to keep
+the count stable would cost the parallelism between the browser and database
+jobs.
 
 Add a step to `verify.yml` and both callers get it. Add one anywhere else and
 only one of them does, which is the failure mode this structure exists to
@@ -100,7 +128,7 @@ from the same `verify.yml` a pull request uses, and the build and publish jobs
 depend on it. A failure anywhere stops the run before the production build and
 the artifact upload, so the previous Pages deployment stays live and untouched.
 
-The gate includes the Docker-backed `db` job, and that was a deliberate call.
+The gate includes the Docker-backed database job, and that was a deliberate call.
 Most of that job tests the tenancy boundary, which a static bundle cannot
 change — but it also holds `test:e2e:auth`, the only suite that drives all four
 roles signing in against a real backend. A bundle that breaks sign-in is the
@@ -111,7 +139,7 @@ other job would notice.
 minutes later rather than immediately, and only if the suite agrees. That is
 the trade being made on purpose.
 
-**Rollback is unchanged**: **Actions → Deploy to GitHub Pages → Run workflow**,
+**Rollback is unchanged**: **Actions → Deploy → Run workflow**,
 choosing an earlier commit. It re-verifies that commit on the way through.
 Accepted deliberately — the commit being rolled back to passed the same suite
 when it landed, so the re-run is expected green, and a rollback only reaches a
@@ -136,7 +164,7 @@ One prerequisite, and it is not optional: **the repo is public.** Pages from a p
 
 Beyond that the workflow is self-provisioning — `actions/configure-pages` enabled Pages on the first run, so the **Settings → Pages → Source** dropdown never had to be touched. If Pages is ever reset, that step will re-enable it rather than failing.
 
-The canonical production origin is **https://ops.shawarmania.in/**. GitHub Pages redirects the former `https://abdatta.github.io/shawarmania-ops/` project URL to the custom domain. Assets are immutable and hashed, so a rollback is re-running the deploy workflow on an earlier commit (`Actions → Deploy to GitHub Pages → Run workflow`).
+The canonical production origin is **https://ops.shawarmania.in/**. GitHub Pages redirects the former `https://abdatta.github.io/shawarmania-ops/` project URL to the custom domain. Assets are immutable and hashed, so a rollback is re-running the deploy workflow on an earlier commit (`Actions → Deploy → Run workflow`).
 
 ### The base path
 

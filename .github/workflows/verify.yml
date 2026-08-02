@@ -10,7 +10,11 @@ on:
 
 jobs:
   verify:
-    name: Lint, typecheck, test, build
+    # Each job is named for the thing only it can catch, because that is the
+    # question you have when you see it red. The three split on what they
+    # need: this one needs nothing but the repo, the next needs a browser,
+    # the last needs a database.
+    name: lint, types, unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +50,7 @@ jobs:
         run: npm run build
 
   e2e:
-    name: End-to-end (incl. offline shell)
+    name: e2e browser tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,7 +84,7 @@ jobs:
   # The Supabase CLI version comes from package.json (devDependency), so local
   # and CI always run the same one.
   db:
-    name: Database policies and isolation
+    name: database + auth tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

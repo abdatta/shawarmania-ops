@@ -1,4 +1,8 @@
-name: Deploy to GitHub Pages
+# Kept short on purpose. GitHub prefixes every check on a commit with the
+# workflow name, so this word is repeated five times in the commit's check
+# list. "Deploy to GitHub Pages" made each line unreadable before it reached
+# the part that says what actually ran.
+name: Deploy
 
 # A push to `main` publishes — once the whole suite says the commit is good.
 #
@@ -17,7 +21,7 @@ name: Deploy to GitHub Pages
 # counters some minutes later rather than immediately, and only if the suite
 # agrees.
 #
-# Rollback is unchanged: Actions → Deploy to GitHub Pages → Run workflow,
+# Rollback is unchanged: Actions → Deploy → Run workflow,
 # choosing an earlier commit. It re-verifies that commit on the way through.
 # Accepted deliberately — the commit being rolled back to passed the same
 # suite when it landed, so the re-run is expected green, and a rollback only
@@ -55,13 +59,17 @@ jobs:
   # worst thing this workflow could hand to somebody standing at a counter,
   # and it is invisible to every other job. Waiting for Docker is the price of
   # not publishing that.
-  verify:
+  # Named `gate` rather than `verify` because GitHub puts this job's name in
+  # the middle of every check it produces — `Deploy / gate / browser tests`.
+  # "gate" says what this stage is doing in a deploy workflow; "verify" would
+  # just repeat the file it calls.
+  gate:
     uses: ./.github/workflows/verify.yml
     permissions:
       contents: read
 
   build:
-    needs: verify
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
