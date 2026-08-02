@@ -110,6 +110,7 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
 - **PWA install changes**: check an eligible Chromium browser, iOS Safari's manual instructions, installed display mode, and an ineligible browser. The app-owned action must survive public-to-real navigation, disappear after use, and remain absent in demo mode.
 - **Theme changes**: the contrast validator passes. AA is the floor.
 - **Schema changes**: migrations apply cleanly to a fresh database *and* to a copy with existing data.
+- **Production deployment changes**: Pages depends on the `production-database` migration job; a failed or missing migration credential blocks publication, an up-to-date schema is a no-op, and manual frontend rollback leaves forward migration history untouched.
 - **Authentication/identity changes**: run username and associated-email sign-in, three-field
   activation, admin reset, alias-rename/session-survival, hand-crafted
   email-change refusal, uniform email-sign-in failure, no-response transport

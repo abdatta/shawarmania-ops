@@ -170,7 +170,7 @@ The UI SHALL display a build version identifier (short commit SHA and build time
 - **WHEN** the app is built from a source copy with no commit history
 - **THEN** the build identifier degrades to an explicit unknown marker rather than failing the build
 
-### Requirement: Push to main deploys, and only after verification passes
+### Requirement: Push to main migrates then deploys, and only after verification passes
 
 A push to the `main` branch SHALL produce a static production deployment of the
 app at a stable URL, with immutable hashed assets so a rollback is redeploying a
@@ -180,9 +180,23 @@ end-to-end jobs — which SHALL complete successfully before anything is
 published. A failure anywhere in that suite SHALL stop the deployment with the
 previously published deployment still live. Producing a build artifact SHALL
 NOT be treated as permission to publish it: an artifact built for a commit that
-fails verification SHALL never reach the stable URL. It SHALL also be possible
-to trigger the same gated deployment manually for a chosen earlier commit, so a
-rollback needs no new commit.
+fails verification SHALL never reach the stable URL.
+
+After verification succeeds on a push, continuous integration SHALL apply every
+pending forward migration to the production database before publishing the
+static bundle. Publication SHALL depend on that migration job: a missing
+credential, rejected migration, failed backfill assertion or connection failure
+SHALL leave the previously published frontend live. The migration job SHALL use
+a production-database environment secret and SHALL run migration push only; it
+SHALL NOT reset the hosted database, apply seed data, push local configuration
+or expose a service-role key.
+
+The migration SHALL run before the new frontend, so every migration committed
+with application code SHALL remain compatible with the previously published
+frontend for that short ordering window. It SHALL also be possible to trigger
+the same gated deployment manually for a chosen earlier commit. That manual
+frontend rollback SHALL NOT reverse or reapply production migration history,
+because released migrations are forward-only.
 
 #### Scenario: Deployment on push
 
@@ -190,6 +204,8 @@ rollback needs no new commit.
   it
 - **THEN** the hosting platform builds and publishes it, and the stable URL
   serves the new build identifier
+- **AND** every migration in that commit is recorded in production before the
+  new build is published
 
 #### Scenario: A commit that compiles but fails verification does not reach users
 
@@ -199,16 +215,32 @@ rollback needs no new commit.
 - **AND** the stable URL continues to serve the previously published build
   identifier
 
+#### Scenario: A production migration fails
+
+- **WHEN** verification passes but a pending production migration cannot be
+  applied completely
+- **THEN** the static artifact is not published
+- **AND** the previous frontend remains live against the unchanged or
+  transactionally rolled-back production schema
+
+#### Scenario: A commit has no pending migration
+
+- **WHEN** verification passes and production already contains every migration
+  in the commit
+- **THEN** the migration job succeeds without changing data and publication
+  continues
+
 #### Scenario: Rollback redeploys an earlier commit
 
 - **WHEN** a deployment is triggered manually for an earlier commit
 - **THEN** that commit is verified again and redeployed
 - **AND** the stable URL serves that earlier build identifier
+- **AND** the current forward production migration history is left untouched
 
 ### Requirement: One verification definition serves both the pull request and the deployment gate
 
-The checks a pull request is judged on and the checks a deployment is gated on
-SHALL come from one definition, so neither can be relaxed without relaxing the
+The checks a pull request is judged on and the checks a deployment is gated on SHALL
+come from one definition, so neither can be relaxed without relaxing the
 other, and SHALL run once per commit rather than once per workflow that wants
 the answer.
 

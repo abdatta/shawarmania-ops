@@ -199,21 +199,40 @@ The 2026-07-30 cutover changed the origin, so **every PWA installed from the old
 
 Privatising the repo at the same time needs a paid GitHub plan for Pages, or a move to different hosting. Worth deciding together with the domain, since both are disruptive in the same window.
 
-Database changes deploy as migrations, applied to staging first and then production. **Migrations are forward-only**; a mistake is corrected by a new migration, not by editing a released one.
+Database changes deploy as migrations. **Migrations are forward-only**; a
+mistake is corrected by a new migration, not by editing a released one.
 
-**The migration goes first, then the front end.** They are two separate acts:
-`npx supabase db push` applies the schema, and pushing to `main` publishes the
-bundle through Pages. Nothing coordinates them, and **CI never touches the
-production database** — `db push` stays a manual, deliberate act and no
-workflow may take it over. A bundle that reaches the browser before its
-migration will call a function or column that does not exist yet, which is a
-broken screen for whoever is at the counter — so run `db push`, confirm it
-took, and only then push the commit. The verification gate buys some slack
-here, since the bundle no longer goes live the moment the push lands, but it is
-slack rather than coordination: do not treat the suite's running time as a
-window to get the migration in. Where a change cannot survive that ordering in
-either direction, it needs splitting into a migration that is safe alone and a
-front end that is safe alone.
+**The verified migration goes first, then the front end, in one workflow.** A
+push to `main` runs the complete suite, then the `production-database` job runs
+`supabase db push` through a project-scoped pooler URL stored as the environment
+secret `SUPABASE_DB_URL`. Pages publication depends on that job. A missing
+secret, connection failure, rejected migration or failed backfill assertion
+leaves the existing frontend live; a transactional migration leaves production
+unchanged when it fails.
+
+That CI identity may push migrations and nothing broader. It receives no
+service-role key, never reaches the browser bundle, and the workflow must never
+run `db reset`, seed data or `config push` against the hosted project. The new
+schema is live briefly before the new frontend, so every migration must remain
+compatible with the currently published build for that ordering window. Split
+a change when it cannot survive that order.
+
+The repository needs one private GitHub environment named
+`production-database`. Add its `SUPABASE_DB_URL` secret with:
+
+```sh
+gh secret set SUPABASE_DB_URL --env production-database
+```
+
+Paste the production project's Session pooler connection URL with the database
+password percent-encoded. Do not use a personal Supabase access token, anon
+key or service-role key for this job. After rotating the database password,
+replace this secret before the next push to `main`; an absent or stale value is
+expected to stop publication.
+
+A manual workflow dispatch republishes an earlier frontend but deliberately
+does not touch migration history. Database rollback remains forward-only: add a
+corrective migration instead of asking an old commit to remove released schema.
 
 ### Installing the app
 

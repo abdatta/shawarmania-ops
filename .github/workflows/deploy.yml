@@ -13,9 +13,10 @@ name: Deploy
 # on staff phones, so that was live exposure rather than a theoretical one.
 #
 # The trigger is unchanged. What changed is that the publish now runs the
-# whole verification suite first, from the same file `ci.yml` uses, and every
-# later job depends on it. A red commit stops before the production build and
-# artifact upload, leaving the current Pages deployment live.
+# whole verification suite first, from the same file `ci.yml` uses, applies
+# forward production migrations, and only then publishes the static bundle.
+# A red verification or migration stops before Pages, leaving the current
+# deployment live.
 #
 # The wait is the cost, and it is the point: a push to `main` reaches the
 # counters some minutes later rather than immediately, and only if the suite
@@ -127,11 +128,52 @@ jobs:
         with:
           path: dist
 
-  # The single gate. Both must pass: the suite says the commit is good, and
-  # the build says there is something to publish. Either one red and this job
-  # is never created, so the current Pages deployment stays live.
+  # Schema and frontend are one release. The verified migration runs before
+  # Pages can publish, so a bundle cannot reach staff phones while production
+  # is still missing a function, table or column it calls.
+  #
+  # The environment secret is a project-scoped Postgres pooler URL. This job
+  # receives neither the browser's public anon key nor a service-role key, and
+  # it deliberately runs only `db push`: never reset, seed or config push.
+  # Manual workflow dispatch is a frontend rollback/republication, so it keeps
+  # the forward-only production schema where it is instead of trying to make
+  # an older commit reverse migration history.
+  migrate:
+    needs: gate
+    runs-on: ubuntu-latest
+    environment:
+      name: production-database
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Require production database credential
+        if: github.event_name == 'push'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: test -n "$SUPABASE_DB_URL"
+
+      - name: Apply forward production migrations
+        if: github.event_name == 'push'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: npx supabase db push --db-url "$SUPABASE_DB_URL" --yes
+
+      - name: Keep the forward schema during a manual frontend rollback
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "Manual republication does not reverse production migrations."
+
+  # The single publication gate. Verification, the production migration and
+  # the build must all pass. Any red dependency leaves the current Pages
+  # deployment live.
   deploy:
-    needs: [gate, build]
+    needs: [gate, build, migrate]
     runs-on: ubuntu-latest
     environment:
       name: github-pages

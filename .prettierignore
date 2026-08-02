@@ -4,6 +4,7 @@ coverage/
 playwright-report/
 test-results/
 node_modules/
+.claude/worktrees/
 public/icons/
 package-lock.json
 
