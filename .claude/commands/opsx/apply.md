@@ -142,6 +142,7 @@ What would you like to do?
 Once implementation has begun (a task is checked), keep the roadmap board in sync with the source of truth: if this project exposes the roadmap reconciler (`npm run roadmap:sync`), run it so the ROADMAP.md status-icon + Status cells derive from folder state (→ leading icon 🔄, Status word `active`). It reads `changes/`/`archive/` (the source of truth) and never hand-stamps, so it self-corrects any drift. Skip silently if the project has no roadmap or reconciler.
 
 **Guardrails**
+- **If a change alters a surface's layout, that surface's shimmer is reshaped in the same change.** The placeholder reserves the shape of what is arriving; when the arriving shape moves and the placeholder does not, the surface reflows again — see docs/DESIGN_SYSTEM.md.
 - Keep going through tasks until done or blocked
 - Always read context files before starting (from the apply instructions output)
 - If task is ambiguous, pause and ask before implementing

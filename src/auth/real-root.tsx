@@ -4,6 +4,7 @@ import { Navigate, useLocation, useParams } from 'react-router'
 import { InstallAppButton } from '@/components/install-app-button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
+import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createSupabaseAdapters } from '@/data-access/supabase-adapters'
 import { NotFound } from '@/routes/not-found'
@@ -51,8 +52,20 @@ export function RealRoot() {
   // sign-in for a URL that will never exist would be a lie.
   if (!roleFromSegment(roleSegment)) return <NotFound />
 
+  // The one placeholder that cannot name what it is waiting for in domain
+  // terms: the session is what resolves the role, so until it does there is no
+  // surface to name. What comes next is a shell either way, so that is the
+  // shape it reserves — a header strip and the content beneath it
+  // (shimmer-as-default-loading, design D3).
   if (state.status === 'loading') {
-    return <p className="p-6 text-sm text-content-muted">Loading…</p>
+    return (
+      <LoadingRegion label="the app" className="flex min-h-dvh flex-col bg-canvas">
+        <Shimmer className="h-14 shrink-0 rounded-none border-x-0 border-t-0" />
+        <div className="flex-1 px-4 py-5">
+          <Shimmer className="h-40" />
+        </div>
+      </LoadingRegion>
+    )
   }
 
   if (state.status === 'unavailable') {

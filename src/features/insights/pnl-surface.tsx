@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card } from '@/components/ui/card'
+import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
@@ -140,7 +141,9 @@ export function PnlSurface() {
       </div>
 
       {summary === undefined ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The three cards that land: the profit figure, where the money came
+        // from, and where it went.
+        <LoadingFigures label="this period’s profit and loss" rows={[4, 4, 5]} />
       ) : summary === null ? (
         <EmptyState
           icon={TrendingUp}

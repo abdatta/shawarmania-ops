@@ -73,6 +73,7 @@ user.
 
 ## Guardrails
 
+- **If a change alters a surface's layout, that surface's shimmer is reshaped in the same change.** The placeholder reserves the shape of what is arriving; when the arriving shape moves and the placeholder does not, the surface reflows again — see docs/DESIGN_SYSTEM.md.
 - Never auto-select an ambiguous change.
 - Never hide incomplete artifacts or tasks.
 - Never skip delta analysis when deltas exist.

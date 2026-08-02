@@ -81,6 +81,7 @@ When every task is complete, recommend `$openspec-archive-change <name>`.
 
 ## Guardrails
 
+- **If a change alters a surface's layout, that surface's shimmer is reshaped in the same change.** The placeholder reserves the shape of what is arriving; when the arriving shape moves and the placeholder does not, the surface reflows again — see docs/DESIGN_SYSTEM.md.
 - Read all CLI-resolved context before editing.
 - Follow `contextFiles`; do not guess filenames.
 - Keep task and code changes synchronized.

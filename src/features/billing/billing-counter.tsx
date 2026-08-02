@@ -5,6 +5,7 @@ import { Link } from 'react-router'
 import { EmptyState } from '@/components/layout/empty-state'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Button } from '@/components/ui/button'
+import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { useAdapters, type Tables } from '@/data-access'
 import {
@@ -249,7 +250,21 @@ export function BillingCounter() {
           </p>
         )}
         {menu === null ? (
-          <p className="text-sm text-content-muted">Loading the menu…</p>
+          // The menu grid's own silhouette: category headings over a grid of
+          // tiles at the tile's height. Only this pane waits — the bill panel
+          // beside it is the write path and is never replaced by a placeholder.
+          <LoadingRegion label="the menu" className="space-y-3" data-testid="menu-loading">
+            {[6, 3].map((tiles, section) => (
+              <div key={section}>
+                <Shimmer className="mb-1.5 h-4 w-24" />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                  {Array.from({ length: tiles }, (_, tile) => (
+                    <Shimmer key={tile} className="h-20" />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </LoadingRegion>
         ) : (
           <MenuGrid menu={menu} quantities={quantities} onAdd={addItem} />
         )}

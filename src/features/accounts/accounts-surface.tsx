@@ -11,6 +11,7 @@ import { AddButton } from '@/components/ui/add-button'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
+import { LoadingTable } from '@/components/ui/loading'
 import { QrCode } from '@/components/ui/qr-code'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
@@ -450,7 +451,13 @@ export function AccountsSurface() {
       )}
 
       {accounts === null ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The people list is a `DataTable`, so it waits behind rows.
+        <LoadingTable
+          label="the people here"
+          rows={10}
+          rowHeight="h-16"
+          data-testid="accounts-loading"
+        />
       ) : (
         <>
           <DataTable

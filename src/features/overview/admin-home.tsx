@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
+import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { useAdapters, type Tables } from '@/data-access'
 import { useOutletScope } from '@/features/outlet-scope'
 
@@ -38,7 +39,16 @@ export function AdminHome() {
 
   // A session with no outlet is resolved, not loading.
   const outlet = outletId ? fetched : null
-  if (outlet === undefined) return <p className="text-sm text-content-muted">Loading…</p>
+  // This branch returns before the header, so the placeholder reserves the
+  // header too — otherwise the title drops in and pushes the card down.
+  if (outlet === undefined) {
+    return (
+      <LoadingRegion label="this outlet" className="mx-auto max-w-3xl space-y-4">
+        <Shimmer className="h-12" />
+        <Shimmer className="h-32" />
+      </LoadingRegion>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">

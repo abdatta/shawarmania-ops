@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
+import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
@@ -146,7 +147,9 @@ export function OutletDayView() {
       )}
 
       {!loaded ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The day's four cards: the figures, then low stock, open alerts and
+        // who checked in.
+        <LoadingFigures label="this outlet’s day" rows={[5, 3, 3, 3]} />
       ) : summary === null ? (
         <EmptyState title="This outlet’s figures are not available yet — the console is not connected to live trading data." />
       ) : (

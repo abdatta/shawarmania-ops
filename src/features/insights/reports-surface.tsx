@@ -5,6 +5,7 @@ import { DataTable, type DataTableColumn } from '@/components/layout/data-table'
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card } from '@/components/ui/card'
+import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
@@ -153,7 +154,9 @@ export function ReportsSurface() {
       </div>
 
       {summary === undefined ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The totals, the spend breakdown and the profit figure — the three
+        // cards this report opens with.
+        <LoadingFigures label="this period’s report" rows={[5, 4, 4]} />
       ) : summary === null ? (
         <EmptyState
           icon={FileText}

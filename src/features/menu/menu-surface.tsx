@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { LoadingList } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { VegMarker } from '@/components/ui/veg-marker'
@@ -259,7 +260,15 @@ export function MenuSurface() {
       )}
 
       {menu === null ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The `space-y-4` stack of category cards, each holding a heading and
+        // the items under it.
+        <LoadingList
+          label="the menu"
+          rows={3}
+          blockHeight="h-40"
+          className="space-y-4"
+          data-testid="menu-loading"
+        />
       ) : categories.length === 0 ? (
         <EmptyState
           icon={UtensilsCrossed}

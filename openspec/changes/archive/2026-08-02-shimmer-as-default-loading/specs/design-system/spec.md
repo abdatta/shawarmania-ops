@@ -35,6 +35,14 @@ grid waits behind a grid. A generic stack of card blocks under content that is
 not a stack of cards does not satisfy this requirement, because it reserves the
 wrong height and reflows on arrival just as a line of text does.
 
+This correspondence is about the reserved space and the overall silhouette, and
+SHALL NOT be read as a requirement to reproduce the loaded markup element for
+element. A placeholder succeeds by going unnoticed, so where literal fidelity
+and a calm, even silhouette disagree, the silhouette wins: a table's placeholder
+reserves an even stack of rows and no separate header strip, because a short
+block above taller ones reads as a mistake rather than as a heading and draws
+attention to the one thing on screen nobody should be studying.
+
 A change that alters a surface's layout SHALL reshape that surface's placeholder
 within the same change, so that the reserved space and the arriving content
 cannot drift apart over time.
@@ -86,6 +94,13 @@ cannot drift apart over time.
 - **WHEN** a surface that will render a table of rows is waiting on that read
 - **THEN** the placeholder reserves the shape of that table, and not a stack of
   card-height blocks
+
+#### Scenario: An even silhouette beats a literal one
+
+- **WHEN** reproducing a detail of the loaded layout would put a block of an odd
+  size among the others, as a table's header row would
+- **THEN** the placeholder reserves the even silhouette instead, absorbing that
+  detail into the space it holds rather than drawing the eye to it
 
 #### Scenario: A summary row reserves tiles
 

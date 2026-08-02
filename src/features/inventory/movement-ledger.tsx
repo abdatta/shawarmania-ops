@@ -5,6 +5,7 @@ import { useParams } from 'react-router'
 import { DataTable, type DataTableColumn } from '@/components/layout/data-table'
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
+import { LoadingTable } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
 import type { InventoryItemSummary, InventoryMovementRecord } from '@/data-access/adapters'
 import { formatBusinessDate, formatDelta, formatQuantity } from '@/domain'
@@ -112,7 +113,8 @@ export function MovementLedger() {
       )}
 
       {movements === null ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // A ledger is a table, so it waits behind rows.
+        <LoadingTable label="this item’s ledger" rows={5} rowHeight="h-12" />
       ) : (
         <DataTable
           columns={columns}

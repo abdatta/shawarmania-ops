@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
@@ -216,7 +217,10 @@ export function DailyCashSurface() {
       )}
 
       {day === null ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The two cards that always land: the four figures and their total,
+        // then the count-and-close form. The exception card is not reserved
+        // because whether there is one is exactly what this read decides.
+        <LoadingFigures label="today’s cash" rows={[6, 7]} data-testid="cash-loading" />
       ) : (
         <div className="space-y-3">
           {day.exceptions.length > 0 && (

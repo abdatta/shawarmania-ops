@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { buttonVariants } from '@/components/ui/button-variants'
+import { LoadingBlock } from '@/components/ui/loading'
 import { CheckInCard } from '@/features/attendance/check-in-card'
 import { useOwnAttendance } from '@/features/attendance/use-own-attendance'
 import { useSession } from '@/session/context'
@@ -45,7 +46,9 @@ export function StaffHome() {
         }
       />
 
-      {own.status === 'loading' && <p className="text-sm text-content-muted">Loading…</p>}
+      {/* One card, at the check-in card's height: a title, the day's evidence,
+          and the tile-sized action beneath them. */}
+      {own.status === 'loading' && <LoadingBlock label="today" className="h-48" />}
 
       {own.status === 'error' && (
         <p role="alert" className="text-sm font-semibold text-danger">

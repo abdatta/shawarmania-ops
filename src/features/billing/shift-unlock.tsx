@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
 import { DataActionError, type CounterBiller } from '@/data-access/adapters'
 import { formatTime } from '@/domain'
@@ -132,7 +133,26 @@ export function ShiftUnlock() {
       )}
 
       {billers === null ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // Whose shape depends on something already known: with a shift open,
+        // what lands here is the one line saying to close it first, so
+        // reserving the grid would hold two rows open for a sentence. Without
+        // one, it is the biller grid — the same two-then-three columns, at the
+        // biller button's height.
+        shift ? (
+          <LoadingRegion label="this counter’s shift" data-testid="billers-loading">
+            <Shimmer className="h-5 w-80 max-w-full" />
+          </LoadingRegion>
+        ) : (
+          <LoadingRegion
+            label="the billers at this counter"
+            className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+            data-testid="billers-loading"
+          >
+            {Array.from({ length: 4 }, (_, index) => (
+              <Shimmer key={index} className="h-24" />
+            ))}
+          </LoadingRegion>
+        )
       ) : billers.length === 0 ? (
         <EmptyState
           icon={UserRound}

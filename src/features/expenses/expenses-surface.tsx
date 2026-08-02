@@ -8,6 +8,7 @@ import { AddButton } from '@/components/ui/add-button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { LoadingList } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
@@ -258,7 +259,14 @@ export function ExpensesSurface() {
       )}
 
       {expenses === null ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The `space-y-2` list of one-line expense cards, at that card's height.
+        <LoadingList
+          label="this day’s expenses"
+          rows={3}
+          blockHeight="h-16"
+          className="space-y-2"
+          data-testid="expenses-loading"
+        />
       ) : expenses.length === 0 ? (
         <EmptyState
           icon={Wallet}

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { LoadingList } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
 import {
@@ -226,7 +227,15 @@ export function InventorySurface() {
       )}
 
       {items === null ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The `space-y-2` stock list, at the height of a card holding a name,
+        // its quantity, and the buttons beside them.
+        <LoadingList
+          label="what this outlet stocks"
+          rows={5}
+          blockHeight="h-16"
+          className="space-y-2"
+          data-testid="stock-loading"
+        />
       ) : items.length === 0 ? (
         <EmptyState
           icon={Package}

@@ -15,6 +15,7 @@ import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
+import { LoadingList } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
@@ -124,7 +125,9 @@ export function OwnerHome() {
       )}
 
       {rows === undefined ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The same `space-y-3` stack the outlet cards land in, at one card's
+        // height, so the figures fill the space rather than push it open.
+        <LoadingList label="your outlets" rows={2} blockHeight="h-52" />
       ) : rows.length === 0 ? (
         <EmptyState
           icon={Store}

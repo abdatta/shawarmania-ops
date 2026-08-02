@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { LoadingList } from '@/components/ui/loading'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
@@ -343,7 +344,14 @@ export function OutletsSurface() {
       )}
 
       {outlets === null ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The `space-y-3` stack of outlet cards, each holding the shop's name,
+        // its address and the actions on it.
+        <LoadingList
+          label="your outlets"
+          rows={3}
+          blockHeight="h-64"
+          data-testid="outlets-loading"
+        />
       ) : outlets.length === 0 ? (
         <EmptyState
           icon={Store}

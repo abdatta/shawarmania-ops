@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { LoadingList } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
 import {
@@ -198,7 +199,15 @@ export function AlertsSurface() {
       )}
 
       {rows === undefined ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The `space-y-2` list of alert buttons, each a subject line over the
+        // detail line beneath it.
+        <LoadingList
+          label="the alerts"
+          rows={4}
+          blockHeight="h-20"
+          className="space-y-2"
+          data-testid="alerts-loading"
+        />
       ) : rows.length === 0 ? (
         <EmptyState
           icon={Bell}

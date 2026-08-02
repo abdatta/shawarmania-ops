@@ -46,6 +46,7 @@ Two consequences follow from that sentence, and they outrank convenience everywh
 - Never use raw hex values in a component.
 - **Light and dark are both first-class.** Every UI change is checked in both, and the contrast validator gates both. A token that passes in one and fails in the other is a failure.
 - This is an ops portal, not the marketing site. Density, legibility, and speed beat expressiveness. See [Design System](docs/DESIGN_SYSTEM.md) for the contrast rules — some brand colours fail AA and have prescribed substitutes.
+- **If a change alters a surface's layout, that surface's shimmer is reshaped in the same change.** A placeholder reserves the shape of what is arriving; when the arriving shape moves and the placeholder does not, the surface reflows again and nothing automated will say so.
 
 ### Delivery model — UI first, then made real
 

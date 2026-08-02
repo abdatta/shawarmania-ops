@@ -120,6 +120,31 @@ export default tseslint.config(
   },
 
   {
+    // The shimmer is the app's loading language, and a line of "Loading…" is
+    // how a surface quietly opts out of it: one line tall where a list, a table
+    // or a grid is about to appear, so the read ends in a reflow.
+    //
+    // A warning, deliberately, and never an error. It exists to be seen in the
+    // editor at the moment the sentence is typed; nothing about this change may
+    // turn a build red (shimmer-as-default-loading, design D4). It catches the
+    // literal sentence and nothing more — a surface that renders nothing while
+    // waiting, or one whose shimmer is the wrong shape, is the review's job.
+    files: ['src/**/*.tsx'],
+    ignores: ['src/components/ui/loading.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: 'JSXText[value=/Loading/]',
+          message:
+            'Surfaces wait behind the shared shimmer, not a line of text. Use the placeholder ' +
+            'from src/components/ui/loading.tsx, shaped like this surface — see docs/DESIGN_SYSTEM.md.',
+        },
+      ],
+    },
+  },
+
+  {
     // Edge Functions run on Deno, not in the browser and not in Node: they use
     // URL/JSR import specifiers and the Deno global, and tsconfig deliberately
     // does not include them (its lib and module resolution are the app's).

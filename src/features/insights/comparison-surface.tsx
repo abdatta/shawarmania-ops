@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { DataTable, type DataTableColumn } from '@/components/layout/data-table'
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
+import { LoadingTable } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
@@ -134,7 +135,9 @@ export function ComparisonSurface() {
       </div>
 
       {rows === undefined ? (
-        <p className="text-sm text-content-muted">Loading…</p>
+        // The `DataTable` it becomes: a header strip over rows at the phone
+        // density the table uses, rather than a stack of card-height blocks.
+        <LoadingTable label="the outlet comparison" rows={3} />
       ) : (
         <>
           <DataTable
