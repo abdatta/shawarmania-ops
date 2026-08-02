@@ -40,7 +40,8 @@ Local development needs the Supabase CLI and Docker. `supabase start` brings the
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request, in three jobs:
+The verification suite is defined **once**, in `.github/workflows/verify.yml`,
+as a reusable workflow nothing triggers directly. It has three jobs:
 
 | Job | Steps |
 |---|---|
@@ -48,13 +49,23 @@ Local development needs the Supabase CLI and Docker. `supabase start` brings the
 | `e2e` | Playwright, including the offline app-shell suite; uploads its report on failure |
 | `db` | fresh local Supabase stack, pgTAP, REST/RLS, authenticated Playwright, and generated-type drift |
 
-`.github/workflows/deploy.yml` publishes to GitHub Pages on push to `main` — see below.
+Two workflows call it, and that single definition is the point — **what a pull
+request is judged on and what a publish is gated on cannot drift apart**:
 
-That deploy first asks the already-deployed production identity backend for its
-narrow readiness result. A negative or unavailable result stops before build
-or upload and leaves the current Pages artifact live.
+- `.github/workflows/ci.yml` runs it on every pull request.
+- `.github/workflows/deploy.yml` runs it on every push to `main`, as the gate
+  in front of the publish — see [Deployment](#deployment).
 
-Both checkouts use `fetch-depth: 0` because the build stamps the short commit SHA into the UI.
+**Nothing runs it twice.** `ci.yml` deliberately does not trigger on a push to
+`main`, because the deploy workflow's gate is that run. One suite per commit,
+and on `main` it is the one that decides whether the commit reaches a counter.
+
+Add a step to `verify.yml` and both callers get it. Add one anywhere else and
+only one of them does, which is the failure mode this structure exists to
+prevent. The list in [`AGENTS.md`](../AGENTS.md) mirrors `verify.yml`; keep the
+two in agreement in the same commit.
+
+Every checkout uses `fetch-depth: 0` because the build stamps the short commit SHA into the UI.
 
 ## Deployment
 
@@ -64,7 +75,52 @@ The frontend is a static SPA — build, upload, done.
 npm run build
 ```
 
-Hosting is **GitHub Pages**, published by `.github/workflows/deploy.yml` on every push to `main`. Hostinger holds the `shawarmania.in` DNS zone; the `ops` CNAME points to `abdatta.github.io`, while GitHub Pages terminates TLS and serves the deployment. Cloudflare Pages or Vercel remain later alternatives if the repository becomes private or the hosting requirements outgrow Pages.
+Hosting is **GitHub Pages**, published by `.github/workflows/deploy.yml` on
+every push to `main` that passes verification.
+Hostinger holds the `shawarmania.in` DNS zone; the `ops` CNAME points to
+`abdatta.github.io`, while GitHub Pages terminates TLS and serves the
+deployment. Cloudflare Pages or Vercel remain later alternatives if the
+repository becomes private or the hosting requirements outgrow Pages.
+
+### A push to `main` publishes, once the suite agrees
+
+**Pushing to `main` still deploys.** What changed on 2026-08-02 is what has to
+happen first.
+
+The two workflows used to be independent: both fired on a push to `main`, and
+the deploy one ran only `npm ci`, the auth readiness probe and `npm run build`.
+Nothing connected it to the tests. So a push published to the counters as soon
+as the code *compiled*, while the suite was still running beside it or had
+already gone red — and on 2026-08-01 that is exactly what happened three times
+in one day. Attendance is in real use on staff phones, so that was live
+exposure rather than a hypothetical.
+
+**The deploy workflow now runs the whole verification suite as its first job**,
+from the same `verify.yml` a pull request uses, and the build and publish jobs
+depend on it. A failure anywhere stops the run before the production build and
+the artifact upload, so the previous Pages deployment stays live and untouched.
+
+The gate includes the Docker-backed `db` job, and that was a deliberate call.
+Most of that job tests the tenancy boundary, which a static bundle cannot
+change — but it also holds `test:e2e:auth`, the only suite that drives all four
+roles signing in against a real backend. A bundle that breaks sign-in is the
+worst thing a publish could hand to somebody standing at a counter, and no
+other job would notice.
+
+**The cost is the wait.** A push to `main` now reaches the counters some
+minutes later rather than immediately, and only if the suite agrees. That is
+the trade being made on purpose.
+
+**Rollback is unchanged**: **Actions → Deploy to GitHub Pages → Run workflow**,
+choosing an earlier commit. It re-verifies that commit on the way through.
+Accepted deliberately — the commit being rolled back to passed the same suite
+when it landed, so the re-run is expected green, and a rollback only reaches a
+counter tablet on its next launch anyway (see *Service worker caution* below).
+CI minutes are not the slow part of a rollback.
+
+One deploy runs at a time (`concurrency: pages`, never cancelled mid-flight),
+so two pushes in quick succession queue rather than racing; cancelling a
+half-finished publish is how a partial build gets served.
 
 Before the workflow builds or uploads, `npm run auth:readiness` posts one
 non-sensitive action to the hosted `email-sign-in` function. It permits
@@ -109,7 +165,19 @@ Privatising the repo at the same time needs a paid GitHub plan for Pages, or a m
 
 Database changes deploy as migrations, applied to staging first and then production. **Migrations are forward-only**; a mistake is corrected by a new migration, not by editing a released one.
 
-**The migration goes first, then the front end.** They are two separate acts: `npx supabase db push` applies the schema, and pushing to `main` publishes the bundle through Pages. Nothing coordinates them, and CI does not touch the production database. A bundle that reaches the browser before its migration will call a function or column that does not exist yet, which is a broken screen for whoever is at the counter — so run `db push`, confirm it took, and only then push the commit. Where a change cannot survive that ordering in either direction, it needs splitting into a migration that is safe alone and a front end that is safe alone.
+**The migration goes first, then the front end.** They are two separate acts:
+`npx supabase db push` applies the schema, and pushing to `main` publishes the
+bundle through Pages. Nothing coordinates them, and **CI never touches the
+production database** — `db push` stays a manual, deliberate act and no
+workflow may take it over. A bundle that reaches the browser before its
+migration will call a function or column that does not exist yet, which is a
+broken screen for whoever is at the counter — so run `db push`, confirm it
+took, and only then push the commit. The verification gate buys some slack
+here, since the bundle no longer goes live the moment the push lands, but it is
+slack rather than coordination: do not treat the suite's running time as a
+window to get the migration in. Where a change cannot survive that ordering in
+either direction, it needs splitting into a migration that is safe alone and a
+front end that is safe alone.
 
 ### Installing the app
 

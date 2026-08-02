@@ -130,9 +130,11 @@ Commands:
 
 ## Verification
 
-**This list mirrors `.github/workflows/ci.yml`, and is meant to stay that way.** A gate that CI runs and this list omits is a gate nobody runs before pushing — which is exactly how `format:check` stayed red across two changes before anybody noticed. If you add a CI step, add it here in the same commit.
+**This list mirrors `.github/workflows/verify.yml`, and is meant to stay that way.** A gate that CI runs and this list omits is a gate nobody runs before pushing — which is exactly how `format:check` stayed red across two changes before anybody noticed. If you add a CI step, add it here in the same commit.
 
-CI runs three jobs. The first two need nothing but the repo:
+`verify.yml` is the one definition of the suite, and nothing triggers it directly. Two workflows call it: `ci.yml` on every pull request, and `deploy.yml` on every push to `main`, where it is the gate the build and publish jobs depend on. **So this list is also what gates a release** — a check added here and to `verify.yml` protects both paths, and a check added anywhere else protects only one. A push to `main` still deploys; it just does not deploy until this list is green, and a red commit leaves the current production build live. See [Operations](docs/OPERATIONS.md#a-push-to-main-publishes-once-the-suite-agrees).
+
+The suite runs three jobs. The first two need nothing but the repo:
 
 - **Any change**: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` — then `npm run test:e2e`, which builds for production and drives it. `npm run format` fixes formatting.
 

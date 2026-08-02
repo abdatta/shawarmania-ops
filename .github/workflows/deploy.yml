@@ -1,5 +1,28 @@
 name: Deploy to GitHub Pages
 
+# A push to `main` publishes — once the whole suite says the commit is good.
+#
+# This workflow and `ci.yml` used to be independent workflows on the same push
+# trigger, with nothing between them. The deploy one only compiled the bundle,
+# so a push published to the counters as soon as the code *compiled*, while
+# the tests ran beside it or had already gone red. Attendance is in real use
+# on staff phones, so that was live exposure rather than a theoretical one.
+#
+# The trigger is unchanged. What changed is that the publish now runs the
+# whole verification suite first, from the same file `ci.yml` uses, and every
+# later job depends on it. A red commit stops before the production build and
+# artifact upload, leaving the current Pages deployment live.
+#
+# The wait is the cost, and it is the point: a push to `main` reaches the
+# counters some minutes later rather than immediately, and only if the suite
+# agrees.
+#
+# Rollback is unchanged: Actions → Deploy to GitHub Pages → Run workflow,
+# choosing an earlier commit. It re-verifies that commit on the way through.
+# Accepted deliberately — the commit being rolled back to passed the same
+# suite when it landed, so the re-run is expected green, and a rollback only
+# reaches a counter tablet on its next launch anyway (see the service-worker
+# section of docs/OPERATIONS.md). CI minutes are not the slow part.
 on:
   push:
     branches: [main]
@@ -11,14 +34,34 @@ permissions:
   pages: write
   id-token: write
 
-# One deploy at a time. `cancel-in-progress: false` because cancelling a
+# One publish at a time. `cancel-in-progress: false` because cancelling a
 # half-finished publish is how you end up serving a partial build.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
+  # The same suite `ci.yml` runs on a pull request, from the same file. A
+  # publish cannot be gated on a weaker check set than a pull request,
+  # because there is only one check set.
+  #
+  # This is also why `ci.yml` no longer triggers on a push to `main`: this job
+  # is that run. One suite per commit, and it is the one holding the gate.
+  #
+  # It includes the Docker-backed database job, deliberately. Most of that job
+  # tests the tenancy boundary, which a static bundle cannot change — but it
+  # also holds `test:e2e:auth`, the only suite that drives four real roles
+  # signing in against a real backend. A bundle that breaks sign-in is the
+  # worst thing this workflow could hand to somebody standing at a counter,
+  # and it is invisible to every other job. Waiting for Docker is the price of
+  # not publishing that.
+  verify:
+    uses: ./.github/workflows/verify.yml
+    permissions:
+      contents: read
+
   build:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

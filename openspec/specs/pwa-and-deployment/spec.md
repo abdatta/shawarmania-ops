@@ -170,14 +170,56 @@ The UI SHALL display a build version identifier (short commit SHA and build time
 - **WHEN** the app is built from a source copy with no commit history
 - **THEN** the build identifier degrades to an explicit unknown marker rather than failing the build
 
-### Requirement: Push to main deploys
+### Requirement: Push to main deploys, and only after verification passes
 
-A push to the `main` branch SHALL produce a static production deployment of the app at a stable URL, with immutable hashed assets so a rollback is redeploying a previous build.
+A push to the `main` branch SHALL produce a static production deployment of the
+app at a stable URL, with immutable hashed assets so a rollback is redeploying a
+previous build. That deployment SHALL be gated on the whole verification suite
+continuous integration runs — including its database and authenticated
+end-to-end jobs — which SHALL complete successfully before the production build
+and artifact upload are allowed to run. A failure anywhere in that suite SHALL
+stop the deployment with the previously published deployment still live. It
+SHALL also be possible to trigger the same gated deployment manually for a
+chosen earlier commit, so a rollback needs no new commit.
 
 #### Scenario: Deployment on push
 
+- **WHEN** a commit lands on `main` and the whole verification suite passes for
+  it
+- **THEN** the hosting platform builds and publishes it, and the stable URL
+  serves the new build identifier
+
+#### Scenario: A commit that compiles but fails verification does not reach users
+
+- **WHEN** a commit lands on `main` whose bundle compiles but which fails any
+  job of the verification suite
+- **THEN** the run stops before the production build and artifact upload
+- **AND** no deployment is produced, and the stable URL continues to serve the
+  previously published build identifier
+
+#### Scenario: Rollback redeploys an earlier commit
+
+- **WHEN** a deployment is triggered manually for an earlier commit
+- **THEN** that commit is verified again and redeployed
+- **AND** the stable URL serves that earlier build identifier
+
+### Requirement: One verification definition serves both the pull request and the deployment gate
+
+The checks a pull request is judged on and the checks a deployment is gated on
+SHALL come from one definition, so neither can be relaxed without relaxing the
+other, and SHALL run once per commit rather than once per workflow that wants
+the answer.
+
+#### Scenario: A check added for pull requests also gates deployment
+
+- **WHEN** a verification step is added to the shared definition
+- **THEN** both the pull-request run and the deployment gate run it
+
+#### Scenario: A push to main verifies once
+
 - **WHEN** a commit lands on `main`
-- **THEN** the hosting platform builds and publishes it, and the stable URL serves the new build identifier
+- **THEN** the verification suite runs once for that commit, as the deployment's
+  own gate
 
 ### Requirement: Production uses the Shawarmania operations hostname
 

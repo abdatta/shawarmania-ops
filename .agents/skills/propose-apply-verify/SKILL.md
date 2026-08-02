@@ -61,8 +61,8 @@ Do not stop at the first successful-looking result.
 
 ### Current Repository Gates
 
-Read `AGENTS.md` and `.github/workflows/ci.yml` at execution time; they outrank
-this summary if they changed.
+Read `AGENTS.md` and `.github/workflows/verify.yml` at execution time; they
+outrank this summary if they changed.
 
 For any change, run:
 

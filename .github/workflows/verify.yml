@@ -1,0 +1,124 @@
+name: Verify
+
+# The single definition of "this commit is good". Nothing triggers it
+# directly. Two callers use it, and that is the point: `ci.yml` runs it on
+# every push and pull request, and `deploy.yml` runs it before it is allowed
+# to build or publish anything. One definition means a publish cannot be
+# gated on a weaker suite than a pull request is.
+on:
+  workflow_call:
+
+jobs:
+  verify:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The build stamps the short commit SHA into the UI.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and component tests
+        run: npm test
+
+      # Both themes. A token that passes in light and fails in dark is a
+      # failure, not a compromise.
+      - name: Contrast validator
+        run: npm run contrast
+
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: End-to-end (incl. offline shell)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # The tenancy boundary is enforced in the database, so the database is what
+  # gets tested: every migration applied to a fresh stack, the pgTAP isolation
+  # and write-contract suites, real-session REST probes, and a check that the
+  # committed TypeScript types match what the schema actually generates.
+  # The Supabase CLI version comes from package.json (devDependency), so local
+  # and CI always run the same one.
+  db:
+    name: Database policies and isolation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start the local stack (applies migrations and seed)
+        run: npx supabase start
+
+      - name: Database policy suite (pgTAP)
+        run: npm run test:db
+
+      - name: REST-level isolation probes and account flows
+        run: npm run test:rls
+
+      # The one browser suite that needs a real backend, so it lives in this
+      # job rather than the e2e one: four roles signing in, an account
+      # provisioned end to end with a one-time code, and a deactivation ending
+      # an open session.
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Auth end-to-end (against the local stack)
+        run: npm run test:e2e:auth
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-auth
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Generated types are current
+        run: |
+          npm run db:types
+          git diff --exit-code src/data-access/database.types.ts
