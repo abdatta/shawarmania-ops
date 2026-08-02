@@ -4,6 +4,8 @@ import type { PositionReading } from '@/lib/geolocation'
 import type {
   AttendanceAdapter,
   AttendanceApproval,
+  AttendanceAttempt,
+  AttendanceDecision,
   AttendanceEvent,
   AttendanceRecord,
   AttendanceStatus,
@@ -195,20 +197,153 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
 
   const materialise = (seed: AttendanceSeed, index: number): AttendanceRecord => {
     const person = personFor(seed.personId)
-    const outletId = seed.outletId ?? soleOutletFor(seed.personId)
+    const initialOutletId = seed.outletId ?? soleOutletFor(seed.personId)
     const businessDate = shiftBusinessDate(today, -seed.daysAgo)
-    const checkIn = eventFrom(businessDate, outletId, seed.checkIn)
-    const approval = approvalFrom(businessDate, outletId, seed.approval, checkIn)
+    const initialCheckIn = eventFrom(businessDate, initialOutletId, seed.checkIn)
+    const retryOutletId = seed.retryCheckIn?.outletId ?? null
+    const retryCheckIn = retryOutletId
+      ? eventFrom(businessDate, retryOutletId, seed.retryCheckIn)
+      : null
+    const checkIn = retryCheckIn ?? initialCheckIn
+    const outletId = retryOutletId ?? initialOutletId
     const outlet = outletFor(outletId)
+    const initialOutlet = outletFor(initialOutletId)
+    const approval = approvalFrom(businessDate, initialOutletId, seed.approval, initialCheckIn)
+
+    const id = `d3000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
+    const attemptId = initialCheckIn
+      ? `d3100000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
+      : null
+    const retryAttemptId = retryCheckIn
+      ? `d3110000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
+      : null
+    const decisionId =
+      approval || seed.denial || (seed.status !== 'absent' && !initialCheckIn)
+        ? `d3200000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
+        : null
+    const correctionId = seed.correction
+      ? `d3300000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
+      : null
+    const decisionAt = seed.denial
+      ? instantAt(businessDate, seed.denial.time)
+      : (approval?.at ?? null)
+    const attempts: AttendanceAttempt[] = []
+    if (initialCheckIn && attemptId) {
+      attempts.push({
+        id: attemptId,
+        outletId: initialOutletId,
+        outletName: initialOutlet.name,
+        businessDate,
+        ...initialCheckIn,
+        arrivalDeadline: initialOutlet.arrival_deadline,
+        supersededAt: retryCheckIn ? retryCheckIn.at : null,
+        settledAt: decisionId ? (decisionAt ?? initialCheckIn.at) : null,
+      })
+    }
+    if (retryCheckIn && retryAttemptId && retryOutletId) {
+      attempts.push({
+        id: retryAttemptId,
+        outletId: retryOutletId,
+        outletName: outlet.name,
+        businessDate,
+        ...retryCheckIn,
+        arrivalDeadline: outlet.arrival_deadline,
+        supersededAt: null,
+        settledAt: null,
+      })
+    }
+    const decisions: AttendanceDecision[] = decisionId
+      ? [
+          {
+            id: decisionId,
+            attemptId,
+            outletId: initialOutletId,
+            outletName: initialOutlet.name,
+            kind: seed.denial
+              ? 'deny'
+              : initialCheckIn?.source === 'manual'
+                ? 'manual_present'
+                : approval
+                  ? 'approve'
+                  : 'legacy_outcome',
+            by: seed.denial ? DEMO_MANAGER_ID : (approval?.by ?? null),
+            byName: seed.denial?.byName ?? approval?.byName ?? null,
+            at: decisionAt ?? instantAt(businessDate, '23:59'),
+            reason: seed.denial?.reason ?? approval?.reason ?? null,
+            preventsRetry: seed.denial?.preventRetry ?? true,
+            previousStatus: seed.status === 'present' ? 'absent' : seed.status,
+            newStatus: seed.denial ? 'absent' : seed.status,
+            latitude: approval?.latitude ?? null,
+            longitude: approval?.longitude ?? null,
+            accuracyMetres: approval?.accuracyMetres ?? null,
+            distanceMetres: approval?.distanceMetres ?? null,
+          },
+        ]
+      : []
+
+    if (seed.correction && correctionId) {
+      const at = instantAt(businessDate, seed.correction.time)
+      decisions.push({
+        id: correctionId,
+        attemptId,
+        outletId: initialOutletId,
+        outletName: initialOutlet.name,
+        kind: seed.correction.kind,
+        by: DEMO_MANAGER_ID,
+        byName: seed.correction.byName,
+        at,
+        reason: seed.correction.reason,
+        preventsRetry: true,
+        previousStatus: seed.status,
+        newStatus: seed.correction.kind === 'correct_present' ? 'present' : 'absent',
+        latitude: null,
+        longitude: null,
+        accuracyMetres: null,
+        distanceMetres: null,
+      })
+    }
+
+    const currentAttemptId = retryAttemptId ?? (initialCheckIn && !decisionId ? attemptId : null)
+    const outcomeAttemptId = decisionId ? attemptId : null
+    const latestDecisionId = correctionId ?? decisionId
+    const retryBlocked = seed.denial
+      ? retryCheckIn
+        ? false
+        : seed.denial.preventRetry
+      : latestDecisionId !== null
+    const status = seed.denial
+      ? 'absent'
+      : seed.correction
+        ? seed.correction.kind === 'correct_present'
+          ? 'present'
+          : 'absent'
+        : adjudicate(seed.status, checkIn, approval !== null)
+    const retry = currentAttemptId
+      ? checkIn?.distanceMetres === null
+        ? ({ allowed: true, reason: 'unverifiable-current' } as const)
+        : (checkIn?.distanceMetres ?? 0) > outlet.geofence_radius_m
+          ? ({ allowed: true, reason: 'outside-current' } as const)
+          : ({ allowed: false, reason: 'inside-current' } as const)
+      : seed.denial && !seed.denial.preventRetry
+        ? ({ allowed: true, reason: 'open-denial' } as const)
+        : ({ allowed: false, reason: retryBlocked ? 'prevented' : 'settled' } as const)
 
     return {
-      id: `d3000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
+      id,
       outletId,
       outletName: outlet.name,
       personId: person.id,
       personName: person.full_name,
       businessDate,
-      status: adjudicate(seed.status, checkIn, approval !== null),
+      status,
+      stateVersion: 1 + (retryCheckIn ? 1 : 0) + decisions.length,
+      currentAttemptId,
+      outcomeAttemptId,
+      latestDecisionId,
+      retryBlocked,
+      attempts,
+      decisions,
+      retry,
       // Stamped from the outlet exactly as the guard stamps it, and only where a
       // check-in landed — a day with no arrival has no deadline to have applied.
       arrivalDeadline: checkIn ? outlet.arrival_deadline : null,
@@ -294,7 +429,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
     async countWaitingByOutlet() {
       const byOutlet = new Map<string, WaitingCount>()
       for (const record of records) {
-        if (!record.checkIn || record.approval || record.status !== 'absent') continue
+        if (!record.currentAttemptId) continue
         const seen = byOutlet.get(record.outletId)
         if (seen) {
           seen.waiting += 1
@@ -318,30 +453,88 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       )
     },
 
-    async checkIn({ personId, outletId, businessDate, reading }) {
+    async checkIn({ personId, outletId, businessDate, reading, attemptId, expectedVersion }) {
       // Matched on person and date alone, mirroring
       // `attendance_one_per_person_day`: a day started at the other outlet is
       // the same day, and a second row for it is what the database refuses.
       const existing = records.find(
         (candidate) => candidate.personId === personId && candidate.businessDate === businessDate,
       )
-      if (existing?.checkIn) {
+      const outlet = outletFor(outletId)
+      if (!outlet.is_active) {
+        throw new AttendanceActionError('outlet_closed', 'This outlet is not accepting check-ins.')
+      }
+      if (!assignedOutlets(assignmentFixtures[personId] ?? []).includes(outletId)) {
+        throw new AttendanceActionError('not_permitted', 'You are not assigned to this outlet.')
+      }
+      if (businessDate !== resolveBusinessDate(new Date(), outlet.business_day_cutover)) {
         throw new AttendanceActionError(
-          'already_started',
-          'This day has already been recorded, here or at another outlet. Reload to see it.',
+          'day_closed',
+          'That outlet has moved to a new business day.',
         )
       }
-      if (existing && existing.outletId !== outletId) {
+      const repeated = attemptId
+        ? existing?.attempts.find((candidate) => candidate.id === attemptId)
+        : null
+      if (repeated) {
+        if (
+          repeated.outletId !== outletId ||
+          repeated.latitude !== (reading?.latitude ?? null) ||
+          repeated.longitude !== (reading?.longitude ?? null) ||
+          repeated.accuracyMetres !== (reading?.accuracyMetres ?? null)
+        ) {
+          throw new AttendanceActionError(
+            'changed_request',
+            'This request ID was reused with changed evidence.',
+          )
+        }
+        return clone(existing as AttendanceRecord)
+      }
+      if (existing && expectedVersion != null && existing.stateVersion !== expectedVersion) {
         throw new AttendanceActionError(
-          'recorded_elsewhere',
-          'This day is already recorded at another outlet. One day belongs to one outlet.',
+          'stale_state',
+          'Attendance changed while this action was open.',
+        )
+      }
+      const current = existing?.attempts.find(
+        (candidate) => candidate.id === existing.currentAttemptId,
+      )
+      if (
+        current &&
+        current.distanceMetres !== null &&
+        current.distanceMetres <= outletFor(current.outletId).geofence_radius_m
+      ) {
+        throw new AttendanceActionError(
+          'inside_retry_locked',
+          'Your latest check-in is inside the fence and must be decided first.',
+        )
+      }
+      if (existing && !existing.currentAttemptId && !existing.retry.allowed) {
+        throw new AttendanceActionError(
+          'retry_blocked',
+          'Another check-in is not allowed for this day.',
         )
       }
 
       const person = personFor(personId)
-      const outlet = outletFor(outletId)
       const event = eventFromReading(outlet, reading)
 
+      const nextAttemptId = attemptId ?? crypto.randomUUID()
+      const attempt: AttendanceAttempt = {
+        id: nextAttemptId,
+        outletId,
+        outletName: outlet.name,
+        businessDate,
+        ...event,
+        arrivalDeadline: outlet.arrival_deadline,
+        supersededAt: null,
+        settledAt: null,
+      }
+      const priorAttempts = existing?.attempts ?? []
+      const now = new Date().toISOString()
+      for (const prior of priorAttempts) {
+        if (prior.id === existing?.currentAttemptId) prior.supersededAt = now
+      }
       const record: AttendanceRecord = {
         id: `d3000000-0000-4000-a000-${String(nextId++).padStart(12, '0')}`,
         outletId,
@@ -350,6 +543,19 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         personName: person.full_name,
         businessDate,
         status: adjudicate('present', event, false),
+        stateVersion: (existing?.stateVersion ?? 0) + 1,
+        currentAttemptId: nextAttemptId,
+        outcomeAttemptId: existing?.outcomeAttemptId ?? null,
+        latestDecisionId: existing?.latestDecisionId ?? null,
+        retryBlocked: false,
+        attempts: [...priorAttempts, attempt],
+        decisions: existing?.decisions ?? [],
+        retry:
+          event.distanceMetres === null
+            ? { allowed: true, reason: 'unverifiable-current' }
+            : event.distanceMetres > outlet.geofence_radius_m
+              ? { allowed: true, reason: 'outside-current' }
+              : { allowed: false, reason: 'inside-current' },
         arrivalDeadline: outlet.arrival_deadline,
         checkIn: event,
         approval: null,
@@ -404,6 +610,14 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         personName: person.full_name,
         businessDate,
         status: 'present',
+        stateVersion: 0,
+        currentAttemptId: null,
+        outcomeAttemptId: null,
+        latestDecisionId: null,
+        retryBlocked: false,
+        attempts: [],
+        decisions: [],
+        retry: { allowed: false, reason: 'settled' },
         arrivalDeadline: null,
         checkIn: null,
         approval: null,
@@ -432,6 +646,42 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         accuracyMetres: null,
         distanceMetres: null,
       }
+      const attemptId = crypto.randomUUID()
+      const decisionId = crypto.randomUUID()
+      record.attempts.push({
+        id: attemptId,
+        outletId,
+        outletName: outlet.name,
+        businessDate,
+        ...record.checkIn,
+        arrivalDeadline: outlet.arrival_deadline,
+        supersededAt: null,
+        settledAt: record.approval.at,
+      })
+      record.decisions.push({
+        id: decisionId,
+        attemptId,
+        outletId,
+        outletName: outlet.name,
+        kind: 'manual_present',
+        by: enteredBy,
+        byName: entererName,
+        at: record.approval.at,
+        reason: null,
+        preventsRetry: true,
+        previousStatus: existing?.status ?? 'absent',
+        newStatus: 'present',
+        latitude: null,
+        longitude: null,
+        accuracyMetres: null,
+        distanceMetres: null,
+      })
+      record.stateVersion += 1
+      record.currentAttemptId = null
+      record.outcomeAttemptId = attemptId
+      record.latestDecisionId = decisionId
+      record.retryBlocked = true
+      record.retry = { allowed: false, reason: 'prevented' }
       if (!existing) records.push(record)
       return clone(record)
     },
@@ -489,8 +739,179 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
             : null,
         }
         record.status = 'present'
+        const decisionId = crypto.randomUUID()
+        const currentAttemptId = record.currentAttemptId
+        record.decisions.push({
+          id: decisionId,
+          attemptId: currentAttemptId,
+          outletId: record.outletId,
+          outletName: record.outletName,
+          kind: 'approve',
+          by: approverId,
+          byName: approver?.profile.full_name ?? null,
+          at: now,
+          reason: trimmed === '' ? null : trimmed,
+          preventsRetry: true,
+          previousStatus: 'absent',
+          newStatus: 'present',
+          latitude: reading?.latitude ?? null,
+          longitude: reading?.longitude ?? null,
+          accuracyMetres: reading?.accuracyMetres ?? null,
+          distanceMetres: record.approval.distanceMetres,
+        })
+        const attempt = record.attempts.find((candidate) => candidate.id === currentAttemptId)
+        if (attempt) attempt.settledAt = now
+        record.stateVersion += 1
+        record.currentAttemptId = null
+        record.outcomeAttemptId = currentAttemptId
+        record.latestDecisionId = decisionId
+        record.retryBlocked = true
+        record.retry = { allowed: false, reason: 'prevented' }
         return clone(record)
       })
+    },
+
+    async deny({
+      attendanceId,
+      expectedAttemptId,
+      expectedVersion,
+      reason,
+      preventRetry,
+      decisionId,
+    }) {
+      const record = find(attendanceId)
+      if (
+        record.stateVersion !== expectedVersion ||
+        record.currentAttemptId !== expectedAttemptId
+      ) {
+        throw new AttendanceActionError(
+          'stale_state',
+          'Attendance changed while this action was open.',
+        )
+      }
+      const trimmed = reason.trim()
+      if (!trimmed)
+        throw new AttendanceActionError('reason_required', 'Enter a reason before denying.')
+      const attempt = record.attempts.find((candidate) => candidate.id === expectedAttemptId)
+      if (!attempt)
+        throw new AttendanceActionError(
+          'stale_state',
+          'Attendance changed while this action was open.',
+        )
+      const now = new Date().toISOString()
+      const id = decisionId ?? crypto.randomUUID()
+      record.decisions.push({
+        id,
+        attemptId: attempt.id,
+        outletId: attempt.outletId,
+        outletName: attempt.outletName,
+        kind: 'deny',
+        by: DEMO_MANAGER_ID,
+        byName: personaFixtures.franchise_admin.profile.full_name,
+        at: now,
+        reason: trimmed,
+        preventsRetry: preventRetry,
+        previousStatus: record.status,
+        newStatus: 'absent',
+        latitude: null,
+        longitude: null,
+        accuracyMetres: null,
+        distanceMetres: null,
+      })
+      attempt.settledAt = now
+      record.outletId = attempt.outletId
+      record.outletName = attempt.outletName
+      record.status = 'absent'
+      record.currentAttemptId = null
+      record.outcomeAttemptId = attempt.id
+      record.latestDecisionId = id
+      record.retryBlocked = preventRetry
+      record.stateVersion += 1
+      record.approval = null
+      record.retry = preventRetry
+        ? { allowed: false, reason: 'prevented' }
+        : { allowed: true, reason: 'open-denial' }
+      return clone(record)
+    },
+
+    async correct({ attendanceId, expectedVersion, action, reason, reading, decisionId }) {
+      const record = find(attendanceId)
+      if (record.stateVersion !== expectedVersion || record.currentAttemptId !== null) {
+        throw new AttendanceActionError(
+          'stale_state',
+          'Attendance changed while this action was open.',
+        )
+      }
+      const trimmed = reason.trim()
+      if (!trimmed) throw new AttendanceActionError('reason_required', 'Enter a correction reason.')
+      const attempt =
+        record.attempts.find((candidate) => candidate.id === record.outcomeAttemptId) ??
+        record.attempts.at(-1)
+      if (!attempt) throw new AttendanceActionError('missing', 'There is no attempt to correct.')
+      if (action === 'allow_retry' && record.status !== 'absent') {
+        throw new AttendanceActionError(
+          'retry_refused',
+          'Only an absent day can allow another check-in.',
+        )
+      }
+      const now = new Date().toISOString()
+      const id = decisionId ?? crypto.randomUUID()
+      const newStatus =
+        action === 'present'
+          ? 'present'
+          : action === 'absent' || action === 'absent_allow_retry'
+            ? 'absent'
+            : record.status
+      const preventsRetry = action === 'present' || action === 'absent'
+      const outlet = outletFor(attempt.outletId)
+      const managerDistance =
+        action === 'present' && reading
+          ? metresFromOutlet(outlet, reading.latitude, reading.longitude)
+          : null
+      record.decisions.push({
+        id,
+        attemptId: attempt.id,
+        outletId: attempt.outletId,
+        outletName: attempt.outletName,
+        kind:
+          action === 'present'
+            ? 'correct_present'
+            : action === 'absent'
+              ? 'correct_absent'
+              : action,
+        by: DEMO_MANAGER_ID,
+        byName: personaFixtures.franchise_admin.profile.full_name,
+        at: now,
+        reason: trimmed,
+        preventsRetry,
+        previousStatus: record.status,
+        newStatus,
+        latitude: action === 'present' ? (reading?.latitude ?? null) : null,
+        longitude: action === 'present' ? (reading?.longitude ?? null) : null,
+        accuracyMetres: action === 'present' ? (reading?.accuracyMetres ?? null) : null,
+        distanceMetres: managerDistance,
+      })
+      record.status = newStatus
+      record.latestDecisionId = id
+      record.retryBlocked = preventsRetry
+      record.stateVersion += 1
+      record.retry = preventsRetry
+        ? { allowed: false, reason: 'prevented' }
+        : { allowed: true, reason: 'open-denial' }
+      record.approval =
+        action === 'present'
+          ? {
+              by: DEMO_MANAGER_ID,
+              byName: personaFixtures.franchise_admin.profile.full_name,
+              at: now,
+              reason: trimmed,
+              latitude: reading?.latitude ?? null,
+              longitude: reading?.longitude ?? null,
+              accuracyMetres: reading?.accuracyMetres ?? null,
+              distanceMetres: managerDistance,
+            }
+          : null
+      return clone(record)
     },
   }
 }

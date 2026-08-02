@@ -117,6 +117,111 @@ describe('token claims', () => {
   })
 })
 
+describe('hand-crafted attendance commands', () => {
+  it('refuses an employee naming an outlet where they have no assignment', async () => {
+    const { client } = await signIn(PERSONAS.employeeKalyani.email)
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
+    const { error } = await client.rpc('attendance_submit_attempt', {
+      p_attempt_id: crypto.randomUUID(),
+      p_outlet_id: OUTLETS.kanchrapara,
+      p_business_date: businessDate,
+      p_attempted_at: new Date().toISOString(),
+      p_lat: 22.94508,
+      p_lng: 88.43312,
+      p_accuracy_m: 12,
+    })
+
+    expect(error?.message).toMatch(/not assigned|not permitted/i)
+  })
+
+  it('refuses blank denial, stale state and cross-outlet manager authority', async () => {
+    const { client: owner } = await signIn(PERSONAS.superAdmin.email)
+    const { client: manager } = await signIn(PERSONAS.faKalyani.email)
+    const { data: rows, error: readError } = await owner
+      .from('attendance')
+      .select('id, outlet_id, current_attempt_id, state_version')
+      .not('current_attempt_id', 'is', null)
+
+    expect(readError).toBeNull()
+    const local = rows?.find((row) => row.outlet_id === OUTLETS.kalyani)
+    const other = rows?.find((row) => row.outlet_id === OUTLETS.kanchrapara)
+    expect(local?.current_attempt_id).toBeTruthy()
+    expect(other?.current_attempt_id).toBeTruthy()
+
+    const blank = await manager.rpc('attendance_deny_attempt', {
+      p_attendance_id: local!.id,
+      p_decision_id: crypto.randomUUID(),
+      p_expected_attempt_id: local!.current_attempt_id!,
+      p_expected_version: local!.state_version,
+      p_reason: '   ',
+      p_prevent_retry: false,
+    })
+    expect(blank.error?.message).toMatch(/reason/i)
+
+    const stale = await manager.rpc('attendance_deny_attempt', {
+      p_attendance_id: local!.id,
+      p_decision_id: crypto.randomUUID(),
+      p_expected_attempt_id: local!.current_attempt_id!,
+      p_expected_version: local!.state_version + 99,
+      p_reason: 'Hand-crafted stale request',
+      p_prevent_retry: false,
+    })
+    expect(stale.error?.message).toMatch(/stale|changed/i)
+
+    const crossOutlet = await manager.rpc('attendance_deny_attempt', {
+      p_attendance_id: other!.id,
+      p_decision_id: crypto.randomUUID(),
+      p_expected_attempt_id: other!.current_attempt_id!,
+      p_expected_version: other!.state_version,
+      p_reason: 'Trying to decide another outlet',
+      p_prevent_retry: false,
+    })
+    expect(crossOutlet.error?.message).toMatch(/not permitted|not found|authority|only a manager/i)
+  })
+
+  it('refuses a forged decision row and self-approval', async () => {
+    const { client: employee } = await signIn(PERSONAS.employeeKalyani.email)
+    const { client: owner } = await signIn(PERSONAS.superAdmin.email)
+    const { data: current } = await owner
+      .from('attendance')
+      .select('id, person_id, outlet_id, business_date, current_attempt_id, state_version')
+      .eq('outlet_id', OUTLETS.kalyani)
+      .not('current_attempt_id', 'is', null)
+      .limit(1)
+      .single()
+
+    expect(current).toBeTruthy()
+    const forged = await employee.from('attendance_decisions').insert({
+      id: crypto.randomUUID(),
+      attendance_id: current!.id,
+      attempt_id: current!.current_attempt_id,
+      person_id: current!.person_id,
+      outlet_id: current!.outlet_id,
+      business_date: current!.business_date,
+      kind: 'approve',
+      actor_id: PERSONAS.faKalyani.sub,
+      actor_name: 'Forged manager',
+      previous_status: 'absent',
+      new_status: 'present',
+      prevents_retry: true,
+      request_fingerprint: 'forged',
+    })
+    expect(forged.error).not.toBeNull()
+
+    const selfApproval = await employee.rpc('attendance_approve_attempt', {
+      p_attendance_id: current!.id,
+      p_decision_id: crypto.randomUUID(),
+      p_expected_attempt_id: current!.current_attempt_id!,
+      p_expected_version: current!.state_version,
+      p_manager_lat: 22.97505,
+      p_manager_lng: 88.4346,
+      p_manager_accuracy_m: 12,
+      p_reason: 'Forged self approval',
+    })
+    expect(selfApproval.error?.message).toMatch(/not permitted|manager|authority/i)
+  })
+})
+
 describe('a person assigned to two outlets', () => {
   let split: Client
 
@@ -362,9 +467,7 @@ describe('an Employee session', () => {
     // The rule was always about who may ATTEST, not about which role you are:
     // the old wording named `employee` and so silently exempted a biller
     // updating their own row (multi-outlet-people).
-    expect(error?.message).toContain(
-      'only an admin for this outlet may change an attendance status',
-    )
+    expect(error?.message).toContain('permission denied for table attendance')
   })
 
   it('cannot erase the evidence its verdict was derived from', async () => {
@@ -375,7 +478,7 @@ describe('an Employee session', () => {
       .update({ check_in_lat: null, check_in_lng: null })
       .eq('person_id', PERSONAS.employeeKalyani.sub)
       .not('check_in_at', 'is', null)
-    expect(error?.message).toContain('captured check-in evidence is immutable')
+    expect(error?.message).toContain('permission denied for table attendance')
   })
 
   it('cannot approve its own day over HTTP', async () => {
@@ -405,7 +508,7 @@ describe('an Employee session', () => {
       .eq('person_id', PERSONAS.employeeKalyani.sub)
       .eq('business_date', businessDate)
       .is('approved_by', null)
-    expect(error?.message).toContain('only a franchise admin or super admin may record an approval')
+    expect(error?.message).toContain('permission denied for table attendance')
   })
 
   it('cannot fabricate a manual entry over HTTP', async () => {
@@ -421,9 +524,7 @@ describe('an Employee session', () => {
       check_in_at: new Date().toISOString(),
       check_in_source: 'manual',
     })
-    expect(error?.message).toContain(
-      'only a franchise admin or super admin may record a manual entry',
-    )
+    expect(error?.message).toContain('permission denied for table attendance')
   })
 
   it('nor can the counter tablet', async () => {
@@ -438,9 +539,7 @@ describe('an Employee session', () => {
       check_in_at: new Date().toISOString(),
       check_in_source: 'manual',
     })
-    expect(error?.message).toContain(
-      'only a franchise admin or super admin may record a manual entry',
-    )
+    expect(error?.message).toContain('permission denied for table attendance')
   })
 })
 

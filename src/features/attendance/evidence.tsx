@@ -199,6 +199,65 @@ export function ApprovalNote({
   )
 }
 
+const DECISION_LABELS: Record<AttendanceRecord['decisions'][number]['kind'], string> = {
+  approve: 'Approved',
+  deny: 'Denied',
+  correct_present: 'Corrected to present',
+  correct_absent: 'Corrected to absent',
+  allow_retry: 'Allowed another check-in',
+  absent_allow_retry: 'Marked absent and allowed another check-in',
+  manual_present: 'Recorded manually as present',
+  legacy_outcome: 'Existing outcome',
+}
+
+/** Ordered immutable evidence and decisions, shared by manager and employee views. */
+export function AttendanceHistory({ record }: { record: AttendanceRecord }) {
+  const hasMaterialDecision = record.decisions.some(
+    (decision) =>
+      decision.kind === 'deny' ||
+      decision.kind === 'correct_present' ||
+      decision.kind === 'correct_absent' ||
+      decision.kind === 'allow_retry' ||
+      decision.kind === 'absent_allow_retry',
+  )
+
+  if (record.attempts.length <= 1 && record.decisions.length <= 1 && !hasMaterialDecision) {
+    return null
+  }
+
+  const items = [
+    ...record.attempts.map((attempt) => ({
+      id: `attempt-${attempt.id}`,
+      at: attempt.at,
+      text: `Checked in${attempt.outletName ? ` at ${attempt.outletName}` : ''}`,
+      reason: attempt.supersededAt ? 'Superseded by a newer check-in' : null,
+    })),
+    ...record.decisions.map((decision) => ({
+      id: `decision-${decision.id}`,
+      at: decision.at,
+      text: `${DECISION_LABELS[decision.kind]}${decision.byName ? ` by ${decision.byName}` : ''}`,
+      reason: decision.reason,
+    })),
+  ].sort((a, b) => a.at.localeCompare(b.at))
+
+  return (
+    <div
+      data-testid="attendance-history-sequence"
+      className="space-y-1 border-t border-border pt-2"
+    >
+      <p className="text-xs font-semibold text-content">History</p>
+      <ol className="space-y-1 text-xs text-content-muted">
+        {items.map((item) => (
+          <li key={item.id}>
+            {formatTime(item.at)} · {item.text}
+            {item.reason ? ` — ${item.reason}` : ''}
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 /**
  * What each settled status reads as at a glance. Present and absent are the two
  * a person scanning a month is looking for, so they carry the colour; half day

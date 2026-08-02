@@ -1,4 +1,12 @@
-import { CalendarCheck, ChevronLeft, ChevronRight, PencilLine, ShieldCheck } from 'lucide-react'
+import {
+  CalendarCheck,
+  ChevronLeft,
+  ChevronRight,
+  PencilLine,
+  RotateCcw,
+  ShieldCheck,
+  XCircle,
+} from 'lucide-react'
 import {
   Fragment,
   useEffect,
@@ -19,7 +27,12 @@ import { LoadingBlock, LoadingList } from '@/components/ui/loading'
 import { Select } from '@/components/ui/select'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { useAdapters, type Tables } from '@/data-access'
-import type { AccountSummary, AttendanceRecord, WaitingCount } from '@/data-access/adapters'
+import type {
+  AccountSummary,
+  AttendanceCorrectionAction,
+  AttendanceRecord,
+  WaitingCount,
+} from '@/data-access/adapters'
 import { AttendanceActionError, isStaffAt } from '@/data-access/adapters'
 import { attentionChanged } from '@/features/attention/attention'
 import {
@@ -35,10 +48,23 @@ import { holdsRole, sessionOutlets } from '@/session/session'
 import { useOutletScope } from '@/features/outlet-scope'
 
 import { AttendanceCard } from './attendance-card'
-import { isLate, readDay, tallyDays, type DayReading } from './attendance-record'
+import {
+  isLate,
+  isOutOfFence,
+  isUnverifiable,
+  readDay,
+  tallyDays,
+  type DayReading,
+} from './attendance-record'
 import { assembleRange, monthRange, type DateRange, type DayRow } from './attendance-range'
 import { RangeDayList, TallySummary } from './day-range-list'
-import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence } from './evidence'
+import {
+  ApprovalNote,
+  AttendanceHistory,
+  DayVerdict,
+  DerivedVerdict,
+  EventEvidence,
+} from './evidence'
 import { RangePicker } from './range-picker'
 import { useWaitingCounts, waitingAt, waitingLabel } from './waiting-counts'
 
@@ -362,6 +388,8 @@ function OutletAxis({
   const [businessDate, setBusinessDate] = useState(today)
   const [flow, setFlow] = useState<ApprovalFlow>({ kind: 'idle' })
   const [manualFor, setManualFor] = useState<AccountSummary | null>(null)
+  const [denyFor, setDenyFor] = useState<AttendanceRecord | null>(null)
+  const [correctFor, setCorrectFor] = useState<AttendanceRecord | null>(null)
 
   const outletIds = useMemo(() => outlets.map((outlet) => outlet.id), [outlets])
   const scopeKey = `${[...outletIds].sort().join(',')}|${businessDate}`
@@ -544,6 +572,61 @@ function OutletAxis({
     }
   }
 
+  async function deny(record: AttendanceRecord, reason: string, preventRetry: boolean) {
+    if (!record.currentAttemptId) return
+    try {
+      upsert([
+        await attendance.deny({
+          attendanceId: record.id,
+          expectedAttemptId: record.currentAttemptId,
+          expectedVersion: record.stateVersion,
+          reason,
+          preventRetry,
+        }),
+      ])
+      setDenyFor(null)
+      onError(null)
+      attentionChanged()
+    } catch (cause) {
+      setDenyFor(null)
+      onError(
+        cause instanceof AttendanceActionError
+          ? cause.message
+          : 'That did not work. Try again in a moment.',
+      )
+    }
+  }
+
+  async function correct(
+    record: AttendanceRecord,
+    action: AttendanceCorrectionAction,
+    reason: string,
+  ) {
+    try {
+      const position = action === 'present' ? await readPosition() : null
+      const reading = position?.ok ? position.reading : null
+      upsert([
+        await attendance.correct({
+          attendanceId: record.id,
+          expectedVersion: record.stateVersion,
+          action,
+          reason,
+          reading,
+        }),
+      ])
+      setCorrectFor(null)
+      onError(null)
+      attentionChanged()
+    } catch (cause) {
+      setCorrectFor(null)
+      onError(
+        cause instanceof AttendanceActionError
+          ? cause.message
+          : 'That did not work. Try again in a moment.',
+      )
+    }
+  }
+
   const onStaff: RollCallRow[] = people.map((person) => {
     const record = records.find((candidate) => candidate.personId === person.id) ?? null
     // Only the selected outlets this person is actually staff at get to decide
@@ -677,6 +760,12 @@ function OutletAxis({
                 const outlet = outletOf(row.record?.outletId ?? null)
                 if (row.record && outlet) void beginApprove([row.record.id], outlet)
               }}
+              onDeny={() => {
+                if (row.record) setDenyFor(row.record)
+              }}
+              onCorrect={() => {
+                if (row.record) setCorrectFor(row.record)
+              }}
               onManual={() => {
                 const staff = people.find((candidate) => candidate.id === row.person.id)
                 if (staff) setManualFor(staff)
@@ -706,6 +795,25 @@ function OutletAxis({
         onClose={() => setManualFor(null)}
         onRecord={(outletId, at) => {
           if (manualFor) void recordManual(manualFor, outletId, at)
+        }}
+      />
+
+      <DenialSheet
+        key={denyFor?.id ?? 'no-denial'}
+        record={denyFor}
+        radiusMetres={denyFor ? (outletOf(denyFor.outletId)?.geofence_radius_m ?? 0) : 0}
+        onClose={() => setDenyFor(null)}
+        onDeny={(reason, preventRetry) => {
+          if (denyFor) void deny(denyFor, reason, preventRetry)
+        }}
+      />
+
+      <CorrectionSheet
+        key={correctFor?.id ?? 'no-correction'}
+        record={correctFor}
+        onClose={() => setCorrectFor(null)}
+        onCorrect={(action, reason) => {
+          if (correctFor) void correct(correctFor, action, reason)
         }}
       />
     </>
@@ -820,6 +928,8 @@ function PersonDay({
   busy,
   offerManual,
   onApprove,
+  onDeny,
+  onCorrect,
   onManual,
 }: {
   person: RollCallPerson
@@ -833,6 +943,8 @@ function PersonDay({
   /** Can an arrival still be typed in for this person on this day? */
   offerManual: boolean
   onApprove: () => void
+  onDeny: () => void
+  onCorrect: () => void
   onManual: () => void
 }) {
   const waiting = reading.kind === 'waiting'
@@ -841,15 +953,27 @@ function PersonDay({
     waiting || offerManual ? (
       <div className="flex flex-wrap gap-2 pt-0.5">
         {waiting && (
-          <Button
-            size="phone"
-            disabled={busy}
-            onClick={onApprove}
-            data-testid={`approve-${person.id}`}
-          >
-            <ShieldCheck aria-hidden size={14} />
-            Approve
-          </Button>
+          <>
+            <Button
+              size="phone"
+              disabled={busy}
+              onClick={onApprove}
+              data-testid={`approve-${person.id}`}
+            >
+              <ShieldCheck aria-hidden size={14} />
+              Approve
+            </Button>
+            <Button
+              variant="secondary"
+              size="phone"
+              disabled={busy}
+              onClick={onDeny}
+              data-testid={`deny-${person.id}`}
+            >
+              <XCircle aria-hidden size={14} />
+              Deny
+            </Button>
+          </>
         )}
         {offerManual && (
           <Button
@@ -919,9 +1043,21 @@ function PersonDay({
                   />
                 </div>
                 <ApprovalNote record={record} radiusMetres={radiusMetres} />
+                <AttendanceHistory record={record} />
               </>
             )}
             {actions}
+            {record && !waiting && record.attempts.length > 0 && (
+              <Button
+                variant="ghost"
+                size="phone"
+                onClick={onCorrect}
+                data-testid={`correct-${person.id}`}
+              >
+                <RotateCcw aria-hidden size={14} />
+                Correct attendance
+              </Button>
+            )}
           </>
         ) : null
       }
@@ -1011,6 +1147,180 @@ function ReasonSheet({
           />
           <p className="text-xs text-content-muted">
             This is stored on the record and is visible to the person it is about.
+          </p>
+        </div>
+      </form>
+    </FormSheet>
+  )
+}
+
+/** Denial has exactly two manager inputs. The retry lock is always opt-in. */
+function DenialSheet({
+  record,
+  radiusMetres,
+  onClose,
+  onDeny,
+}: {
+  record: AttendanceRecord | null
+  radiusMetres: number
+  onClose: () => void
+  onDeny: (reason: string, preventRetry: boolean) => void
+}) {
+  const current = record?.attempts.find((attempt) => attempt.id === record.currentAttemptId) ?? null
+  const initialReason = isOutOfFence(current, radiusMetres)
+    ? 'Not at outlet'
+    : isUnverifiable(current)
+      ? 'Location could not be verified'
+      : ''
+  const [reason, setReason] = useState(initialReason)
+  const [preventRetry, setPreventRetry] = useState(false)
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    if (reason.trim()) onDeny(reason.trim(), preventRetry)
+  }
+
+  return (
+    <FormSheet
+      open={record !== null}
+      onClose={onClose}
+      title="Deny this check-in"
+      footer={
+        <button
+          type="submit"
+          form="deny-attendance"
+          disabled={!reason.trim()}
+          className={`${buttonVariants({ variant: 'danger', size: 'phone' })} w-full`}
+        >
+          Deny check-in
+        </button>
+      }
+    >
+      <form id="deny-attendance" onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-1">
+          <label htmlFor="denial-reason" className="block text-sm font-semibold">
+            Reason
+          </label>
+          <Input
+            id="denial-reason"
+            required
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            data-testid="denial-reason"
+          />
+          <p className="text-xs text-content-muted">
+            Denial marks this day absent. The reason is saved in the attendance history.
+          </p>
+        </div>
+        <label className="flex items-start gap-2 text-sm text-content">
+          <input
+            type="checkbox"
+            checked={preventRetry}
+            onChange={(event) => setPreventRetry(event.target.checked)}
+            data-testid="prevent-retry"
+            className="mt-0.5 size-4 accent-primary"
+          />
+          <span>
+            <span className="font-semibold">Prevent another check-in today</span>
+            <span className="block text-xs text-content-muted">
+              Leave unchecked to let the employee correct an outside or wrong-outlet check-in.
+            </span>
+          </span>
+        </label>
+      </form>
+    </FormSheet>
+  )
+}
+
+function correctionOptions(record: AttendanceRecord): {
+  value: AttendanceCorrectionAction
+  label: string
+}[] {
+  if (record.status === 'present') {
+    return [
+      { value: 'absent', label: 'Mark absent' },
+      { value: 'absent_allow_retry', label: 'Mark absent and allow another check-in' },
+    ]
+  }
+  if (record.status === 'absent') {
+    return [
+      { value: 'present', label: 'Mark present' },
+      record.retry.allowed
+        ? { value: 'absent', label: 'Keep absent and prevent another check-in' }
+        : { value: 'allow_retry', label: 'Allow another check-in' },
+    ]
+  }
+  return [
+    { value: 'present', label: 'Mark present' },
+    { value: 'absent', label: 'Mark absent' },
+  ]
+}
+
+/** One compact correction entry; opening it reveals only valid actions. */
+function CorrectionSheet({
+  record,
+  onClose,
+  onCorrect,
+}: {
+  record: AttendanceRecord | null
+  onClose: () => void
+  onCorrect: (action: AttendanceCorrectionAction, reason: string) => void
+}) {
+  const options = record ? correctionOptions(record) : []
+  const [action, setAction] = useState<AttendanceCorrectionAction>(options[0]?.value ?? 'present')
+  const [reason, setReason] = useState('')
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    if (reason.trim()) onCorrect(action, reason.trim())
+  }
+
+  return (
+    <FormSheet
+      open={record !== null}
+      onClose={onClose}
+      title="Correct attendance"
+      footer={
+        <button
+          type="submit"
+          form="correct-attendance"
+          disabled={!reason.trim()}
+          className={`${buttonVariants({ size: 'phone' })} w-full`}
+        >
+          Save correction
+        </button>
+      }
+    >
+      <form id="correct-attendance" onSubmit={submit} className="space-y-4" noValidate>
+        <div className="space-y-1">
+          <label htmlFor="correction-action" className="block text-sm font-semibold">
+            Correction
+          </label>
+          <Select
+            id="correction-action"
+            value={action}
+            onChange={(event) => setAction(event.target.value as AttendanceCorrectionAction)}
+          >
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="correction-reason" className="block text-sm font-semibold">
+            Reason
+          </label>
+          <Input
+            id="correction-reason"
+            required
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+          <p className="text-xs text-content-muted">
+            Every correction is appended to history. Marking present reads your current position;
+            other corrections do not.
           </p>
         </div>
       </form>

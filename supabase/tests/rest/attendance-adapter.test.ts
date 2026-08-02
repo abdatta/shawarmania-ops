@@ -251,9 +251,15 @@ describe('the attendance adapter', () => {
 
     expect(record.checkIn).not.toBeNull()
     expect(record.checkIn?.distanceMetres).toBeGreaterThan(outlet!.geofence_radius_m)
-    expect(record.status).toBe('absent')
-    // Recorded, and counting for nothing until somebody vouches for it.
-    expect(record.approval).toBeNull()
+    // A re-run may find the same day already settled by the approval test
+    // below. A newly written claim must be absent; a found row may now be the
+    // append-only present outcome from that later decision.
+    if (existing === null) expect(record.status).toBe('absent')
+    else expect(['absent', 'present']).toContain(record.status)
+    // A new claim counts for nothing until somebody vouches for it. On a
+    // deliberate re-run the later approval test may already have settled it.
+    if (existing === null) expect(record.approval).toBeNull()
+    else if (record.status === 'present') expect(record.approval).not.toBeNull()
     // The deadline that applied, stamped by the database as the row landed.
     expect(record.arrivalDeadline).toBe(outlet!.arrival_deadline)
   })

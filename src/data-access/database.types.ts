@@ -270,9 +270,14 @@ export type Database = {
           check_in_lng: number | null
           check_in_source: Database["public"]["Enums"]["check_in_source"] | null
           created_at: string
+          current_attempt_id: string | null
           id: string
+          latest_decision_id: string | null
+          outcome_attempt_id: string | null
           outlet_id: string
           person_id: string
+          retry_blocked: boolean
+          state_version: number
           status: Database["public"]["Enums"]["attendance_status"]
         }
         Insert: {
@@ -297,9 +302,14 @@ export type Database = {
             | Database["public"]["Enums"]["check_in_source"]
             | null
           created_at?: string
+          current_attempt_id?: string | null
           id?: string
+          latest_decision_id?: string | null
+          outcome_attempt_id?: string | null
           outlet_id: string
           person_id: string
+          retry_blocked?: boolean
+          state_version?: number
           status: Database["public"]["Enums"]["attendance_status"]
         }
         Update: {
@@ -324,9 +334,14 @@ export type Database = {
             | Database["public"]["Enums"]["check_in_source"]
             | null
           created_at?: string
+          current_attempt_id?: string | null
           id?: string
+          latest_decision_id?: string | null
+          outcome_attempt_id?: string | null
           outlet_id?: string
           person_id?: string
+          retry_blocked?: boolean
+          state_version?: number
           status?: Database["public"]["Enums"]["attendance_status"]
         }
         Relationships: [
@@ -345,6 +360,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "attendance_current_attempt_fkey"
+            columns: ["current_attempt_id"]
+            isOneToOne: false
+            referencedRelation: "attendance_attempts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_latest_decision_fkey"
+            columns: ["latest_decision_id"]
+            isOneToOne: false
+            referencedRelation: "attendance_decisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_outcome_attempt_fkey"
+            columns: ["outcome_attempt_id"]
+            isOneToOne: false
+            referencedRelation: "attendance_attempts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "attendance_outlet_id_fkey"
             columns: ["outlet_id"]
             isOneToOne: false
@@ -353,6 +389,203 @@ export type Database = {
           },
           {
             foreignKeyName: "attendance_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendance_attempts: {
+        Row: {
+          accuracy_m: number | null
+          arrival_deadline: string
+          attempted_at: string
+          attendance_id: string
+          business_date: string
+          created_at: string
+          distance_m: number | null
+          entered_by: string | null
+          entered_by_name: string | null
+          id: string
+          latitude: number | null
+          longitude: number | null
+          outlet_id: string
+          person_id: string
+          request_fingerprint: string
+          settled_at: string | null
+          source: Database["public"]["Enums"]["check_in_source"]
+          superseded_at: string | null
+        }
+        Insert: {
+          accuracy_m?: number | null
+          arrival_deadline: string
+          attempted_at: string
+          attendance_id: string
+          business_date: string
+          created_at?: string
+          distance_m?: number | null
+          entered_by?: string | null
+          entered_by_name?: string | null
+          id: string
+          latitude?: number | null
+          longitude?: number | null
+          outlet_id: string
+          person_id: string
+          request_fingerprint: string
+          settled_at?: string | null
+          source: Database["public"]["Enums"]["check_in_source"]
+          superseded_at?: string | null
+        }
+        Update: {
+          accuracy_m?: number | null
+          arrival_deadline?: string
+          attempted_at?: string
+          attendance_id?: string
+          business_date?: string
+          created_at?: string
+          distance_m?: number | null
+          entered_by?: string | null
+          entered_by_name?: string | null
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          outlet_id?: string
+          person_id?: string
+          request_fingerprint?: string
+          settled_at?: string | null
+          source?: Database["public"]["Enums"]["check_in_source"]
+          superseded_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_attempts_attendance_id_fkey"
+            columns: ["attendance_id"]
+            isOneToOne: false
+            referencedRelation: "attendance"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_attempts_entered_by_fkey"
+            columns: ["entered_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_attempts_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_attempts_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendance_decisions: {
+        Row: {
+          actor_id: string | null
+          actor_name: string | null
+          attempt_id: string | null
+          attendance_id: string
+          business_date: string
+          created_at: string
+          decided_at: string
+          id: string
+          kind: Database["public"]["Enums"]["attendance_decision_kind"]
+          manager_accuracy_m: number | null
+          manager_distance_m: number | null
+          manager_lat: number | null
+          manager_lng: number | null
+          new_status: Database["public"]["Enums"]["attendance_status"]
+          outlet_id: string
+          person_id: string
+          prevents_retry: boolean
+          previous_status: Database["public"]["Enums"]["attendance_status"]
+          reason: string | null
+          request_fingerprint: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_name?: string | null
+          attempt_id?: string | null
+          attendance_id: string
+          business_date: string
+          created_at?: string
+          decided_at?: string
+          id: string
+          kind: Database["public"]["Enums"]["attendance_decision_kind"]
+          manager_accuracy_m?: number | null
+          manager_distance_m?: number | null
+          manager_lat?: number | null
+          manager_lng?: number | null
+          new_status: Database["public"]["Enums"]["attendance_status"]
+          outlet_id: string
+          person_id: string
+          prevents_retry: boolean
+          previous_status: Database["public"]["Enums"]["attendance_status"]
+          reason?: string | null
+          request_fingerprint: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_name?: string | null
+          attempt_id?: string | null
+          attendance_id?: string
+          business_date?: string
+          created_at?: string
+          decided_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["attendance_decision_kind"]
+          manager_accuracy_m?: number | null
+          manager_distance_m?: number | null
+          manager_lat?: number | null
+          manager_lng?: number | null
+          new_status?: Database["public"]["Enums"]["attendance_status"]
+          outlet_id?: string
+          person_id?: string
+          prevents_retry?: boolean
+          previous_status?: Database["public"]["Enums"]["attendance_status"]
+          reason?: string | null
+          request_fingerprint?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_decisions_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_decisions_attempt_id_fkey"
+            columns: ["attempt_id"]
+            isOneToOne: false
+            referencedRelation: "attendance_attempts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_decisions_attendance_id_fkey"
+            columns: ["attendance_id"]
+            isOneToOne: false
+            referencedRelation: "attendance"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_decisions_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_decisions_person_id_fkey"
             columns: ["person_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -1218,9 +1451,249 @@ export type Database = {
       }
       app_username_from_auth_alias: { Args: { input: string }; Returns: string }
       app_username_valid: { Args: { input: string }; Returns: boolean }
+      attendance_approve_attempt: {
+        Args: {
+          p_attendance_id: string
+          p_decision_id: string
+          p_expected_attempt_id: string
+          p_expected_version: number
+          p_manager_accuracy_m: number
+          p_manager_lat: number
+          p_manager_lng: number
+          p_reason: string
+        }
+        Returns: {
+          approval_reason: string | null
+          approved_at: string | null
+          approved_by: string | null
+          approved_by_name: string | null
+          approver_accuracy_m: number | null
+          approver_distance_m: number | null
+          approver_lat: number | null
+          approver_lng: number | null
+          arrival_deadline: string | null
+          business_date: string
+          check_in_accuracy_m: number | null
+          check_in_at: string | null
+          check_in_distance_m: number | null
+          check_in_entered_by: string | null
+          check_in_entered_by_name: string | null
+          check_in_lat: number | null
+          check_in_lng: number | null
+          check_in_source: Database["public"]["Enums"]["check_in_source"] | null
+          created_at: string
+          current_attempt_id: string | null
+          id: string
+          latest_decision_id: string | null
+          outcome_attempt_id: string | null
+          outlet_id: string
+          person_id: string
+          retry_blocked: boolean
+          state_version: number
+          status: Database["public"]["Enums"]["attendance_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "attendance"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      attendance_correct: {
+        Args: {
+          p_action: string
+          p_attendance_id: string
+          p_decision_id: string
+          p_expected_version: number
+          p_manager_accuracy_m?: number
+          p_manager_lat?: number
+          p_manager_lng?: number
+          p_reason: string
+        }
+        Returns: {
+          approval_reason: string | null
+          approved_at: string | null
+          approved_by: string | null
+          approved_by_name: string | null
+          approver_accuracy_m: number | null
+          approver_distance_m: number | null
+          approver_lat: number | null
+          approver_lng: number | null
+          arrival_deadline: string | null
+          business_date: string
+          check_in_accuracy_m: number | null
+          check_in_at: string | null
+          check_in_distance_m: number | null
+          check_in_entered_by: string | null
+          check_in_entered_by_name: string | null
+          check_in_lat: number | null
+          check_in_lng: number | null
+          check_in_source: Database["public"]["Enums"]["check_in_source"] | null
+          created_at: string
+          current_attempt_id: string | null
+          id: string
+          latest_decision_id: string | null
+          outcome_attempt_id: string | null
+          outlet_id: string
+          person_id: string
+          retry_blocked: boolean
+          state_version: number
+          status: Database["public"]["Enums"]["attendance_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "attendance"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      attendance_deny_attempt: {
+        Args: {
+          p_attendance_id: string
+          p_decision_id: string
+          p_expected_attempt_id: string
+          p_expected_version: number
+          p_prevent_retry?: boolean
+          p_reason: string
+        }
+        Returns: {
+          approval_reason: string | null
+          approved_at: string | null
+          approved_by: string | null
+          approved_by_name: string | null
+          approver_accuracy_m: number | null
+          approver_distance_m: number | null
+          approver_lat: number | null
+          approver_lng: number | null
+          arrival_deadline: string | null
+          business_date: string
+          check_in_accuracy_m: number | null
+          check_in_at: string | null
+          check_in_distance_m: number | null
+          check_in_entered_by: string | null
+          check_in_entered_by_name: string | null
+          check_in_lat: number | null
+          check_in_lng: number | null
+          check_in_source: Database["public"]["Enums"]["check_in_source"] | null
+          created_at: string
+          current_attempt_id: string | null
+          id: string
+          latest_decision_id: string | null
+          outcome_attempt_id: string | null
+          outlet_id: string
+          person_id: string
+          retry_blocked: boolean
+          state_version: number
+          status: Database["public"]["Enums"]["attendance_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "attendance"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       attendance_elsewhere: {
         Args: { p_business_date: string; p_outlets: string[] }
         Returns: string[]
+      }
+      attendance_record_manual: {
+        Args: {
+          p_attempt_id: string
+          p_attempted_at: string
+          p_business_date: string
+          p_decision_id: string
+          p_outlet_id: string
+          p_person_id: string
+        }
+        Returns: {
+          approval_reason: string | null
+          approved_at: string | null
+          approved_by: string | null
+          approved_by_name: string | null
+          approver_accuracy_m: number | null
+          approver_distance_m: number | null
+          approver_lat: number | null
+          approver_lng: number | null
+          arrival_deadline: string | null
+          business_date: string
+          check_in_accuracy_m: number | null
+          check_in_at: string | null
+          check_in_distance_m: number | null
+          check_in_entered_by: string | null
+          check_in_entered_by_name: string | null
+          check_in_lat: number | null
+          check_in_lng: number | null
+          check_in_source: Database["public"]["Enums"]["check_in_source"] | null
+          created_at: string
+          current_attempt_id: string | null
+          id: string
+          latest_decision_id: string | null
+          outcome_attempt_id: string | null
+          outlet_id: string
+          person_id: string
+          retry_blocked: boolean
+          state_version: number
+          status: Database["public"]["Enums"]["attendance_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "attendance"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      attendance_request_fingerprint: {
+        Args: { payload: Json }
+        Returns: string
+      }
+      attendance_submit_attempt: {
+        Args: {
+          p_accuracy_m: number
+          p_attempt_id: string
+          p_attempted_at: string
+          p_business_date: string
+          p_expected_version?: number
+          p_lat: number
+          p_lng: number
+          p_outlet_id: string
+        }
+        Returns: {
+          approval_reason: string | null
+          approved_at: string | null
+          approved_by: string | null
+          approved_by_name: string | null
+          approver_accuracy_m: number | null
+          approver_distance_m: number | null
+          approver_lat: number | null
+          approver_lng: number | null
+          arrival_deadline: string | null
+          business_date: string
+          check_in_accuracy_m: number | null
+          check_in_at: string | null
+          check_in_distance_m: number | null
+          check_in_entered_by: string | null
+          check_in_entered_by_name: string | null
+          check_in_lat: number | null
+          check_in_lng: number | null
+          check_in_source: Database["public"]["Enums"]["check_in_source"] | null
+          created_at: string
+          current_attempt_id: string | null
+          id: string
+          latest_decision_id: string | null
+          outcome_attempt_id: string | null
+          outlet_id: string
+          person_id: string
+          retry_blocked: boolean
+          state_version: number
+          status: Database["public"]["Enums"]["attendance_status"]
+        }
+        SetofOptions: {
+          from: "*"
+          to: "attendance"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       close_business_day: {
         Args: {
@@ -1374,6 +1847,15 @@ export type Database = {
       alert_priority: "low" | "normal" | "high" | "urgent"
       alert_status: "open" | "acknowledged" | "resolved" | "closed"
       app_role: "super_admin" | "franchise_admin" | "biller" | "employee"
+      attendance_decision_kind:
+        | "approve"
+        | "deny"
+        | "correct_present"
+        | "correct_absent"
+        | "allow_retry"
+        | "absent_allow_retry"
+        | "manual_present"
+        | "legacy_outcome"
       attendance_status: "present" | "absent" | "half_day" | "leave"
       bill_status: "settled" | "void"
       check_in_source: "phone" | "counter_tablet" | "manual"
@@ -1531,6 +2013,16 @@ export const Constants = {
       alert_priority: ["low", "normal", "high", "urgent"],
       alert_status: ["open", "acknowledged", "resolved", "closed"],
       app_role: ["super_admin", "franchise_admin", "biller", "employee"],
+      attendance_decision_kind: [
+        "approve",
+        "deny",
+        "correct_present",
+        "correct_absent",
+        "allow_retry",
+        "absent_allow_retry",
+        "manual_present",
+        "legacy_outcome",
+      ],
       attendance_status: ["present", "absent", "half_day", "leave"],
       bill_status: ["settled", "void"],
       check_in_source: ["phone", "counter_tablet", "manual"],

@@ -7,6 +7,7 @@ import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters, OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
+import { resolveBusinessDate } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
@@ -28,6 +29,7 @@ import { isLate } from './attendance-record'
 const AT_COUNTER = { latitude: 22.97505, longitude: 88.4346, accuracy: 12 }
 /** Far outside a 150 m fence. */
 const DOWN_THE_ROAD = { latitude: 22.9765, longitude: 88.4362, accuracy: 45 }
+const AT_KANCHRAPARA = { latitude: 22.94508, longitude: 88.43312, accuracy: 14 }
 
 let getCurrentPosition: ReturnType<typeof vi.fn>
 
@@ -123,6 +125,51 @@ describe('the employee home', () => {
     expect(screen.getByText('Waiting for a manager to approve')).toBeInTheDocument()
     expect(screen.getByText(/^12 m$/)).toBeInTheDocument()
     expect(screen.queryByTestId('attendance-blocked')).not.toBeInTheDocument()
+  })
+
+  it('confirms material retry changes, and writes only when the employee uses the new check-in', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters()
+    const outlet = await adapters.outlets.getOutlet(OUTLET_KALYANI_ID)
+    if (!outlet) throw new Error('missing demo outlet')
+    const businessDate = resolveBusinessDate(new Date(), outlet.business_day_cutover)
+    await adapters.attendance.checkIn({
+      personId: personaFixtures.employee.profile.id,
+      outletId: OUTLET_KALYANI_ID,
+      businessDate,
+      reading: {
+        latitude: DOWN_THE_ROAD.latitude,
+        longitude: DOWN_THE_ROAD.longitude,
+        accuracyMetres: DOWN_THE_ROAD.accuracy,
+        at: new Date().toISOString(),
+      },
+    })
+    atPosition(AT_KANCHRAPARA)
+    renderHome(adapters, bothOutletsSession)
+
+    await user.click(await screen.findByTestId('attendance-retry'))
+    expect(await screen.findByRole('dialog', { name: 'Use this new check-in?' })).toHaveTextContent(
+      /Kalyani.*Kanchrapara/,
+    )
+    expect(screen.getByRole('dialog')).toHaveTextContent(/outside fence.*inside fence/)
+    await user.click(screen.getByRole('button', { name: 'Keep existing check-in' }))
+    expect(
+      (await adapters.attendance.getDay(personaFixtures.employee.profile.id, businessDate))
+        ?.attempts,
+    ).toHaveLength(1)
+
+    await user.click(screen.getByTestId('attendance-retry'))
+    await user.click(await screen.findByTestId('confirm-retry'))
+    await waitFor(async () => {
+      const record = await adapters.attendance.getDay(
+        personaFixtures.employee.profile.id,
+        businessDate,
+      )
+      expect(record?.attempts).toHaveLength(2)
+      expect(record?.outletId).toBe(OUTLET_KANCHRAPARA_ID)
+      expect(record?.status).toBe('absent')
+      expect(record?.currentAttemptId).toBe(record?.attempts.at(-1)?.id)
+    })
   })
 
   it('refuses a check-in taken outside the fence, and explains it', async () => {

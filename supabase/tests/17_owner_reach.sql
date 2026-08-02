@@ -79,24 +79,27 @@ select isnt_empty(
 -- rule the outlet's own manager answers to.
 select throws_ok(
   format($q$
-    update public.attendance
-       set approved_by = %L, status = 'present'
-     where outlet_id = %L and person_id = %L and approved_by is null $q$,
-    :'OWNER', :'KPA', :'GRILLER_KPA'),
+    select public.attendance_approve_attempt(
+      '86000000-0000-4000-a000-000000000001',
+      (select id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+      (select current_attempt_id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+      (select state_version from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+      null, null, null, null) $q$,
+    :'KPA', :'GRILLER_KPA', :'KPA', :'GRILLER_KPA', :'KPA', :'GRILLER_KPA'),
   null,
   'an approval from away from the outlet, or after the row''s own business day, requires a reason',
   'an off-site approval without a reason is refused, owner included');
 
 -- With the reason it records, and the owner needed no assignment to give it.
-select is(
-  pg_temp.rows_touched(format($q$
-    update public.attendance
-       set approved_by = %L,
-           approval_reason = 'Owner settled it from elsewhere (synthetic)',
-           status = 'present'
-     where outlet_id = %L and person_id = %L and approved_by is null $q$,
-    :'OWNER', :'KPA', :'GRILLER_KPA')),
-  1::bigint,
+select lives_ok(
+  format($q$
+    select public.attendance_approve_attempt(
+      '86000000-0000-4000-a000-000000000002',
+      (select id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+      (select current_attempt_id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+      (select state_version from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+      'Owner settled it from elsewhere (synthetic)', null, null, null) $q$,
+    :'KPA', :'GRILLER_KPA', :'KPA', :'GRILLER_KPA', :'KPA', :'GRILLER_KPA'),
   'the owner approves a waiting arrival at an outlet they are not assigned to');
 
 -- The approval is theirs on the record, and the database worked out how far away
@@ -122,15 +125,15 @@ select is(
 -- has to sit inside the day it names.
 select lives_ok(
   format($q$
-    insert into public.attendance
-      (outlet_id, person_id, business_date, status, check_in_at, check_in_source)
-    values (%L, %L, public.app_business_date(now(), time '04:00'), 'present',
-            greatest(
-              now() - interval '2 hours',
-              (public.app_business_date(now(), time '04:00') + time '04:00')
-                at time zone 'Asia/Kolkata'),
-            'manual') $q$,
-    :'KPA', :'STAFF_KPA'),
+    select public.attendance_record_manual(
+      '86000000-0000-4000-a000-000000000003',
+      '86000000-0000-4000-a000-000000000004',
+      %L, %L, public.app_business_date(now(), time '04:00'),
+      greatest(
+        now() - interval '2 hours',
+        (public.app_business_date(now(), time '04:00') + time '04:00')
+          at time zone 'Asia/Kolkata')) $q$,
+    :'STAFF_KPA', :'KPA'),
   'the owner records a manual arrival at an outlet they are not assigned to');
 
 select is(

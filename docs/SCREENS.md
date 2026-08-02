@@ -148,6 +148,24 @@ A manager supplies one number, what they counted, and **the difference appears t
 
 **Every arrival waits for approval, in the fence or not.** A check-in records where a phone was; only a manager saying so records that somebody worked. Waiting days are distinguished on the row, **counted by a badge on the day picker**, and **sorted to the top of the roll-call**, since they are the only rows carrying somebody else's request for attention. That order is fixed while the page is open and recomputed next time it is opened, so settling one day never slides the next person's Approve button under a moving thumb. **Each day is approved on its own** — there is no bulk action, deliberately, because approving is meant to be the moment a manager remembers this person turning up for this shift. The approval reads the manager's own position, reused for up to a minute across a run of approvals: **inside the fence, on the row's own business day, it is one tap with no reason at all** — and anywhere or any day else it asks for one first, which is stored on the day and readable by the person it is about. Nothing is refused for being elsewhere. A manager who approves from home every morning shows up as a column of reasons, which is oversight a refusal would not have produced.
 
+**Deny sits beside Approve on the one current waiting attempt.** Its sheet has
+exactly two inputs: a required editable reason and **Prevent another check-in
+today**, always unchecked when the sheet opens. A measured outside attempt is
+prefilled as *Not at outlet* and an attempt with no usable fix says that its
+location could not be verified; the manager may edit either before submitting.
+Denial never asks for or stores the manager's position. It immediately makes
+the outcome absent and clears the waiting item. Checking the optional box locks
+all employee retries for that person/date across outlets.
+
+**Corrections stay inside expanded settled details.** One quiet *Correct
+attendance* entry offers only actions meaningful for the current state: mark
+present, mark absent, allow another check-in, or mark absent and allow one. Every
+correction requires a reason and is appended to the decision history. Correcting
+to present reuses the manager-position flow while retaining the employee's
+attempt evidence; absent and retry-policy corrections read no manager position.
+This is also how a manager reopens a prevented wrong-outlet denial so the person
+can check in at the outlet where they were meant to work.
+
 
 **The day controls say where the rest of the work is.** The badge on the day picker counts only the day on screen, so the earlier-days and later-days arrows carry a dot when **this outlet** holds unapproved arrivals before or after it. The dot is scoped to the outlet in scope and to nothing else: another shop's backlog never marks these arrows, and switching outlets changes what they say. A count of nought is never drawn — the absence of a badge always means there is nothing waiting.
 
@@ -239,9 +257,23 @@ An alert moves **one step at a time** — open → acknowledged → resolved →
 
 **Home** — one large check-in button, today's status, and the outlet they are assigned to. A recorded arrival says plainly that it is **waiting for a manager to approve it**, never that the day is done: it counts for nothing until somebody vouches for it, and a screen implying otherwise would be the misunderstanding this design exists to remove. An arrival after the outlet's deadline reads as late.
 
-If the geofence blocks them, this screen says how far outside the limit they were, what the limit is, and how accurate their phone's reading was, then offers to ask a manager to approve it. **A refused check-in records nothing** until they choose to ask — walking away leaves no row and does not consume the one record that day allows. If the phone cannot supply a position at all, the screen names which of permission, signal, or timeout failed, and offers the same route through.
+An outside or unverifiable check-in is still recorded and waits for a manager.
+The employee may retry only while the newest attempt is outside/unverifiable or
+after an open denial; an inside pending attempt and every approved, manual,
+leave, half-day or retry-prevented day are locked. A retry can resolve to any
+live outlet where that person has an Employee assignment, but only while that
+outlet still reckons the same explicit business date as current. Being absent at
+one outlet does not create a second person/day at another.
 
-**My attendance** — own history a month at a time, with the same control the manager's person view has, and the same counts. Each day is a headline that opens onto its detail, exactly as the manager's rows are. For each day: the time, the status, the distance, the accuracy, the source, the late tag, and the approval — **including whether the approver was standing at the outlet when they gave it**, and any reason they typed. Days with nothing recorded read as absent here too, per outlet. Own records only, enforced in the database, and spanning every outlet they work at with each day naming its own. The symmetry is deliberate and is built by sharing the components: asymmetric visibility in a monitoring feature is how it becomes something staff resent.
+Before writing, a retry shows one confirmation whenever it would change the
+outlet, on-time/late classification, or inside/outside/unverifiable evidence.
+It lists every before→after change together. *Keep existing check-in* writes
+nothing; *Use new check-in* appends the attempt. A denied day remains visibly
+**Absent — new check-in awaiting manager review** until that newer attempt is
+approved. Repeated weak readings remain possible so a staff member can recover
+from GPS drift, but no retry erases prior evidence.
+
+**My attendance** — own history a month at a time, with the same control the manager's person view has, and the same counts. Each day is a headline that opens onto its detail, exactly as the manager's rows are. For each day: every ordered attempt and decision, the outlet, time, status, distance, accuracy, source, late tag, denial/correction reasons, and approvals — **including whether the approver was standing at the outlet when they gave it**. Days with nothing recorded read as absent here too. Own records only, enforced in the database, and spanning every outlet they work at with each day naming its complete sequence. The symmetry is deliberate and is built by sharing the components: asymmetric visibility in a monitoring feature is how it becomes something staff resent.
 
 ## Cross-cutting
 

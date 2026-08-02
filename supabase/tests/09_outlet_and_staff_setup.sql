@@ -126,13 +126,12 @@ $q$, 'the super admin deactivates Kalyani');
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 select throws_ok($q$
-  insert into public.attendance
-    (outlet_id, person_id, business_date, status,
-     check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
-  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
-          public.app_business_date(now(), time '04:00'), 'present',
-          now(), 22.97505, 88.43460, 18, 'phone')
-$q$, '23514', 'outlet is not trading',
+  select public.attendance_submit_attempt(
+    '85000000-0000-4000-a000-000000000001',
+    '00000000-0000-4000-a000-000000000001',
+    public.app_business_date(now(), time '04:00'), now(),
+    22.97505, 88.43460, 18, null)
+$q$, 'P0001', 'outlet is not trading',
   'a check-in at a deactivated outlet is refused, and says why');
 
 -- A day worked before the shop closed must still be settleable afterwards. The
@@ -145,23 +144,22 @@ $q$, '23514', 'outlet is not trading',
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select throws_ok($q$
-  update public.attendance
-     set approved_by = '10000000-0000-4000-a000-000000000002', status = 'present',
-         approver_lat = 22.97502, approver_lng = 88.43455, approver_accuracy_m = 20
-   where person_id = '20000000-0000-4000-a000-000000000002'
-     and outlet_id = '00000000-0000-4000-a000-000000000001'
-     and business_date = current_date - 1
+  select public.attendance_approve_attempt(
+    '85000000-0000-4000-a000-000000000002',
+    (select id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+    (select current_attempt_id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+    (select state_version from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+    null, 22.97502, 88.43455, 20)
 $q$, 'P0001', 'an approval from away from the outlet, or after the row''s own business day, requires a reason',
   'settling a day that has already closed needs a reason, even from inside the fence');
 
 select lives_ok($q$
-  update public.attendance
-     set approved_by = '10000000-0000-4000-a000-000000000002', status = 'present',
-         approval_reason = 'Worked the shift before we closed the shop (synthetic)',
-         approver_lat = 22.97502, approver_lng = 88.43455, approver_accuracy_m = 20
-   where person_id = '20000000-0000-4000-a000-000000000002'
-     and outlet_id = '00000000-0000-4000-a000-000000000001'
-     and business_date = current_date - 1
+  select public.attendance_approve_attempt(
+    '85000000-0000-4000-a000-000000000003',
+    (select id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+    (select current_attempt_id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+    (select state_version from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+    'Worked the shift before we closed the shop (synthetic)', 22.97502, 88.43455, 20)
 $q$, 'an approval at a deactivated outlet is recorded, never refused');
 
 select is((select status from public.attendance
@@ -198,12 +196,11 @@ $q$, 'the super admin reactivates Kalyani');
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000006'::uuid);
 
 select lives_ok($q$
-  insert into public.attendance
-    (outlet_id, person_id, business_date, status,
-     check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
-  values ('00000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000006',
-          public.app_business_date(now(), time '04:00'), 'present',
-          now(), 22.97505, 88.43460, 18, 'phone')
+  select public.attendance_submit_attempt(
+    '85000000-0000-4000-a000-000000000004',
+    '00000000-0000-4000-a000-000000000001',
+    public.app_business_date(now(), time '04:00'), now(),
+    22.97505, 88.43460, 18, null)
 $q$, 'reactivating restores check-in with no other intervention');
 
 select is((select status::text from public.attendance

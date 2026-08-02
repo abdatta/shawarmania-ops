@@ -77,6 +77,22 @@ export interface AttendanceSeed {
   status: AttendanceStatus
   checkIn?: EventSeed
   approval?: ApprovalSeed
+  /** A manager denial, retained even when a newer retry is pending. */
+  denial?: {
+    byName: string
+    time: string
+    reason: string
+    preventRetry: boolean
+  }
+  /** A later immutable claim, potentially at the correct other outlet. */
+  retryCheckIn?: EventSeed & { outletId: string }
+  /** An audited correction after the original settlement. */
+  correction?: {
+    byName: string
+    time: string
+    reason: string
+    kind: 'correct_present' | 'correct_absent'
+  }
 }
 
 const DEMO_STAFF_ID = personaFixtures.employee.profile.id
@@ -131,6 +147,12 @@ export const attendanceSeeds: AttendanceSeed[] = [
       time: '09:26',
       reason: 'Signal drift by the main road; seen at the counter at 9:15 before I left.',
       ...APPROVED_FROM_HOME,
+    },
+    correction: {
+      byName: DEMO_MANAGER.full_name,
+      time: '10:05',
+      reason: 'Confirmed the original present outcome after reviewing the shift log.',
+      kind: 'correct_present',
     },
   },
   {
@@ -196,7 +218,7 @@ export const attendanceSeeds: AttendanceSeed[] = [
     personId: DEMO_PREP_COOK_ACCOUNT_ID,
     daysAgo: 0,
     status: 'present',
-    checkIn: { time: '08:55', ...NEAR_COUNTER },
+    checkIn: { time: '08:55' },
   },
   // Waiting, and the reading is a poor one taken well outside the fence: the
   // row a manager actually has to think about before settling it.
@@ -218,7 +240,18 @@ export const attendanceSeeds: AttendanceSeed[] = [
       manual: { byId: DEMO_MANAGER.id, byName: DEMO_MANAGER.full_name },
     },
   },
-  { personId: DEMO_RUNNER_ACCOUNT_ID, daysAgo: 1, status: 'absent' },
+  {
+    personId: DEMO_RUNNER_ACCOUNT_ID,
+    daysAgo: 1,
+    status: 'absent',
+    checkIn: { time: '09:24', ...DOWN_THE_ROAD },
+    denial: {
+      byName: DEMO_MANAGER.full_name,
+      time: '09:32',
+      reason: 'Not at outlet',
+      preventRetry: true,
+    },
+  },
 
   // ── Two outlets, one day each ────────────────────────────────────────────
   //
@@ -239,6 +272,20 @@ export const attendanceSeeds: AttendanceSeed[] = [
     status: 'present',
     checkIn: { time: '08:55', ...AT_COUNTER },
     approval: { byName: DEMO_MANAGER.full_name, time: '09:14', ...APPROVED_AT_COUNTER },
+  },
+  {
+    personId: DEMO_TWO_OUTLETS_ACCOUNT_ID,
+    outletId: OUTLET_KALYANI_ID,
+    daysAgo: 3,
+    status: 'absent',
+    checkIn: { time: '09:05', ...DOWN_THE_ROAD },
+    denial: {
+      byName: DEMO_MANAGER.full_name,
+      time: '09:12',
+      reason: 'Checked in to the wrong outlet',
+      preventRetry: false,
+    },
+    retryCheckIn: { outletId: OUTLET_KANCHRAPARA_ID, time: '09:20' },
   },
   {
     personId: DEMO_TWO_OUTLETS_ACCOUNT_ID,

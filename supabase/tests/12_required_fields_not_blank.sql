@@ -263,6 +263,7 @@ select bag_eq($$
      and connamespace = 'public'::regnamespace
 $$, $$ values
   ('attendance_approval_reason_not_blank'),
+  ('attendance_decision_reason_not_blank'),
   ('outlets_name_not_blank'),
   ('outlets_code_not_blank'),
   ('outlets_location_label_not_blank'),

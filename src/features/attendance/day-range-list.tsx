@@ -6,7 +6,13 @@ import { formatBusinessDate } from '@/domain'
 import { AttendanceCard } from './attendance-card'
 import type { AttendanceTally } from './attendance-record'
 import type { DayRow } from './attendance-range'
-import { ApprovalNote, DayVerdict, DerivedVerdict, EventEvidence } from './evidence'
+import {
+  ApprovalNote,
+  AttendanceHistory,
+  DayVerdict,
+  DerivedVerdict,
+  EventEvidence,
+} from './evidence'
 
 /**
  * A span of days, rendered once for both surfaces that show one.
@@ -133,6 +139,7 @@ export function RangeDayCard({
               <EventEvidence label="Arrived" event={record.checkIn} radiusMetres={radiusMetres} />
             </div>
             <ApprovalNote record={record} radiusMetres={radiusMetres} />
+            <AttendanceHistory record={record} />
           </>
         ) : null
       }

@@ -62,7 +62,7 @@ export function isUnevaluated(event: AttendanceEvent | null): boolean {
  * override rule. The way to record "arrived but not counted" is `half_day`.
  */
 export function isWaitingForApproval(record: AttendanceRecord): boolean {
-  return record.checkIn !== null && record.approval === null && record.status === 'absent'
+  return record.currentAttemptId !== null
 }
 
 /**
@@ -200,7 +200,11 @@ export const STATUS_LABELS = {
  * explanation of why the two disagree.
  */
 export function describeDay(record: AttendanceRecord): string {
-  if (isWaitingForApproval(record)) return 'Waiting for a manager to approve'
+  if (isWaitingForApproval(record)) {
+    return record.latestDecisionId && record.status === 'absent'
+      ? 'Absent — new check-in awaiting manager review'
+      : 'Waiting for a manager to approve'
+  }
   // An approved day says "Present" here and carries its approval in the note
   // beneath it — every surface renders both, and two lines each opening
   // "Approved by" reads like a stutter rather than like two facts.
@@ -259,6 +263,7 @@ export function tallyDays(
       tally.absent += 1
     } else if (reading.kind === 'waiting') {
       tally.waiting += 1
+      if (reading.record.status === 'absent' && reading.record.latestDecisionId) tally.absent += 1
     } else if (reading.kind === 'recorded') {
       if (reading.record.status === 'present') tally.present += 1
       else if (reading.record.status === 'absent') tally.absent += 1

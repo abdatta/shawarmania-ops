@@ -2,6 +2,8 @@ import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import type {
   AttendanceAdapter,
+  AttendanceAttempt,
+  AttendanceDecision,
   AttendanceEvent,
   AttendanceRecord,
   WaitingCount,
@@ -23,7 +25,8 @@ import type { Database } from '../database.types'
  */
 
 const COLUMNS =
-  'id, outlet_id, person_id, business_date, status, arrival_deadline, ' +
+  'id, outlet_id, person_id, business_date, status, state_version, current_attempt_id, ' +
+  'outcome_attempt_id, latest_decision_id, retry_blocked, arrival_deadline, ' +
   'check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_distance_m, check_in_source, ' +
   'check_in_entered_by, check_in_entered_by_name, ' +
   'approved_by, approved_by_name, approval_reason, approved_at, ' +
@@ -32,7 +35,46 @@ const COLUMNS =
   // Named on the row since multi-outlet-people: a person may work a morning at
   // one outlet and an evening at another, so their own history has to say which
   // day was where rather than let the reader assume.
-  'outlets!attendance_outlet_id_fkey(name)'
+  'outlets!attendance_outlet_id_fkey(name), ' +
+  'attendance_attempts!attendance_attempts_attendance_id_fkey(id, outlet_id, business_date, attempted_at, latitude, longitude, accuracy_m, distance_m, source, entered_by, entered_by_name, arrival_deadline, superseded_at, settled_at, outlets!attendance_attempts_outlet_id_fkey(name, geofence_radius_m)), ' +
+  'attendance_decisions!attendance_decisions_attendance_id_fkey(id, attempt_id, outlet_id, kind, actor_id, actor_name, decided_at, reason, prevents_retry, previous_status, new_status, manager_lat, manager_lng, manager_accuracy_m, manager_distance_m, outlets!attendance_decisions_outlet_id_fkey(name))'
+
+interface JoinedAttempt {
+  id: string
+  outlet_id: string
+  business_date: string
+  attempted_at: string
+  latitude: number | null
+  longitude: number | null
+  accuracy_m: number | null
+  distance_m: number | null
+  source: AttendanceEvent['source']
+  entered_by: string | null
+  entered_by_name: string | null
+  arrival_deadline: string
+  superseded_at: string | null
+  settled_at: string | null
+  outlets: { name: string; geofence_radius_m: number } | null
+}
+
+interface JoinedDecision {
+  id: string
+  attempt_id: string | null
+  outlet_id: string
+  kind: AttendanceDecision['kind']
+  actor_id: string | null
+  actor_name: string | null
+  decided_at: string
+  reason: string | null
+  prevents_retry: boolean
+  previous_status: AttendanceDecision['previousStatus']
+  new_status: AttendanceDecision['newStatus']
+  manager_lat: number | null
+  manager_lng: number | null
+  manager_accuracy_m: number | null
+  manager_distance_m: number | null
+  outlets: { name: string } | null
+}
 
 interface JoinedRow {
   id: string
@@ -40,6 +82,11 @@ interface JoinedRow {
   person_id: string
   business_date: string
   status: AttendanceRecord['status']
+  state_version: number
+  current_attempt_id: string | null
+  outcome_attempt_id: string | null
+  latest_decision_id: string | null
+  retry_blocked: boolean
   arrival_deadline: string | null
   check_in_at: string | null
   check_in_lat: number | null
@@ -59,9 +106,75 @@ interface JoinedRow {
   approver_distance_m: number | null
   profiles: { full_name: string } | null
   outlets: { name: string } | null
+  attendance_attempts: JoinedAttempt[]
+  attendance_decisions: JoinedDecision[]
+}
+
+function retryEligibility(row: JoinedRow, attempts: AttendanceAttempt[]) {
+  if (row.retry_blocked) return { allowed: false, reason: 'prevented' as const }
+  if (row.current_attempt_id) {
+    const current = attempts.find((attempt) => attempt.id === row.current_attempt_id)
+    if (!current) return { allowed: false, reason: 'settled' as const }
+    if (current.distanceMetres === null) {
+      return { allowed: true, reason: 'unverifiable-current' as const }
+    }
+    return current.distanceMetres >
+      (row.attendance_attempts.find((item) => item.id === current.id)?.outlets?.geofence_radius_m ??
+        0)
+      ? { allowed: true, reason: 'outside-current' as const }
+      : { allowed: false, reason: 'inside-current' as const }
+  }
+  if (row.status !== 'absent') return { allowed: false, reason: 'not-absent' as const }
+  const latest = row.attendance_decisions.find((decision) => decision.id === row.latest_decision_id)
+  if (
+    latest &&
+    ['deny', 'correct_absent', 'allow_retry', 'absent_allow_retry'].includes(latest.kind)
+  ) {
+    return { allowed: true, reason: 'open-denial' as const }
+  }
+  return { allowed: false, reason: 'settled' as const }
 }
 
 function toRecord(row: JoinedRow): AttendanceRecord {
+  const attempts: AttendanceAttempt[] = [...(row.attendance_attempts ?? [])]
+    .sort((a, b) => a.attempted_at.localeCompare(b.attempted_at))
+    .map((attempt) => ({
+      id: attempt.id,
+      outletId: attempt.outlet_id,
+      outletName: attempt.outlets?.name ?? null,
+      businessDate: attempt.business_date,
+      at: attempt.attempted_at,
+      latitude: attempt.latitude,
+      longitude: attempt.longitude,
+      accuracyMetres: attempt.accuracy_m,
+      distanceMetres: attempt.distance_m,
+      source: attempt.source,
+      enteredBy: attempt.entered_by,
+      enteredByName: attempt.entered_by_name,
+      arrivalDeadline: attempt.arrival_deadline,
+      supersededAt: attempt.superseded_at,
+      settledAt: attempt.settled_at,
+    }))
+  const decisions: AttendanceDecision[] = [...(row.attendance_decisions ?? [])]
+    .sort((a, b) => a.decided_at.localeCompare(b.decided_at))
+    .map((decision) => ({
+      id: decision.id,
+      attemptId: decision.attempt_id,
+      outletId: decision.outlet_id,
+      outletName: decision.outlets?.name ?? null,
+      kind: decision.kind,
+      by: decision.actor_id,
+      byName: decision.actor_name,
+      at: decision.decided_at,
+      reason: decision.reason,
+      preventsRetry: decision.prevents_retry,
+      previousStatus: decision.previous_status,
+      newStatus: decision.new_status,
+      latitude: decision.manager_lat,
+      longitude: decision.manager_lng,
+      accuracyMetres: decision.manager_accuracy_m,
+      distanceMetres: decision.manager_distance_m,
+    }))
   return {
     id: row.id,
     outletId: row.outlet_id,
@@ -70,6 +183,14 @@ function toRecord(row: JoinedRow): AttendanceRecord {
     personName: row.profiles?.full_name ?? '',
     businessDate: row.business_date,
     status: row.status,
+    stateVersion: row.state_version,
+    currentAttemptId: row.current_attempt_id,
+    outcomeAttemptId: row.outcome_attempt_id,
+    latestDecisionId: row.latest_decision_id,
+    retryBlocked: row.retry_blocked,
+    attempts,
+    decisions,
+    retry: retryEligibility(row, attempts),
     arrivalDeadline: row.arrival_deadline,
     checkIn: row.check_in_at
       ? {
@@ -111,6 +232,43 @@ function toRecord(row: JoinedRow): AttendanceRecord {
 function toActionError(error: PostgrestError): AttendanceActionError {
   const detail = `${error.message} ${error.details ?? ''}`
 
+  if (detail.includes('attendance state is stale')) {
+    return new AttendanceActionError(
+      'stale_state',
+      'Attendance changed while this action was open. The latest state has been reloaded.',
+    )
+  }
+  if (detail.includes('changed payload') || detail.includes('command id was reused')) {
+    return new AttendanceActionError(
+      'changed_request',
+      'This saved request no longer matches the action. Start the action again.',
+    )
+  }
+  if (detail.includes('current in-fence attempt')) {
+    return new AttendanceActionError(
+      'inside_retry_locked',
+      'Your latest check-in is inside the fence and must be decided before another check-in.',
+    )
+  }
+  if (detail.includes('another check-in is not allowed')) {
+    return new AttendanceActionError(
+      'retry_blocked',
+      'Another check-in is not allowed for this business day.',
+    )
+  }
+  if (detail.includes('retry target no longer')) {
+    return new AttendanceActionError(
+      'day_closed',
+      'That outlet has moved to a new business day, so this check-in can no longer be retried.',
+    )
+  }
+  if (detail.includes('requires a reason')) {
+    return new AttendanceActionError(
+      'reason_required',
+      'This action needs a reason before it can be saved.',
+    )
+  }
+
   if (detail.includes('attendance_one_per_person_day')) {
     return new AttendanceActionError(
       'already_started',
@@ -144,7 +302,7 @@ function toActionError(error: PostgrestError): AttendanceActionError {
       'Only a manager for this outlet can record an entry on someone’s behalf.',
     )
   }
-  if (detail.includes('requires a reason') || detail.includes('approval_reason_not_blank')) {
+  if (detail.includes('approval_reason_not_blank')) {
     return new AttendanceActionError(
       'reason_required',
       'You are not at the outlet, or this day has already closed, so this approval needs a reason.',
@@ -274,9 +432,7 @@ export function createSupabaseAttendanceAdapter(
     async countWaitingByOutlet() {
       const { data, error } = await table()
         .select('outlet_id, business_date, outlets!attendance_outlet_id_fkey(name)')
-        .not('check_in_at', 'is', null)
-        .is('approved_by', null)
-        .eq('status', 'absent')
+        .not('current_attempt_id', 'is', null)
         .order('business_date', { ascending: true })
         .limit(2000)
       if (error) throw toActionError(error)
@@ -309,23 +465,24 @@ export function createSupabaseAttendanceAdapter(
       )
     },
 
-    async checkIn({ personId, outletId, businessDate, reading }) {
-      const { data, error } = await table()
-        .insert({
-          outlet_id: outletId,
-          person_id: personId,
-          business_date: businessDate,
-          // The claim, not the verdict. The trigger stores `absent` whatever the
-          // coordinates say, because nobody has vouched for the day yet.
-          status: 'present',
-          check_in_at: reading?.at ?? new Date().toISOString(),
-          check_in_lat: reading?.latitude ?? null,
-          check_in_lng: reading?.longitude ?? null,
-          check_in_accuracy_m: reading?.accuracyMetres ?? null,
-          check_in_source: 'phone',
-        })
-        .select('id')
-        .single()
+    async checkIn({
+      personId: _personId,
+      outletId,
+      businessDate,
+      reading,
+      attemptId = crypto.randomUUID(),
+      expectedVersion = null,
+    }) {
+      const { data, error } = await client.rpc('attendance_submit_attempt', {
+        p_attempt_id: attemptId,
+        p_outlet_id: outletId,
+        p_business_date: businessDate,
+        p_attempted_at: reading?.at ?? new Date().toISOString(),
+        p_lat: reading?.latitude as number,
+        p_lng: reading?.longitude as number,
+        p_accuracy_m: reading?.accuracyMetres as number,
+        ...(expectedVersion == null ? {} : { p_expected_version: expectedVersion }),
+      })
       if (error) throw toActionError(error)
       return readOne(data.id)
     },
@@ -337,45 +494,14 @@ export function createSupabaseAttendanceAdapter(
      * writing session for both and would overwrite anything supplied.
      */
     async recordManualEntry({ personId, outletId, businessDate, at }) {
-      // One row per person per day, so the day may already exist as an absent
-      // or leave row. Amend it rather than colliding with it; the guard still
-      // refuses replacing a check-in that is already recorded.
-      const { data: existing, error: findError } = await table()
-        .select('id, outlet_id')
-        .eq('person_id', personId)
-        .eq('business_date', businessDate)
-        .maybeSingle()
-      if (findError) throw toActionError(findError)
-
-      // The row is theirs but it belongs to another shop. Moving a recorded day
-      // between outlets is not what this action is for, and quietly amending
-      // the other outlet's row would be worse than refusing.
-      if (existing && existing.outlet_id !== outletId) {
-        throw new AttendanceActionError(
-          'recorded_elsewhere',
-          'This person already has a day recorded at another outlet. One day belongs to one outlet.',
-        )
-      }
-
-      if (existing) {
-        const { error } = await table()
-          .update({ status: 'present', check_in_at: at, check_in_source: 'manual' })
-          .eq('id', existing.id)
-        if (error) throw toActionError(error)
-        return readOne(existing.id)
-      }
-
-      const { data, error } = await table()
-        .insert({
-          outlet_id: outletId,
-          person_id: personId,
-          business_date: businessDate,
-          status: 'present',
-          check_in_at: at,
-          check_in_source: 'manual',
-        })
-        .select('id')
-        .single()
+      const { data, error } = await client.rpc('attendance_record_manual', {
+        p_attempt_id: crypto.randomUUID(),
+        p_decision_id: crypto.randomUUID(),
+        p_person_id: personId,
+        p_outlet_id: outletId,
+        p_business_date: businessDate,
+        p_attempted_at: at,
+      })
       if (error) throw toActionError(error)
       return readOne(data.id)
     },
@@ -390,22 +516,76 @@ export function createSupabaseAttendanceAdapter(
      * `approved_at` is deliberately not sent: when the approval was made is the
      * database's fact, and it stamps it.
      */
-    async approve(attendanceIds, { reason, reading, approverId }) {
+    async approve(attendanceIds, { reason, reading, approverId: _approverId }) {
       if (attendanceIds.length === 0) return []
       const trimmed = reason?.trim() ?? ''
-
-      const { error } = await table()
-        .update({
-          approved_by: approverId,
-          approval_reason: trimmed === '' ? null : trimmed,
-          approver_lat: reading?.latitude ?? null,
-          approver_lng: reading?.longitude ?? null,
-          approver_accuracy_m: reading?.accuracyMetres ?? null,
-          status: 'present',
+      const current = await readMany(attendanceIds)
+      for (const record of current) {
+        if (!record.currentAttemptId) {
+          throw new AttendanceActionError(
+            'nothing_to_approve',
+            'There is no current check-in to approve.',
+          )
+        }
+        const { error } = await client.rpc('attendance_approve_attempt', {
+          p_decision_id: crypto.randomUUID(),
+          p_attendance_id: record.id,
+          p_expected_attempt_id: record.currentAttemptId,
+          p_expected_version: record.stateVersion,
+          p_reason: (trimmed || null) as string,
+          p_manager_lat: reading?.latitude as number,
+          p_manager_lng: reading?.longitude as number,
+          p_manager_accuracy_m: reading?.accuracyMetres as number,
         })
-        .in('id', attendanceIds as string[])
-      if (error) throw toActionError(error)
+        if (error) throw toActionError(error)
+      }
       return readMany(attendanceIds)
+    },
+
+    async deny({
+      attendanceId,
+      expectedAttemptId,
+      expectedVersion,
+      reason,
+      preventRetry,
+      decisionId = crypto.randomUUID(),
+    }) {
+      const { data, error } = await client.rpc('attendance_deny_attempt', {
+        p_decision_id: decisionId,
+        p_attendance_id: attendanceId,
+        p_expected_attempt_id: expectedAttemptId,
+        p_expected_version: expectedVersion,
+        p_reason: reason,
+        p_prevent_retry: preventRetry,
+      })
+      if (error) throw toActionError(error)
+      return readOne(data.id)
+    },
+
+    async correct({
+      attendanceId,
+      expectedVersion,
+      action,
+      reason,
+      reading,
+      decisionId = crypto.randomUUID(),
+    }) {
+      const { data, error } = await client.rpc('attendance_correct', {
+        p_decision_id: decisionId,
+        p_attendance_id: attendanceId,
+        p_expected_version: expectedVersion,
+        p_action: action,
+        p_reason: reason,
+        ...(reading
+          ? {
+              p_manager_lat: reading.latitude,
+              p_manager_lng: reading.longitude,
+              p_manager_accuracy_m: reading.accuracyMetres,
+            }
+          : {}),
+      })
+      if (error) throw toActionError(error)
+      return readOne(data.id)
     },
   }
 }

@@ -181,6 +181,40 @@ check-in: `check_in_at`, `check_in_lat`, `check_in_lng`, `check_in_accuracy_m`, 
 the deadline that applied: `arrival_deadline`,
 approval: `approved_by`, `approved_by_name`, `approval_reason`, `approved_at`, `approver_lat`, `approver_lng`, `approver_accuracy_m`, `approver_distance_m`.
 
+`attendance` is the **one canonical person/day outcome**. Its
+`current_attempt_id`, `outcome_attempt_id`, `latest_decision_id`,
+`retry_blocked` and monotonically increasing `state_version` point into the
+immutable history and make competing manager/employee commands serialize on
+one row. `outlet_id` follows the current attempt while one is waiting and the
+settled attempt otherwise. A denial sets the outcome to absent; a later retry
+changes the current attempt and waiting outlet but does not suspend that absent
+outcome. Only approving or correcting the day changes it.
+
+**`attendance_attempts`** stores every employee or manager-entered arrival:
+client UUID, canonical attendance/person/date, outlet, time, source, coordinates,
+accuracy, server-computed distance, stamped arrival deadline, superseded/settled
+times and a server request fingerprint. **`attendance_decisions`** stores every
+approval, denial, correction and retry-policy change with its client UUID,
+actor snapshot, affected attempt, previous/new outcome, reason, retry policy
+and manager evidence when the action is one that reads it. Both tables are
+append-only: updates and deletes are refused, including after a later retry or
+correction.
+
+The old evidence and approval columns on `attendance` remain as a compatibility
+projection for existing reads and service/seed setup; live browser mutations go
+only through the guarded attendance commands. The migration materialises every
+recognised legacy check-in, approval, manual entry and row-only outcome without
+recomputing historical GPS, and aborts on an unrecognised or lossy shape.
+
+**The command boundary owns attendance state.** Submit-attempt, approve, deny,
+correct and manual-entry commands derive the caller and authority from the
+session, validate live assignments, active outlets, the target outlet's current
+explicit `business_date`, deadlines, evidence and reasons, lock the canonical
+person/day, and advance its version. Client UUIDs make an exact replay
+idempotent; reusing one with different evidence is refused. An expected version
+and attempt id make a stale sheet or racing decision fail instead of overwriting
+the winner.
+
 **There is no check-out.** Ten columns and four constraints were dropped by
 `attendance-approved-on-site` (#26, owner decision 2026-07-31), with a full
 production dump taken beforehand and held outside the repo. Nobody used it, and
@@ -248,12 +282,18 @@ recorded, because none was read.
 
 Captured coordinates, GPS accuracy, **and** computed distance are all stored. Storing the inputs alongside the verdict is what makes a disputed check-in reviewable instead of a black box — "the app said no" is not an acceptable answer to an employee.
 
-**Three readings are not columns**: waiting for a manager, late, and absent
+**Three readings are not outcome columns**: waiting for a manager, late, and absent
 because nobody came. Each is derived from the stored rows and the outlet's clock
 in one shared module (`src/features/attendance/attendance-record.ts`), so every
 surface agrees by construction. No scheduled process manufactures attendance
 rows — a job writing an absence per assigned person per day would need a backfill
 for every past day and would race the late arrival it was trying to describe.
+
+Waiting now means exactly **the canonical current attempt is unsettled**. A
+denied-absent day with a later attempt therefore belongs to both the absent
+outcome tally and the manager's waiting work. The explicit person/date and
+outlet/date links on attempts and decisions prevent a history row from being
+attached to a different day, including across outlets with different cutovers.
 
 ## Daily cash
 

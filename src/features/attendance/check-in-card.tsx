@@ -1,7 +1,9 @@
 import { CircleSlash, Hourglass, LoaderCircle, LogIn, MapPinOff, TriangleAlert } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
+import { FormSheet } from '@/components/layout/form-sheet'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardTitle } from '@/components/ui/card'
 import type { AttendanceRecord } from '@/data-access/adapters'
 import { useAdapters, type Tables } from '@/data-access'
@@ -10,13 +12,14 @@ import {
   distanceMetres,
   evaluateFence,
   formatMetres,
+  instantOnBusinessDay,
   resolveBusinessDate,
   type FenceVerdict,
 } from '@/domain'
 import { readPosition, type GeolocationFailureKind, type PositionReading } from '@/lib/geolocation'
 
 import { isLate, isWaitingForApproval } from './attendance-record'
-import { ApprovalNote, DayVerdict, EventEvidence } from './evidence'
+import { ApprovalNote, AttendanceHistory, DayVerdict, EventEvidence } from './evidence'
 
 /**
  * One large action, today's status, and — when the fence refuses — a state
@@ -78,7 +81,20 @@ type Attempt =
    * lands in, and a manager who did not see that person does not approve it.
    */
   | { kind: 'which-outlet'; failure: GeolocationFailureKind }
+  | {
+      kind: 'confirm'
+      outlet: Tables<'outlets'>
+      reading: PositionReading | null
+      changes: string[]
+    }
   | { kind: 'error'; message: string }
+
+type FenceClass = 'inside' | 'outside' | 'unverifiable'
+
+function fenceClass(distance: number | null, radius: number): FenceClass {
+  if (distance === null) return 'unverifiable'
+  return distance <= radius ? 'inside' : 'outside'
+}
 
 /**
  * Which of the outlets this person works at are they standing at?
@@ -147,6 +163,13 @@ export function CheckInCard({
         onChange(await action())
         setAttempt({ kind: 'idle' })
       } catch (cause) {
+        if (cause instanceof AttendanceActionError && cause.code === 'stale_state') {
+          const latest = await attendance.getDay(
+            personId,
+            record?.businessDate ?? currentBusinessDate(outlet),
+          )
+          if (latest) onChange(latest)
+        }
         setAttempt({
           kind: 'error',
           message:
@@ -158,10 +181,10 @@ export function CheckInCard({
         setBusy(false)
       }
     },
-    [onChange],
+    [attendance, onChange, outlet, personId, record?.businessDate],
   )
 
-  const submitCheckIn = useCallback(
+  const commitCheckIn = useCallback(
     (target: Tables<'outlets'>, reading: PositionReading | null) =>
       write(() =>
         attendance.checkIn({
@@ -171,12 +194,66 @@ export function CheckInCard({
           // day is the day at the shop they are standing in.
           businessDate: businessDateOf(record, target),
           reading,
+          expectedVersion: record?.stateVersion ?? null,
         }),
       ),
     [attendance, personId, record, write],
   )
 
+  const prepareCheckIn = useCallback(
+    (target: Tables<'outlets'>, reading: PositionReading | null) => {
+      if (!record) return commitCheckIn(target, reading)
+      const previous = record.attempts.at(-1)
+      if (!previous) return commitCheckIn(target, reading)
+      const previousOutlet =
+        outlets.find((candidate) => candidate.id === previous.outletId) ?? outlet
+      const nextDistance =
+        reading && target.latitude !== null && target.longitude !== null
+          ? distanceMetres(
+              { latitude: target.latitude, longitude: target.longitude },
+              { latitude: reading.latitude, longitude: reading.longitude },
+            )
+          : null
+      const beforeFence = fenceClass(previous.distanceMetres, previousOutlet.geofence_radius_m)
+      const afterFence = fenceClass(nextDistance, target.geofence_radius_m)
+      const previousLate =
+        previous.at >
+        instantOnBusinessDay(
+          record.businessDate,
+          previous.arrivalDeadline,
+          previousOutlet.business_day_cutover,
+        )
+      const nextAt = reading?.at ?? new Date().toISOString()
+      const nextLate =
+        nextAt >
+        instantOnBusinessDay(
+          record.businessDate,
+          target.arrival_deadline,
+          target.business_day_cutover,
+        )
+      const changes: string[] = []
+      if (previous.outletId !== target.id) {
+        changes.push(`${previous.outletName ?? 'Previous outlet'} → ${target.name}`)
+      }
+      if (previousLate !== nextLate) {
+        changes.push(`${previousLate ? 'Late' : 'On time'} → ${nextLate ? 'late' : 'on time'}`)
+      }
+      if (beforeFence !== afterFence) changes.push(`${beforeFence} fence → ${afterFence} fence`)
+      if (changes.length === 0) return commitCheckIn(target, reading)
+      setAttempt({ kind: 'confirm', outlet: target, reading, changes })
+    },
+    [commitCheckIn, outlet, outlets, record],
+  )
+
   async function onCheckIn() {
+    const liveOutlets = outlets.filter((candidate) => candidate.is_active)
+    if (liveOutlets.length === 0) {
+      setAttempt({
+        kind: 'error',
+        message: 'None of your assigned outlets is accepting check-ins.',
+      })
+      return
+    }
     setAttempt({ kind: 'locating' })
     const result = await readPosition()
 
@@ -186,14 +263,14 @@ export function CheckInCard({
       // judge it, and a manager clears it. With several, nothing can choose —
       // so the person is asked, and nothing is recorded until they answer.
       setAttempt(
-        outlets.length > 1
+        liveOutlets.length > 1
           ? { kind: 'which-outlet', failure: result.kind }
           : { kind: 'unlocatable', failure: result.kind },
       )
       return
     }
 
-    const target = resolveOutlet(outlets, result.reading) ?? outlet
+    const target = resolveOutlet(liveOutlets, result.reading) ?? outlet
     const verdict = evaluateFence(
       {
         latitude: target.latitude,
@@ -210,7 +287,7 @@ export function CheckInCard({
       return
     }
 
-    await submitCheckIn(target, result.reading)
+    await prepareCheckIn(target, result.reading)
   }
 
   return (
@@ -235,6 +312,7 @@ export function CheckInCard({
         <div className="space-y-2">
           <EventEvidence label="Checked in" event={record.checkIn} radiusMetres={radius} />
           <ApprovalNote record={record} radiusMetres={radius} />
+          <AttendanceHistory record={record} />
         </div>
       )}
 
@@ -245,7 +323,7 @@ export function CheckInCard({
           radiusMetres={attempt.outlet.geofence_radius_m}
           outletName={outlets.length > 1 ? attempt.outlet.name : null}
           busy={busy}
-          onRequest={() => void submitCheckIn(attempt.outlet, attempt.reading)}
+          onRequest={() => void prepareCheckIn(attempt.outlet, attempt.reading)}
           onDismiss={() => setAttempt({ kind: 'idle' })}
         />
       )}
@@ -254,7 +332,7 @@ export function CheckInCard({
         <UnlocatableState
           failure={attempt.failure}
           busy={busy}
-          onRequest={() => void submitCheckIn(outlet, null)}
+          onRequest={() => void prepareCheckIn(outlet, null)}
           onRetry={() => void onCheckIn()}
         />
       )}
@@ -262,9 +340,9 @@ export function CheckInCard({
       {attempt.kind === 'which-outlet' && (
         <WhichOutletState
           failure={attempt.failure}
-          outlets={outlets}
+          outlets={outlets.filter((candidate) => candidate.is_active)}
           busy={busy}
-          onChoose={(chosen) => void submitCheckIn(chosen, null)}
+          onChoose={(chosen) => void prepareCheckIn(chosen, null)}
           onRetry={() => void onCheckIn()}
         />
       )}
@@ -279,15 +357,31 @@ export function CheckInCard({
         </p>
       )}
 
+      <RetryConfirmation
+        attempt={attempt}
+        onKeep={() => setAttempt({ kind: 'idle' })}
+        onUse={() => {
+          if (attempt.kind === 'confirm') void commitCheckIn(attempt.outlet, attempt.reading)
+        }}
+      />
+
       <PrimaryAction
         phase={phase}
         waiting={record !== null && isWaitingForApproval(record)}
+        retry={
+          record?.retry.allowed === true &&
+          outlets.some(
+            (candidate) =>
+              candidate.is_active && currentBusinessDate(candidate) === record.businessDate,
+          )
+        }
         locating={attempt.kind === 'locating'}
         busy={busy}
         blocked={
           attempt.kind === 'blocked' ||
           attempt.kind === 'unlocatable' ||
-          attempt.kind === 'which-outlet'
+          attempt.kind === 'which-outlet' ||
+          attempt.kind === 'confirm'
         }
         onCheckIn={() => void onCheckIn()}
       />
@@ -320,6 +414,7 @@ function cardPhase(record: AttendanceRecord | null): CardPhase {
 function PrimaryAction({
   phase,
   waiting,
+  retry,
   locating,
   busy,
   blocked,
@@ -328,6 +423,7 @@ function PrimaryAction({
   phase: CardPhase
   /** Recorded, and no manager has settled it yet. */
   waiting: boolean
+  retry: boolean
   locating: boolean
   busy: boolean
   blocked: boolean
@@ -353,6 +449,24 @@ function PrimaryAction({
       offer to start another would invite a row the database refuses
       (attendance-one-day-per-person).
     */
+    if (retry) {
+      return (
+        <div className="space-y-2">
+          <p
+            data-testid={waiting ? 'attendance-waiting' : 'attendance-retry-open'}
+            className="text-center text-sm text-content-muted"
+          >
+            {waiting
+              ? 'Your arrival is recorded and is waiting for your manager to approve it.'
+              : 'This day is absent. A new check-in will also need manager approval.'}
+          </p>
+          <Button size="tile" className="w-full" onClick={onCheckIn} data-testid="attendance-retry">
+            <LogIn aria-hidden size={20} />
+            Check in again
+          </Button>
+        </div>
+      )
+    }
     return (
       <p
         data-testid={waiting ? 'attendance-waiting' : 'attendance-approved'}
@@ -365,7 +479,7 @@ function PrimaryAction({
         <Hourglass aria-hidden size={16} />
         {waiting
           ? 'Your arrival is recorded and is waiting for your manager to approve it.'
-          : 'Your manager has approved today. Nothing more to do.'}
+          : 'Your manager has approved today. Another check-in is not available.'}
       </p>
     )
   }
@@ -395,6 +509,50 @@ function PrimaryAction({
       <LogIn aria-hidden size={20} />
       {blocked ? 'Try again' : 'Check in'}
     </Button>
+  )
+}
+
+function RetryConfirmation({
+  attempt,
+  onKeep,
+  onUse,
+}: {
+  attempt: Attempt
+  onKeep: () => void
+  onUse: () => void
+}) {
+  const open = attempt.kind === 'confirm'
+  const changes = attempt.kind === 'confirm' ? attempt.changes : []
+  return (
+    <FormSheet
+      open={open}
+      onClose={onKeep}
+      title="Use this new check-in?"
+      footer={
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" size="phone" onClick={onKeep}>
+            Keep existing check-in
+          </Button>
+          <button
+            type="button"
+            onClick={onUse}
+            className={buttonVariants({ size: 'phone' })}
+            data-testid="confirm-retry"
+          >
+            Use new check-in
+          </button>
+        </div>
+      }
+    >
+      <p className="text-sm text-content-muted">
+        This keeps the earlier evidence and adds a new manager review. These facts will change:
+      </p>
+      <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-content">
+        {changes.map((change) => (
+          <li key={change}>{change}</li>
+        ))}
+      </ul>
+    </FormSheet>
   )
 }
 

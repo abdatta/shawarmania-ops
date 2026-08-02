@@ -108,7 +108,10 @@ The same person visiting both outlets is two customer records. Unifying them wou
 
 Attendance location can be faked with browser devtools or a mock-location app. This **raises the bar; it is not proof.** It is stated here rather than assumed away because the consequence matters: a location flag must never be treated as evidence in a dispute about someone's pay.
 
-The counter-tablet check-in path is substantially stronger — the device is physically in the shop — and is available as an alternative wherever assurance matters more than convenience.
+The planned counter-tablet check-in path would be substantially stronger — the
+device is physically in the shop — but it is not built yet. Today the fallback
+is a manager-entered arrival, which is explicitly an attestation and stores no
+invented GPS evidence.
 
 GPS accuracy indoors also drifts 20–100m routinely, which is why the geofence refuses nothing at all: it is evidence a manager reads, and the manager's approval is what counts a day. That approval carries the manager's own position for the same reason it carries the employee's, and it is subject to the same limitation — an approval recorded as on-site raises the bar that the manager was there, and does not prove it.
 
@@ -159,6 +162,21 @@ Nothing in this app knows a roster. A person holding a live assignment at an out
 The answer today is for the manager to **mark the day as leave**, which a stored row always wins over the derived reading. That is a real cost: somebody has to remember, once a week, per person.
 
 Fixing it properly is rostering — expected working days per person, which the absent reading would then be bounded by, the same way it is already bounded by the assignment window so that days before somebody joined are not painted at all. That is its own change and is deliberately not this one; adding a half-guess (assume Sundays off, assume six-day weeks) would be wrong for some outlet within a month and harder to remove than to add. Recorded in `openspec/todos/`.
+
+### Attendance does not know the expected outlet
+
+Assignments say where a person **may** work, not where they were scheduled today.
+For multi-outlet staff the app therefore cannot recognise a wrong-outlet
+check-in automatically or tell that outlet's manager it was wrong. The manager
+may deny it with a reason, leave retry open (the default), or reopen a prevented
+retry through an audited correction; the employee can then check in at another
+live assigned outlet while that outlet still has the same business date open.
+
+That recovery is intentionally not a scheduling system. If managers need the
+app to know which outlet was expected, that belongs with the roster and shift
+model, not as a second outlet flag on attendance. Until then, a denial remains
+absent while the newer attempt waits, and a manager may manually correct the day
+to present even though no newer employee location exists.
 
 ### A badge is not a notification, and its count can be stale
 

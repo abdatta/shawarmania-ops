@@ -206,6 +206,109 @@ describe('the outlet attendance day', () => {
     expect(within(card).getByText('Waiting for a manager to approve')).toBeInTheDocument()
   })
 
+  it('denies with exactly a reason and an unchecked retry lock, without reading manager location', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderDay()
+
+    await user.click(await screen.findByTestId(`deny-${DEMO_RUNNER_ACCOUNT_ID}`))
+    expect(screen.getByLabelText('Reason')).toHaveValue('Not at outlet')
+    expect(screen.getByTestId('prevent-retry')).not.toBeChecked()
+    expect(screen.getAllByRole('textbox')).toHaveLength(1)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1)
+
+    await user.clear(screen.getByLabelText('Reason'))
+    expect(screen.getByRole('button', { name: 'Deny check-in' })).toBeDisabled()
+    await user.type(screen.getByLabelText('Reason'), 'Seen working at another shop')
+    await user.click(screen.getByRole('button', { name: 'Deny check-in' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(getCurrentPosition).not.toHaveBeenCalled()
+    const today = await todayAt(adapters, OUTLET_KALYANI_ID)
+    const record = await adapters.attendance.getDay(DEMO_RUNNER_ACCOUNT_ID, today)
+    expect(record?.status).toBe('absent')
+    expect(record?.retry.allowed).toBe(true)
+    expect(record?.decisions.at(-1)).toMatchObject({
+      kind: 'deny',
+      reason: 'Seen working at another shop',
+      preventsRetry: false,
+      latitude: null,
+    })
+  })
+
+  it('can opt into preventing retries and later reopen them through the compact correction', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderDay()
+
+    await user.click(await screen.findByTestId(`deny-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId('prevent-retry'))
+    await user.click(screen.getByRole('button', { name: 'Deny check-in' }))
+    await openRow(user, DEMO_RUNNER_ACCOUNT_ID)
+    await user.click(await screen.findByTestId(`correct-${DEMO_RUNNER_ACCOUNT_ID}`))
+
+    expect(screen.getByLabelText('Correction')).toHaveValue('present')
+    await user.selectOptions(screen.getByLabelText('Correction'), 'allow_retry')
+    await user.type(screen.getByLabelText('Reason'), 'Employee should check in at Kanchrapara')
+    await user.click(screen.getByRole('button', { name: 'Save correction' }))
+
+    const today = await todayAt(adapters, OUTLET_KALYANI_ID)
+    await waitFor(async () => {
+      const record = await adapters.attendance.getDay(DEMO_RUNNER_ACCOUNT_ID, today)
+      expect(record?.retry.allowed).toBe(true)
+      expect(record?.decisions.at(-1)?.kind).toBe('allow_retry')
+    })
+    expect(getCurrentPosition).not.toHaveBeenCalled()
+  })
+
+  it('corrects present to absent with a reason and no manager location', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderDay()
+
+    const grillerRow = await screen.findByTestId(`expand-${DEMO_GRILLER_ACCOUNT_ID}`)
+    if (grillerRow.getAttribute('aria-expanded') === 'false') await user.click(grillerRow)
+    await user.click(await screen.findByTestId(`correct-${DEMO_GRILLER_ACCOUNT_ID}`))
+    expect(screen.getByLabelText('Correction')).toHaveValue('absent')
+    await user.type(screen.getByLabelText('Reason'), 'Shift record was assigned to the wrong day')
+    await user.click(screen.getByRole('button', { name: 'Save correction' }))
+
+    const today = await todayAt(adapters, OUTLET_KALYANI_ID)
+    await waitFor(async () => {
+      const record = await adapters.attendance.getDay(DEMO_GRILLER_ACCOUNT_ID, today)
+      expect(record?.status).toBe('absent')
+      expect(record?.decisions.at(-1)).toMatchObject({
+        kind: 'correct_absent',
+        reason: 'Shift record was assigned to the wrong day',
+        latitude: null,
+      })
+    })
+    expect(getCurrentPosition).not.toHaveBeenCalled()
+  })
+
+  it('corrects denied absence to present with manager position and retained employee evidence', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderDay()
+    atPosition(AT_COUNTER)
+
+    await user.click(await screen.findByTestId(`deny-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByRole('button', { name: 'Deny check-in' }))
+    await openRow(user, DEMO_RUNNER_ACCOUNT_ID)
+    await user.click(await screen.findByTestId(`correct-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.type(screen.getByLabelText('Reason'), 'Manager confirmed the employee was present')
+    await user.click(screen.getByRole('button', { name: 'Save correction' }))
+
+    const today = await todayAt(adapters, OUTLET_KALYANI_ID)
+    await waitFor(async () => {
+      const record = await adapters.attendance.getDay(DEMO_RUNNER_ACCOUNT_ID, today)
+      expect(record?.status).toBe('present')
+      expect(record?.attempts.at(0)?.distanceMetres).toBeGreaterThan(150)
+      expect(record?.decisions.at(-1)).toMatchObject({
+        kind: 'correct_present',
+        reason: 'Manager confirmed the employee was present',
+      })
+      expect(record?.decisions.at(-1)?.distanceMetres).toBeLessThan(150)
+    })
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1)
+  })
+
   it('approves in one tap from inside the fence on the day, asking nothing', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()

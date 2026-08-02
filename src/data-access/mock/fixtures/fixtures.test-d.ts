@@ -111,6 +111,67 @@ export const attendanceEvidenceShape: Pick<
   check_in_entered_by_name: null,
 }
 
+// The canonical day points at immutable history rather than overwriting the
+// employee's evidence when a manager decides or corrects the outcome.
+export const attendanceCanonicalStateShape: Pick<
+  Tables<'attendance'>,
+  | 'current_attempt_id'
+  | 'outcome_attempt_id'
+  | 'latest_decision_id'
+  | 'retry_blocked'
+  | 'state_version'
+> = {
+  current_attempt_id: 'd2000000-0000-4000-a000-000000000001',
+  outcome_attempt_id: null,
+  latest_decision_id: null,
+  retry_blocked: false,
+  state_version: 1,
+}
+
+export const attendanceAttemptShape: Pick<
+  Tables<'attendance_attempts'>,
+  | 'attendance_id'
+  | 'person_id'
+  | 'outlet_id'
+  | 'business_date'
+  | 'source'
+  | 'distance_m'
+  | 'settled_at'
+  | 'superseded_at'
+  | 'request_fingerprint'
+> = {
+  attendance_id: 'd3000000-0000-4000-a000-000000000001',
+  person_id: 'd1000000-0000-4000-a000-000000000004',
+  outlet_id: 'd0000000-0000-4000-a000-000000000001',
+  business_date: '2026-08-02',
+  source: 'phone',
+  distance_m: 211,
+  settled_at: null,
+  superseded_at: null,
+  request_fingerprint: 'server-generated-fingerprint',
+}
+
+export const attendanceDecisionShape: Pick<
+  Tables<'attendance_decisions'>,
+  | 'attendance_id'
+  | 'attempt_id'
+  | 'kind'
+  | 'previous_status'
+  | 'new_status'
+  | 'prevents_retry'
+  | 'reason'
+  | 'manager_lat'
+> = {
+  attendance_id: 'd3000000-0000-4000-a000-000000000001',
+  attempt_id: 'd2000000-0000-4000-a000-000000000001',
+  kind: 'deny',
+  previous_status: 'absent',
+  new_status: 'absent',
+  prevents_retry: false,
+  reason: 'Not at outlet',
+  manager_lat: null,
+}
+
 // @ts-expect-error — check-out was removed from the product, not renamed.
 export const checkOutIsGone: Pick<Tables<'attendance'>, 'check_out_at'> = {
   check_out_at: null,

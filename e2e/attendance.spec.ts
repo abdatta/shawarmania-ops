@@ -321,7 +321,7 @@ test('an employee’s own history shows the approval, where the approver was, an
   // The same facts a manager sees about the same day — the symmetry the
   // proposal insists on, including the new one: whether the manager was there.
   await expect(history.getByText(/Demo Manager, /).first()).toBeVisible()
-  await expect(history.getByText(/Signal drift by the main road/)).toBeVisible()
+  await expect(history.getByText(/Signal drift by the main road/).first()).toBeVisible()
   await expect(history.getByTestId('late-tag').first()).toBeVisible()
   await expect(history.getByTestId('derived-absent').first()).toBeVisible()
   // And no check-out, anywhere, ever again.
@@ -441,9 +441,16 @@ test('the attendance walk makes no request beyond the app origin', async ({ page
 
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
-  // The approval reads a position too, and it must reach nothing either.
-  await page.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`).click()
-  await expect(page.getByTestId('day-waiting')).toBeVisible()
+  // Denial and its retry-policy correction stay entirely in the demo store too.
+  await page.getByTestId(`deny-${DEMO_RUNNER_ACCOUNT_ID}`).click()
+  await expect(page.getByTestId('prevent-retry')).not.toBeChecked()
+  await page.getByTestId('prevent-retry').check()
+  await page.getByRole('button', { name: 'Deny check-in' }).click()
+  await page.getByTestId(`correct-${DEMO_RUNNER_ACCOUNT_ID}`).click()
+  await page.getByLabel('Correction').selectOption('allow_retry')
+  await page.getByLabel('Reason').fill('Employee should check in at the assigned outlet')
+  await page.getByRole('button', { name: 'Save correction' }).click()
+  await expect(page.getByText('Allowed another check-in')).toBeVisible()
 
   await page.goto('demo/admin/people')
   await expect(page.getByText('Demo Griller')).toBeVisible()

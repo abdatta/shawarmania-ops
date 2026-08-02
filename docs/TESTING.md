@@ -124,6 +124,36 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
   submission and navigation are acceptance evidence; Chrome's optional native
   save prompt is an observation, never a deterministic gate.
 
+### Attendance denial, retries and corrections
+
+An attendance change is not covered by a happy-path component test alone. Run
+the reset migration and prove each of these layers:
+
+- migration/backfill preserves approved on-site, approved away, legacy present,
+  manual, waiting, late, leave, half-day and rowless days without inventing GPS
+  or changing person/date/outlet counts;
+- command tests cover default-open and prevented denial, blank reasons,
+  outside/unverifiable repeated retry, inside and approved-day locks,
+  wrong-outlet recovery, cutover disagreement, stale versions, exact UUID replay
+  and changed-payload reuse;
+- concurrent approve/deny and retry/decision calls leave one outcome, one current
+  attempt, one waiting outlet and complete append-only history;
+- RLS and authenticated REST probes include forged actor, unassigned/cross-outlet
+  requests, former-manager bounded history, unrelated employee refusal, subject
+  full history and owner reach;
+- component tests cover the exactly-two-input denial sheet, unchecked default,
+  editable prefills, no-location denial/absent/retry correction, present
+  correction location, compact discoverability, every material-change
+  confirmation combination, cancel-without-write and stale reload;
+- waiting/notification tests prove retry transfers a count between outlets,
+  zero badges stay absent, foreground refresh is fresh and a switched outlet
+  never renders the previous outlet's rows under a new label.
+
+Finally walk live and demo at phone and tablet widths in both light and dark:
+ordinary row density, approve/deny, denial sheet, retry confirmation,
+absent-plus-waiting wording, full history, compact correction action, badges and
+multi-outlet switching. Demo network capture must remain within the app origin.
+
 ## Fixtures
 
 - **Never use real customer or employee data.** Seed data is synthetic: invented names, obviously fake phone numbers.

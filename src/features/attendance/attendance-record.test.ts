@@ -47,7 +47,7 @@ const ON_TIME = '2026-07-25T03:32:00.000Z'
 const LATE_ARRIVAL = '2026-07-25T08:50:00.000Z'
 
 function record(overrides: Partial<AttendanceRecord> = {}): AttendanceRecord {
-  return {
+  const value: AttendanceRecord = {
     id: 'row-1',
     outletId: OUTLET.id,
     outletName: OUTLET.name,
@@ -55,6 +55,14 @@ function record(overrides: Partial<AttendanceRecord> = {}): AttendanceRecord {
     personName: 'Demo Staff',
     businessDate: '2026-07-25',
     status: 'absent',
+    stateVersion: 1,
+    currentAttemptId: 'attempt-1',
+    outcomeAttemptId: null,
+    latestDecisionId: null,
+    retryBlocked: false,
+    attempts: [],
+    decisions: [],
+    retry: { allowed: false, reason: 'inside-current' },
     arrivalDeadline: '13:00:00',
     checkIn: {
       at: ON_TIME,
@@ -69,6 +77,11 @@ function record(overrides: Partial<AttendanceRecord> = {}): AttendanceRecord {
     approval: null,
     ...overrides,
   }
+  if (!Object.prototype.hasOwnProperty.call(overrides, 'currentAttemptId')) {
+    value.currentAttemptId =
+      value.checkIn && !value.approval && value.status === 'absent' ? 'attempt-1' : null
+  }
+  return value
 }
 
 function approval(overrides: Partial<AttendanceApproval> = {}): AttendanceApproval {

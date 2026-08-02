@@ -110,7 +110,7 @@ describe('my attendance', () => {
     expect(within(history).getAllByText(/Demo Manager, /).length).toBeGreaterThan(0)
     // The off-site approval: the reason it cost, and the fact that the manager
     // was not at the outlet — both readable by the person the day is about.
-    expect(within(history).getByText(/Signal drift by the main road/)).toBeInTheDocument()
+    expect(within(history).getAllByText(/Signal drift by the main road/).length).toBeGreaterThan(0)
     // The chip names itself to a screen reader ("Approver") and shows the
     // distance to everybody else, so neither reader has to infer it from an icon.
     expect(

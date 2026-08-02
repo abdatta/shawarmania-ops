@@ -289,6 +289,23 @@ Employees check in from their own phones. The browser's Geolocation API supplies
 
 **Approving is a capability, held by a Super Admin anywhere and by a Franchise Admin at outlets they hold a live assignment at.** Resolved from the approving session by membership, never from anything the request states; an Employee cannot approve their own day or anyone else's, and the database refuses it rather than the surface merely not offering it. An approval requires an arrival on the row: a day nobody claimed is not a day anybody can settle.
 
+The same authority governs **deny and correct**. A Franchise Admin may decide
+only the current attempt at an outlet they manage and may later correct a
+settled day only while its outcome attempt is in their scope. The Super Admin
+may do so across outlets. The database stamps the actor; requests cannot nominate
+or forge a manager. Denials and all corrections require a non-blank reason.
+Denial stores no manager GPS, while approval and correction-to-present store the
+manager evidence their flows read. Retry-only and absent corrections are
+locationless.
+
+An employee may submit a later attempt only for their own person/date and a live
+outlet where they currently hold an Employee assignment. That attempt is allowed
+after outside/unverifiable current evidence or an open denial; an in-fence
+pending attempt, settled present/manual/leave/half-day, or globally prevented
+day is refused at the command boundary. A multi-outlet employee may therefore
+recover from checking in to the wrong outlet without gaining permission to make
+two attendance days.
+
 **One rule governs every approver, and it is about the approval rather than the role.** The approving device's position is read at that moment and the database computes its distance from the outlet. **Inside the fence, on the row's own business day, no reason is asked for.** Being outside it, supplying no position at all, and settling a business day that has already closed are one case and each require a reason that cannot be blank. Nothing is refused on distance alone, and every surface that shows an approval shows whether the approver was there — so approving from elsewhere is visible rather than prevented. The failure mode a refusal produces is a manager telephoning instead of recording anything, which is the workaround you cannot see.
 
 There is no Super Admin fallback and no session-scoped "acting as" anything. The owner is simply an approver whose reach spans outlets, which is what their assignment already means everywhere else.
@@ -296,6 +313,14 @@ There is no Super Admin fallback and no session-scoped "acting as" anything. The
 **Reading one person's days spans every outlet the reader may see, and the database decides which those are** (`attendance-one-day-per-person`, #29). The by-staff read names no outlet at all: a Franchise Admin holding one assignment reads that outlet, one holding two reads exactly those two, and the Super Admin reads all of them — resolved by policy from live assignments, never from anything the request states. A hand-crafted request naming a third outlet returns nothing, which is asserted in `supabase/tests/18_attendance_elsewhere.sql` rather than assumed. This reverses #22's decision to pin an explicit outlet on that read: that was right while the intended meaning was one outlet, and the intended meaning is now exactly the set the policy already computes.
 
 **One bit crosses the outlet boundary, and it is the only one.** Because a person holds one attendance row per business date wherever it was worked, a Franchise Admin whose staff member went to the other shop sees no row at all — and, left alone, would derive *absent* for a day that person was paid for. `attendance_elsewhere(outlets, date)` answers which people **on their own outlets' staff lists** are accounted for somewhere outside their scope. Person ids and nothing else: not which outlet, not the time, not the status, not the evidence, not the approver, not whether it was approved. The surface renders it as *working at another outlet* with no outlet named, and the underlying row stays refused. See [Security And Privacy](SECURITY_AND_PRIVACY.md).
+
+Retry history preserves the same boundary. A manager who denied the earlier
+Kalyani attempt may continue to read that local attempt and their own decision,
+but a newer Kanchrapara attempt does not disclose its outlet, time, coordinates,
+status or manager to them. The employee sees their complete history and the
+Super Admin sees all of it. Waiting counts follow only the single current
+attempt, so retry transfers attention to its outlet without leaving a stale
+badge at the former one.
 
 **A person is asked which outlet in exactly one situation**: they hold more than one assignment and their device can supply no position at all. Nothing is recorded until they answer, the resulting row carries no coordinates, and it waits for that outlet's manager on the same terms as any other unlocated check-in — which means a reasoned approval. Wherever a reading exists the fence is still the only chooser, and nobody is asked.
 

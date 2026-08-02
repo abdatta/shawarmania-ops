@@ -155,6 +155,21 @@ Then look at **My attendance**, which shows a month rather than a run of good da
 
 As the **Franchise Admin**, the same days are approvable from the attendance day. Standing at the counter — which is where the demo's emulated position puts you — approving is one tap and asks nothing. Move the browser's position away from Kalyani and the same action asks for a reason first, then records it on the day for the employee to read. **By person** then shows one staff member's month with the counts, which is the second axis the day view cannot give you.
 
+The same Kalyani roll-call also demonstrates denial without turning the screen
+into an audit console. Deny the runner's outside attempt: the sheet contains an
+editable *Not at outlet* reason and one unchecked *Prevent another check-in
+today* box, and it never reads the manager's position. Leave it open to show a
+staff retry, or check it and then reopen the settled row's single *Correct
+attendance* action to allow another check-in with a reason.
+
+The two-outlet person's older day is the wrong-outlet recovery story in one
+coherent record: their Kalyani attempt was denied, the absent outcome remains,
+and a newer unverifiable Kanchrapara attempt is waiting. Their employee/owner
+history names both outlets and every decision; the former outlet manager sees
+only the evidence and decision within their own scope. The retry-prevented
+runner day and the employee's audited present correction cover the other compact
+correction states without inventing a separate scenario.
+
 **5 — Close the loop** (Admin, then Owner)
 
 As the manager, **raise an alert** — four fields. Flip to the owner: it is in the inbox, naming its outlet. Reply to it, and point out that the status did not move — replying and acting are separate. Then **Acknowledge**, **Resolve**, **Close**, and note that the sequence cannot be skipped and that closed is final.
