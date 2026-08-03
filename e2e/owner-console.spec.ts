@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { E2E_ORIGIN } from '../ports'
+
 /**
  * The demo milestone's own gate: **a single uninterrupted walkthrough of all
  * four roles, with internally consistent mock data** — a busy trading day whose
@@ -198,7 +200,7 @@ test('start again puts the scenario back and keeps the reader in place', async (
 })
 
 test('the whole owner walk stays inside the app origin', async ({ page, baseURL }) => {
-  const origin = new URL(baseURL ?? 'http://127.0.0.1:4173/').origin
+  const origin = new URL(baseURL ?? E2E_ORIGIN).origin
   const violations: string[] = []
   page.on('request', (request) => {
     if (new URL(request.url()).origin !== origin) violations.push(request.url())

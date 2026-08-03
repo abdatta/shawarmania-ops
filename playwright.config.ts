@@ -1,6 +1,12 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const PORT = 4173
+import { PORTS } from './ports'
+
+// This app's reserved range — see ports.ts. Not Vite's 4173 preview default,
+// which any other Vite project on the machine would also claim, and which Vite
+// silently walks past on a collision: the suite would then have run against
+// whichever server happened to answer.
+const PORT = PORTS.e2e
 const ORIGIN = `http://127.0.0.1:${PORT}`
 
 /**

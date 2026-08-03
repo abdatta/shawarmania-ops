@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { E2E_ORIGIN } from '../ports'
 import { DEMO_HELPER_ACCOUNT_ID } from '../src/data-access/mock/fixtures/accounts'
 
 /**
@@ -125,7 +126,7 @@ test('the people states each say what is wrong and what to do', async ({ page })
 test('the whole setup walk stays inside the app origin', async ({ page, baseURL }) => {
   // The demo tree is structurally incapable of reaching a backend, and the
   // writes this change makes must not be the exception that proves otherwise.
-  const origin = new URL(baseURL ?? 'http://127.0.0.1:4173/').origin
+  const origin = new URL(baseURL ?? E2E_ORIGIN).origin
   const foreign: string[] = []
   page.on('request', (request) => {
     if (new URL(request.url()).origin !== origin) foreign.push(request.url())
@@ -159,7 +160,7 @@ test('an address is filled from a search, and the search never leaves the origin
   // call somebody else's service. In demo mode it must not — and the failure
   // mode if it did is invisible in the UI, which is exactly why this asserts on
   // the network rather than on the screen.
-  const origin = new URL(baseURL ?? 'http://127.0.0.1:4173/').origin
+  const origin = new URL(baseURL ?? E2E_ORIGIN).origin
   const foreign: string[] = []
   page.on('request', (request) => {
     if (new URL(request.url()).origin !== origin) foreign.push(request.url())

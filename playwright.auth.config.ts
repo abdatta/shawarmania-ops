@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
+import { PORTS } from './ports'
+
 /**
  * The auth suite, kept apart from the rest of the end-to-end tests for one
  * reason: it is the only suite that needs a **real backend**. Everything else
@@ -12,7 +14,7 @@ import { defineConfig, devices } from '@playwright/test'
  * built with the dummy configuration — can never be reused for these tests
  * and fail them mysteriously.
  */
-const PORT = 4174
+const PORT = PORTS.e2eAuth
 const BASE_PATH = process.env['BASE_PATH'] ?? '/shawarmania-ops/'
 const BASE_URL = `http://127.0.0.1:${PORT}${BASE_PATH}`
 

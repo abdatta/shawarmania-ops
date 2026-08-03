@@ -4,23 +4,23 @@
     {
       "name": "dev",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "--port", "5173", "--strictPort", "--host", "127.0.0.1"],
-      "port": 5173,
-      "url": "http://127.0.0.1:5173/"
+      "runtimeArgs": ["vite", "--port", "7412", "--strictPort", "--host", "127.0.0.1"],
+      "port": 7412,
+      "url": "http://127.0.0.1:7412/"
     },
     {
       "name": "preview",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "preview", "--port", "4280", "--strictPort", "--host", "127.0.0.1"],
-      "port": 4280,
-      "url": "http://127.0.0.1:4280"
+      "runtimeArgs": ["vite", "preview", "--port", "7413", "--strictPort", "--host", "127.0.0.1"],
+      "port": 7413,
+      "url": "http://127.0.0.1:7413"
     },
     {
       "name": "preview-alt",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "preview", "--port", "4281", "--strictPort", "--host", "127.0.0.1"],
-      "port": 4281,
-      "url": "http://127.0.0.1:4281"
+      "runtimeArgs": ["vite", "preview", "--port", "7414", "--strictPort", "--host", "127.0.0.1"],
+      "port": 7414,
+      "url": "http://127.0.0.1:7414"
     }
   ]
 }

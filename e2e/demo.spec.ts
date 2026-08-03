@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 
+import { E2E_ORIGIN } from '../ports'
+
 // baseURL carries the deployment sub-path, so every goto here is relative.
 // A leading slash would resolve against the origin and skip the base.
 //
@@ -15,7 +17,7 @@ test('walking all four demo role shells makes no request beyond the app origin',
   page,
   baseURL,
 }) => {
-  const origin = new URL(baseURL ?? 'http://127.0.0.1:4173/').origin
+  const origin = new URL(baseURL ?? E2E_ORIGIN).origin
   const violations: string[] = []
   page.on('request', (request) => {
     if (new URL(request.url()).origin !== origin) violations.push(request.url())

@@ -8,6 +8,8 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig, type Plugin } from 'vitest/config'
 
+import { PORTS } from './ports'
+
 /**
  * GitHub Pages serves a project repo from `/<repo>/`, so that sub-path is the
  * default — `npm run build` produces a deployable artifact with no extra flag,
@@ -53,6 +55,18 @@ function githubPagesFallback(): Plugin {
 
 export default defineConfig({
   base,
+  /**
+   * This app's own ports rather than Vite's defaults — see `ports.ts` for why
+   * 5173 and 4173 are unusable on a machine running more than one Vite app.
+   *
+   * `strictPort` on both: a collision must fail loudly, because Vite's silent
+   * walk to the next port is exactly what makes a default address meaningless.
+   * `host` is explicit because `localhost` resolves to ::1 on Windows and leaves
+   * 127.0.0.1 unanswered, which is the same reason both Playwright configs pass
+   * it to `vite preview`.
+   */
+  server: { port: PORTS.dev, strictPort: true, host: '127.0.0.1' },
+  preview: { port: PORTS.preview, strictPort: true, host: '127.0.0.1' },
   plugins: [
     react(),
     tailwindcss(),

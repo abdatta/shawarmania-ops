@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 
+import { E2E_ORIGIN } from '../ports'
+
 /**
  * The activation handover, in demo mode.
  *
@@ -55,7 +57,7 @@ test('an admin is handed one username-only activation link', async ({ page }) =>
 })
 
 test('producing the handover leaves the app origin alone', async ({ page, baseURL }) => {
-  const origin = new URL(baseURL ?? 'http://127.0.0.1:4173/').origin
+  const origin = new URL(baseURL ?? E2E_ORIGIN).origin
   const foreign: string[] = []
   page.on('request', (request) => {
     if (new URL(request.url()).origin !== origin) foreign.push(request.url())

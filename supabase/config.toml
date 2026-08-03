@@ -40,9 +40,9 @@ file_size_limit = "50MiB"
 
 [auth]
 enabled = true
-site_url = "http://127.0.0.1:5173"
+site_url = "http://127.0.0.1:7412"
 additional_redirect_urls = [
-  "http://127.0.0.1:5173",
+  "http://127.0.0.1:7412",
 ]
 # Short-lived access tokens are what make the claim model safe: app_role and
 # app_outlet_id are baked in at issue, so an hour bounds how stale a claim can
