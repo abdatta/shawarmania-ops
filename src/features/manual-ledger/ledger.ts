@@ -1,0 +1,392 @@
+import type { ExpenseCategory, ManualLedgerDay, ManualLedgerExpense } from '@/data-access/adapters'
+import {
+  describeDifference,
+  differencePaise,
+  NotPaiseError,
+  profitEstimate,
+  type DifferenceKind,
+  type ProfitEstimate,
+} from '@/domain'
+
+/**
+ * Everything the manual ledger derives, in one place, in integer paise.
+ *
+ * **The database stores facts; this file computes figures.** There is no view, no
+ * SQL function and no generated column behind this surface (design D3), for two
+ * reasons: a migration that drops two tables is trivially reviewable where one
+ * that also drops views invites leaving something behind, and the commission
+ * rounding rule has to be identical wherever it runs, which it is if there is
+ * exactly one implementation of it.
+ *
+ * The one rule worth reading before the code: **commission is applied per day,
+ * from that day's own stored rate, and never to a month's total.** Days in a
+ * month may carry different rates — that is the whole point of storing the rate
+ * on the row — so a month total reduced by one rate would be a different, wrong
+ * number that happens to look plausible.
+ */
+
+/** 10000 basis points is 100%. */
+export const COMMISSION_BP_SCALE = 10_000
+
+/** Half of one basis-point scale, which is what makes the division round half up. */
+const COMMISSION_HALF = COMMISSION_BP_SCALE / 2
+
+function assertPaise(value: number, what: string): number {
+  if (!Number.isInteger(value)) {
+    const error = new NotPaiseError(value)
+    error.message = `${error.message} (${what})`
+    throw error
+  }
+  return value
+}
+
+/**
+ * What the aggregator keeps: `(stated × bp + 5000) / 10000`, integer division.
+ *
+ * Rounds half up, and rounds **symmetrically about zero**. A refund can push a
+ * day's stated aggregator revenue negative, and `Math.trunc` on a negative
+ * numerator rounds toward zero instead of up, so a month containing one refunded
+ * day would fail to reconcile by a paisa. Rounding the magnitude and reapplying
+ * the sign makes the rule mean the same thing on both sides of zero.
+ */
+export function commissionPaise(statedPaise: number, bp: number): number {
+  assertPaise(statedPaise, 'stated aggregator revenue')
+  if (!Number.isInteger(bp) || bp < 0 || bp > COMMISSION_BP_SCALE) {
+    throw new RangeError(
+      `Expected a commission rate in basis points between 0 and ${COMMISSION_BP_SCALE}, received ${String(bp)}.`,
+    )
+  }
+
+  const sign = statedPaise < 0 ? -1 : 1
+  const magnitude = Math.abs(statedPaise)
+  return sign * Math.trunc((magnitude * bp + COMMISSION_HALF) / COMMISSION_BP_SCALE)
+}
+
+/** What actually arrives: the stated figure less the commission on it. */
+export function netAggregatorPaise(statedPaise: number, bp: number): number {
+  return statedPaise - commissionPaise(statedPaise, bp)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// One day.
+
+export interface DayReading {
+  /** `opening + cash revenue + cash in − cash expenses − cash out`. */
+  expectedCashPaise: number
+  countedCashPaise: number
+  /** `counted − expected`, so a shortfall is negative — the repo's convention. */
+  differencePaise: number
+  /** The word beside the figure, because a minus sign is what a bad screen loses. */
+  difference: DifferenceKind
+  cashExpensesPaise: number
+  nonCashExpensesPaise: number
+  /** Gross, by channel, for the day's own reading. */
+  grossRevenuePaise: number
+  netZomatoPaise: number
+  netSwiggyPaise: number
+}
+
+/**
+ * The day, read against its count.
+ *
+ * Only cash moves the drawer. UPI, Zomato and Swiggy revenue and every non-cash
+ * expense are excluded here and included in the month — the single rule that
+ * connects the two readings, and the one a reader is most likely to expect
+ * wrongly.
+ */
+export function readDay(
+  day: ManualLedgerDay,
+  expenses: readonly ManualLedgerExpense[],
+): DayReading {
+  const cashExpensesPaise = sumExpenses(expenses.filter((expense) => expense.isCash))
+  const nonCashExpensesPaise = sumExpenses(expenses.filter((expense) => !expense.isCash))
+
+  const expectedCashPaise =
+    assertPaise(day.openingCashPaise, 'opening cash') +
+    assertPaise(day.cashRevenuePaise, 'cash revenue') +
+    assertPaise(day.cashAddedPaise, 'cash brought in') -
+    cashExpensesPaise -
+    assertPaise(day.cashRemovedPaise, 'cash taken out')
+
+  const difference = differencePaise(
+    assertPaise(day.countedCashPaise, 'counted cash'),
+    expectedCashPaise,
+  )
+
+  return {
+    expectedCashPaise,
+    countedCashPaise: day.countedCashPaise,
+    differencePaise: difference,
+    difference: describeDifference(difference),
+    cashExpensesPaise,
+    nonCashExpensesPaise,
+    grossRevenuePaise:
+      day.cashRevenuePaise +
+      assertPaise(day.upiRevenuePaise, 'UPI revenue') +
+      assertPaise(day.zomatoRevenuePaise, 'Zomato revenue') +
+      assertPaise(day.swiggyRevenuePaise, 'Swiggy revenue'),
+    netZomatoPaise: netAggregatorPaise(day.zomatoRevenuePaise, day.zomatoCommissionBp),
+    netSwiggyPaise: netAggregatorPaise(day.swiggyRevenuePaise, day.swiggyCommissionBp),
+  }
+}
+
+function sumExpenses(expenses: readonly ManualLedgerExpense[]): number {
+  return expenses.reduce(
+    (running, expense) => running + assertPaise(expense.amountPaise, 'expense amount'),
+    0,
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The opening-cash chain.
+
+export type ChainSignal =
+  /** No earlier day at this outlet: the opening was typed, and nothing contradicts it. */
+  | { kind: 'first-day' }
+  | { kind: 'agrees'; previousBusinessDate: string }
+  | {
+      kind: 'disagrees'
+      previousBusinessDate: string
+      storedOpeningPaise: number
+      previousCountPaise: number
+      /** `stored opening − previous count`. Signed, and never applied to anything. */
+      gapPaise: number
+    }
+
+/**
+ * Whether this day's stored opening cash agrees with the previous day's count.
+ *
+ * **Reports, never repairs.** Storing the opening rather than deriving it is what
+ * stops a correction to day 3 silently moving day 4 through day 31, and the price
+ * of that is that the chain can break. A function that quietly returned the
+ * previous count instead would hide exactly the break it had just found — which
+ * is the compounding error this ledger exists to catch (design D2).
+ */
+export function checkOpeningChain(
+  day: ManualLedgerDay,
+  previousDay: ManualLedgerDay | null,
+): ChainSignal {
+  if (!previousDay) return { kind: 'first-day' }
+
+  const gapPaise =
+    assertPaise(day.openingCashPaise, 'opening cash') -
+    assertPaise(previousDay.countedCashPaise, 'previous counted cash')
+
+  if (gapPaise === 0) return { kind: 'agrees', previousBusinessDate: previousDay.businessDate }
+
+  return {
+    kind: 'disagrees',
+    previousBusinessDate: previousDay.businessDate,
+    storedOpeningPaise: day.openingCashPaise,
+    previousCountPaise: previousDay.countedCashPaise,
+    gapPaise,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// One month.
+
+/** One expense, as the month's category breakdown lists it. */
+export interface MonthExpenseLine {
+  businessDate: string
+  description: string
+  amountPaise: number
+  isCash: boolean
+}
+
+export interface MonthCategoryTotal {
+  category: ExpenseCategory
+  amountPaise: number
+  /** Every row behind the total, so a figure can be checked rather than trusted. */
+  lines: MonthExpenseLine[]
+}
+
+export interface MonthReading {
+  /**
+   * Whether anything was recorded at all. A month nobody wrote in is not a month
+   * that earned nothing, and a surface that showed zero for both would be
+   * reporting a measurement it never took.
+   */
+  recorded: boolean
+  daysRecorded: number
+  grossCashPaise: number
+  grossUpiPaise: number
+  grossZomatoPaise: number
+  grossSwiggyPaise: number
+  /** Per day, from each day's own stored rate, then summed. Never the reverse. */
+  netZomatoPaise: number
+  netSwiggyPaise: number
+  zomatoCommissionPaise: number
+  swiggyCommissionPaise: number
+  /** Cash + UPI + both aggregators net of their own commission. */
+  netRevenuePaise: number
+  expensesByCategory: MonthCategoryTotal[]
+  totalExpensesPaise: number
+  cashExpensesPaise: number
+  /**
+   * Cash basis, and the estimate names its basis on screen because
+   * `profit-estimates` requires any profit figure to. Every recorded expense is
+   * subtracted, so this reconciles exactly against `expensesByCategory`.
+   */
+  profit: ProfitEstimate
+}
+
+/**
+ * The month, read for one outlet.
+ *
+ * Two things are deliberately absent. **Aggregator commission is not an expense**
+ * — it is already netted out of revenue, and counting it twice is the second of
+ * the double-counting traps `docs/DATA_MODEL.md` names. And **consumption-basis
+ * profit is not offered**, because no stock valuation is recorded here; raw
+ * materials are taken as zero on hand at the start of tracking by owner decision,
+ * which leaves cash basis the only computable answer.
+ *
+ * The figure this returns is an **operating** estimate: capital spending is not
+ * recorded in this ledger at all (design D8), so it answers whether trading
+ * covered running costs and not where every rupee went. The surface says so in
+ * words; nothing here can enforce that, which is why the spec requires it.
+ */
+export function readMonth(
+  days: readonly ManualLedgerDay[],
+  expenses: readonly ManualLedgerExpense[],
+): MonthReading {
+  let grossCashPaise = 0
+  let grossUpiPaise = 0
+  let grossZomatoPaise = 0
+  let grossSwiggyPaise = 0
+  let netZomatoPaise = 0
+  let netSwiggyPaise = 0
+
+  for (const day of days) {
+    grossCashPaise += assertPaise(day.cashRevenuePaise, 'cash revenue')
+    grossUpiPaise += assertPaise(day.upiRevenuePaise, 'UPI revenue')
+    grossZomatoPaise += assertPaise(day.zomatoRevenuePaise, 'Zomato revenue')
+    grossSwiggyPaise += assertPaise(day.swiggyRevenuePaise, 'Swiggy revenue')
+    // Per day, from that day's own rate. Moving this out of the loop is the bug
+    // this whole per-day-rate design exists to make impossible.
+    netZomatoPaise += netAggregatorPaise(day.zomatoRevenuePaise, day.zomatoCommissionBp)
+    netSwiggyPaise += netAggregatorPaise(day.swiggyRevenuePaise, day.swiggyCommissionBp)
+  }
+
+  const netRevenuePaise = grossCashPaise + grossUpiPaise + netZomatoPaise + netSwiggyPaise
+  const expensesByCategory = groupByCategory(expenses)
+
+  return {
+    recorded: days.length > 0 || expenses.length > 0,
+    daysRecorded: days.length,
+    grossCashPaise,
+    grossUpiPaise,
+    grossZomatoPaise,
+    grossSwiggyPaise,
+    netZomatoPaise,
+    netSwiggyPaise,
+    zomatoCommissionPaise: grossZomatoPaise - netZomatoPaise,
+    swiggyCommissionPaise: grossSwiggyPaise - netSwiggyPaise,
+    netRevenuePaise,
+    expensesByCategory,
+    totalExpensesPaise: sumExpenses(expenses),
+    cashExpensesPaise: sumExpenses(expenses.filter((expense) => expense.isCash)),
+    // The domain's own estimator, so this surface cannot invent a third
+    // definition of cash-basis profit. `movements` is empty because no stock is
+    // valued here, which is also why the consumption basis is never asked for.
+    profit: profitEstimate('cash', {
+      salesPaise: netRevenuePaise,
+      expenses: expenses.map((expense) => ({
+        category: expense.category,
+        amountPaise: expense.amountPaise,
+      })),
+      movements: [],
+    }),
+  }
+}
+
+/**
+ * Expenses grouped by category, largest total first.
+ *
+ * Every recorded expense lands in exactly one group and no group is filtered
+ * out, which is what makes the profit figure reconcile against this list. A
+ * category quietly excluded here would make the two disagree by an amount
+ * nothing on the screen could explain.
+ */
+function groupByCategory(expenses: readonly ManualLedgerExpense[]): MonthCategoryTotal[] {
+  const groups = new Map<ExpenseCategory, MonthCategoryTotal>()
+
+  for (const expense of expenses) {
+    const existing = groups.get(expense.category)
+    const line: MonthExpenseLine = {
+      businessDate: expense.businessDate,
+      description: expense.description,
+      amountPaise: assertPaise(expense.amountPaise, 'expense amount'),
+      isCash: expense.isCash,
+    }
+
+    if (existing) {
+      existing.amountPaise += line.amountPaise
+      existing.lines.push(line)
+    } else {
+      groups.set(expense.category, {
+        category: expense.category,
+        amountPaise: line.amountPaise,
+        lines: [line],
+      })
+    }
+  }
+
+  for (const group of groups.values()) {
+    group.lines.sort((a, b) => a.businessDate.localeCompare(b.businessDate))
+  }
+
+  return [...groups.values()].sort((a, b) => b.amountPaise - a.amountPaise)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Vocabulary.
+
+/**
+ * The categories offered, in the order the form offers them.
+ *
+ * The existing shared `expense_category` enum, reused unchanged so a recorded row
+ * maps one-to-one onto the live `expenses` table at retirement. It deliberately
+ * has no entry for aggregator commission, cash banked or an owner drawing —
+ * each is accounted for elsewhere, and a category for it would double-count it.
+ *
+ * Here rather than in the screen so both the day list and the month breakdown
+ * read from one list, and so a category added to the enum has one place to land.
+ */
+export const LEDGER_CATEGORIES: readonly { value: ExpenseCategory; label: string }[] = [
+  { value: 'raw_materials', label: 'Raw materials' },
+  { value: 'salaries', label: 'Salaries' },
+  { value: 'rent', label: 'Rent' },
+  { value: 'electricity', label: 'Electricity' },
+  { value: 'packaging', label: 'Packaging' },
+  { value: 'maintenance', label: 'Maintenance' },
+  { value: 'marketing', label: 'Marketing' },
+  { value: 'other', label: 'Other' },
+]
+
+export const CATEGORY_WORDS = Object.fromEntries(
+  LEDGER_CATEGORIES.map((category) => [category.value, category.label]),
+) as Record<ExpenseCategory, string>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Small shared helpers the surface and the adapters both want.
+
+/** `YYYY-MM` for a business date, which is how a month is named to the adapter. */
+export function monthOf(businessDate: string): string {
+  return businessDate.slice(0, 7)
+}
+
+/** The inclusive date range a `YYYY-MM` month covers, as business dates. */
+export function monthRange(month: string): { from: string; to: string } {
+  const [year, monthNumber] = month.split('-').map(Number)
+  if (!year || !monthNumber || monthNumber < 1 || monthNumber > 12) {
+    throw new RangeError(`Expected a month as YYYY-MM, received ${month}.`)
+  }
+  // Day 0 of the next month is the last day of this one, which avoids a table of
+  // month lengths and gets February right in a leap year for free.
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()
+  return {
+    from: `${month}-01`,
+    to: `${month}-${String(lastDay).padStart(2, '0')}`,
+  }
+}

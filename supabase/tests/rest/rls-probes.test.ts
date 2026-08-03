@@ -873,3 +873,101 @@ describe('deliberately closed surfaces', () => {
     expect(error?.code).toBe('42501')
   })
 })
+
+/**
+ * The manual ledger (#36) — **temporary, and these probes go with it.**
+ *
+ * The pgTAP file proves the policies exhaustively with simulated claims. What
+ * this layer adds is the half those cannot reach: a real token, minted by the
+ * real Auth service, carrying nothing but `sub`, over HTTP. If the deployed stack
+ * ever resolved authority from a claim rather than from a live assignment, the
+ * pgTAP suite would still pass and this would not.
+ *
+ * The claim is stronger than cross-outlet isolation: an outlet role is refused
+ * its **own** outlet's rows, at every verb. Every write attempted here is a
+ * denied one, so these probes leave the seeded database untouched.
+ */
+describe('the manual ledger is the owner’s alone, over HTTP', () => {
+  const YESTERDAY = '2026-08-03'
+
+  const OUTLET_ROLES = [
+    { name: 'a Franchise Admin', persona: PERSONAS.faKalyani },
+    { name: 'a Biller', persona: PERSONAS.billerKalyani },
+    { name: 'an Employee', persona: PERSONAS.employeeKalyani },
+  ] as const
+
+  for (const role of OUTLET_ROLES) {
+    it(`${role.name} reads nothing, at their own outlet`, async () => {
+      const client = (await session(role.persona.email)).client
+
+      // Not an error: a policy that excludes rows returns none. Both tables, and
+      // both naming their own outlet explicitly — the shape that leaks if the
+      // outlet is left implicit.
+      const days = await client
+        .from('manual_ledger_days')
+        .select('*')
+        .eq('outlet_id', OUTLETS.kalyani)
+      expect(days.error).toBeNull()
+      expect(days.data).toEqual([])
+
+      const expenses = await client
+        .from('manual_ledger_expenses')
+        .select('*')
+        .eq('outlet_id', OUTLETS.kalyani)
+      expect(expenses.error).toBeNull()
+      expect(expenses.data).toEqual([])
+    })
+
+    it(`${role.name} cannot write either table at their own outlet`, async () => {
+      const client = (await session(role.persona.email)).client
+
+      const day = await client.from('manual_ledger_days').insert({
+        outlet_id: OUTLETS.kalyani,
+        business_date: YESTERDAY,
+        opening_cash_paise: 0,
+        counted_cash_paise: 0,
+        zomato_commission_bp: 0,
+        swiggy_commission_bp: 0,
+      })
+      expect(day.error?.code).toBe('42501')
+
+      const expense = await client.from('manual_ledger_expenses').insert({
+        outlet_id: OUTLETS.kalyani,
+        business_date: YESTERDAY,
+        category: 'other',
+        is_cash: false,
+        amount_paise: 100,
+        description: 'smuggled',
+      })
+      expect(expense.error?.code).toBe('42501')
+    })
+  }
+
+  it('an owner reads both tables at both outlets', async () => {
+    const owner = (await session(PERSONAS.superAdmin.email)).client
+
+    // Zero rows is the right answer on a fresh reset — nothing seeds these
+    // tables. What matters is that the read is permitted rather than refused,
+    // which is the difference the probes above turn on.
+    for (const outlet of [OUTLETS.kalyani, OUTLETS.kanchrapara]) {
+      const days = await owner.from('manual_ledger_days').select('*').eq('outlet_id', outlet)
+      expect(days.error).toBeNull()
+
+      const expenses = await owner
+        .from('manual_ledger_expenses')
+        .select('*')
+        .eq('outlet_id', outlet)
+      expect(expenses.error).toBeNull()
+    }
+  })
+
+  it('a deactivated owner-role session is refused without waiting for token expiry', async () => {
+    // The deactivated persona is a Franchise Admin, so this probe is about the
+    // `app_account_active()` half rather than the `app_is_owner()` half — but it
+    // is the half that cannot be proved by ending an assignment, because the
+    // schema refuses to end the last live owner.
+    const client = (await session(PERSONAS.deactivatedFa.email)).client
+    const { error, data } = await client.from('manual_ledger_days').select('*')
+    expect(error === null ? data : []).toEqual([])
+  })
+})

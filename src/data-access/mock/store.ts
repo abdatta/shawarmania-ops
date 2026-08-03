@@ -24,6 +24,7 @@ import {
   type BillSeed,
 } from './fixtures/billing'
 import { alertSeeds } from './fixtures/alerts'
+import { manualLedgerDaySeeds, manualLedgerExpenseSeeds } from './fixtures/manual-ledger'
 import { menuCategoryFixtures, menuItemFixtures } from './fixtures/menu'
 import {
   CLOSED_DAYS_AGO,
@@ -106,6 +107,15 @@ export interface DemoStore {
   alertResponses: Tables<'alert_responses'>[]
   /** What was in the drawer when the day started. #12 makes this configurable. */
   readonly openingCashPaise: number
+  /**
+   * Owned by the manual-ledger adapter (#36), and **temporary**: both slices go
+   * when that capability is retired. Kept here rather than inside the mock
+   * adapter so a role switch does not restart the demo month, which is the same
+   * reason every other slice lives here.
+   */
+  manualLedgerDays: Tables<'manual_ledger_days'>[]
+  /** Owned by the manual-ledger adapter (#36). Temporary. */
+  manualLedgerExpenses: Tables<'manual_ledger_expenses'>[]
 }
 
 /** The outlet every demo persona but the owner belongs to. */
@@ -116,6 +126,9 @@ export const DEMO_SECOND_OUTLET_ID = OUTLET_KANCHRAPARA_ID
 
 /** Whoever recorded the demo's operational rows. A manager, as it would be. */
 const MANAGER_ID = personaFixtures.franchise_admin.profile.id
+
+/** Whoever wrote the manual ledger's rows. The owner, because nobody else can. */
+const OWNER_ID = personaFixtures.super_admin.profile.id
 
 /** When each outlet counted its drawer yesterday. */
 const CLOSE_TIME: Record<string, string> = {
@@ -447,6 +460,75 @@ export function createDemoStore(): DemoStore {
     })),
   )
 
+  // ── The manual ledger's demo month (#36, temporary) ───────────────────────
+  //
+  // One outlet only. The month view reads one outlet at a time (design D9), and a
+  // second fabricated outlet would double the fixture for nothing observable.
+
+  const manualLedgerExpenses: Tables<'manual_ledger_expenses'>[] = manualLedgerExpenseSeeds.map(
+    (seed, index) => ({
+      id: `de000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
+      outlet_id: DEMO_OUTLET_ID,
+      business_date: businessDate(seed.daysAgo),
+      category: seed.category,
+      is_cash: seed.isCash,
+      amount_paise: seed.amountPaise,
+      description: seed.description,
+      recorded_by: OWNER_ID,
+      created_at: instantAt(businessDate(seed.daysAgo), seed.time),
+      updated_at: instantAt(businessDate(seed.daysAgo), seed.time),
+    }),
+  )
+
+  const manualLedgerDays: Tables<'manual_ledger_days'>[] = manualLedgerDaySeeds.map(
+    (seed, index) => ({
+      id: `dd000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
+      outlet_id: DEMO_OUTLET_ID,
+      business_date: businessDate(seed.daysAgo),
+      opening_cash_paise: seed.openingCashPaise,
+      cash_revenue_paise: seed.cashRevenuePaise,
+      upi_revenue_paise: seed.upiRevenuePaise,
+      zomato_revenue_paise: seed.zomatoRevenuePaise,
+      swiggy_revenue_paise: seed.swiggyRevenuePaise,
+      cash_added_paise: seed.cashAddedPaise ?? 0,
+      cash_added_reason: seed.cashAddedReason ?? null,
+      cash_removed_paise: seed.cashRemovedPaise ?? 0,
+      cash_removed_reason: seed.cashRemovedReason ?? null,
+      counted_cash_paise: seed.countedCashPaise,
+      zomato_commission_bp: seed.zomatoCommissionBp,
+      swiggy_commission_bp: seed.swiggyCommissionBp,
+      note: seed.note ?? null,
+      recorded_by: OWNER_ID,
+      created_at: instantAt(businessDate(seed.daysAgo), '23:00'),
+      updated_at: instantAt(businessDate(seed.daysAgo), '23:00'),
+    }),
+  )
+
+  // The same drift guard the inventory fixtures get, for the same reason: a demo
+  // whose drawer does not add up is a demo the real system cannot reproduce, and
+  // the arithmetic here is exactly what the surface will show.
+  for (const [index, seed] of manualLedgerDaySeeds.entries()) {
+    const row = manualLedgerDays[index]
+    if (!row) throw new Error(`Demo fixture drift: manual ledger day ${index} was not built.`)
+    const cashExpenses = manualLedgerExpenses
+      .filter((expense) => expense.business_date === row.business_date && expense.is_cash)
+      .reduce((running, expense) => running + expense.amount_paise, 0)
+    const expected = expectedClosingPaise({
+      openingCashPaise: row.opening_cash_paise,
+      cashSalesPaise: row.cash_revenue_paise + row.cash_added_paise,
+      cashExpensesPaise: cashExpenses,
+      cashWithdrawnPaise: row.cash_removed_paise,
+    })
+    const difference = differencePaise(row.counted_cash_paise, expected)
+    const declared = seed.expectedDifferencePaise ?? 0
+    if (difference !== declared) {
+      throw new Error(
+        `Demo fixture drift: the manual ledger day ${row.business_date} is out by ${difference} ` +
+          `paise but declares ${declared}. Fix the fixture, not this check.`,
+      )
+    }
+  }
+
   return {
     today,
     businessDate,
@@ -466,5 +548,7 @@ export function createDemoStore(): DemoStore {
     alerts,
     alertResponses,
     openingCashPaise: OPENING_CASH_PAISE,
+    manualLedgerDays,
+    manualLedgerExpenses,
   }
 }

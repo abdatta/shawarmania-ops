@@ -13,6 +13,7 @@ import { OutletDayView } from '@/features/insights/outlet-day-view'
 import { PnlSurface } from '@/features/insights/pnl-surface'
 import { ReportsSurface } from '@/features/insights/reports-surface'
 import { InventorySurface } from '@/features/inventory/inventory-surface'
+import { ManualLedgerSurface } from '@/features/manual-ledger/manual-ledger-surface'
 import { MovementLedger } from '@/features/inventory/movement-ledger'
 import { MenuSurface } from '@/features/menu/menu-surface'
 import { OutletsSurface } from '@/features/outlets/outlets-surface'
@@ -130,6 +131,18 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="cash">
         <DailyCashSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // The manual ledger (#36) — temporary. This entry goes with the capability,
+    // and it is one line precisely because the gate is what decides who reaches
+    // it: only `owner-manual-ledger` declares this path, so no other role's shell
+    // resolves it and a direct URL renders nothing.
+    path: 'ledger',
+    element: (
+      <GatedSurface path="ledger">
+        <ManualLedgerSurface />
       </GatedSurface>
     ),
   },

@@ -1223,6 +1223,141 @@ export type Database = {
         }
         Relationships: []
       }
+      manual_ledger_days: {
+        Row: {
+          business_date: string
+          cash_added_paise: number
+          cash_added_reason: string | null
+          cash_removed_paise: number
+          cash_removed_reason: string | null
+          cash_revenue_paise: number
+          counted_cash_paise: number
+          created_at: string
+          id: string
+          note: string | null
+          opening_cash_paise: number
+          outlet_id: string
+          recorded_by: string
+          swiggy_commission_bp: number
+          swiggy_revenue_paise: number
+          updated_at: string
+          upi_revenue_paise: number
+          zomato_commission_bp: number
+          zomato_revenue_paise: number
+        }
+        Insert: {
+          business_date: string
+          cash_added_paise?: number
+          cash_added_reason?: string | null
+          cash_removed_paise?: number
+          cash_removed_reason?: string | null
+          cash_revenue_paise?: number
+          counted_cash_paise: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          opening_cash_paise: number
+          outlet_id: string
+          recorded_by?: string
+          swiggy_commission_bp: number
+          swiggy_revenue_paise?: number
+          updated_at?: string
+          upi_revenue_paise?: number
+          zomato_commission_bp: number
+          zomato_revenue_paise?: number
+        }
+        Update: {
+          business_date?: string
+          cash_added_paise?: number
+          cash_added_reason?: string | null
+          cash_removed_paise?: number
+          cash_removed_reason?: string | null
+          cash_revenue_paise?: number
+          counted_cash_paise?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          opening_cash_paise?: number
+          outlet_id?: string
+          recorded_by?: string
+          swiggy_commission_bp?: number
+          swiggy_revenue_paise?: number
+          updated_at?: string
+          upi_revenue_paise?: number
+          zomato_commission_bp?: number
+          zomato_revenue_paise?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_ledger_days_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_ledger_days_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      manual_ledger_expenses: {
+        Row: {
+          amount_paise: number
+          business_date: string
+          category: Database["public"]["Enums"]["expense_category"]
+          created_at: string
+          description: string
+          id: string
+          is_cash: boolean
+          outlet_id: string
+          recorded_by: string
+          updated_at: string
+        }
+        Insert: {
+          amount_paise: number
+          business_date: string
+          category: Database["public"]["Enums"]["expense_category"]
+          created_at?: string
+          description: string
+          id?: string
+          is_cash: boolean
+          outlet_id: string
+          recorded_by?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_paise?: number
+          business_date?: string
+          category?: Database["public"]["Enums"]["expense_category"]
+          created_at?: string
+          description?: string
+          id?: string
+          is_cash?: boolean
+          outlet_id?: string
+          recorded_by?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_ledger_expenses_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_ledger_expenses_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_categories: {
         Row: {
           id: string

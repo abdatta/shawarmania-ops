@@ -1395,6 +1395,110 @@ export interface InsightsAdapter {
   ): Promise<OutletComparisonRow[]>
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Manual ledger: the temporary owner-only notebook (#36).
+//
+// **This section is designed to be deleted**, along with
+// `src/features/manual-ledger/`, `mock/manual-ledger.ts`,
+// `supabase-adapters/manual-ledger.ts`, one registry entry, one route and two
+// tables. It exists because billing (#10), expenses (#11) and daily cash (#12)
+// are not live while August 2026 is trading, and the month cannot be
+// reconstructed from memory afterwards.
+//
+// It is deliberately NOT a partial `ExpensesAdapter` or `DailyCashAdapter`.
+// Those belong to #11 and #12, whose tables have not been designed; writing
+// into them now would either constrain those changes or collapse the authority
+// boundary `docs/LIMITATIONS.md` draws around the drawer.
+
+/** One trading day at one outlet, exactly as stored. Nothing here is derived. */
+export interface ManualLedgerDay {
+  outletId: string
+  businessDate: string
+  /** Stored, never derived from the previous day's count — see design D2. */
+  openingCashPaise: number
+  /** Negative is legitimate: a cash refund is recorded by lowering this. */
+  cashRevenuePaise: number
+  upiRevenuePaise: number
+  zomatoRevenuePaise: number
+  swiggyRevenuePaise: number
+  cashAddedPaise: number
+  cashAddedReason: string | null
+  cashRemovedPaise: number
+  cashRemovedReason: string | null
+  countedCashPaise: number
+  /** Basis points that applied to THIS day. 2250 is 22.5%. */
+  zomatoCommissionBp: number
+  swiggyCommissionBp: number
+  /** Optional, unlike an expense description: it explains a cash difference. */
+  note: string | null
+}
+
+export interface ManualLedgerExpense {
+  id: string
+  outletId: string
+  businessDate: string
+  category: ExpenseCategory
+  /** The only question this ledger asks of an expense: did it leave the drawer? */
+  isCash: boolean
+  amountPaise: number
+  /** Required. A category and an amount do not identify a purchase weeks later. */
+  description: string
+  createdAt: string
+}
+
+/** The day form's payload. Upserted on `(outlet, business date)` — design D6. */
+export type ManualLedgerDayInput = ManualLedgerDay
+
+export interface NewManualLedgerExpense {
+  outletId: string
+  businessDate: string
+  category: ExpenseCategory
+  isCash: boolean
+  /** Integer paise. Rupees are converted at the input boundary, never here. */
+  amountPaise: number
+  description: string
+}
+
+export type ManualLedgerExpensePatch = Partial<
+  Pick<NewManualLedgerExpense, 'category' | 'isCash' | 'amountPaise' | 'description'>
+>
+
+/** Everything a month reading needs, unaggregated. The maths is not the adapter's. */
+export interface ManualLedgerMonth {
+  days: ManualLedgerDay[]
+  expenses: ManualLedgerExpense[]
+}
+
+export class ManualLedgerActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
+    this.name = 'ManualLedgerActionError'
+  }
+}
+
+export interface ManualLedgerAdapter {
+  getDay(outletId: string, businessDate: string): Promise<ManualLedgerDay | null>
+  /**
+   * The most recent day row BEFORE this date at this outlet, or null on an
+   * outlet's first tracked day.
+   *
+   * Serves two jobs that must not be conflated: it supplies the form's defaults,
+   * and it is what the opening-cash chain is checked against. Both are reads —
+   * nothing here writes a repaired figure, because a stored figure the owner
+   * entered is evidence and a recomputed one is not (design D2).
+   */
+  getPreviousDay(outletId: string, businessDate: string): Promise<ManualLedgerDay | null>
+  upsertDay(day: ManualLedgerDayInput): Promise<ManualLedgerDay>
+  /** A day typed against the wrong date. There is no history here to protect. */
+  deleteDay(outletId: string, businessDate: string): Promise<void>
+  listExpenses(outletId: string, businessDate: string): Promise<ManualLedgerExpense[]>
+  createExpense(expense: NewManualLedgerExpense): Promise<ManualLedgerExpense>
+  updateExpense(id: string, patch: ManualLedgerExpensePatch): Promise<ManualLedgerExpense>
+  deleteExpense(id: string): Promise<void>
+  /** One outlet, one month, as `YYYY-MM`. One outlet at a time — design D9. */
+  getMonth(outletId: string, month: string): Promise<ManualLedgerMonth>
+}
+
 /** The bag of domain adapters a session provider supplies to its tree. */
 export interface DataAdapters {
   outlets: OutletsAdapter
@@ -1409,6 +1513,8 @@ export interface DataAdapters {
   alerts: AlertsAdapter
   insights: InsightsAdapter
   addressLookup: AddressLookupAdapter
+  /** Temporary (#36). Removed with the capability once #12 carries its rows. */
+  manualLedger: ManualLedgerAdapter
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

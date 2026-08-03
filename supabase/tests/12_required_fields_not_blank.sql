@@ -279,8 +279,33 @@ $$, $$ values
   -- refused is the third state: a name that is present, occupies the field, and
   -- says nothing. Null means "not given"; '   ' would mean it twice, in a way
   -- no list could render.
-  ('customers_name_not_blank')
+  ('customers_name_not_blank'),
+  -- The manual ledger (#36), temporary: both go when the capability does.
+  --
+  -- The note is OPTIONAL, like a customer's name, and for the same reason — it
+  -- exists to explain a cash difference and most days have none to explain. What
+  -- is refused is a note that occupies the field and says nothing.
+  ('manual_ledger_days_note_not_blank'),
+  -- The description is REQUIRED, which is the stronger case and the deliberate
+  -- difference from `expenses.description`. A category and an amount identify a
+  -- purchase for about a week; an expense nobody can identify by month end is not
+  -- a record, and this ledger's only purpose is to be readable at month end.
+  ('manual_ledger_expenses_description_not_blank')
 $$, 'every not-blank constraint in the schema is accounted for, and no others exist');
+
+-- The manual ledger's two cash-movement reasons are blank-checked too, under
+-- names the pattern above does not match: each constraint does two jobs at once
+-- (a reason is REQUIRED when cash moved, and is never blank when present), so
+-- naming either of them `_not_blank` would describe half of it. Named here so
+-- they are not invisible to somebody grepping for the convention.
+
+select is(
+  (select count(*) from pg_catalog.pg_constraint
+    where connamespace = 'public'::regnamespace
+      and conname in ('manual_ledger_days_cash_added_reason',
+                      'manual_ledger_days_cash_removed_reason')),
+  2::bigint,
+  'both manual-ledger cash-movement reasons are constrained, under their own names');
 
 select * from finish();
 rollback;

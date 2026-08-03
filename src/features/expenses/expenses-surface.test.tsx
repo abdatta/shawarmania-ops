@@ -12,6 +12,7 @@ import { formatPaise, resolveBusinessDate } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
+import { chooseOutlet, expectOutletChosen } from '@/test/outlet-scope'
 
 import { ExpensesSurface } from './expenses-surface'
 
@@ -58,8 +59,12 @@ describe('ExpensesSurface', () => {
     const list = await screen.findByTestId('expense-list')
     const rows = within(list).getAllByRole('listitem')
 
-    const cashRows = rows.filter((row) => within(row).queryByText(/Cash — from the drawer/))
+    // Visibly one word, because the badge shares a line with a category and an
+    // amount on a phone — and the rest of the sentence is still there for a reader
+    // who cannot see it.
+    const cashRows = rows.filter((row) => within(row).queryByText('Cash'))
     expect(cashRows.length).toBeGreaterThan(0)
+    expect(within(cashRows[0]!).getByText(/from the drawer/)).toHaveClass('sr-only')
 
     const upiRow = rows.find((row) => within(row).queryByText('UPI'))
     expect(upiRow).toBeDefined()
@@ -178,27 +183,23 @@ describe('the owner, on an outlet they do not manage', () => {
   }
 
   it('opens on the outlet they run, and can reach the other one', async () => {
-    const user = userEvent.setup()
     renderAsOwner()
 
     // The demo owner manages Kalyani, so that is where they land — not on
     // somebody else's books.
     const selector = await screen.findByTestId('surface-outlet')
-    expect(selector).toHaveValue(OUTLET_KALYANI_ID)
+    expectOutletChosen(OUTLET_KALYANI_ID)
 
-    const options = within(selector)
-      .getAllByRole('option')
-      .map((o) => o.textContent)
-    expect(options).toContain('Shawarmania Kanchrapara')
-    await user.selectOptions(selector, OUTLET_KANCHRAPARA_ID)
-    expect(selector).toHaveValue(OUTLET_KANCHRAPARA_ID)
+    // Every outlet they can reach is on screen without opening anything.
+    expect(selector).toHaveTextContent('Shawarmania Kanchrapara')
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
   })
 
   it('offers no cash there, and says why', async () => {
     const user = userEvent.setup()
     renderAsOwner()
 
-    await user.selectOptions(await screen.findByTestId('surface-outlet'), OUTLET_KANCHRAPARA_ID)
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
     await user.click(await screen.findByTestId('add-expense'))
 
     expect(await screen.findByTestId('remote-entry-note')).toHaveTextContent(
@@ -231,7 +232,7 @@ describe('the owner, on an outlet they do not manage', () => {
     const user = userEvent.setup()
     const { adapters } = renderAsOwner()
 
-    await user.selectOptions(await screen.findByTestId('surface-outlet'), OUTLET_KANCHRAPARA_ID)
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
     await user.click(await screen.findByTestId('add-expense'))
     await user.type(screen.getByLabelText('Amount (₹)'), '620')
     await user.type(screen.getByLabelText(/Description/), 'Aggregator platform fee')

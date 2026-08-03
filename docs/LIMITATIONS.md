@@ -30,6 +30,43 @@ there, and are offered neither of the two writes. Whether an outlet with no
 dedicated manager should hand its drawer to the owner is an open design question
 in `daily-cash-live` (#12).
 
+## The manual ledger is a stopgap with a stated exit
+
+August 2026 is trading while billing (#10), expenses and inventory (#11) and
+daily cash (#12) are still proposals, so nothing records what the outlets sold,
+spent, or held in the drawer. The **Ledger** surface (#36) is where the owner
+writes that down by hand until those surfaces land. It is deliberately small: two
+owner-only tables, no workflow, no sign-off, no correction history, and one
+person who can reach it.
+
+Four bounds worth knowing, because each is a decision:
+
+- **The month's figure is a cash-basis _operating_ estimate.** Capital spending
+  is not recorded here at all, by owner decision, so nothing in it accounts for
+  equipment. It answers whether trading covered running costs, not where every
+  rupee went. Where equipment was paid for out of the drawer it is recorded as
+  cash taken out with its reason, which keeps that day's count reconciling
+  without entering the month's expenses.
+- **Opening cash and both commission rates are stored per day**, offered from the
+  previous recorded day and editable. Correcting an old day therefore changes
+  only that day. The price is that the chain can break — a day's stored opening
+  may disagree with the previous day's count — and the surface reports that
+  without repairing it, because a figure somebody counted is evidence and a
+  recomputed one is not.
+- **No consumption-basis profit**, because no stock is valued here. Raw materials
+  are taken as zero on hand at the start of tracking, by owner decision.
+- **It grants the owner no authority that survives it.** They may type cash
+  figures into this notebook only because no real drawer record exists yet to
+  corrupt. The bound in the section above is untouched, and #12 must not inherit
+  this permission — it decides its own boundary on its own merits.
+
+**Its exit belongs to #12**, and is recorded in that change's proposal as
+inherited scope: the change that removes this capability must first carry every
+recorded day and expense row into the live cash and expense records. The rows are
+the value here; the surface is not. Dropping the tables without the carry-over
+does not satisfy the removal, and the `manual-ledger` capability spec says so as
+a testable requirement.
+
 ## A remembered outlet is per device and per browser profile
 
 The outlet an outlet-scoped screen opens on is remembered for the signed-in

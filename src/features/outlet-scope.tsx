@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
-import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
 import { readRememberedOutlets, rememberOutlets } from '@/features/remembered-outlet'
 import { useSession } from '@/session/context'
@@ -220,51 +219,50 @@ export function useOutletScope(
     choose,
     selector:
       outlets.length > 1 ? (
-        multiple ? (
-          <MultiSelector
-            outlets={outlets}
-            chosen={chosen}
-            onToggle={toggle}
-            badgeFor={options.badgeFor}
-          />
-        ) : (
-          <label className="flex items-center gap-2 text-sm text-content-muted">
-            <span>Outlet</span>
-            <Select
-              aria-label="Outlet"
-              data-testid="surface-outlet"
-              value={chosen[0] ?? ''}
-              onChange={(event) => choose(event.target.value)}
-            >
-              {outlets.map((outlet) => (
-                <option key={outlet.id} value={outlet.id}>
-                  {outlet.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-        )
+        // One control in two modes, not two controls. A surface that reads several
+        // outlets toggles them; a surface that reads one replaces the choice. The
+        // chip, the selected treatment and the rule that the current choice cannot
+        // be cleared are identical either way, so the switcher looks the same on
+        // every surface an owner walks through.
+        <OutletChips
+          outlets={outlets}
+          chosen={multiple ? chosen : chosen.slice(0, 1)}
+          onToggle={multiple ? toggle : choose}
+          label={multiple ? 'Outlets' : 'Outlet'}
+          testId={multiple ? 'surface-outlets' : 'surface-outlet'}
+          badgeFor={options.badgeFor}
+        />
       ) : null,
   }
 }
 
 /**
- * One toggle per outlet, rather than a multi-select list box.
+ * One chip per outlet, rather than a select.
  *
  * A native multiple `<select>` needs ctrl-click to be usable and is close to
- * unusable on the phones this app is actually held on. Toggles say what is on
- * with a state a screen reader reads (`aria-pressed`) and a border a sighted
- * reader sees, and the whole selection is visible without opening anything.
+ * unusable on the phones this app is actually held on. And in single-outlet mode a
+ * select was worse than it looked: its options are floored at 16px so a phone does
+ * not zoom on focus, which left it towering over any caption beside it, and the
+ * caption was carrying nothing that the outlet's own name did not already say.
+ *
+ * Chips say what is on with a state a screen reader reads (`aria-pressed`) and a
+ * fill a sighted reader sees, and the whole selection is visible without opening
+ * anything. The current choice is `disabled` rather than clearable, which says
+ * before the press what a swallowed press would only say after it.
  */
-function MultiSelector({
+function OutletChips({
   outlets,
   chosen,
   onToggle,
+  label,
+  testId,
   badgeFor,
 }: {
   outlets: readonly Tables<'outlets'>[]
   chosen: readonly string[]
   onToggle: (outletId: string) => void
+  label: string
+  testId: string
   badgeFor?: ((outletId: string, selected: boolean) => ReactNode) | undefined
 }) {
   const only = chosen.length === 1
@@ -272,8 +270,8 @@ function MultiSelector({
   return (
     <div
       role="group"
-      aria-label="Outlets"
-      data-testid="surface-outlets"
+      aria-label={label}
+      data-testid={testId}
       className="flex flex-wrap items-center gap-1.5"
     >
       {outlets.map((outlet) => {

@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { E2E_ORIGIN } from '../ports'
+
 /**
  * The manager's four operational surfaces, walked the way a demo walks them.
  *
@@ -23,7 +25,7 @@ async function setTheme(page: Page, theme: 'light' | 'dark') {
 
 test.describe('the operations surfaces', () => {
   test('walks menu, stock, expenses and a full day-close', async ({ page, baseURL }) => {
-    const origin = new URL(baseURL ?? 'http://127.0.0.1:4173/').origin
+    const origin = new URL(baseURL ?? E2E_ORIGIN).origin
     const violations: string[] = []
     page.on('request', (request) => {
       if (new URL(request.url()).origin !== origin) violations.push(request.url())
@@ -52,7 +54,8 @@ test.describe('the operations surfaces', () => {
     // ── Expenses, cash rows distinguishable from the rest ───────────────────
     await page.getByRole('link', { name: 'Expenses' }).click()
     await expect(page.getByTestId('expense-list')).toBeVisible()
-    await expect(page.getByText('Cash — from the drawer').first()).toBeVisible()
+    // The badge is one visible word; the rest of the sentence is announced only.
+    await expect(page.locator('[data-testid^="cash-"]').first()).toContainText('Cash')
     await expect(page.getByTestId('expense-cash-total')).toBeVisible()
 
     // ── Daily cash, and a deliberate mismatch on the way out ────────────────

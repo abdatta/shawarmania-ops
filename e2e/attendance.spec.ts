@@ -3,6 +3,7 @@ import {
   DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
 } from '../src/data-access/mock/fixtures/accounts'
+import { E2E_ORIGIN } from '../ports'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '../src/data-access/mock/fixtures/outlets'
 import { DEMO_OWNER_ID } from '../src/data-access/mock/fixtures/personas'
 
@@ -471,7 +472,7 @@ test('the owner captures a position and the outlet stops being unsurveyed', asyn
 })
 
 test('the attendance walk makes no request beyond the app origin', async ({ page, baseURL }) => {
-  const origin = new URL(baseURL ?? 'http://127.0.0.1:4173/').origin
+  const origin = new URL(baseURL ?? E2E_ORIGIN).origin
   const violations: string[] = []
   page.on('request', (request) => {
     if (new URL(request.url()).origin !== origin) violations.push(request.url())
@@ -612,7 +613,13 @@ test('the owner settles a day at an outlet they are not assigned to', async ({ p
     'true',
   )
   await page.goto('demo/owner/cash')
-  await expect(page.getByTestId('surface-outlet')).toHaveValue(OUTLET_KANCHRAPARA_ID)
+  // The same chip, on a surface that reads one outlet rather than several: the
+  // switcher is one control in two modes, so the remembered choice reads the same
+  // way on both.
+  await expect(page.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
 
   // Reaching the surface is not managing the outlet: the drawer stays the
   // manager's, and the screen says so rather than offering a refused control.

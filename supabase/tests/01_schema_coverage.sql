@@ -228,5 +228,52 @@ select is(
   'all five customer identity functions exist'
 );
 
+-- ---------------------------------------------------------------------------
+-- 7. What the owner-only tables cost.
+--
+-- The manual ledger's two tables carry `outlet_id`, so section 2 classifies them
+-- outlet-scoped and the sweep in 02 proves the ordinary cross-outlet claim about
+-- them. Neither notices that they are a stronger case: **no outlet role has any
+-- access at all**, at any outlet, including its own. That is stated as a catalog
+-- fact here, on the same terms the global customer table is, so a later migration
+-- that quietly adds a Franchise Admin branch fails by name rather than in
+-- whichever test somebody remembered to write. What the branch would actually
+-- permit is proved in 21_manual_ledger.sql.
+
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'public'
+      and tablename in ('manual_ledger_days', 'manual_ledger_expenses')),
+  8::bigint,
+  'both manual-ledger tables carry one policy per verb: select, insert, update, delete');
+
+select is(
+  coalesce(
+    (select string_agg(policyname, ', ' order by policyname)
+       from pg_policies
+      where schemaname = 'public'
+        and tablename in ('manual_ledger_days', 'manual_ledger_expenses')
+        and coalesce(qual, '') || coalesce(with_check, '') not like '%app_is_owner%'),
+    ''),
+  '',
+  'every manual-ledger policy is predicated on app_is_owner()');
+
+-- The absence that matters. An outlet predicate here would be the first step by
+-- which a notebook the owner alone writes into becomes a surface a manager can
+-- reach, and it would do so without failing any other test in this suite.
+select is(
+  coalesce(
+    (select string_agg(policyname, ', ' order by policyname)
+       from pg_policies
+      where schemaname = 'public'
+        and tablename in ('manual_ledger_days', 'manual_ledger_expenses')
+        and (coalesce(qual, '') || coalesce(with_check, '') like '%app_outlet_id%'
+             or coalesce(qual, '') || coalesce(with_check, '') like '%app_has_role_at%'
+             or coalesce(qual, '') || coalesce(with_check, '') like '%app_outlets_for%'
+             or coalesce(qual, '') || coalesce(with_check, '') like '%app_role()%')),
+    ''),
+  '',
+  'no manual-ledger policy carries an outlet-role predicate of any kind');
+
 select * from finish();
 rollback;

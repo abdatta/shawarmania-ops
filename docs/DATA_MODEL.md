@@ -333,6 +333,56 @@ The three derived inputs come from settled `cash` bills, `cash` expenses, and wi
 
 This is structural, not conventional: clients cannot write `daily_cash_records` at all. The `close_business_day()` function is the only path — it computes the three derived inputs server-side in the same transaction that writes the snapshot, is available only to an active Franchise Admin of that outlet (deliberately not the Super Admin), and refuses a duplicate close. CHECK constraints hold both equations on every row regardless of writer.
 
+## The manual ledger (temporary, #36)
+
+Two owner-only tables that exist because billing, expenses and daily cash were
+not live while August 2026 was trading. **Both are designed to be dropped**, by
+the change that first carries their rows into the live records (#12 — see
+[Limitations](LIMITATIONS.md#the-manual-ledger-is-a-stopgap-with-a-stated-exit)).
+The `manual_ledger_` prefix is what makes that removal, and any accidental
+reference from a live surface, greppable.
+
+**`manual_ledger_days`** — `id`, `outlet_id`, `business_date`,
+`opening_cash_paise`, `cash_revenue_paise`, `upi_revenue_paise`,
+`zomato_revenue_paise`, `swiggy_revenue_paise`, `cash_added_paise`,
+`cash_added_reason`, `cash_removed_paise`, `cash_removed_reason`,
+`counted_cash_paise`, `zomato_commission_bp`, `swiggy_commission_bp`, `note`,
+`recorded_by`, `created_at`, `updated_at`. `unique (outlet_id, business_date)`.
+
+**`manual_ledger_expenses`** — `id`, `outlet_id`, `business_date`, `category`
+(the same shared `expense_category`, so retirement maps one-to-one onto
+`expenses`), `is_cash`, `amount_paise`, `description` (**required**, refused
+blank), `recorded_by`, `created_at`, `updated_at`.
+
+Four properties are load-bearing and easy to undo by accident:
+
+- **Nothing is derived in the database.** No view, no generated column, no
+  trigger that computes. Expected cash, the difference, net aggregator revenue
+  and the monthly estimate all live in `src/features/manual-ledger/ledger.ts`, so
+  the rounding rule has exactly one implementation. A migration that drops two
+  tables is trivially reviewable; one that also drops views invites leaving
+  something behind.
+- **`opening_cash_paise` and both `_commission_bp` columns are stored per day,
+  not derived.** This is the opposite of the `daily_cash_records` treatment above
+  and for the same underlying reason: correcting day 3's count must not silently
+  move day 4 through day 31. The cost is that the chain can break, and the
+  surface reports the break rather than repairing it.
+- **Commission is basis points and applied per day**, then summed. Never applied
+  to a month's total, because days in a month may carry different rates — which is
+  the entire point of storing the rate on the row.
+- **There is no capital marker, deliberately.** Capital spending is not recorded
+  here at all, so the monthly figure is a cash-basis *operating* estimate and the
+  surface says so. Equipment paid for from the drawer is recorded as cash taken
+  out with its reason, which keeps the day reconciling while leaving the month's
+  expenses clean. A boolean that was always false would imply the opposite.
+
+Negative revenue is permitted (a cash refund lowers that day's cash revenue);
+negative opening cash, drawer count and cash movements are refused, as are a
+future business date, a blank movement reason, a blank expense description and a
+commission rate outside 0–10000 basis points. RLS is `app_is_owner() and
+app_account_active()` with no outlet-role predicate anywhere: every other role is
+refused every verb at every outlet, including its own.
+
 ## Alerts
 
 **`alerts`** — `id`, `outlet_id`, `raised_by`, `subject`, `message`, `category` (`inventory` | `equipment` | `cash_mismatch` | `employee` | `supplier` | `other`), `priority` (`low` | `normal` | `high` | `urgent`), `status` (`open` | `acknowledged` | `resolved` | `closed`), `created_at`.

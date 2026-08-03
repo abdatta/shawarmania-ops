@@ -6,11 +6,13 @@ import { describe, expect, it } from 'vitest'
 import type { DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
+import { OUTLET_KANCHRAPARA_ID } from '@/data-access/mock/fixtures/outlets'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { formatPaise } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
+import { chooseOutlet } from '@/test/outlet-scope'
 
 import { DailyCashSurface } from './daily-cash-surface'
 
@@ -265,16 +267,11 @@ describe('DailyCashSurface — an owner assigned nowhere', () => {
   })
 
   it('says the same at every outlet, because the reason is the assignment', async () => {
-    const user = userEvent.setup()
     renderCashAsOwner()
 
     await screen.findByTestId('expected-closing')
-    const selector = await screen.findByTestId('surface-outlet')
-    const otherOutlet = within(selector)
-      .getAllByRole('option')
-      .map((option) => (option as HTMLOptionElement).value)
-      .find((value) => value !== (selector as HTMLSelectElement).value)
-    await user.selectOptions(selector, otherOutlet!)
+    // The outlet they do not run, reached through the same switcher.
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
 
     expect(await screen.findByTestId('drawer-not-yours')).toBeInTheDocument()
     expect(screen.queryByTestId('close-day-button')).not.toBeInTheDocument()

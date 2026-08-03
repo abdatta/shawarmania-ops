@@ -5,6 +5,7 @@ import { createSupabaseAccountsAdapter } from './accounts'
 import { createSupabaseAttendanceAdapter } from './attendance'
 import { createSupabaseBillingAdapter } from './billing'
 import { createSupabaseCustomersAdapter } from './customers'
+import { createSupabaseManualLedgerAdapter } from './manual-ledger'
 import { createSupabaseMenuAdapter } from './menu'
 import {
   createSupabaseDailyCashAdapter,
@@ -45,6 +46,10 @@ export function createSupabaseAdapters(): DataAdapters {
     // its honest answer until #13. See supabase-adapters/oversight.ts.
     alerts: createSupabaseAlertsAdapter(),
     insights: createSupabaseInsightsAdapter(),
+    // Real from the day it ships, unlike the three above it: the manual ledger
+    // is a stopgap precisely because nothing else records August (#36), so a
+    // stub would defeat the point. It goes when #12 carries its rows across.
+    manualLedger: createSupabaseManualLedgerAdapter(client),
     // Takes no client: it holds no credential and reaches no Supabase service.
     // It is here because this is the layer permitted to do I/O, and a screen
     // fetching for itself is exactly what the seam exists to prevent.

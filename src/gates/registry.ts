@@ -8,6 +8,7 @@ import {
   Home,
   KeyRound,
   LayoutDashboard,
+  NotebookPen,
   Package,
   Store,
   TabletSmartphone,
@@ -89,7 +90,7 @@ const defs = {
   'owner-people': {
     role: 'super_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 3 },
+    nav: { label: 'People', icon: Users, order: 4 },
     state: 'live',
   },
   'owner-comparison': {
@@ -120,6 +121,29 @@ const defs = {
     role: 'super_admin',
     path: 'reports',
     state: 'demo',
+  },
+  /**
+   * The manual ledger (#36) — **`live`, and designed to be deleted**.
+   *
+   * A stopgap with a known end date: billing (#10), expenses (#11) and daily cash
+   * (#12) are not live while August 2026 is trading, and the month cannot be
+   * reconstructed from memory in September. `live` rather than `demo` because a
+   * surface whose entire purpose is to capture real figures is useless gated to a
+   * demo, and the notebook it replaces would otherwise be a spreadsheet.
+   *
+   * It carries navigation because the owner opens it nightly; that is the whole
+   * job. It goes when #12 carries its rows into the live cash and expense
+   * records — never before, because the rows are the value here and the surface
+   * is not.
+   */
+  'owner-manual-ledger': {
+    role: 'super_admin',
+    path: 'ledger',
+    // Ahead of People: this is opened every night, and People is opened when
+    // somebody joins or leaves. Nav order follows how often a tab is reached for,
+    // and the nightly job should not sit behind the occasional one.
+    nav: { label: 'Ledger', icon: NotebookPen, order: 3 },
+    state: 'live',
   },
   /** Drop into one outlet's Franchise Admin view, read-only. */
   'owner-outlet-view': {

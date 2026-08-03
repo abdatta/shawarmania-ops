@@ -10,6 +10,7 @@ import { createMockDailyCashAdapter } from './daily-cash'
 import { createMockExpensesAdapter } from './expenses'
 import { createMockInsightsAdapter } from './insights'
 import { createMockInventoryAdapter } from './inventory'
+import { createMockManualLedgerAdapter } from './manual-ledger'
 import { createMockMenuAdapter } from './menu'
 import { createMockOutletsAdapter } from './outlets'
 import { personaFixtures } from './fixtures/personas'
@@ -136,6 +137,9 @@ export function createMockAdapters(
     // reads across outlets, and asking for somebody else's returns nothing.
     alerts: createMockAlertsAdapter(store, role, session),
     insights: createMockInsightsAdapter(store, attendance, role, session),
+    // The role reaches it for the same reason: the policies refuse every verb on
+    // both manual-ledger tables to everybody but an owner (#36, temporary).
+    manualLedger: createMockManualLedgerAdapter(store, role),
     addressLookup: createMockAddressLookupAdapter(),
   }
 }

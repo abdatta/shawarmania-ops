@@ -129,6 +129,9 @@ assignment cannot be ended by anyone, including its holder.
 | **Alerts** |
 | Raise an alert | — | ✓ own outlet | — | — |
 | View and respond | ✓ all | R own alerts | — | — |
+| **Manual ledger** (temporary, #36) |
+| Read a day, a month, or any row | ✓ all | — | — | — |
+| Record and correct days and expenses | ✓ all | — | — | — |
 
 **Customers are the one thing here that is not an outlet's.** One normalized
 phone identifies one customer for the whole business, so a returning customer is
@@ -165,6 +168,22 @@ reaching an outlet's cash surface still gets the figures and neither write; the
 screen says whose they are rather than leaving it to be discovered by refusal.
 Whether that should change where an outlet has no dedicated manager is an open
 design question in `daily-cash-live` (#12), which builds the drawer.
+
+**The manual ledger is the only capability nobody but the owner touches, and it
+is temporary.** Every other row in the matrix gives some outlet role something;
+these two give them nothing at all, at any outlet, including their own — which is
+a stronger claim than ordinary outlet isolation and is asserted directly in
+`supabase/tests/21_manual_ledger.sql` rather than inherited from the cross-outlet
+sweep. The policies name `app_is_owner()` and `app_account_active()` and no
+outlet-role predicate appears in any of the eight;
+`supabase/tests/01_schema_coverage.sql` asserts that absence as a catalog fact,
+so a later migration that quietly adds a manager branch fails by name.
+
+**The owner writing cash figures there is not precedent for the drawer.** It is
+allowed only because no real cash record exists yet to corrupt, and the bound in
+the paragraph above is untouched by it. See
+[Limitations](LIMITATIONS.md#the-manual-ledger-is-a-stopgap-with-a-stated-exit)
+for the capability's stated exit, which belongs to #12.
 
 Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to an enrolled device and a shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it.
 

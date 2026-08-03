@@ -1,5 +1,4 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
@@ -12,6 +11,8 @@ import { ExpensesSurface } from '@/features/expenses/expenses-surface'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
+
+import { chooseOutlet, expectOutletChosen } from '@/test/outlet-scope'
 
 import { forgetRememberedOutlets, readRememberedOutlets } from './remembered-outlet'
 
@@ -63,13 +64,6 @@ function renderSurface(
   }
 }
 
-async function chooseOutlet(outletId: string) {
-  const user = userEvent.setup()
-  const selector = await screen.findByTestId('surface-outlet')
-  await user.selectOptions(selector, outletId)
-  await waitFor(() => expect(screen.getByTestId('surface-outlet')).toHaveValue(outletId))
-}
-
 describe('the outlet in scope, remembered', () => {
   it('opens the next surface on the outlet chosen on the last one', async () => {
     const first = renderSurface(ExpensesSurface)
@@ -78,7 +72,8 @@ describe('the outlet in scope, remembered', () => {
 
     // A different surface entirely, and the question is not asked again.
     renderSurface(DailyCashSurface)
-    expect(await screen.findByTestId('surface-outlet')).toHaveValue(OUTLET_KANCHRAPARA_ID)
+    await screen.findByTestId('surface-outlet')
+    expectOutletChosen(OUTLET_KANCHRAPARA_ID)
   })
 
   it('survives the surface being torn down and rebuilt', async () => {
@@ -87,7 +82,8 @@ describe('the outlet in scope, remembered', () => {
     first.unmount()
 
     renderSurface(DailyCashSurface)
-    expect(await screen.findByTestId('surface-outlet')).toHaveValue(OUTLET_KANCHRAPARA_ID)
+    await screen.findByTestId('surface-outlet')
+    expectOutletChosen(OUTLET_KANCHRAPARA_ID)
   })
 
   it('replaces a remembered outlet the person may no longer see', async () => {
@@ -100,8 +96,8 @@ describe('the outlet in scope, remembered', () => {
     renderSurface(ExpensesSurface)
 
     // Opens on a real outlet rather than on a blank or an error…
-    const selector = await screen.findByTestId('surface-outlet')
-    expect((selector as HTMLSelectElement).value).toBe(OUTLET_KALYANI_ID)
+    await screen.findByTestId('surface-outlet')
+    expectOutletChosen(OUTLET_KALYANI_ID)
     // …and the dead value is written over, so the next surface does not
     // rediscover it.
     await waitFor(() => expect(readRememberedOutlets(ownerSession)).toEqual([OUTLET_KALYANI_ID]))
@@ -117,7 +113,8 @@ describe('the outlet in scope, remembered', () => {
     expect(readRememberedOutlets(ownerSession)).toEqual([])
 
     renderSurface(ExpensesSurface)
-    expect(await screen.findByTestId('surface-outlet')).toHaveValue(OUTLET_KALYANI_ID)
+    await screen.findByTestId('surface-outlet')
+    expectOutletChosen(OUTLET_KALYANI_ID)
   })
 
   it('keeps the demo’s choice out of a real session', async () => {
@@ -172,9 +169,11 @@ describe('the outlet in scope, remembered', () => {
     renderSurface(ExpensesSurface)
 
     const selector = await screen.findByTestId('surface-outlet')
-    const values = within(selector)
-      .getAllByRole('option')
-      .map((option) => (option as HTMLOptionElement).value)
-    expect(values).toEqual([OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID])
+    // Every outlet as its own chip, in order, and nothing else.
+    const chips = within(selector).getAllByRole('button')
+    expect(chips.map((chip) => chip.getAttribute('data-testid'))).toEqual([
+      `surface-outlet-${OUTLET_KALYANI_ID}`,
+      `surface-outlet-${OUTLET_KANCHRAPARA_ID}`,
+    ])
   })
 })

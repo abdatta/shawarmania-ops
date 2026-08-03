@@ -38,6 +38,34 @@ It keeps its own change at every level of consolidation because it contains the 
   not rewrite the old drawer. The manager reopens and re-closes an affected
   drawer, or accepts the exception with a note.
 
+## Inherited obligation: retire the manual ledger (#36)
+
+**This change owns the exit of the manual-ledger stopgap, and cannot be archived
+without discharging it.** #36 shipped two owner-only tables,
+`manual_ledger_days` and `manual_ledger_expenses`, because August 2026 was
+trading with no record of what it sold, spent or held in the drawer while this
+change and #11 were still proposals. Those rows are the only record of that
+period, so they are the thing of value there — the surface is not.
+
+Two obligations, both written here so a future session inherits them as scope
+rather than discovering them:
+
+- **Carry the rows across before dropping the tables.** Each day row becomes a
+  cash record and each expense row becomes an expense; both already carry an
+  outlet, an explicit `business_date`, integer paise, and — for expenses — the
+  same shared `public.expense_category` this schema uses, so the mapping needs no
+  translation table. Dropping the tables without the carry-over does not satisfy
+  the removal, and the `manual-ledger` capability spec says so as a requirement.
+  Two shapes need a decision rather than a copy: the manual ledger holds one
+  stored `opening_cash_paise` per day where a real drawer derives it, and it holds
+  aggregator revenue by channel where this schema has no bill behind it.
+- **Do not inherit its permission.** The owner may write cash figures in the
+  manual ledger only because no real drawer record existed to corrupt. That is
+  not precedent for this change's boundary, which is the open design question
+  above. Whatever this change decides about the owner and the drawer, it must
+  decide it on its own merits — `docs/LIMITATIONS.md` records the stopgap and its
+  exit for exactly this reason.
+
 ## Non-goals
 
 - No bank deposit tracking or till-float denomination counting.

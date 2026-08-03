@@ -263,7 +263,7 @@ If a tablet needs forcing onto a new build, closing and reopening the app twice 
 
 The repeatable path. **If any step here requires a code change, that is a bug** — outlet number seven must be a data operation.
 
-> ⚠ **Steps 4, 5 and 7 are not built yet** and are marked below. Everything else is done in the app — no SQL console, at any step. **Order matters**: an outlet has to exist before anybody can be assigned to it.
+> ⚠ **Steps 4, 5 and 7 are not built yet** and are marked below; **step 9 is temporary** and goes when #12 lands. Everything else is done in the app — no SQL console, at any step. **Order matters**: an outlet has to exist before anybody can be assigned to it.
 
 1. **Create the outlet** (Super Admin → Outlets → *Add outlet*): short code, name, location label, address, phone, business-day cutover. Use **Find the address** to fill the address block from a search rather than typing five fields — it fills the District from the PIN code, which is the part nobody remembers. Check what it filled before saving; OpenStreetMap data is contributed rather than surveyed, and this address is what a GST invoice will carry. If it finds nothing, type it: the search is a shortcut and never a step. **The business-day cutover is not the opening time** — it is where one trading day ends and the next begins, so it belongs in the quiet hours (04:00 is the default and the owner-confirmed value for both outlets). The form resolves a whole session against whatever you type and warns if it would split one night across two days; leave it at 04:00 unless you have a reason. On a brand-new installation this is the only thing there is to do, and the empty screen says so.
 2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → *Capture position here*). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the Outlets screen shows it as unsurveyed.
@@ -285,8 +285,63 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    keeps that outlet preselected. Later assignment changes keep the same
    account. A pending link is replaced transactionally; an activated person
    gets no code unless an admin explicitly chooses **New code**.
-7. **Set the opening cash float** for the first business day. *(Not built — #12.)*
+7. **Set the opening cash float** for the first business day. *(Not built — #12.
+   Meanwhile the float is typed as the first day's opening cash in the manual
+   ledger, step 9.)*
 8. **Verify isolation before going live** — sign in as the new Franchise Admin and confirm no other outlet is visible anywhere. This is a real step, not a formality: it is the last point at which a misconfiguration is cheap to fix.
+9. **Start the manual ledger for the outlet** (Super Admin → Ledger). *(Temporary
+   — #36, and this step disappears when #12 lands.)* Until billing, expenses and
+   daily cash are live, this is the only record of what the outlet takes and
+   spends, so it is a step rather than a suggestion. On the first day, count the
+   drawer and type that as **opening cash**, and type both aggregator commission
+   rates — nothing is inherited, because there is no earlier day to inherit from.
+   Every later day offers the previous day's count and rates and needs only the
+   four channel figures, the expenses as they happen, and the count at close.
+
+## Recording a trading day by hand *(temporary — #36)*
+
+The nightly job while billing, expenses and cash are not live. Two or three
+minutes per outlet, from a phone, and the figures build the month by themselves.
+
+1. **Super Admin → Ledger**, pick the outlet, leave it on **One day** and today.
+2. **Check the opening cash it offers.** It is the previous recorded day's count.
+   If the drawer really started somewhere else, change it — and if the screen
+   reports a gap between the two, correct whichever day is wrong rather than
+   overwriting the figure to make the warning go away. That warning is the whole
+   reason the opening is stored per day.
+3. **Type the four channels**: cash, UPI, and what Zomato and Swiggy **state**,
+   not what they settle. Each aggregator sits in its own block with the rate that
+   applies to this day, and the block shows what actually arrives as you type.
+4. **Check each block's rate.** It carries forward from the previous day. Edit it
+   on the day the rate actually changed and no earlier day moves.
+5. **Record each expense with what it was for.** The description is required and
+   is the point: `raw_materials ₹2,400` will mean nothing at month end. Mark it
+   cash only if it came out of this drawer.
+6. **Cash added and cash withdrawn, each with a reason.** Banking, a float
+   top-up, an owner drawing. **Equipment bought with drawer cash goes in Cash
+   withdrawn, not in expenses** — the drawer is genuinely lighter, and recording
+   it as an expense would double-count it while recording it nowhere would make
+   the day read short.
+7. **Count the drawer and type it.** The difference appears as you type. If it
+   does not balance, write a note saying what you found.
+8. **Save.** The form gives way to a reading of what you just stored: the revenue
+   side with each aggregator's rate and what actually arrived, and the drawer
+   below it.
+
+To correct a day later, open it and press **Edit**. It opens as a reading, so the
+figures cannot be nudged by a stray tap on the way past; every field comes back
+exactly as it was stored, and **Cancel** writes nothing. Saving changes that day
+alone.
+
+The rules behind any section — why a rate is stored per day, why a fridge is cash
+out rather than an expense — are on the **ⓘ** beside that section's title. Nothing
+is hidden that you need in order to type a figure; what is hidden is what you only
+need to read once.
+
+At month end, switch to **The month**: revenue by channel with each aggregator net
+of its own daily rate, expenses by category with every line behind the total, and
+a cash-basis operating profit estimate. It is an *operating* figure — equipment is
+deliberately not recorded here — and the screen says so.
 
 ## First production deploy
 

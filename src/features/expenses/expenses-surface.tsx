@@ -291,7 +291,14 @@ export function ExpensesSurface() {
                           className="inline-flex items-center gap-1 rounded-lg border border-primary px-2 py-0.5 text-xs font-semibold text-content"
                         >
                           <Banknote aria-hidden size={12} />
-                          Cash — from the drawer
+                          Cash
+                          {/*
+                            The rest of the sentence stays for a reader who cannot
+                            see the badge. Visibly it is one word, because on a
+                            phone this sits between a category and an amount on one
+                            line and the full phrase pushed both onto their own.
+                          */}
+                          <span className="sr-only"> — from the drawer</span>
                         </span>
                       ) : (
                         <span className="text-xs font-normal text-content-muted">

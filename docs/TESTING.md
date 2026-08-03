@@ -58,6 +58,16 @@ Pure functions over integer paise, so they are trivially testable and there is n
 - Cash difference sign convention — short is negative, over is positive. Assert it explicitly; it is exactly the kind of thing that silently inverts.
 - P&L in both modes, with an explicit test that the two do **not** double-count raw materials.
 - Formatting: paise → Indian-grouped rupees (`₹1,23,456`), including zero and negative values.
+- Aggregator commission in the manual ledger *(temporary — #36)*:
+  `(stated × bp + 5000) / 10000` with integer division, asserted to round half up
+  **and to round symmetrically about zero** — truncation toward zero on a refunded
+  day would leave a month a paisa out. Applied **per day** and summed, with an
+  explicit test that one rate applied to a month's total gives a *different*
+  answer, so the bug the per-day design forecloses cannot be reintroduced by
+  moving the commission out of the loop.
+- The manual ledger's month reconciling exactly against its own expenses by
+  category — the guarantee that no category or marker is quietly excluded from the
+  profit estimate.
 
 **No floating point anywhere.** A test that asserts a money value equals a float is itself a bug.
 
@@ -82,6 +92,16 @@ For **every** outlet-scoped table, with sessions for each role:
 - An Employee can read **only their own** attendance rows.
 
 **A new outlet-scoped table without a case in this suite is an incomplete change.** The suite enforces this itself: it enumerates the tables from the database catalog and fails, naming the table, on any it cannot classify as outlet-scoped, child-scoped, or tenancy-root, or that lacks Row-Level Security — nobody has to remember.
+
+**Owner-only tables need a case the sweep cannot express.** The manual ledger's
+two tables *(temporary — #36)* carry `outlet_id`, so the enumeration finds them
+and proves the ordinary claim: nobody reads across outlets. The real claim is
+stronger — an outlet role is refused its **own** outlet's rows, at every verb —
+and `supabase/tests/21_manual_ledger.sql` asserts it directly for a Franchise
+Admin, a Biller and an Employee. `01_schema_coverage.sql` backs it with catalog
+facts: every one of the eight policies names `app_is_owner()`, and **none** names
+an outlet-role predicate, so a later migration that quietly adds a manager branch
+fails by name rather than in whichever test somebody remembered to write.
 
 ### 3. The offline path
 
