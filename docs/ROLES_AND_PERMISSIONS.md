@@ -119,6 +119,7 @@ assignment cannot be ended by anyone, including its holder.
 | Enter attendance for someone (past time, today) | ✓ any outlet | ✓ own outlet | — | — |
 | View attendance | R all | ✓ own outlet | — | R self |
 | Override a failed geofence check | ✓ | ✓ own outlet | — | — |
+| Correct a settled check-in time (audited) | ✓ any outlet | ✓ own outlet | — | — |
 | **Daily cash** |
 | View | R all | ✓ own outlet | — | — |
 | Record withdrawal, close the day | — | ✓ own outlet | — | — |
@@ -318,6 +319,15 @@ or forge a manager. Denials and all corrections require a non-blank reason.
 Denial stores no manager GPS, while approval and correction-to-present store the
 manager evidence their flows read. Retry-only and absent corrections are
 locationless.
+
+That same correction boundary permits **changing the effective check-in time
+on a settled day, including a historical one**. The original attempt time,
+source and GPS/manual evidence never change. The database appends the previous
+time, replacement time, actor, decision time and mandatory reason; refuses a
+future time or one outside the row's explicit outlet business date; and makes
+the replacement the time used for lateness and every attendance view. The
+employee sees this history but cannot write it. Waiting attempts must first be
+approved or denied and do not offer the action.
 
 An employee may submit a later attempt only for their own person/date and a live
 outlet where they currently hold an Employee assignment. That attempt is allowed

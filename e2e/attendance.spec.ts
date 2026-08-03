@@ -309,6 +309,51 @@ test('a seeded manual arrival is visibly not a self check-in, on both sides', as
   await expect(card.getByText('phone')).toHaveCount(0)
 })
 
+test('a settled historical arrival time changes through an attributed correction', async ({
+  page,
+}) => {
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  // Waiting evidence is still evidence under review, so the correction entry
+  // remains absent until the manager first settles it.
+  await expect(page.getByTestId(`correct-${DEMO_RUNNER_ACCOUNT_ID}`)).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Previous day' }).click()
+  const grillerId = 'd1000000-0000-4000-a000-000000000006'
+  await page.getByTestId(`expand-${grillerId}`).click()
+  await page.getByTestId(`correct-${grillerId}`).click()
+  await page.getByLabel('Correction').selectOption('time')
+
+  const save = page.getByRole('button', { name: 'Save correction' })
+  await page.getByLabel('Reason').fill('Paper register confirms the later arrival')
+  await expect(save).toBeDisabled()
+  await page.getByLabel('Corrected check-in time').fill('14:30')
+  await save.click()
+
+  const card = page.getByTestId(`day-${grillerId}`)
+  await expect(card.getByTestId('late-tag')).toBeVisible()
+  const history = card.getByTestId('attendance-history-sequence')
+  await expect(history).toContainText('Changed check-in time from')
+  await expect(history).toContainText('to 02:30 pm by Demo Manager')
+  await expect(history).toContainText('Paper register confirms the later arrival')
+  // The original manual event remains in the same sequence rather than being
+  // rewritten into a second fabricated arrival.
+  await expect(history.getByText(/Checked in at Shawarmania Kalyani/)).toHaveCount(1)
+
+  // A second correction proves lateness is derived from the effective time in
+  // both directions, while keeping every earlier correction in the audit trail.
+  await page.getByTestId(`correct-${grillerId}`).click()
+  await page.getByLabel('Correction').selectOption('time')
+  await page.getByLabel('Corrected check-in time').fill('12:30')
+  await page.getByLabel('Reason').fill('Owner verified the earlier arrival')
+  await page.getByRole('button', { name: 'Save correction' }).click()
+  await expect(card.getByTestId('late-tag')).toHaveCount(0)
+  await expect(history).toContainText('from 02:30 pm to 12:30 pm by Demo Manager')
+  await expect(history).toContainText('Owner verified the earlier arrival')
+  await expect(history.getByText(/Checked in at Shawarmania Kalyani/)).toHaveCount(1)
+})
+
 test('an employee’s own history shows the approval, where the approver was, and why', async ({
   page,
 }) => {

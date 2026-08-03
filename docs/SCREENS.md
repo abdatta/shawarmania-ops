@@ -159,12 +159,18 @@ all employee retries for that person/date across outlets.
 
 **Corrections stay inside expanded settled details.** One quiet *Correct
 attendance* entry offers only actions meaningful for the current state: mark
-present, mark absent, allow another check-in, or mark absent and allow one. Every
+present, mark absent, allow another check-in, mark absent and allow one, or
+**change check-in time**. Choosing the time correction reveals one required time
+field in the same sheet; the reason remains required. It is available only on a
+settled row, including historical days. Every
 correction requires a reason and is appended to the decision history. Correcting
 to present reuses the manager-position flow while retaining the employee's
 attempt evidence; absent and retry-policy corrections read no manager position.
 This is also how a manager reopens a prevented wrong-outlet denial so the person
-can check in at the outlet where they were meant to work.
+can check in at the outlet where they were meant to work. A time correction
+changes the effective arrival and therefore the late tag everywhere, while
+History keeps the original attempt and shows each old-to-new time, actor and
+reason. Future times and times outside that outlet business date are refused.
 
 
 **The day controls say where the rest of the work is.** The badge on the day picker counts only the day on screen, so the earlier-days and later-days arrows carry a dot when **this outlet** holds unapproved arrivals before or after it. The dot is scoped to the outlet in scope and to nothing else: another shop's backlog never marks these arrows, and switching outlets changes what they say. A count of nought is never drawn — the absence of a badge always means there is nothing waiting.

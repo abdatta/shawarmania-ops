@@ -309,6 +309,41 @@ describe('the outlet attendance day', () => {
     expect(getCurrentPosition).toHaveBeenCalledTimes(1)
   })
 
+  it('reveals a mandatory check-in time only for the time-correction option', async () => {
+    const user = userEvent.setup()
+    const { adapters } = renderDay()
+    const today = await todayAt(adapters, OUTLET_KALYANI_ID)
+    const existing = await adapters.attendance.getDay(DEMO_GRILLER_ACCOUNT_ID, today)
+    expect(existing).not.toBeNull()
+    const correct = vi.spyOn(adapters.attendance, 'correct').mockResolvedValue(existing!)
+
+    const grillerRow = await screen.findByTestId(`expand-${DEMO_GRILLER_ACCOUNT_ID}`)
+    if (grillerRow.getAttribute('aria-expanded') === 'false') await user.click(grillerRow)
+    await user.click(await screen.findByTestId(`correct-${DEMO_GRILLER_ACCOUNT_ID}`))
+    expect(screen.queryByLabelText('Corrected check-in time')).not.toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Correction'), 'time')
+    const save = screen.getByRole('button', { name: 'Save correction' })
+    expect(screen.getByLabelText('Corrected check-in time')).toBeRequired()
+    await user.type(screen.getByLabelText('Reason'), 'Paper register has the correct time')
+    expect(save).toBeDisabled()
+    await user.type(screen.getByLabelText('Corrected check-in time'), '10:30')
+    expect(save).toBeEnabled()
+    await user.click(save)
+
+    await waitFor(() => expect(correct).toHaveBeenCalledTimes(1))
+    expect(correct).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attendanceId: existing!.id,
+        action: 'time',
+        reason: 'Paper register has the correct time',
+        reading: null,
+        correctedAt: expect.any(String),
+      }),
+    )
+    expect(getCurrentPosition).not.toHaveBeenCalled()
+  })
+
   it('approves in one tap from inside the fence on the day, asking nothing', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()

@@ -137,7 +137,10 @@ the reset migration and prove each of these layers:
 - command tests cover default-open and prevented denial, blank reasons,
   outside/unverifiable repeated retry, inside and approved-day locks,
   wrong-outlet recovery, cutover disagreement, stale versions, exact UUID replay
-  and changed-payload reuse;
+  and changed-payload reuse. Time-correction cases additionally cover historical
+  settled rows, repeated old-to-new audit entries, future and cross-cutover
+  refusal, immutable attempts, preserved approval/retry state and both directions
+  across the stamped late deadline;
 - concurrent approve/deny and retry/decision calls leave one outcome, one current
   attempt, one waiting outlet and complete append-only history;
 - RLS and authenticated REST probes include forged actor, unassigned/cross-outlet
@@ -145,7 +148,8 @@ the reset migration and prove each of these layers:
   full history and owner reach;
 - component tests cover the exactly-two-input denial sheet, unchecked default,
   editable prefills, no-location denial/absent/retry correction, present
-  correction location, compact discoverability, every material-change
+  correction location, the conditional mandatory check-in-time input, employee
+  visibility of attributed old-to-new history, compact discoverability, every material-change
   confirmation combination, cancel-without-write and stale reload;
 - waiting/notification tests prove retry transfers a count between outlets,
   zero badges stay absent, foreground refresh is fresh and a switched outlet

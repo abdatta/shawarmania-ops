@@ -206,6 +206,7 @@ const DECISION_LABELS: Record<AttendanceRecord['decisions'][number]['kind'], str
   correct_absent: 'Corrected to absent',
   allow_retry: 'Allowed another check-in',
   absent_allow_retry: 'Marked absent and allowed another check-in',
+  correct_time: 'Changed check-in time',
   manual_present: 'Recorded manually as present',
   legacy_outcome: 'Existing outcome',
 }
@@ -218,7 +219,8 @@ export function AttendanceHistory({ record }: { record: AttendanceRecord }) {
       decision.kind === 'correct_present' ||
       decision.kind === 'correct_absent' ||
       decision.kind === 'allow_retry' ||
-      decision.kind === 'absent_allow_retry',
+      decision.kind === 'absent_allow_retry' ||
+      decision.kind === 'correct_time',
   )
 
   if (record.attempts.length <= 1 && record.decisions.length <= 1 && !hasMaterialDecision) {
@@ -235,7 +237,11 @@ export function AttendanceHistory({ record }: { record: AttendanceRecord }) {
     ...record.decisions.map((decision) => ({
       id: `decision-${decision.id}`,
       at: decision.at,
-      text: `${DECISION_LABELS[decision.kind]}${decision.byName ? ` by ${decision.byName}` : ''}`,
+      text: `${DECISION_LABELS[decision.kind]}${
+        decision.previousCheckInAt && decision.newCheckInAt
+          ? ` from ${formatTime(decision.previousCheckInAt)} to ${formatTime(decision.newCheckInAt)}`
+          : ''
+      }${decision.byName ? ` by ${decision.byName}` : ''}`,
       reason: decision.reason,
     })),
   ].sort((a, b) => a.at.localeCompare(b.at))

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { resolveBusinessDate } from '@/domain'
+import { instantOnBusinessDay, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 
 import { AttendanceActionError } from '../adapters'
 import { createMockAttendanceAdapter } from './attendance'
@@ -133,5 +133,86 @@ describe('mock attendance denial and retries', () => {
       accuracyMetres: null,
       distanceMetres: null,
     })
+  })
+
+  it('changes a settled historical time without changing its attempt, approval, or retry state', async () => {
+    const adapter = createMockAttendanceAdapter()
+    const history = await adapter.listPersonRange(
+      DEMO_RUNNER_ACCOUNT_ID,
+      '2000-01-01',
+      '2100-01-01',
+    )
+    const settled = history.find((record) => record.checkIn && record.outcomeAttemptId)
+    expect(settled).toBeDefined()
+    const outlet = outletFixtures.find((candidate) => candidate.id === settled!.outletId)!
+    const originalAttempt = settled!.attempts.find(
+      (attempt) => attempt.id === settled!.outcomeAttemptId,
+    )!
+    const originalApproval = settled!.approval
+    const originalRetry = settled!.retry
+    const correctedAt = instantOnBusinessDay(
+      settled!.businessDate,
+      settled!.checkIn!.at.includes('T04:30') ? '11:30' : '10:30',
+      outlet.business_day_cutover,
+    )
+
+    const corrected = await adapter.correct({
+      attendanceId: settled!.id,
+      expectedVersion: settled!.stateVersion,
+      action: 'time',
+      reason: 'Paper register shows the earlier arrival',
+      reading: null,
+      correctedAt,
+    })
+
+    expect(corrected.checkIn?.at).toBe(correctedAt)
+    expect(corrected.attempts.find((attempt) => attempt.id === originalAttempt.id)?.at).toBe(
+      originalAttempt.at,
+    )
+    expect(corrected.approval).toEqual(originalApproval)
+    expect(corrected.retry).toEqual(originalRetry)
+    expect(corrected.decisions.at(-1)).toMatchObject({
+      kind: 'correct_time',
+      reason: 'Paper register shows the earlier arrival',
+      previousCheckInAt: settled!.checkIn!.at,
+      newCheckInAt: correctedAt,
+      latitude: null,
+      longitude: null,
+    })
+
+    const correctedAgainAt = instantOnBusinessDay(
+      settled!.businessDate,
+      '12:30',
+      outlet.business_day_cutover,
+    )
+    const correctedAgain = await adapter.correct({
+      attendanceId: corrected.id,
+      expectedVersion: corrected.stateVersion,
+      action: 'time',
+      reason: 'Owner confirmed the final time',
+      reading: null,
+      correctedAt: correctedAgainAt,
+    })
+    expect(correctedAgain.decisions.slice(-2).map((decision) => decision.kind)).toEqual([
+      'correct_time',
+      'correct_time',
+    ])
+    expect(correctedAgain.decisions.at(-1)?.previousCheckInAt).toBe(correctedAt)
+    expect(correctedAgain.checkIn?.at).toBe(correctedAgainAt)
+
+    await expect(
+      adapter.correct({
+        attendanceId: correctedAgain.id,
+        expectedVersion: correctedAgain.stateVersion,
+        action: 'time',
+        reason: 'Wrong business day probe',
+        reading: null,
+        correctedAt: instantOnBusinessDay(
+          shiftBusinessDate(settled!.businessDate, 1),
+          '10:30',
+          outlet.business_day_cutover,
+        ),
+      }),
+    ).rejects.toMatchObject({ code: 'time_wrong_day' } satisfies Partial<AttendanceActionError>)
   })
 })

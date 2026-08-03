@@ -447,6 +447,9 @@ export interface AttendanceDecision {
   longitude: number | null
   accuracyMetres: number | null
   distanceMetres: number | null
+  /** Effective arrival time before/after a `correct_time` decision. */
+  previousCheckInAt: string | null
+  newCheckInAt: string | null
 }
 
 export type AttendanceRetryReason =
@@ -601,7 +604,8 @@ export interface DenialInput {
   decisionId?: string
 }
 
-export type AttendanceCorrectionAction = 'present' | 'absent' | 'allow_retry' | 'absent_allow_retry'
+export type AttendanceCorrectionAction =
+  'present' | 'absent' | 'allow_retry' | 'absent_allow_retry' | 'time'
 
 export interface AttendanceCorrectionInput {
   attendanceId: string
@@ -609,6 +613,8 @@ export interface AttendanceCorrectionInput {
   action: AttendanceCorrectionAction
   reason: string
   reading: PositionReading | null
+  /** Required only for `time`; an absolute instant on the row's business date. */
+  correctedAt?: string | null
   decisionId?: string
 }
 

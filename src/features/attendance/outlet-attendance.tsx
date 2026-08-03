@@ -601,6 +601,7 @@ function OutletAxis({
     record: AttendanceRecord,
     action: AttendanceCorrectionAction,
     reason: string,
+    correctedAt: string | null,
   ) {
     try {
       const position = action === 'present' ? await readPosition() : null
@@ -612,6 +613,7 @@ function OutletAxis({
           action,
           reason,
           reading,
+          correctedAt,
         }),
       ])
       setCorrectFor(null)
@@ -811,9 +813,10 @@ function OutletAxis({
       <CorrectionSheet
         key={correctFor?.id ?? 'no-correction'}
         record={correctFor}
+        outlet={correctFor ? outletOf(correctFor.outletId) : null}
         onClose={() => setCorrectFor(null)}
-        onCorrect={(action, reason) => {
-          if (correctFor) void correct(correctFor, action, reason)
+        onCorrect={(action, reason, correctedAt) => {
+          if (correctFor) void correct(correctFor, action, reason, correctedAt)
         }}
       />
     </>
@@ -1240,6 +1243,7 @@ function correctionOptions(record: AttendanceRecord): {
     return [
       { value: 'absent', label: 'Mark absent' },
       { value: 'absent_allow_retry', label: 'Mark absent and allow another check-in' },
+      ...(record.checkIn ? [{ value: 'time' as const, label: 'Change check-in time' }] : []),
     ]
   }
   if (record.status === 'absent') {
@@ -1248,31 +1252,45 @@ function correctionOptions(record: AttendanceRecord): {
       record.retry.allowed
         ? { value: 'absent', label: 'Keep absent and prevent another check-in' }
         : { value: 'allow_retry', label: 'Allow another check-in' },
+      ...(record.checkIn ? [{ value: 'time' as const, label: 'Change check-in time' }] : []),
     ]
   }
   return [
     { value: 'present', label: 'Mark present' },
     { value: 'absent', label: 'Mark absent' },
+    ...(record.checkIn ? [{ value: 'time' as const, label: 'Change check-in time' }] : []),
   ]
 }
 
 /** One compact correction entry; opening it reveals only valid actions. */
 function CorrectionSheet({
   record,
+  outlet,
   onClose,
   onCorrect,
 }: {
   record: AttendanceRecord | null
+  outlet: Tables<'outlets'> | null
   onClose: () => void
-  onCorrect: (action: AttendanceCorrectionAction, reason: string) => void
+  onCorrect: (
+    action: AttendanceCorrectionAction,
+    reason: string,
+    correctedAt: string | null,
+  ) => void
 }) {
   const options = record ? correctionOptions(record) : []
   const [action, setAction] = useState<AttendanceCorrectionAction>(options[0]?.value ?? 'present')
   const [reason, setReason] = useState('')
+  const [time, setTime] = useState('')
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (reason.trim()) onCorrect(action, reason.trim())
+    if (!reason.trim() || (action === 'time' && (!time || !record || !outlet))) return
+    const correctedAt =
+      action === 'time'
+        ? instantOnBusinessDay(record!.businessDate, time, outlet!.business_day_cutover)
+        : null
+    onCorrect(action, reason.trim(), correctedAt)
   }
 
   return (
@@ -1284,7 +1302,7 @@ function CorrectionSheet({
         <button
           type="submit"
           form="correct-attendance"
-          disabled={!reason.trim()}
+          disabled={!reason.trim() || (action === 'time' && !time)}
           className={`${buttonVariants({ size: 'phone' })} w-full`}
         >
           Save correction
@@ -1308,6 +1326,23 @@ function CorrectionSheet({
             ))}
           </Select>
         </div>
+        {action === 'time' && (
+          <div className="space-y-1">
+            <label htmlFor="corrected-check-in-time" className="block text-sm font-semibold">
+              Corrected check-in time
+            </label>
+            <Input
+              id="corrected-check-in-time"
+              type="time"
+              required
+              value={time}
+              onChange={(event) => setTime(event.target.value)}
+            />
+            <p className="text-xs text-content-muted">
+              It must remain on this attendance day and cannot be in the future.
+            </p>
+          </div>
+        )}
         <div className="space-y-1">
           <label htmlFor="correction-reason" className="block text-sm font-semibold">
             Reason

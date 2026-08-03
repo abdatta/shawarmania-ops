@@ -273,6 +273,8 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
             preventsRetry: seed.denial?.preventRetry ?? true,
             previousStatus: seed.status === 'present' ? 'absent' : seed.status,
             newStatus: seed.denial ? 'absent' : seed.status,
+            previousCheckInAt: null,
+            newCheckInAt: null,
             latitude: approval?.latitude ?? null,
             longitude: approval?.longitude ?? null,
             accuracyMetres: approval?.accuracyMetres ?? null,
@@ -296,6 +298,8 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         preventsRetry: true,
         previousStatus: seed.status,
         newStatus: seed.correction.kind === 'correct_present' ? 'present' : 'absent',
+        previousCheckInAt: null,
+        newCheckInAt: null,
         latitude: null,
         longitude: null,
         accuracyMetres: null,
@@ -671,6 +675,8 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         preventsRetry: true,
         previousStatus: existing?.status ?? 'absent',
         newStatus: 'present',
+        previousCheckInAt: null,
+        newCheckInAt: null,
         latitude: null,
         longitude: null,
         accuracyMetres: null,
@@ -754,6 +760,8 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
           preventsRetry: true,
           previousStatus: 'absent',
           newStatus: 'present',
+          previousCheckInAt: null,
+          newCheckInAt: null,
           latitude: reading?.latitude ?? null,
           longitude: reading?.longitude ?? null,
           accuracyMetres: reading?.accuracyMetres ?? null,
@@ -813,6 +821,8 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         preventsRetry: preventRetry,
         previousStatus: record.status,
         newStatus: 'absent',
+        previousCheckInAt: null,
+        newCheckInAt: null,
         latitude: null,
         longitude: null,
         accuracyMetres: null,
@@ -834,7 +844,15 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       return clone(record)
     },
 
-    async correct({ attendanceId, expectedVersion, action, reason, reading, decisionId }) {
+    async correct({
+      attendanceId,
+      expectedVersion,
+      action,
+      reason,
+      reading,
+      correctedAt,
+      decisionId,
+    }) {
       const record = find(attendanceId)
       if (record.stateVersion !== expectedVersion || record.currentAttemptId !== null) {
         throw new AttendanceActionError(
@@ -862,8 +880,44 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
           : action === 'absent' || action === 'absent_allow_retry'
             ? 'absent'
             : record.status
-      const preventsRetry = action === 'present' || action === 'absent'
       const outlet = outletFor(attempt.outletId)
+      if (action === 'time') {
+        if (!correctedAt) {
+          throw new AttendanceActionError('time_required', 'Choose the corrected check-in time.')
+        }
+        if (!record.checkIn || !record.outcomeAttemptId) {
+          throw new AttendanceActionError(
+            'time_refused',
+            'Only settled attendance with an arrival can change check-in time.',
+          )
+        }
+        const corrected = new Date(correctedAt)
+        if (Number.isNaN(corrected.getTime())) {
+          throw new AttendanceActionError('time_invalid', 'Choose a valid check-in time.')
+        }
+        if (corrected.getTime() > Date.now()) {
+          throw new AttendanceActionError(
+            'time_future',
+            'A corrected check-in time cannot be in the future.',
+          )
+        }
+        if (resolveBusinessDate(corrected, outlet.business_day_cutover) !== record.businessDate) {
+          throw new AttendanceActionError(
+            'time_wrong_day',
+            'The corrected time must remain on this attendance day.',
+          )
+        }
+        if (correctedAt === record.checkIn.at) {
+          throw new AttendanceActionError('time_unchanged', 'Choose a different check-in time.')
+        }
+      } else if (correctedAt) {
+        throw new AttendanceActionError(
+          'time_unexpected',
+          'Only a check-in time correction accepts a time.',
+        )
+      }
+      const preventsRetry =
+        action === 'time' ? record.retryBlocked : action === 'present' || action === 'absent'
       const managerDistance =
         action === 'present' && reading
           ? metresFromOutlet(outlet, reading.latitude, reading.longitude)
@@ -878,7 +932,9 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
             ? 'correct_present'
             : action === 'absent'
               ? 'correct_absent'
-              : action,
+              : action === 'time'
+                ? 'correct_time'
+                : action,
         by: DEMO_MANAGER_ID,
         byName: personaFixtures.franchise_admin.profile.full_name,
         at: now,
@@ -886,31 +942,39 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         preventsRetry,
         previousStatus: record.status,
         newStatus,
+        previousCheckInAt: action === 'time' ? (record.checkIn?.at ?? null) : null,
+        newCheckInAt: action === 'time' ? (correctedAt ?? null) : null,
         latitude: action === 'present' ? (reading?.latitude ?? null) : null,
         longitude: action === 'present' ? (reading?.longitude ?? null) : null,
         accuracyMetres: action === 'present' ? (reading?.accuracyMetres ?? null) : null,
         distanceMetres: managerDistance,
       })
       record.status = newStatus
-      record.latestDecisionId = id
-      record.retryBlocked = preventsRetry
+      if (action !== 'time') {
+        record.latestDecisionId = id
+        record.retryBlocked = preventsRetry
+      }
       record.stateVersion += 1
-      record.retry = preventsRetry
-        ? { allowed: false, reason: 'prevented' }
-        : { allowed: true, reason: 'open-denial' }
-      record.approval =
-        action === 'present'
-          ? {
-              by: DEMO_MANAGER_ID,
-              byName: personaFixtures.franchise_admin.profile.full_name,
-              at: now,
-              reason: trimmed,
-              latitude: reading?.latitude ?? null,
-              longitude: reading?.longitude ?? null,
-              accuracyMetres: reading?.accuracyMetres ?? null,
-              distanceMetres: managerDistance,
-            }
-          : null
+      if (action === 'time') {
+        if (record.checkIn && correctedAt) record.checkIn.at = correctedAt
+      } else {
+        record.retry = preventsRetry
+          ? { allowed: false, reason: 'prevented' }
+          : { allowed: true, reason: 'open-denial' }
+        record.approval =
+          action === 'present'
+            ? {
+                by: DEMO_MANAGER_ID,
+                byName: personaFixtures.franchise_admin.profile.full_name,
+                at: now,
+                reason: trimmed,
+                latitude: reading?.latitude ?? null,
+                longitude: reading?.longitude ?? null,
+                accuracyMetres: reading?.accuracyMetres ?? null,
+                distanceMetres: managerDistance,
+              }
+            : null
+      }
       return clone(record)
     },
   }

@@ -37,7 +37,7 @@ const COLUMNS =
   // day was where rather than let the reader assume.
   'outlets!attendance_outlet_id_fkey(name), ' +
   'attendance_attempts!attendance_attempts_attendance_id_fkey(id, outlet_id, business_date, attempted_at, latitude, longitude, accuracy_m, distance_m, source, entered_by, entered_by_name, arrival_deadline, superseded_at, settled_at, outlets!attendance_attempts_outlet_id_fkey(name, geofence_radius_m)), ' +
-  'attendance_decisions!attendance_decisions_attendance_id_fkey(id, attempt_id, outlet_id, kind, actor_id, actor_name, decided_at, reason, prevents_retry, previous_status, new_status, manager_lat, manager_lng, manager_accuracy_m, manager_distance_m, outlets!attendance_decisions_outlet_id_fkey(name))'
+  'attendance_decisions!attendance_decisions_attendance_id_fkey(id, attempt_id, outlet_id, kind, actor_id, actor_name, decided_at, reason, prevents_retry, previous_status, new_status, manager_lat, manager_lng, manager_accuracy_m, manager_distance_m, previous_check_in_at, new_check_in_at, outlets!attendance_decisions_outlet_id_fkey(name))'
 
 interface JoinedAttempt {
   id: string
@@ -73,6 +73,8 @@ interface JoinedDecision {
   manager_lng: number | null
   manager_accuracy_m: number | null
   manager_distance_m: number | null
+  previous_check_in_at: string | null
+  new_check_in_at: string | null
   outlets: { name: string } | null
 }
 
@@ -174,6 +176,8 @@ function toRecord(row: JoinedRow): AttendanceRecord {
       longitude: decision.manager_lng,
       accuracyMetres: decision.manager_accuracy_m,
       distanceMetres: decision.manager_distance_m,
+      previousCheckInAt: decision.previous_check_in_at,
+      newCheckInAt: decision.new_check_in_at,
     }))
   return {
     id: row.id,
@@ -267,6 +271,30 @@ function toActionError(error: PostgrestError): AttendanceActionError {
       'reason_required',
       'This action needs a reason before it can be saved.',
     )
+  }
+  if (detail.includes('check-in time correction requires a time')) {
+    return new AttendanceActionError('time_required', 'Choose the corrected check-in time.')
+  }
+  if (detail.includes('corrected check-in time cannot be in the future')) {
+    return new AttendanceActionError(
+      'time_future',
+      'A corrected check-in time cannot be in the future.',
+    )
+  }
+  if (detail.includes('corrected check-in time must remain')) {
+    return new AttendanceActionError(
+      'time_wrong_day',
+      'The corrected time must remain on this attendance day.',
+    )
+  }
+  if (detail.includes('only settled attendance with an arrival')) {
+    return new AttendanceActionError(
+      'time_refused',
+      'Only settled attendance with an arrival can change check-in time.',
+    )
+  }
+  if (detail.includes('corrected check-in time is unchanged')) {
+    return new AttendanceActionError('time_unchanged', 'Choose a different check-in time.')
   }
 
   if (detail.includes('attendance_one_per_person_day')) {
@@ -568,6 +596,7 @@ export function createSupabaseAttendanceAdapter(
       action,
       reason,
       reading,
+      correctedAt,
       decisionId = crypto.randomUUID(),
     }) {
       const { data, error } = await client.rpc('attendance_correct', {
@@ -576,6 +605,7 @@ export function createSupabaseAttendanceAdapter(
         p_expected_version: expectedVersion,
         p_action: action,
         p_reason: reason,
+        ...(correctedAt ? { p_corrected_at: correctedAt } : {}),
         ...(reading
           ? {
               p_manager_lat: reading.latitude,

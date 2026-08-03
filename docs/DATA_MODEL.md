@@ -210,7 +210,10 @@ accuracy, server-computed distance, stamped arrival deadline, superseded/settled
 times and a server request fingerprint. **`attendance_decisions`** stores every
 approval, denial, correction and retry-policy change with its client UUID,
 actor snapshot, affected attempt, previous/new outcome, reason, retry policy
-and manager evidence when the action is one that reads it. Both tables are
+and manager evidence when the action is one that reads it. A `correct_time`
+decision additionally holds `previous_check_in_at` and `new_check_in_at`: it
+updates only the canonical effective `attendance.check_in_at`, while the
+attempt's captured timestamp and GPS/manual evidence remain immutable. Both tables are
 append-only: updates and deletes are refused, including after a later retry or
 correction.
 
@@ -227,7 +230,9 @@ explicit `business_date`, deadlines, evidence and reasons, lock the canonical
 person/day, and advance its version. Client UUIDs make an exact replay
 idempotent; reusing one with different evidence is refused. An expected version
 and attempt id make a stale sheet or racing decision fail instead of overwriting
-the winner.
+the winner. Time correction is settled-only and may reach historical days; the
+database refuses future timestamps and any timestamp whose outlet cutover maps
+it to a business date other than the row's explicit date.
 
 **There is no check-out.** Ten columns and four constraints were dropped by
 `attendance-approved-on-site` (#26, owner decision 2026-07-31), with a full
@@ -299,7 +304,9 @@ Captured coordinates, GPS accuracy, **and** computed distance are all stored. St
 **Three readings are not outcome columns**: waiting for a manager, late, and absent
 because nobody came. Each is derived from the stored rows and the outlet's clock
 in one shared module (`src/features/attendance/attendance-record.ts`), so every
-surface agrees by construction. No scheduled process manufactures attendance
+surface agrees by construction. Lateness uses the canonical effective check-in
+time, so an audited correction can move the tag in either direction without
+relabeling the original attempt. No scheduled process manufactures attendance
 rows — a job writing an absence per assigned person per day would need a backfill
 for every past day and would race the late arrival it was trying to describe.
 

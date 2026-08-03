@@ -531,10 +531,12 @@ export type Database = {
           manager_distance_m: number | null
           manager_lat: number | null
           manager_lng: number | null
+          new_check_in_at: string | null
           new_status: Database["public"]["Enums"]["attendance_status"]
           outlet_id: string
           person_id: string
           prevents_retry: boolean
+          previous_check_in_at: string | null
           previous_status: Database["public"]["Enums"]["attendance_status"]
           reason: string | null
           request_fingerprint: string
@@ -553,10 +555,12 @@ export type Database = {
           manager_distance_m?: number | null
           manager_lat?: number | null
           manager_lng?: number | null
+          new_check_in_at?: string | null
           new_status: Database["public"]["Enums"]["attendance_status"]
           outlet_id: string
           person_id: string
           prevents_retry: boolean
+          previous_check_in_at?: string | null
           previous_status: Database["public"]["Enums"]["attendance_status"]
           reason?: string | null
           request_fingerprint: string
@@ -575,10 +579,12 @@ export type Database = {
           manager_distance_m?: number | null
           manager_lat?: number | null
           manager_lng?: number | null
+          new_check_in_at?: string | null
           new_status?: Database["public"]["Enums"]["attendance_status"]
           outlet_id?: string
           person_id?: string
           prevents_retry?: boolean
+          previous_check_in_at?: string | null
           previous_status?: Database["public"]["Enums"]["attendance_status"]
           reason?: string | null
           request_fingerprint?: string
@@ -1550,6 +1556,7 @@ export type Database = {
         Args: {
           p_action: string
           p_attendance_id: string
+          p_corrected_at?: string
           p_decision_id: string
           p_expected_version: number
           p_manager_accuracy_m?: number
@@ -1943,6 +1950,7 @@ export type Database = {
         | "absent_allow_retry"
         | "manual_present"
         | "legacy_outcome"
+        | "correct_time"
       attendance_status: "present" | "absent" | "half_day" | "leave"
       bill_status: "settled" | "void"
       check_in_source: "phone" | "counter_tablet" | "manual"
@@ -2109,6 +2117,7 @@ export const Constants = {
         "absent_allow_retry",
         "manual_present",
         "legacy_outcome",
+        "correct_time",
       ],
       attendance_status: ["present", "absent", "half_day", "leave"],
       bill_status: ["settled", "void"],

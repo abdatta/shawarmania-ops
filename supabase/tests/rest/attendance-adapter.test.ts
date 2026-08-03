@@ -22,7 +22,11 @@ import { AttendanceActionError } from '../../../src/data-access/adapters'
 import type { Database } from '../../../src/data-access/database.types'
 import { createSupabaseAttendanceAdapter } from '../../../src/data-access/supabase-adapters/attendance'
 import { createSupabaseOutletsAdapter } from '../../../src/data-access/supabase-adapters/outlets'
-import { resolveBusinessDate } from '../../../src/domain/datetime'
+import {
+  instantOnBusinessDay,
+  resolveBusinessDate,
+  shiftBusinessDate,
+} from '../../../src/domain/datetime'
 
 const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
 const SUPABASE_ANON_KEY =
@@ -71,6 +75,10 @@ function dayBeforeYesterday(): string {
 
 /** A range wide enough to cover everything the seed wrote. */
 const WIDE_RANGE = { from: '2000-01-01', to: '2100-01-01' } as const
+
+function instantValue(value: string): number {
+  return new Date(value).getTime()
+}
 
 let employeeClient: Client
 let managerClient: Client
@@ -302,7 +310,11 @@ describe('the attendance adapter', () => {
 
     const day = await attendance.listOutletDay([OUTLET_KALYANI], today)
     const waiting = day.filter(
-      (record) => record.checkIn !== null && record.approval === null && record.status === 'absent',
+      (record) =>
+        record.checkIn !== null &&
+        record.currentAttemptId !== null &&
+        record.approval === null &&
+        record.status === 'absent',
     )
     // Survives a re-run against the same reset: with nothing left waiting there
     // is nothing to settle, and the earlier assertions already covered the map.
@@ -368,6 +380,158 @@ describe('the attendance adapter', () => {
         approverId: STAFF_KAL,
       }),
     ).rejects.toBeInstanceOf(AttendanceActionError)
+  })
+
+  it('audits historical time corrections without rewriting arrival evidence or tenancy', async () => {
+    const asManager = createSupabaseAttendanceAdapter(managerClient)
+    const asOwner = createSupabaseAttendanceAdapter(ownerClient)
+    const asEmployee = createSupabaseAttendanceAdapter(employeeClient)
+    const before = await asManager.getDay(STAFF_KAL, yesterday())
+    expect(before?.outcomeAttemptId).not.toBeNull()
+    expect(before?.checkIn).not.toBeNull()
+    const originalAttempt = before!.attempts.find(
+      (attempt) => attempt.id === before!.outcomeAttemptId,
+    )!
+    const originalApproval = before!.approval
+    const originalRetry = before!.retry
+    const correctedAt = instantOnBusinessDay(yesterday(), '12:30', '04:00')
+    const firstDecisionId = crypto.randomUUID()
+
+    const first = await asManager.correct({
+      attendanceId: before!.id,
+      expectedVersion: before!.stateVersion,
+      action: 'time',
+      reason: 'Paper register confirms 12:30',
+      reading: null,
+      correctedAt,
+      decisionId: firstDecisionId,
+    })
+
+    expect(instantValue(first.checkIn!.at)).toBe(instantValue(correctedAt))
+    expect(first.attempts.find((attempt) => attempt.id === originalAttempt.id)?.at).toBe(
+      originalAttempt.at,
+    )
+    expect(first.approval).toEqual(originalApproval)
+    expect(first.retry).toEqual(originalRetry)
+    expect(first.decisions.at(-1)).toMatchObject({
+      id: firstDecisionId,
+      kind: 'correct_time',
+      byName: 'Synthetic Admin Kal',
+      reason: 'Paper register confirms 12:30',
+    })
+    expect(instantValue(first.decisions.at(-1)!.previousCheckInAt!)).toBe(
+      instantValue(before!.checkIn!.at),
+    )
+    expect(instantValue(first.decisions.at(-1)!.newCheckInAt!)).toBe(instantValue(correctedAt))
+
+    // Exact command replay is a read; a changed command id payload and stale
+    // version are both refused without appending partial history.
+    const replay = await asManager.correct({
+      attendanceId: before!.id,
+      expectedVersion: before!.stateVersion,
+      action: 'time',
+      reason: 'Paper register confirms 12:30',
+      reading: null,
+      correctedAt,
+      decisionId: firstDecisionId,
+    })
+    expect(replay.stateVersion).toBe(first.stateVersion)
+    await expect(
+      asManager.correct({
+        attendanceId: before!.id,
+        expectedVersion: before!.stateVersion,
+        action: 'time',
+        reason: 'Different payload under the same id',
+        reading: null,
+        correctedAt,
+        decisionId: firstDecisionId,
+      }),
+    ).rejects.toMatchObject({ code: 'changed_request' })
+    await expect(
+      asManager.correct({
+        attendanceId: before!.id,
+        expectedVersion: before!.stateVersion,
+        action: 'time',
+        reason: 'Stale correction probe',
+        reading: null,
+        correctedAt: instantOnBusinessDay(yesterday(), '12:45', '04:00'),
+      }),
+    ).rejects.toMatchObject({ code: 'stale_state' })
+
+    const correctedLateAt = instantOnBusinessDay(yesterday(), '14:30', '04:00')
+    const second = await asOwner.correct({
+      attendanceId: first.id,
+      expectedVersion: first.stateVersion,
+      action: 'time',
+      reason: 'Owner confirmed the final arrival time',
+      reading: null,
+      correctedAt: correctedLateAt,
+    })
+    expect(instantValue(second.checkIn!.at)).toBe(instantValue(correctedLateAt))
+    expect(second.decisions.slice(-2).map((decision) => decision.kind)).toEqual([
+      'correct_time',
+      'correct_time',
+    ])
+    expect(second.decisions.at(-1)?.byName).toBe('Synthetic Owner')
+    expect(instantValue(second.decisions.at(-1)!.previousCheckInAt!)).toBe(
+      instantValue(correctedAt),
+    )
+    expect(instantValue(second.decisions.at(-1)!.newCheckInAt!)).toBe(instantValue(correctedLateAt))
+
+    // The affected employee reads the same immutable attempt and correction
+    // trail as management, but cannot create another correction themselves.
+    const employeeView = await asEmployee.getDay(STAFF_KAL, yesterday())
+    expect(instantValue(employeeView!.checkIn!.at)).toBe(instantValue(correctedLateAt))
+    expect(employeeView?.attempts.find((attempt) => attempt.id === originalAttempt.id)?.at).toBe(
+      originalAttempt.at,
+    )
+    expect(
+      employeeView?.decisions.filter((decision) => decision.kind === 'correct_time'),
+    ).toHaveLength(2)
+    await expect(
+      asEmployee.correct({
+        attendanceId: second.id,
+        expectedVersion: second.stateVersion,
+        action: 'time',
+        reason: 'Employee must not self-correct',
+        reading: null,
+        correctedAt,
+      }),
+    ).rejects.toMatchObject({ code: 'not_permitted' })
+
+    await expect(
+      asManager.correct({
+        attendanceId: second.id,
+        expectedVersion: second.stateVersion,
+        action: 'time',
+        reason: 'Future-time probe',
+        reading: null,
+        correctedAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    ).rejects.toMatchObject({ code: 'time_future' })
+    await expect(
+      asManager.correct({
+        attendanceId: second.id,
+        expectedVersion: second.stateVersion,
+        action: 'time',
+        reason: 'Wrong-business-day probe',
+        reading: null,
+        correctedAt: instantOnBusinessDay(shiftBusinessDate(yesterday(), -1), '12:30', '04:00'),
+      }),
+    ).rejects.toMatchObject({ code: 'time_wrong_day' })
+
+    const otherOutlet = (await asOwner.listOutletDay([OUTLET_KANCHRAPARA], yesterday())).find(
+      (record) => record.checkIn && record.outcomeAttemptId && !record.currentAttemptId,
+    )!
+    const crossOutlet = await managerClient.rpc('attendance_correct', {
+      p_attendance_id: otherOutlet.id,
+      p_decision_id: crypto.randomUUID(),
+      p_expected_version: otherOutlet.stateVersion,
+      p_action: 'time',
+      p_reason: 'Cross-outlet probe',
+      p_corrected_at: instantOnBusinessDay(yesterday(), '15:00', '04:00'),
+    })
+    expect(crossOutlet.error?.code).toBe('42501')
   })
 })
 
