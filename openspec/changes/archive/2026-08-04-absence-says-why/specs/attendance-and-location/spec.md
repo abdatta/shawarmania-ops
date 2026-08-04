@@ -70,13 +70,6 @@ one reader that the other cannot see.
 - **THEN** it names the manager, states what the day counted as before the
   correction, and shows their recorded reason
 
-#### Scenario: A re-affirmed absence does not claim to have changed
-
-- **WHEN** either reader expands a day a manager corrected while it was already
-  absent
-- **THEN** it states that the manager reviewed the day and kept it absent,
-  rather than naming a previous outcome identical to the current one
-
 #### Scenario: An absence no decision accounts for says so
 
 - **WHEN** either reader expands an absent day carrying no manager decision, or
