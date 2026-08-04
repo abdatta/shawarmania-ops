@@ -14,6 +14,7 @@ import { demoSessionFor } from '@/test/session'
 import type { Role } from '@/session/session'
 import { chooseOutlet } from '@/test/outlet-scope'
 
+import { monthOf } from './ledger'
 import { ManualLedgerSurface } from './manual-ledger-surface'
 
 /**
@@ -56,6 +57,38 @@ async function openDay(businessDate: string): Promise<HTMLInputElement> {
   const picker = (await screen.findByTestId('ledger-day-picker')) as HTMLInputElement
   fireEvent.change(picker, { target: { value: businessDate } })
   return picker
+}
+
+/**
+ * The one seeded day whose opening disagrees with the previous day's count.
+ *
+ * Selected by the disagreement itself, and read across this month and the one
+ * before it, because the seeds are `daysAgo` offsets from today: which month they
+ * land in changes with the calendar, and on the 1st they are all in the month
+ * before. Throws if there is not exactly one break, so a fixture edit that removes
+ * it — or adds a second — fails saying so rather than by an assertion further down.
+ */
+async function brokenChainDay(adapters: DataAdapters) {
+  const picker = (await screen.findByTestId('ledger-day-picker')) as HTMLInputElement
+  const thisMonth = monthOf(picker.value)
+  const lastMonth = monthOf(shiftBusinessDate(`${thisMonth}-01`, -1))
+
+  const months = await Promise.all(
+    [lastMonth, thisMonth].map((month) => adapters.manualLedger.getMonth(OUTLET_KALYANI_ID, month)),
+  )
+  const days = months
+    .flatMap((month) => month.days)
+    .sort((a, b) => a.businessDate.localeCompare(b.businessDate))
+
+  const broken = days.filter(
+    (day, index) => index > 0 && day.openingCashPaise !== days[index - 1]?.countedCashPaise,
+  )
+  if (broken.length !== 1 || !broken[0]) {
+    throw new Error(
+      `The demo fixture should contain exactly one broken chain; found ${broken.length}.`,
+    )
+  }
+  return broken[0]
 }
 
 describe('the manual ledger surface', () => {
@@ -152,9 +185,14 @@ describe('the manual ledger surface', () => {
 
     // The seeded break: this day opens on ₹15,000 although the day before it
     // closed on ₹14,750.
-    const stored = await adapters.manualLedger.getMonth(OUTLET_KALYANI_ID, '2026-08')
-    const broken = stored.days.find((day) => day.openingCashPaise === 1_500_000)
-    if (!broken) throw new Error('The demo fixture no longer contains a broken chain.')
+    //
+    // Found by the property that makes it the break rather than by its opening
+    // figure, which two seeded days share, and read across both months the seeded
+    // window can span — the seeds are `daysAgo` offsets, so on the 1st of a month
+    // every one of them is in the month before. An earlier version of this named
+    // one month and one figure, and passed only while the month boundary happened
+    // to filter the ambiguity out.
+    const broken = await brokenChainDay(adapters)
 
     await openDay(broken.businessDate)
 
