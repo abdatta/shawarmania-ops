@@ -7,6 +7,7 @@ import { AttendanceCard } from './attendance-card'
 import type { AttendanceTally } from './attendance-record'
 import type { DayRow } from './attendance-range'
 import {
+  AbsenceReason,
   ApprovalNote,
   AttendanceHistory,
   DayVerdict,
@@ -56,11 +57,19 @@ export function TallySummary({ tally }: { tally: AttendanceTally }) {
 export function RangeDayList({
   rows,
   radiusFor,
+  personId,
   showOutlet = false,
 }: {
   rows: readonly DayRow[]
   /** The radius each day was judged against — its own outlet's, never one number. */
   radiusFor: (row: DayRow) => number
+  /**
+   * Whose days these are. Both callers know it and they answer differently —
+   * their own on `My attendance`, whoever the picker names on the by-staff
+   * axis — and a day with no row carries nobody to ask, so it is stated rather
+   * than derived.
+   */
+  personId: string | null
   /** Name the outlet on each day. Noise for one shop; necessary for two. */
   showOutlet?: boolean
 }) {
@@ -83,6 +92,7 @@ export function RangeDayList({
           key={row.businessDate}
           row={row}
           radiusMetres={radiusFor(row)}
+          personId={personId}
           outletName={showOutlet ? row.outletName : null}
         />
       ))}
@@ -93,15 +103,21 @@ export function RangeDayList({
 export function RangeDayCard({
   row,
   radiusMetres,
+  personId = null,
   outletName = null,
 }: {
   row: DayRow
   radiusMetres: number
+  /** Whose day this is, so an absence can be addressed to them. */
+  personId?: string | null
   outletName?: string | null
 }) {
   const record =
     row.reading.kind === 'waiting' || row.reading.kind === 'recorded' ? row.reading.record : null
   const waiting = row.reading.kind === 'waiting'
+  // A day nobody recorded still has one thing to say if it is absent, which is
+  // why. It is the only content a derived day has ever had.
+  const derivedAbsence = record === null && row.reading.kind === 'absent'
 
   return (
     <AttendanceCard
@@ -126,21 +142,25 @@ export function RangeDayCard({
         )
       }
       /*
-        A derived day has nothing to render beneath its verdict, and that is the
-        honest amount: no row exists, so there is no evidence and no approval to
-        show (design D6). It has no outlet either — a day nobody recorded was
-        worked nowhere, and naming a shop beside it would invent a fact. With
-        nothing to open onto, it renders no chevron either.
+        A derived day has no evidence and no approval to render beneath its
+        verdict: no row exists (design D6). It has no outlet either — a day
+        nobody recorded was worked nowhere, and naming a shop beside it would
+        invent a fact. What it does have, when it is an absence, is a reason to
+        be one, and that is worth a chevron; the other two derived readings still
+        open onto nothing and so still show none.
       */
       details={
         record ? (
           <>
+            <AbsenceReason reading={row.reading} subjectId={personId} />
             <div className="flex flex-wrap items-center gap-1.5">
               <EventEvidence label="Arrived" event={record.checkIn} radiusMetres={radiusMetres} />
             </div>
             <ApprovalNote record={record} radiusMetres={radiusMetres} />
             <AttendanceHistory record={record} />
           </>
+        ) : derivedAbsence ? (
+          <AbsenceReason reading={row.reading} subjectId={personId} />
         ) : null
       }
     />

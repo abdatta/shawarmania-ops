@@ -128,7 +128,14 @@ export function MyAttendance() {
         <div data-testid="attendance-history">
           <RangePicker range={range} today={today} onChange={setChosenRange} />
           <TallySummary tally={tallyDays(days)} />
-          <RangeDayList rows={days} radiusFor={radiusFor} showOutlet={multiOutlet} />
+          {/* Always the reader's own days, which is what lets an absence here
+              address them directly. */}
+          <RangeDayList
+            rows={days}
+            radiusFor={radiusFor}
+            personId={session.userId}
+            showOutlet={multiOutlet}
+          />
         </div>
       )}
     </div>

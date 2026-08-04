@@ -1,5 +1,5 @@
-import type { AttendanceEvent, AttendanceRecord } from '@/data-access/adapters'
-import { instantOnBusinessDay } from '@/domain'
+import type { AttendanceDecision, AttendanceEvent, AttendanceRecord } from '@/data-access/adapters'
+import { formatTime, instantOnBusinessDay } from '@/domain'
 
 /**
  * What a stored attendance row means, derived in one place.
@@ -108,8 +108,14 @@ export function isLate(record: AttendanceRecord, cutover: string): boolean {
 export type DayReading =
   /** Nothing recorded, and no deadline that could still see them has passed. */
   | { kind: 'not-yet-arrived' }
-  /** Nothing recorded anywhere, and every deadline has passed. No row exists. */
-  | { kind: 'absent' }
+  /**
+   * Nothing recorded anywhere, and every deadline has passed. No row exists.
+   *
+   * Carries the deadline it was judged against, because the surfaces name it and
+   * it is otherwise worked out and thrown away here. With several outlets it is
+   * the latest of them — the same instant that decided the absence.
+   */
+  | { kind: 'absent'; deadline: string }
   /**
    * Nothing recorded at the outlets in scope, and the database says they hold a
    * row somewhere the reader cannot see. Carries no outlet, time or evidence,
@@ -184,7 +190,7 @@ export function readDay(
   // on the exact minute the rule was set to.
   const deadline = lastDeadline(clocks, businessDate)
   if (deadline === null) return { kind: 'not-yet-arrived' }
-  return now.toISOString() > deadline ? { kind: 'absent' } : { kind: 'not-yet-arrived' }
+  return now.toISOString() > deadline ? { kind: 'absent', deadline } : { kind: 'not-yet-arrived' }
 }
 
 export const STATUS_LABELS = {
@@ -195,13 +201,32 @@ export const STATUS_LABELS = {
 } as const satisfies Record<AttendanceRecord['status'], string>
 
 /**
+ * Does this row actually count as an absence?
+ *
+ * Not the same question as `status === 'absent'`. Every unapproved check-in is
+ * stored absent, so a row waiting for its first decision reads absent in the
+ * column and is not an absence — it is a claim nobody has settled. What makes a
+ * waiting row absent too is a decision already behind it: the denied day
+ * somebody has since checked in again on, which stays absent until the new
+ * attempt is approved.
+ *
+ * Three readers asked this separately before it had a name — the verdict, the
+ * tally and the reason beneath it — which is three chances to disagree about
+ * whether somebody was paid for a day.
+ */
+export function isAbsence(record: AttendanceRecord): boolean {
+  if (record.status !== 'absent') return false
+  return !isWaitingForApproval(record) || record.latestDecisionId !== null
+}
+
+/**
  * One sentence for how a day stands, from the evidence rather than the bare
  * status — so "Absent" never appears next to a check-in time with no
  * explanation of why the two disagree.
  */
 export function describeDay(record: AttendanceRecord): string {
   if (isWaitingForApproval(record)) {
-    return record.latestDecisionId && record.status === 'absent'
+    return isAbsence(record)
       ? 'Absent — new check-in awaiting manager review'
       : 'Waiting for a manager to approve'
   }
@@ -224,6 +249,178 @@ export function describeReading(reading: DayReading): string {
       return 'Working at another outlet'
     default:
       return describeDay(reading.record)
+  }
+}
+
+/**
+ * Why a day counts as absent, and in whose words.
+ *
+ * `note` is the manager's own sentence where the record holds one, kept apart
+ * from `text` so it can be rendered as a quotation rather than folded into
+ * prose the app wrote.
+ */
+export interface AbsenceReason {
+  text: string
+  note: string | null
+}
+
+/**
+ * Who is reading, and whose day they are reading.
+ *
+ * Two independent questions, and the sentence turns on both: a manager reading
+ * their own decision should be told "you denied it", and the person the day
+ * belongs to should be told "your check-in" — while the manager reading somebody
+ * else's day must be told neither, because "you did not check in" said to the
+ * wrong reader is a false statement about a person's pay.
+ *
+ * Both are answered from ids the surfaces already hold, rather than from a
+ * per-surface voice flag. A flag can be passed wrongly; an id cannot disagree
+ * with itself.
+ */
+export interface AbsenceAudience {
+  /** The signed-in reader. */
+  viewerId: string | null
+  /** Whose day this card is about — the derived readings carry no row to ask. */
+  subjectId: string | null
+}
+
+/**
+ * Did this decision make the day absent, or merely adjust one that already was?
+ *
+ * The distinction has now caught two kinds out, so it is named rather than
+ * spelled as a list of kinds a third could quietly join.
+ *
+ * `allow_retry` and `correct_absent` on an already-absent day both record
+ * `absent` as their new status while deciding nothing about the outcome — they
+ * open or close the door to another check-in. Treating either as a cause means
+ * the newest one wins and the denial behind it stops being shown, so somebody
+ * reading "why am I absent" is told "a manager kept it absent", which answers
+ * nothing. A denial is always the real answer in that sequence, and closing a
+ * retry is still in the history below.
+ *
+ * `deny` needs its own arm: every unapproved check-in is stored `absent`, so a
+ * denial's previous status is `absent` too, and going by status alone would drop
+ * the one kind that matters most.
+ */
+function madeTheDayAbsent(decision: AttendanceDecision): boolean {
+  if (decision.kind === 'deny') return true
+  if (decision.kind === 'correct_absent' || decision.kind === 'absent_allow_retry') {
+    return decision.previousStatus !== 'absent'
+  }
+  return false
+}
+
+/**
+ * The cause behind an absence, stated once for every surface that renders one.
+ *
+ * "Absent" on its own is the verdict somebody is most likely to dispute and the
+ * one they could least account for: the person reading their own month could not
+ * tell a forgotten check-in from a manager declining the one they made, and the
+ * manager reading the same day had to open the history timeline and scan it for
+ * the reason they themselves typed. Both now read the same sentence, from here,
+ * because asymmetric visibility in a monitoring feature is how it becomes
+ * something staff resent.
+ *
+ * Derived, never stored. Every fact it states is already on the row and already
+ * visible to both readers, so nothing crosses a boundary that did not cross it
+ * before.
+ *
+ * Null for every day that is not an absence — including a row waiting for its
+ * first decision, which is stored absent and is not one (`isAbsence`). Telling
+ * somebody a day "counts as absent" underneath a verdict reading "waiting for a
+ * manager" would be contradicting the line above it.
+ *
+ * Null too for the other two derived readings: nothing is wrong on a day nobody
+ * has arrived for yet, and `elsewhere` is one bit wide on purpose (design
+ * D3) — there is nothing more to say about it without inventing it.
+ */
+export function explainAbsence(
+  reading: DayReading,
+  { viewerId, subjectId }: AbsenceAudience,
+): AbsenceReason | null {
+  /*
+    Second person only when the reader is provably the subject. Both ids null —
+    which is what a caller with nothing to say passes — must not read as a match,
+    or every day would address a reader who may be anybody.
+  */
+  const own = viewerId !== null && subjectId === viewerId
+
+  /*
+    The deadline is named rather than described. "The deadline for arriving has
+    passed" makes the reader ask which deadline; the time answers it in three
+    words. Neither sentence names the day, because the card's own heading is the
+    date, nor the person, because the heading is their name.
+  */
+  if (reading.kind === 'absent') {
+    const by = formatTime(reading.deadline)
+    return {
+      text: own ? `You did not check in by ${by}.` : `No check-in by ${by}.`,
+      note: null,
+    }
+  }
+  if (reading.kind !== 'recorded' && reading.kind !== 'waiting') return null
+
+  const { record } = reading
+  if (!isAbsence(record)) return null
+
+  // The last decision that made the day absent, as opposed to the last one that
+  // touched it.
+  const decision = [...record.decisions]
+    .filter(madeTheDayAbsent)
+    .sort((a, b) => a.at.localeCompare(b.at))
+    .at(-1)
+
+  /*
+    No decision on this row asserts the absence. The case that reaches production
+    is an absent row from before 20260802000001, which its backfill deliberately
+    skipped: that migration inserted a decision only for a row with an approver or
+    a status other than absent, so a day nobody had settled kept no decision and
+    no actor to name. A row whose only decisions touch retry permission lands here
+    too, and truthfully — nothing on it says who decided the outcome.
+
+    Note what this is NOT, so nobody adds a branch for it: `legacy_outcome`.
+    That kind is the same migration's `else`, reachable only when there is no
+    approver, which under the same filter forces a status other than absent — so
+    a legacy outcome cannot be an absence, here or in production. It still exists
+    for present, half-day and leave rows, where the history timeline names it.
+  */
+  // One sentence for both readers: with the day no longer named there is nothing
+  // left to make possessive.
+  if (!decision) {
+    return {
+      text: 'Recorded absent, with no manager decision explaining it.',
+      note: null,
+    }
+  }
+
+  /*
+    English past tense does not inflect for person — "you denied" and "Priya
+    denied" take the same verb — so the actor is one substitution rather than a
+    second set of sentences. That is what keeps this at three templates instead of
+    twelve, and it is why the templates below read identically in both voices.
+  */
+  const by =
+    decision.by !== null && decision.by === viewerId ? 'You' : (decision.byName ?? 'A manager')
+
+  // Denied: a check-in existed and a manager rejected it.
+  if (decision.kind === 'deny') {
+    return {
+      text: `${by} denied ${own ? 'your' : 'the'} check-in.`,
+      note: decision.reason,
+    }
+  }
+  /*
+    Corrected: the day already counted as something and a manager changed it.
+    Naming what it was before is what tells this apart from a denial, without
+    asking the reader to weigh two similar sentences — and the row already knows.
+
+    `previousStatus` cannot be `absent` here: `madeTheDayAbsent` keeps only the
+    corrections that moved the outcome, so a manager merely closing a retry no
+    longer reaches this and no longer displaces the denial that did.
+  */
+  return {
+    text: `${by} changed this from ${STATUS_LABELS[decision.previousStatus].toLowerCase()} to absent.`,
+    note: decision.reason,
   }
 }
 
@@ -263,10 +460,10 @@ export function tallyDays(
       tally.absent += 1
     } else if (reading.kind === 'waiting') {
       tally.waiting += 1
-      if (reading.record.status === 'absent' && reading.record.latestDecisionId) tally.absent += 1
+      if (isAbsence(reading.record)) tally.absent += 1
     } else if (reading.kind === 'recorded') {
       if (reading.record.status === 'present') tally.present += 1
-      else if (reading.record.status === 'absent') tally.absent += 1
+      else if (isAbsence(reading.record)) tally.absent += 1
     }
   }
   return tally

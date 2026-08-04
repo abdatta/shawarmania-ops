@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import type { AttendanceApproval, AttendanceRecord } from '@/data-access/adapters'
+import type {
+  AttendanceApproval,
+  AttendanceDecision,
+  AttendanceRecord,
+} from '@/data-access/adapters'
 
 import {
+  explainAbsence,
   isLate,
   isWaitingForApproval,
   readDay,
@@ -276,7 +281,11 @@ describe('tallyDays', () => {
         late: true,
       },
       { businessDate: '2026-07-23', reading: { kind: 'waiting', record: record() }, late: false },
-      { businessDate: '2026-07-22', reading: { kind: 'absent' }, late: false },
+      {
+        businessDate: '2026-07-22',
+        reading: { kind: 'absent', deadline: '2026-07-22T07:30:00.000Z' },
+        late: false,
+      },
       { businessDate: '2026-07-21', reading: { kind: 'not-yet-arrived' }, late: false },
     ]
 
@@ -308,6 +317,200 @@ describe('tallyDays', () => {
     expect(
       tallyDays([{ businessDate: '2026-07-25', reading: { kind: 'elsewhere' }, late: false }]),
     ).toEqual({ present: 0, late: 0, absent: 0, waiting: 0 })
+  })
+})
+
+/**
+ * The wordings the surfaces cannot reach.
+ *
+ * The component suites cover the two shapes the demo holds — a denial and a
+ * deadline — and the fixtures hold no correction to absent and no reopened
+ * retry, both of which a real manager can produce in two taps. They are proved
+ * here rather than by inventing fixtures, because this is the module that
+ * decides them.
+ */
+describe('explainAbsence', () => {
+  function decision(overrides: Partial<AttendanceDecision> = {}): AttendanceDecision {
+    return {
+      id: 'decision-1',
+      attemptId: 'attempt-1',
+      outletId: OUTLET.id,
+      outletName: OUTLET.name,
+      kind: 'deny',
+      by: 'manager-1',
+      byName: 'Demo Manager',
+      at: '2026-07-25T04:00:00.000Z',
+      reason: 'Not at outlet',
+      preventsRetry: true,
+      previousStatus: 'absent',
+      newStatus: 'absent',
+      latitude: null,
+      longitude: null,
+      accuracyMetres: null,
+      distanceMetres: null,
+      previousCheckInAt: null,
+      newCheckInAt: null,
+      ...overrides,
+    }
+  }
+
+  /** A settled absent row carrying exactly these decisions. */
+  function settled(decisions: AttendanceDecision[]): DayReading {
+    return {
+      kind: 'recorded',
+      record: record({
+        status: 'absent',
+        currentAttemptId: null,
+        latestDecisionId: decisions.at(-1)?.id ?? null,
+        decisions,
+      }),
+    }
+  }
+
+  /** A manager reading somebody else's day: neither id matches theirs. */
+  const asManager = { viewerId: 'manager-2', subjectId: 'person-1' }
+  /** The person the day belongs to, reading their own history. */
+  const asSubject = { viewerId: 'person-1', subjectId: 'person-1' }
+  /** The manager who made the decision, reading their own back. */
+  const asActor = { viewerId: 'manager-1', subjectId: 'person-1' }
+
+  it('says what a corrected day counted as before, which is what a denial cannot say', () => {
+    const corrected = settled([
+      decision({
+        kind: 'correct_absent',
+        previousStatus: 'present',
+        reason: 'Shift log shows he left before opening',
+      }),
+    ])
+
+    expect(explainAbsence(corrected, asManager)).toEqual({
+      text: 'Demo Manager changed this from present to absent.',
+      note: 'Shift log shows he left before opening',
+    })
+  })
+
+  /**
+   * A decision that adjusts an absence must not displace the one that caused it.
+   *
+   * Both kinds below record `absent` as their new status while deciding nothing
+   * about the outcome — one opens the door to another check-in, the other closes
+   * it. Showing the newest of them answers "why am I absent" with "a manager kept
+   * it absent", which answers nothing, and buries the denial that is the actual
+   * reason. The retry change is still in the history beneath.
+   */
+  describe('names the decision that caused the absence, not the last one to touch it', () => {
+    /** The denial, then a manager reopening the retry as a favour. */
+    const reopened = settled([
+      decision({ id: 'decision-1', at: '2026-07-25T04:00:00.000Z' }),
+      decision({
+        id: 'decision-2',
+        kind: 'allow_retry',
+        at: '2026-07-25T06:00:00.000Z',
+        reason: 'Phone had no signal at the counter',
+      }),
+    ])
+
+    /** The denial, then `Keep absent and prevent another check-in`. */
+    const locked = settled([
+      decision({ id: 'decision-1', at: '2026-07-25T04:00:00.000Z' }),
+      decision({
+        id: 'decision-2',
+        kind: 'correct_absent',
+        at: '2026-07-25T06:00:00.000Z',
+        reason: 'Spoke to him, he was not at the shop',
+      }),
+    ])
+
+    it('survives the retry being reopened', () => {
+      expect(explainAbsence(reopened, asManager)).toEqual({
+        text: 'Demo Manager denied the check-in.',
+        note: 'Not at outlet',
+      })
+    })
+
+    it('survives the retry being closed', () => {
+      // `correct_absent` on a day that was already absent moved nothing: its
+      // previous and new status are both absent. Only the retry lock changed.
+      expect(explainAbsence(locked, asManager)).toEqual({
+        text: 'Demo Manager denied the check-in.',
+        note: 'Not at outlet',
+      })
+    })
+  })
+
+  it('claims no actor for an absence no decision accounts for', () => {
+    // The pre-migration absent rows 20260802000001's backfill skipped. There is
+    // nobody to name, so it names nobody — and one sentence serves both readers,
+    // because with the day unnamed there is nothing left to make possessive.
+    expect(explainAbsence(settled([]), asManager)).toEqual({
+      text: 'Recorded absent, with no manager decision explaining it.',
+      note: null,
+    })
+    expect(explainAbsence(settled([]), asSubject)?.text).toBe(
+      'Recorded absent, with no manager decision explaining it.',
+    )
+  })
+
+  it('stays silent about a row still waiting for its first decision', () => {
+    // Stored `absent` because every unapproved check-in is. It is a claim nobody
+    // has settled, not an absence, and the verdict above it says so.
+    expect(explainAbsence({ kind: 'waiting', record: record() }, asManager)).toBeNull()
+  })
+
+  it('stays silent about the readings that have nothing to explain', () => {
+    expect(explainAbsence({ kind: 'not-yet-arrived' }, asManager)).toBeNull()
+    expect(explainAbsence({ kind: 'elsewhere' }, asManager)).toBeNull()
+    expect(
+      explainAbsence({ kind: 'recorded', record: record({ status: 'leave' }) }, asManager),
+    ).toBeNull()
+  })
+
+  /**
+   * Who the sentence is addressed to.
+   *
+   * Two substitutions, from two ids, and the failure they exist to prevent is
+   * specific: "you did not check in" shown to a manager reading somebody else's
+   * row is a false statement about that person's pay.
+   */
+  describe('addresses the reader it actually has', () => {
+    /** 13:00 in Asia/Kolkata — Kalyani's arrival deadline. */
+    const missed: DayReading = { kind: 'absent', deadline: '2026-07-25T07:30:00.000Z' }
+
+    it('speaks to the person whose day it is', () => {
+      expect(explainAbsence(settled([decision()]), asSubject)).toEqual({
+        text: 'Demo Manager denied your check-in.',
+        note: 'Not at outlet',
+      })
+      expect(explainAbsence(missed, asSubject)?.text).toBe('You did not check in by 01:00 pm.')
+    })
+
+    it('speaks to the manager who made the decision', () => {
+      expect(explainAbsence(settled([decision()]), asActor)?.text).toBe('You denied the check-in.')
+      // The verb does not change with the person, which is what keeps this to one
+      // template rather than one per voice.
+      expect(
+        explainAbsence(settled([decision({ kind: 'correct_absent', previousStatus: 'leave' })]), {
+          ...asActor,
+        })?.text,
+      ).toBe('You changed this from leave to absent.')
+    })
+
+    it('tells a manager reading somebody else’s day nothing about themselves', () => {
+      // The whole point. A manager scanning a roll-call must never be told they
+      // failed to check in, or that somebody else's day is theirs.
+      expect(explainAbsence(missed, asManager)?.text).toBe('No check-in by 01:00 pm.')
+      expect(explainAbsence(settled([decision()]), asManager)?.text).toBe(
+        'Demo Manager denied the check-in.',
+      )
+    })
+
+    it('does not read two unknowns as a match', () => {
+      // A caller with nothing to say passes nulls. Treating null === null as
+      // "this is your day" would address every reader as the subject.
+      expect(explainAbsence(missed, { viewerId: null, subjectId: null })?.text).toBe(
+        'No check-in by 01:00 pm.',
+      )
+    })
   })
 })
 

@@ -15,9 +15,11 @@ import {
 
 import type { AttendanceEvent, AttendanceRecord } from '@/data-access/adapters'
 import { formatMetres, formatTime } from '@/domain'
+import { useSession } from '@/session/context'
 
 import {
   describeDay,
+  explainAbsence,
   isOutOfFence,
   isWaitingForApproval,
   wasApprovedOnSite,
@@ -193,6 +195,57 @@ export function ApprovalNote({
       {approval.reason && (
         <p className="text-content-muted">
           <span className="sr-only">Approval reason: </span>“{approval.reason}”
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Why this day counts as absent, in one sentence, addressed to whoever is
+ * reading it.
+ *
+ * Behind the chevron rather than on the headline: the roll-call's first line is
+ * for scanning past six people to reach the two that want a decision, and a
+ * sentence there would undo that. Somebody who wants to know why opens the day,
+ * which is the same gesture that reveals the evidence beside it.
+ *
+ * **The reader comes from the session, not from a prop.** The person the day
+ * belongs to is told "your check-in", and a manager reading their own decision
+ * is told "you denied it" — but "you did not check in" shown to a manager
+ * reading somebody else's row would be a false statement about that person's
+ * pay. A call site can pass a prop wrongly; it cannot pass the signed-in reader
+ * wrongly, so only the half it unambiguously knows is asked of it.
+ *
+ * Named to a screen reader, because "Absent" followed by loose prose does not
+ * say what the prose is for.
+ */
+export function AbsenceReason({
+  reading,
+  subjectId,
+}: {
+  reading: DayReading
+  /** Whose day this is. A derived reading carries no row to ask. */
+  subjectId: string | null
+}) {
+  const { userId } = useSession()
+  const absence = explainAbsence(reading, { viewerId: userId, subjectId })
+  if (!absence) return null
+
+  /*
+    No icon. The verdict directly above already carries the struck-through circle
+    that means absent, and repeating it in front of the sentence explaining that
+    verdict is one mark saying one thing twice.
+  */
+  return (
+    <div data-testid="absence-reason" className="space-y-1 text-xs text-content-muted">
+      <p>
+        <span className="sr-only">Why absent: </span>
+        {absence.text}
+      </p>
+      {absence.note && (
+        <p>
+          <span className="sr-only">Reason: </span>“{absence.note}”
         </p>
       )}
     </div>

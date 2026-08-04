@@ -23,9 +23,15 @@ import { Card } from '@/components/ui/card'
  * happened rather than folding away under the thumb that pressed it — the same
  * reasoning that keeps the sort order still while the view is open.
  *
- * **A row with nothing beneath it gets no toggle at all.** A derived absence on
- * a past day has no evidence, no approval and no action, and a chevron that
- * promises something and opens onto nothing is worse than no chevron.
+ * **A row with nothing beneath it gets no toggle at all.** A chevron that
+ * promises something and opens onto nothing is worse than no chevron, so `Not
+ * yet arrived` and `Working at another outlet` render as headlines and stop
+ * there.
+ *
+ * **A derived absence is not one of those rows.** It has no evidence, no
+ * approval and no action, but it does have a cause, and an absence that cannot
+ * account for itself is the verdict somebody is most likely to argue with. So it
+ * opens onto that one sentence and nothing else.
  *
  * The header is the WAI-ARIA accordion shape — a button inside the heading — so
  * the heading survives, which is how a roll-call is navigable at all.

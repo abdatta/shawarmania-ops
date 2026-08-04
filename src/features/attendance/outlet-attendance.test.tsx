@@ -726,26 +726,67 @@ describe('the roll-call collapses to its headlines', () => {
     renderDay()
     await screen.findByTestId('attendance-day')
 
-    // A past day: nobody may type an arrival in, so a person with no row has no
-    // evidence, no approval and no action. A chevron opening onto nothing is
-    // worse than no chevron.
+    /*
+      Two days back the two-outlet person worked at Kanchrapara, which this
+      manager cannot see: one bit crossed the boundary (design D3), and there is
+      nothing else to render beside it.
+
+      It is the only row left with genuinely nothing underneath. A day nobody has
+      arrived for yet is still open to a typed-in arrival, so it has an action;
+      an absence now opens onto its cause. This test used to name all three
+      readings and only ever found the absence — so it was proving the rule
+      against the one row that had a reason to become an exception to it.
+    */
+    await user.click(screen.getByRole('button', { name: 'Previous day' }))
+    await user.click(screen.getByRole('button', { name: 'Previous day' }))
+    await waitFor(() => expect(screen.getByTestId('day-label')).not.toHaveTextContent('Today'))
+
+    const card = await screen.findByTestId(`day-${DEMO_TWO_OUTLETS_ACCOUNT_ID}`)
+    await waitFor(() => expect(within(card).getByTestId('working-elsewhere')).toBeInTheDocument())
+    // Nothing to open — and the verdict is still on the face of it rather than
+    // the row reading as a blank.
+    expect(within(card).queryByTestId(/^expand-/)).not.toBeInTheDocument()
+    expect(card).toHaveTextContent('Working at another outlet')
+  })
+
+  it('says why an absent day is absent, whether a manager decided it or the deadline did', async () => {
+    const user = userEvent.setup()
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    // Yesterday holds both shapes of absence on one screen: the runner's
+    // check-in was denied, so a person decided it, and colleagues with no row
+    // at all are absent because the deadline passed. "Absent" alone leaves the
+    // person it is about unable to tell those apart, or to dispute either.
     await user.click(screen.getByRole('button', { name: 'Previous day' }))
     await waitFor(() => expect(screen.getByTestId('day-label')).not.toHaveTextContent('Today'))
     await waitFor(() => expect(screen.getByTestId('attendance-day')).toBeInTheDocument())
 
-    const derived = dayCards().filter(
-      (card) =>
-        within(card).queryByTestId('derived-absent') !== null ||
-        within(card).queryByTestId('not-yet-arrived') !== null ||
-        within(card).queryByTestId('working-elsewhere') !== null,
-    )
-    expect(derived.length).toBeGreaterThan(0)
-    for (const card of derived) {
-      // No row, so nothing to open — and the verdict itself is still on the face
-      // of it rather than the row reading as a blank.
-      expect(within(card).queryByTestId(/^expand-/)).not.toBeInTheDocument()
-      expect(card.textContent).toMatch(/Absent|Not yet arrived|Working at another outlet/)
-    }
+    const decided = await screen.findByTestId(`day-${DEMO_RUNNER_ACCOUNT_ID}`)
+    await openRow(user, DEMO_RUNNER_ACCOUNT_ID)
+    const decidedWhy = within(decided).getByTestId('absence-reason')
+    // This session's manager is the one who denied it in the fixtures, so they
+    // are told they did — reading your own decision back should not name you in
+    // the third person.
+    expect(decidedWhy).toHaveTextContent(/You denied the check-in\./)
+    // And in the manager's own words, where they gave any.
+    expect(decidedWhy).toHaveTextContent(/Not at outlet/)
+
+    const derived = dayCards().find((card) => within(card).queryByTestId('derived-absent') !== null)
+    expect(derived).toBeDefined()
+    // It now has one thing beneath it, so it now has a chevron.
+    await user.click(within(derived!).getByTestId(/^expand-/))
+    const derivedWhy = within(derived!).getByTestId('absence-reason')
+    // Names the deadline it was judged against rather than describing it, and
+    // names neither the day nor the person — the card's heading is both.
+    expect(derivedWhy).toHaveTextContent(/No check-in by \d\d:\d\d [ap]m\./)
+    /*
+      And the failure worth guarding above all others: this is somebody else's
+      row, so the manager reading it must not be told that THEY failed to check
+      in. Getting this backwards would be a false statement about a person's pay,
+      shown to the person deciding it.
+    */
+    expect(derivedWhy).not.toHaveTextContent(/You did not check in/)
   })
 })
 

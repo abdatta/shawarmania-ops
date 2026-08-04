@@ -59,6 +59,7 @@ import {
 import { assembleRange, monthRange, type DateRange, type DayRow } from './attendance-range'
 import { RangeDayList, TallySummary } from './day-range-list'
 import {
+  AbsenceReason,
   ApprovalNote,
   AttendanceHistory,
   DayVerdict,
@@ -951,6 +952,9 @@ function PersonDay({
   onManual: () => void
 }) {
   const waiting = reading.kind === 'waiting'
+  // A person with no row on a past day has no evidence and no action, but if the
+  // deadline has passed they are absent, and an absence says why.
+  const derivedAbsence = record === null && reading.kind === 'absent'
 
   const actions =
     waiting || offerManual ? (
@@ -1034,8 +1038,9 @@ function PersonDay({
         record ? <DayVerdict record={record} late={late} /> : <DerivedVerdict reading={reading} />
       }
       details={
-        record || actions ? (
+        record || actions || derivedAbsence ? (
           <>
+            <AbsenceReason reading={reading} subjectId={person.id} />
             {record && (
               <>
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -1590,7 +1595,14 @@ function StaffAxis({
       ) : (
         <>
           <TallySummary tally={tallyDays(days)} />
-          <RangeDayList rows={days} radiusFor={radiusFor} showOutlet={outlets.length > 1} />
+          {/* Whoever the picker names — usually somebody else, occasionally the
+              reader themselves, and the sentences follow either way. */}
+          <RangeDayList
+            rows={days}
+            radiusFor={radiusFor}
+            personId={personId}
+            showOutlet={outlets.length > 1}
+          />
         </>
       )}
     </div>

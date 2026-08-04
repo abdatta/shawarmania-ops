@@ -135,13 +135,25 @@ describe('my attendance', () => {
     expect(within(history).getAllByTestId('late-tag').length).toBeGreaterThan(0)
   })
 
-  it('derives an absent day for a date with nothing recorded', async () => {
+  it('derives an absent day for a date with nothing recorded, and says why it is one', async () => {
+    const user = userEvent.setup()
     renderWith('employee', <MyAttendance />, createMockAdapters())
 
     const history = await screen.findByTestId('attendance-history')
     // No row exists for these dates. Nothing wrote them and nothing will — the
     // reading is derived when the day is read (design D6).
-    expect(within(history).getAllByTestId('derived-absent').length).toBeGreaterThan(0)
+    const absent = within(history).getAllByTestId('derived-absent')
+    expect(absent.length).toBeGreaterThan(0)
+
+    // And it accounts for itself when opened, addressed to the person whose pay
+    // it affects rather than narrated about them. This is their own history, so
+    // the subject of the sentence is the reader.
+    await openEveryDay(user)
+    expect(
+      within(history)
+        .getAllByTestId('absence-reason')
+        .some((node) => /You did not check in by \d\d:\d\d [ap]m\./.test(node.textContent ?? '')),
+    ).toBe(true)
   })
 
   it('says the same thing about a day as the manager’s view does', async () => {
