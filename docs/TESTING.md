@@ -180,6 +180,18 @@ ordinary row density, approve/deny, denial sheet, retry confirmation,
 absent-plus-waiting wording, full history, compact correction action, badges and
 multi-outlet switching. Demo network capture must remain within the app origin.
 
+## What only the real transport can prove
+
+`supabase/tests/rest/attendance-adapter.test.ts` runs the real adapters against the real stack, and it exists because of a class of bug no other layer can see. A command's payload is an object here and JSON on the wire, so **the mock adapter and the component suites are handed something the database never receives.** A key whose value is `undefined` survives the mock and vanishes over HTTP.
+
+That is not hypothetical. Every attendance check-in and approval taken **without a position** failed in production for as long as those paths existed: with no reading, three coordinate arguments evaluated to `undefined`, JSON dropped them, and PostgREST could not resolve a function that declares no default for them. The screen said "try again in a moment" and nothing was written. Four suites were green throughout — the component tests drove the mock, pgTAP called the functions from SQL where a missing argument is unwritable, Playwright drove demo mode, and the one REST case that passed `reading: null` asserted only that it rejected, which it did, for the wrong reason.
+
+Three habits follow, and they generalise past attendance:
+
+- **Cover the empty and unknown variant of every command over the real transport**, not only the happy one with every field populated.
+- **Assert refusals by error code, never by "it rejected".** A bare rejection cannot tell a policy refusing from an app incapable of asking.
+- **A command test that never leaves the process proves the object, not the request.**
+
 ## Fixtures
 
 - **Never use real customer or employee data.** Seed data is synthetic: invented names, obviously fake phone numbers.

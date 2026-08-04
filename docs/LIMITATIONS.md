@@ -223,6 +223,21 @@ model, not as a second outlet flag on attendance. Until then, a denial remains
 absent while the newer attempt waits, and a manager may manually correct the day
 to present even though no newer employee location exists.
 
+### A check-in that cannot be sent is reported, never queued
+
+Attendance has no outbox. The counter has one because a biller cannot wait for
+the network with a customer in front of them; an arrival is one tap on the way
+in, and a queue behind it would mean a screen saying "recorded" over a row that
+may never exist. So a command either reaches the database or it does not, and
+when it does not the person is told which: a refusal states the rule, a lost
+connection says so, and a request this app could not send at all asks them to
+report it, because that last one is a defect rather than a condition of the day.
+
+The cost is real. Where there is no signal at all, the arrival waits on the
+person retrying, or on their manager recording it for them — and a manual entry
+carries the manager's name rather than the employee's evidence. Whether that is
+worth an offline attendance queue is its own decision, and it has not been made.
+
 ### A badge is not a notification, and its count can be stale
 
 The count on the Attendance tab reaches only somebody already holding the app. Nothing pushes: a manager who does not open it does not find out, and the person whose day it is finds out when they query their pay. Reaching somebody who is not looking needs a service-worker subscription, a server to hold it and a key pair to sign with, none of which exists; it is tracked in `openspec/todos/pending-approval-notification.md`.

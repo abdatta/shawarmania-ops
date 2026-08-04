@@ -47,6 +47,13 @@ const outletRadius = 150
 // which is what makes the manual-entry test's re-run check sufficient.
 const PENDING_STAFF_KAL = '10000000-0000-4000-a000-00000000000c'
 const FA_KALYANI_SUB = '10000000-0000-4000-a000-000000000002'
+/**
+ * One live Employee assignment at Kalyani, and no row for today in any suite —
+ * which is what makes them the persona for the position-free check-in. The
+ * two-outlet person's today is already written by the command-races suite, and
+ * one person holds one row a day.
+ */
+const GRILLER_KAL = '20000000-0000-4000-a000-000000000002'
 
 type Client = SupabaseClient<Database>
 
@@ -84,11 +91,14 @@ let employeeClient: Client
 let managerClient: Client
 /** The one session that reads both outlets, for the cross-outlet assertions. */
 let ownerClient: Client
+/** The employee whose day is claimed with no position at all. */
+let grillerClient: Client
 
 beforeAll(async () => {
   employeeClient = await signIn('staff.kalyani@login.shawarmania.invalid')
   managerClient = await signIn('admin.kalyani@login.shawarmania.invalid')
   ownerClient = await signIn('owner@login.shawarmania.invalid')
+  grillerClient = await signIn('griller.kalyani@login.shawarmania.invalid')
 }, 30_000)
 
 describe('the attendance adapter', () => {
@@ -367,19 +377,103 @@ describe('the attendance adapter', () => {
     await expect(refusal).rejects.toThrow(/needs a reason|already been approved/)
   })
 
-  it('turns a policy refusal into something worth reading at a counter', async () => {
-    // An employee attempting to approve their own day: the guard raises, and
-    // the adapter must not surface a raw Postgres message.
+  it('refuses to send an approval for a day with nothing waiting on it', async () => {
+    // Yesterday's row is settled, so there is no current attempt to decide. The
+    // adapter answers that itself rather than asking the database to.
+    //
+    // Asserted by code, not merely "it rejected". While this asserted nothing
+    // but rejection it could not tell a refusal apart from a request the app
+    // was incapable of sending — which is exactly how a bug that broke every
+    // position-free command sat here unnoticed. Who may approve is proved
+    // below, against a row that is genuinely waiting.
     const attendance = createSupabaseAttendanceAdapter(employeeClient)
     const day = await attendance.getDay(STAFF_KAL, yesterday())
 
-    await expect(
-      attendance.approve([day!.id], {
-        reason: 'self approved',
+    const refusal = attendance.approve([day!.id], {
+      reason: 'self approved',
+      reading: null,
+      approverId: STAFF_KAL,
+    })
+    await expect(refusal).rejects.toBeInstanceOf(AttendanceActionError)
+    await expect(refusal).rejects.toMatchObject({ code: 'nothing_to_approve' })
+  })
+
+  it('records a check-in with no position at all, and settles it with no position either', async () => {
+    // The production bug this file could have caught: with no reading, the
+    // adapter used to drop `p_lat`, `p_lng` and `p_accuracy_m` from the payload
+    // entirely, and PostgREST could not resolve a command function that declares
+    // no default for them. Every unlocated check-in failed while writing nothing.
+    //
+    // The persona is the Kalyani griller: one live Employee assignment there, and
+    // no row for today from any other suite. How many outlets the person had is
+    // not something the transport can see — the payload is identical — so the
+    // which-outlet question stays covered in the component suite, and this proves
+    // the part only a real database can.
+    const asEmployee = createSupabaseAttendanceAdapter(grillerClient)
+    const asManager = createSupabaseAttendanceAdapter(managerClient)
+    const outlets = createSupabaseOutletsAdapter(grillerClient)
+    const outlet = await outlets.getOutlet(OUTLET_KALYANI)
+    const today = resolveBusinessDate(new Date(), outlet!.business_day_cutover)
+
+    // Survives a re-run against the same reset: the unlocated day is read back
+    // rather than claimed twice.
+    const existing = await asEmployee.getDay(GRILLER_KAL, today)
+    const recorded =
+      existing ??
+      (await asEmployee.checkIn({
+        personId: GRILLER_KAL,
+        outletId: OUTLET_KALYANI,
+        businessDate: today,
         reading: null,
-        approverId: STAFF_KAL,
+      }))
+
+    expect(recorded.outletId).toBe(OUTLET_KALYANI)
+    expect(recorded.checkIn).not.toBeNull()
+    // Unknown, and stored as unknown: there is no reading to vouch for anybody,
+    // and nothing invented one.
+    expect(recorded.checkIn?.latitude).toBeNull()
+    expect(recorded.checkIn?.longitude).toBeNull()
+    expect(recorded.checkIn?.accuracyMetres).toBeNull()
+    expect(recorded.checkIn?.distanceMetres).toBeNull()
+    expect(recorded.checkIn?.source).toBe('phone')
+    // A claim, not a day: it counts for nothing until a manager settles it.
+    if (existing === null) {
+      expect(recorded.status).toBe('absent')
+      expect(recorded.approval).toBeNull()
+      expect(recorded.currentAttemptId).not.toBeNull()
+    }
+
+    if (recorded.currentAttemptId === null) return
+
+    // The row is genuinely waiting, so a position-free approval now reaches the
+    // policy rather than stopping at the adapter's own guard — which is what
+    // makes this the place to prove an Employee cannot settle their own day. It
+    // is also the proof that the payload arrives: a request the backend could
+    // not resolve would read as `unsendable`, not as a refusal.
+    await expect(
+      asEmployee.approve([recorded.id], {
+        reason: 'Approving my own day',
+        reading: null,
+        approverId: GRILLER_KAL,
       }),
-    ).rejects.toBeInstanceOf(AttendanceActionError)
+    ).rejects.toMatchObject({ code: 'not_permitted' })
+
+    // And the manager settles it from a phone that cannot find a position
+    // either — the other half of the same bug. With no reading the rule treats
+    // this exactly as an off-site approval, so it costs a reason.
+    const [settled] = await asManager.approve([recorded.id], {
+      reason: 'Griller was on the grill; neither phone could find a position',
+      reading: null,
+      approverId: FA_KALYANI_SUB,
+    })
+
+    expect(settled?.status).toBe('present')
+    expect(settled?.approval?.byName).toBe('Synthetic Admin Kal')
+    expect(settled?.approval?.reason).toContain('neither phone could find a position')
+    // The approver's position is unknown, and the distance with it. An approval
+    // that recorded a distance here would be claiming a place nobody read.
+    expect(settled?.approval?.latitude).toBeNull()
+    expect(settled?.approval?.distanceMetres).toBeNull()
   })
 
   it('audits historical time corrections without rewriting arrival evidence or tenancy', async () => {
@@ -394,6 +488,15 @@ describe('the attendance adapter', () => {
     )!
     const originalApproval = before!.approval
     const originalRetry = before!.retry
+    /*
+      Corrections are append-only, so a deliberate re-run against the same reset
+      finds the ones the previous run made. What this test owns is the two it is
+      about to add; counting the total would pass only on the first run, which is
+      not the promise this file makes at the top.
+    */
+    const correctionsBefore = before!.decisions.filter(
+      (decision) => decision.kind === 'correct_time',
+    ).length
     const correctedAt = instantOnBusinessDay(yesterday(), '12:30', '04:00')
     const firstDecisionId = crypto.randomUUID()
 
@@ -487,7 +590,7 @@ describe('the attendance adapter', () => {
     )
     expect(
       employeeView?.decisions.filter((decision) => decision.kind === 'correct_time'),
-    ).toHaveLength(2)
+    ).toHaveLength(correctionsBefore + 2)
     await expect(
       asEmployee.correct({
         attendanceId: second.id,

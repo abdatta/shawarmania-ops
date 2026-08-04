@@ -1,5 +1,7 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
+import type { PositionReading } from '@/lib/geolocation'
+
 import type {
   AttendanceAdapter,
   AttendanceAttempt,
@@ -228,6 +230,45 @@ function toRecord(row: JoinedRow): AttendanceRecord {
 }
 
 /**
+ * The position a check-in claims, always stated — `null` where no reading was
+ * taken.
+ *
+ * Stated, not omitted, and that is the whole of it: `undefined` is dropped by
+ * JSON serialisation, and `attendance_submit_attempt` declares no default for
+ * these three, so a dropped key means PostgREST cannot find the function at all.
+ * That failure looks nothing like a missing position — it looks like a broken
+ * app, and it broke every unlocated check-in in production until it was found.
+ * The command functions are right to demand these facts; a caller that has none
+ * says so.
+ *
+ * The cast is applied to a value that is provably `number | null`, never
+ * `undefined`. The generated `Args` type says `number` because the Postgres
+ * parameter carries no default, and an argument's nullability is not something
+ * the type generator expresses.
+ */
+function attemptPosition(reading: PositionReading | null) {
+  return {
+    p_lat: (reading?.latitude ?? null) as number,
+    p_lng: (reading?.longitude ?? null) as number,
+    p_accuracy_m: (reading?.accuracyMetres ?? null) as number,
+  }
+}
+
+/**
+ * The same, for the manager giving an approval. An approval with no reading is
+ * treated exactly as an off-site one — a reason is required and the row records
+ * that the approver's position is unknown — which it cannot be if the command
+ * never reaches the database.
+ */
+function managerPosition(reading: PositionReading | null) {
+  return {
+    p_manager_lat: (reading?.latitude ?? null) as number,
+    p_manager_lng: (reading?.longitude ?? null) as number,
+    p_manager_accuracy_m: (reading?.accuracyMetres ?? null) as number,
+  }
+}
+
+/**
  * Turn a Postgres refusal into something worth reading at a counter. The
  * constraint and trigger names are the contract here — they are what the
  * schema chose to call these rules, and matching on them beats matching on
@@ -356,6 +397,20 @@ function toActionError(error: PostgrestError): AttendanceActionError {
   }
   if (error.code === '42501' || error.code === 'PGRST116') {
     return new AttendanceActionError('not_permitted', 'That is not something this account can do.')
+  }
+  /*
+    The backend could not accept a request of this shape at all: PostgREST found
+    no function matching the arguments sent (`PGRST202`), or Postgres said so
+    itself (`42883`). Nothing about the action was wrong, so nothing about trying
+    it again can be right — this is a defect in the app, and the only useful
+    thing to tell somebody standing at a counter is that it could not be sent
+    and somebody needs to hear about it.
+  */
+  if (error.code === 'PGRST202' || error.code === '42883') {
+    return new AttendanceActionError(
+      'unsendable',
+      'This app could not send that action. Nothing was recorded. Please report this.',
+    )
   }
   return new AttendanceActionError('failed', 'That did not work. Try again in a moment.')
 }
@@ -506,9 +561,7 @@ export function createSupabaseAttendanceAdapter(
         p_outlet_id: outletId,
         p_business_date: businessDate,
         p_attempted_at: reading?.at ?? new Date().toISOString(),
-        p_lat: reading?.latitude as number,
-        p_lng: reading?.longitude as number,
-        p_accuracy_m: reading?.accuracyMetres as number,
+        ...attemptPosition(reading),
         ...(expectedVersion == null ? {} : { p_expected_version: expectedVersion }),
       })
       if (error) throw toActionError(error)
@@ -561,9 +614,7 @@ export function createSupabaseAttendanceAdapter(
           p_expected_attempt_id: record.currentAttemptId,
           p_expected_version: record.stateVersion,
           p_reason: (trimmed || null) as string,
-          p_manager_lat: reading?.latitude as number,
-          p_manager_lng: reading?.longitude as number,
-          p_manager_accuracy_m: reading?.accuracyMetres as number,
+          ...managerPosition(reading),
         })
         if (error) throw toActionError(error)
       }

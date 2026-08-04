@@ -451,6 +451,92 @@ test.describe('provisioning and admin-issued reset', () => {
   })
 })
 
+/**
+ * The production failure, walked end to end: a real session, a real database,
+ * and a phone that cannot produce a position.
+ *
+ * Every layer of the suite had this green while it was broken. The component
+ * tests drove the mock adapter, which takes a null reading happily; the REST
+ * suite always sent coordinates; and the demo walk never reaches Supabase. So a
+ * two-outlet employee whose phone found nothing chose their shop, was told "that
+ * did not work, try again in a moment", and had nothing recorded — for as long
+ * as the path existed. This is the one place where the screen, the adapter and
+ * the database are all real at once.
+ *
+ * A freshly provisioned hire on purpose: they hold no attendance row, so this
+ * cannot collide with the suites that share the stack in CI, and a person holds
+ * one row a business date.
+ */
+test('a two-outlet hire whose phone finds no position records the day and waits', async ({
+  page,
+  browser,
+}) => {
+  const person = freshPerson('unlocated')
+  await signIn(page, PERSONAS.owner.username)
+  await page.goto('owner/people')
+  const issued = await provisionEmployee(page, person, [
+    'Shawarmania Kalyani',
+    'Shawarmania Kanchrapara',
+  ])
+  const activated = await activate(browser, issued.link, person.username)
+  await expect(activated.page).toHaveURL(/\/staff$/)
+
+  // Geolocation permission is never granted to this context, so the browser
+  // refuses the read exactly as a phone with location off does.
+  await activated.page.getByTestId('attendance-action').click()
+
+  // Two live assignments and no reading, so the one question anybody is ever
+  // asked, and nothing recorded until it is answered.
+  const question = activated.page.getByTestId('attendance-which-outlet')
+  await expect(question).toBeVisible()
+  await expect(question).toHaveAttribute('data-failure', 'denied')
+  await expect(question).toContainText('Location permission is off')
+
+  await question.getByRole('button', { name: 'Shawarmania Kalyani' }).click()
+
+  // Recorded, and honest about what it is worth: a claim waiting for a manager.
+  // This assertion is the bug. It used to be the error message instead.
+  await expect(activated.page.getByTestId('attendance-waiting')).toContainText(
+    'waiting for your manager to approve it',
+  )
+  await expect(activated.page.getByTestId('attendance-error')).toHaveCount(0)
+
+  // It survives a reload, because it is a row rather than a screen state.
+  await activated.page.reload()
+  await expect(activated.page.getByTestId('attendance-waiting')).toBeVisible()
+
+  // And their manager settles it from a phone that cannot find a position
+  // either — the other half of the same fault. No reading means this is treated
+  // as an off-site approval, so it costs a written reason.
+  const managerContext = await browser.newContext()
+  const manager = await managerContext.newPage()
+  await signIn(manager, PERSONAS.admin.username)
+  await manager.goto('admin/attendance')
+
+  const card = manager.locator('[data-testid^="day-"]').filter({ hasText: person.name })
+  await expect(card).toBeVisible()
+  // Exact, because the card's own expand control says "approve" in its label.
+  await card.getByRole('button', { name: 'Approve', exact: true }).click()
+
+  // The reason is demanded because nothing vouches for either of them: no
+  // employee position, and no manager position to compare it against.
+  await expect(manager.getByTestId('reason-required')).toBeVisible()
+  await manager
+    .getByLabel('Why are you approving this?')
+    .fill('Both phones lost GPS; seen at the counter all morning')
+  await manager.getByRole('button', { name: 'Approve and record my reason' }).click()
+
+  await expect(manager.getByTestId('attendance-error')).toHaveCount(0)
+  await expect(card).toContainText('Present')
+
+  // The person reads their own settled day, reason and all.
+  await activated.page.reload()
+  await expect(activated.page.getByTestId('attendance-approved')).toBeVisible()
+
+  await managerContext.close()
+  await activated.context.close()
+})
+
 test('deactivation ends an open username session immediately', async ({ page, browser }) => {
   const person = freshPerson('doomed')
   await signIn(page, PERSONAS.owner.username)
