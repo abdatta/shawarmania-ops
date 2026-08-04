@@ -122,6 +122,7 @@ Commands:
 
 - `/next-change` — what to work on next, which model, and the pre-flight checklist. Derived live from files, never from memory.
 - `/propose-apply-verify <name>` — drive one change end to end: propose, apply, then an autonomous verify-fix-reverify loop ending in a verification report. Archiving stays a separate, deliberate step.
+- `/quickfix` — the same journey for a **bug fix or small correction**, at the weight one deserves: reproduce, fix, pin with one test proved to fail without it, push and let CI gate. It refuses itself for migrations, policies, money, offline, the gate registry and the demo seam. See [The quickfix lane](#the-quickfix-lane) for why the shorter path is safe and where it is not.
 - `/opsx:propose <name>` — expand a seeded change into design, specs, and tasks.
 - `/opsx:apply <name>` — implement its tasks.
 - `/opsx:archive <name>` — merge spec deltas into `openspec/specs/` and date-stamp the folder into `archive/`.
@@ -156,3 +157,60 @@ git diff --exit-code src/data-access/database.types.ts
 - **Theme changes**: run the contrast validator, in both themes. AA is the floor, not the goal.
 - **`*-live` changes**: confirm the surface actually moved from `demo` to `live`, and that demo mode still works afterwards.
 - Prefer real verification over asserting success. If a gate was not run, say so.
+
+### The quickfix lane
+
+**A bug fix is not a roadmap change.** Run it like one and most of the effort
+goes on artifacts a correction does not need, and on local suites CI is about to
+run anyway. Run `/quickfix` instead; the reasoning it encodes is below, because a
+lane whose reasons live only in a skill file is a lane nobody trusts under
+pressure. `attendance-position-free-commands` is the change that prompted this,
+if you want a worked example.
+
+**Why pushing early is safe here.** `deploy.yml` declares `migrate: needs: gate`
+and `deploy: needs: [gate, build, migrate]`. A red gate publishes nothing and
+migrates nothing, and the build already on the counter stays live. CI is a hard
+gate, not an advisory one, so running the full suite locally buys a faster red
+rather than a safer deploy — and it runs three jobs in parallel, which beats
+running them yourself in series.
+
+**What a quickfix still owes, and none of it is optional:**
+
+- **A reproduction before the change.** If you cannot make it fail on demand,
+  you do not know what you are fixing.
+- **One test that fails before the fix and passes after.** Prove it by reverting
+  the fix and re-running, not by reasoning about it. This costs about a minute
+  and is the only thing separating a fix from a hope.
+- **For anything about the shape of a request, one cheap proof the database
+  accepts the new payload.** A payload assertion proves what left; it says
+  nothing about what the far end does with it. One rolled-back call closes that,
+  and reading the function body to convince yourself does not — that is
+  inference. This is the exact gap that let the original bug ship.
+- **`npm run typecheck` and the test files the change touches.** Seconds.
+- **A change folder**, which the spec-driven rule means literally: a
+  one-paragraph `proposal.md` carrying the gate, and `tasks.md`. OpenSpec's own
+  `applyRequires` is `["tasks"]`, and `design.md` plus a spec delta are for
+  changes that decide something. **A fix that restores behaviour an existing
+  requirement already demands needs no delta** — it was never a contract change,
+  and the archive flow handles a change that has none.
+- **If the reproduction shows an existing test could not have caught this,
+  tighten that test in the same commit.** A test asserting only that something
+  rejected, or counting rows it does not own, is green for a reason other than
+  the one it claims — and will stay green when the bug returns. Cheap to fix
+  while you are already in the file.
+- **A one-line docs update where the fix implies a rule.** The essay can wait;
+  the rule cannot, because the rule is what stops the recurrence.
+
+**Where the lane is refused, and the reason is never "the tests might fail":**
+
+- **Migrations.** `migrate` is forward-only and a manual frontend rollback keeps
+  the forward schema. A migration that passes every test and is still wrong is
+  not undone by a follow-up push.
+- **RLS or policy changes.** Silent over-permission passes every functional test
+  in this repo. That is what `test:db` and `test:rls` exist for.
+- **Money arithmetic, offline and outbox semantics, the gate registry, and the
+  demo seam.** Each fails in a way a green suite does not describe.
+
+Anything on that list runs the full local gate set, including the Docker job,
+before it is pushed. Everything else pushes on the strength of the list above
+and lets CI decide.
