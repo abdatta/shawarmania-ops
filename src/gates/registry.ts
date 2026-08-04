@@ -8,7 +8,7 @@ import {
   Home,
   KeyRound,
   LayoutDashboard,
-  NotebookPen,
+  NotepadText,
   Package,
   Store,
   TabletSmartphone,
@@ -142,7 +142,7 @@ const defs = {
     // Ahead of People: this is opened every night, and People is opened when
     // somebody joins or leaves. Nav order follows how often a tab is reached for,
     // and the nightly job should not sit behind the occasional one.
-    nav: { label: 'Ledger', icon: NotebookPen, order: 3 },
+    nav: { label: 'Ledger', icon: NotepadText, order: 3 },
     state: 'live',
   },
   /** Drop into one outlet's Franchise Admin view, read-only. */

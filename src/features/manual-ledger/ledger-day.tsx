@@ -1042,7 +1042,7 @@ function DayReadingCard({ day, reading }: { day: ManualLedgerDay; reading: DayRe
         label="Cash expenses"
         paise={-reading.cashExpensesPaise}
         testId="reading-cash-expenses"
-        hint="Only expenses marked as cash. Nothing paid another way came out of this drawer."
+        hint="Only expenses marked as cash."
       />
       <Row
         label="Cash withdrawn"

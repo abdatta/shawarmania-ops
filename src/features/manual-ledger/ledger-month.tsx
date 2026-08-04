@@ -1,4 +1,4 @@
-import { NotebookPen } from 'lucide-react'
+import { NotepadText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
@@ -83,7 +83,7 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
   if (!reading.recorded) {
     return (
       <EmptyState
-        icon={NotebookPen}
+        icon={NotepadText}
         title="Nothing is recorded for this month at this outlet yet. Record a day and the month’s figures build themselves from it."
         action={undefined}
       />
