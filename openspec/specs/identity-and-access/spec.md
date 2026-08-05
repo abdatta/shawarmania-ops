@@ -367,12 +367,6 @@ without switching anything.
   hold nor reach
 - **THEN** it is redirected to its own home rather than rendering that shell
 
-#### Scenario: A signed-in visit to the landing page goes to the app
-
-- **WHEN** a signed-in session opens the application root
-- **THEN** it is taken to its own home rather than shown the unauthenticated
-  landing page
-
 ### Requirement: An unauthenticated visitor cannot reach a role shell
 
 Role surfaces SHALL be reachable only with a session. An unauthenticated
@@ -383,6 +377,115 @@ person SHALL arrive at the surface they originally asked for.
 
 - **WHEN** an unauthenticated visitor opens a role surface URL and then signs in
 - **THEN** they arrive at the originally requested surface, not a generic home
+
+### Requirement: The application root resolves the session rather than greeting the visitor
+
+The application root SHALL be a resolver, not a destination. It SHALL present no
+description of the product and offer no navigation of its own, because the
+operations origin serves only people who are trying to get into the app and the
+product is described on its own separately hosted site.
+
+The root SHALL act on the session state it has, and SHALL distinguish a session
+that is absent from one that is merely not yet known:
+
+- While the session is still being resolved, the root SHALL show the same
+  loading placeholder the role shells show, and SHALL send nobody anywhere.
+- Once resolved, the root SHALL take the session to the home of the highest role
+  it holds.
+- Once the absence of a session is **confirmed**, the root SHALL send the visitor
+  to sign-in.
+- When a session probably exists but could not be confirmed, the root SHALL say
+  so and offer a retry, and SHALL NOT send anyone to sign-in.
+
+A session whose state is unknown or unconfirmed SHALL NOT be treated as signed
+out. Asking somebody to authenticate again for a session they already hold is a
+refusal the app SHALL never make on the strength of an unanswered request.
+
+The unauthenticated entry screen SHALL be the sign-in screen, and SHALL be
+composed as a standalone screen rather than as content within a longer page.
+
+A screen that establishes a session SHALL leave for its destination only once the
+session reflects it, rather than as soon as the credentials are accepted. The two
+are different moments, and navigating on the first reaches a root whose knowledge
+of the session is still the one it had before.
+
+#### Scenario: A signed-in visit to the root goes to the app
+
+- **WHEN** a signed-in session opens the application root
+- **THEN** it is taken to the home of the highest role it holds, without any
+  intermediate screen describing the product
+
+#### Scenario: A confirmed signed-out visit reaches sign-in
+
+- **WHEN** a visitor whose absence of a session has been confirmed opens the
+  application root
+- **THEN** they arrive at sign-in without an intervening screen to pass through
+
+#### Scenario: An unresolved session waits rather than being sent anywhere
+
+- **WHEN** the application root is opened and the session has not yet resolved
+- **THEN** the loading placeholder is shown, and no navigation to sign-in or to
+  a role shell has happened
+
+#### Scenario: An unconfirmed session is not sent to sign-in
+
+- **WHEN** the application root is opened, a stored session exists, and the
+  request that would confirm it receives no response
+- **THEN** the root states that the session could not be confirmed and offers a
+  retry, and sign-in is not reached
+
+#### Scenario: The root describes nothing
+
+- **WHEN** the application root is opened with no session
+- **THEN** no product description, marketing copy, or route other than the way
+  in has been presented
+
+#### Scenario: A completed sign-in does not return to sign-in
+
+- **WHEN** credentials are accepted on the sign-in screen
+- **THEN** the person arrives at their own shell, and is not returned to sign-in
+  by a root acting on the session state that preceded it
+
+### Requirement: The session is resolved once per visit, not once per screen
+
+The real session SHALL be resolved by one holder shared across the screens that
+need it, so that one visit asks who the person is once. Handing off from the
+root to a role shell SHALL NOT re-resolve the session from nothing, and signing
+in SHALL NOT require the destination to resolve it again.
+
+That holder SHALL supply session state without deciding what is rendered: each
+screen SHALL decide for itself what an unresolved session means for it, so that
+screens which do not need a session, such as sign-in and activation, render
+immediately rather than behind a placeholder.
+
+The holder SHALL NOT be mounted above demo mode. Demo mode SHALL remain outside
+its scope so that no real-session read occurs while fabricated data is on
+screen.
+
+#### Scenario: Opening the root resolves the session once
+
+- **WHEN** a signed-in person opens the application root and is taken to their
+  shell
+- **THEN** the profile and assignments behind that session were read once for
+  the visit, not once for the root and again for the shell
+
+#### Scenario: Signing in does not re-resolve from nothing
+
+- **WHEN** a person completes sign-in
+- **THEN** the shell they arrive at already has the resolved session, without
+  starting from an unresolved state
+
+#### Scenario: The screens that need no session are not delayed by one
+
+- **WHEN** sign-in or activation is opened while a session is still resolving
+- **THEN** the form is rendered immediately rather than behind a loading
+  placeholder
+
+#### Scenario: Demo mode is outside the session holder
+
+- **WHEN** any demo-mode path is rendered
+- **THEN** no real session is resolved for it, and the demo-scope guard is not
+  triggered
 
 ### Requirement: Accounts are provisioned by an admin, never self-registered
 
@@ -872,7 +975,13 @@ no username, provider alias, account email, or other personal detail.
 
 Opening a live link SHALL resolve and display the current username, then ask
 the person to type that username, a new password, and the repeated new password.
-The code itself SHALL NOT be typed.
+The code itself SHALL NOT be typed, and activation SHALL therefore offer no
+field, form, or route for entering one. A code is a thing links carry, not a
+thing people transcribe.
+
+Activation opened without a code SHALL say that the link is incomplete and
+SHALL offer the way to sign in. It SHALL NOT invite the person to supply the
+missing code, because the issuing surface never shows them one to supply.
 
 #### Scenario: Issuing a code produces one link handover
 
@@ -895,6 +1004,18 @@ The code itself SHALL NOT be typed.
 - **WHEN** a person opens a valid activation link
 - **THEN** the current username is shown and the form contains username, new
   password, and repeated new password
+
+#### Scenario: Activation offers no way to type a code
+
+- **WHEN** activation is opened without a code
+- **THEN** no code field is present, the screen says the link is incomplete, and
+  the way to sign in is offered
+
+#### Scenario: No screen routes to activation without a code
+
+- **WHEN** the sign-in screen is inspected for its routes onward
+- **THEN** it offers no link to activation, and tells anybody without a password
+  to ask an authorized admin for a one-time link
 
 ### Requirement: A code resolves to its username only for whoever holds that code
 
