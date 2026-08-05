@@ -1261,14 +1261,21 @@ describe('a person who works at two outlets', () => {
     expect(only).toBeDisabled()
   })
 
-  it('offers every readable outlet’s staff, whatever the outlet chips say', async () => {
+  /** Whose names the by-staff picker is currently offering. */
+  function offered(picker: HTMLElement): string[] {
+    return within(picker)
+      .getAllByRole('option')
+      .map((option) => (option as HTMLOptionElement).value)
+  }
+
+  it('narrows the person picker to the selected outlets’ staff', async () => {
     const user = userEvent.setup()
     renderAsOwner()
 
-    // Kalyani alone is selected, and Kanchrapara's staff are still offered. The
-    // by-staff axis takes its scope from the database, so filtering its picker
-    // by the by-outlet chips would hide a whole shop's people from a view that
-    // is not about shops — the exact confusion splitting the axes ended.
+    // Kalyani alone is selected, so a Kanchrapara-only person is not offered.
+    // The chips scope the surface now, both axes, and a chip that sat above the
+    // tabs doing nothing on one of them would teach the reader that controls
+    // lie (design D1).
     await screen.findByTestId('attendance-day')
     expect(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)).toHaveAttribute(
       'aria-pressed',
@@ -1276,25 +1283,56 @@ describe('a person who works at two outlets', () => {
     )
 
     await user.click(screen.getByTestId('axis-staff'))
-    const picker = await screen.findByTestId('person-picker')
-    expect(
-      within(picker)
-        .getAllByRole('option')
-        .map((option) => (option as HTMLOptionElement).value),
-    ).toContain(DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
+    expect(offered(await screen.findByTestId('person-picker'))).not.toContain(
+      DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
+    )
+
+    // And one tap brings them back, which is the whole cost of the narrowing.
+    await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
+    await waitFor(() =>
+      expect(offered(screen.getByTestId('person-picker'))).toContain(
+        DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
+      ),
+    )
   })
 
-  it('offers no outlet picker on the by-staff axis', async () => {
+  it('keeps the outlet chips in place across both axes', async () => {
     const user = userEvent.setup()
     renderAsOwner()
 
-    // By outlet has one, because it is a filter within what they may already
-    // see. By staff must not: its scope is the database's answer to who they
-    // are, not a choice (design D4).
+    // One scope above the surface, not one per axis. It does not move and it
+    // does not vanish, because a control that appears and disappears under the
+    // title is a control whose meaning the reader has to keep re-deciding.
     await screen.findByTestId('attendance-day')
     expect(screen.getByTestId('surface-outlets')).toBeInTheDocument()
     await user.click(screen.getByTestId('axis-staff'))
-    expect(screen.queryByTestId('surface-outlets')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('person-picker')).toBeInTheDocument()
+    expect(screen.getByTestId('surface-outlets')).toBeInTheDocument()
+  })
+
+  it('replaces a subject the selection has narrowed away', async () => {
+    const user = userEvent.setup()
+    renderAsOwner()
+
+    // Both outlets on, so the Kanchrapara-only person can be selected.
+    await screen.findByTestId('attendance-day')
+    await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
+    await user.click(screen.getByTestId('axis-staff'))
+    const picker = await screen.findByTestId('person-picker')
+    await user.selectOptions(picker, DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
+    expect((picker as HTMLSelectElement).value).toBe(DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
+
+    // Dropping their outlet must not leave the days of somebody the control is
+    // no longer naming on screen. The subject moves to somebody it is offering.
+    await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
+    await waitFor(() =>
+      expect((screen.getByTestId('person-picker') as HTMLSelectElement).value).not.toBe(
+        DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
+      ),
+    )
+    expect(offered(screen.getByTestId('person-picker'))).toContain(
+      (screen.getByTestId('person-picker') as HTMLSelectElement).value,
+    )
   })
 
   it('counts each business date once across both outlets', async () => {

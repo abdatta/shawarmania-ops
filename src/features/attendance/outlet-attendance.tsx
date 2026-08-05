@@ -42,6 +42,7 @@ import {
   resolveBusinessDate,
   shiftBusinessDate,
 } from '@/domain'
+import { cn } from '@/lib/cn'
 import { readPosition, type PositionReading } from '@/lib/geolocation'
 import { useSession } from '@/session/context'
 import { holdsRole, sessionOutlets } from '@/session/session'
@@ -85,30 +86,55 @@ import { useWaitingCounts, waitingAt, waitingLabel } from './waiting-counts'
  * is not reading it at all. The counts exist so somebody can work out pay by
  * hand, which is why each business date counts once.
  *
- * **The axis is chosen before the outlet** (attendance-one-day-per-person). It
- * used to be the other way round, which made the owner's actual question —
- * "how many days did this person work in August" — impossible to ask, because
- * every read started by naming one shop. The outlet choice now belongs to the
- * by-outlet axis alone, and it selects as many as the reader may see. By staff
- * takes its scope from the database instead (design D4).
+ * **One outlet scope sits above both axes**, in the header, where the Ledger
+ * keeps its own — same reader, same shops, same phone, so a second idiom for it
+ * would be a second thing to learn. It stays in one place whichever axis is
+ * being read.
  *
- * **So the load is not scoped by the selection, and the axes narrow it
- * differently.** One read of `listOutlets` and one of `listAccounts`, neither
+ * That supersedes `attendance-one-day-per-person`'s design D4, which cut the
+ * outlet choice out of the by-staff axis entirely (see this change's design D1).
+ * The half of D4 that mattered is untouched and is what makes the reversal safe:
+ * **the axis is still chosen freely and the by-staff read still names no outlet
+ * at all**, so what comes back is resolved in the database from the reader's own
+ * live assignments. The earlier arrangement, where the outlet came first and the
+ * axis second, made "how many days did this person work in August" impossible to
+ * ask without first naming one shop; that is still gone.
+ *
+ * **So the load is not scoped by the selection, and the selection narrows it
+ * afterwards.** One read of `listOutlets` and one of `listAccounts`, neither
  * naming an outlet, both already scoped by policy: what comes back is exactly
- * every outlet this reader may see and everybody they may see. By outlet
- * intersects that with the selection. **By staff does not** — filtering its
- * person picker by the outlet chips is the very thing splitting the axes was
- * meant to stop, and it hid a whole shop's people from a view that is not about
- * shops.
+ * every outlet this reader may see and everybody they may see. The chips
+ * intersect that, for both axes — a filter applied after the policies have
+ * decided, which widens nothing and is not a boundary.
+ *
+ * **What the chips do not narrow is a person's month.** `StaffAxis` is handed the
+ * narrowed people and every outlet the reader may see, so somebody who moved from
+ * one shop to another inside the period still reads as one continuous month
+ * rather than two partial ones. Narrowing that would break the one question the
+ * axis exists to answer.
  *
  * Departed people (`left_on` set) are not offered for new days; their recorded
  * rows remain readable through the by-staff axis over a range that covers them.
  */
+
+/**
+ * Which question is being asked of the outlets in scope.
+ *
+ * `day` was `outlet` until the chips moved above the axis control. Naming a tab
+ * after the thing the chips beside it choose said the choice belonged to the
+ * tab, which is exactly what stopped being true; and the axis was never really
+ * about outlets anyway — it is one business date, across however many shops are
+ * on.
+ */
+type Axis = 'day' | 'staff'
+
+const AXIS_LABELS: Record<Axis, string> = { day: 'By day', staff: 'By staff' }
+
 export function OutletAttendance() {
   const { outlets: outletsAdapter, accounts } = useAdapters()
   const session = useSession()
 
-  const [axis, setAxis] = useState<'outlet' | 'staff'>('outlet')
+  const [axis, setAxis] = useState<Axis>('day')
   const [error, setError] = useState<string | null>(null)
 
   // Who may see what, applied the same way `useOutletScope` applies it: the
@@ -199,42 +225,61 @@ export function OutletAttendance() {
 
   const unsurveyed = selectedOutlets.filter((outlet) => outlet.latitude === null)
   // A selection that names outlets the list has not produced yet is a moment
-  // between reads, not an empty day.
-  const ready = loaded !== null && (axis === 'staff' || selectedOutlets.length > 0)
+  // between reads, not an empty day. Both axes wait on it now, because both are
+  // scoped by it.
+  const ready = loaded !== null && selectedOutlets.length > 0
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title="Attendance" subtitle="Who was here, and where they were." />
+      {/*
+        The scope above the axis, in the header, exactly where the Ledger puts
+        its own. It applies to both axes and never moves.
+      */}
+      {/*
+        The subtitle names the two axes rather than the surface. "Who was here,
+        and where they were" described attendance to somebody who had not looked
+        at it yet, which the roll-call underneath does better by being it. What
+        is genuinely not obvious is the control directly below — that one tab is
+        a day across the shops and the other is a person across a month — so
+        that is the line worth spending.
+      */}
+      <PageHeader
+        scope={outletSelector}
+        title="Attendance"
+        subtitle="A day's roll-call, or one person's month."
+      />
 
       {/*
-        The axis first, then what it needs. By outlet needs to know which shops;
-        by staff does not, because the database already knows which shops this
-        reader may see and that is exactly the right answer (design D4).
+        One control in two halves, the same shape the Ledger uses for its own
+        day/month switch. It was two loose buttons carrying `role="tab"` with no
+        tabpanel and no `aria-controls` beneath them, which is a tablist that is
+        not one; a pressed pair says what these are and says it the same way on
+        both surfaces (design D3).
       */}
-      <div className="mb-3 flex gap-2" role="tablist" aria-label="Read attendance by">
-        <Button
-          role="tab"
-          aria-selected={axis === 'outlet'}
-          variant={axis === 'outlet' ? 'primary' : 'secondary'}
-          size="phone"
-          data-testid="axis-outlet"
-          onClick={() => setAxis('outlet')}
-        >
-          By outlet
-        </Button>
-        <Button
-          role="tab"
-          aria-selected={axis === 'staff'}
-          variant={axis === 'staff' ? 'primary' : 'secondary'}
-          size="phone"
-          data-testid="axis-staff"
-          onClick={() => setAxis('staff')}
-        >
-          By staff
-        </Button>
+      <div
+        role="group"
+        aria-label="Read attendance by"
+        data-testid="attendance-axis"
+        className="mb-3 grid grid-cols-2 gap-1 rounded-xl border border-border bg-surface p-1"
+      >
+        {(['day', 'staff'] as const).map((candidate) => (
+          <button
+            key={candidate}
+            type="button"
+            aria-pressed={axis === candidate}
+            data-testid={`axis-${candidate}`}
+            onClick={() => setAxis(candidate)}
+            className={cn(
+              'h-[var(--size-control-phone)] rounded-lg text-sm font-semibold focus-visible:focus-ring',
+              axis === candidate
+                ? 'bg-primary text-on-primary'
+                : 'text-content-muted hover:bg-surface-raised hover:text-content',
+            )}
+          >
+            {AXIS_LABELS[candidate]}
+          </button>
+        ))}
       </div>
-
-      {axis === 'outlet' && outletSelector && <div className="mb-3">{outletSelector}</div>}
 
       {unsurveyed.length > 0 && (
         <p className="mb-3 rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted">
@@ -256,7 +301,7 @@ export function OutletAttendance() {
 
       {!ready || loaded === null ? (
         <LoadingList label="attendance" data-testid="attendance-loading" />
-      ) : axis === 'outlet' ? (
+      ) : axis === 'day' ? (
         <OutletAxis
           key={scopeKey}
           outlets={selectedOutlets}
@@ -264,7 +309,11 @@ export function OutletAttendance() {
           onError={setError}
         />
       ) : (
-        <StaffAxis outlets={loaded.outlets} people={loaded.people} onError={setError} />
+        // The narrowed people, and every outlet the reader may see. The chips
+        // decide who is offered; they must not decide which outlets a chosen
+        // person's month is assembled against, or somebody who moved shops in
+        // August would read as two partial months.
+        <StaffAxis outlets={loaded.outlets} people={selectedPeople} onError={setError} />
       )}
     </div>
   )
@@ -1470,22 +1519,20 @@ function ManualEntrySheet({
 /**
  * One person, a range of dates, and the counts.
  *
- * **No outlet picker on this axis** (attendance-one-day-per-person, design D4).
- * The read names no outlet at all, so what comes back is every outlet the reader
- * may see, resolved in the database from their own live assignments: one outlet
- * for a single-outlet Franchise Admin, their own for a multi-outlet one, all of
- * them for the owner. That is the question this axis exists to answer — how many
- * days did this person work — and a filter here could only ever make the answer
- * wrong.
+ * **The read names no outlet at all**, so what comes back is every outlet the
+ * reader may see, resolved in the database from their own live assignments: one
+ * outlet for a single-outlet Franchise Admin, their own for a multi-outlet one,
+ * all of them for the owner. That is the question this axis exists to answer —
+ * how many days did this person work — and naming a set here could only
+ * duplicate the policy or contradict it.
  *
  * This revisits #28's D7, which pinned an explicit outlet on the read. That was
  * right while the intended meaning was one outlet. It is not the meaning now.
  *
- * **And no outlet filter either.** The surface used to hand this axis the people
- * and outlets narrowed to the by-outlet selection, so deselecting a shop above
- * emptied a picker that has nothing to do with shops — the exact confusion
- * splitting the axes was meant to end. `outlets` and `people` here are
- * everything the reader may see, whatever the chips say.
+ * **The outlet chips narrow `people` and nothing else** (this change's D1).
+ * `outlets` remains everything the reader may see, so a person who moved from one
+ * shop to another mid-month is still assembled into one continuous month; only
+ * who is *offered* follows the chips. The read above is untouched by either.
  */
 function StaffAxis({
   outlets,
@@ -1494,7 +1541,7 @@ function StaffAxis({
 }: {
   /** Every outlet the reader may see — never the selection. */
   outlets: readonly Tables<'outlets'>[]
-  /** Everybody staffed at one of them — never the selection. */
+  /** Those of them staffed at a selected outlet. */
   people: AccountSummary[]
   onError: (message: string | null) => void
 }) {
@@ -1510,7 +1557,16 @@ function StaffAxis({
   // Whose days, derived rather than seeded from an effect: "the first person on
   // the list" is a fact about the list, not a choice anybody made, and setting
   // it from an effect cascades a render every time the list arrives.
-  const personId = chosenPersonId || (people[0]?.id ?? '')
+  //
+  // **Validated against the list, not merely defaulted from it.** The chips can
+  // narrow a chosen person away mid-read, and a `<select>` whose value points
+  // outside its options is how a surface ends up showing one person's month
+  // under another person's name. Deliberately not a reset: the month stays where
+  // the reader put it, because the month is a fact about what they are reading
+  // and not about which shops are on.
+  const personId = people.some((candidate) => candidate.id === chosenPersonId)
+    ? chosenPersonId
+    : (people[0]?.id ?? '')
   const person = people.find((candidate) => candidate.id === personId) ?? null
 
   // Which read `loaded` actually holds. Loading is derived from it lagging what
@@ -1570,20 +1626,26 @@ function StaffAxis({
 
   return (
     <div data-testid="attendance-person">
-      <label className="mb-3 block text-xs text-content-muted">
-        Whose attendance
-        <Select
-          data-testid="person-picker"
-          value={personId}
-          onChange={(event) => setChosenPersonId(event.target.value)}
-        >
-          {people.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {candidate.fullName}
-            </option>
-          ))}
-        </Select>
-      </label>
+      {/*
+        Named to a screen reader, captioned to nobody. A control showing a
+        person's name under a tab reading "By staff" was already saying whose
+        attendance this is, and "Whose attendance" above it said it a third
+        time — the same caption the outlet chips dropped, for the same reason.
+        The accessible name stays, because a bare combobox announces nothing.
+      */}
+      <Select
+        aria-label="Whose attendance"
+        data-testid="person-picker"
+        className="mb-3"
+        value={personId}
+        onChange={(event) => setChosenPersonId(event.target.value)}
+      >
+        {people.map((candidate) => (
+          <option key={candidate.id} value={candidate.id}>
+            {candidate.fullName}
+          </option>
+        ))}
+      </Select>
 
       <RangePicker range={range} today={today} onChange={setRange} />
 

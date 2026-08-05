@@ -332,12 +332,19 @@ const STATUS_TONE = {
 /**
  * The day's headline: what it counts as, and whether anything about it is
  * unresolved. Identical wording on every surface.
+ *
+ * **The late tag leads.** It qualifies the verdict beside it, and a qualifier
+ * trailing the thing it qualifies reads as an afterthought — "Present, and also
+ * late" rather than "a late Present". It matters most in the place these are
+ * hardest to read: a month of days down a phone, where the verdicts line up in a
+ * column and the eye is looking for the ones that are not ordinary.
  */
 export function DayVerdict({ record, late = false }: { record: AttendanceRecord; late?: boolean }) {
   const waiting = isWaitingForApproval(record)
 
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
+      {late && <LateTag />}
       {waiting ? (
         <span className="inline-flex items-center gap-1 font-semibold text-warning">
           <TriangleAlert aria-hidden size={14} />
@@ -353,7 +360,6 @@ export function DayVerdict({ record, late = false }: { record: AttendanceRecord;
           <span className={STATUS_TONE[record.status]}>{describeDay(record)}</span>
         </span>
       )}
-      {late && <LateTag />}
     </span>
   )
 }
