@@ -86,6 +86,38 @@ sees.
   listed with its status, arrival time, late tag and approval, and the summary
   counts present, late, absent and waiting days
 
+#### Scenario: The owner reads a month across outlets
+
+- **WHEN** a Super Admin selects a person who worked at two outlets during the
+  month and reads their range
+- **THEN** every day is listed once, each naming the outlet it was worked at,
+  and no day is counted twice or shown as absent because it was worked elsewhere
+
+#### Scenario: A multi-outlet manager reads their own outlets and no others
+
+- **WHEN** a Franchise Admin holding live assignments at two outlets reads a
+  person's range, and that person also worked at a third outlet
+- **THEN** the days at the two outlets are listed and the third outlet's days
+  are not returned
+
+#### Scenario: The two views agree
+
+- **WHEN** the same business day is read through the day view and through the
+  person view
+- **THEN** both show the same status, time, evidence, late tag and approval
+
+#### Scenario: A manager cannot read another outlet's days for the same person
+
+- **WHEN** a Franchise Admin hand-crafts a request for a person's days naming an
+  outlet they hold no live assignment at
+- **THEN** no rows are returned for that outlet
+
+#### Scenario: An employee reads their own month across outlets
+
+- **WHEN** a person who works at two outlets reads their own attendance over a
+  range
+- **THEN** every day is listed, each naming the outlet it was worked at
+
 ## ADDED Requirements
 
 ### Requirement: The late tag reads before the verdict it qualifies

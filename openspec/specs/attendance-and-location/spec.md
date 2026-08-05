@@ -8,9 +8,7 @@ the approval that settles it. A check-in is a claim and counts for nothing on it
 recorded approval makes a day present, and an approval given away from the outlet or after the day
 closed carries the approver's position and their written reason. These requirements bind what the
 schema records, what the geofence may and may not decide, and what every surface must show about it.
-
 ## Requirements
-
 ### Requirement: Attendance stores the evidence beside the verdict
 
 Every attendance row SHALL be able to record, for the check-in and for the
@@ -932,11 +930,15 @@ action SHALL offer nothing to open.
 
 ### Requirement: Attendance is readable by person over a range, not only by day
 
-Attendance SHALL be readable along two axes: **by outlet**, which is the day
-roll-call above, and **by staff**, which is one person over **one calendar
-month**, defaulting to the current one, with a summary of how many days were
-present, late, absent and waiting for approval. Choosing the axis SHALL come
-before choosing an outlet, and the outlet choice SHALL belong to the by-outlet
+Attendance SHALL be readable along two axes: **by day**, which is the roll-call
+above for one business date across the outlets in scope, and **by staff**, which
+is one person over **one calendar month**, defaulting to the current one, with a
+summary of how many days were present, late, absent and waiting for approval.
+
+**The outlet choice SHALL scope the surface rather than one axis.** It SHALL be
+offered above the axis control, SHALL stay in the same place whichever axis is
+read, and SHALL apply to both. This supersedes the earlier rule that the axis is
+chosen before the outlet and that the outlet choice belongs to the by-outlet
 axis alone.
 
 **The period is a month and there SHALL be no second way to state it.** The
@@ -952,20 +954,36 @@ assignments rather than from anything the request names. A Franchise Admin
 holding one assignment therefore reads that outlet, a Franchise Admin holding
 several reads exactly those, and a Super Admin reads all of them. A reader SHALL
 NOT be able to obtain a person's days at an outlet they hold no live assignment
-at, by the surface or by a hand-crafted request.
+at, by the surface or by a hand-crafted request. **The outlet selection SHALL
+NOT be named in that read**, so it can neither widen what comes back nor
+contradict the policy that decides it.
 
-**The by-outlet selection SHALL NOT narrow this axis.** Who is offered here, and
-which outlets a person's month is assembled against, SHALL be everybody and
-everything the reader may see, whatever outlets are selected on the by-outlet
-axis. Narrowing it there would hide a whole outlet's people from a view that is
-not about outlets, which is the confusion separating the axes exists to end.
+**The outlet selection SHALL narrow who the by-staff axis offers**, to people
+holding a staff assignment at a selected outlet, and SHALL NOT narrow anything
+else about the axis. In particular a selected person's month SHALL continue to
+be assembled against every outlet the reader may see, so a person who moved
+between outlets inside the period reads as one continuous month rather than two
+partial ones. Where the selection leaves nobody to offer, the axis SHALL say so
+rather than present an empty control.
 
-#### Scenario: The outlet selection does not narrow the person picker
+**A person the selection has narrowed away SHALL NOT remain the subject of the
+read.** Where the person being read holds no staff assignment at any selected
+outlet, the axis SHALL move to somebody it is offering, so the days on screen
+always belong to a person the control names.
 
-- **WHEN** a reader who may see two outlets selects one of them on the by-outlet
-  axis and then reads by staff
-- **THEN** people holding staff assignments at the unselected outlet are still
-  offered, and a selected person's month still covers both outlets
+#### Scenario: The outlet selection narrows the person picker
+
+- **WHEN** a reader who may see two outlets selects one of them and reads by
+  staff
+- **THEN** only people holding a staff assignment at the selected outlet are
+  offered, and selecting the second outlet as well offers both outlets' people
+
+#### Scenario: A narrowed month still spans the outlets the reader may see
+
+- **WHEN** a reader selects one outlet and reads the month of a person who
+  worked at two of the outlets that reader may see
+- **THEN** every day of that month is listed once, including the days worked at
+  the outlet that is not selected, and the read names no outlet
 
 #### Scenario: The period cannot be stated as a loose range
 
@@ -1489,3 +1507,21 @@ one reader that the other cannot see.
 - **WHEN** either reader looks at a day reading not yet arrived or working at
   another outlet
 - **THEN** the verdict is on the face of the row and there is nothing to expand
+
+### Requirement: The late tag reads before the verdict it qualifies
+
+Late SHALL remain a tag and never a status: an approved late day is present and
+late, and whether that costs half a day stays a manager's decision recorded in
+the status.
+
+Where a day is both settled and late, the tag SHALL be rendered **before** the
+status it qualifies, on every surface that shows one — the roll-call, the
+person's month, and the employee's own history — so that a reader scanning a
+column of days meets the qualifier and the verdict in the order they are read.
+
+#### Scenario: A late present day reads as late first
+
+- **WHEN** any surface renders a day that is present and late
+- **THEN** the late tag appears before the word Present, and both are still
+  present with the tag still named to a screen reader
+
