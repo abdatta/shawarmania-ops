@@ -200,6 +200,12 @@ describe('mock attendance denial and retries', () => {
     expect(correctedAgain.decisions.at(-1)?.previousCheckInAt).toBe(correctedAt)
     expect(correctedAgain.checkIn?.at).toBe(correctedAgainAt)
 
+    // The probe goes to the day BEFORE, and the direction is the assertion.
+    // The settled record the fixtures offer is yesterday's, so the day after it
+    // is today: `instantOnBusinessDay(today, '10:30', …)` is in the future
+    // every morning before half past ten, and the adapter answers `time_future`
+    // before it ever reaches the wrong-day check. The day before is in the past
+    // at every hour of every day, so only the rule under test can refuse it.
     await expect(
       adapter.correct({
         attendanceId: correctedAgain.id,
@@ -208,7 +214,7 @@ describe('mock attendance denial and retries', () => {
         reason: 'Wrong business day probe',
         reading: null,
         correctedAt: instantOnBusinessDay(
-          shiftBusinessDate(settled!.businessDate, 1),
+          shiftBusinessDate(settled!.businessDate, -1),
           '10:30',
           outlet.business_day_cutover,
         ),
