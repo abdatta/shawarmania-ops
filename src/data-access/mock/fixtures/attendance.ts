@@ -34,6 +34,21 @@ import { personaFixtures } from './personas'
  *
  * Offsets are in business days back from today, so a walkthrough always shows a
  * plausible recent month rather than dates from whenever these were written.
+ *
+ * **A state the demo exists to show belongs on a small offset.** The by-staff
+ * axis reads one *calendar month* and defaults to the current one, so on the 5th
+ * it reaches back four days and no further — and a state seeded eight days back
+ * is simply absent from the default view for the first eight days of every
+ * month. Lateness was exactly that: one seed at `daysAgo: 8`, so a demo opened
+ * early in a month showed `0 Late` for everybody and read as a feature that did
+ * not exist.
+ *
+ * No offset can cover the 1st, when the month holds only today, and none tries
+ * to — a calendar month genuinely has nothing in it on its first morning. The
+ * rule is narrower and worth keeping: **every state the demo is meant to
+ * demonstrate appears within the last three days**, so it survives all but the
+ * first day or two of a month. Deeper offsets stay where they are; their job is
+ * to make the month a pattern rather than to introduce a state.
  */
 
 interface EventSeed {
@@ -155,13 +170,21 @@ export const attendanceSeeds: AttendanceSeed[] = [
       kind: 'correct_present',
     },
   },
+  // Late: 14:05 against Kalyani's 13:00, approved standing at the counter — so
+  // it is present AND late, because lateness is a tag and never a status.
+  //
+  // Three days back rather than deeper, and that is the point: this is the
+  // person the by-staff axis is usually opened on, and their late day used to
+  // sit at `daysAgo: 8` where the current month could not reach it until the 9th.
+  // The one at day 8 stays; a month wants more than one of these to read as a
+  // pattern.
   {
     personId: DEMO_STAFF_ID,
     outletId: OUTLET_KALYANI_ID,
     daysAgo: 3,
     status: 'present',
-    checkIn: { time: '08:58', ...AT_COUNTER },
-    approval: { byName: DEMO_MANAGER.full_name, time: '09:11', ...APPROVED_AT_COUNTER },
+    checkIn: { time: '14:05', ...AT_COUNTER },
+    approval: { byName: DEMO_MANAGER.full_name, time: '14:19', ...APPROVED_AT_COUNTER },
   },
   { personId: DEMO_STAFF_ID, outletId: OUTLET_KALYANI_ID, daysAgo: 4, status: 'leave' },
   // Recorded and still waiting. Nobody approved it, so it counts as nothing —
@@ -251,6 +274,22 @@ export const attendanceSeeds: AttendanceSeed[] = [
       reason: 'Not at outlet',
       preventRetry: true,
     },
+  },
+  // A late arrival on the roll-call itself, one step back from where the demo
+  // lands. By day is the default axis and today cannot carry this — Kalyani's
+  // deadline is 13:00, so a late arrival today does not exist until the
+  // afternoon, and a demo opened in the morning would show none. Yesterday
+  // always has one.
+  //
+  // Approved on the day, so it reads as the ordinary case it is: somebody was
+  // late, their manager settled it, and the day counts. Nothing here is
+  // waiting on anybody.
+  {
+    personId: DEMO_PREP_COOK_ACCOUNT_ID,
+    daysAgo: 1,
+    status: 'present',
+    checkIn: { time: '13:42', ...AT_COUNTER },
+    approval: { byName: DEMO_MANAGER.full_name, time: '13:58', ...APPROVED_AT_COUNTER },
   },
 
   // ── Two outlets, one day each ────────────────────────────────────────────

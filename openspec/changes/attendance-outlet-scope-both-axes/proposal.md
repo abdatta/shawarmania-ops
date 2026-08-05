@@ -36,6 +36,13 @@ attendance surface shares.
   between two shops keeps one continuous month.
 - The late tag renders before the verdict it qualifies, on every surface that
   shows one.
+- **The demo can show a late day again.** Verifying the tag turned up that it
+  could not: the only late seed sat eight days back and the by-staff axis reads
+  a calendar month, so for the first eight days of every month the demo showed
+  `0 Late` for everybody and lateness read as a feature nobody had built. Two
+  seeds move close to today — one on the roll-call a step back, one in the
+  Employee persona's month — and the rule behind them is written into the
+  fixture file: a state the demo exists to show belongs on a small offset.
 
 ## Capabilities
 
@@ -54,11 +61,16 @@ None.
 
 ## Impact
 
-Two files of UI (`outlet-attendance.tsx`, `evidence.tsx`), their tests, one
-`docs/SCREENS.md` paragraph, and one requirement plus one scenario in the
-attendance spec. No schema change, no migration, no policy change, no adapter
-change, no gate change. The reads each axis makes are byte-for-byte what they
-were.
+Two files of UI (`outlet-attendance.tsx`, `evidence.tsx`), their tests, two
+demo attendance seeds and a test over them, one `docs/SCREENS.md` paragraph, and
+one requirement plus one scenario in the attendance spec. No schema change, no
+migration, no policy change, no adapter change, no gate change. The reads each
+axis makes are byte-for-byte what they were.
+
+The seeds are demo **data**, not the demo **seam** — they are typed from the
+generated schema, so one the database could not serve fails to compile, and a
+wrong one is visible the moment somebody opens the demo. That is why they are
+in this lane rather than referred out of it.
 
 ## Non-goals
 

@@ -5,7 +5,7 @@ import { instantOnBusinessDay, resolveBusinessDate, shiftBusinessDate } from '@/
 import { AttendanceActionError } from '../adapters'
 import { createMockAttendanceAdapter } from './attendance'
 import { DEMO_RUNNER_ACCOUNT_ID } from './fixtures/accounts'
-import { OUTLET_KALYANI_ID, outletFixtures } from './fixtures/outlets'
+import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
 
 const managerReading = {
   latitude: 22.97505,
@@ -220,5 +220,44 @@ describe('mock attendance denial and retries', () => {
         ),
       }),
     ).rejects.toMatchObject({ code: 'time_wrong_day' } satisfies Partial<AttendanceActionError>)
+  })
+})
+
+/**
+ * What the demo can actually be shown to demonstrate, on any date.
+ *
+ * The seeds are offsets back from today and the by-staff axis reads one calendar
+ * month, so a state seeded deep enough is simply absent from the default view
+ * for the first days of every month. Lateness was: one seed eight days back, so
+ * a demo opened on the 5th showed `0 Late` for everybody and read as a feature
+ * that had never been built.
+ *
+ * Asserted against the roll-call rather than against the seed array, because
+ * what matters is what a demonstrator can point at — a seed whose time falls
+ * before its own outlet's deadline is not a late day however it was intended.
+ * Kanchrapara's deadline is 20:00 and Kalyani's 13:00, which is exactly the
+ * mistake reading the seeds alone would let through.
+ */
+describe('the demo attendance seeds', () => {
+  it('puts a late arrival within reach of a month opened on its first days', async () => {
+    const adapter = createMockAttendanceAdapter()
+    const cutovers = new Map(outletFixtures.map((o) => [o.id, o.business_day_cutover]))
+    const outletIds = [OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID]
+
+    // The last three business days, which is what the current calendar month
+    // still reaches on the 4th. Nothing can cover the 1st, when the month holds
+    // only today, and nothing here pretends to.
+    const late: string[] = []
+    for (let back = 0; back <= 3; back += 1) {
+      const date = shiftBusinessDate(today(), -back)
+      for (const record of await adapter.listOutletDay(outletIds, date)) {
+        const cutover = cutovers.get(record.outletId)
+        if (!record.checkIn || record.arrivalDeadline === null || !cutover) continue
+        const deadline = instantOnBusinessDay(record.businessDate, record.arrivalDeadline, cutover)
+        if (record.checkIn.at > deadline) late.push(`${record.businessDate} ${record.personName}`)
+      }
+    }
+
+    expect(late).not.toHaveLength(0)
   })
 })
