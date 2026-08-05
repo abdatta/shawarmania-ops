@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import {
   DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
+  DEMO_TWO_OUTLETS_ACCOUNT_ID,
 } from '../src/data-access/mock/fixtures/accounts'
 import { E2E_ORIGIN } from '../ports'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '../src/data-access/mock/fixtures/outlets'
@@ -419,26 +420,44 @@ test('the outlet chips carry their own unsettled days, in one row', async ({ pag
   )
 })
 
-test('the by-staff picker is not filtered by the outlet chips', async ({ page }) => {
+test('the by-staff picker follows the outlet chips', async ({ page }) => {
   await page.clock.setFixedTime(MID_MONTH)
   await page.goto('demo/owner/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
 
-  // Kalyani alone is selected. The by-staff axis takes its scope from the
-  // database rather than from these chips, so Kanchrapara's staff are still
-  // offered — filtering them out hid a whole shop's people from a view that is
-  // not about shops.
-  await expect(page.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)).toHaveAttribute(
-    'aria-pressed',
-    'false',
-  )
+  // One scope above both axes, in the header, where the Ledger keeps its own.
+  // It stays put across the switch, because a control that appears and
+  // disappears under the title is one whose meaning the reader has to keep
+  // re-deciding.
+  const kanchrapara = page.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`)
+  await expect(kanchrapara).toHaveAttribute('aria-pressed', 'false')
   await page.getByTestId('axis-staff').click()
+  await expect(page.getByTestId('surface-outlets')).toBeVisible()
 
-  const options = await page
-    .getByTestId('person-picker')
-    .locator('option')
-    .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value))
-  expect(options).toContain(DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
+  const offered = () =>
+    page
+      .getByTestId('person-picker')
+      .locator('option')
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value))
+
+  // Kalyani alone is selected, so a Kanchrapara-only person is not offered —
+  // and one tap brings them back, which is the whole cost of the narrowing.
+  expect(await offered()).not.toContain(DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
+  await kanchrapara.click()
+  await expect
+    .poll(offered, { message: 'Kanchrapara staff offered once their outlet is on' })
+    .toContain(DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID)
+
+  // What the chips must NOT narrow: the month itself. Somebody staffed at both
+  // shops still reads as one continuous month with Kalyani alone selected,
+  // because the read names no outlet at all.
+  await kanchrapara.click()
+  await expect(kanchrapara).toHaveAttribute('aria-pressed', 'false')
+  await page.getByTestId('person-picker').selectOption(DEMO_TWO_OUTLETS_ACCOUNT_ID)
+  await expect(page.getByTestId('attendance-range')).toBeVisible()
+  await expect(
+    page.getByTestId('attendance-range').getByText('Shawarmania Kanchrapara').first(),
+  ).toBeVisible()
 
   // And the period is a month, with no second way to say what the period is.
   await expect(page.getByTestId('range-picker')).toBeVisible()
