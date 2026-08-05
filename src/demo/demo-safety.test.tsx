@@ -297,9 +297,21 @@ describe('demo mode safety', () => {
 
     // Out of the demo tree, so the tripwire stands down and the banner is gone
     // because the fabricated data is.
-    await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+    //
+    // Asserted as "no longer under /demo" rather than "parked at /", which is
+    // what it used to say. The exit still points at the root — that href is
+    // asserted above and has not moved — but since
+    // the-root-resolves-instead-of-greeting the root resolves onward instead of
+    // rendering a card, so a visitor with no session continues to sign-in. That
+    // is the intended destination and not demo mode's business; what demo mode
+    // owes is that leaving leaves.
+    await waitFor(() => expect(router.state.location.pathname).not.toMatch(/^\/demo/))
     expect(screen.queryByTestId('demo-banner')).not.toBeInTheDocument()
     expect(isDemoScopeActive()).toBe(false)
+
+    // And where it actually landed, stated once so the chain is readable rather
+    // than implied by a negative.
+    expect(router.state.location.pathname).toBe('/sign-in')
   })
 
   it('an unknown role segment is absent, not greyed out', async () => {

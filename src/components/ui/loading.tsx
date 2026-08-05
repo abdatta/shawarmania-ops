@@ -26,9 +26,10 @@ import { cn } from '@/lib/cn'
  * wrong height and reflows on arrival just as a sentence does
  * (shimmer-as-default-loading, design D1).
  *
- * The four shapes that actually recur — a stack of cards, a single strip, a
- * table, a card of label/value figures — are exported as named compositions so
- * the common cases stay short. Anything else composes the primitive directly.
+ * The five shapes that actually recur — a stack of cards, a single strip, a
+ * table, a card of label/value figures, a whole shell — are exported as named
+ * compositions so the common cases stay short. Anything else composes the
+ * primitive directly.
  *
  * **The wait is announced, and never conveyed by motion alone.** The region is
  * `aria-busy` and carries a name saying what is loading, so a reader who cannot
@@ -171,6 +172,32 @@ export function LoadingTable({
       {Array.from({ length: rows }, (_, index) => (
         <Shimmer key={index} className={rowHeight} />
       ))}
+    </LoadingRegion>
+  )
+}
+
+/**
+ * A whole shell, waited behind before there is a surface to name.
+ *
+ * The one placeholder that cannot describe what it is waiting for in domain
+ * terms: the session is what resolves the role, so until it does there is no
+ * surface, no navigation and no title. What comes next is a shell either way, so
+ * that is the shape it reserves — a header strip and the content beneath it
+ * (shimmer-as-default-loading, design D3).
+ *
+ * It is shared rather than composed twice because the application root and the
+ * role shells wait behind it **in sequence**: the root resolves the session and
+ * hands off to the shell, and two placeholders that differ at all would read as
+ * two separate loads rather than one continuous boot
+ * (the-root-resolves-instead-of-greeting, design D4).
+ */
+export function LoadingShell({ label = 'the app' }: { label?: string }) {
+  return (
+    <LoadingRegion label={label} className="flex min-h-dvh flex-col bg-canvas">
+      <Shimmer className="h-14 shrink-0 rounded-none border-x-0 border-t-0" />
+      <div className="flex-1 px-4 py-5">
+        <Shimmer className="h-40" />
+      </div>
     </LoadingRegion>
   )
 }

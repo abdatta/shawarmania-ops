@@ -6,16 +6,18 @@ import { describe, expect, it } from 'vitest'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
-import { Landing } from '@/routes/landing'
 import { SessionContext } from '@/session/context'
 import type { Role, Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
 
 import { AccountMenu } from './account-menu'
+import { RealSessionContext } from './real-session-context'
+import { SignIn } from './sign-in'
 
 /**
- * Handing the demo over (design D9): it leaves the public landing card and
- * appears in the Super Admin's account menu as a single **View Demo** entry.
+ * Handing the demo over (design D9): it is absent from everything an
+ * unauthenticated visitor can reach, and appears in the Super Admin's account
+ * menu as a single **View Demo** entry.
  *
  * The account menu is the first thing in that chrome that is not the same for
  * all four roles, which is why the role assertions here are as specific as they
@@ -50,14 +52,32 @@ function renderMenu(role: Role) {
 }
 
 describe('the demo’s front door', () => {
-  it('is absent from the public landing page', () => {
+  // The screen an unauthenticated visitor actually reaches. It used to be the
+  // landing card the root rendered; since the-root-resolves-instead-of-greeting
+  // the root resolves straight to sign-in, so that is where the absence has to
+  // hold.
+  it('is absent from the unauthenticated entry screen', () => {
     render(
       <MemoryRouter>
-        <Landing />
+        {/*
+          Sign-in reads the session since design D11 — it waits for one before
+          leaving, rather than for accepted credentials — so it needs the context
+          its route always provides. `anonymous` is the state a visitor reaching
+          this screen is actually in.
+        */}
+        <RealSessionContext.Provider
+          value={{
+            state: { status: 'anonymous' },
+            revalidate: () => undefined,
+            endSession: async () => undefined,
+          }}
+        >
+          <SignIn />
+        </RealSessionContext.Provider>
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /demo/i })).not.toBeInTheDocument()
     expect(document.querySelector('a[href*="/demo"]')).toBeNull()
   })

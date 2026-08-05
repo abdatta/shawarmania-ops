@@ -4,7 +4,7 @@ import { Navigate, useLocation, useParams } from 'react-router'
 import { InstallAppButton } from '@/components/install-app-button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
-import { LoadingRegion, Shimmer } from '@/components/ui/loading'
+import { LoadingShell } from '@/components/ui/loading'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createSupabaseAdapters } from '@/data-access/supabase-adapters'
 import { NotFound } from '@/routes/not-found'
@@ -14,7 +14,8 @@ import { SessionContext } from '@/session/context'
 import { heldRoles, reachableRoles, roleFromSegment, ROLE_SEGMENTS } from '@/session/session'
 
 import { AccountMenu } from './account-menu'
-import { useRealSession } from './use-real-session'
+import { useRealSessionContext } from './real-session-context'
+import { UnconfirmedSession } from './unconfirmed-session'
 
 /**
  * The real branch's provider stack — the structural twin of DemoRoot
@@ -31,7 +32,11 @@ import { useRealSession } from './use-real-session'
 export function RealRoot() {
   const { roleSegment } = useParams()
   const location = useLocation()
-  const { state, revalidate, endSession } = useRealSession()
+  // From the provider above this branch, not from its own hook call: the root
+  // resolves the session and hands off here, and resolving it twice for one
+  // visit is what that provider exists to stop
+  // (the-root-resolves-instead-of-greeting, design D5).
+  const { state, revalidate, endSession } = useRealSessionContext()
 
   // Non-fatal on purpose. The demo-only deployment ships with no Supabase
   // configuration at all, and `getSupabaseClient()` throws when it is missing;
@@ -52,44 +57,12 @@ export function RealRoot() {
   // sign-in for a URL that will never exist would be a lie.
   if (!roleFromSegment(roleSegment)) return <NotFound />
 
-  // The one placeholder that cannot name what it is waiting for in domain
-  // terms: the session is what resolves the role, so until it does there is no
-  // surface to name. What comes next is a shell either way, so that is the
-  // shape it reserves — a header strip and the content beneath it
-  // (shimmer-as-default-loading, design D3).
-  if (state.status === 'loading') {
-    return (
-      <LoadingRegion label="the app" className="flex min-h-dvh flex-col bg-canvas">
-        <Shimmer className="h-14 shrink-0 rounded-none border-x-0 border-t-0" />
-        <div className="flex-1 px-4 py-5">
-          <Shimmer className="h-40" />
-        </div>
-      </LoadingRegion>
-    )
-  }
+  // Shared with the application root, which waits behind the same shape
+  // immediately before handing off here. Two placeholders that differed at all
+  // would read as two loads rather than one boot (design D4).
+  if (state.status === 'loading') return <LoadingShell />
 
-  if (state.status === 'unavailable') {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-canvas p-4 text-content">
-        <Card className="max-w-md">
-          <CardTitle>Could not reach Shawarmania Ops</CardTitle>
-          <CardBody className="space-y-4">
-            <p>
-              You are still signed in — the app just could not confirm it. Check your connection and
-              try again.
-            </p>
-            <button
-              type="button"
-              onClick={revalidate}
-              className={buttonVariants({ size: 'phone' })}
-            >
-              Try again
-            </button>
-          </CardBody>
-        </Card>
-      </div>
-    )
-  }
+  if (state.status === 'unavailable') return <UnconfirmedSession onRetry={revalidate} />
 
   if (state.status === 'anonymous') {
     return (

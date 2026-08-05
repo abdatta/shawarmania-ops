@@ -146,6 +146,33 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
   submission and navigation are acceptance evidence; Chrome's optional native
   save prompt is an observation, never a deterministic gate.
 
+### The application root, and resolving the session once
+
+The root is a resolver, so its tests are about which of four states leads where,
+not about anything rendered. All four are covered, and the one that earns the
+suite is `unavailable`: with a stored session and a failing profile read, the root
+must show the retry card and **must not navigate to sign in**. Being sent to a
+password field for a session you still hold is the failure mode, and it is
+invisible to a happy-path test because both states look like "no session yet".
+
+Two structural properties are pinned rather than assumed, because both are the
+kind that a later edit breaks silently:
+
+- **One resolution per visit.** Opening the root as a signed-in person reads
+  profile and assignments exactly once, not once for the root and again for the
+  shell it hands off to. Asserted as a call count, and confirmed to fail when the
+  shell resolves its own session, which is what it used to do.
+- **Demo mode resolves no real session.** Mounting any `/demo` path must never
+  reach `currentUser`. If the session holder were mounted above the demo branch,
+  `getSupabaseClient()` would throw inside the demo tree and `resolveSession`
+  would catch it and return `indeterminate` — so the tripwire would fire and be
+  swallowed. A silent failure is worth a test that a loud one would not need.
+
+Sign in and activation additionally prove they render **immediately** while the
+session is still resolving. They need no session, they sit under the same
+provider, and a placeholder in front of a login form would be worse than the flash
+this replaced.
+
 ### Attendance denial, retries and corrections
 
 An attendance change is not covered by a happy-path component test alone. Run

@@ -8,7 +8,7 @@ Demo mode lives at a dedicated route prefix: **`/demo/owner`, `/demo/admin`, `/d
 
 ## Where the link comes from
 
-**The demo is not advertised on the public landing page**, and has not been since #8. It became something the owner distributes rather than something a visitor stumbles into, so:
+**The demo is not advertised on anything an unauthenticated visitor reaches**, and has not been since #8. It became something the owner distributes rather than something a visitor stumbles into, so:
 
 - **the Super Admin's account menu** carries a **View Demo** entry;
 - where it goes is `/demo` — the demo root, not a role path, because the banner's role switcher is right there and a recipient should not be pinned to whichever role the owner was looking at. Sending it to somebody is the browser's own share or address bar: a copy button that the clipboard may refuse (it does, over plain http on a phone) needs a fallback explaining itself, and that is a lot of menu for something the platform already does;
@@ -16,7 +16,9 @@ Demo mode lives at a dedicated route prefix: **`/demo/owner`, `/demo/admin`, `/d
 
 Franchise Admins do not have the entry. That is a decision to revisit when somebody asks rather than an oversight — the link is public either way, so nothing is protected by the omission; there is simply no reason to widen an affordance ahead of wanting it.
 
-**If you have been asked to run a demo and have no link, ask the owner for it from that menu.** There is no other route in, which is the point and is also the trap: removing it from the landing page makes the demo undiscoverable to everyone else.
+**If you have been asked to run a demo and have no link, ask the owner for it from that menu.** There is no other route in, which is the point and is also the trap: keeping it out of the way in makes the demo undiscoverable to everyone else.
+
+**Leaving the demo returns to the application root, and the root resolves.** Since the-root-resolves-instead-of-greeting there is no card there to land on, so a visitor with no session continues to sign in. That is the intended destination rather than a rough edge: the exit exists for the owner who was demonstrating, and somebody sent a demo link has no reason to use it. What demo mode owes is that leaving leaves, which the exit's own tests assert.
 
 One consequence to expect rather than report as a bug: **following the link while signed in lands on the "you are signed in — this is the demo" gate**, for the owner exactly as for anybody else. It is not special-cased, deliberately. Continuing is one tap and is held per tab.
 

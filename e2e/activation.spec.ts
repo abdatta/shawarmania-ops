@@ -95,3 +95,20 @@ test('the activation link a real deployment would send resolves to the screen', 
   await expect(page.getByRole('heading', { level: 2 })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible()
 })
+
+test('an activation address with no code says so, and offers no field to supply one', async ({
+  page,
+}) => {
+  // The other half of the property above, through the same static-hosting
+  // fallback: there is no code-entry path at all now, because the issuing panel
+  // hands over a link and a QR and never a raw code
+  // (the-root-resolves-instead-of-greeting, D8). An address missing its code is
+  // told it is incomplete rather than invited to fill the gap.
+  await page.goto('activate')
+
+  await expect(page.getByRole('heading', { name: 'This link is incomplete' })).toBeVisible()
+  await expect(page.getByTestId('activate-error')).toContainText('missing its one-time code')
+  await expect(page.getByLabel('One-time code')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Continue' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible()
+})

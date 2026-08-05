@@ -22,7 +22,15 @@ export function RootLayout() {
         </div>
       </header>
 
-      <main className="flex-1 px-4 py-6">
+      {/*
+        A flex column so a screen inside it can fill and centre. `flex-1` alone
+        gives `main` a used height but leaves its CSS height `auto`, so a child's
+        `min-h-full` resolved to nothing and the entry cards sat at the top of a
+        tall viewport. A screen that wants centring now adds `flex-1` and centres
+        within it; one that does not is unaffected
+        (the-root-resolves-instead-of-greeting, design D9).
+      */}
+      <main className="flex flex-1 flex-col px-4 py-6">
         <Outlet />
       </main>
 

@@ -26,21 +26,43 @@ not access control.
 
 ## Shared
 
+**The root** — `/` renders nothing of its own. It resolves the session and sends
+you on: to your own shell if you have one, to sign in if you demonstrably do not,
+behind the shell-shaped placeholder while the answer is still coming, and to
+"could not confirm it" with a retry if a session probably exists and the app
+could not check. **Not knowing is not the same as being signed out**, and only a
+confirmed absence reaches sign in, because being asked to retype a password for a
+session you still hold is the one thing a lost network must never cause. There
+used to be a card here describing the product; the product is described at
+`shawarmania.in`, which is separately hosted, so on the operations origin it was
+a step in front of everybody who already knew what they had come for. It also
+redirected on a resolved session only, which is why signing in used to flash it.
+
 **Sign in** — username or associated email + password, with stable field names and
 `autocomplete="username"` / `"current-password"`. Unknown username and wrong
 password receive the same sentence as unknown/unassociated email. An
 `@username` is refused with direct guidance because usernames are handle-shaped
-but typed without it. Anyone who forgot a password is told to ask a Franchise
-Admin or Super Admin for a new one-time link.
+but typed without it. **It is also the app's front door**, since the root resolves
+straight here for anybody signed out, so it is centred as a screen in its own
+right. One sentence covers everybody without a working password, first-timers and
+forgetters alike: ask a Franchise Admin or Super Admin for a one-time link. There
+is deliberately **no route to activation from here**, because activation without a
+code could only offer a form asking for one, and an admin is never shown a code to
+give out.
 
 **Set your password** — both first activation and an admin-issued reset.
 Opening the handover link previews **“Your username is …”** and presents one
 real form: type that username, a new password, and the same password again.
 The username and both password fields carry password-manager semantics.
 Mismatch remains on the form and consumes nothing; a dead or spent link says
-so before password fields appear. Someone handed only the code types it first
-and reaches the same form. Success sets the password, signs in through the
+so before password fields appear. Success sets the password, signs in through the
 ordinary username path, and navigates to the assigned shell.
+
+**The code is never typed, and there is nowhere to type one.** The handover is a
+link and a QR; the issuing panel prints no raw code, so a form asking for one
+asked for a value nobody is given. An address arriving without its code is told
+it is **incomplete** — a different fact from a link that will not work, and one
+the person can act on by opening the whole link or asking for another.
 
 **Install app** — the public header and every real role shell expose one 44px
 install action when the browser has an installation path. Chromium-family

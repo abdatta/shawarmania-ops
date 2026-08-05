@@ -89,7 +89,13 @@ test('the demo can be left, and leaving is not dismissing', async ({ page }) => 
 
   await expect(page).not.toHaveURL(/\/demo/)
   await expect(page.getByTestId('demo-banner')).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible()
+
+  // The exit still points at the root; what the root does with a visitor who has
+  // no session changed. Since the-root-resolves-instead-of-greeting it resolves
+  // onward to sign-in instead of rendering a card, so the way in is a form here
+  // rather than a link (D1).
+  await expect(page).toHaveURL(/\/sign-in$/)
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
 })
 
 test('a demo deep link reconstructs the same role and surface on reload', async ({ page }) => {
@@ -124,13 +130,18 @@ test('a hidden surface is absent: its deep link lands on not-found inside the sh
   await expect(page.getByTestId('demo-banner')).toBeVisible()
 })
 
-test('the landing page offers no route into the demo', async ({ page }) => {
+test('the unauthenticated entry screen offers no route into the demo', async ({ page }) => {
+  // The root no longer renders anything itself: it resolves, and with no session
+  // that means sign-in (the-root-resolves-instead-of-greeting, D1). So the
+  // absence has to hold on the screen the root actually reaches.
   await page.goto('.')
-  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible()
+  await expect(page).toHaveURL(/\/sign-in$/)
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
 
   // The demo stopped advertising itself when it became something the owner
   // distributes. The link lives in the Super Admin's account menu now; nothing
-  // on the public root should point at /demo (ui-owner-console-and-demo, D9).
+  // an unauthenticated visitor reaches should point at /demo
+  // (ui-owner-console-and-demo, D9).
   await expect(page.getByRole('link', { name: /demo/i })).toHaveCount(0)
   expect(await page.locator('a[href*="/demo"]').count()).toBe(0)
 })

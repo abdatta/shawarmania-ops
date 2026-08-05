@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router'
 
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { signIn, SignInError } from '@/data-access/auth'
 import { validateUsername, usernameErrorMessage } from '../../shared/username'
 
+import { useRealSessionContext } from './real-session-context'
 import type { SessionEndReason } from './use-real-session'
 
 /**
@@ -36,15 +37,38 @@ export function SignIn() {
   const navigate = useNavigate()
   const location = useLocation()
   const state = (location.state ?? {}) as SignInLocationState
+  const { state: session, revalidate } = useRealSessionContext()
 
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [accepted, setAccepted] = useState(false)
 
   // Shown once, and only until the person starts typing: it explains why they
   // are looking at this screen, and then it stops being the news.
   const ended = state.reason ? ENDED_MESSAGES[state.reason] : null
+
+  /**
+   * Leave only once the session says so.
+   *
+   * Accepted credentials and a resolved session are two different moments, and
+   * navigating on the first one lands in a resolver that still believes the
+   * second: the provider computed `anonymous` when this screen loaded, and it
+   * learns otherwise from its own auth listener a tick later. Navigating to the
+   * root in between meant the root read that stale `anonymous` and sent us
+   * straight back here — signed in, looking at a password field
+   * (the-root-resolves-instead-of-greeting, design D11).
+   *
+   * `unavailable` leaves too. The credentials were accepted, so this screen has
+   * nothing further to offer, and the retry belongs on the screen whose whole
+   * subject is a session that could not be confirmed.
+   */
+  useEffect(() => {
+    if (!accepted) return
+    if (session.status !== 'ready' && session.status !== 'unavailable') return
+    navigate(state.from && state.from !== '/sign-in' ? state.from : '/', { replace: true })
+  }, [accepted, session.status, navigate, state.from])
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -61,23 +85,31 @@ export function SignIn() {
     setError(null)
     try {
       await signIn(submittedIdentifier, password)
-      // Land where they were headed. The role tree resolves the session and
-      // redirects to their own shell if the path was not theirs to open.
-      navigate(state.from && state.from !== '/sign-in' ? state.from : '/', { replace: true })
+      // Accepted. Where they land is the session's decision, so ask for it and
+      // let the effect above leave when there is an answer. `busy` deliberately
+      // stays set: the credentials are gone and the screen is on its way out,
+      // and re-enabling the button would invite a second submission of a
+      // sign-in that already worked.
+      setAccepted(true)
+      revalidate()
     } catch (cause) {
       setError(
         cause instanceof SignInError
           ? cause.message
           : 'Could not sign in right now. Try again in a moment.',
       )
-    } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div className="mx-auto max-w-md">
-      <Card>
+    // Centred rather than top-aligned in the page: since
+    // the-root-resolves-instead-of-greeting the root resolves straight here for
+    // anybody signed out, so this is the app's front door rather than content
+    // inside a longer page, and it is composed like the other standalone cards
+    // (design D9).
+    <div className="flex flex-1 items-center justify-center">
+      <Card className="w-full max-w-md">
         <CardTitle>Sign in</CardTitle>
         <CardBody>
           {ended && !error && (
@@ -142,14 +174,18 @@ export function SignIn() {
             </button>
           </form>
 
+          {/*
+            One sentence where there were two. The other was a link to
+            `/activate`, which without a code could only offer a form asking
+            somebody to type one — a value no admin is ever shown, since the
+            issuing panel deliberately hands over a link and a QR and no raw code
+            (the-root-resolves-instead-of-greeting, design D8). The people it used
+            to serve, a first-timer and somebody who forgot, need the same thing
+            and it is this.
+          */}
           <p className="mt-6 text-sm text-content-muted">
-            First time here, or been given a new code?{' '}
-            <Link to="/activate" className="font-semibold text-accent-text underline">
-              Set your password
-            </Link>
-          </p>
-          <p className="mt-3 text-sm text-content-muted">
-            Forgot your password? Ask a Franchise Admin or Super Admin for a new one-time link.
+            No password yet, or forgotten it? Ask a Franchise Admin or Super Admin for a one-time
+            link.
           </p>
         </CardBody>
       </Card>

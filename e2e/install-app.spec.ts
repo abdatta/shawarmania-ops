@@ -80,7 +80,18 @@ test('a captured install capability survives public navigation and is consumed o
     contentType: 'image/png',
   })
 
-  await page.getByRole('link', { name: 'Sign in' }).click()
+  // The public tree used to have two screens and a link between them: a landing
+  // card and the sign-in it pointed at. Since
+  // the-root-resolves-instead-of-greeting the root renders nothing and resolves
+  // straight here, so `.` above already IS sign-in and there is no second public
+  // screen to hop to. Activation cannot stand in for one: this test forbids
+  // off-origin requests, and previewing a code would call the (dummy) Supabase
+  // host configured in playwright.config.ts.
+  //
+  // Nothing is lost. Survival across a navigation is covered where it matters
+  // more — `e2e-auth/auth.spec.ts` captures the capability on this screen, signs
+  // in for real, and asserts the action is still there once the role shell has
+  // mounted. That crosses a session boundary, which this hop never did.
   await expect(page).toHaveURL(/\/sign-in$/)
   await expect(install).toBeVisible()
 

@@ -13,11 +13,37 @@ import {
 } from '@/data-access/auth'
 import { canonicalUsername } from '../../shared/username'
 
+import { useRealSessionContext } from './real-session-context'
+
+/**
+ * Three states, and none of them asks for a code.
+ *
+ * There used to be a fourth that did, and it contradicted a requirement already
+ * in force: the code SHALL NOT be typed. The issuing panel hands over a QR, the
+ * link, and a copy action, and deliberately never prints a raw code — so the form
+ * asked for a value nobody is given, and the only way to fill it was to read it
+ * out of a URL you already had (the-root-resolves-instead-of-greeting, design
+ * D8).
+ *
+ * So a mount with no `?code=` is `dead`, and says the link is **incomplete**
+ * rather than invalid. Those are different facts and the person can act on the
+ * first one: open the whole link, or ask for a new one.
+ */
 type State =
-  | { kind: 'need-code' }
   | { kind: 'checking' }
   | { kind: 'form'; code: string; username: string }
-  | { kind: 'dead'; message: string }
+  | { kind: 'dead'; message: string; title?: string }
+
+/**
+ * An address with no code at all, told apart from a code that will not work.
+ * "This link will not work" would send somebody to ask for a replacement for a
+ * link that is probably fine, when what happened is that they opened part of it.
+ */
+const INCOMPLETE_LINK = {
+  title: 'This link is incomplete',
+  message:
+    'This address is missing its one-time code. Open the whole link your admin sent you, or ask them for a new one.',
+} as const
 
 function deadMessage(cause: unknown): string {
   return cause instanceof ActivationError
@@ -29,13 +55,29 @@ export function Activate() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const linkCode = params.get('code')
-  const [state, setState] = useState<State>(linkCode ? { kind: 'checking' } : { kind: 'need-code' })
-  const [typedCode, setTypedCode] = useState('')
+  const [state, setState] = useState<State>(
+    linkCode ? { kind: 'checking' } : { kind: 'dead', ...INCOMPLETE_LINK },
+  )
   const [typedUsername, setTypedUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [accepted, setAccepted] = useState(false)
+  const { state: session, revalidate } = useRealSessionContext()
+
+  /**
+   * The same wait sign-in does, for the same reason: a redeemed code and a
+   * resolved session are two moments, and the root acts on whichever answer the
+   * provider currently holds. Leaving before it has caught up meant arriving at
+   * a resolver that still read `anonymous` and being sent to sign-in, having
+   * just set a password (design D11).
+   */
+  useEffect(() => {
+    if (!accepted) return
+    if (session.status !== 'ready' && session.status !== 'unavailable') return
+    navigate('/', { replace: true })
+  }, [accepted, session.status, navigate])
 
   useEffect(() => {
     if (!linkCode) return
@@ -51,18 +93,6 @@ export function Activate() {
       active = false
     }
   }, [linkCode])
-
-  async function onCodeSubmit(event: FormEvent) {
-    event.preventDefault()
-    setState({ kind: 'checking' })
-    setError(null)
-    try {
-      const username = await previewInvite(typedCode)
-      setState({ kind: 'form', code: typedCode, username })
-    } catch (cause) {
-      setState({ kind: 'dead', message: deadMessage(cause) })
-    }
-  }
 
   async function onPasswordSubmit(event: FormEvent) {
     event.preventDefault()
@@ -83,7 +113,10 @@ export function Activate() {
     try {
       await redeemInvite(state.code, submittedUsername, password)
       await signIn(submittedUsername, password)
-      navigate('/', { replace: true })
+      // `busy` stays set on purpose: the password is set and the code is spent,
+      // so there is nothing here to submit again while the session resolves.
+      setAccepted(true)
+      revalidate()
     } catch (cause) {
       if (cause instanceof ActivationError && cause.code === 'invalid_code') {
         setState({ kind: 'dead', message: cause.message })
@@ -94,50 +127,20 @@ export function Activate() {
             : 'Could not set your password right now. Try again in a moment.',
         )
       }
-    } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div className="mx-auto max-w-md">
-      <Card>
+    // Centred like sign-in, which this screen links to and is linked from: two
+    // entry cards in the same layout that agreed on everything except their
+    // vertical position would jump as you moved between them (design D9).
+    <div className="flex flex-1 items-center justify-center">
+      <Card className="w-full max-w-md">
         <CardTitle>
-          {state.kind === 'dead' ? 'This link will not work' : 'Set your password'}
+          {state.kind === 'dead' ? (state.title ?? 'This link will not work') : 'Set your password'}
         </CardTitle>
         <CardBody>
-          {state.kind === 'need-code' && (
-            <>
-              <p className="mb-4 text-sm text-content-muted">
-                Enter the one-time code your manager gave you. It works once and expires a week
-                after it was issued.
-              </p>
-              <form onSubmit={onCodeSubmit} className="space-y-4" noValidate>
-                <div className="space-y-1">
-                  <label htmlFor="activate-code" className="block text-sm font-semibold">
-                    One-time code
-                  </label>
-                  <Input
-                    id="activate-code"
-                    name="one-time-code"
-                    inputMode="text"
-                    autoComplete="one-time-code"
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                    placeholder="XXXXX-XXXXX"
-                    required
-                    value={typedCode}
-                    onChange={(event) => setTypedCode(event.target.value)}
-                    className="font-mono tracking-widest"
-                  />
-                </div>
-                <button type="submit" className={buttonVariants({ size: 'phone' })}>
-                  Continue
-                </button>
-              </form>
-            </>
-          )}
-
           {state.kind === 'checking' && (
             <p data-testid="activate-checking" className="text-sm text-content-muted">
               Checking your link…
