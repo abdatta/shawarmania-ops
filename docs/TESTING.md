@@ -12,7 +12,7 @@ npm run test:e2e  # Playwright: shell, demo and the offline path, against a real
 npm run test:e2e:auth # Playwright: sign-in, provisioning, deactivation (needs the local stack)
 npm run test:db   # pgTAP: isolation + write-contract suites (needs the local stack)
 npm run test:rls  # REST probes: real sign-ins, hand-crafted cross-outlet requests
-npm run lint      # ESLint (incl. layer boundaries) + the no-hex-outside-tokens check
+npm run lint      # ESLint (incl. layer boundaries) + no-hex-outside-tokens + backlog index
 npm run typecheck # tsc --noEmit, strict
 npm run contrast  # WCAG validator over the token file, both themes
 
@@ -29,7 +29,9 @@ npm run auth:readiness # hosted read-only pre-publication identity readiness pro
 
 **Editing an Edge Function? Restart the runtime.** The bundled edge-runtime container caches function modules, so a change to anything under `supabase/functions/` is invisible until `docker restart supabase_edge_runtime_shawarmania-ops` (or a full `db:stop`/`db:start`). A test that keeps failing against code you have already fixed is almost always this.
 
-`npm test` runs `.test.ts` / `.test.tsx` under `src/` in a jsdom environment and `.test.mjs` under `scripts/` in a node environment. The shared setup file guards its DOM work, so the build-tooling suites do not need a second Vitest project to live alongside the app suites.
+`npm test` runs `.test.ts` / `.test.tsx` under `src/` in a jsdom environment and `.test.mjs` under `scripts/` in a node environment. The shared setup file guards its DOM work, so the build-tooling suites do not need a second Vitest project to live alongside the app suites. A check script under `scripts/` therefore resolves its paths inside its CLI entry rather than at module load, because the runner rewrites `import.meta.url` to something `fileURLToPath` rejects; the exported rule stays importable and the filesystem stays the entry point's business.
+
+**`npm run lint` gates the behaviour backlog's index.** `openspec/todos/README.md` carries each item's trigger to promote, so a note the index does not mention is not deferred work but lost work — nothing looks broken while it goes unread, which is how one sat unlisted for two days. The check fails in both directions: a note no link mentions, and a row pointing at a note that is gone. The index stays authored, since no tool can derive a trigger.
 
 `npm run test:e2e` builds the app and serves the build — never the dev server. The service worker only exists in a real build, and the offline gate is the whole point of that suite. Browsers install once with `npx playwright install chromium`. The install-affordance browser cases dispatch a controlled `beforeinstallprompt` capability because Playwright does not own Chromium's native install UI; they prove capture, route persistence, single consumption, installed-mode suppression, and demo omission. `test:e2e:auth` carries that same capability through sign-in into both the phone and counter shells against a real session.
 
