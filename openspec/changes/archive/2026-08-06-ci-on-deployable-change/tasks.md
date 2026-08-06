@@ -22,4 +22,7 @@
 ## 4. PHASE GATE
 
 - [x] 4.1 **Gate**: met. The replay over the last 80 commits gives 27 prose-only, 10 full-suite-only, 43 both, **0 neither**, with no code reaching the prose-only tier; the standing test holds both filters complements across both events and was proved to fail on a deleted list entry and on a deleted push trigger. Ran `npm run lint` (clean; the 2 `react-refresh` warnings are pre-existing), `npm run typecheck`, `npm test` (77 files, 960 tests), `npm run format:check`, `npx openspec validate` and `npm run roadmap:sync`.
-- [ ] 4.2 🧍 **Not verifiable locally: the tiers themselves.** Path filters are evaluated by GitHub, so the first push after this lands is the real proof. Expect a prose-only commit to show one `Prose` check and no `Deploy`, and a code commit to show the five checks it shows today.
+- [x] 4.2 **Verified against GitHub, which is the only place path filters are evaluated.** Three real pushes, one per case:
+  - **Mixed** (`438b170`, code + prose): `Prose` and `Deploy` both ran; all six Deploy jobs green — gate's three, build, migrate, deploy — and the published bundle was confirmed to carry `438b170`.
+  - **Prose-only** (`4993951`, the archive of the previous change, entirely under `openspec/`): **exactly one run, `Prose`, green. No `Deploy`, no `CI`.** This is the case that could not be tested any other way.
+  - **The documented consequence**, checked rather than asserted: after that prose push the live bundle is byte-identical — same `index-y7tEdxJP.js` filename — and still stamped `438b170`, not the tip. The build stamp names the last commit that changed the app, exactly as `docs/OPERATIONS.md` now says.
