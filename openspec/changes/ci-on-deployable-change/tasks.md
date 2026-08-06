@@ -17,7 +17,7 @@
 - [x] 3.1 `docs/TESTING.md`: the two tiers, what each gates, the `openspec/tools/` carve-out, and the standing test that keeps the lists complements. Also the `import.meta.url` rule from 2.4, now covering both escapes.
 - [x] 3.2 `docs/OPERATIONS.md`: after a prose-only push there is no `Deploy` run and the build stamp names the last commit that changed the app, plus `workflow_dispatch` as the deliberate republication path.
 - [x] 3.3 `AGENTS.md` and the quickfix skill: qualify the post-push check, which reads the deployed SHA and is now correct only for a commit that changed the app.
-- [x] 3.4 Added the roadmap row at #37, Wave A — its only dependency is #1, and the roadmap's own convention is that late-discovered work often belongs early. Ran `npm run roadmap:sync`.
+- [x] 3.4 **No roadmap row.** A row was added at #37 and then removed on the owner's call: `ROADMAP.md` is a product-oriented document, and delivery tooling has no place being sequenced against product capability. The rule was not written down anywhere, which is why it was guessed wrong, so it is now in the "How work enters" section beside the existing bug-fix exception. Ran `npm run roadmap:sync`.
 
 ## 4. PHASE GATE
 

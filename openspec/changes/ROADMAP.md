@@ -14,6 +14,8 @@ So this roadmap plans the spine and leaves the branches to be discovered. Expect
 
 **How work enters:** a discovered need goes into [`openspec/todos/`](../todos/README.md) as a behaviour-focused note. When it is ready and its trigger has fired, `/opsx:propose` graduates it into a change folder and it gets a row here — with a number, a wave, a model, dependencies, and a gate like everything else. Nothing is sequenced before it earns a place. Its number will be the next free one; **its wave will usually not be**, since work discovered late often belongs early — and **its row is inserted at whatever position its dependencies place it in the topological order**, not appended at the bottom.
 
+**What does not enter: anything that is not product.** This is a product-oriented document — it sequences capability a customer, an owner or a counter eventually sees. A bug fix does not get a row, and neither does **delivery tooling**: CI structure, lint checks, test harness work, repo scripts. Such a change still gets a change folder, a gate and a spec delta where it modifies a requirement — `ci-on-deployable-change` modified `project-scaffold` and had no row — but a number and a wave would imply it was sequenced against product work, and it was not. If you are wondering which side something falls on: ask whether shipping it changes what anyone can do with the app.
+
 ## Delivery Strategy
 
 Three commitments shape the order below.
@@ -43,7 +45,6 @@ Promoting a surface from `demo` to `live` is the visible outcome of every `*-liv
 |  | # | Wave | Change | Model | Status | Hard dependencies | Checkpoint (gate) |
 |---|---|---|--------|-------|--------|-------------------|-------------------|
 | ✅ | 1 | A | `project-foundations` | Opus | **archived 2026-07-26** | — | fresh clone → install, test, lint, typecheck, build all green; contrast validator passes in **both** themes; the empty app installs on a real Android phone and loads its shell with the network off; a push to `main` deploys |
-| 🔄 | 37 | A | `ci-on-deployable-change` | Opus | active | #1 | a commit confined to prose runs the prose tier and publishes nothing; a commit touching anything that can change what is built, served or migrated runs the whole suite and publishes as before; a mixed commit runs the whole suite; and **no commit matches neither tier**, asserted against real history and by a standing test over the workflow files |
 | ✅ | 2 | A | `data-model-and-tenancy` | **Fable** | **archived 2026-07-26** | #1 | isolation suite passes for **every** outlet-scoped table; a Franchise Admin session provably cannot read the other outlet's rows even with a hand-crafted request; both outlets seeded; TypeScript types generated |
 | ✅ | 3 | A | `demo-mode-and-app-shell` | **Fable** | **archived 2026-07-27** | #1, #2 | all four role shells navigable in demo mode with a working role switcher; **a demo session provably cannot write to Supabase**; a real signed-in user cannot silently enter demo mode; the demo banner is never dismissible; a mock that drifts from schema types fails to compile |
 | ✅ | 4 | B | `auth-and-roles` | Opus | **archived 2026-07-27** | #2, #3 | all four roles sign in and land on their own shell; an admin provisions a staff account end-to-end with a one-time code; deactivating an account blocks access without waiting for token expiry |

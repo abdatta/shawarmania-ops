@@ -1,6 +1,6 @@
 # Proposal: The Suite Runs When The Commit Can Change What Ships
 
-> **Model**: Opus · **Wave**: A · **Gate**: **a commit confined to prose runs the prose tier and publishes nothing**, a commit touching anything that can change what is built, served or migrated runs the whole suite and publishes exactly as it does today, a commit touching both runs the whole suite, and **no commit reaches `main` with no checks at all**.
+> **Model**: Opus · **Kind**: delivery tooling — no roadmap row · **Gate**: **a commit confined to prose runs the prose tier and publishes nothing**, a commit touching anything that can change what is built, served or migrated runs the whole suite and publishes exactly as it does today, a commit touching both runs the whole suite, and **no commit reaches `main` with no checks at all**.
 
 ## Why
 
