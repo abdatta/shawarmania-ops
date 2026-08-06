@@ -1,14 +1,36 @@
 name: CI
 
-# Runs the verification suite on pull requests.
+# Runs the verification suite on pull requests that can change what ships.
 #
 # Deliberately not on a push to `main`: `deploy.yml` runs the same suite, from
 # the same file (`verify.yml`), as the gate in front of the publish. Having
 # both trigger on a push would run the whole thing twice per commit — Docker
 # stack included — to answer the same question. One suite per commit, and on
 # `main` it is the one that decides whether the commit reaches the counters.
+#
+# `paths-ignore` is a DENYLIST, and the direction is the whole point. Forget an
+# entry here and a prose commit runs the full suite for nothing: four minutes,
+# visible, harmless. An allowlist would fail the other way — forget an entry
+# and real application code ships with no verification at all, silently. A
+# filter standing in front of a publish errs toward running.
+#
+# `openspec/tools/**` is absent on purpose. It is eslint-linted JavaScript that
+# rewrites the roadmap, so it is code that happens to live beside prose, and it
+# takes the full suite. So does anything else appearing under `openspec/`
+# later: only the three prose directories are named.
+#
+# A commit touching both prose and code matches this filter and runs everything,
+# which is correct. `docs.yml` carries the tier for a commit that matches none
+# of it, and the two lists are complements so that no commit is left unchecked.
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'openspec/changes/**'
+      - 'openspec/specs/**'
+      - 'openspec/todos/**'
+      - '.claude/**'
+      - '*.md'
 
 concurrency:
   group: ci-${{ github.ref }}

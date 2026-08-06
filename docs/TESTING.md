@@ -29,7 +29,9 @@ npm run auth:readiness # hosted read-only pre-publication identity readiness pro
 
 **Editing an Edge Function? Restart the runtime.** The bundled edge-runtime container caches function modules, so a change to anything under `supabase/functions/` is invisible until `docker restart supabase_edge_runtime_shawarmania-ops` (or a full `db:stop`/`db:start`). A test that keeps failing against code you have already fixed is almost always this.
 
-`npm test` runs `.test.ts` / `.test.tsx` under `src/` in a jsdom environment and `.test.mjs` under `scripts/` in a node environment. The shared setup file guards its DOM work, so the build-tooling suites do not need a second Vitest project to live alongside the app suites. A check script under `scripts/` therefore resolves its paths inside its CLI entry rather than at module load, because the runner rewrites `import.meta.url` to something `fileURLToPath` rejects; the exported rule stays importable and the filesystem stays the entry point's business.
+`npm test` runs `.test.ts` / `.test.tsx` under `src/` in a jsdom environment and `.test.mjs` under `scripts/` in a node environment. The shared setup file guards its DOM work, so the build-tooling suites do not need a second Vitest project to live alongside the app suites.
+
+**`import.meta.url` is not a file URL under the runner.** Vitest rewrites it, so `fileURLToPath(new URL('../x', import.meta.url))` resolves against the drive root and throws or reads the wrong path. Two escapes, depending on which side of the seam the code is on: a **check script** resolves its paths inside its CLI entry rather than at module load, keeping the exported rule importable and the filesystem the entry point's business; a **test** reading repo files resolves from `process.cwd()`, which the runner sets to the repo root. Both shapes are in `scripts/` if you need an example.
 
 **`npm run lint` gates the behaviour backlog's index.** `openspec/todos/README.md` carries each item's trigger to promote, so a note the index does not mention is not deferred work but lost work — nothing looks broken while it goes unread, which is how one sat unlisted for two days. The check fails in both directions: a note no link mentions, and a row pointing at a note that is gone. The index stays authored, since no tool can derive a trigger.
 
@@ -124,7 +126,8 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
 
 ## Verification before calling a change done
 
-- `npm test` green, `npm run lint` clean, `npm run typecheck` clean. CI runs all of these, plus `npm run format:check`, `npm run contrast`, the production build, and the Playwright suite, on every push and pull request.
+- `npm test` green, `npm run lint` clean, `npm run typecheck` clean. CI runs all of these, plus `npm run format:check`, `npm run contrast`, the production build, and the Playwright suite, on every push and pull request **that can change what is built, served or migrated**.
+- **CI has two tiers, split by path.** A commit touching anything that can change the bundle, the schema or the policies runs the whole suite and gates the publish, exactly as it always has. A commit confined to prose — `docs/`, `openspec/changes|specs|todos/`, `.claude/`, root markdown — runs the `Prose` workflow instead: `format:check` and `lint:todos`, the two gates that genuinely apply, and no database. It publishes nothing, because there is nothing in it to publish. `openspec/tools/` is **not** prose: it is linted JavaScript and takes the full suite. The two path lists are exact complements, so every commit matches at least one tier and none goes unchecked; `scripts/check-workflow-path-tiers.test.mjs` fails if they ever drift apart.
 - **Tenancy-touching changes**: the isolation suite passes, including new cases for any new table.
 - **Migration changes**: after `db:reset`, run `npm run db:types` and include any generated schema change. Once it is staged, `git diff --exit-code src/data-access/database.types.ts` must be clean; ordinary TypeScript checking cannot detect a stale but internally valid generated snapshot.
 - **Billing or offline changes**: the offline E2E path passes.

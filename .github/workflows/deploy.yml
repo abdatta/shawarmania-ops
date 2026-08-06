@@ -28,9 +28,28 @@ name: Deploy
 # suite when it landed, so the re-run is expected green, and a rollback only
 # reaches a counter tablet on its next launch anyway (see the service-worker
 # section of docs/OPERATIONS.md). CI minutes are not the slow part.
+#
+# The trigger skips a commit that cannot change what is built, served or
+# migrated, because a publish for such a commit has nothing to publish. The list
+# is the complement of `docs.yml`'s and matches `ci.yml`'s exactly; see the
+# reasoning in `ci.yml` for why it is a denylist and why `openspec/tools/**` is
+# not in it.
+#
+# One consequence, deliberate: the bundle stamps its own commit into the shell,
+# so after a prose-only push `Build <sha>` names the last commit that changed the
+# app rather than the tip of `main`. That is the more truthful number — it names
+# the code that is running — and `docs/OPERATIONS.md` says so. `workflow_dispatch`
+# is never path-filtered, so deliberate republication is unaffected.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'openspec/changes/**'
+      - 'openspec/specs/**'
+      - 'openspec/todos/**'
+      - '.claude/**'
+      - '*.md'
   # Lets a known-good commit be re-published without an empty commit.
   workflow_dispatch:
 

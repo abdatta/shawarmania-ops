@@ -125,6 +125,11 @@ Then `gh run watch <id> --exit-status`, and check the deployed build actually
 carries the commit (`build-version` on the shell reads `Build <sha>`). If CI goes
 red, fix forward: nothing published.
 
+**Unless the fix was documentation only.** CI is tiered by path, so a commit
+confined to prose runs the `Prose` workflow, produces no `Deploy` run, and leaves
+`Build <sha>` naming the last commit that changed the app. Expect that rather than
+chasing it; compare against that commit instead.
+
 **Say that the service worker does not claim an open page**, so whoever hit the
 bug must close the app and reopen it before the fix reaches them. On a bug
 somebody is waiting on, this is the difference between "fixed" and "still

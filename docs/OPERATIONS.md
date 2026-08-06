@@ -102,6 +102,23 @@ two in agreement in the same commit.
 
 Every checkout uses `fetch-depth: 0` because the build stamps the short commit SHA into the UI.
 
+**A prose-only push produces no checks and no deployment, deliberately.** Both
+`Deploy` and `CI` skip a commit that cannot change what is built, served or
+migrated — the documentation tree, the change, spec and backlog directories, root
+markdown — and the `Prose` workflow gates those instead (see
+[`TESTING.md`](TESTING.md)). Nothing is published because nothing in such a commit
+can reach a counter.
+
+The visible consequence is the build stamp: **after a prose-only push,
+`Build <sha>` in the app footer names the last commit that changed the app, not
+the tip of `main`.** That is the more truthful number, since it names the code
+actually running rather than whatever happened to be at the tip when Pages last
+ran, but it does mean "the deployed build carries my commit" is the wrong check
+after a docs commit. Compare against the last commit that touched the app instead.
+
+To republish deliberately — a rollback, or forcing the stamp forward — use
+`Actions → Deploy → Run workflow`. `workflow_dispatch` is never path-filtered.
+
 ## Deployment
 
 The frontend is a static SPA — build, upload, done.

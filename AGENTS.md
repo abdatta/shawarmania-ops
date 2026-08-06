@@ -174,6 +174,13 @@ gate, not an advisory one, so running the full suite locally buys a faster red
 rather than a safer deploy — and it runs three jobs in parallel, which beats
 running them yourself in series.
 
+**A prose-only commit gets the `Prose` tier and no deployment**, so a fix whose
+diff turns out to be documentation only will show no `Deploy` run and will not
+move the `Build <sha>` in the app footer. That is correct, not a failed push:
+there is nothing in such a commit to publish. Verify against the last commit that
+touched the app, and use `Actions → Deploy → Run workflow` if you need the stamp
+moved deliberately. See `docs/TESTING.md` for the two tiers.
+
 **What a quickfix still owes, and none of it is optional:**
 
 - **A reproduction before the change.** If you cannot make it fail on demand,

@@ -1,0 +1,86 @@
+# Kept short for the same reason as `Deploy`: GitHub prefixes every check on a
+# commit with the workflow name.
+name: Prose
+
+# The other tier. `ci.yml` and `deploy.yml` run the whole suite on any commit
+# that can change what is built, served or migrated; this runs on a commit that
+# cannot, and the two path lists are exact complements. Every commit therefore
+# matches at least one of the three workflows, which is the property that makes
+# the split safe rather than merely cheap — see
+# `openspec/changes/ci-on-deployable-change/design.md`.
+#
+# This is a `paths` allowlist because it is the complement of a denylist, not
+# because an allowlist is safe here: forgetting an entry means a prose commit
+# gets the full suite, which is the old behaviour and harmless. The dangerous
+# direction is guarded in `ci.yml`.
+#
+# A commit touching both prose and code matches both filters and runs both. Both
+# checks below are already inside the full suite, so the overlap costs about
+# thirty seconds and buys a simpler trigger than "prose only, and nothing else",
+# which GitHub cannot express: `paths` and `paths-ignore` are mutually exclusive
+# for one event.
+# Both events, and the push one is not optional. `ci.yml` runs on pull requests
+# and `deploy.yml` on a push to `main`, so a filter that covered only pull
+# requests would leave a prose-only push to `main` matching nothing at all — and
+# this repo pushes to `main` directly. Coverage is a property of (event × path),
+# not of paths alone.
+# The list is written twice because GitHub Actions does not support YAML anchors,
+# so there is no way to say it once. The standing test is what keeps the copies
+# and the two denylists in agreement.
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'openspec/changes/**'
+      - 'openspec/specs/**'
+      - 'openspec/todos/**'
+      - '.claude/**'
+      - '*.md'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'openspec/changes/**'
+      - 'openspec/specs/**'
+      - 'openspec/todos/**'
+      - '.claude/**'
+      - '*.md'
+
+concurrency:
+  group: prose-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Named for what it checks rather than for the tier, so the check reads
+  # `Prose / formatting and the backlog index`.
+  check:
+    name: formatting and the backlog index
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Prettier formats markdown, so a mangled table in a spec or a proposal is
+      # a real failure and this is the gate that has always caught it.
+      - name: Format check
+        run: npm run format:check
+
+      # Load bearing, and the reason this tier exists at all rather than the
+      # prose set simply being skipped: ADDING A BACKLOG NOTE IS ITSELF A
+      # PROSE-ONLY COMMIT. Leaving the index check behind the full-suite filter
+      # would have disarmed it for precisely the commits it exists to police.
+      - name: Backlog index is in sync
+        run: npm run lint:todos
+
+      # Nothing else runs here on purpose. eslint, typecheck, the build and
+      # every test suite take no input from any file this workflow's filter
+      # admits — with `openspec/tools/**` excluded from that filter precisely
+      # because it is such an input.
