@@ -103,45 +103,48 @@ select throws_ok(
   $q$, :'KAL', :'OWNER'),
   '23514', null, 'a blank live-expense category is refused');
 
--- Build one row in each expense record under the same source word.
+-- Build one row in each expense record under the same source word. The words
+-- here are deliberately ones the seed does not use: these assertions count
+-- rows absolutely, so a category the seed also mints would make them fail for
+-- a reason that has nothing to do with merging.
 insert into public.manual_ledger_expenses
   (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
-values (:'KAL', current_date - 10, 'Chicken', false, 100, :'OWNER');
+values (:'KAL', current_date - 10, 'Test Poultry', false, 100, :'OWNER');
 insert into public.expenses
   (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
-values (:'KAL', current_date - 10, 'Chicken', 200, 'upi', :'OWNER');
-insert into public.expense_categories (name) values ('Food') on conflict do nothing;
+values (:'KAL', current_date - 10, 'Test Poultry', 200, 'upi', :'OWNER');
+insert into public.expense_categories (name) values ('Test Larder') on conflict do nothing;
 reset role;
 
 select pg_temp.impersonate(:'FA_KAL');
 select throws_ok($q$
-  select * from public.rename_expense_category('Chicken', 'Poultry', true)
+  select * from public.rename_expense_category('Test Poultry', 'Test Meat', true)
 $q$, '42501', null, 'a non-owner cannot rename a category');
 select throws_ok($q$
-  select * from public.merge_expense_category('Chicken', 'Food')
+  select * from public.merge_expense_category('Test Poultry', 'Test Larder')
 $q$, '42501', null, 'a non-owner cannot merge categories');
 reset role;
 
-select is((select count(*) from public.manual_ledger_expenses where category = 'Chicken'),
+select is((select count(*) from public.manual_ledger_expenses where category = 'Test Poultry'),
   1::bigint, 'the refused operations changed no manual-ledger row');
-select is((select count(*) from public.expenses where category = 'Chicken'),
+select is((select count(*) from public.expenses where category = 'Test Poultry'),
   1::bigint, 'the refused operations changed no live-expense row');
 
 select pg_temp.impersonate(:'OWNER');
 select is(
-  (select ledger_rows_moved from public.merge_expense_category('Chicken', 'Food')),
+  (select ledger_rows_moved from public.merge_expense_category('Test Poultry', 'Test Larder')),
   1::bigint,
   'merge reports the manual-ledger rows it moved');
 reset role;
 
-select is((select count(*) from public.manual_ledger_expenses where category = 'Food'),
+select is((select count(*) from public.manual_ledger_expenses where category = 'Test Larder'),
   1::bigint, 'merge rewrites the manual-ledger row');
-select is((select count(*) from public.expenses where category = 'Food'),
+select is((select count(*) from public.expenses where category = 'Test Larder'),
   1::bigint, 'merge rewrites the live-expense row');
-select is((select count(*) from public.expense_categories where lower(name) = 'chicken'),
+select is((select count(*) from public.expense_categories where lower(name) = 'test poultry'),
   0::bigint, 'the merged-away suggestion is gone');
 select is((select count(*) from public.expense_category_operations
-  where operation = 'merge' and name_before = 'Chicken' and name_after = 'Food'
+  where operation = 'merge' and name_before = 'Test Poultry' and name_after = 'Test Larder'
     and ledger_rows_moved = 1 and expense_rows_moved = 1),
   1::bigint, 'one durable operation row records both moved counts');
 

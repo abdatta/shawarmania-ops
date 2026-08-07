@@ -256,7 +256,6 @@ export function ExpenseCategoriesSurface() {
                 New name
                 <Input
                   required
-                  className="text-base"
                   value={target}
                   onChange={(event) => setTarget(event.target.value)}
                 />

@@ -518,23 +518,29 @@ values
 -- ---------------------------------------------------------------------------
 -- Expenses and withdrawals for the reconciled day. Only cash rows feed the
 -- drawer; the UPI electricity bill deliberately does not.
+--
+-- Categories are free text since `expense-categories-grow-from-use`, and every
+-- row inserted here mints its word into the business-wide suggestion list. So
+-- they are written the way a person would type them: the old enum identifiers
+-- would greet the first local sign-in as `raw_materials` in the owner's own
+-- vocabulary.
 
 insert into public.expenses
   (outlet_id, business_date, category, description, amount_paise, payment_method, recorded_by)
 values
-  ('00000000-0000-4000-a000-000000000001', current_date - 2, 'raw_materials',
+  ('00000000-0000-4000-a000-000000000001', current_date - 2, 'Chicken',
    'Chicken and vegetables (synthetic)', 150000, 'cash', '10000000-0000-4000-a000-000000000002'),
-  ('00000000-0000-4000-a000-000000000001', current_date - 2, 'electricity',
+  ('00000000-0000-4000-a000-000000000001', current_date - 2, 'Electricity',
    'Monthly electricity bill (synthetic)', 80000, 'upi', '10000000-0000-4000-a000-000000000002'),
-  ('00000000-0000-4000-a000-000000000001', current_date - 1, 'salaries',
+  ('00000000-0000-4000-a000-000000000001', current_date - 1, 'Staff wages',
    'Advance to staff (synthetic)', 50000, 'cash', '10000000-0000-4000-a000-000000000002'),
-  ('00000000-0000-4000-a000-000000000002', current_date - 2, 'raw_materials',
+  ('00000000-0000-4000-a000-000000000002', current_date - 2, 'Packaging',
    'Pita and packaging (synthetic)', 10000, 'cash', '10000000-0000-4000-a000-000000000003'),
   -- The owner's remote entry: recorded by the Super Admin, at an outlet they
   -- hold no assignment at, non-cash by necessity — `expenses_insert` refuses
   -- `cash` from that branch, so this row cannot move Kanchrapara's drawer
   -- (multi-outlet-people, design D8).
-  ('00000000-0000-4000-a000-000000000002', current_date - 1, 'other',
+  ('00000000-0000-4000-a000-000000000002', current_date - 1, 'Platform fee',
    'Aggregator platform fee, paid centrally (synthetic)', 62000, 'upi',
    '10000000-0000-4000-a000-000000000001');
 

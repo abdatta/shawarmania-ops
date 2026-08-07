@@ -48,6 +48,16 @@ describe('CategoryInput', () => {
     expect(input).toHaveAttribute('aria-expanded', 'false')
   })
 
+  it('carries no font-size class, so the base layer keeps it at 16px', () => {
+    // A utility class beats the `input { font-size: 1.143rem }` rule in
+    // `index.css`, and `text-base` resolves to 14px at this root — which is
+    // exactly the size that makes iOS Safari zoom the viewport on focus.
+    render(<Example />)
+    const input = screen.getByRole('combobox', { name: 'Expense category' })
+    expect([...input.classList].filter((name) => name.startsWith('text-['))).toEqual([])
+    expect(input.className).not.toMatch(/\btext-(xs|sm|base|lg|xl)\b/)
+  })
+
   it('warns about double counting without blocking the value', async () => {
     render(<Example />)
     const input = screen.getByRole('combobox', { name: 'Expense category' })

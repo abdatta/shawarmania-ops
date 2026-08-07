@@ -38,7 +38,18 @@ export const PROFIT_BASIS_DESCRIPTIONS: Record<ProfitBasis, string> = {
     'Sales minus running costs minus the stock actually used. Answers: did we make money on what we sold?',
 }
 
-/** The expense category that must never be counted alongside stock consumed. */
+/**
+ * The expense category that must never be counted alongside stock consumed.
+ *
+ * **This word no longer identifies anything a person types.** Categories became
+ * free text in `expense-categories-grow-from-use`, so a real stock purchase
+ * arrives as `Chicken` or a supplier's name and never matches here. Only the
+ * demo fixtures still carry it, which is why the demo reads correctly and
+ * proves nothing. The consumption basis needs a different way to recognise a
+ * stock purchase before `expenses-and-inventory-live` (#11) puts real rows in
+ * front of it — see
+ * `openspec/todos/raw-materials-is-identified-by-a-word-nobody-types.md`.
+ */
 export const RAW_MATERIALS_CATEGORY = 'raw_materials'
 
 function assertPaise(value: number, what: string): void {

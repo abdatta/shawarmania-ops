@@ -411,7 +411,9 @@ Alerts are the one place a Franchise Admin deliberately writes data the Super Ad
 
 ### 1. Double-counting food cost in profit and loss
 
-Raw materials appear **twice** in the natural reading of this schema: once as an `expenses` row with category `raw_materials` when stock is bought, and again as inventory `used`/`wasted` movements valued at purchase cost. Summing "all expenses" *and* "food cost" double-counts.
+Raw materials appear **twice** in the natural reading of this schema: once as an `expenses` row when stock is bought, and again as inventory `used`/`wasted` movements valued at purchase cost. Summing "all expenses" *and* "food cost" double-counts.
+
+**The consumption basis cannot currently tell which expenses were stock.** It matches the exact word `raw_materials`, which was a value of the closed category list before `expense-categories-grow-from-use` made categories free text. Nothing a person types matches it, so only the demo fixtures still do. This is invisible while the live expense record is empty and the P&L is demo-gated, and it must be settled before `expenses-and-inventory-live` (#11) — see [the backlog note](../openspec/todos/raw-materials-is-identified-by-a-word-nobody-types.md).
 
 The P&L therefore has two explicit modes, and the UI must always say which one it is showing:
 

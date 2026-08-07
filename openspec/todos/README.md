@@ -35,6 +35,7 @@ Keep entries behavior-focused:
 | [On The First Of A Month, The Demo's Ranges Open Empty](./month-boundary-empties-fixture-ranges.md) | Demo-data weakness | Open | Demo data | A demo walked on the 1st or 2nd, or the next range-based surface |
 | [Page Headers Reserve Their Own Space](./page-headers-reserve-their-own-space.md) | Defect | Found, not scheduled | Design system | The next change touching `PageHeader`, or a demo where the stock ledger's header jump is noticed |
 | [Expense Payment Method Inherits The Bill Enum](./expense-payment-method-inherits-the-bill-enum.md) | Design gap | Open | Expenses | `expenses-and-inventory-live` (#11), while the table is still empty and the fix is one migration rather than a data migration |
+| [Raw Materials Is Identified By A Word Nobody Types](./raw-materials-is-identified-by-a-word-nobody-types.md) | Design gap | Open | Reporting | `expenses-and-inventory-live` (#11), which puts the first real rows in front of the consumption basis |
 
 The three billing items are grouped deliberately: v1 ships bills as **record-only**, and all three extensions were anticipated in the schema so none of them requires migrating historical bills. See [Limitations](../../docs/LIMITATIONS.md#bills-are-record-only) for exactly which columns exist ahead of need, and why.
 

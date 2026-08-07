@@ -99,7 +99,10 @@ export function CategoryInput({
           required
           value={value}
           data-testid={testId}
-          className="text-base"
+          // No font-size utility here. `index.css` puts every input at 16px in
+          // the base layer so iOS Safari does not zoom on focus, and a utility
+          // class beats that layer: `text-base` is 1rem, which is 14px at this
+          // root and reintroduces the zoom this field must not have.
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}
           onKeyDown={keyDown}
