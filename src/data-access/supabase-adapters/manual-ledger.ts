@@ -67,7 +67,7 @@ function toExpense(row: Tables<'manual_ledger_expenses'>): ManualLedgerExpense {
     category: row.category,
     isCash: row.is_cash,
     amountPaise: row.amount_paise,
-    description: row.description,
+    note: row.description,
     createdAt: row.created_at,
   }
 }
@@ -187,10 +187,7 @@ export function createSupabaseManualLedgerAdapter(
           category: expense.category,
           is_cash: expense.isCash,
           amount_paise: expense.amountPaise,
-          // Not `trimmed()`: this column is `not null` and refuses blank, so the
-          // honest move is to send what was typed and let the database refuse it
-          // rather than turn a blank into a null the column cannot hold either.
-          description: expense.description.trim(),
+          description: trimmed(expense.note),
         })
         .select(ALL)
         .single()
@@ -205,7 +202,7 @@ export function createSupabaseManualLedgerAdapter(
           ...(patch.category === undefined ? {} : { category: patch.category }),
           ...(patch.isCash === undefined ? {} : { is_cash: patch.isCash }),
           ...(patch.amountPaise === undefined ? {} : { amount_paise: patch.amountPaise }),
-          ...(patch.description === undefined ? {} : { description: patch.description.trim() }),
+          ...(patch.note === undefined ? {} : { description: trimmed(patch.note) }),
         })
         .eq('id', id)
         .select(ALL)
@@ -272,7 +269,7 @@ function toLedgerError(error: PostgrestError): ManualLedgerActionError {
     case '23502':
       return new ManualLedgerActionError(
         'missing_field',
-        'Something required was left empty. An expense needs a description of what it was for.',
+        'Something required was left empty. An expense needs a category.',
       )
     case '42501':
       return new ManualLedgerActionError(

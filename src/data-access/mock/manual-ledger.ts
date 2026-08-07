@@ -11,6 +11,7 @@ import {
 import type { Tables } from '../database.types'
 import { personaFixtures } from './fixtures/personas'
 import type { DemoStore } from './store'
+import { captureMockCategory } from './expense-categories'
 
 /**
  * The mock manual-ledger adapter (#36) — **temporary, deleted with the
@@ -61,7 +62,7 @@ function toExpense(row: Tables<'manual_ledger_expenses'>): ManualLedgerExpense {
     category: row.category,
     isCash: row.is_cash,
     amountPaise: row.amount_paise,
-    description: row.description,
+    note: row.description,
     createdAt: row.created_at,
   }
 }
@@ -113,17 +114,17 @@ function refuseImpossibleDay(day: ManualLedgerDayInput): void {
   }
 }
 
-function refuseImpossibleExpense(expense: { amountPaise: number; description: string }): void {
+function refuseImpossibleExpense(expense: { amountPaise: number; category: string }): void {
   if (!Number.isInteger(expense.amountPaise) || expense.amountPaise <= 0) {
     throw new ManualLedgerActionError(
       'bad_amount',
       'An expense needs an amount above zero, as a number of rupees.',
     )
   }
-  if (!expense.description.trim()) {
+  if (!expense.category.trim()) {
     throw new ManualLedgerActionError(
-      'description_required',
-      'Say what the money was spent on. A category and an amount will not identify it next month.',
+      'category_required',
+      'Choose or type what the money was spent on.',
     )
   }
 }
@@ -235,10 +236,10 @@ export function createMockManualLedgerAdapter(
         id: `de000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`,
         outlet_id: expense.outletId,
         business_date: expense.businessDate,
-        category: expense.category,
+        category: captureMockCategory(store, expense.category),
         is_cash: expense.isCash,
         amount_paise: expense.amountPaise,
-        description: expense.description.trim(),
+        description: trimmed(expense.note),
         recorded_by: OWNER_ID,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -255,15 +256,15 @@ export function createMockManualLedgerAdapter(
       }
 
       const amountPaise = patch.amountPaise ?? existing.amount_paise
-      const description = patch.description ?? existing.description
-      refuseImpossibleExpense({ amountPaise, description })
+      const category = patch.category ?? existing.category
+      refuseImpossibleExpense({ amountPaise, category })
 
       const updated: Tables<'manual_ledger_expenses'> = {
         ...existing,
-        category: patch.category ?? existing.category,
+        category: captureMockCategory(store, category),
         is_cash: patch.isCash ?? existing.is_cash,
         amount_paise: amountPaise,
-        description: description.trim(),
+        description: patch.note === undefined ? existing.description : trimmed(patch.note),
         updated_at: new Date().toISOString(),
       }
 

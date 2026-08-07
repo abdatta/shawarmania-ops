@@ -8,6 +8,7 @@ import { createMockBillingAdapter } from './billing'
 import { createDemoCustomers, createMockCustomersAdapter } from './customers'
 import { createMockDailyCashAdapter } from './daily-cash'
 import { createMockExpensesAdapter } from './expenses'
+import { createMockExpenseCategoriesAdapter } from './expense-categories'
 import { createMockInsightsAdapter } from './insights'
 import { createMockInventoryAdapter } from './inventory'
 import { createMockManualLedgerAdapter } from './manual-ledger'
@@ -132,6 +133,7 @@ export function createMockAdapters(
     customers: createMockCustomersAdapter(data.customers, role),
     inventory: createMockInventoryAdapter(store),
     expenses: createMockExpensesAdapter(store),
+    expenseCategories: createMockExpenseCategoriesAdapter(store, role),
     dailyCash: createMockDailyCashAdapter(store),
     // Both enforce the boundary the RLS policies will: only the Super Admin
     // reads across outlets, and asking for somebody else's returns nothing.

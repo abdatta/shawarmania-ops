@@ -85,7 +85,7 @@ select lives_ok(
   format($q$
     insert into public.manual_ledger_expenses
       (outlet_id, business_date, category, is_cash, amount_paise, description, recorded_by)
-    values (%L, %L, 'raw_materials', true, 50000,
+    values (%L, %L, 'Chicken', true, 50000,
             'Chicken from Nadia Poultry', %L) $q$,
     :'KAL', pg_temp.ledger_day(1), :'OWNER'),
   'the owner records a cash expense with a description');
@@ -94,7 +94,7 @@ select lives_ok(
   format($q$
     insert into public.manual_ledger_expenses
       (outlet_id, business_date, category, is_cash, amount_paise, description, recorded_by)
-    values (%L, %L, 'electricity', false, 180000,
+    values (%L, %L, 'Electricity', false, 180000,
             'WBSEDCL bill paid by UPI', %L) $q$,
     :'KAL', pg_temp.ledger_day(1), :'OWNER'),
   'and a non-cash one, which the drawer never sees');
@@ -232,7 +232,7 @@ select throws_ok(
     insert into public.manual_ledger_expenses
       (outlet_id, business_date, category, is_cash, amount_paise, description, recorded_by)
     values (%L, public.app_business_date(now(), time '04:00') + 1,
-            'other', false, 100, 'x', %L) $q$,
+            'Other', false, 100, 'x', %L) $q$,
     :'KAL', :'OWNER'),
   'P0001', null, 'an expense dated in the future is refused too');
 
@@ -244,7 +244,7 @@ returns text language sql as $$
     '(outlet_id, business_date, recorded_by, category, is_cash, %s) '
     'values (''00000000-0000-4000-a000-000000000001'', '
     'public.app_business_date(now(), time ''04:00'') - 2, '
-    '''10000000-0000-4000-a000-000000000001'', ''other'', false, %s)',
+    '''10000000-0000-4000-a000-000000000001'', ''Other'', false, %s)',
     cols, vals)
 $$;
 
@@ -260,9 +260,9 @@ select throws_ok(
   pg_temp.bad_expense('amount_paise, description', '100, ''   '''),
   '23514', null, 'an expense whose description is whitespace is refused');
 
-select throws_ok(
+select lives_ok(
   pg_temp.bad_expense('amount_paise', '100'),
-  '23502', null, 'an expense with no description at all is refused');
+  'an expense with no note at all is accepted');
 
 -- ---------------------------------------------------------------------------
 -- 3b. A day is corrected in place; its identity is not.
@@ -313,7 +313,7 @@ select lives_ok(
   format($q$
     insert into public.manual_ledger_expenses
       (outlet_id, business_date, category, is_cash, amount_paise, description)
-    values (%L, %L, 'packaging', true, 30000, 'Paper bags, 500') $q$,
+    values (%L, %L, 'Packaging', true, 30000, 'Paper bags, 500') $q$,
     :'KAL', pg_temp.ledger_day(1)),
   'an expense written without naming a recorder is accepted');
 
@@ -377,7 +377,7 @@ begin
       insert into public.manual_ledger_expenses
         (outlet_id, business_date, category, is_cash, amount_paise, description, recorded_by)
       values (%L, public.app_business_date(now(), time '04:00') - 4,
-              'other', false, 100, 'x', %L) $q$, p_outlet, p_sub),
+              'Other', false, 100, 'x', %L) $q$, p_outlet, p_sub),
     '42501', null,
     format('%s cannot insert a manual-ledger expense at their own outlet', persona));
 

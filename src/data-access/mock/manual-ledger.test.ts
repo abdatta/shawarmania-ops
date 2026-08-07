@@ -11,7 +11,7 @@ import { createDemoStore, DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID } from './store'
 /**
  * What this mock has to honour, because the database honours it: the day is one
  * row per outlet per date corrected in place, an expense cannot exist without a
- * description, a cash movement cannot exist without a reason, and nobody but an
+ * category, a cash movement cannot exist without a reason, and nobody but an
  * owner gets an answer at all.
  *
  * The arithmetic is not tested here — it lives in
@@ -58,10 +58,10 @@ describe('mock manual ledger adapter', () => {
     ): NewManualLedgerExpense => ({
       outletId: DEMO_OUTLET_ID,
       businessDate: store.today,
-      category: 'raw_materials',
+      category: 'Chicken',
       isCash: true,
       amountPaise: 240_000,
-      description: 'Chicken from Nadia Poultry',
+      note: 'From Nadia Poultry',
       ...overrides,
     })
 
@@ -226,19 +226,19 @@ describe('mock manual ledger adapter', () => {
       // three here means this test found a seeded day instead of today's.
       const list = await adapter.listExpenses(DEMO_OUTLET_ID, store.today)
       expect(list).toHaveLength(1)
-      expect(list[0]?.description).toBe('Chicken from Nadia Poultry')
+      expect(list[0]?.note).toBe('From Nadia Poultry')
       expect(list[0]?.isCash).toBe(true)
     })
 
-    it('refuses one with nothing said about what it was for', async () => {
+    it('requires a category and accepts no note', async () => {
       const { adapter, expenseInput } = over()
 
-      await expect(adapter.createExpense(expenseInput({ description: '   ' }))).rejects.toThrow(
-        /what the money was spent on/,
-      )
-      await expect(adapter.createExpense(expenseInput({ description: '' }))).rejects.toThrow(
+      await expect(adapter.createExpense(expenseInput({ category: '   ' }))).rejects.toThrow(
         ManualLedgerActionError,
       )
+      await expect(adapter.createExpense(expenseInput({ note: null }))).resolves.toMatchObject({
+        note: null,
+      })
     })
 
     it('refuses an amount of nothing or less', async () => {
@@ -251,25 +251,24 @@ describe('mock manual ledger adapter', () => {
       )
     })
 
-    it('edits one, and refuses an edit that would make it unidentifiable', async () => {
+    it('edits one and keeps the note optional', async () => {
       const { store, adapter, expenseInput } = over()
       const created = await adapter.createExpense(expenseInput())
 
       const edited = await adapter.updateExpense(created.id, {
         amountPaise: 260_000,
-        description: 'Chicken, 11 kg, from Nadia Poultry',
+        note: '11 kg from Nadia Poultry',
         isCash: false,
       })
       expect(edited.amountPaise).toBe(260_000)
-      expect(edited.description).toBe('Chicken, 11 kg, from Nadia Poultry')
+      expect(edited.note).toBe('11 kg from Nadia Poultry')
       expect(edited.isCash).toBe(false)
 
-      await expect(adapter.updateExpense(created.id, { description: '  ' })).rejects.toThrow(
-        /what the money was spent on/,
-      )
-      // And the refused edit changed nothing.
+      await expect(adapter.updateExpense(created.id, { note: '  ' })).resolves.toMatchObject({
+        note: null,
+      })
       const list = await adapter.listExpenses(DEMO_OUTLET_ID, store.today)
-      expect(list[0]?.description).toBe('Chicken, 11 kg, from Nadia Poultry')
+      expect(list[0]?.note).toBeNull()
     })
 
     it('removes one', async () => {
@@ -289,17 +288,17 @@ describe('mock manual ledger adapter', () => {
       await adapter.createExpense(
         expenseInput({
           outletId: DEMO_SECOND_OUTLET_ID,
-          category: 'rent',
+          category: 'Rent',
           isCash: false,
           amountPaise: 5_000_000,
-          description: 'Kanchrapara rent',
+          note: 'Kanchrapara rent',
         }),
       )
 
       const mine = await adapter.getMonth(DEMO_OUTLET_ID, month)
       expect(mine.days.every((day) => day.outletId === DEMO_OUTLET_ID)).toBe(true)
       expect(mine.expenses.every((expense) => expense.outletId === DEMO_OUTLET_ID)).toBe(true)
-      expect(mine.expenses.map((expense) => expense.description)).not.toContain('Kanchrapara rent')
+      expect(mine.expenses.map((expense) => expense.note)).not.toContain('Kanchrapara rent')
     })
 
     it('is empty for a month nobody wrote in', async () => {
@@ -340,7 +339,7 @@ describe('mock manual ledger adapter', () => {
         await expect(adapter.upsertDay(refusedDay)).rejects.toThrow(/Only an owner/)
         await expect(
           adapter.createExpense(
-            expenseInput({ category: 'other', isCash: false, amountPaise: 100, description: 'x' }),
+            expenseInput({ category: 'Other', isCash: false, amountPaise: 100, note: 'x' }),
           ),
         ).rejects.toThrow(/Only an owner/)
         await expect(adapter.deleteDay(DEMO_OUTLET_ID, store.today)).rejects.toThrow(

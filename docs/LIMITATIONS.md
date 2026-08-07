@@ -67,6 +67,18 @@ the value here; the surface is not. Dropping the tables without the carry-over
 does not satisfy the removal, and the `manual-ledger` capability spec says so as
 a testable requirement.
 
+## Expense double-counting is warned about, not prevented
+
+Typing an expense category that means aggregator commission, cash banked or an
+owner drawing raises a dismissible warning. Commission already belongs in net
+aggregator revenue; banking or drawing cash belongs in the day's cash movement.
+The warning does not block the save because categories are deliberately free
+text and a phrase cannot prove the accounting meaning of a real transaction.
+Making this a guarantee would require structured transaction kinds and a single
+ledger across expenses, settlements and cash movements; until those live
+records exist, a hard refusal would reject legitimate entries as confidently as
+it stops mistakes.
+
 ## A remembered outlet is per device and per browser profile
 
 The outlet an outlet-scoped screen opens on is remembered for the signed-in
@@ -129,7 +141,7 @@ This is the single largest known inaccuracy in the P&L. Worth fixing when aggreg
 
 ### Payroll is out of scope
 
-There is no salary data anywhere in the schema or the UI — `staff-as-accounts` (#21) removed the roster's `salary_paise` rather than migrating it, by owner decision. Attendance feeds whatever payroll process the business runs outside the app, and wages actually paid are recorded as ordinary expenses under the `salaries` category. If payroll ever becomes in-scope, salary fields return by migration onto the person's account record — nothing else has to move.
+There is no salary data anywhere in the schema or the UI — `staff-as-accounts` (#21) removed the roster's `salary_paise` rather than migrating it, by owner decision. Attendance feeds whatever payroll process the business runs outside the app, and wages actually paid are recorded as ordinary expenses under a free-text category such as `Staff wages`. If payroll ever becomes in-scope, salary fields return by migration onto the person's account record — nothing else has to move.
 
 ### Menu is per-outlet, with no shared catalogue
 

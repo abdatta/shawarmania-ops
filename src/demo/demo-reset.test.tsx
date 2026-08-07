@@ -46,6 +46,7 @@ describe('demo reset', () => {
     const before = within(list).getAllByRole('listitem').length
 
     await user.click(screen.getByRole('button', { name: 'Add expense' }))
+    await user.type(screen.getByLabelText('Expense category'), 'Reset supplies')
     await user.type(screen.getByLabelText('Amount (₹)'), '175')
     await user.type(screen.getByLabelText('Description (optional)'), 'Reset probe')
     await user.click(screen.getByRole('button', { name: 'Record expense' }))

@@ -145,6 +145,11 @@ const defs = {
     nav: { label: 'Ledger', icon: NotepadText, order: 3 },
     state: 'live',
   },
+  'owner-expense-categories': {
+    role: 'super_admin',
+    path: 'ledger/categories',
+    state: 'live',
+  },
   /** Drop into one outlet's Franchise Admin view, read-only. */
   'owner-outlet-view': {
     role: 'super_admin',

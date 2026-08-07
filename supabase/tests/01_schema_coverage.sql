@@ -58,7 +58,8 @@ classified as (
       -- for in this file. Classification alone proves nothing, which is why
       -- section 6 below tests what the exception actually costs: no outlet
       -- role holds any privilege on it at all.
-      when tbl = 'customers' then 'global'
+      when tbl in ('customers', 'expense_categories', 'expense_category_operations')
+        then 'global'
       -- Tenant-less: belongs to no outlet at all, because the thing it counts
       -- happens before anybody has an outlet. Listed by name rather than
       -- inferred, so the next table with no outlet_id still has to be argued
@@ -199,6 +200,36 @@ select is(
     ''),
   '',
   'the lookup counter stores who and when, and nothing about what was asked'
+);
+
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'public' and tablename = 'expense_categories'),
+  2::bigint,
+  'the business-wide category list has explicit select and insert policies'
+);
+
+select ok(
+  has_table_privilege('authenticated', 'public.expense_categories', 'SELECT')
+  and has_table_privilege('authenticated', 'public.expense_categories', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.expense_categories', 'UPDATE')
+  and not has_table_privilege('authenticated', 'public.expense_categories', 'DELETE'),
+  'category suggestions expose only the two verbs their policy set governs'
+);
+
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'public' and tablename = 'expense_category_operations'),
+  2::bigint,
+  'the category operation log has explicit owner select and insert policies'
+);
+
+select ok(
+  has_table_privilege('authenticated', 'public.expense_category_operations', 'SELECT')
+  and has_table_privilege('authenticated', 'public.expense_category_operations', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.expense_category_operations', 'UPDATE')
+  and not has_table_privilege('authenticated', 'public.expense_category_operations', 'DELETE'),
+  'the category operation log cannot be edited or deleted by a client'
 );
 
 -- Security definer is what lets these read a table the caller cannot. Losing

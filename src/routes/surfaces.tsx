@@ -7,6 +7,7 @@ import { OutletAttendance } from '@/features/attendance/outlet-attendance'
 import { BillingCounter } from '@/features/billing/billing-counter'
 import { ShiftUnlock } from '@/features/billing/shift-unlock'
 import { DailyCashSurface } from '@/features/cash/daily-cash-surface'
+import { ExpenseCategoriesSurface } from '@/features/expense-categories/expense-categories-surface'
 import { ExpensesSurface } from '@/features/expenses/expenses-surface'
 import { ComparisonSurface } from '@/features/insights/comparison-surface'
 import { OutletDayView } from '@/features/insights/outlet-day-view'
@@ -143,6 +144,14 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="ledger">
         <ManualLedgerSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'ledger/categories',
+    element: (
+      <GatedSurface path="ledger/categories">
+        <ExpenseCategoriesSurface />
       </GatedSurface>
     ),
   },

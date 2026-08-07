@@ -1,14 +1,16 @@
-import { NotepadText } from 'lucide-react'
+import { NotepadText, Settings2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { Card } from '@/components/ui/card'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
 import { formatBusinessDate, PROFIT_BASIS_LABELS } from '@/domain'
 
-import { CATEGORY_WORDS, readMonth, type MonthReading } from './ledger'
+import { readMonth, type MonthReading } from './ledger'
 
 /**
  * The month, for one outlet (#36) — **temporary, deleted with the capability.**
@@ -72,7 +74,7 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
     return (
       <LoadingFigures
         label="this month’s figures"
-        rows={[7, 5, 4]}
+        rows={[7, 6, 4]}
         data-testid="ledger-month-loading"
       />
     )
@@ -163,7 +165,13 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
       </Card>
 
       <Card className="space-y-2" data-testid="month-expenses">
-        <h2 className="text-sm font-bold text-content">Expenses breakdown</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-bold text-content">Expenses breakdown</h2>
+          <Link to="categories" className={buttonVariants({ variant: 'secondary', size: 'phone' })}>
+            <Settings2 aria-hidden size={15} />
+            Manage categories
+          </Link>
+        </div>
         {reading.expensesByCategory.length === 0 ? (
           <p className="text-sm text-content-muted">
             No expenses recorded this month. Cash withdrawn from the drawer is not an expense and is
@@ -174,15 +182,12 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
             {reading.expensesByCategory.map((total) => (
               <div key={total.category} data-testid={`month-category-${total.category}`}>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-semibold text-content">
-                    {CATEGORY_WORDS[total.category]}
-                  </span>
+                  <span className="text-sm font-semibold text-content">{total.category}</span>
                   <Money paise={total.amountPaise} className="text-sm font-semibold" />
                 </div>
                 {/*
-                  Every row behind the total, with what it was for. A total on its
-                  own is unauditable by month end, which is the whole reason the
-                  description is a required field rather than a nicety.
+                  Every row behind the total. The category identifies the cost;
+                  an optional note adds detail such as quantity.
                 */}
                 <ul className="mt-0.5 space-y-0.5">
                   {total.lines.map((line, index) => (
@@ -191,7 +196,8 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
                       className="flex items-baseline justify-between gap-2 text-xs text-content-muted"
                     >
                       <span className="min-w-0">
-                        {formatBusinessDate(line.businessDate)} — {line.description}
+                        {formatBusinessDate(line.businessDate)}
+                        {line.note ? ` — ${line.note}` : ''}
                         {line.isCash ? '' : ' (not cash)'}
                       </span>
                       <Money paise={line.amountPaise} className="shrink-0" />

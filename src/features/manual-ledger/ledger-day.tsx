@@ -8,6 +8,7 @@ import { AddButton } from '@/components/ui/add-button'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
+import { CategoryInput } from '@/components/ui/category-input'
 import { Input } from '@/components/ui/input'
 import { LoadingFigures, LoadingList } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
@@ -15,17 +16,14 @@ import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
-  type ExpenseCategory,
   type ManualLedgerDay,
   type ManualLedgerExpense,
 } from '@/data-access/adapters'
-import { formatBusinessDate, rupeesToPaise } from '@/domain'
+import { formatBusinessDate, normalizeCategory, rupeesToPaise } from '@/domain'
 import { cn } from '@/lib/cn'
 
 import {
-  CATEGORY_WORDS,
   checkOpeningChain,
-  LEDGER_CATEGORIES,
   netAggregatorPaise,
   readDay,
   type ChainSignal,
@@ -238,27 +236,28 @@ function draftToDay(
 }
 
 interface ExpenseDraft {
-  category: ExpenseCategory
+  category: string
   amount: string
   isCash: boolean
-  description: string
+  note: string
 }
 
 const BLANK_EXPENSE: ExpenseDraft = {
-  category: 'raw_materials',
+  category: '',
   amount: '',
   isCash: true,
-  description: '',
+  note: '',
 }
 
 export function LedgerDay({ outletId, businessDate }: { outletId: string; businessDate: string }) {
-  const { manualLedger: adapter } = useAdapters()
+  const { manualLedger: adapter, expenseCategories: categoriesAdapter } = useAdapters()
 
   const [previous, setPrevious] = useState<ManualLedgerDay | null>(null)
   const [recorded, setRecorded] = useState<ManualLedgerDay | null>(null)
   /** Null while the day is still being read: the whole card waits behind a shape. */
   const [draft, setDraft] = useState<DayDraft | null>(null)
   const [expenses, setExpenses] = useState<ManualLedgerExpense[] | null>(null)
+  const [categories, setCategories] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -278,6 +277,11 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
     setExpenses(await adapter.listExpenses(outletId, businessDate))
   }, [adapter, outletId, businessDate])
 
+  const loadCategories = useCallback(async () => {
+    const list = await categoriesAdapter.list()
+    setCategories(list.map((category) => category.name))
+  }, [categoriesAdapter])
+
   // Loads once per mount, and the parent remounts this component when the outlet
   // or the day changes (see the `key` in `manual-ledger-surface.tsx`). That is why
   // there is no reset here: clearing the draft in the effect body would be a
@@ -290,8 +294,9 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
       adapter.getDay(outletId, businessDate),
       adapter.getPreviousDay(outletId, businessDate),
       adapter.listExpenses(outletId, businessDate),
+      categoriesAdapter.list(),
     ])
-      .then(([day, earlier, list]) => {
+      .then(([day, earlier, list, categoryList]) => {
         if (!active) return
         setRecorded(day)
         setPrevious(earlier)
@@ -299,6 +304,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
         // previous close and rates, and inherits nothing on the first day.
         setDraft(day ? draftFrom(day) : draftInheriting(earlier))
         setExpenses(list)
+        setCategories(categoryList.map((category) => category.name))
       })
       .catch(() => {
         if (active) setError('Could not load this day. Try again in a moment.')
@@ -307,7 +313,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
     return () => {
       active = false
     }
-  }, [adapter, outletId, businessDate])
+  }, [adapter, categoriesAdapter, outletId, businessDate])
 
   /**
    * The day the two readings below are computed from.
@@ -392,8 +398,9 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
       setError('An expense needs an amount above zero, as a number of rupees.')
       return
     }
-    if (expenseDraft.description.trim() === '') {
-      setError('Say what the money was spent on.')
+    const category = normalizeCategory(expenseDraft.category)
+    if (!category) {
+      setError('Choose or type what the money was spent on.')
       return
     }
 
@@ -402,25 +409,25 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
     try {
       if (editing) {
         await adapter.updateExpense(editing.id, {
-          category: expenseDraft.category,
+          category,
           isCash: expenseDraft.isCash,
           amountPaise: rupeesToPaise(rupees),
-          description: expenseDraft.description,
+          note: expenseDraft.note,
         })
       } else {
         await adapter.createExpense({
           outletId,
           businessDate,
-          category: expenseDraft.category,
+          category,
           isCash: expenseDraft.isCash,
           amountPaise: rupeesToPaise(rupees),
-          description: expenseDraft.description,
+          note: expenseDraft.note,
         })
       }
       setExpenseOpen(false)
       setEditing(null)
       setExpenseDraft(BLANK_EXPENSE)
-      await loadExpenses()
+      await Promise.all([loadExpenses(), loadCategories()])
     } catch (cause) {
       setError(
         cause instanceof DataActionError
@@ -691,7 +698,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
         // one would be the same door twice, a hand's width apart.
         <EmptyState
           icon={Wallet}
-          title="Nothing recorded for this day yet. Add what was spent, and say what it was for."
+          title="Nothing recorded for this day yet. Add what was spent under the category the month should use."
         />
       ) : (
         <ul className="space-y-2" data-testid="ledger-expense-list">
@@ -703,7 +710,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
               >
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-content">
-                    {CATEGORY_WORDS[expense.category]}
+                    {expense.category}
                     {expense.isCash ? (
                       <span
                         data-testid={`ledger-cash-${expense.id}`}
@@ -723,14 +730,14 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
                       <span className="text-xs font-normal text-content-muted">Not cash</span>
                     )}
                   </p>
-                  <p className="text-xs text-content-muted">{expense.description}</p>
+                  {expense.note && <p className="text-xs text-content-muted">{expense.note}</p>}
                 </div>
                 <Money paise={expense.amountPaise} className="text-sm font-semibold" />
                 <div className="flex items-center gap-1">
                   <Button
                     variant="ghost"
                     size="phone"
-                    aria-label={`Edit ${expense.description}`}
+                    aria-label={`Edit ${expense.category}`}
                     data-testid={`edit-expense-${expense.id}`}
                     onClick={() => {
                       setError(null)
@@ -739,7 +746,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
                         category: expense.category,
                         amount: String(expense.amountPaise / 100),
                         isCash: expense.isCash,
-                        description: expense.description,
+                        note: expense.note ?? '',
                       })
                       setExpenseOpen(true)
                     }}
@@ -749,7 +756,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
                   <Button
                     variant="ghost"
                     size="phone"
-                    aria-label={`Remove ${expense.description}`}
+                    aria-label={`Remove ${expense.category}`}
                     data-testid={`remove-expense-${expense.id}`}
                     onClick={() => {
                       setError(null)
@@ -786,39 +793,24 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
       >
         <form id="ledger-expense-form" onSubmit={submitExpense} className="space-y-4" noValidate>
           <Field label="Category" id="expense-category">
-            <Select
+            <CategoryInput
               id="expense-category"
+              label="Expense category"
               value={expenseDraft.category}
-              data-testid="expense-category"
-              onChange={(event) =>
-                setExpenseDraft({
-                  ...expenseDraft,
-                  category: event.target.value as ExpenseCategory,
-                })
-              }
-            >
-              {LEDGER_CATEGORIES.map((category) => (
-                <option key={category.value} value={category.value}>
-                  {category.label}
-                </option>
-              ))}
-            </Select>
+              suggestions={categories}
+              testId="expense-category"
+              onChange={(category) => setExpenseDraft({ ...expenseDraft, category })}
+            />
           </Field>
 
-          <Field label="What was it for" id="expense-description">
+          <Field label="Note (optional)" id="expense-description">
             <Input
               id="expense-description"
-              required
-              value={expenseDraft.description}
-              placeholder="e.g. Chicken, 10 kg, from Nadia Poultry"
+              value={expenseDraft.note}
+              placeholder="e.g. 10 kg from Nadia Poultry"
               data-testid="expense-description"
-              onChange={(event) =>
-                setExpenseDraft({ ...expenseDraft, description: event.target.value })
-              }
+              onChange={(event) => setExpenseDraft({ ...expenseDraft, note: event.target.value })}
             />
-            <p className="text-xs text-content-muted">
-              Required: &ldquo;raw materials ₹2,400&rdquo; means nothing at month end.
-            </p>
           </Field>
 
           <Field label="Amount (₹)" id="expense-amount">
@@ -857,7 +849,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
         title="Remove this expense?"
         consequence={
           removing
-            ? `“${removing.description}” is removed from this day. Nothing records that it was ever here — this is a notebook, not a ledger of record.`
+            ? `“${removing.category}” is removed from this day. Nothing records that it was ever here — this is a notebook, not a ledger of record.`
             : ''
         }
         confirmLabel="Remove it"

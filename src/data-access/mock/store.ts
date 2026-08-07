@@ -4,6 +4,7 @@ import {
   expectedClosingPaise,
   lineTotalPaise,
   movementDelta,
+  normalizeCategory,
   resolveBusinessDate,
   shiftBusinessDate,
   sumQuantities,
@@ -97,6 +98,10 @@ export interface DemoStore {
   inventoryMovements: Tables<'inventory_movements'>[]
   /** Owned by the expenses adapter. Read by the daily-cash and insights adapters. */
   expenses: Tables<'expenses'>[]
+  /** Business-wide suggestions, shared by both expense records. */
+  expenseCategories: Tables<'expense_categories'>[]
+  /** Owner curation history. */
+  expenseCategoryOperations: Tables<'expense_category_operations'>[]
   /** Owned by the daily-cash adapter. */
   withdrawals: Tables<'cash_withdrawals'>[]
   /** Owned by the daily-cash adapter. A record here is a signed-off snapshot. */
@@ -473,7 +478,7 @@ export function createDemoStore(): DemoStore {
       category: seed.category,
       is_cash: seed.isCash,
       amount_paise: seed.amountPaise,
-      description: seed.description,
+      description: seed.note ?? null,
       recorded_by: OWNER_ID,
       created_at: instantAt(businessDate(seed.daysAgo), seed.time),
       updated_at: instantAt(businessDate(seed.daysAgo), seed.time),
@@ -503,6 +508,23 @@ export function createDemoStore(): DemoStore {
       updated_at: instantAt(businessDate(seed.daysAgo), '23:00'),
     }),
   )
+
+  const categoryNames = new Map<string, string>()
+  for (const row of [...expenses, ...manualLedgerExpenses]) {
+    const name = normalizeCategory(row.category)
+    if (!categoryNames.has(name.toLocaleLowerCase())) {
+      categoryNames.set(name.toLocaleLowerCase(), name)
+    }
+  }
+  const expenseCategories: Tables<'expense_categories'>[] = [...categoryNames.values()]
+    .sort((a, b) => a.localeCompare(b))
+    .map((name, index) => ({
+      id: `e1000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
+      name,
+      created_by: OWNER_ID,
+      created_at: new Date().toISOString(),
+    }))
+  const expenseCategoryOperations: Tables<'expense_category_operations'>[] = []
 
   // The same drift guard the inventory fixtures get, for the same reason: a demo
   // whose drawer does not add up is a demo the real system cannot reproduce, and
@@ -543,6 +565,8 @@ export function createDemoStore(): DemoStore {
     inventoryItems,
     inventoryMovements,
     expenses,
+    expenseCategories,
+    expenseCategoryOperations,
     withdrawals,
     dailyCashRecords,
     alerts,

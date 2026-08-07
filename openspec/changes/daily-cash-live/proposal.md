@@ -53,8 +53,8 @@ rather than discovering them:
 - **Carry the rows across before dropping the tables.** Each day row becomes a
   cash record and each expense row becomes an expense; both already carry an
   outlet, an explicit `business_date`, integer paise, and — for expenses — the
-  same shared `public.expense_category` this schema uses, so the mapping needs no
-  translation table. Dropping the tables without the carry-over does not satisfy
+  same normalised free-text category snapshot the live expense table uses, so
+  the mapping needs no translation table. Dropping the tables without the carry-over does not satisfy
   the removal, and the `manual-ledger` capability spec says so as a requirement.
   Two shapes need a decision rather than a copy: the manual ledger holds one
   stored `opening_cash_paise` per day where a real drawer derives it, and it holds

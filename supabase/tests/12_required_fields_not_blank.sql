@@ -280,16 +280,19 @@ $$, $$ values
   -- says nothing. Null means "not given"; '   ' would mean it twice, in a way
   -- no list could render.
   ('customers_name_not_blank'),
+  ('expense_categories_name_not_blank'),
+  ('expense_category_operations_before_not_blank'),
+  ('expense_category_operations_after_not_blank'),
+  ('expenses_category_not_blank'),
   -- The manual ledger (#36), temporary: both go when the capability does.
   --
   -- The note is OPTIONAL, like a customer's name, and for the same reason — it
   -- exists to explain a cash difference and most days have none to explain. What
   -- is refused is a note that occupies the field and says nothing.
   ('manual_ledger_days_note_not_blank'),
-  -- The description is REQUIRED, which is the stronger case and the deliberate
-  -- difference from `expenses.description`. A category and an amount identify a
-  -- purchase for about a week; an expense nobody can identify by month end is not
-  -- a record, and this ledger's only purpose is to be readable at month end.
+  -- Free-text category now carries the required identity. The note is optional,
+  -- but present whitespace still says nothing and is refused.
+  ('manual_ledger_expenses_category_not_blank'),
   ('manual_ledger_expenses_description_not_blank')
 $$, 'every not-blank constraint in the schema is accounted for, and no others exist');
 

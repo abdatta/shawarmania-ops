@@ -212,7 +212,7 @@ describe('the manual ledger surface', () => {
     expect(after?.openingCashPaise).toBe(1_500_000)
   })
 
-  it('records an expense only when it says what the money was for', async () => {
+  it('requires a category, accepts a new one, and leaves the note optional', async () => {
     renderLedger()
     await screen.findByTestId('ledger-day-form')
 
@@ -225,15 +225,11 @@ describe('the manual ledger surface', () => {
       /what the money was spent on/i,
     )
 
-    await userEvent.type(
-      screen.getByTestId('expense-description'),
-      'Chicken, 10 kg, from Nadia Poultry',
-    )
+    await userEvent.type(screen.getByTestId('expense-category'), 'Chicken')
     await userEvent.click(screen.getByRole('button', { name: /record expense/i }))
 
     const list = await screen.findByTestId('ledger-expense-list')
-    // Shown with what it was for, which is the point of requiring it.
-    expect(list).toHaveTextContent('Chicken, 10 kg, from Nadia Poultry')
+    expect(list).toHaveTextContent('Chicken')
     // One visible word beside the category, and the rest of it announced.
     expect(within(list).getByText('Cash')).toBeInTheDocument()
     expect(within(list).getByText(/from the drawer/)).toHaveClass('sr-only')
@@ -248,6 +244,7 @@ describe('the manual ledger surface', () => {
     const before = (await screen.findByTestId('expected-cash')).textContent
 
     await userEvent.click(screen.getByTestId('add-ledger-expense'))
+    await userEvent.type(screen.getByTestId('expense-category'), 'Electricity')
     await userEvent.type(screen.getByTestId('expense-amount'), '3200')
     await userEvent.type(screen.getByTestId('expense-description'), 'Electricity bill, by UPI')
     await userEvent.selectOptions(screen.getByTestId('expense-is-cash'), 'other')
@@ -280,9 +277,9 @@ describe('the manual ledger surface', () => {
     const spent = month.expenses.reduce((running, expense) => running + expense.amountPaise, 0)
 
     expect(screen.getByTestId('month-expenses-total')).toHaveTextContent(formatPaise(spent))
-    // Every expense is shown with its description, so a total is auditable.
+    // Every expense is shown with its optional note when one exists.
     for (const expense of month.expenses) {
-      expect(screen.getByTestId('month-expenses')).toHaveTextContent(expense.description)
+      if (expense.note) expect(screen.getByTestId('month-expenses')).toHaveTextContent(expense.note)
     }
   })
 

@@ -5,6 +5,7 @@ import { createSupabaseAccountsAdapter } from './accounts'
 import { createSupabaseAttendanceAdapter } from './attendance'
 import { createSupabaseBillingAdapter } from './billing'
 import { createSupabaseCustomersAdapter } from './customers'
+import { createSupabaseExpenseCategoriesAdapter } from './expense-categories'
 import { createSupabaseManualLedgerAdapter } from './manual-ledger'
 import { createSupabaseMenuAdapter } from './menu'
 import {
@@ -40,6 +41,7 @@ export function createSupabaseAdapters(): DataAdapters {
     // See supabase-adapters/operations.ts.
     inventory: createSupabaseInventoryAdapter(),
     expenses: createSupabaseExpensesAdapter(),
+    expenseCategories: createSupabaseExpenseCategoriesAdapter(client),
     dailyCash: createSupabaseDailyCashAdapter(),
     // Alerts are `demo`-gated, so nothing calls this one. Insights is the
     // exception: `owner-dashboard` is `live` and does call it — and `null` is

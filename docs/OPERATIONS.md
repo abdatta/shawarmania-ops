@@ -331,9 +331,10 @@ minutes per outlet, from a phone, and the figures build the month by themselves.
    applies to this day, and the block shows what actually arrives as you type.
 4. **Check each block's rate.** It carries forward from the previous day. Edit it
    on the day the rate actually changed and no earlier day moves.
-5. **Record each expense with what it was for.** The description is required and
-   is the point: `raw_materials ₹2,400` will mean nothing at month end. Mark it
-   cash only if it came out of this drawer.
+5. **Record each expense under the words the month should group by.** Category
+   is free text with business-wide suggestions; type a new one when the existing
+   list does not fit. Add an optional Note only when the category needs detail.
+   Mark it cash only if it came out of this drawer.
 6. **Cash added and cash withdrawn, each with a reason.** Banking, a float
    top-up, an owner drawing. **Equipment bought with drawer cash goes in Cash
    withdrawn, not in expenses** — the drawer is genuinely lighter, and recording

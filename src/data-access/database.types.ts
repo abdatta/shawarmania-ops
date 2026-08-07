@@ -1049,11 +1049,81 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_categories: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_categories_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_category_operations: {
+        Row: {
+          expense_rows_moved: number
+          id: string
+          ledger_rows_moved: number
+          name_after: string
+          name_before: string
+          operation: string
+          performed_at: string
+          performed_by: string
+        }
+        Insert: {
+          expense_rows_moved: number
+          id?: string
+          ledger_rows_moved: number
+          name_after: string
+          name_before: string
+          operation: string
+          performed_at?: string
+          performed_by?: string
+        }
+        Update: {
+          expense_rows_moved?: number
+          id?: string
+          ledger_rows_moved?: number
+          name_after?: string
+          name_before?: string
+          operation?: string
+          performed_at?: string
+          performed_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_category_operations_performed_by_fkey"
+            columns: ["performed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           amount_paise: number
           business_date: string
-          category: Database["public"]["Enums"]["expense_category"]
+          category: string
           created_at: string
           description: string | null
           id: string
@@ -1064,7 +1134,7 @@ export type Database = {
         Insert: {
           amount_paise: number
           business_date: string
-          category: Database["public"]["Enums"]["expense_category"]
+          category: string
           created_at?: string
           description?: string | null
           id?: string
@@ -1075,7 +1145,7 @@ export type Database = {
         Update: {
           amount_paise?: number
           business_date?: string
-          category?: Database["public"]["Enums"]["expense_category"]
+          category?: string
           created_at?: string
           description?: string | null
           id?: string
@@ -1308,9 +1378,9 @@ export type Database = {
         Row: {
           amount_paise: number
           business_date: string
-          category: Database["public"]["Enums"]["expense_category"]
+          category: string
           created_at: string
-          description: string
+          description: string | null
           id: string
           is_cash: boolean
           outlet_id: string
@@ -1320,9 +1390,9 @@ export type Database = {
         Insert: {
           amount_paise: number
           business_date: string
-          category: Database["public"]["Enums"]["expense_category"]
+          category: string
           created_at?: string
-          description: string
+          description?: string | null
           id?: string
           is_cash: boolean
           outlet_id: string
@@ -1332,9 +1402,9 @@ export type Database = {
         Update: {
           amount_paise?: number
           business_date?: string
-          category?: Database["public"]["Enums"]["expense_category"]
+          category?: string
           created_at?: string
-          description?: string
+          description?: string | null
           id?: string
           is_cash?: boolean
           outlet_id?: string
@@ -1998,6 +2068,14 @@ export type Database = {
         }
         Returns: string
       }
+      merge_expense_category: {
+        Args: { p_from: string; p_into: string }
+        Returns: {
+          expense_rows_moved: number
+          ledger_rows_moved: number
+        }[]
+      }
+      normalize_expense_category: { Args: { p_value: string }; Returns: string }
       normalize_indian_phone: { Args: { p_input: string }; Returns: string }
       outlet_reference_counts: {
         Args: { p_outlet: string }
@@ -2048,6 +2126,13 @@ export type Database = {
           user_id: string
         }[]
       }
+      rename_expense_category: {
+        Args: { p_from: string; p_rewrite_history: boolean; p_to: string }
+        Returns: {
+          expense_rows_moved: number
+          ledger_rows_moved: number
+        }[]
+      }
       resolve_email_sign_in: {
         Args: {
           p_email: string
@@ -2059,6 +2144,7 @@ export type Database = {
         }
         Returns: string
       }
+      retire_expense_category: { Args: { p_name: string }; Returns: undefined }
       set_super_admin_account_email: {
         Args: { p_email: string; p_profile_id: string }
         Returns: undefined
@@ -2089,15 +2175,6 @@ export type Database = {
       attendance_status: "present" | "absent" | "half_day" | "leave"
       bill_status: "settled" | "void"
       check_in_source: "phone" | "counter_tablet" | "manual"
-      expense_category:
-        | "raw_materials"
-        | "salaries"
-        | "rent"
-        | "electricity"
-        | "packaging"
-        | "maintenance"
-        | "marketing"
-        | "other"
       inventory_unit: "kg" | "litre" | "packet" | "piece"
       movement_type: "added" | "used" | "wasted" | "correction"
       payment_method: "cash" | "upi" | "card" | "swiggy" | "zomato" | "other"
@@ -2257,16 +2334,6 @@ export const Constants = {
       attendance_status: ["present", "absent", "half_day", "leave"],
       bill_status: ["settled", "void"],
       check_in_source: ["phone", "counter_tablet", "manual"],
-      expense_category: [
-        "raw_materials",
-        "salaries",
-        "rent",
-        "electricity",
-        "packaging",
-        "maintenance",
-        "marketing",
-        "other",
-      ],
       inventory_unit: ["kg", "litre", "packet", "piece"],
       movement_type: ["added", "used", "wasted", "correction"],
       payment_method: ["cash", "upi", "card", "swiggy", "zomato", "other"],

@@ -174,7 +174,23 @@ Quantity is `numeric`, not integer paise — 1.5 kg is a real quantity. Money on
 
 **`expenses`** — `id`, `outlet_id`, `business_date`, `category`, `description`, `amount_paise`, `payment_method`, `recorded_by`, `created_at`.
 
-`category`: `raw_materials` | `salaries` | `rent` | `electricity` | `packaging` | `maintenance` | `marketing` | `other`.
+`category` is normalised free text: outer whitespace is trimmed, internal
+whitespace collapses to one space, and case is preserved. It is a snapshot on
+the expense row, not a foreign key. Renaming or retiring a suggestion therefore
+cannot silently rewrite historical reporting; the owner must explicitly choose
+a history rewrite or merge when that is the intended correction.
+
+**`expense_categories`** — `id`, `name`, `created_by`, `created_at`. This is a
+business-wide suggestion list alongside `customers`, because the same vocabulary
+is useful at every outlet. Recording a new category mints its suggestion in the
+same transaction. Names are unique without regard to case and must already be
+normalised. There is deliberately no foreign key from either expense table:
+retiring a suggestion must not invalidate the rows that used it.
+
+**`expense_category_operations`** — `id`, `operation` (`rename` | `merge`),
+`name_before`, `name_after`, `ledger_rows_moved`, `expense_rows_moved`,
+`performed_by`, `performed_at`. One immutable row explains each owner rename or
+merge and records how much history moved in each expense table.
 
 Only expenses with `payment_method = 'cash'` affect the daily cash record.
 
@@ -350,9 +366,9 @@ reference from a live surface, greppable.
 `recorded_by`, `created_at`, `updated_at`. `unique (outlet_id, business_date)`.
 
 **`manual_ledger_expenses`** — `id`, `outlet_id`, `business_date`, `category`
-(the same shared `expense_category`, so retirement maps one-to-one onto
-`expenses`), `is_cash`, `amount_paise`, `description` (**required**, refused
-blank), `recorded_by`, `created_at`, `updated_at`.
+(the same normalised free-text snapshot used by `expenses`), `is_cash`,
+`amount_paise`, `description` (an optional Note, refused blank when present),
+`recorded_by`, `created_at`, `updated_at`.
 
 Four properties are load-bearing and easy to undo by accident:
 

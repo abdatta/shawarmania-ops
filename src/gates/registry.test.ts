@@ -117,4 +117,19 @@ describe('gate registry', () => {
       'staff-home',
     ])
   })
+
+  it('keeps live expense-category curation behind the ledger instead of in navigation', () => {
+    const categorySurface = surfaces.find((surface) => surface.id === 'owner-expense-categories')
+    expect(categorySurface).toMatchObject({
+      role: 'super_admin',
+      path: 'ledger/categories',
+      state: 'live',
+    })
+    expect(categorySurface?.nav).toBeUndefined()
+    expect(
+      visibleSurfaces(['super_admin'], 'real').some(
+        (surface) => surface.id === 'owner-expense-categories',
+      ),
+    ).toBe(false)
+  })
 })

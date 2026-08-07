@@ -1088,13 +1088,11 @@ export interface InventoryAdapter {
 // ─────────────────────────────────────────────────────────────────────────────
 // Expenses: what the outlet spent, and how.
 
-export type ExpenseCategory = Tables<'expenses'>['category']
-
 export interface ExpenseRecord {
   id: string
   outletId: string
   businessDate: string
-  category: ExpenseCategory
+  category: string
   amountPaise: number
   paymentMethod: PaymentMethod
   description: string | null
@@ -1104,7 +1102,7 @@ export interface ExpenseRecord {
 export interface NewExpense {
   outletId: string
   businessDate: string
-  category: ExpenseCategory
+  category: string
   /** Integer paise. Rupees are converted at the input boundary, never here. */
   amountPaise: number
   paymentMethod: PaymentMethod
@@ -1122,6 +1120,41 @@ export interface ExpensesAdapter {
   /** One outlet's expenses for one business date, most recent first. */
   listExpenses(outletId: string, businessDate: string): Promise<ExpenseRecord[]>
   createExpense(expense: NewExpense): Promise<ExpenseRecord>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Expense categories: a business-wide suggestion list and owner curation.
+
+export interface ExpenseCategorySuggestion {
+  id: string
+  name: string
+  ledgerUsageCount: number
+  expenseUsageCount: number
+  createdAt: string
+}
+
+export interface ExpenseCategoryOperation {
+  id: string
+  operation: 'rename' | 'merge'
+  nameBefore: string
+  nameAfter: string
+  ledgerRowsMoved: number
+  expenseRowsMoved: number
+  performedBy: string
+  performedAt: string
+}
+
+export interface ExpenseCategoryMoveResult {
+  ledgerRowsMoved: number
+  expenseRowsMoved: number
+}
+
+export interface ExpenseCategoriesAdapter {
+  list(): Promise<ExpenseCategorySuggestion[]>
+  rename(from: string, to: string, rewriteHistory: boolean): Promise<ExpenseCategoryMoveResult>
+  merge(from: string, into: string): Promise<ExpenseCategoryMoveResult>
+  retire(name: string): Promise<void>
+  listOperations(): Promise<ExpenseCategoryOperation[]>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1303,7 +1336,7 @@ export interface MethodTotal {
 
 /** Money spent under one category. */
 export interface CategoryTotal {
-  category: ExpenseCategory
+  category: string
   amountPaise: number
 }
 
@@ -1437,12 +1470,12 @@ export interface ManualLedgerExpense {
   id: string
   outletId: string
   businessDate: string
-  category: ExpenseCategory
+  category: string
   /** The only question this ledger asks of an expense: did it leave the drawer? */
   isCash: boolean
   amountPaise: number
-  /** Required. A category and an amount do not identify a purchase weeks later. */
-  description: string
+  /** Optional detail beyond the category, such as a quantity. */
+  note: string | null
   createdAt: string
 }
 
@@ -1452,15 +1485,15 @@ export type ManualLedgerDayInput = ManualLedgerDay
 export interface NewManualLedgerExpense {
   outletId: string
   businessDate: string
-  category: ExpenseCategory
+  category: string
   isCash: boolean
   /** Integer paise. Rupees are converted at the input boundary, never here. */
   amountPaise: number
-  description: string
+  note?: string | null
 }
 
 export type ManualLedgerExpensePatch = Partial<
-  Pick<NewManualLedgerExpense, 'category' | 'isCash' | 'amountPaise' | 'description'>
+  Pick<NewManualLedgerExpense, 'category' | 'isCash' | 'amountPaise' | 'note'>
 >
 
 /** Everything a month reading needs, unaggregated. The maths is not the adapter's. */
@@ -1509,6 +1542,7 @@ export interface DataAdapters {
   customers: CustomersAdapter
   inventory: InventoryAdapter
   expenses: ExpensesAdapter
+  expenseCategories: ExpenseCategoriesAdapter
   dailyCash: DailyCashAdapter
   alerts: AlertsAdapter
   insights: InsightsAdapter

@@ -113,6 +113,8 @@ assignment cannot be ended by anyone, including its holder.
 | **Expenses** |
 | View | R all | ✓ own outlet | — | — |
 | Record | — | ✓ own outlet | — | — |
+| Use or mint a category while recording | when recording is allowed | when recording is allowed | when recording is allowed | when recording is allowed |
+| Rename, merge or retire categories | ✓ | — | — | — |
 | **Attendance** |
 | Appear on an outlet's attendance day | only if also staff there | only if also staff there | — | ✓ |
 | Check in | — | only if also staff there | — | ✓ self |
@@ -132,6 +134,15 @@ assignment cannot be ended by anyone, including its holder.
 | **Manual ledger** (temporary, #36) |
 | Read a day, a month, or any row | ✓ all | — | — | — |
 | Record and correct days and expenses | ✓ all | — | — | — |
+
+**Expense categories are business-wide suggestions, not authority.** Any active
+account that is allowed to record an expense now, or will be allowed by the live
+expense writer set, may use an existing suggestion or mint a normalised new one
+as part of that write. Seeing the shared list does not reveal an expense row or
+widen outlet access. Only a Super Admin may curate the vocabulary: rename, merge
+and retire run through database functions that re-derive that authority from the
+caller's session, and rename or merge records an immutable operation with the
+number of historical rows moved.
 
 **Customers are the one thing here that is not an outlet's.** One normalized
 phone identifies one customer for the whole business, so a returning customer is

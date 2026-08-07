@@ -245,9 +245,8 @@ export const inventedMovementType: Pick<Tables<'inventory_movements'>, 'movement
   movement_type: 'spoiled',
 }
 
-export const inventedExpenseCategory: Pick<Tables<'expenses'>, 'category'> = {
-  // @ts-expect-error — 'travel' is not an expense_category.
-  category: 'travel',
+export const freeTextExpenseCategory: Pick<Tables<'expenses'>, 'category'> = {
+  category: 'Travel',
 }
 
 /**

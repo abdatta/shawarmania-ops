@@ -47,7 +47,7 @@ function expense(overrides: Partial<ManualLedgerExpense> = {}): ManualLedgerExpe
     category: 'raw_materials',
     isCash: true,
     amountPaise: 50_000,
-    description: 'Chicken from Nadia Poultry',
+    note: 'Chicken from Nadia Poultry',
     createdAt: '2026-08-01T10:00:00.000Z',
     ...overrides,
   }
@@ -259,20 +259,20 @@ describe('a month read for one outlet', () => {
       businessDate: '2026-08-02',
       category: 'raw_materials',
       amountPaise: 180_000,
-      description: 'Vegetables from the Kalyani market',
+      note: 'Vegetables from the Kalyani market',
     }),
     expense({
       businessDate: '2026-08-02',
       category: 'electricity',
       amountPaise: 320_000,
       isCash: false,
-      description: 'WBSEDCL bill paid by UPI',
+      note: 'WBSEDCL bill paid by UPI',
     }),
     expense({
       businessDate: '2026-08-03',
       category: 'salaries',
       amountPaise: 900_000,
-      description: 'Weekly wages, four staff',
+      note: 'Weekly wages, four staff',
     }),
   ]
 
@@ -334,10 +334,24 @@ describe('a month read for one outlet', () => {
     const rawMaterials = month.expensesByCategory.find(
       (total) => total.category === 'raw_materials',
     )
-    expect(rawMaterials?.lines.map((line) => line.description)).toEqual([
+    expect(rawMaterials?.lines.map((line) => line.note)).toEqual([
       'Chicken from Nadia Poultry',
       'Vegetables from the Kalyani market',
     ])
+  })
+
+  it('groups category spellings that differ only by case or spacing', () => {
+    const month = readMonth(days, [
+      expense({ category: ' Chicken ', amountPaise: 240_000 }),
+      expense({ category: 'chicken', amountPaise: 180_000 }),
+      expense({ category: 'CHICKEN  ', amountPaise: 80_000 }),
+    ])
+
+    expect(month.expensesByCategory).toHaveLength(1)
+    expect(month.expensesByCategory[0]).toMatchObject({
+      category: 'Chicken',
+      amountPaise: 500_000,
+    })
   })
 
   it('separates what left the drawer from what was merely spent', () => {

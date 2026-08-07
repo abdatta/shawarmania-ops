@@ -1,8 +1,9 @@
-import type { ExpenseCategory, ManualLedgerDay, ManualLedgerExpense } from '@/data-access/adapters'
+import type { ManualLedgerDay, ManualLedgerExpense } from '@/data-access/adapters'
 import {
   describeDifference,
   differencePaise,
   NotPaiseError,
+  normalizeCategory,
   profitEstimate,
   type DifferenceKind,
   type ProfitEstimate,
@@ -189,13 +190,13 @@ export function checkOpeningChain(
 /** One expense, as the month's category breakdown lists it. */
 export interface MonthExpenseLine {
   businessDate: string
-  description: string
+  note: string | null
   amountPaise: number
   isCash: boolean
 }
 
 export interface MonthCategoryTotal {
-  category: ExpenseCategory
+  category: string
   amountPaise: number
   /** Every row behind the total, so a figure can be checked rather than trusted. */
   lines: MonthExpenseLine[]
@@ -309,13 +310,15 @@ export function readMonth(
  * nothing on the screen could explain.
  */
 function groupByCategory(expenses: readonly ManualLedgerExpense[]): MonthCategoryTotal[] {
-  const groups = new Map<ExpenseCategory, MonthCategoryTotal>()
+  const groups = new Map<string, MonthCategoryTotal>()
 
   for (const expense of expenses) {
-    const existing = groups.get(expense.category)
+    const category = normalizeCategory(expense.category)
+    const key = category.toLocaleLowerCase()
+    const existing = groups.get(key)
     const line: MonthExpenseLine = {
       businessDate: expense.businessDate,
-      description: expense.description,
+      note: expense.note,
       amountPaise: assertPaise(expense.amountPaise, 'expense amount'),
       isCash: expense.isCash,
     }
@@ -324,8 +327,8 @@ function groupByCategory(expenses: readonly ManualLedgerExpense[]): MonthCategor
       existing.amountPaise += line.amountPaise
       existing.lines.push(line)
     } else {
-      groups.set(expense.category, {
-        category: expense.category,
+      groups.set(key, {
+        category,
         amountPaise: line.amountPaise,
         lines: [line],
       })
@@ -338,35 +341,6 @@ function groupByCategory(expenses: readonly ManualLedgerExpense[]): MonthCategor
 
   return [...groups.values()].sort((a, b) => b.amountPaise - a.amountPaise)
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Vocabulary.
-
-/**
- * The categories offered, in the order the form offers them.
- *
- * The existing shared `expense_category` enum, reused unchanged so a recorded row
- * maps one-to-one onto the live `expenses` table at retirement. It deliberately
- * has no entry for aggregator commission, cash banked or an owner drawing —
- * each is accounted for elsewhere, and a category for it would double-count it.
- *
- * Here rather than in the screen so both the day list and the month breakdown
- * read from one list, and so a category added to the enum has one place to land.
- */
-export const LEDGER_CATEGORIES: readonly { value: ExpenseCategory; label: string }[] = [
-  { value: 'raw_materials', label: 'Raw materials' },
-  { value: 'salaries', label: 'Salaries' },
-  { value: 'rent', label: 'Rent' },
-  { value: 'electricity', label: 'Electricity' },
-  { value: 'packaging', label: 'Packaging' },
-  { value: 'maintenance', label: 'Maintenance' },
-  { value: 'marketing', label: 'Marketing' },
-  { value: 'other', label: 'Other' },
-]
-
-export const CATEGORY_WORDS = Object.fromEntries(
-  LEDGER_CATEGORIES.map((category) => [category.value, category.label]),
-) as Record<ExpenseCategory, string>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Small shared helpers the surface and the adapters both want.

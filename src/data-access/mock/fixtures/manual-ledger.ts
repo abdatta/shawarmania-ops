@@ -55,7 +55,7 @@ export interface ManualLedgerExpenseSeed {
   category: Tables<'manual_ledger_expenses'>['category']
   isCash: boolean
   amountPaise: number
-  description: string
+  note?: string
   time: string
 }
 
@@ -139,50 +139,50 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
 export const manualLedgerExpenseSeeds: ManualLedgerExpenseSeed[] = [
   {
     daysAgo: 4,
-    category: 'raw_materials',
+    category: 'Chicken',
     isCash: true,
     amountPaise: 240_000,
-    description: 'Chicken, 10 kg, from Nadia Poultry',
+    note: '10 kg from Nadia Poultry',
     time: '09:15',
   },
   {
     daysAgo: 3,
-    category: 'raw_materials',
+    category: 'Vegetables and pita',
     isCash: true,
     amountPaise: 180_000,
-    description: 'Vegetables and pita from the Kalyani market',
+    note: 'Kalyani market',
     time: '09:05',
   },
   {
     daysAgo: 3,
-    category: 'electricity',
+    category: 'Electricity',
     isCash: false,
     amountPaise: 320_000,
-    description: 'WBSEDCL bill for July, paid by UPI',
+    note: 'WBSEDCL bill for July, paid by UPI',
     time: '18:40',
   },
   {
     daysAgo: 2,
-    category: 'packaging',
+    category: 'Packaging',
     isCash: true,
     amountPaise: 90_000,
-    description: 'Paper bags and foil, 500 each',
+    note: 'Paper bags and foil, 500 each',
     time: '11:20',
   },
   {
     daysAgo: 1,
-    category: 'salaries',
+    category: 'Staff wages',
     isCash: true,
     amountPaise: 1_450_000,
-    description: 'Weekly wages, four staff',
+    note: 'Four staff',
     time: '21:30',
   },
   {
     daysAgo: 1,
-    category: 'maintenance',
+    category: 'Maintenance',
     isCash: false,
     amountPaise: 145_000,
-    description: 'Grill serviced, paid by UPI',
+    note: 'Grill serviced, paid by UPI',
     time: '16:00',
   },
 ]

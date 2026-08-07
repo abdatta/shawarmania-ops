@@ -7,6 +7,7 @@ import {
 import type { Tables } from '../database.types'
 import { personaFixtures } from './fixtures/personas'
 import type { DemoStore } from './store'
+import { captureMockCategory } from './expense-categories'
 
 /**
  * The mock expenses adapter.
@@ -58,7 +59,7 @@ export function createMockExpensesAdapter(store: DemoStore): ExpensesAdapter {
         id: `db000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`,
         outlet_id: expense.outletId,
         business_date: expense.businessDate,
-        category: expense.category,
+        category: captureMockCategory(store, expense.category, RECORDED_BY),
         amount_paise: expense.amountPaise,
         payment_method: expense.paymentMethod,
         description: expense.description?.trim() || null,

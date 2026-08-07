@@ -95,7 +95,7 @@ describe('ExpensesSurface', () => {
 
     await screen.findByTestId('expense-list')
     await user.click(screen.getByRole('button', { name: 'Add expense' }))
-    await user.selectOptions(screen.getByLabelText('Category'), 'salaries')
+    await user.type(screen.getByLabelText('Expense category'), 'Staff advances')
     await user.type(screen.getByLabelText('Amount (₹)'), '3500')
     await user.selectOptions(screen.getByLabelText('Paid with'), 'cash')
     await user.type(screen.getByLabelText('Description (optional)'), 'Advance to the griller')
@@ -234,6 +234,7 @@ describe('the owner, on an outlet they do not manage', () => {
 
     await chooseOutlet(OUTLET_KANCHRAPARA_ID)
     await user.click(await screen.findByTestId('add-expense'))
+    await user.type(screen.getByLabelText('Expense category'), 'Platform fee')
     await user.type(screen.getByLabelText('Amount (₹)'), '620')
     await user.type(screen.getByLabelText(/Description/), 'Aggregator platform fee')
     await user.click(screen.getByRole('button', { name: /Record/ }))

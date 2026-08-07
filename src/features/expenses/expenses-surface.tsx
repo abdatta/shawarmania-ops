@@ -7,18 +7,20 @@ import { PageHeader } from '@/components/layout/page-header'
 import { AddButton } from '@/components/ui/add-button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
+import { CategoryInput } from '@/components/ui/category-input'
 import { Input } from '@/components/ui/input'
 import { LoadingList } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
+import { DataActionError, type ExpenseRecord, type PaymentMethod } from '@/data-access/adapters'
 import {
-  DataActionError,
-  type ExpenseCategory,
-  type ExpenseRecord,
-  type PaymentMethod,
-} from '@/data-access/adapters'
-import { formatBusinessDate, resolveBusinessDate, rupeesToPaise, shiftBusinessDate } from '@/domain'
+  formatBusinessDate,
+  normalizeCategory,
+  resolveBusinessDate,
+  rupeesToPaise,
+  shiftBusinessDate,
+} from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
 
 /**
@@ -39,17 +41,6 @@ import { useOutletScope } from '@/features/outlet-scope'
  * `docs/DATA_MODEL.md` owns it and this screen must not answer it.
  */
 
-const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
-  { value: 'raw_materials', label: 'Raw materials' },
-  { value: 'salaries', label: 'Salaries' },
-  { value: 'rent', label: 'Rent' },
-  { value: 'electricity', label: 'Electricity' },
-  { value: 'packaging', label: 'Packaging' },
-  { value: 'maintenance', label: 'Maintenance' },
-  { value: 'marketing', label: 'Marketing' },
-  { value: 'other', label: 'Other' },
-]
-
 /** Said once, on both surfaces the owner's remote path reaches. */
 const REMOTE_ENTRY_NOTE =
   'Recording into an outlet you do not run. Only entries that cannot touch its drawer are available, and this will be recorded as yours.'
@@ -61,10 +52,6 @@ const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'other', label: 'Other' },
 ]
 
-const CATEGORY_WORDS = Object.fromEntries(
-  CATEGORIES.map((category) => [category.value, category.label]),
-) as Record<ExpenseCategory, string>
-
 const METHOD_WORDS: Record<PaymentMethod, string> = {
   cash: 'Cash',
   upi: 'UPI',
@@ -75,7 +62,7 @@ const METHOD_WORDS: Record<PaymentMethod, string> = {
 }
 
 interface Draft {
-  category: ExpenseCategory
+  category: string
   /** Rupees, as typed. Converted to integer paise at the boundary. */
   amount: string
   paymentMethod: PaymentMethod
@@ -83,14 +70,14 @@ interface Draft {
 }
 
 const EMPTY_DRAFT: Draft = {
-  category: 'raw_materials',
+  category: '',
   amount: '',
   paymentMethod: 'cash',
   description: '',
 }
 
 export function ExpensesSurface() {
-  const { expenses: adapter, outlets } = useAdapters()
+  const { expenses: adapter, expenseCategories: categoriesAdapter, outlets } = useAdapters()
 
   // `today` is the anchor the day picker offers a week back from; `businessDate`
   // is which of those days is on screen. Two values rather than one, because
@@ -99,6 +86,7 @@ export function ExpensesSurface() {
   const [today, setToday] = useState<string | null>(null)
   const [businessDate, setBusinessDate] = useState<string | null>(null)
   const [expenses, setExpenses] = useState<ExpenseRecord[] | null>(null)
+  const [categories, setCategories] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
@@ -145,6 +133,21 @@ export function ExpensesSurface() {
   }, [adapter, outletId, businessDate])
 
   useEffect(() => {
+    let active = true
+    void categoriesAdapter
+      .list()
+      .then((list) => {
+        if (active) setCategories(list.map((category) => category.name))
+      })
+      .catch(() => {
+        if (active) setError('Could not load expense categories. Try again in a moment.')
+      })
+    return () => {
+      active = false
+    }
+  }, [categoriesAdapter])
+
+  useEffect(() => {
     if (!outletId || !businessDate) return
     let active = true
     void adapter
@@ -169,6 +172,11 @@ export function ExpensesSurface() {
       setError('An expense needs an amount above zero, as a number of rupees.')
       return
     }
+    const category = normalizeCategory(draft.category)
+    if (!category) {
+      setError('Choose or type what the money was spent on.')
+      return
+    }
 
     setBusy(true)
     setError(null)
@@ -176,7 +184,7 @@ export function ExpensesSurface() {
       await adapter.createExpense({
         outletId,
         businessDate,
-        category: draft.category,
+        category,
         amountPaise: rupeesToPaise(rupees),
         paymentMethod: draft.paymentMethod,
         description: draft.description,
@@ -184,6 +192,11 @@ export function ExpensesSurface() {
       setDraft(EMPTY_DRAFT)
       setFormOpen(false)
       await load()
+      setCategories((current) =>
+        current.some((name) => name.toLocaleLowerCase() === category.toLocaleLowerCase())
+          ? current
+          : [...current, category].sort((a, b) => a.localeCompare(b)),
+      )
     } catch (cause) {
       setError(
         cause instanceof DataActionError
@@ -284,7 +297,7 @@ export function ExpensesSurface() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-content">
-                      {CATEGORY_WORDS[expense.category]}
+                      {expense.category}
                       {expense.paymentMethod === 'cash' ? (
                         <span
                           data-testid={`cash-${expense.id}`}
@@ -351,19 +364,13 @@ export function ExpensesSurface() {
       >
         <form id="expense-form" onSubmit={submit} className="space-y-4" noValidate>
           <Field label="Category" id="expense-category">
-            <Select
+            <CategoryInput
               id="expense-category"
+              label="Expense category"
               value={draft.category}
-              onChange={(event) =>
-                setDraft({ ...draft, category: event.target.value as ExpenseCategory })
-              }
-            >
-              {CATEGORIES.map((category) => (
-                <option key={category.value} value={category.value}>
-                  {category.label}
-                </option>
-              ))}
-            </Select>
+              suggestions={categories}
+              onChange={(category) => setDraft({ ...draft, category })}
+            />
           </Field>
 
           <Field label="Amount (₹)" id="expense-amount">

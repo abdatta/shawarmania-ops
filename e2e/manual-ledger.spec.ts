@@ -53,11 +53,12 @@ test('the owner records a full trading day on a phone and reads its difference',
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('hint-drawer-panel')).toHaveCount(0)
 
-  // An expense, with what it was for — required, and the reason the ledger is
-  // worth keeping.
+  // A typed category grows the shared suggestion list; the note is optional
+  // detail and does not carry the reporting vocabulary.
   await page.getByTestId('add-ledger-expense').click()
+  await page.getByTestId('expense-category').fill('Chicken')
   await page.getByTestId('expense-amount').fill('2400')
-  await page.getByTestId('expense-description').fill('Chicken, 10 kg, from Nadia Poultry')
+  await page.getByTestId('expense-description').fill('10 kg from Nadia Poultry')
   await page.getByRole('button', { name: 'Record expense' }).click()
   await expect(page.getByTestId('ledger-expense-list')).toContainText('Nadia Poultry')
 
@@ -125,12 +126,17 @@ test('the month names its basis and nets the aggregators per day', async ({ page
   await expect(page.getByTestId('month-expenses')).toContainText(
     'already taken off the revenue above',
   )
-  // No category is an aggregator: the shared enum has no such value, and this is
-  // what that absence looks like on screen.
+  // The seeded notebook contains no double-counted aggregator category. Free
+  // text permits one, but the entry field warns instead of blocking it.
   await expect(page.locator('[data-testid^="month-category-"]')).not.toHaveCount(0)
   for (const forbidden of ['month-category-zomato', 'month-category-swiggy']) {
     await expect(page.locator(`[data-testid="${forbidden}"]`)).toHaveCount(0)
   }
+
+  await page.getByRole('link', { name: 'Manage categories' }).click()
+  await expect(page.getByRole('heading', { name: 'Expense categories' })).toBeVisible()
+  await expect(page.getByTestId('expense-category-list')).toContainText('Ledger')
+  await expect(page.getByTestId('category-operation-log')).toBeVisible()
 })
 
 test('recording a day at each outlet keeps the two apart', async ({ page }) => {
