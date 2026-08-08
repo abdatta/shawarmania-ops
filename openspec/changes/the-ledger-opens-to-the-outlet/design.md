@@ -1,7 +1,7 @@
 ## Context
 
 The manual ledger (#36) shipped owner-only and is in nightly use: twelve day rows
-across six trading days at both outlets by 2026-08-07. Every one of its six
+across six trading days at both outlets by 2026-08-07. Every one of its eight
 policies reads `public.app_is_owner() and public.app_account_active()`, and the
 migration comment says the absence of an outlet-role predicate is deliberate,
 because "no outlet role has any access to grant". `supabase/tests/21_manual_ledger.sql`
@@ -24,7 +24,7 @@ managers are appointed, a manager who counts the drawer nightly but cannot read
 whether the month covered its costs is running half a shop.
 
 This change does both halves together because they are the same edit to the same
-six policies. Splitting them would mean two migrations rewriting the same
+eight policies. Splitting them would mean two migrations rewriting the same
 policies a fortnight apart, with the second having to reason about what the first
 did.
 
@@ -33,7 +33,9 @@ touches no policy on either table; this change touches nothing #37 added except
 by reading the category list. The two migrations do not overlap by construction.
 
 Owner decisions taken during the 2026-08-07 grilling are marked
-**[owner, 2026-08-07]**.
+**[owner, 2026-08-07]**. Two scope decisions taken on 2026-08-08 are marked
+**[owner, 2026-08-08]** and are the reason D4 and D5 do not say what an earlier
+draft of this document said.
 
 ## Goals / Non-Goals
 
@@ -47,17 +49,16 @@ Owner decisions taken during the 2026-08-07 grilling are marked
   they are assigned to.
 - Staff read expenses and nothing else. No revenue, no drawer, no commission, no
   month.
+- No staff account can alter a day's counted cash, opening cash or cash removed.
 - An expense that goes away leaves a trace.
-- An expense not yet paid counts in the month when it is incurred and moves the
-  drawer only on the day it is settled.
 
 **Non-Goals:**
 
+- **No pending expenses and no settlement** [owner, 2026-08-08]. See D4 for what
+  that removed and why the case it served was not the one asked for.
 - **No edit history for expense figures** [owner, 2026-08-07]. Void is traced; an
   amount corrected in place is not. The described failure is a row disappearing,
   not a row being quietly inflated. Its own change if ever wanted.
-- **No structured "owed to" field** [owner, 2026-08-07]. Who is owed goes in the
-  note. Revisit if the pending list routinely runs past ten rows.
 - No approval workflow, spend limit, or receipt attachment.
 - **No offline queue.** `src/outbox/index.ts` is still `export {}` and the real
   one arrives with #9.
@@ -68,7 +69,7 @@ Owner decisions taken during the 2026-08-07 grilling are marked
 
 ### D1 — Authority is membership, resolved per outlet, exactly like every other table
 
-All six policies drop `app_is_owner()` as their sole predicate and become the
+All eight policies drop `app_is_owner()` as their sole predicate and become the
 shape #22 established:
 
 ```
@@ -86,10 +87,10 @@ and wrapped in `(select ...)`. Both conventions are documented in
 `20260729000004_multi_outlet_people.sql` and exist so the planner evaluates them
 once per query rather than once per row.
 
-`manual_ledger_days` gets **no staff branch at all**. Revenue by channel,
-commission rates, opening cash and the drawer count are on that row, and a staff
-member has no business reading any of them. This is enforced by the absence of a
-policy branch, not by a screen.
+`manual_ledger_days` gets **no staff branch at all**, which is not a widening but
+a refusal to widen: the table is owner-only today and this change opens it to
+Franchise Admins and stops. What that costs is nothing, and what it protects is
+set out in D5.
 
 **Rejected: a `staff` role predicate.** There is no such role. Biller and
 Employee are separate assignments and both need the same reach here, so the
@@ -98,7 +99,7 @@ Writing it as two clauses keeps it greppable when one of them changes.
 
 ### D2 — Staff correct their own rows on the current business day only
 
-Three separate limits, each enforced in the database rather than by the form:
+Two limits, both enforced in the database rather than by the form:
 
 - **Recording**: today only. A purchase noticed the next morning belongs to the
   manager or owner, who can reach any date [owner, 2026-08-07]. Enforced against
@@ -108,21 +109,19 @@ Three separate limits, each enforced in the database rather than by the form:
 - **Correcting and voiding**: own rows (`recorded_by = auth.uid()`), and only
   while `business_date` is still the current business date. A row that survives
   its own day is frozen to its author.
-- **Settling a pending expense**: any row at their outlet, any age.
 
-The settling asymmetry is deliberate and was reversed during design. The first
-rule drafted was owner-and-manager-only, reasoning that the person owed should
-not record that they were paid. That fails the common case outright: a supplier
-turns up, a staff member pays them from the drawer, and refusing it sends them to
-find the owner, which is the friction this change exists to remove
-[owner, 2026-08-07].
+**Reads carry no date limit.** The staff surface opens on the last two business
+days, but that is where it opens rather than a boundary, and no policy carries a
+date predicate on `select`. Enforcing the window would mean resolving each
+outlet's cutover through `app_business_date` per row, and it would be protecting
+an expense row, which is not a revenue figure. A rule that costs a correlated
+subquery to enforce something nobody needs enforced is the wrong rule.
 
-**The control it appears to give up was never there.** A fabricated cash entry
-lowers expected cash, so the nightly count still matches. The drawer count
-catches a *missing* entry, never an invented one. That is already true of the
-ordinary cash expenses being granted here, so restricting settlement buys nothing
-and costs the main scenario. **Attribution is the control**, and the spec says so
-rather than implying the count is a check.
+**A false cash entry is not caught by the drawer count.** It lowers expected
+cash, so the count still matches. The drawer count catches a *missing* entry,
+never an invented one. That is inherent to granting cash expenses at all, so no
+further restriction on staff buys anything. **Attribution is the control**, and
+the spec says so rather than implying the count is a check.
 
 ### D3 — Void replaces delete on `manual_ledger_expenses`
 
@@ -134,7 +133,9 @@ wondering where the row went.
 
 `DELETE` is revoked from `manual_ledger_expenses`. #36's migration granted it,
 and stated the reason explicitly: these tables are "a notebook with exactly one
-reader and one writer". That premise is what this change removes.
+reader and one writer". That premise is what this change removes. The revoke is a
+grant change as well as a policy change, and `20260726000010_grants_hygiene.sql`
+is the precedent for how those are written.
 
 `manual_ledger_days` keeps `DELETE`, because a day typed against the wrong date
 is still a mistake with no story worth keeping, and only owners and managers can
@@ -144,58 +145,75 @@ reach it.
 tracing a removal is knowing who removed it and why; a boolean is a tombstone
 that answers neither.
 
-### D4 — Three payment states, named by where the money came from
+### D4 — `is_cash` stays a boolean, because pending expenses are not in this change
 
-`is_cash boolean` becomes `payment public.ledger_payment` with values
-`from_drawer`, `from_bank`, `pending`. Named by source rather than by
-instrument, because the labels are what stop a staff member marking their own
-out-of-pocket purchase as cash and reading the drawer short by money that never
-left it.
+An earlier draft replaced `is_cash boolean` with a three-valued
+`payment public.ledger_payment` of `from_drawer`, `from_bank` and `pending`, and
+built settlement on top of it: settling wrote a cash-out line on the settlement
+day so that no already-counted day was rewritten. **Cut in full**
+[owner, 2026-08-08].
 
-The enum stays deliberately three-valued. The bill `payment_method` enum is not
-reused: it carries `swiggy` and `zomato`, which are revenue channels and cannot
-be ways an expense was paid, and `card` versus `upi` changes no figure this app
-computes. That mismatch is logged as a backlog note for #11 rather than fixed
-here.
+The reasoning for the cut. Supplier credit is a real problem and it is not the
+one the owner described, which was staff recording spends as they happen. It
+arrived during design rather than from the shop. Carrying it here would have
+meant a new enum, two settlement columns with three cross-column checks, a
+`security definer` settlement function that mutates a *different* day's row than
+the expense it settles, and an assertion that the original day stays byte-for-byte
+unchanged. It would also have stopped the month being a cash basis, which
+`profit-estimates` then requires the surface to rename, and the pending total
+becomes its own figure beside the profit estimate. That is a second capability
+wearing this one's clothes.
 
-The drawer arithmetic keeps asking exactly one question:
-`payment = 'from_drawer' and voided_at is null`.
+**Nothing regresses.** A credit purchase is unrecorded today and stays unrecorded
+after this change. The month is exactly as truthful as it was, and its existing
+cash-basis wording stays correct rather than needing to be rewritten.
 
-### D5 — Pending counts in the month when incurred, and moves the drawer only when settled
+So `is_cash` keeps its boolean type, its meaning and its column name, and the
+drawer arithmetic keeps asking one question, now with one more clause:
+`is_cash and voided_at is null`.
 
-A pending expense enters the month's expenses on its own `business_date`. A
-supplier postponing ₹40,000 of chicken must not make this month look excellent
-and next month terrible [owner, 2026-08-07].
+**What this defers, stated plainly.** An outlet buying on terms has no way to
+record it, and the month will understate in the month the goods arrive and
+overstate in the month they are paid for. That is today's behaviour. Revisit as
+its own change when the owner starts buying on terms; the `payment_method` enum
+mismatch that pushed toward a new enum is already logged as a backlog note for
+#11 either way.
 
-**This makes the month no longer a pure cash basis**, and the wording beside the
-profit figure changes to say so. `profit-estimates` requires any profit figure to
-name its basis, and the current words claim one it no longer has. The pending
-total is shown separately beside it, because "we owe ₹40,000" is its own useful
-figure.
+### D5 — What staff cannot read, and the exact size of that claim
 
-**Settling in cash writes a cash-out line on the settlement day.** The expense
-row is marked settled (`settled_on`, `settled_by`) and its `payment` stays
-`pending`, so it never enters any day's drawer arithmetic itself. The drawer
-moves once, on the day the money actually left, through
-`manual_ledger_days.cash_removed_paise` with a reason.
+The read side of the day-table boundary is real but narrower than an earlier
+draft assumed, and the difference matters because it decides what the tests are
+allowed to prove.
 
-This reuses machinery whose semantics are already correct: cash out is explicitly
-not an expense in this capability, so nothing double-counts, and **no day the
-owner has already counted is rewritten.** Flipping `payment` from `pending` to
-`from_drawer` would have subtracted the amount from the *original* business
-date's expected cash, silently changing a reconciled day. #12 calls that the
-subtlest rule in the system.
+**Today's takings at the outlet a staff member is working in are not
+confidential** [owner, 2026-08-08]. They stand where the sales happen. The
+counter tablet is signed in and physically present, and anyone who wanted the
+evening's figure could tally the orders themselves and reach it. No test, wording
+or later feature may rest on the premise that a worked shift is a secret this app
+is keeping.
 
-**Rejected: a separate settlement date with the drawer summing cash expenses by
-settlement date and the month summing by business date.** Two date axes on one
-row, and every read has to state which one it means. Correct, and more
-machinery than a notebook with a scheduled retirement should carry.
+**Everything else on that row is confidential and is in scope**: any past day,
+any month's aggregate, the other outlet, and every figure net of commission. None
+of it can be observed from behind a counter, and a running total across weeks is
+not the same information as one evening's cash. This is the read-side claim the
+gate makes and the read-side assertions prove.
 
-**Accepted limitation** [owner, 2026-08-07]: the day row holds a single
-`cash_removed_paise` and a single `cash_removed_reason`, so two settlements on
-one day merge into one line with a combined reason. Stated in the spec so it is
-not discovered as a bug. The app writes the line rather than making the user do
-it twice, and appends to the reason when one is already present.
+**The mechanism is blunter than the principle, deliberately.** The policy refuses
+staff every day row, including one from a shift they worked and watched. There is
+no roster check and none is worth building: the narrow thing the owner conceded
+is a statement about what the system may *claim*, not an instruction to open a
+hole. Writing it down keeps a later reader from hunting for a roster predicate
+that was never there.
+
+**Why the boundary is worth having at all, given the concession.** The write side.
+A staff account that could set `cash_counted_paise`, `opening_cash_paise` or
+`cash_removed_paise` could make any drawer reconcile, and the nightly count is the
+only control the owner has over cash. That alone justifies the policy; the read
+protection is a free consequence of the same predicate.
+
+`docs/LIMITATIONS.md` records the distinction so #11 and #13 inherit it rather
+than re-arguing it, and so that a later change showing staff their own shift's
+sales is a product question while one showing them the month is not.
 
 ### D6 — `updated_by` beside the frozen `recorded_by`
 
@@ -214,17 +232,21 @@ notebook; the reading just has to say whose figures are on screen.
 one day row simultaneously is not a real scenario at this scale, and a conflict
 dialog on a notebook is ceremony.
 
-### D7 — Staff get their own surface, not the Ledger with sections removed
+### D7 — The expense list is lifted out of the day surface, and staff mount it alone
 
-A new `staff-expenses` surface, its own tab in the Biller and Employee shells.
-It renders that outlet's expenses for the last two business days, every row
-whoever recorded it, plus every unsettled pending item **regardless of age** so
-the supplier bill somebody is standing there to settle is reachable.
+`src/features/manual-ledger/ledger-day.tsx` is 1,402 lines built around the day
+row: the opening-cash chain, the live drawer difference, every figure card. The
+expense list and its form are a self-contained region inside it, and they become
+one component that both surfaces mount. The day surface renders it below its
+figures. A new `staff-expenses` surface renders it alone, for the last two
+business days at the chosen outlet, every row whoever recorded it.
 
-**Rejected: the Ledger with revenue and drawer stripped by role.** One screen
-rendering four different amounts of financial truth is the shape that leaks
-eventually, and it would put a role check in front of every figure on a 1,400-line
-component.
+**Rejected: the Ledger opened to staff with revenue and drawer stripped by role.**
+This was the intuitive shape and it is more work, not less. The surface reads the
+day row for almost everything it draws, and an account holding no day row means a
+role check in front of every figure on a 1,400-line component, each one a place a
+figure leaks later. Extraction is the honest version of the same instinct: real
+reuse of the part both readers share, with no role branching in the large file.
 
 Two gate registry entries, `staff-expenses` under `biller` and under `employee`,
 state `live`, each with a `nav` block. **The gate registry is on the `/quickfix`
@@ -238,10 +260,10 @@ and the chrome around it, and this change adds a tab to two shells.
 ### D8 — The row is lean, and the detail expands
 
 Each expense row shows category, amount, a from-the-drawer marker, and the note.
-Recorder, timestamps, void state with its reason and actor, and settlement
-history live behind an expandable card [owner, 2026-08-07]. An expandable card
-rather than an info icon: the detail is more than a tooltip holds, and a tooltip
-is a hover idiom on a surface used entirely with thumbs.
+Recorder, timestamps, and void state with its reason and actor live behind an
+expandable card [owner, 2026-08-07]. An expandable card rather than an info icon:
+the detail is more than a tooltip holds, and a tooltip is a hover idiom on a
+surface used entirely with thumbs.
 
 Naming the recorder on the collapsed row is what makes "your own rows" legible.
 A staff member sees at a glance which rows they can still fix.
@@ -257,24 +279,28 @@ A staff member sees at a glance which rows they can still fix.
 
 - **The `manual-ledger` spec's first requirement is being replaced, not
   amended.** "Reachable only by an owner, and the database is what refuses
-  everyone else", with four scenarios. → The spec delta uses MODIFIED with the
-  full replacement text, and every one of the four scenarios is rewritten rather
-  than dropped, so the archive keeps a readable record of what the boundary was.
-
-- **A pending expense that is never settled inflates the month forever.** →
-  Accepted: it is a genuine liability and the month should show it. The pending
-  total shown beside the profit figure is what stops it being invisible, and
-  the surface lists unsettled items without an age limit so nothing rots
-  unnoticed.
+  everyone else", with four scenarios. → Its own title asserts the rule being
+  removed, and a MODIFIED block cannot rename a requirement, so the delta uses
+  REMOVED with a stated reason plus an ADDED replacement, the idiom this spec
+  already uses for its authority requirement. Every one of the four scenarios is
+  rewritten rather than dropped, so the archive keeps a readable record of what
+  the boundary was.
 
 - **A false cash entry is not caught by the drawer count.** → Stated in the spec
   as a limitation of the control model rather than papered over. The controls are
   attribution and the void trace, and the alternative (an approval step on every
   gas cylinder) is what the change exists to avoid.
 
-- **#12's carry-over obligation grows.** → It currently owes amounts, dates and
-  categories. After this it owes attribution, void state, settlement state and
-  three payment states. Updated in `daily-cash-live/proposal.md` in this change,
+- **Cutting pending leaves credit purchases unrecordable.** → Accepted
+  [owner, 2026-08-08]. It is the current behaviour, so nothing regresses, and the
+  month keeps the cash-basis wording that is already true of it. The risk is that
+  the gap is forgotten rather than that it bites now; D4 states it and the
+  non-goals repeat it.
+
+- **#12's carry-over obligation grows, but by less than it would have.** → It
+  currently owes amounts, dates and categories. After this it owes attribution and
+  void state. It does **not** owe settlement state or payment states, which is the
+  direct saving from D4. Updated in `daily-cash-live/proposal.md` in this change,
   not later.
 
 - **The counter tablet will stop having personal logins.** → #9 replaces the
@@ -295,11 +321,12 @@ A staff member sees at a glance which rows they can still fix.
   staff". Whether an Employee who is not at the counter ever spends outlet money
   is worth one question before building two tabs, and the answer is cheap to act
   on either way since the policy branch already names both roles.
+- **Does voiding require a reason?** D3 assumes yes, and the completeness check is
+  written for it. A required reason is one more field on the fastest path a staff
+  member takes; an absent one leaves the trace able to answer who and when but not
+  why. Settle before writing the check, because it is a constraint either way.
 - **What a Franchise Admin sees of the owner's remote entries, and the reverse.**
   `outlet-expenses` already requires an owner's remote expense to be visibly the
   owner's on the live surface. Whether the ledger adopts the same marking, or
   relies on the recorder name alone, is a surface decision this change should
   settle rather than inherit by accident.
-- **The exact replacement wording for "cash-basis operating estimate".** It must
-  be truthful about counting unpaid expenses and still short enough to sit beside
-  a figure on a phone.

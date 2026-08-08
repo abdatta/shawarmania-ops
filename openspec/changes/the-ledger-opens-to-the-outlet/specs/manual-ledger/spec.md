@@ -1,6 +1,38 @@
-## MODIFIED Requirements
+## REMOVED Requirements
 
 ### Requirement: The manual ledger is reachable only by an owner, and the database is what refuses everyone else
+
+**Reason**: The owner-only rule described production rather than a decision. Both
+Super Admins held no Franchise Admin assignment at either outlet, so the owners
+were the managers, and the requirement recorded that accident as a boundary. The
+requirement cannot be amended in place because its own title asserts the rule
+this change removes.
+
+**Migration**: Replaced by "The day record is reachable by owners, and by
+managers at the outlets they are assigned to" below, which keeps every clause
+still in force, rewrites all four scenarios rather than dropping them so the
+archive keeps a readable record of what the boundary was, and states what the
+refusal of outlet staff is actually protecting. No stored row changes.
+
+### Requirement: The manual ledger grants no authority that survives it, and its rows outlive its surface
+
+**Reason**: The clause stating that the owner's ability to write cash figures
+here is not precedent for the live cash record still holds and is retained, but
+the requirement as written asserts a single-writer, owner-only capability that
+this change replaces.
+
+**Migration**: Replaced by "The manual ledger is a record only, and its rows
+outlive its surface" below, which keeps every clause that is still true and drops
+the ones describing an authority model no longer in force. No stored row changes.
+`daily-cash-live` (#12) still owns the retirement, and its inherited obligation
+grows in the same change: carrying these rows across now means carrying
+attribution and void state as well as amounts, dates and categories. It does not
+mean carrying settlement or payment states, which this change deliberately does
+not create.
+
+## ADDED Requirements
+
+### Requirement: The day record is reachable by owners, and by managers at the outlets they are assigned to
 
 The manual ledger's day record and its full surface SHALL be available to an
 account holding a live Super Admin assignment at any outlet, and to an account
@@ -11,10 +43,28 @@ assignment at, by Row-Level Security rather than by the interface.
 
 A Biller or an Employee SHALL be refused every select, insert, update and delete
 on `manual_ledger_days` at every outlet, including outlets where they hold a
-live assignment. That row carries revenue by channel, commission rates, opening
-cash and the counted drawer, and no outlet staff role has any business reading
-any of them. The refusal SHALL be the absence of a policy branch, not a hidden
-screen.
+live assignment. The refusal SHALL be the absence of a policy branch, not a
+hidden screen.
+
+That refusal protects two distinct things and the difference SHALL be stated
+rather than left implied.
+
+On the **write** side it protects the drawer. No outlet staff account SHALL be
+able to set a day's counted cash, opening cash or cash removed, because a staff
+account that could set any of them could make any drawer reconcile, and the
+nightly count is the only control the business has over cash.
+
+On the **read** side it protects history and aggregates: any past business date,
+any month's total, any other outlet, and every figure net of commission. None of
+these is observable from behind a counter, and a running total across weeks is
+not the same information as one evening's cash.
+
+The system SHALL NOT claim that the takings of a shift a staff member worked, at
+the outlet they worked it in, are confidential. That person stands where the
+sales happen and could tally them. No requirement, test or later feature SHALL
+rest on the premise that such a figure is secret. The policy nevertheless
+refuses every day row without checking who was rostered, because the concession
+is a limit on what the system may claim and not an instruction to open a hole.
 
 The expense record SHALL be reachable by outlet staff under the separate
 requirement below, which is a narrower grant against a different table.
@@ -40,7 +90,17 @@ end that access on the account's next request rather than at token expiry.
 #### Scenario: Outlet staff are refused the day record at their own outlet
 
 - **WHEN** a Biller or an Employee issues a hand-crafted select, insert, update or delete against `manual_ledger_days`, naming an outlet where they hold a live assignment
-- **THEN** the database refuses it and returns no rows, so no revenue, commission rate, opening cash or drawer count is reachable by any outlet staff role anywhere
+- **THEN** the database refuses it and returns no rows
+
+#### Scenario: Staff cannot move the drawer figures
+
+- **WHEN** a Biller or an Employee issues a hand-crafted update setting a day's counted cash, opening cash or cash removed at their own outlet
+- **THEN** the database refuses each of them and every figure on that day is unchanged
+
+#### Scenario: A past day and a month total stay out of reach
+
+- **WHEN** a Biller or an Employee issues a hand-crafted select for a business date other than the current one, or for a range spanning a month, at their own outlet
+- **THEN** the database returns no rows, so no past day's revenue and no monthly aggregate is reachable
 
 #### Scenario: The day surface is absent rather than forbidden
 
@@ -52,14 +112,17 @@ end that access on the account's next request rather than at token expiry.
 - **WHEN** an account's assignment is ended or the account is deactivated
 - **THEN** its next manual-ledger request is refused without waiting for token expiry, at every outlet that assignment reached
 
-## ADDED Requirements
-
 ### Requirement: Everyone at an outlet reads its expenses, and each staff member corrects only their own, on the day they recorded them
 
 An account holding a live Biller or Employee assignment at an outlet SHALL be
 able to read every expense recorded against that outlet, whoever recorded it,
 and SHALL be refused every expense at every outlet they hold no live assignment
 at, by the database rather than by the interface.
+
+That read SHALL NOT be limited by business date. An expense row is not a revenue
+figure, so there is nothing to protect by withholding an old one, and any date
+window a surface applies SHALL be a presentation default rather than a rule the
+database enforces.
 
 Such an account SHALL be able to record an expense at that outlet against the
 **current business date only**, resolved through that outlet's own business-day
@@ -80,6 +143,12 @@ assignment SHALL be able to do so at every outlet.
 Every expense SHALL name the account that recorded it wherever it is listed, so
 that which rows a reader may still correct is legible rather than remembered.
 
+A cash expense that was never made SHALL NOT be detectable by the drawer count,
+because an invented expense lowers expected cash and the count still matches.
+The count catches a missing entry, never an invented one. The controls on a
+staff-recorded expense SHALL therefore be understood as attribution and the void
+trace, and no requirement SHALL imply the nightly count is a check on it.
+
 #### Scenario: A staff member records an expense at their own outlet
 
 - **WHEN** a Biller or Employee records an expense against the current business date at an outlet they hold a live assignment at
@@ -89,6 +158,11 @@ that which rows a reader may still correct is legible rather than remembered.
 
 - **WHEN** a Biller or Employee reads their outlet's expenses
 - **THEN** the list includes expenses recorded by other staff, by the manager and by the owner, each naming who recorded it
+
+#### Scenario: An older expense is readable, not refused
+
+- **WHEN** a Biller or Employee issues a hand-crafted select for an expense at their own outlet dated before any window the surface shows
+- **THEN** the database returns it, because the window is a surface default and not a boundary
 
 #### Scenario: Another outlet's expenses are refused
 
@@ -124,7 +198,8 @@ voided it, and a required reason.
 A voided expense SHALL be shown to every reader of that outlet, including
 outlet staff, marked so that it reads as withdrawn rather than as an ordinary
 entry. It SHALL NOT count toward that day's expected cash, that day's expense
-list total, or any figure in that month.
+list total, or any figure in that month, including that month's breakdown by
+category.
 
 A voided expense SHALL NOT be editable, un-voidable or re-voidable. A correction
 after voiding is a new expense.
@@ -141,7 +216,7 @@ only owners and managers can reach it.
 #### Scenario: A voided expense stops counting
 
 - **WHEN** a day and a month containing a voided expense are read
-- **THEN** that expense is absent from the day's expected cash, from the day's total and from every month figure, while every other expense is unchanged
+- **THEN** that expense is absent from the day's expected cash, from the day's total and from every month figure including the category breakdown, while every other expense is unchanged
 
 #### Scenario: Staff see the withdrawal
 
@@ -161,101 +236,6 @@ only owners and managers can reach it.
 #### Scenario: A voided expense is final
 
 - **WHEN** an edit, an un-void or a second void is attempted against an already-voided expense
-- **THEN** the database refuses it
-
-### Requirement: An expense states where its money came from, and one of the three states is that it has not been paid
-
-Each expense SHALL carry exactly one of three states: paid **from the drawer**,
-paid **from the bank**, or **pending**. The states SHALL be named by where the
-money came from rather than by payment instrument, so that a purchase somebody
-made from their own pocket is not recorded as drawer cash and does not read the
-drawer short by money that never left it.
-
-Only an expense paid from the drawer, and not voided, SHALL reduce a day's
-expected cash. An expense paid from the bank and a pending expense SHALL NOT.
-
-A pending expense SHALL be included in its month's expenses on its own business
-date, when the cost was incurred rather than when it is paid, so that a
-postponed supplier bill cannot flatter one month and distort the next. The
-pending total SHALL be shown separately from the profit figure, because what the
-business owes is its own reading.
-
-The month's profit figure SHALL NOT be described as a cash-basis estimate, since
-unpaid expenses are counted. It SHALL state its actual basis in words beside it,
-as `profit-estimates` requires of any profit figure, and SHALL continue to be
-described as an operating estimate because capital spending is still not
-recorded.
-
-#### Scenario: Only drawer money moves the drawer
-
-- **WHEN** a day carries expenses paid from the drawer, paid from the bank and pending
-- **THEN** expected cash falls by the drawer-paid expenses alone, and the other two leave it unchanged
-
-#### Scenario: A pending expense counts in its month
-
-- **WHEN** a month contains a pending expense
-- **THEN** the month's expenses and profit include it on its own business date, and the pending total is shown separately
-
-#### Scenario: The basis is stated truthfully
-
-- **WHEN** the month's estimated profit is rendered
-- **THEN** the words beside it state a basis that accounts for unpaid expenses being counted, do not call it a cash-basis estimate, and still identify it as an operating figure
-
-### Requirement: Settling a pending expense moves the drawer on the day it is settled, never on the day it was incurred
-
-Any account that may record an expense at an outlet SHALL be able to settle a
-pending expense at that outlet, whoever recorded it and however old it is,
-because a supplier presenting an invoice is paid by whoever is standing there.
-
-Settling SHALL record the date it was settled and the account that settled it.
-Settling from the drawer SHALL additionally record cash taken out of the drawer
-**on the settlement date**, with a reason, so that the drawer falls on the day
-the money actually left.
-
-A settled expense SHALL NOT itself enter any day's expected cash, and settling
-SHALL NOT change the expense's business date, its amount, or any figure on the
-business date it was incurred on. A day already recorded and counted SHALL be
-byte-for-byte unchanged by a settlement occurring after it.
-
-An unsettled pending expense SHALL be listed to every reader of that outlet
-**regardless of its age**, so that the item somebody is standing there to settle
-is reachable however long it has been outstanding.
-
-Where cash was already taken out of the drawer on the settlement date, the
-settlement SHALL add to that amount and extend its reason rather than replacing
-either, because the day record holds one cash-out figure and one reason. This is
-a stated limitation of the day record's shape, not a rounding of the settlement.
-
-A voided expense SHALL NOT be settleable.
-
-#### Scenario: A supplier is paid from the drawer by whoever is there
-
-- **WHEN** a Biller settles a pending expense from the drawer at their own outlet, recorded weeks earlier by somebody else
-- **THEN** the settlement is stored with the date and the account, and cash taken out of the drawer on that settlement date increases by exactly that amount with a reason
-
-#### Scenario: The day it was incurred does not move
-
-- **WHEN** a pending expense is settled after the business date it was incurred on has been recorded and counted
-- **THEN** that earlier day's opening cash, cash movements, expected cash, counted cash and difference are all unchanged
-
-#### Scenario: Settling does not double-count
-
-- **WHEN** a settled expense's month is read
-- **THEN** the expense appears once, on its own business date, and the cash taken out on the settlement date is not counted as an expense
-
-#### Scenario: An old pending item is still reachable
-
-- **WHEN** a pending expense older than the expense list's usual window is unsettled
-- **THEN** it is listed to every reader of that outlet, including outlet staff, until it is settled or voided
-
-#### Scenario: Two settlements on one day share the cash-out line
-
-- **WHEN** two pending expenses are settled from the drawer on the same business date
-- **THEN** the day's cash taken out equals the sum of both, its reason names both, and neither settlement overwrites the other
-
-#### Scenario: A voided expense cannot be settled
-
-- **WHEN** a settlement is attempted against a voided expense, including by a hand-crafted request
 - **THEN** the database refuses it
 
 ### Requirement: A corrected row says who corrected it, without rewriting who recorded it
@@ -295,13 +275,21 @@ and nothing else. It SHALL NOT show revenue by any channel, opening cash, cash
 movements, the counted drawer, any commission rate, any difference, or any
 monthly figure.
 
-The surface SHALL show the expenses recorded against the **two most recent
-business days** for that outlet, plus every unsettled pending expense whatever
-its date.
+The surface SHALL open on the expenses recorded against the **two most recent
+business days** for that outlet. That window is where the surface opens rather
+than a boundary, and SHALL NOT be enforced by the database, for the reason given
+in the expense-reading requirement above.
+
+The expense list and its entry form SHALL be the same component the day surface
+renders, mounted without the day's figures around it, rather than the day
+surface shown with sections removed by role. A single surface rendering
+different amounts of financial truth depending on who is reading it puts a role
+check in front of every figure it draws, and each such check is a place a figure
+can later leak.
 
 Each listed expense SHALL show its category, its amount, whether it came from
 the drawer, its note and the account that recorded it. Everything else the row
-holds, including the void reason and actor and the settlement history, SHALL be
+holds, including the void reason and the account that voided it, SHALL be
 reachable by expanding the entry rather than shown by default, so that the list
 stays readable on a phone held in one hand.
 
@@ -317,36 +305,17 @@ SHALL decide every read and write from the assignment.
 #### Scenario: Detail is reached deliberately
 
 - **WHEN** a listed expense is expanded
-- **THEN** its recorder, timestamps, void reason and actor where present, and settlement history are shown without leaving the list
+- **THEN** its recorder, timestamps, and void reason and actor where present are shown without leaving the list
 
-#### Scenario: Pending items ignore the window
+#### Scenario: The same list serves both readers
 
-- **WHEN** the surface is opened and an unsettled pending expense exists that is older than two business days
-- **THEN** it is listed alongside the recent days rather than being hidden by the window
+- **WHEN** an expense is recorded from the staff surface and the day surface is then opened for that business date by a manager
+- **THEN** the row appears in the day surface's expense list unchanged, because both surfaces render the same list from the same rows
 
 #### Scenario: A staff member assigned at two outlets chooses one
 
 - **WHEN** an account holds live staff assignments at more than one outlet
 - **THEN** the surface offers a choice of outlet, and a hand-crafted request naming an outlet they hold no assignment at is still refused by the database
-
-## REMOVED Requirements
-
-### Requirement: The manual ledger grants no authority that survives it, and its rows outlive its surface
-
-**Reason**: The clause stating that the owner's ability to write cash figures
-here is not precedent for the live cash record still holds and is retained,
-but the requirement as written asserts a single-writer, owner-only capability
-that this change replaces. It is superseded by the requirements above together
-with the replacement below, which keeps every clause that is still true and drops
-the ones that describe an authority model no longer in force.
-
-**Migration**: Replaced by "The manual ledger is a record only, and its rows
-outlive its surface" below. No stored row changes. `daily-cash-live` (#12) still
-owns the retirement, and its inherited obligation grows in the same change:
-carrying these rows across now means carrying attribution, void state,
-settlement state and the three payment states, not amounts and dates alone.
-
-## ADDED Requirements
 
 ### Requirement: The manual ledger is a record only, and its rows outlive its surface
 
@@ -364,14 +333,13 @@ be taken as precedent for the live expense record either, whose grants are
 The capability SHALL be removed only by a change that first carries its rows
 into the live cash and expense records, so that a period recorded here remains
 readable from the real reports afterwards. That carry-over SHALL preserve, for
-every row, the account that recorded it, the account that last corrected it,
-whether it was voided and by whom and why, whether it was settled and when, and
-which of the three payment states it held. Dropping the tables without that
+every row, the account that recorded it, the account that last corrected it, and
+whether it was voided and by whom and why. Dropping the tables without that
 carry-over SHALL NOT satisfy the removal.
 
 #### Scenario: No live figure moves
 
-- **WHEN** a manual-ledger day or expense row is written, corrected, voided or settled
+- **WHEN** a manual-ledger day or expense row is written, corrected or voided
 - **THEN** no attendance, bill, live expense, inventory, cash record or live report figure changes
 
 #### Scenario: No live surface reads the notebook
@@ -387,4 +355,4 @@ carry-over SHALL NOT satisfy the removal.
 #### Scenario: Retirement carries the attribution, not only the amounts
 
 - **WHEN** the change that removes this capability runs
-- **THEN** every recorded day and expense row is carried into the live cash and expense records with its recording account, correcting account, void state and reason, settlement state, and payment state intact, and the removal is incomplete until it is
+- **THEN** every recorded day and expense row is carried into the live cash and expense records with its recording account, correcting account, and void state and reason intact, and the removal is incomplete until it is
