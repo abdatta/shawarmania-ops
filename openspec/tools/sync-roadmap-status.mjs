@@ -21,14 +21,20 @@
 // same derivation, so they cannot drift from each other. If an inventory row is
 // missing the leading icon cell (e.g. a freshly hand-added row), it is inserted;
 // rows that already have it keep their column count. Rows are never inserted,
-// removed, or reordered, and no other cell (wave, model, deps, checkpoint) is
-// touched — the Wave column in particular is authored, not derived, so it is
-// left alone. Row ORDER is likewise authored, not derived: the inventory is
-// kept in topological (dependency) order by hand — see the note under "Change
-// Inventory" in ROADMAP.md — and whoever adds a row must place it there, since
-// this script only rewrites status cells in place and never moves a row. The
-// table header and separator rows carry no change number, so they are left as
-// authored.
+// removed, or reordered, and no cell but status/icon/deps is touched — the Wave
+// column in particular is authored, not derived, so it is left alone. Row ORDER
+// is likewise authored, not derived: the inventory is kept in topological
+// (dependency) order by hand — see the note under "Change Inventory" in
+// ROADMAP.md — and whoever adds a row must place it there, since this script
+// only rewrites cells in place and never moves a row. The table header and
+// separator rows carry no change number, so they are left as authored.
+//
+// The Hard dependencies cell is rewritten too, but only its emphasis: a
+// dependency number is bold while that change is not yet archived (still
+// blocking) and plain once it archives. The dependency numbers themselves are
+// never added, removed, or reordered — only `**` markers around existing `#N`
+// tokens are added or stripped, from the same archive-folder scan used for the
+// status column, so the two can never disagree about what counts as done.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -105,6 +111,32 @@ const ICON_COL = 1
 const nameIdxFrom = (cells, numIdx) =>
   [numIdx + 1, numIdx + 2].find((i) => nameOf(cells[i] ?? '')) ?? -1
 
+// First pass: every inventory row's own change number → whether it is
+// archived, so the second pass can bold a `#N` dependency reference wherever
+// it appears based on *that* change's state, regardless of table order.
+const archivedByNumber = new Map()
+for (const line of lines) {
+  if (!line.startsWith('|')) continue
+  const cells = line.split('|')
+  const numIdx = cells.findIndex(isNumberCell)
+  if (numIdx !== 1 && numIdx !== 2) continue
+  const nameIdx = nameIdxFrom(cells, numIdx)
+  if (nameIdx < 0) continue
+  const number = cells[numIdx].trim()
+  const name = nameOf(cells[nameIdx])[1].trim()
+  archivedByNumber.set(number, archivedByName.has(name))
+}
+
+// Bold a `#N` token while N is not yet archived (still blocking), plain once
+// it is. Leaves anything else in the cell — prose, em dashes — untouched, and
+// leaves a reference to an unknown number as-is rather than guessing.
+const restyleDeps = (cell) =>
+  cell.replace(/(\*\*)?#(\d+)(\*\*)?/g, (whole, _open, num) => {
+    const archived = archivedByNumber.get(num)
+    if (archived === undefined) return whole
+    return archived ? `#${num}` : `**#${num}**`
+  })
+
 const out = lines.map((line) => {
   if (!line.startsWith('|')) return line
   const cells = line.split('|')
@@ -127,10 +159,19 @@ const out = lines.map((line) => {
   const prevStatus = cells[statusIdx].trim()
   cells[statusIdx] = ` ${derived} `
 
+  const depsIdx = statusIdx + 1
+  let depsChanged = false
+  if (cells[depsIdx] !== undefined) {
+    const restyled = restyleDeps(cells[depsIdx])
+    depsChanged = restyled !== cells[depsIdx]
+    cells[depsIdx] = restyled
+  }
+
   const rebuilt = cells.join('|')
   if (rebuilt !== line) {
     modified = true
-    changed.push([name, prevStatus || '(empty)', derived])
+    if (prevStatus !== derived) changed.push([name, prevStatus || '(empty)', derived])
+    else if (depsChanged) changed.push([name, 'deps', 'bold sync'])
   }
   return rebuilt
 })
