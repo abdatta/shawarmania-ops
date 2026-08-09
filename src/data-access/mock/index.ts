@@ -139,9 +139,17 @@ export function createMockAdapters(
     // reads across outlets, and asking for somebody else's returns nothing.
     alerts: createMockAlertsAdapter(store, role, session),
     insights: createMockInsightsAdapter(store, attendance, role, session),
-    // The role reaches it for the same reason: the policies refuse every verb on
-    // both manual-ledger tables to everybody but an owner (#36, temporary).
-    manualLedger: createMockManualLedgerAdapter(store, role),
+    // The role, the person and their assignments all reach it, because the
+    // ledger's two tables now answer differently for the same caller: the day
+    // record refuses outlet staff everywhere, the expense record admits them at
+    // their own outlet, and "your own rows" needs to know who is asking
+    // (the-ledger-opens-to-the-outlet).
+    manualLedger: createMockManualLedgerAdapter(
+      store,
+      role,
+      persona.profile.id,
+      assignedOutlets(persona.assignments),
+    ),
     addressLookup: createMockAddressLookupAdapter(),
   }
 }

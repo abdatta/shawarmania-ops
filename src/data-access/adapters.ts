@@ -1464,6 +1464,29 @@ export interface ManualLedgerDay {
   swiggyCommissionBp: number
   /** Optional, unlike an expense description: it explains a cash difference. */
   note: string | null
+  /**
+   * Who first recorded this day, and who last corrected it. Frozen and stamped
+   * respectively, both by the database. The reading names both where they
+   * differ, so a day the owner recorded and a manager later fixed does not read
+   * as though the owner entered the figures now on screen (design D6).
+   */
+  recordedBy: LedgerActor
+  updatedBy: LedgerActor | null
+}
+
+/**
+ * Who touched a ledger row, as the surface names them.
+ *
+ * The name is resolved separately from the row, because `profiles` is not
+ * readable by everyone who may now read an expense — an Employee sees nobody
+ * through it, and nobody at an outlet sees an owner. `manual_ledger_people()`
+ * answers exactly these names and nothing else. A null name is a person the
+ * caller genuinely cannot resolve rather than an error, and the surface says
+ * "someone" rather than inventing one.
+ */
+export interface LedgerActor {
+  id: string
+  name: string | null
 }
 
 export interface ManualLedgerExpense {
@@ -1477,10 +1500,35 @@ export interface ManualLedgerExpense {
   /** Optional detail beyond the category, such as a quantity. */
   note: string | null
   createdAt: string
+  updatedAt: string
+  /** Frozen at insert. Naming it is what makes "your own rows" legible. */
+  recordedBy: LedgerActor
+  /** Null until somebody corrects the row, so an untouched row names one party. */
+  updatedBy: LedgerActor | null
+  /**
+   * Recorded by an account holding no live assignment at this outlet. Stamped
+   * once, never derived on read: an assignment that ends later must not rewrite
+   * what was true when the row was written. The surface shows it **only on a
+   * drawer expense**, where it explains why expected cash moved without anybody
+   * at the outlet spending it (design D9).
+   */
+  recordedAway: boolean
+  /** Set together, by the database. A voided row is visible and stops counting. */
+  voidedAt: string | null
+  voidedBy: LedgerActor | null
+  /** Optional [owner, 2026-08-09]. The trace answers who and when without it. */
+  voidedReason: string | null
 }
 
-/** The day form's payload. Upserted on `(outlet, business date)` — design D6. */
-export type ManualLedgerDayInput = ManualLedgerDay
+/**
+ * The day form's payload. Upserted on `(outlet, business date)` — design D6.
+ *
+ * Attribution is absent by construction: `recorded_by` defaults from the session
+ * and is frozen, `updated_by` is stamped by the guard and refused from a caller.
+ * A form that could name either would be asserting something the database is
+ * about to overrule.
+ */
+export type ManualLedgerDayInput = Omit<ManualLedgerDay, 'recordedBy' | 'updatedBy'>
 
 export interface NewManualLedgerExpense {
   outletId: string
@@ -1525,9 +1573,32 @@ export interface ManualLedgerAdapter {
   /** A day typed against the wrong date. There is no history here to protect. */
   deleteDay(outletId: string, businessDate: string): Promise<void>
   listExpenses(outletId: string, businessDate: string): Promise<ManualLedgerExpense[]>
+  /**
+   * Expenses across several business days at once, newest day first — what the
+   * staff surface opens on.
+   *
+   * The caller resolves the dates from the outlet's own cutover, because "the
+   * last two business days" is a question about an outlet's clock rather than
+   * about the calendar. **The window is a presentation default and not a
+   * boundary**: no policy carries a date predicate on reads, and an older
+   * expense asked for by id is still returned (design D2).
+   */
+  listRecentExpenses(
+    outletId: string,
+    businessDates: readonly string[],
+  ): Promise<ManualLedgerExpense[]>
   createExpense(expense: NewManualLedgerExpense): Promise<ManualLedgerExpense>
   updateExpense(id: string, patch: ManualLedgerExpensePatch): Promise<ManualLedgerExpense>
-  deleteExpense(id: string): Promise<void>
+  /**
+   * Withdraw an expense. It replaces `deleteExpense`, because once several
+   * people write here a row that can vanish without trace defeats the reason to
+   * open the surface up at all.
+   *
+   * The reason is optional [owner, 2026-08-09]: the database stamps who and
+   * when, which is what the trace exists to answer, and demanding a sentence on
+   * the fastest correction path collects a column of "mistake".
+   */
+  voidExpense(id: string, reason?: string | null): Promise<ManualLedgerExpense>
   /** One outlet, one month, as `YYYY-MM`. One outlet at a time — design D9. */
   getMonth(outletId: string, month: string): Promise<ManualLedgerMonth>
 }

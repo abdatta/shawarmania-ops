@@ -1,4 +1,4 @@
-import type { ManualLedgerDay, ManualLedgerExpense } from '@/data-access/adapters'
+import type { ManualLedgerDayInput, ManualLedgerExpense } from '@/data-access/adapters'
 import {
   describeDifference,
   differencePaise,
@@ -96,11 +96,12 @@ export interface DayReading {
  * wrongly.
  */
 export function readDay(
-  day: ManualLedgerDay,
+  day: ManualLedgerDayInput,
   expenses: readonly ManualLedgerExpense[],
 ): DayReading {
-  const cashExpensesPaise = sumExpenses(expenses.filter((expense) => expense.isCash))
-  const nonCashExpensesPaise = sumExpenses(expenses.filter((expense) => !expense.isCash))
+  const counting = expenses.filter(isCounted)
+  const cashExpensesPaise = sumExpenses(counting.filter((expense) => expense.isCash))
+  const nonCashExpensesPaise = sumExpenses(counting.filter((expense) => !expense.isCash))
 
   const expectedCashPaise =
     assertPaise(day.openingCashPaise, 'opening cash') +
@@ -129,6 +130,20 @@ export function readDay(
     netZomatoPaise: netAggregatorPaise(day.zomatoRevenuePaise, day.zomatoCommissionBp),
     netSwiggyPaise: netAggregatorPaise(day.swiggyRevenuePaise, day.swiggyCommissionBp),
   }
+}
+
+/**
+ * Does this expense count toward anything?
+ *
+ * **The single filter every figure in this file passes through**, because a
+ * withdrawn expense that counted in one reading and not another would produce
+ * two true-looking numbers that disagree, and nothing on the screen could
+ * explain the gap. It stays visible on the list and contributes to no total:
+ * the day's expected cash, the day's own totals, the month, and the month's
+ * category breakdown all ignore it (design D3).
+ */
+export function isCounted(expense: ManualLedgerExpense): boolean {
+  return expense.voidedAt === null
 }
 
 function sumExpenses(expenses: readonly ManualLedgerExpense[]): number {
@@ -164,8 +179,8 @@ export type ChainSignal =
  * is the compounding error this ledger exists to catch (design D2).
  */
 export function checkOpeningChain(
-  day: ManualLedgerDay,
-  previousDay: ManualLedgerDay | null,
+  day: ManualLedgerDayInput,
+  previousDay: ManualLedgerDayInput | null,
 ): ChainSignal {
   if (!previousDay) return { kind: 'first-day' }
 
@@ -248,9 +263,15 @@ export interface MonthReading {
  * words; nothing here can enforce that, which is why the spec requires it.
  */
 export function readMonth(
-  days: readonly ManualLedgerDay[],
-  expenses: readonly ManualLedgerExpense[],
+  days: readonly ManualLedgerDayInput[],
+  allExpenses: readonly ManualLedgerExpense[],
 ): MonthReading {
+  // Withdrawn rows are dropped once, here, so every figure below is computed
+  // from the same set. `recorded` still counts the raw list: a month whose only
+  // expense was withdrawn was written in, and reporting it as never measured
+  // would be a different claim from reporting it as nil.
+  const expenses = allExpenses.filter(isCounted)
+
   let grossCashPaise = 0
   let grossUpiPaise = 0
   let grossZomatoPaise = 0
@@ -273,7 +294,7 @@ export function readMonth(
   const expensesByCategory = groupByCategory(expenses)
 
   return {
-    recorded: days.length > 0 || expenses.length > 0,
+    recorded: days.length > 0 || allExpenses.length > 0,
     daysRecorded: days.length,
     grossCashPaise,
     grossUpiPaise,

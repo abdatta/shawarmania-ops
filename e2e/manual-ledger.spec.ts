@@ -13,8 +13,10 @@ import { expect, test } from '@playwright/test'
  * commission edit moves the month without moving the drawer.
  */
 
-const OTHER_ROLES = [
-  { segment: 'admin', label: 'Admin' },
+// Outlet staff only. `the-ledger-opens-to-the-outlet` gave the manager the
+// ledger at the outlets they are assigned to, so the Admin's case is asserted
+// below as reachable rather than here as absent.
+const STAFF_ROLES = [
   { segment: 'biller', label: 'Biller' },
   { segment: 'staff', label: 'Staff' },
 ] as const
@@ -193,17 +195,23 @@ test('a retrospective commission edit moves the month and not the drawer', async
   await expect(page.getByTestId('month-profit-figure')).not.toHaveText(profitBefore ?? '')
 })
 
-test('the ledger is in the owner’s navigation and in nobody else’s', async ({ page }) => {
-  await page.goto('demo/owner')
-  await expect(page.getByRole('link', { name: 'Ledger' })).toBeVisible()
+test('the ledger is in the owner’s and the manager’s navigation, and in nobody else’s', async ({
+  page,
+}) => {
+  for (const segment of ['owner', 'admin']) {
+    await page.goto(`demo/${segment}`)
+    await expect(page.getByRole('link', { name: 'Ledger' }), segment).toBeVisible()
+  }
 
-  for (const role of OTHER_ROLES) {
+  for (const role of STAFF_ROLES) {
     await page.goto(`demo/${role.segment}`)
     await expect(page.getByRole('link', { name: 'Ledger' }), role.segment).toHaveCount(0)
+    // What they get instead: the expense list alone, under its own entry.
+    await expect(page.getByRole('link', { name: 'Expenses' }), role.segment).toBeVisible()
   }
 })
 
-for (const role of OTHER_ROLES) {
+for (const role of STAFF_ROLES) {
   test(`the manual-ledger path renders nothing for a ${role.label}`, async ({ page }) => {
     await page.goto(`demo/${role.segment}/ledger`)
 
@@ -215,4 +223,33 @@ for (const role of OTHER_ROLES) {
     // Still inside the demo, so the banner still stands.
     await expect(page.getByTestId('demo-banner')).toBeVisible()
   })
+
+  test(`the expenses surface shows a ${role.label} expenses and no day figures`, async ({
+    page,
+  }) => {
+    await page.goto(`demo/${role.segment}/ledger/expenses`)
+
+    await expect(page.getByTestId('ledger-expense-list')).toBeVisible()
+
+    // Not one figure the day record holds. The drawer figures are refused by the
+    // database rather than hidden here; the day's own takings are left off
+    // because a screen showing four kinds of financial truth is a screen nobody
+    // reads (design D5).
+    await expect(page.getByTestId('day-reading')).toHaveCount(0)
+    await expect(page.getByTestId('expected-cash')).toHaveCount(0)
+    await expect(page.getByTestId('ledger-day-form')).toHaveCount(0)
+    await expect(page.getByTestId('ledger-view-month')).toHaveCount(0)
+
+    // Every row names who recorded it, which is what makes "your own rows"
+    // legible rather than remembered.
+    const first = page.getByTestId('ledger-expense-list').getByRole('listitem').first()
+    await expect(first).toContainText(/\w/)
+  })
 }
+
+test('a manager opens the full ledger at the outlet they manage', async ({ page }) => {
+  await page.goto('demo/admin/ledger')
+  // The day figures included: a manager who counts the drawer nightly but cannot
+  // read whether the month covered its costs is running half a shop.
+  await expect(page.getByTestId('ledger-day-form')).toBeVisible()
+})

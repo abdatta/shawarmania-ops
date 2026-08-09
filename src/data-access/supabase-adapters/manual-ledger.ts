@@ -2,6 +2,7 @@ import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import {
   ManualLedgerActionError,
+  type LedgerActor,
   type ManualLedgerAdapter,
   type ManualLedgerDay,
   type ManualLedgerDayInput,
@@ -39,7 +40,43 @@ import type { Database, Tables } from '../database.types'
  */
 const ALL = '*'
 
-function toDay(row: Tables<'manual_ledger_days'>): ManualLedgerDay {
+/**
+ * Display names for the accounts that wrote in this ledger.
+ *
+ * A join to `profiles` cannot answer this for the readers this capability adds.
+ * That table's select policy resolves through `app_may_see_person`, which needs
+ * a **shared outlet assignment** and a caller whose own role is
+ * `franchise_admin` or `biller` — so an Employee sees nobody, and nobody at an
+ * outlet sees an owner, whose assignment carries no outlet at all. Since the
+ * owner recorded most of the rows already stored, that is the common case.
+ *
+ * `manual_ledger_people()` returns names, only names, and only for accounts that
+ * wrote in a ledger the caller may already read.
+ */
+type People = ReadonlyMap<string, string | null>
+
+async function readPeople(client: SupabaseClient<Database>): Promise<People> {
+  const { data, error } = await client.rpc('manual_ledger_people')
+  if (error) throw toLedgerError(error)
+  return new Map((data ?? []).map((row) => [row.id, row.full_name]))
+}
+
+/**
+ * A null name is a person the caller genuinely cannot resolve rather than a
+ * failure, so the surface can say "someone" instead of breaking the list. It
+ * should not happen — `manual_ledger_people()` mirrors the row policies and
+ * 21_manual_ledger.sql asserts the two agree — which is exactly why this
+ * degrades quietly rather than throwing.
+ */
+function actor(id: string, people: People): LedgerActor {
+  return { id, name: people.get(id) ?? null }
+}
+
+function optionalActor(id: string | null, people: People): LedgerActor | null {
+  return id ? actor(id, people) : null
+}
+
+function toDay(row: Tables<'manual_ledger_days'>, people: People): ManualLedgerDay {
   return {
     outletId: row.outlet_id,
     businessDate: row.business_date,
@@ -56,10 +93,12 @@ function toDay(row: Tables<'manual_ledger_days'>): ManualLedgerDay {
     zomatoCommissionBp: row.zomato_commission_bp,
     swiggyCommissionBp: row.swiggy_commission_bp,
     note: row.note,
+    recordedBy: actor(row.recorded_by, people),
+    updatedBy: optionalActor(row.updated_by, people),
   }
 }
 
-function toExpense(row: Tables<'manual_ledger_expenses'>): ManualLedgerExpense {
+function toExpense(row: Tables<'manual_ledger_expenses'>, people: People): ManualLedgerExpense {
   return {
     id: row.id,
     outletId: row.outlet_id,
@@ -69,6 +108,13 @@ function toExpense(row: Tables<'manual_ledger_expenses'>): ManualLedgerExpense {
     amountPaise: row.amount_paise,
     note: row.description,
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    recordedBy: actor(row.recorded_by, people),
+    updatedBy: optionalActor(row.updated_by, people),
+    recordedAway: row.recorded_away,
+    voidedAt: row.voided_at,
+    voidedBy: optionalActor(row.voided_by, people),
+    voidedReason: row.voided_reason,
   }
 }
 
@@ -102,29 +148,35 @@ export function createSupabaseManualLedgerAdapter(
 ): ManualLedgerAdapter {
   return {
     async getDay(outletId, businessDate) {
-      const { data, error } = await client
-        .from('manual_ledger_days')
-        .select(ALL)
-        .eq('outlet_id', outletId)
-        .eq('business_date', businessDate)
-        .maybeSingle()
+      const [{ data, error }, people] = await Promise.all([
+        client
+          .from('manual_ledger_days')
+          .select(ALL)
+          .eq('outlet_id', outletId)
+          .eq('business_date', businessDate)
+          .maybeSingle(),
+        readPeople(client),
+      ])
       if (error) throw toLedgerError(error)
-      return data ? toDay(data) : null
+      return data ? toDay(data, people) : null
     },
 
     async getPreviousDay(outletId, businessDate) {
       // The most recent row BEFORE this date, not literally yesterday: a gap in
       // the notebook is normal and the chain runs between the rows that exist.
-      const { data, error } = await client
-        .from('manual_ledger_days')
-        .select(ALL)
-        .eq('outlet_id', outletId)
-        .lt('business_date', businessDate)
-        .order('business_date', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const [{ data, error }, people] = await Promise.all([
+        client
+          .from('manual_ledger_days')
+          .select(ALL)
+          .eq('outlet_id', outletId)
+          .lt('business_date', businessDate)
+          .order('business_date', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        readPeople(client),
+      ])
       if (error) throw toLedgerError(error)
-      return data ? toDay(data) : null
+      return data ? toDay(data, people) : null
     },
 
     async upsertDay(day: ManualLedgerDayInput) {
@@ -155,7 +207,7 @@ export function createSupabaseManualLedgerAdapter(
         .select(ALL)
         .single()
       if (error) throw toLedgerError(error)
-      return toDay(data)
+      return toDay(data, await readPeople(client))
     },
 
     async deleteDay(outletId, businessDate) {
@@ -168,14 +220,36 @@ export function createSupabaseManualLedgerAdapter(
     },
 
     async listExpenses(outletId, businessDate) {
-      const { data, error } = await client
-        .from('manual_ledger_expenses')
-        .select(ALL)
-        .eq('outlet_id', outletId)
-        .eq('business_date', businessDate)
-        .order('created_at', { ascending: false })
+      const [{ data, error }, people] = await Promise.all([
+        client
+          .from('manual_ledger_expenses')
+          .select(ALL)
+          .eq('outlet_id', outletId)
+          .eq('business_date', businessDate)
+          .order('created_at', { ascending: false }),
+        readPeople(client),
+      ])
       if (error) throw toLedgerError(error)
-      return (data ?? []).map(toExpense)
+      return (data ?? []).map((row) => toExpense(row, people))
+    },
+
+    async listRecentExpenses(outletId, businessDates) {
+      // The staff surface's window, and the day surface never asks for it. The
+      // dates are resolved by the caller from the outlet's own cutover, because
+      // "the last two business days" is a question about an outlet's clock and
+      // not about the calendar.
+      const [{ data, error }, people] = await Promise.all([
+        client
+          .from('manual_ledger_expenses')
+          .select(ALL)
+          .eq('outlet_id', outletId)
+          .in('business_date', [...businessDates])
+          .order('business_date', { ascending: false })
+          .order('created_at', { ascending: false }),
+        readPeople(client),
+      ])
+      if (error) throw toLedgerError(error)
+      return (data ?? []).map((row) => toExpense(row, people))
     },
 
     async createExpense(expense: NewManualLedgerExpense) {
@@ -192,7 +266,7 @@ export function createSupabaseManualLedgerAdapter(
         .select(ALL)
         .single()
       if (error) throw toLedgerError(error)
-      return toExpense(data)
+      return toExpense(data, await readPeople(client))
     },
 
     async updateExpense(id, patch: ManualLedgerExpensePatch) {
@@ -208,19 +282,35 @@ export function createSupabaseManualLedgerAdapter(
         .select(ALL)
         .single()
       if (error) throw toLedgerError(error)
-      return toExpense(data)
+      return toExpense(data, await readPeople(client))
     },
 
-    async deleteExpense(id) {
-      const { error } = await client.from('manual_ledger_expenses').delete().eq('id', id)
+    async voidExpense(id, reason) {
+      // `voided_by` and the moment are stamped by the guard from the session, so
+      // nothing here names them: a client that supplied either would be
+      // asserting something the database is about to overrule, and a forged
+      // actor is refused rather than corrected.
+      //
+      // The reason is optional. `trimmed` is what keeps a field somebody tapped
+      // into and left blank from being stored as a reason that says nothing.
+      const { data, error } = await client
+        .from('manual_ledger_expenses')
+        .update({
+          voided_at: new Date().toISOString(),
+          voided_reason: trimmed(reason),
+        })
+        .eq('id', id)
+        .select(ALL)
+        .single()
       if (error) throw toLedgerError(error)
+      return toExpense(data, await readPeople(client))
     },
 
     async getMonth(outletId, month) {
       const from = `${month}-01`
       const to = firstOfNextMonth(month)
 
-      const [days, expenses] = await Promise.all([
+      const [days, expenses, people] = await Promise.all([
         client
           .from('manual_ledger_days')
           .select(ALL)
@@ -235,14 +325,15 @@ export function createSupabaseManualLedgerAdapter(
           .gte('business_date', from)
           .lt('business_date', to)
           .order('business_date', { ascending: true }),
+        readPeople(client),
       ])
 
       if (days.error) throw toLedgerError(days.error)
       if (expenses.error) throw toLedgerError(expenses.error)
 
       return {
-        days: (days.data ?? []).map(toDay),
-        expenses: (expenses.data ?? []).map(toExpense),
+        days: (days.data ?? []).map((row) => toDay(row, people)),
+        expenses: (expenses.data ?? []).map((row) => toExpense(row, people)),
       } satisfies ManualLedgerMonth
     },
   }
@@ -274,14 +365,20 @@ function toLedgerError(error: PostgrestError): ManualLedgerActionError {
     case '42501':
       return new ManualLedgerActionError(
         'not_permitted',
-        'Only an owner can use the manual ledger.',
+        'That is not yours to change here. The ledger’s figures belong to the ' +
+          'manager and the owner; an expense belongs to whoever recorded it.',
       )
     case 'P0001':
       return new ManualLedgerActionError(
         'refused',
-        // The two the trigger raises: a future date, and moving a recorded day.
-        'That is not a day this ledger can record. A day cannot be dated ahead of ' +
-          'the outlet’s own trading day, and a recorded day cannot be moved to another date.',
+        // The guard raises for several reasons now — a future date, moving a
+        // recorded day, an expense against a day that has closed for staff, an
+        // edit of a withdrawn row, a forged correcting account — and the message
+        // names the two a person actually meets. Naming all five would be a
+        // paragraph nobody reads on a phone.
+        'This ledger cannot record that. A day cannot be dated ahead of the ' +
+          'outlet’s own trading day, and an entry from a day that has closed is ' +
+          'the manager’s or the owner’s to change.',
       )
     default:
       return new ManualLedgerActionError('failed', 'That did not save. Try again in a moment.')

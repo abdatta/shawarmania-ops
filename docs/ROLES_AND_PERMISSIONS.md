@@ -132,8 +132,12 @@ assignment cannot be ended by anyone, including its holder.
 | Raise an alert | — | ✓ own outlet | — | — |
 | View and respond | ✓ all | R own alerts | — | — |
 | **Manual ledger** (temporary, #36) |
-| Read a day, a month, or any row | ✓ all | — | — | — |
-| Record and correct days and expenses | ✓ all | — | — | — |
+| Read a day or a month | ✓ all | R own outlets | — | — |
+| Record and correct days | ✓ all | ✓ own outlets | — | — |
+| Read the outlet's expenses | ✓ all | ✓ own outlets | R own outlet | R own outlet |
+| Record an expense | ✓ all | ✓ own outlets, any date | ✓ own outlet, today | ✓ own outlet, today |
+| Correct or withdraw an expense | ✓ all | ✓ own outlets | own rows, today | own rows, today |
+| Delete an expense | — | — | — | — |
 
 **Expense categories are business-wide suggestions, not authority.** Any active
 account that is allowed to record an expense now, or will be allowed by the live
@@ -180,15 +184,40 @@ screen says whose they are rather than leaving it to be discovered by refusal.
 Whether that should change where an outlet has no dedicated manager is an open
 design question in `daily-cash-live` (#12), which builds the drawer.
 
-**The manual ledger is the only capability nobody but the owner touches, and it
-is temporary.** Every other row in the matrix gives some outlet role something;
-these two give them nothing at all, at any outlet, including their own — which is
-a stronger claim than ordinary outlet isolation and is asserted directly in
+**The manual ledger's two tables answer differently, and the difference is the
+point.** The **day record** reaches owners and managers and stops: no outlet
+staff branch exists on any verb, at any outlet, including their own. That is a
+stronger claim than ordinary outlet isolation and is asserted directly in
 `supabase/tests/21_manual_ledger.sql` rather than inherited from the cross-outlet
-sweep. The policies name `app_is_owner()` and `app_account_active()` and no
-outlet-role predicate appears in any of the eight;
-`supabase/tests/01_schema_coverage.sql` asserts that absence as a catalog fact,
-so a later migration that quietly adds a manager branch fails by name.
+sweep, with `supabase/tests/01_schema_coverage.sql` pinning the absence of a
+staff predicate as a catalog fact so a later migration fails by name.
+
+It protects two different things. On the **write** side, the drawer: an account
+that could set the counted cash, the opening cash or the cash removed could make
+any drawer reconcile, and the nightly count is the only control the business has
+over cash. On the **read** side, history and aggregates — any past business date,
+any month's total, the other outlet, and every figure net of commission, none of
+which can be observed from behind a counter. It does **not** protect the takings
+of a shift somebody worked at the outlet they worked it in; see
+[Limitations](LIMITATIONS.md) for why the system does not claim that, and why the
+policy refuses that row anyway.
+
+The **expense record** is the opposite: everyone at the outlet reads every row,
+whoever recorded it, so the surface can show at a glance which rows are yours to
+fix. Staff record against the outlet's current business day only and correct or
+withdraw only their own rows while that day is still running; both limits are the
+guard's, because both need the outlet's own cutover. A manager or the owner
+reaches any row on any date, which is what makes the freeze a routing rule rather
+than a dead end.
+
+**Nobody deletes an expense.** The grant is revoked and a trigger refuses it, so
+a row goes only by being withdrawn: it stays visible, struck through, naming who
+withdrew it and when. A reason is optional (owner, 2026-08-09) — the moment and
+the account answer what the trace exists for, and demanding a sentence on the
+fastest correction path collects a column of "mistake". **A fabricated cash
+expense is not caught by the drawer count**, because an invented expense lowers
+expected cash and the count still matches; the controls are attribution and the
+withdrawal trace, not the count.
 
 **The owner writing cash figures there is not precedent for the drawer.** It is
 allowed only because no real cash record exists yet to corrupt, and the bound in

@@ -1,27 +1,23 @@
-import { Banknote, Info, Link2Off, Pencil, Trash2, Wallet } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Info, Link2Off, Pencil } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
-import { ConfirmDialog } from '@/components/layout/confirm-dialog'
-import { EmptyState } from '@/components/layout/empty-state'
-import { FormSheet } from '@/components/layout/form-sheet'
-import { AddButton } from '@/components/ui/add-button'
 import { Button } from '@/components/ui/button'
-import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
-import { CategoryInput } from '@/components/ui/category-input'
 import { Input } from '@/components/ui/input'
-import { LoadingFigures, LoadingList } from '@/components/ui/loading'
+import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
-import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
   type ManualLedgerDay,
+  type ManualLedgerDayInput,
   type ManualLedgerExpense,
 } from '@/data-access/adapters'
-import { formatBusinessDate, normalizeCategory, rupeesToPaise } from '@/domain'
+import { formatBusinessDate, rupeesToPaise } from '@/domain'
 import { cn } from '@/lib/cn'
+import { useSession } from '@/session/context'
 
+import { ExpenseList } from './expense-list'
 import {
   checkOpeningChain,
   netAggregatorPaise,
@@ -185,7 +181,7 @@ function draftToDay(
   draft: DayDraft,
   outletId: string,
   businessDate: string,
-): ManualLedgerDay | null {
+): ManualLedgerDayInput | null {
   const openingCashPaise = requiredPaise(draft.openingCash)
   const countedCashPaise = requiredPaise(draft.countedCash)
   const zomatoCommissionBp = basisPoints(draft.zomatoCommission)
@@ -235,29 +231,15 @@ function draftToDay(
   }
 }
 
-interface ExpenseDraft {
-  category: string
-  amount: string
-  isCash: boolean
-  note: string
-}
-
-const BLANK_EXPENSE: ExpenseDraft = {
-  category: '',
-  amount: '',
-  isCash: true,
-  note: '',
-}
-
 export function LedgerDay({ outletId, businessDate }: { outletId: string; businessDate: string }) {
-  const { manualLedger: adapter, expenseCategories: categoriesAdapter } = useAdapters()
+  const { manualLedger: adapter } = useAdapters()
+  const { userId } = useSession()
 
   const [previous, setPrevious] = useState<ManualLedgerDay | null>(null)
   const [recorded, setRecorded] = useState<ManualLedgerDay | null>(null)
   /** Null while the day is still being read: the whole card waits behind a shape. */
   const [draft, setDraft] = useState<DayDraft | null>(null)
   const [expenses, setExpenses] = useState<ManualLedgerExpense[] | null>(null)
-  const [categories, setCategories] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -268,19 +250,9 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
    */
   const [editingDay, setEditingDay] = useState(false)
 
-  const [expenseOpen, setExpenseOpen] = useState(false)
-  const [editing, setEditing] = useState<ManualLedgerExpense | null>(null)
-  const [expenseDraft, setExpenseDraft] = useState<ExpenseDraft>(BLANK_EXPENSE)
-  const [removing, setRemoving] = useState<ManualLedgerExpense | null>(null)
-
   const loadExpenses = useCallback(async () => {
     setExpenses(await adapter.listExpenses(outletId, businessDate))
   }, [adapter, outletId, businessDate])
-
-  const loadCategories = useCallback(async () => {
-    const list = await categoriesAdapter.list()
-    setCategories(list.map((category) => category.name))
-  }, [categoriesAdapter])
 
   // Loads once per mount, and the parent remounts this component when the outlet
   // or the day changes (see the `key` in `manual-ledger-surface.tsx`). That is why
@@ -294,9 +266,8 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
       adapter.getDay(outletId, businessDate),
       adapter.getPreviousDay(outletId, businessDate),
       adapter.listExpenses(outletId, businessDate),
-      categoriesAdapter.list(),
     ])
-      .then(([day, earlier, list, categoryList]) => {
+      .then(([day, earlier, list]) => {
         if (!active) return
         setRecorded(day)
         setPrevious(earlier)
@@ -304,7 +275,6 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
         // previous close and rates, and inherits nothing on the first day.
         setDraft(day ? draftFrom(day) : draftInheriting(earlier))
         setExpenses(list)
-        setCategories(categoryList.map((category) => category.name))
       })
       .catch(() => {
         if (active) setError('Could not load this day. Try again in a moment.')
@@ -313,7 +283,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
     return () => {
       active = false
     }
-  }, [adapter, categoriesAdapter, outletId, businessDate])
+  }, [adapter, outletId, businessDate])
 
   /**
    * The day the two readings below are computed from.
@@ -389,68 +359,6 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
       setBusy(false)
     }
   }
-
-  async function submitExpense(event: FormEvent) {
-    event.preventDefault()
-
-    const rupees = Number(expenseDraft.amount.trim())
-    if (expenseDraft.amount.trim() === '' || !Number.isFinite(rupees) || rupees <= 0) {
-      setError('An expense needs an amount above zero, as a number of rupees.')
-      return
-    }
-    const category = normalizeCategory(expenseDraft.category)
-    if (!category) {
-      setError('Choose or type what the money was spent on.')
-      return
-    }
-
-    setBusy(true)
-    setError(null)
-    try {
-      if (editing) {
-        await adapter.updateExpense(editing.id, {
-          category,
-          isCash: expenseDraft.isCash,
-          amountPaise: rupeesToPaise(rupees),
-          note: expenseDraft.note,
-        })
-      } else {
-        await adapter.createExpense({
-          outletId,
-          businessDate,
-          category,
-          isCash: expenseDraft.isCash,
-          amountPaise: rupeesToPaise(rupees),
-          note: expenseDraft.note,
-        })
-      }
-      setExpenseOpen(false)
-      setEditing(null)
-      setExpenseDraft(BLANK_EXPENSE)
-      await Promise.all([loadExpenses(), loadCategories()])
-    } catch (cause) {
-      setError(
-        cause instanceof DataActionError
-          ? cause.message
-          : 'That did not save. Try again in a moment.',
-      )
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const addExpense = (
-    <AddButton
-      label="Add expense"
-      data-testid="add-ledger-expense"
-      onClick={() => {
-        setError(null)
-        setEditing(null)
-        setExpenseDraft(BLANK_EXPENSE)
-        setExpenseOpen(true)
-      }}
-    />
-  )
 
   return (
     <div className="space-y-3">
@@ -680,197 +588,25 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
         </>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-        <h2 className="text-sm font-bold text-content">Expenses</h2>
-        {addExpense}
-      </div>
+      {/*
+        The same list the staff surface mounts, with the day's figures around it
+        rather than alone (design D7).
 
-      {expenses === null ? (
-        <LoadingList
-          label="this day’s expenses"
-          rows={3}
-          blockHeight="h-16"
-          className="space-y-2"
-          data-testid="ledger-expenses-loading"
-        />
-      ) : expenses.length === 0 ? (
-        // No action here: the Add button sits directly above this box, so a second
-        // one would be the same door twice, a hand's width apart.
-        <EmptyState
-          icon={Wallet}
-          title="Nothing recorded for this day yet. Add what was spent under the category the month should use."
-        />
-      ) : (
-        <ul className="space-y-2" data-testid="ledger-expense-list">
-          {expenses.map((expense) => (
-            <li key={expense.id}>
-              <Card
-                className="flex flex-wrap items-center gap-x-3 gap-y-1"
-                data-testid={`ledger-expense-${expense.id}`}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-content">
-                    {expense.category}
-                    {expense.isCash ? (
-                      <span
-                        data-testid={`ledger-cash-${expense.id}`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-primary px-2 py-0.5 text-xs font-semibold text-content"
-                      >
-                        <Banknote aria-hidden size={12} />
-                        Cash
-                        {/*
-                          The rest of the sentence, for a reader who cannot see the
-                          note. On a phone the badge sits between a category and an
-                          amount on one line, and "Cash — from the drawer" pushed
-                          both of those onto lines of their own.
-                        */}
-                        <span className="sr-only"> — from the drawer</span>
-                      </span>
-                    ) : (
-                      <span className="text-xs font-normal text-content-muted">Not cash</span>
-                    )}
-                  </p>
-                  {expense.note && <p className="text-xs text-content-muted">{expense.note}</p>}
-                </div>
-                <Money paise={expense.amountPaise} className="text-sm font-semibold" />
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="phone"
-                    aria-label={`Edit ${expense.category}`}
-                    data-testid={`edit-expense-${expense.id}`}
-                    onClick={() => {
-                      setError(null)
-                      setEditing(expense)
-                      setExpenseDraft({
-                        category: expense.category,
-                        amount: String(expense.amountPaise / 100),
-                        isCash: expense.isCash,
-                        note: expense.note ?? '',
-                      })
-                      setExpenseOpen(true)
-                    }}
-                  >
-                    <Pencil aria-hidden size={16} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="phone"
-                    aria-label={`Remove ${expense.category}`}
-                    data-testid={`remove-expense-${expense.id}`}
-                    onClick={() => {
-                      setError(null)
-                      setRemoving(expense)
-                    }}
-                  >
-                    <Trash2 aria-hidden size={16} />
-                  </Button>
-                </div>
-              </Card>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <FormSheet
-        open={expenseOpen}
-        onClose={() => {
-          setExpenseOpen(false)
-          setEditing(null)
-        }}
-        title={editing ? 'Edit expense' : 'Add expense'}
-        error={error}
-        footer={
-          <button
-            type="submit"
-            form="ledger-expense-form"
-            disabled={busy}
-            className={`${buttonVariants({ size: 'phone' })} w-full`}
-          >
-            {busy ? 'Saving…' : editing ? 'Save expense' : 'Record expense'}
-          </button>
-        }
-      >
-        <form id="ledger-expense-form" onSubmit={submitExpense} className="space-y-4" noValidate>
-          <Field label="Category" id="expense-category">
-            <CategoryInput
-              id="expense-category"
-              label="Expense category"
-              value={expenseDraft.category}
-              suggestions={categories}
-              testId="expense-category"
-              onChange={(category) => setExpenseDraft({ ...expenseDraft, category })}
-            />
-          </Field>
-
-          <Field label="Note (optional)" id="expense-description">
-            <Input
-              id="expense-description"
-              value={expenseDraft.note}
-              placeholder="e.g. 10 kg from Nadia Poultry"
-              data-testid="expense-description"
-              onChange={(event) => setExpenseDraft({ ...expenseDraft, note: event.target.value })}
-            />
-          </Field>
-
-          <Field label="Amount (₹)" id="expense-amount">
-            <Input
-              id="expense-amount"
-              required
-              inputMode="decimal"
-              value={expenseDraft.amount}
-              placeholder="e.g. 2400"
-              data-testid="expense-amount"
-              onChange={(event) => setExpenseDraft({ ...expenseDraft, amount: event.target.value })}
-            />
-          </Field>
-
-          <Field label="Paid with" id="expense-is-cash">
-            <Select
-              id="expense-is-cash"
-              value={expenseDraft.isCash ? 'cash' : 'other'}
-              data-testid="expense-is-cash"
-              onChange={(event) =>
-                setExpenseDraft({ ...expenseDraft, isCash: event.target.value === 'cash' })
-              }
-            >
-              <option value="cash">Cash, out of the drawer</option>
-              <option value="other">Anything else — UPI, card, transfer</option>
-            </Select>
-            <p className="text-xs text-content-muted">
-              Only cash reaches the day&rsquo;s count. Everything else is still an expense.
-            </p>
-          </Field>
-        </form>
-      </FormSheet>
-
-      <ConfirmDialog
-        open={removing !== null}
-        title="Remove this expense?"
-        consequence={
-          removing
-            ? `“${removing.category}” is removed from this day. Nothing records that it was ever here — this is a notebook, not a ledger of record.`
-            : ''
-        }
-        confirmLabel="Remove it"
-        onClose={() => setRemoving(null)}
-        onConfirm={() => {
-          const target = removing
-          setRemoving(null)
-          if (!target) return
-          setBusy(true)
-          void adapter
-            .deleteExpense(target.id)
-            .then(loadExpenses)
-            .catch((cause: unknown) => {
-              setError(
-                cause instanceof DataActionError
-                  ? cause.message
-                  : 'That did not work. Try again in a moment.',
-              )
-            })
-            .finally(() => setBusy(false))
-        }}
+        `mayTouchAnyRow` is unconditionally true because this surface is
+        reachable only by an owner or by a manager at this outlet, both of whom
+        may correct any row on any date — so `currentBusinessDate` never narrows
+        anything here. It is passed anyway rather than made optional: the
+        component asks one question of every reader, and a prop that appeared
+        only for staff would be a role branch wearing a different hat.
+      */}
+      <ExpenseList
+        expenses={expenses}
+        outletId={outletId}
+        businessDate={businessDate}
+        currentBusinessDate={businessDate}
+        viewer={{ id: userId, mayTouchAnyRow: true }}
+        emptyTitle="Nothing recorded for this day yet. Add what was spent under the category the month should use."
+        onChanged={loadExpenses}
       />
     </div>
   )
@@ -894,7 +630,7 @@ function RecordedDay({
   onEdit,
 }: {
   businessDate: string
-  day: ManualLedgerDay
+  day: ManualLedgerDayInput
   reading: DayReading
   saved: boolean
   onEdit: () => void
@@ -1014,7 +750,7 @@ function ChainBreak({ chain }: { chain: ChainSignal | null }) {
  * well as by sign — a minus sign is the first thing a bright counter or a small
  * screen loses, and "₹250 short" is not a sentence anybody misreads.
  */
-function DayReadingCard({ day, reading }: { day: ManualLedgerDay; reading: DayReading }) {
+function DayReadingCard({ day, reading }: { day: ManualLedgerDayInput; reading: DayReading }) {
   return (
     <Card className="space-y-2" data-testid="day-reading">
       <Row label="Opening cash" paise={day.openingCashPaise} testId="reading-opening" />
@@ -1386,17 +1122,6 @@ function Row({
         <Money paise={amount} data-testid={testId} />
       </div>
       {hint && <p className="text-xs text-content-muted">{hint}</p>}
-    </div>
-  )
-}
-
-function Field({ label, id, children }: { label: string; id: string; children: ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <label htmlFor={id} className="block text-sm font-semibold">
-        {label}
-      </label>
-      {children}
     </div>
   )
 }

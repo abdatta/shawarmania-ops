@@ -883,42 +883,36 @@ describe('deliberately closed surfaces', () => {
  * ever resolved authority from a claim rather than from a live assignment, the
  * pgTAP suite would still pass and this would not.
  *
- * The claim is stronger than cross-outlet isolation: an outlet role is refused
- * its **own** outlet's rows, at every verb. Every write attempted here is a
- * denied one, so these probes leave the seeded database untouched.
+ * The claims are stronger than cross-outlet isolation, and after
+ * `the-ledger-opens-to-the-outlet` there are two of them: **outlet staff are
+ * refused their own outlet's DAY row at every verb** — which protects the drawer
+ * on the write side, and past days and month aggregates on the read side — while
+ * **the expense record admits everyone at the outlet**. Every write attempted
+ * here is a denied one, so these probes leave the seeded database untouched.
  */
-describe('the manual ledger is the owner’s alone, over HTTP', () => {
+describe('the manual ledger over HTTP', () => {
   const YESTERDAY = '2026-08-03'
 
-  const OUTLET_ROLES = [
-    { name: 'a Franchise Admin', persona: PERSONAS.faKalyani },
+  const STAFF_ROLES = [
     { name: 'a Biller', persona: PERSONAS.billerKalyani },
     { name: 'an Employee', persona: PERSONAS.employeeKalyani },
   ] as const
 
-  for (const role of OUTLET_ROLES) {
-    it(`${role.name} reads nothing, at their own outlet`, async () => {
+  for (const role of STAFF_ROLES) {
+    it(`${role.name} reads no day row, at their own outlet`, async () => {
       const client = (await session(role.persona.email)).client
 
-      // Not an error: a policy that excludes rows returns none. Both tables, and
-      // both naming their own outlet explicitly — the shape that leaks if the
-      // outlet is left implicit.
+      // Not an error: a policy that excludes rows returns none. Named outlet
+      // explicitly — the shape that leaks if the outlet is left implicit.
       const days = await client
         .from('manual_ledger_days')
         .select('*')
         .eq('outlet_id', OUTLETS.kalyani)
       expect(days.error).toBeNull()
       expect(days.data).toEqual([])
-
-      const expenses = await client
-        .from('manual_ledger_expenses')
-        .select('*')
-        .eq('outlet_id', OUTLETS.kalyani)
-      expect(expenses.error).toBeNull()
-      expect(expenses.data).toEqual([])
     })
 
-    it(`${role.name} cannot write either table at their own outlet`, async () => {
+    it(`${role.name} cannot write the day record at their own outlet`, async () => {
       const client = (await session(role.persona.email)).client
 
       const day = await client.from('manual_ledger_days').insert({
@@ -930,18 +924,106 @@ describe('the manual ledger is the owner’s alone, over HTTP', () => {
         swiggy_commission_bp: 0,
       })
       expect(day.error?.code).toBe('42501')
+    })
+
+    it(`${role.name} may read their own outlet's expenses, and no other's`, async () => {
+      const client = (await session(role.persona.email)).client
+
+      // Permitted rather than populated: nothing seeds these tables, so what
+      // this asserts is the absence of a refusal. The row-level answers are
+      // 21_manual_ledger.sql's job.
+      const mine = await client
+        .from('manual_ledger_expenses')
+        .select('*')
+        .eq('outlet_id', OUTLETS.kalyani)
+      expect(mine.error).toBeNull()
+
+      const theirs = await client
+        .from('manual_ledger_expenses')
+        .select('*')
+        .eq('outlet_id', OUTLETS.kanchrapara)
+      expect(theirs.error).toBeNull()
+      expect(theirs.data).toEqual([])
+    })
+
+    it(`${role.name} cannot record an expense at an outlet they are not at`, async () => {
+      const client = (await session(role.persona.email)).client
 
       const expense = await client.from('manual_ledger_expenses').insert({
-        outlet_id: OUTLETS.kalyani,
+        outlet_id: OUTLETS.kanchrapara,
         business_date: YESTERDAY,
-        category: 'other',
+        category: 'Other',
         is_cash: false,
         amount_paise: 100,
         description: 'smuggled',
       })
       expect(expense.error?.code).toBe('42501')
     })
+
+    it(`${role.name} cannot record an expense against a day that has closed`, async () => {
+      const client = (await session(role.persona.email)).client
+
+      // The guard's rule rather than a policy's, so the code is P0001 and not
+      // 42501. A different refusal from the one above, asserted separately —
+      // a test that accepted either would keep passing while the policy
+      // silently opened.
+      const expense = await client.from('manual_ledger_expenses').insert({
+        outlet_id: OUTLETS.kalyani,
+        business_date: YESTERDAY,
+        category: 'Other',
+        is_cash: false,
+        amount_paise: 100,
+        description: 'noticed the next morning',
+      })
+      expect(expense.error?.code).toBe('P0001')
+    })
   }
+
+  it('a Franchise Admin reads the full ledger at the outlet they manage', async () => {
+    const client = (await session(PERSONAS.faKalyani.email)).client
+
+    for (const table of ['manual_ledger_days', 'manual_ledger_expenses'] as const) {
+      const mine = await client.from(table).select('*').eq('outlet_id', OUTLETS.kalyani)
+      expect(mine.error).toBeNull()
+
+      // And nothing at the outlet they do not manage.
+      const theirs = await client.from(table).select('*').eq('outlet_id', OUTLETS.kanchrapara)
+      expect(theirs.error).toBeNull()
+      expect(theirs.data).toEqual([])
+    }
+  })
+
+  it('a Franchise Admin cannot write the ledger at an outlet they do not manage', async () => {
+    const client = (await session(PERSONAS.faKalyani.email)).client
+
+    const day = await client.from('manual_ledger_days').insert({
+      outlet_id: OUTLETS.kanchrapara,
+      business_date: YESTERDAY,
+      opening_cash_paise: 0,
+      counted_cash_paise: 0,
+      zomato_commission_bp: 0,
+      swiggy_commission_bp: 0,
+    })
+    expect(day.error?.code).toBe('42501')
+  })
+
+  it('nobody deletes an expense, whatever their role', async () => {
+    // The grant is revoked, so this is refused before any policy is consulted —
+    // which is why the owner is in this list beside everybody else.
+    for (const persona of [
+      PERSONAS.superAdmin,
+      PERSONAS.faKalyani,
+      PERSONAS.billerKalyani,
+      PERSONAS.employeeKalyani,
+    ]) {
+      const client = (await session(persona.email)).client
+      const removed = await client
+        .from('manual_ledger_expenses')
+        .delete()
+        .eq('outlet_id', OUTLETS.kalyani)
+      expect(removed.error?.code, persona.email).toBe('42501')
+    }
+  })
 
   it('an owner reads both tables at both outlets', async () => {
     const owner = (await session(PERSONAS.superAdmin.email)).client

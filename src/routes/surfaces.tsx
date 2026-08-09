@@ -9,6 +9,7 @@ import { ShiftUnlock } from '@/features/billing/shift-unlock'
 import { DailyCashSurface } from '@/features/cash/daily-cash-surface'
 import { ExpenseCategoriesSurface } from '@/features/expense-categories/expense-categories-surface'
 import { ExpensesSurface } from '@/features/expenses/expenses-surface'
+import { StaffExpensesSurface } from '@/features/expenses/staff-expenses-surface'
 import { ComparisonSurface } from '@/features/insights/comparison-surface'
 import { OutletDayView } from '@/features/insights/outlet-day-view'
 import { PnlSurface } from '@/features/insights/pnl-surface'
@@ -144,6 +145,18 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="ledger">
         <ManualLedgerSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // The manual ledger's expense list, alone, for the people who spend the
+    // money (the-ledger-opens-to-the-outlet). Under `ledger/` rather than at
+    // `expenses`, which `admin-expenses` already owns and which is #11's live
+    // expense record — a different thing that outlives this one.
+    path: 'ledger/expenses',
+    element: (
+      <GatedSurface path="ledger/expenses">
+        <StaffExpensesSurface />
       </GatedSurface>
     ),
   },

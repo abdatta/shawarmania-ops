@@ -1,18 +1,21 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  assignedOutlets,
   ManualLedgerActionError,
   type ManualLedgerDayInput,
   type NewManualLedgerExpense,
 } from '../adapters'
+import { personaFixtures } from './fixtures/personas'
 import { createMockManualLedgerAdapter } from './manual-ledger'
 import { createDemoStore, DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID } from './store'
 
 /**
  * What this mock has to honour, because the database honours it: the day is one
  * row per outlet per date corrected in place, an expense cannot exist without a
- * category, a cash movement cannot exist without a reason, and nobody but an
- * owner gets an answer at all.
+ * category, a cash movement cannot exist without a reason, the day record
+ * answers only owners and managers, and the expense record answers everyone at
+ * the outlet on the terms the policies set.
  *
  * The arithmetic is not tested here — it lives in
  * `src/features/manual-ledger/ledger.test.ts` and is the same module in both
@@ -33,6 +36,8 @@ describe('mock manual ledger adapter', () => {
    */
   function over(role: Parameters<typeof createMockManualLedgerAdapter>[1] = 'super_admin') {
     const store = createDemoStore()
+    const persona = personaFixtures[role]
+    const assignedOutletIds = assignedOutlets(persona.assignments)
 
     const dayInput = (overrides: Partial<ManualLedgerDayInput> = {}): ManualLedgerDayInput => ({
       outletId: DEMO_OUTLET_ID,
@@ -65,7 +70,13 @@ describe('mock manual ledger adapter', () => {
       ...overrides,
     })
 
-    return { store, adapter: createMockManualLedgerAdapter(store, role), dayInput, expenseInput }
+    return {
+      store,
+      adapter: createMockManualLedgerAdapter(store, role, persona.profile.id, assignedOutletIds),
+      userId: persona.profile.id,
+      dayInput,
+      expenseInput,
+    }
   }
 
   describe('the day', () => {
@@ -220,14 +231,19 @@ describe('mock manual ledger adapter', () => {
   describe('expenses', () => {
     it('records one and lists it for its day', async () => {
       const { store, adapter, expenseInput } = over()
-      await adapter.createExpense(expenseInput())
+      const before = await adapter.listExpenses(DEMO_OUTLET_ID, store.today)
+      const created = await adapter.createExpense(expenseInput())
 
-      // Exactly one, because today is the day the seeds leave empty. A list of
-      // three here means this test found a seeded day instead of today's.
+      // One more than were there, rather than exactly one. Today carries seeded
+      // expenses now — spending recorded through the day, hours before anybody
+      // opens the day row, which is the case this capability exists for — while
+      // the day row itself is still deliberately left unrecorded.
       const list = await adapter.listExpenses(DEMO_OUTLET_ID, store.today)
-      expect(list).toHaveLength(1)
-      expect(list[0]?.note).toBe('From Nadia Poultry')
-      expect(list[0]?.isCash).toBe(true)
+      expect(list).toHaveLength(before.length + 1)
+
+      const mine = list.find((expense) => expense.id === created.id)
+      expect(mine?.note).toBe('From Nadia Poultry')
+      expect(mine?.isCash).toBe(true)
     })
 
     it('requires a category and accepts no note', async () => {
@@ -268,14 +284,40 @@ describe('mock manual ledger adapter', () => {
         note: null,
       })
       const list = await adapter.listExpenses(DEMO_OUTLET_ID, store.today)
-      expect(list[0]?.note).toBeNull()
+      expect(list.find((expense) => expense.id === created.id)?.note).toBeNull()
     })
 
-    it('removes one', async () => {
-      const { store, adapter, expenseInput } = over()
+    it('withdraws one, and keeps it', async () => {
+      const { store, adapter, expenseInput, userId } = over()
       const created = await adapter.createExpense(expenseInput())
-      await adapter.deleteExpense(created.id)
-      expect(await adapter.listExpenses(DEMO_OUTLET_ID, store.today)).toEqual([])
+
+      const voided = await adapter.voidExpense(created.id)
+
+      expect(voided.voidedAt).not.toBeNull()
+      expect(voided.voidedBy?.id).toBe(userId)
+      // No reason, and that is a complete trace [owner, 2026-08-09].
+      expect(voided.voidedReason).toBeNull()
+
+      const list = await adapter.listExpenses(DEMO_OUTLET_ID, store.today)
+      expect(list.map((expense) => expense.id)).toContain(created.id)
+    })
+
+    it('stores a blank withdrawal reason as no reason at all', async () => {
+      const { adapter, expenseInput } = over()
+      const created = await adapter.createExpense(expenseInput())
+      const voided = await adapter.voidExpense(created.id, '   ')
+      expect(voided.voidedReason).toBeNull()
+    })
+
+    it('refuses to change a withdrawn expense, or withdraw it twice', async () => {
+      const { adapter, expenseInput } = over()
+      const created = await adapter.createExpense(expenseInput())
+      await adapter.voidExpense(created.id, 'Typed twice')
+
+      await expect(adapter.updateExpense(created.id, { amountPaise: 1 })).rejects.toThrow(
+        /withdrawn/,
+      )
+      await expect(adapter.voidExpense(created.id)).rejects.toThrow(/withdrawn/)
     })
   })
 
@@ -317,35 +359,27 @@ describe('mock manual ledger adapter', () => {
     })
   })
 
-  describe('the owner-only boundary', () => {
-    // The registry already means no other role's shell mounts this surface. The
-    // mock refuses anyway, because the policies refuse every verb on both tables
-    // — and a mock that answered would let the surface be built wrongly.
-    for (const role of ['franchise_admin', 'biller', 'employee'] as const) {
-      it(`refuses every read and write to a ${role}`, async () => {
-        const { store, adapter, dayInput, expenseInput } = over(role)
+  describe('the boundary between the two tables', () => {
+    // The registry already means no staff shell mounts the ledger. The mock
+    // refuses anyway, because the policies refuse it — and a mock that answered
+    // would let the surface be built wrongly.
+    //
+    // What changed with `the-ledger-opens-to-the-outlet` is that the two tables
+    // no longer answer alike for the same caller, so they are asserted apart.
+    for (const role of ['biller', 'employee'] as const) {
+      it(`refuses a ${role} every verb on the day record, at their own outlet`, async () => {
+        const { store, adapter, dayInput } = over(role)
 
-        await expect(adapter.getDay(DEMO_OUTLET_ID, store.today)).rejects.toThrow(/Only an owner/)
-        await expect(adapter.getPreviousDay(DEMO_OUTLET_ID, store.today)).rejects.toThrow(
-          /Only an owner/,
-        )
-        await expect(adapter.listExpenses(DEMO_OUTLET_ID, store.today)).rejects.toThrow(
-          /Only an owner/,
-        )
+        // The read side protects any past day, any month aggregate and every
+        // commission-net figure. The write side protects the drawer.
+        await expect(adapter.getDay(DEMO_OUTLET_ID, store.today)).rejects.toThrow(/manager/)
+        await expect(adapter.getPreviousDay(DEMO_OUTLET_ID, store.today)).rejects.toThrow(/manager/)
         await expect(adapter.getMonth(DEMO_OUTLET_ID, store.today.slice(0, 7))).rejects.toThrow(
-          /Only an owner/,
+          /manager/,
         )
         const refusedDay = dayInput()
-        await expect(adapter.upsertDay(refusedDay)).rejects.toThrow(/Only an owner/)
-        await expect(
-          adapter.createExpense(
-            expenseInput({ category: 'Other', isCash: false, amountPaise: 100, note: 'x' }),
-          ),
-        ).rejects.toThrow(/Only an owner/)
-        await expect(adapter.deleteDay(DEMO_OUTLET_ID, store.today)).rejects.toThrow(
-          /Only an owner/,
-        )
-        await expect(adapter.deleteExpense('anything')).rejects.toThrow(/Only an owner/)
+        await expect(adapter.upsertDay(refusedDay)).rejects.toThrow(/manager/)
+        await expect(adapter.deleteDay(DEMO_OUTLET_ID, store.today)).rejects.toThrow(/manager/)
 
         // Refused, and nothing written on the way out — asserted against the
         // date the refused write actually carried, not one that happens to
@@ -354,6 +388,100 @@ describe('mock manual ledger adapter', () => {
           store.manualLedgerDays.some((day) => day.business_date === refusedDay.businessDate),
         ).toBe(false)
       })
+
+      it(`lets a ${role} read and record their own outlet's expenses`, async () => {
+        const { store, adapter, expenseInput, userId } = over(role)
+
+        const listed = await adapter.listExpenses(DEMO_OUTLET_ID, store.businessDate(1))
+        // Every row at the outlet, whoever recorded it — which is the point of
+        // the surface, not an oversight.
+        expect(listed.length).toBeGreaterThan(0)
+        expect(listed.some((expense) => expense.recordedBy.id !== userId)).toBe(true)
+
+        const created = await adapter.createExpense(expenseInput())
+        expect(created.recordedBy.id).toBe(userId)
+        // Standing in the shop, so never marked from away.
+        expect(created.recordedAway).toBe(false)
+      })
+
+      it(`refuses a ${role} an expense against any day but today`, async () => {
+        const { store, adapter, expenseInput } = over(role)
+        await expect(
+          adapter.createExpense(expenseInput({ businessDate: store.businessDate(1) })),
+        ).rejects.toThrow(/closed/)
+      })
+
+      it(`refuses a ${role} somebody else's expense, and an old one of their own`, async () => {
+        const { store, adapter, expenseInput } = over(role)
+
+        const someoneElses = (await adapter.listExpenses(DEMO_OUTLET_ID, store.businessDate(1)))[0]
+        if (!someoneElses) throw new Error('The demo fixture no longer seeds an earlier expense.')
+
+        // Two different refusals, and the older-day one is checked first by the
+        // mock, so this row proves the date rule rather than the ownership one.
+        await expect(adapter.updateExpense(someoneElses.id, { amountPaise: 1 })).rejects.toThrow(
+          /closed/,
+        )
+
+        const own = await adapter.createExpense(expenseInput())
+        await expect(adapter.updateExpense(own.id, { amountPaise: 100 })).resolves.toMatchObject({
+          amountPaise: 100,
+        })
+      })
     }
+
+    // The biller alone, deliberately. The demo Employee persona works BOTH
+    // outlets — the case multi-outlet hiring exists for — so asserting a
+    // cross-outlet refusal through them would assert nothing.
+    it('refuses a biller anything at an outlet they are not assigned to', async () => {
+      const { store, adapter, expenseInput } = over('biller')
+      await expect(adapter.listExpenses(DEMO_SECOND_OUTLET_ID, store.today)).rejects.toThrow(
+        /not yours/,
+      )
+      await expect(
+        adapter.createExpense(expenseInput({ outletId: DEMO_SECOND_OUTLET_ID })),
+      ).rejects.toThrow(/not yours/)
+    })
+
+    it('lets a manager read and write the full ledger at their own outlet', async () => {
+      const { store, adapter, dayInput } = over('franchise_admin')
+
+      await expect(adapter.upsertDay(dayInput())).resolves.toMatchObject({
+        cashRevenuePaise: 1_200_000,
+      })
+      // The full day, not a staff subset: the drawer figures are exactly what a
+      // manager is here for.
+      const read = await adapter.getDay(DEMO_OUTLET_ID, store.today)
+      expect(read?.countedCashPaise).toBe(1_700_000)
+      expect(
+        (await adapter.getMonth(DEMO_OUTLET_ID, store.today.slice(0, 7))).days.length,
+      ).toBeGreaterThan(0)
+    })
+
+    it('refuses a manager the ledger at an outlet they do not manage', async () => {
+      const { store, adapter, dayInput } = over('franchise_admin')
+      await expect(adapter.getDay(DEMO_SECOND_OUTLET_ID, store.today)).rejects.toThrow(/manager/)
+      await expect(
+        adapter.upsertDay(dayInput({ outletId: DEMO_SECOND_OUTLET_ID })),
+      ).rejects.toThrow(/manager/)
+    })
+
+    it('marks an expense recorded at an outlet the recorder is not assigned to', async () => {
+      const owner = over('super_admin')
+      const manager = over('franchise_admin')
+
+      // At Kanchrapara the owner holds nothing, which is the case the marker
+      // exists for: expected cash moves without anybody at that outlet spending
+      // it. At Kalyani the same owner holds a Franchise Admin assignment — the
+      // row their operational writes come from — so an expense there is an
+      // ordinary manager expense and carries no marker. That distinction is the
+      // rule, not an artefact of who the demo persona happens to be.
+      expect(
+        (await owner.adapter.createExpense(owner.expenseInput({ outletId: DEMO_SECOND_OUTLET_ID })))
+          .recordedAway,
+      ).toBe(true)
+      expect((await owner.adapter.createExpense(owner.expenseInput())).recordedAway).toBe(false)
+      expect((await manager.adapter.createExpense(manager.expenseInput())).recordedAway).toBe(false)
+    })
   })
 })

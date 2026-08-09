@@ -36,10 +36,16 @@ August 2026 is trading while billing (#10), expenses and inventory (#11) and
 daily cash (#12) are still proposals, so nothing records what the outlets sold,
 spent, or held in the drawer. The **Ledger** surface (#36) is where the owner
 writes that down by hand until those surfaces land. It is deliberately small: two
-owner-only tables, no workflow, no sign-off, no correction history, and one
-person who can reach it.
+tables, no workflow, no sign-off and no correction history.
 
-Four bounds worth knowing, because each is a decision:
+It is no longer owner-only. `the-ledger-opens-to-the-outlet` gave the **day
+record** to managers at the outlets they are assigned to, and the **expense
+record** to everyone at the outlet, because the person who spends the money was
+the one person who could not write it down. What that opened, and what it
+deliberately did not, is in
+[Roles and permissions](ROLES_AND_PERMISSIONS.md).
+
+Seven bounds worth knowing, because each is a decision:
 
 - **The month's figure is a cash-basis _operating_ estimate.** Capital spending
   is not recorded here at all, by owner decision, so nothing in it accounts for
@@ -58,7 +64,44 @@ Four bounds worth knowing, because each is a decision:
 - **It grants the owner no authority that survives it.** They may type cash
   figures into this notebook only because no real drawer record exists yet to
   corrupt. The bound in the section above is untouched, and #12 must not inherit
-  this permission — it decides its own boundary on its own merits.
+  this permission — it decides its own boundary on its own merits. That an outlet
+  staff role may record a drawer expense here is likewise no precedent for the
+  live expense record, whose grants are `outlet-expenses`' own to decide.
+- **A worked shift's own takings are not treated as confidential; history and
+  aggregates are.** Owner decision, 2026-08-08, and it extends no further than
+  that sentence. A staff member stands where the sales happen: the counter tablet
+  is signed in and physically present, and anyone who wanted the evening's figure
+  could tally the orders. So no test, wording or later feature may rest on the
+  premise that the shift somebody worked is a secret this app keeps. **Any past
+  day, any month's total, the other outlet and every figure net of commission
+  remain confidential**, because none of them can be observed from behind a
+  counter and a running total across weeks is not the same information as one
+  evening's cash. The policy nevertheless refuses staff every day row, with no
+  roster check: the concession is a limit on what the system may *claim*, not an
+  instruction to open a hole. A later change showing staff their own shift's
+  sales is therefore a product question; one showing them the month is not.
+- **A fabricated cash expense is not caught by the drawer count.** An invented
+  expense lowers expected cash, so the count still matches. The count catches a
+  *missing* entry, never an invented one. That is inherent in granting cash
+  expenses at all, so no further restriction on staff would buy anything: the
+  controls are visible attribution and the withdrawal trace, and no screen should
+  imply the nightly count is a check on it.
+- **A credit purchase cannot be recorded at all.** Buying on terms has no
+  representation here: `is_cash` is a boolean, there is no pending state and no
+  settlement. This is today's behaviour rather than a regression — such a
+  purchase is unrecorded now and stays unrecorded — but it means the month
+  understates in the month goods arrive and overstates in the month they are paid
+  for. Its own change if the owner starts buying on terms.
+- **"Your own rows" degrades when the counter tablet stops having personal
+  logins.** A staff member may correct or withdraw only expenses they recorded,
+  which Row-Level Security enforces against `auth.uid()`. #9 replaces the
+  Biller's login with an enrolled device plus a shift PIN, and that PIN *selects
+  attribution and is not the security boundary* — so `recorded_by` will name
+  whoever the shift claims to be, and RLS will have no session identity to check
+  it against. The rule then means "only expenses recorded during this shift". The
+  owner deferred this deliberately (2026-08-07); it is written down here and in
+  the `manual-ledger` capability spec now, so #9 states which of the two it
+  enforces rather than letting the rule quietly stop meaning what it says.
 
 **Its exit belongs to #12**, and is recorded in that change's proposal as
 inherited scope: the change that removes this capability must first carry every

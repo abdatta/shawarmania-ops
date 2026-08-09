@@ -97,7 +97,7 @@ export function MovementLedger() {
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
-        title={item?.name ?? 'Ledger'}
+        title={item?.name ?? 'Movements'}
         subtitle={
           item
             ? `Now: ${formatQuantity(item.currentQuantity, item.unit)}. Every figure on this screen is the sum of the rows below it.`

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ManualLedgerDay, ManualLedgerExpense } from '@/data-access/adapters'
+import type { ManualLedgerDayInput, ManualLedgerExpense } from '@/data-access/adapters'
 import { NotPaiseError } from '@/domain'
 
 import {
@@ -16,7 +16,7 @@ import {
 
 const OUTLET = '00000000-0000-4000-a000-000000000001'
 
-function day(overrides: Partial<ManualLedgerDay> = {}): ManualLedgerDay {
+function day(overrides: Partial<ManualLedgerDayInput> = {}): ManualLedgerDayInput {
   return {
     outletId: OUTLET,
     businessDate: '2026-08-01',
@@ -49,6 +49,15 @@ function expense(overrides: Partial<ManualLedgerExpense> = {}): ManualLedgerExpe
     amountPaise: 50_000,
     note: 'Chicken from Nadia Poultry',
     createdAt: '2026-08-01T10:00:00.000Z',
+    updatedAt: '2026-08-01T10:00:00.000Z',
+    recordedBy: { id: 'person-owner', name: 'Synthetic Owner' },
+    updatedBy: null,
+    recordedAway: false,
+    // Counted unless a test says otherwise, which is what every figure below
+    // assumes. Withdrawal is exercised by the tests that set it.
+    voidedAt: null,
+    voidedBy: null,
+    voidedReason: null,
     ...overrides,
   }
 }
@@ -182,6 +191,35 @@ describe('a day read against its count', () => {
     // Revenue survived intact: a cash movement is not a sale and not a cost.
     expect(month.profit.profitPaise).toBe(1_000_000)
   })
+
+  it('leaves expected cash untouched when a drawer expense is withdrawn', () => {
+    const withdrawn = expense({
+      amountPaise: 200_000,
+      isCash: true,
+      voidedAt: '2026-08-01T18:00:00.000Z',
+      voidedBy: { id: 'person-biller', name: 'Synthetic Biller Kal' },
+      voidedReason: null,
+    })
+    const standing = expense({ amountPaise: 50_000, isCash: true })
+
+    const reading = readDay(day({ openingCashPaise: 500_000 }), [withdrawn, standing])
+
+    // 5,000 − 500 only. The withdrawn ₹2,000 never leaves the drawer, which is
+    // the whole point: a row typed by mistake must not move the count somebody
+    // is about to reconcile against.
+    expect(reading.expectedCashPaise).toBe(450_000)
+    expect(reading.cashExpensesPaise).toBe(50_000)
+  })
+
+  it('drops a withdrawn non-cash expense from the day it appears on', () => {
+    const reading = readDay(day(), [
+      expense({ amountPaise: 180_000, isCash: false, voidedAt: '2026-08-01T18:00:00.000Z' }),
+    ])
+    expect(reading.nonCashExpensesPaise).toBe(0)
+    // And it moved nothing on the cash side either, so the two totals cannot
+    // disagree about the same row.
+    expect(reading.cashExpensesPaise).toBe(0)
+  })
 })
 
 describe('the opening-cash chain', () => {
@@ -222,7 +260,7 @@ describe('the opening-cash chain', () => {
 
 describe('a month read for one outlet', () => {
   /** Three days at two different Zomato rates, which is the case that matters. */
-  const days: ManualLedgerDay[] = [
+  const days: ManualLedgerDayInput[] = [
     day({
       businessDate: '2026-08-01',
       cashRevenuePaise: 1_200_000,
@@ -373,6 +411,47 @@ describe('a month read for one outlet', () => {
     expect(measuredZero.recorded).toBe(true)
     expect(measuredZero.daysRecorded).toBe(1)
     expect(measuredZero.profit.profitPaise).toBe(0)
+  })
+
+  it('excludes a withdrawn expense from every figure, breakdown included', () => {
+    const days = [day({ businessDate: '2026-08-01', cashRevenuePaise: 1_000_000 })]
+    const kept = expense({ businessDate: '2026-08-01', category: 'Gas', amountPaise: 190_000 })
+    const withdrawn = expense({
+      businessDate: '2026-08-01',
+      category: 'Gas',
+      amountPaise: 190_000,
+      voidedAt: '2026-08-01T19:00:00.000Z',
+      voidedBy: { id: 'person-owner', name: 'Synthetic Owner' },
+    })
+
+    const month = readMonth(days, [kept, withdrawn])
+
+    expect(month.totalExpensesPaise).toBe(190_000)
+    expect(month.cashExpensesPaise).toBe(190_000)
+    // The breakdown has to agree with the total, or the profit figure reconciles
+    // against a list that contradicts it — the exact failure grouping every row
+    // exists to prevent.
+    expect(month.expensesByCategory).toEqual([
+      {
+        category: 'Gas',
+        amountPaise: 190_000,
+        lines: [expect.objectContaining({ amountPaise: 190_000 })],
+      },
+    ])
+    expect(month.profit.profitPaise).toBe(810_000)
+  })
+
+  it('still calls a month recorded when its only expense was withdrawn', () => {
+    // Somebody wrote in this month and then took it back. Reporting it as never
+    // measured would be a different claim from reporting it as nil, and the
+    // surface says different words for each.
+    const month = readMonth(
+      [],
+      [expense({ voidedAt: '2026-08-01T19:00:00.000Z', voidedBy: { id: 'x', name: 'X' } })],
+    )
+    expect(month.recorded).toBe(true)
+    expect(month.totalExpensesPaise).toBe(0)
+    expect(month.expensesByCategory).toEqual([])
   })
 })
 

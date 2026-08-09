@@ -21,6 +21,14 @@ import type { Tables } from '../../database.types'
  *
  * Dates are `daysAgo` offsets materialised by the store, so the demo month is
  * always the month somebody is looking at it in.
+ *
+ * **Today carries no expenses either**, for the same reason it carries no day
+ * row: the staff surface opens on today and yesterday, and the first thing
+ * somebody does there is record what they just bought. A today already full of
+ * rows would never show that. Yesterday's rows are what the surface opens on,
+ * and they are attributed across all four roles so the list shows what it is now
+ * for — every row at the outlet, with the ones you may still fix legible at a
+ * glance.
  */
 
 export interface ManualLedgerDaySeed {
@@ -48,6 +56,12 @@ export interface ManualLedgerDaySeed {
    * same guard the inventory fixtures get.
    */
   expectedDifferencePaise?: number
+  /**
+   * Whether a manager corrected this day after the owner recorded it, so the
+   * "recorded by X, last corrected by Y" reading is on screen in the
+   * walkthrough rather than only in a test (design D6).
+   */
+  correctedByManager?: boolean
 }
 
 export interface ManualLedgerExpenseSeed {
@@ -57,6 +71,27 @@ export interface ManualLedgerExpenseSeed {
   amountPaise: number
   note?: string
   time: string
+  /**
+   * Who recorded it. Defaults to the owner, which is who recorded everything
+   * before this capability opened up.
+   */
+  recordedBy?: 'owner' | 'manager' | 'biller' | 'employee'
+  /**
+   * Recorded by somebody holding no assignment at this outlet, which the guard
+   * stamps at insert.
+   *
+   * Declared rather than derived from `recordedBy`, because the **demo** owner
+   * persona also holds a Franchise Admin assignment at Kalyani — their writes
+   * there come from that row, which is why the drawer opens for them at all —
+   * so nothing they record in this demo would ever be away. **Production is the
+   * other way round**: neither Super Admin holds an assignment at either outlet,
+   * which is the whole situation this change was written for. Declaring it here
+   * lets the walkthrough show the state a real owner produces.
+   */
+  recordedAway?: boolean
+  /** Set to withdraw this row. A reason is optional [owner, 2026-08-09]. */
+  voidedAtTime?: string
+  voidedReason?: string
 }
 
 /**
@@ -94,6 +129,9 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
     swiggyCommissionBp: 2100,
     note: 'Counted twice. Two ₹100 notes and some change unaccounted for.',
     expectedDifferencePaise: -25_000,
+    // The short day is the one a manager went back into, which is exactly when a
+    // second person touches a row somebody else recorded.
+    correctedByManager: true,
   },
   // Two days ago. **The chain break**: opens at ₹15,000 although the previous day
   // counted ₹14,750, because whoever opened the drawer wrote down what they
@@ -152,6 +190,7 @@ export const manualLedgerExpenseSeeds: ManualLedgerExpenseSeed[] = [
     amountPaise: 180_000,
     note: 'Kalyani market',
     time: '09:05',
+    recordedBy: 'biller',
   },
   {
     daysAgo: 3,
@@ -168,7 +207,12 @@ export const manualLedgerExpenseSeeds: ManualLedgerExpenseSeed[] = [
     amountPaise: 90_000,
     note: 'Paper bags and foil, 500 each',
     time: '11:20',
+    recordedBy: 'employee',
   },
+  // The owner's, from the drawer, and settled without being at the outlet — the
+  // one combination that earns a from-away marker. Expected cash moved and
+  // nobody standing in the shop spent it, which is what whoever counts tonight
+  // needs to know (design D9).
   {
     daysAgo: 1,
     category: 'Staff wages',
@@ -176,6 +220,7 @@ export const manualLedgerExpenseSeeds: ManualLedgerExpenseSeed[] = [
     amountPaise: 1_450_000,
     note: 'Four staff',
     time: '21:30',
+    recordedAway: true,
   },
   {
     daysAgo: 1,
@@ -184,5 +229,25 @@ export const manualLedgerExpenseSeeds: ManualLedgerExpenseSeed[] = [
     amountPaise: 145_000,
     note: 'Grill serviced, paid by UPI',
     time: '16:00',
+    recordedBy: 'manager',
+  },
+  // Yesterday, withdrawn. Typed twice by whoever was at the counter and caught
+  // the same evening, which is the mistake void exists for. It stays on screen,
+  // struck through, and counts toward nothing — including the drawer arithmetic
+  // the store checks above, which is why this row can sit on a day that
+  // reconciles.
+  //
+  // No reason on it, deliberately [owner, 2026-08-09]: the trace answers who and
+  // when, and a demo that showed every withdrawal explained would imply a field
+  // that is not required.
+  {
+    daysAgo: 1,
+    category: 'Packaging',
+    isCash: true,
+    amountPaise: 60_000,
+    note: 'Foil rolls — entered twice',
+    time: '17:05',
+    recordedBy: 'biller',
+    voidedAtTime: '17:11',
   },
 ]

@@ -42,12 +42,13 @@ The second half arrives with it because it is the same edit to the same policies
 - **No approval workflow, spend limit or receipt attachment.** The nightly drawer count and visible attribution are the controls.
 - **No offline queue.** `src/outbox/index.ts` is still an empty placeholder and the real one arrives with #9. A failed submit says so and keeps everything typed, so one tap retries. A second half-queue would make the real one harder to land.
 
-## Design questions to settle during `/opsx:propose`
+## Design questions, all settled
 
-- **Whether a Biller reaches this surface on the shared counter tablet at all.** #9 replaces the Biller's personal login with an enrolled device plus a shift PIN, and `AGENTS.md` is explicit that the PIN "selects attribution, it is not the security boundary". At that point "their own rows" degrades to "this shift's rows" and RLS cannot enforce ownership against a device session. **The owner has deferred this deliberately** (2026-08-07) to be settled when #9 is built. What this change owes is that the degradation is written into the spec and `docs/LIMITATIONS.md` now, not discovered later when the rule quietly stops meaning what it says.
-- **What a Franchise Admin sees of a day recorded by the owner, and the reverse.** Both can now correct the same row and there is no concurrency control on it. Last write wins is right for a notebook; the reading has to say whose figures are on screen.
-- **Whether an Employee needs this tab at all, or only a Biller.** The owner asked for "all staff"; whether an Employee who is not at the counter ever spends outlet money is worth one question before building two tabs.
-- **Whether voiding requires a reason.** A required reason is one more field on the fastest path a staff member takes; an absent one makes the trace answer "when and who" but not "why".
+- **Whether a Biller reaches this surface on the shared counter tablet at all.** #9 replaces the Biller's personal login with an enrolled device plus a shift PIN, and `AGENTS.md` is explicit that the PIN "selects attribution, it is not the security boundary". At that point "their own rows" degrades to "this shift's rows" and RLS cannot enforce ownership against a device session. **The owner has deferred this deliberately** (2026-08-07) to be settled when #9 is built. The degradation is now written into the expense-ownership requirement in the spec, and into `docs/LIMITATIONS.md` by task 10.4, so it is recorded before it bites rather than discovered when the rule has quietly stopped meaning what it says.
+- **What a Franchise Admin sees of a day recorded by the owner, and the reverse.** Settled by `updated_by` and the requirement that the reading names both accounts where they differ (design D6). Last write wins on the figures, which is right for a notebook; the reading says whose figures are on screen.
+- **Whether an Employee needs this tab at all, or only a Biller.** Both, per the owner's "all staff". Two gate registry entries, and the policy branch already names both roles.
+- **Whether voiding requires a reason.** **No** (owner, 2026-08-09). One tap. A reason stays optional, stored and shown when given; the moment and the account answer the failure the trace exists for. See design D9.
+- **Whether the ledger marks an owner's remote entry the way the live expenses surface does.** **Only when the expense comes from the drawer** (owner, 2026-08-09). `outlet-expenses` can mark every remote entry because it refuses remote cash outright; this notebook does not, so a drawer expense entered from elsewhere genuinely moves what the counters should expect to find and the marking is what tells them. A non-cash one gets the recorder's name alone. See design D9.
 
 ## Watch out for
 

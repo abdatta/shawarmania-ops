@@ -59,6 +59,21 @@ rather than discovering them:
   Two shapes need a decision rather than a copy: the manual ledger holds one
   stored `opening_cash_paise` per day where a real drawer derives it, and it holds
   aggregator revenue by channel where this schema has no bill behind it.
+
+  **This obligation grew with `the-ledger-opens-to-the-outlet`, and is recorded
+  here rather than left to be discovered.** The rows are no longer one person's:
+  every row now carries the account that **recorded** it, the account that **last
+  corrected** it, and — for expenses — whether it was **withdrawn**, by whom and
+  why. All of that has to survive the carry-over, because the reason the ledger
+  was opened up was that a row which can vanish or lose its author defeats the
+  point of several people writing in it. An expense also carries whether it was
+  recorded by somebody holding no assignment at that outlet, which explains a
+  drawer movement nobody in the shop made.
+
+  It does **not** owe payment states or settlement. Pending expenses were
+  designed and cut in full (owner, 2026-08-09), so `is_cash` is still a boolean
+  and the month is still a cash basis — that is the direct saving, and it is why
+  this obligation grew by less than it might have.
 - **Do not inherit its permission.** The owner may write cash figures in the
   manual ledger only because no real drawer record existed to corrupt. That is
   not precedent for this change's boundary, which is the open design question

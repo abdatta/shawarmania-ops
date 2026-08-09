@@ -57,4 +57,27 @@ describe('RowActionsMenu', () => {
     await user.click(screen.getByRole('button', { name: 'Actions for Demo Person' }))
     expect(screen.getByRole('button', { name: 'Deactivate' })).toBeDisabled()
   })
+
+  it("opens inward from the trigger's left edge when start-aligned", async () => {
+    const user = userEvent.setup()
+    const getBoundingClientRect = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ bottom: 80, left: 48, right: 80 } as DOMRect)
+
+    render(
+      <RowActionsMenu
+        align="start"
+        label="Actions for Demo Person"
+        actions={[{ label: 'Edit', onSelect: () => {} }]}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Demo Person' }))
+
+    const panel = screen.getByRole('button', { name: 'Edit' }).closest('div[style]')
+    expect(panel).toHaveStyle({ left: '48px', top: '84px' })
+    expect(panel).not.toHaveStyle({ right: `${window.innerWidth - 80}px` })
+
+    getBoundingClientRect.mockRestore()
+  })
 })

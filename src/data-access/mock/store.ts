@@ -132,8 +132,23 @@ export const DEMO_SECOND_OUTLET_ID = OUTLET_KANCHRAPARA_ID
 /** Whoever recorded the demo's operational rows. A manager, as it would be. */
 const MANAGER_ID = personaFixtures.franchise_admin.profile.id
 
-/** Whoever wrote the manual ledger's rows. The owner, because nobody else can. */
+/** Whoever wrote the manual ledger's day rows. Owners and managers only. */
 const OWNER_ID = personaFixtures.super_admin.profile.id
+
+/**
+ * Who a ledger expense seed can be attributed to.
+ *
+ * All four, because `the-ledger-opens-to-the-outlet` made the expense list a
+ * thing several people write into, and a demo where every row names the owner
+ * would not show what the surface is now for: seeing at a glance which rows are
+ * yours to fix.
+ */
+const LEDGER_RECORDERS: Record<'owner' | 'manager' | 'biller' | 'employee', string> = {
+  owner: OWNER_ID,
+  manager: MANAGER_ID,
+  biller: personaFixtures.biller.profile.id,
+  employee: personaFixtures.employee.profile.id,
+}
 
 /** When each outlet counted its drawer yesterday. */
 const CLOSE_TIME: Record<string, string> = {
@@ -479,9 +494,20 @@ export function createDemoStore(): DemoStore {
       is_cash: seed.isCash,
       amount_paise: seed.amountPaise,
       description: seed.note ?? null,
-      recorded_by: OWNER_ID,
+      recorded_by: LEDGER_RECORDERS[seed.recordedBy ?? 'owner'],
+      // Stamped at insert by the guard, from the recorder's assignments as they
+      // stood then. Declared on the seed rather than derived here — see the
+      // fixture, where the reason is that the demo owner manages Kalyani and a
+      // production owner manages nothing.
+      recorded_away: seed.recordedAway ?? false,
       created_at: instantAt(businessDate(seed.daysAgo), seed.time),
       updated_at: instantAt(businessDate(seed.daysAgo), seed.time),
+      updated_by: null,
+      voided_at: seed.voidedAtTime
+        ? instantAt(businessDate(seed.daysAgo), seed.voidedAtTime)
+        : null,
+      voided_by: seed.voidedAtTime ? LEDGER_RECORDERS[seed.recordedBy ?? 'owner'] : null,
+      voided_reason: seed.voidedReason ?? null,
     }),
   )
 
@@ -506,6 +532,10 @@ export function createDemoStore(): DemoStore {
       recorded_by: OWNER_ID,
       created_at: instantAt(businessDate(seed.daysAgo), '23:00'),
       updated_at: instantAt(businessDate(seed.daysAgo), '23:00'),
+      // One day carries a manager's correction, so the "recorded by X, last
+      // corrected by Y" reading appears in the walkthrough rather than only in a
+      // test (design D6).
+      updated_by: seed.correctedByManager ? MANAGER_ID : null,
     }),
   )
 
@@ -532,8 +562,16 @@ export function createDemoStore(): DemoStore {
   for (const [index, seed] of manualLedgerDaySeeds.entries()) {
     const row = manualLedgerDays[index]
     if (!row) throw new Error(`Demo fixture drift: manual ledger day ${index} was not built.`)
+    // A withdrawn expense stops counting, here as everywhere else. Leaving it in
+    // would make the demo's drawer disagree with the surface reading it, which
+    // is precisely the drift this guard exists to catch.
     const cashExpenses = manualLedgerExpenses
-      .filter((expense) => expense.business_date === row.business_date && expense.is_cash)
+      .filter(
+        (expense) =>
+          expense.business_date === row.business_date &&
+          expense.is_cash &&
+          expense.voided_at === null,
+      )
       .reduce((running, expense) => running + expense.amount_paise, 0)
     const expected = expectedClosingPaise({
       openingCashPaise: row.opening_cash_paise,

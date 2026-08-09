@@ -35,7 +35,9 @@ by reading the category list. The two migrations do not overlap by construction.
 Owner decisions taken during the 2026-08-07 grilling are marked
 **[owner, 2026-08-07]**. Two scope decisions taken on 2026-08-08 are marked
 **[owner, 2026-08-08]** and are the reason D4 and D5 do not say what an earlier
-draft of this document said.
+draft of this document said. Two surface decisions taken on 2026-08-09 are marked
+**[owner, 2026-08-09]** and are recorded in D9, which closes the last of the open
+questions and overrides D3 on the void reason.
 
 ## Goals / Non-Goals
 
@@ -125,7 +127,8 @@ the spec says so rather than implying the count is a check.
 
 ### D3 — Void replaces delete on `manual_ledger_expenses`
 
-`voided_at`, `voided_by` and `voided_reason` on the row. A voided expense stays
+`voided_at`, `voided_by` and `voided_reason` on the row, the reason optional
+(D9 settles this; an earlier draft of D3 required it). A voided expense stays
 visible, struck through, and stops counting toward the day's expected cash and
 the month's totals. Visible to everyone who can read the row, including staff
 [owner, 2026-08-07], so somebody can see their own mistake was caught rather than
@@ -315,18 +318,35 @@ A staff member sees at a glance which rows they can still fix.
   and adds columns. Neither repeats the other's work, and this one must be
   written against the post-#37 schema rather than against `main` as it stands.
 
+### D9 — A void needs no reason, and a from-away marking is for drawer expenses only
+
+Both settled [owner, 2026-08-09], closing the last two open questions.
+
+**Voiding requires no reason.** D3 assumed one and the completeness check was
+written for it. The owner's answer is one tap. The reasoning holds: voiding is
+the fastest correction on a surface used entirely with thumbs, and the failure
+the trace exists for is a row vanishing, which the moment and the account already
+answer in full. A reason stays available and is stored and shown when given. The
+check keeps its `attendance_override_complete` shape over `voided_at` and
+`voided_by` alone, and additionally refuses a blank or whitespace-only reason so
+the column is either absent or has content. Loosening a constraint later is a
+cheaper migration than tightening one, which is the right direction for a
+judgment call that could go either way.
+
+**A from-away marking is worth having only where the drawer moves.**
+`outlet-expenses` marks an owner's remote expense as the owner's, but it can
+afford a blanket rule because that path refuses a remote cash expense outright:
+its remote entries are mathematically incapable of moving a drawer. This notebook
+has no such refusal. The owner may write any figure at any outlet, so a drawer
+expense entered from elsewhere does change what the people counting that drawer
+should expect to find, and the marking is what tells them. A non-cash expense
+from away moves nothing and gets the recorder's name alone.
+
+**Rejected: adopting `outlet-expenses`' blanket marking wholesale.** It would
+put a badge on rows where it carries no information, and a marker that appears
+on rows it does not matter for is a marker nobody reads on the row it does.
+
 ## Open Questions
 
-- **Does an Employee need this tab, or only a Biller?** The owner asked for "all
-  staff". Whether an Employee who is not at the counter ever spends outlet money
-  is worth one question before building two tabs, and the answer is cheap to act
-  on either way since the policy branch already names both roles.
-- **Does voiding require a reason?** D3 assumes yes, and the completeness check is
-  written for it. A required reason is one more field on the fastest path a staff
-  member takes; an absent one leaves the trace able to answer who and when but not
-  why. Settle before writing the check, because it is a constraint either way.
-- **What a Franchise Admin sees of the owner's remote entries, and the reverse.**
-  `outlet-expenses` already requires an owner's remote expense to be visibly the
-  owner's on the live surface. Whether the ledger adopts the same marking, or
-  relies on the recorder name alone, is a surface decision this change should
-  settle rather than inherit by accident.
+None. The Employee tab is answered by the owner's original "all staff" and built
+under D7; the remaining two are settled in D9 above.

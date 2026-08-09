@@ -1,6 +1,7 @@
 import {
   ManualLedgerActionError,
   type AppRole,
+  type LedgerActor,
   type ManualLedgerAdapter,
   type ManualLedgerDay,
   type ManualLedgerDayInput,
@@ -32,7 +33,27 @@ import { captureMockCategory } from './expense-categories'
  * `src/features/manual-ledger/ledger.ts`, in both modes.
  */
 
-const OWNER_ID = personaFixtures.super_admin.profile.id
+/**
+ * Names for the accounts that wrote in the ledger, exactly as
+ * `manual_ledger_people()` supplies them in real mode.
+ *
+ * Every demo persona is in one map because the demo has nobody to hide from.
+ * What matters is the *shape*: the surface reads a name from a lookup rather
+ * than from the row, so it is built against the same seam it will use for real —
+ * where `profiles` cannot answer for an Employee, or for an owner seen from an
+ * outlet.
+ */
+const LEDGER_PEOPLE: ReadonlyMap<string, string | null> = new Map(
+  Object.values(personaFixtures).map((persona) => [persona.profile.id, persona.profile.full_name]),
+)
+
+function actor(id: string): LedgerActor {
+  return { id, name: LEDGER_PEOPLE.get(id) ?? null }
+}
+
+function optionalActor(id: string | null): LedgerActor | null {
+  return id ? actor(id) : null
+}
 
 function toDay(row: Tables<'manual_ledger_days'>): ManualLedgerDay {
   return {
@@ -51,6 +72,8 @@ function toDay(row: Tables<'manual_ledger_days'>): ManualLedgerDay {
     zomatoCommissionBp: row.zomato_commission_bp,
     swiggyCommissionBp: row.swiggy_commission_bp,
     note: row.note,
+    recordedBy: actor(row.recorded_by),
+    updatedBy: optionalActor(row.updated_by),
   }
 }
 
@@ -64,6 +87,13 @@ function toExpense(row: Tables<'manual_ledger_expenses'>): ManualLedgerExpense {
     amountPaise: row.amount_paise,
     note: row.description,
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    recordedBy: actor(row.recorded_by),
+    updatedBy: optionalActor(row.updated_by),
+    recordedAway: row.recorded_away,
+    voidedAt: row.voided_at,
+    voidedBy: optionalActor(row.voided_by),
+    voidedReason: row.voided_reason,
   }
 }
 
@@ -132,28 +162,91 @@ function refuseImpossibleExpense(expense: { amountPaise: number; category: strin
 export function createMockManualLedgerAdapter(
   store: DemoStore,
   role: AppRole,
+  userId: string,
+  assignedOutletIds: readonly string[],
 ): ManualLedgerAdapter {
   let nextId = 1
 
+  const isOwner = role === 'super_admin'
+  const isManager = role === 'franchise_admin'
+  const isStaff = role === 'biller' || role === 'employee'
+
+  function assignedAt(outletId: string): boolean {
+    return assignedOutletIds.includes(outletId)
+  }
+
   /**
-   * The owner-only boundary, drawn here as well as by the registry.
+   * The day record: owners everywhere, managers where they are assigned, and
+   * **nobody else anywhere** — including at their own outlet.
    *
-   * The registry already means no other role's shell mounts this surface, so this
-   * is never reached in a walkthrough. It is here because the policies refuse
-   * every verb on both tables for everybody else, and a mock that would have
-   * answered is a mock the surface could be built wrongly against — the same
-   * reason the alerts and insights mocks enforce the cross-outlet boundary they
-   * will inherit from RLS.
+   * The registry already means no staff shell mounts the ledger, so this is not
+   * reached in a walkthrough. It is here because the policies refuse it, and a
+   * mock that would have answered is a mock the surface could be built wrongly
+   * against. The refusal protects the drawer on the write side and past days and
+   * month aggregates on the read side (design D5).
    */
-  function refuseUnlessOwner(): void {
-    if (role !== 'super_admin') {
-      throw new ManualLedgerActionError('not_permitted', 'Only an owner can use the manual ledger.')
+  function refuseDay(outletId: string): void {
+    if (isOwner) return
+    if (isManager && assignedAt(outletId)) return
+    throw new ManualLedgerActionError(
+      'not_permitted',
+      'The day’s figures belong to the manager and the owner.',
+    )
+  }
+
+  /** The expense record: everyone at the outlet, whoever recorded the row. */
+  function refuseExpenses(outletId: string): void {
+    if (isOwner) return
+    if ((isManager || isStaff) && assignedAt(outletId)) return
+    throw new ManualLedgerActionError(
+      'not_permitted',
+      'That outlet’s expenses are not yours to read.',
+    )
+  }
+
+  /**
+   * The two staff limits the guard enforces, restated so the form is built
+   * against the answers it will get: record against today only, and correct or
+   * withdraw only your own row while its day is still running.
+   *
+   * A manager or owner passes both untouched, which is what makes the freeze a
+   * routing rule rather than a dead end — the row stays fixable, by somebody
+   * else.
+   */
+  function refuseStaffWrite(row: { businessDate: string; recordedBy?: string }): void {
+    if (!isStaff) return
+    if (row.businessDate !== store.businessDate(0)) {
+      throw new ManualLedgerActionError(
+        'refused',
+        'That day has closed. A manager or the owner can still change it.',
+      )
+    }
+    if (row.recordedBy !== undefined && row.recordedBy !== userId) {
+      throw new ManualLedgerActionError('not_permitted', 'That one is somebody else’s to correct.')
+    }
+  }
+
+  function findExpense(id: string): Tables<'manual_ledger_expenses'> {
+    const existing = store.manualLedgerExpenses.find((expense) => expense.id === id)
+    if (!existing) {
+      throw new ManualLedgerActionError('not_found', 'That expense is no longer there.')
+    }
+    return existing
+  }
+
+  /** A withdrawn row is final: no edit, no second void, no un-void. */
+  function refuseVoided(expense: Tables<'manual_ledger_expenses'>): void {
+    if (expense.voided_at !== null) {
+      throw new ManualLedgerActionError(
+        'refused',
+        'That one was withdrawn. Record a new expense instead of changing it.',
+      )
     }
   }
 
   return {
     async getDay(outletId, businessDate) {
-      refuseUnlessOwner()
+      refuseDay(outletId)
       const row = store.manualLedgerDays.find(
         (day) => day.outlet_id === outletId && day.business_date === businessDate,
       )
@@ -161,7 +254,7 @@ export function createMockManualLedgerAdapter(
     },
 
     async getPreviousDay(outletId, businessDate) {
-      refuseUnlessOwner()
+      refuseDay(outletId)
       // The most recent row before this date, not literally yesterday: a gap in
       // the notebook is normal and the chain runs between the rows that exist.
       const row = store.manualLedgerDays
@@ -171,7 +264,7 @@ export function createMockManualLedgerAdapter(
     },
 
     async upsertDay(day: ManualLedgerDayInput) {
-      refuseUnlessOwner()
+      refuseDay(day.outletId)
       refuseImpossibleDay(day)
 
       const existing = store.manualLedgerDays.find(
@@ -195,11 +288,14 @@ export function createMockManualLedgerAdapter(
         zomato_commission_bp: day.zomatoCommissionBp,
         swiggy_commission_bp: day.swiggyCommissionBp,
         note: trimmed(day.note),
-        // Frozen on a correction, as the guard freezes it: the other owner may fix
-        // a figure without becoming the day's author.
-        recorded_by: existing?.recorded_by ?? OWNER_ID,
+        // Frozen on a correction, as the guard freezes it: a second owner — or
+        // now a manager — may fix a figure without becoming the day's author.
+        recorded_by: existing?.recorded_by ?? userId,
         created_at: existing?.created_at ?? new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        // Stamped on every correction and null until one, so an untouched row
+        // names one account rather than implying a second party (design D6).
+        updated_by: existing ? userId : null,
       }
 
       if (existing) {
@@ -211,7 +307,7 @@ export function createMockManualLedgerAdapter(
     },
 
     async deleteDay(outletId, businessDate) {
-      refuseUnlessOwner()
+      refuseDay(outletId)
       const index = store.manualLedgerDays.findIndex(
         (day) => day.outlet_id === outletId && day.business_date === businessDate,
       )
@@ -219,7 +315,7 @@ export function createMockManualLedgerAdapter(
     },
 
     async listExpenses(outletId, businessDate) {
-      refuseUnlessOwner()
+      refuseExpenses(outletId)
       return store.manualLedgerExpenses
         .filter(
           (expense) => expense.outlet_id === outletId && expense.business_date === businessDate,
@@ -228,8 +324,27 @@ export function createMockManualLedgerAdapter(
         .map(toExpense)
     },
 
+    async listRecentExpenses(outletId, businessDates) {
+      refuseExpenses(outletId)
+      // No date rule in the filter beyond the window the caller asked for: the
+      // window is where the surface opens, and the policies carry no date
+      // predicate on reads (design D2).
+      return store.manualLedgerExpenses
+        .filter(
+          (expense) =>
+            expense.outlet_id === outletId && businessDates.includes(expense.business_date),
+        )
+        .sort(
+          (a, b) =>
+            b.business_date.localeCompare(a.business_date) ||
+            b.created_at.localeCompare(a.created_at),
+        )
+        .map(toExpense)
+    },
+
     async createExpense(expense: NewManualLedgerExpense) {
-      refuseUnlessOwner()
+      refuseExpenses(expense.outletId)
+      refuseStaffWrite({ businessDate: expense.businessDate })
       refuseImpossibleExpense(expense)
 
       const created: Tables<'manual_ledger_expenses'> = {
@@ -240,20 +355,29 @@ export function createMockManualLedgerAdapter(
         is_cash: expense.isCash,
         amount_paise: expense.amountPaise,
         description: trimmed(expense.note),
-        recorded_by: OWNER_ID,
+        recorded_by: userId,
+        // What the guard stamps: did the recorder hold an assignment here? The
+        // owner holds none anywhere, which is the case the marker exists for.
+        recorded_away: !assignedAt(expense.outletId),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        updated_by: null,
+        voided_at: null,
+        voided_by: null,
+        voided_reason: null,
       }
       store.manualLedgerExpenses.push(created)
       return toExpense(created)
     },
 
     async updateExpense(id, patch: ManualLedgerExpensePatch) {
-      refuseUnlessOwner()
-      const existing = store.manualLedgerExpenses.find((expense) => expense.id === id)
-      if (!existing) {
-        throw new ManualLedgerActionError('not_found', 'That expense is no longer there.')
-      }
+      const existing = findExpense(id)
+      refuseExpenses(existing.outlet_id)
+      refuseVoided(existing)
+      refuseStaffWrite({
+        businessDate: existing.business_date,
+        recordedBy: existing.recorded_by,
+      })
 
       const amountPaise = patch.amountPaise ?? existing.amount_paise
       const category = patch.category ?? existing.category
@@ -266,20 +390,39 @@ export function createMockManualLedgerAdapter(
         amount_paise: amountPaise,
         description: patch.note === undefined ? existing.description : trimmed(patch.note),
         updated_at: new Date().toISOString(),
+        updated_by: userId,
       }
 
       store.manualLedgerExpenses[store.manualLedgerExpenses.indexOf(existing)] = updated
       return toExpense(updated)
     },
 
-    async deleteExpense(id) {
-      refuseUnlessOwner()
-      const index = store.manualLedgerExpenses.findIndex((expense) => expense.id === id)
-      if (index >= 0) store.manualLedgerExpenses.splice(index, 1)
+    async voidExpense(id, reason) {
+      const existing = findExpense(id)
+      refuseExpenses(existing.outlet_id)
+      refuseVoided(existing)
+      refuseStaffWrite({
+        businessDate: existing.business_date,
+        recordedBy: existing.recorded_by,
+      })
+
+      const voided: Tables<'manual_ledger_expenses'> = {
+        ...existing,
+        voided_at: new Date().toISOString(),
+        voided_by: userId,
+        // Optional [owner, 2026-08-09]. Blank is stored as absent, so nobody is
+        // ever shown a reason field with nothing in it.
+        voided_reason: trimmed(reason),
+        updated_at: new Date().toISOString(),
+        updated_by: userId,
+      }
+
+      store.manualLedgerExpenses[store.manualLedgerExpenses.indexOf(existing)] = voided
+      return toExpense(voided)
     },
 
     async getMonth(outletId, month) {
-      refuseUnlessOwner()
+      refuseDay(outletId)
       const inMonth = (businessDate: string) => businessDate.startsWith(`${month}-`)
 
       return {

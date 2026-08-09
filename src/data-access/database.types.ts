@@ -1311,6 +1311,7 @@ export type Database = {
           swiggy_commission_bp: number
           swiggy_revenue_paise: number
           updated_at: string
+          updated_by: string | null
           upi_revenue_paise: number
           zomato_commission_bp: number
           zomato_revenue_paise: number
@@ -1332,6 +1333,7 @@ export type Database = {
           swiggy_commission_bp: number
           swiggy_revenue_paise?: number
           updated_at?: string
+          updated_by?: string | null
           upi_revenue_paise?: number
           zomato_commission_bp: number
           zomato_revenue_paise?: number
@@ -1353,6 +1355,7 @@ export type Database = {
           swiggy_commission_bp?: number
           swiggy_revenue_paise?: number
           updated_at?: string
+          updated_by?: string | null
           upi_revenue_paise?: number
           zomato_commission_bp?: number
           zomato_revenue_paise?: number
@@ -1372,6 +1375,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "manual_ledger_days_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       manual_ledger_expenses: {
@@ -1384,8 +1394,13 @@ export type Database = {
           id: string
           is_cash: boolean
           outlet_id: string
+          recorded_away: boolean
           recorded_by: string
           updated_at: string
+          updated_by: string | null
+          voided_at: string | null
+          voided_by: string | null
+          voided_reason: string | null
         }
         Insert: {
           amount_paise: number
@@ -1396,8 +1411,13 @@ export type Database = {
           id?: string
           is_cash: boolean
           outlet_id: string
+          recorded_away?: boolean
           recorded_by?: string
           updated_at?: string
+          updated_by?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+          voided_reason?: string | null
         }
         Update: {
           amount_paise?: number
@@ -1408,8 +1428,13 @@ export type Database = {
           id?: string
           is_cash?: boolean
           outlet_id?: string
+          recorded_away?: boolean
           recorded_by?: string
           updated_at?: string
+          updated_by?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+          voided_reason?: string | null
         }
         Relationships: [
           {
@@ -1422,6 +1447,20 @@ export type Database = {
           {
             foreignKeyName: "manual_ledger_expenses_recorded_by_fkey"
             columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_ledger_expenses_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_ledger_expenses_voided_by_fkey"
+            columns: ["voided_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -2067,6 +2106,13 @@ export type Database = {
           p_valid_for: string
         }
         Returns: string
+      }
+      manual_ledger_people: {
+        Args: never
+        Returns: {
+          full_name: string
+          id: string
+        }[]
       }
       merge_expense_category: {
         Args: { p_from: string; p_into: string }

@@ -7,6 +7,8 @@ export interface RowAction {
   label: string
   onSelect: () => void
   disabled?: boolean
+  /** For callers whose tests reach the action by name rather than by its label. */
+  testId?: string
 }
 
 /**
@@ -23,17 +25,44 @@ export interface RowAction {
  * Native `<details>`/`<summary>` for the disclosure itself, same as
  * AccountMenu: less to get subtly wrong than a hand-built popover.
  */
-export function RowActionsMenu({ label, actions }: { label: string; actions: RowAction[] }) {
+export function RowActionsMenu({
+  label,
+  actions,
+  compact = false,
+  align = 'end',
+}: {
+  label: string
+  actions: RowAction[]
+  /**
+   * Trims the trigger to the glyph plus a hair, for lists whose row is itself
+   * one tap target. A full 44px control is the right size when the kebab is the
+   * only thing on the row to hit; where the whole card already takes the tap it
+   * is mostly padding, and padding on every row is what makes a list feel long.
+   */
+  compact?: boolean
+  /** Which trigger edge the menu's matching edge should use. */
+  align?: 'start' | 'end'
+}) {
   const detailsRef = useRef<HTMLDetailsElement>(null)
   const [open, setOpen] = useState(false)
-  const [position, setPosition] = useState<{ top: number; right: number } | null>(null)
+  const [position, setPosition] = useState<{
+    top: number
+    left?: number
+    right?: number
+  } | null>(null)
 
   useEffect(() => {
     if (!open) return
 
     function place() {
       const rect = detailsRef.current?.getBoundingClientRect()
-      if (rect) setPosition({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+      if (!rect) return
+
+      setPosition(
+        align === 'start'
+          ? { top: rect.bottom + 4, left: rect.left }
+          : { top: rect.bottom + 4, right: window.innerWidth - rect.right },
+      )
     }
     place()
 
@@ -56,7 +85,7 @@ export function RowActionsMenu({ label, actions }: { label: string; actions: Row
       document.removeEventListener('keydown', onKeyDown)
       document.removeEventListener('pointerdown', onPointerDown)
     }
-  }, [open])
+  }, [align, open])
 
   return (
     <details
@@ -68,14 +97,16 @@ export function RowActionsMenu({ label, actions }: { label: string; actions: Row
       <summary
         role="button"
         aria-label={label}
-        className="flex size-[var(--size-control-phone)] cursor-pointer list-none items-center justify-center rounded-lg text-content-muted hover:bg-surface-raised hover:text-content focus-visible:focus-ring [&::-webkit-details-marker]:hidden"
+        className={`flex cursor-pointer list-none items-center justify-center rounded-lg text-content-muted hover:bg-surface-raised hover:text-content focus-visible:focus-ring [&::-webkit-details-marker]:hidden ${
+          compact ? 'size-8' : 'size-[var(--size-control-phone)]'
+        }`}
       >
-        <EllipsisVertical aria-hidden size={18} />
+        <EllipsisVertical aria-hidden size={compact ? 16 : 18} />
       </summary>
 
       {open && position && (
         <div
-          style={{ position: 'fixed', top: position.top, right: position.right }}
+          style={{ position: 'fixed', ...position }}
           className="z-30 flex min-w-40 flex-col gap-0.5 rounded-lg border border-border bg-surface p-1 shadow-lg"
         >
           {actions.map((action) => (
@@ -84,6 +115,7 @@ export function RowActionsMenu({ label, actions }: { label: string; actions: Row
               variant="ghost"
               size="phone"
               className="w-full justify-start"
+              data-testid={action.testId}
               disabled={action.disabled}
               onClick={() => {
                 setOpen(false)

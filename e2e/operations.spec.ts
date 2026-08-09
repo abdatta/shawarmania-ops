@@ -45,8 +45,8 @@ test.describe('the operations surfaces', () => {
     await expect(page.getByText('Pita bread')).toBeVisible()
     await expect(page.getByText('Low stock')).toBeVisible()
 
-    // The ledger behind a figure, at its own address.
-    await page.getByRole('link', { name: 'Ledger' }).first().click()
+    // The movements behind a figure, at their own address.
+    await page.getByRole('link', { name: 'Movements' }).first().click()
     await expect(page.getByRole('table')).toBeVisible()
     await expect(page.getByRole('columnheader', { name: 'Left' })).toBeVisible()
     await page.goBack()
@@ -132,7 +132,7 @@ test.describe('the operations surfaces', () => {
 
     await expect(chicken).toContainText(expected)
 
-    await chicken.getByRole('link', { name: 'Ledger' }).click()
+    await chicken.getByRole('link', { name: 'Movements' }).click()
     await expect(page.getByRole('table')).toContainText(expected)
   })
 

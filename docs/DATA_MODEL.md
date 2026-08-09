@@ -351,8 +351,8 @@ This is structural, not conventional: clients cannot write `daily_cash_records` 
 
 ## The manual ledger (temporary, #36)
 
-Two owner-only tables that exist because billing, expenses and daily cash were
-not live while August 2026 was trading. **Both are designed to be dropped**, by
+Two tables that exist because billing, expenses and daily cash were not live
+while August 2026 was trading. **Both are designed to be dropped**, by
 the change that first carries their rows into the live records (#12 — see
 [Limitations](LIMITATIONS.md#the-manual-ledger-is-a-stopgap-with-a-stated-exit)).
 The `manual_ledger_` prefix is what makes that removal, and any accidental
@@ -363,14 +363,16 @@ reference from a live surface, greppable.
 `zomato_revenue_paise`, `swiggy_revenue_paise`, `cash_added_paise`,
 `cash_added_reason`, `cash_removed_paise`, `cash_removed_reason`,
 `counted_cash_paise`, `zomato_commission_bp`, `swiggy_commission_bp`, `note`,
-`recorded_by`, `created_at`, `updated_at`. `unique (outlet_id, business_date)`.
+`recorded_by`, `updated_by`, `created_at`, `updated_at`.
+`unique (outlet_id, business_date)`.
 
 **`manual_ledger_expenses`** — `id`, `outlet_id`, `business_date`, `category`
 (the same normalised free-text snapshot used by `expenses`), `is_cash`,
 `amount_paise`, `description` (an optional Note, refused blank when present),
-`recorded_by`, `created_at`, `updated_at`.
+`recorded_by`, `recorded_away`, `updated_by`, `voided_at`, `voided_by`,
+`voided_reason`, `created_at`, `updated_at`.
 
-Four properties are load-bearing and easy to undo by accident:
+Seven properties are load-bearing and easy to undo by accident:
 
 - **Nothing is derived in the database.** No view, no generated column, no
   trigger that computes. Expected cash, the difference, net aggregator revenue
@@ -391,13 +393,62 @@ Four properties are load-bearing and easy to undo by accident:
   surface says so. Equipment paid for from the drawer is recorded as cash taken
   out with its reason, which keeps the day reconciling while leaving the month's
   expenses clean. A boolean that was always false would imply the opposite.
+- **`is_cash` is a boolean and stays one.** A three-valued payment column with a
+  `pending` state, and settlement built on top of it, was designed and cut in
+  full (owner, 2026-08-09). Supplier credit is a real problem and not the one the
+  owner described; carrying it here would have meant a new enum, settlement
+  columns with cross-column checks, a `security definer` function that mutates a
+  *different* day's row than the expense it settles, and the month ceasing to be
+  a cash basis. Nothing regresses — a credit purchase is unrecorded today and
+  stays unrecorded — but the month understates when goods arrive and overstates
+  when they are paid for. Its own change if the owner starts buying on terms.
+- **An expense is withdrawn, never deleted.** `DELETE` is revoked from
+  `manual_ledger_expenses` and a `reject_mutation()` trigger refuses it behind
+  the grant, so a service-side mistake is refused too. A withdrawn row keeps
+  `voided_at` and `voided_by`; `voided_reason` is **optional**, on the same
+  reasoning as `attendance_approval_reason` — demanding one on the fastest
+  correction path collects a column of "mistake". The three travel together under
+  checks shaped like `attendance_approval_complete`: actor and time both present
+  or both absent, a reason only beside a void, and never blank. `manual_ledger_days`
+  keeps `DELETE`, because a day typed against the wrong date is a mistake with no
+  story worth keeping and only owners and managers reach that table.
+- **`recorded_away` is stamped at insert, never derived on read.** True when the
+  recording account held no live assignment at that outlet at the moment it wrote
+  the row. Deriving it from today's assignments would make a manager's old rows
+  silently become "from away" the week they leave — a statement about now dressed
+  up as a fact about then. It is frozen afterwards for the same reason
+  `recorded_by` is, and the surface shows it only on a drawer expense, where it
+  explains why expected cash moved without anybody at the outlet spending it.
 
 Negative revenue is permitted (a cash refund lowers that day's cash revenue);
 negative opening cash, drawer count and cash movements are refused, as are a
 future business date, a blank movement reason, a blank expense description and a
-commission rate outside 0–10000 basis points. RLS is `app_is_owner() and
-app_account_active()` with no outlet-role predicate anywhere: every other role is
-refused every verb at every outlet, including its own.
+commission rate outside 0–10000 basis points.
+
+**The two tables answer differently under RLS, and the difference is the point.**
+`manual_ledger_days` reaches owners and Franchise Admins at outlets from
+`app_outlets_for('franchise_admin')`, and carries **no outlet-staff branch on any
+verb** — a stronger claim than ordinary outlet isolation, protecting the drawer on
+the write side and past days, month aggregates, the other outlet and every
+commission-net figure on the read side.
+`manual_ledger_expenses` additionally admits `app_has_role_at('biller', …)` and
+`app_has_role_at('employee', …)`, who read every row at their outlet and correct
+only their own. **No select policy carries a date predicate**: the surface's
+two-day window is a presentation default, and enforcing it would cost a
+correlated subquery to protect a row that is not a revenue figure. The staff date
+limits — record on the current business day, correct only while that day is still
+running — live in `manual_ledger_guard()` instead, because both resolve the
+outlet's own cutover through `app_business_date`.
+
+`manual_ledger_people()` is a `security definer` read returning display names,
+and only display names, for accounts that wrote in a ledger the caller may
+already read. It exists because `profiles` cannot answer that question for the
+readers this capability added: its select policy needs a shared outlet assignment
+and a caller whose role is `franchise_admin` or `biller`, so an Employee sees
+nobody and nobody at an outlet sees an owner — whose assignment carries no outlet
+at all, and who recorded most of the rows already stored. Its predicates mirror
+the row policies deliberately, and `supabase/tests/21_manual_ledger.sql` asserts
+the two agree rather than trusting that they do.
 
 ## Alerts
 

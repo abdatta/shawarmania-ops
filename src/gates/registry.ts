@@ -204,22 +204,41 @@ const defs = {
     },
     state: 'live',
   },
+  /**
+   * The manager's counterpart to `owner-manual-ledger`, scoped by assignment.
+   *
+   * The capability was owner-only because production had two Super Admins and
+   * no live Franchise Admin at either outlet, so the owners *were* the managers
+   * — the entry recorded that accident rather than a decision. A manager who
+   * counts the drawer nightly but cannot read whether the month covered its
+   * costs is running half a shop (the-ledger-opens-to-the-outlet).
+   *
+   * Directly after Attendance, and ahead of People, for the reason the owner's
+   * entry gives: nav order follows how often a tab is reached for, and this is
+   * opened every night while People is opened when somebody joins or leaves.
+   */
+  'admin-manual-ledger': {
+    role: 'franchise_admin',
+    path: 'ledger',
+    nav: { label: 'Ledger', icon: NotepadText, order: 7 },
+    state: 'live',
+  },
   'admin-pnl': {
     role: 'franchise_admin',
     path: 'pnl',
-    nav: { label: 'P&L', icon: TrendingUp, order: 8 },
+    nav: { label: 'P&L', icon: TrendingUp, order: 9 },
     state: 'demo',
   },
   'admin-alerts': {
     role: 'franchise_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 9 },
+    nav: { label: 'Alerts', icon: Bell, order: 10 },
     state: 'demo',
   },
   'admin-devices': {
     role: 'franchise_admin',
     path: 'devices',
-    nav: { label: 'Devices', icon: TabletSmartphone, order: 10 },
+    nav: { label: 'Devices', icon: TabletSmartphone, order: 11 },
     state: 'hidden',
   },
   /**
@@ -230,7 +249,7 @@ const defs = {
   'admin-people': {
     role: 'franchise_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 7 },
+    nav: { label: 'People', icon: Users, order: 8 },
     state: 'live',
   },
 
@@ -276,6 +295,30 @@ const defs = {
     nav: { label: 'My shift', icon: ClipboardList, order: 4 },
     state: 'hidden',
   },
+  /**
+   * What this outlet spent — **the manual ledger's expense list, and nothing
+   * else on it** (the-ledger-opens-to-the-outlet).
+   *
+   * `live` for the same reason the ledger itself is: it captures real figures
+   * against a real trading month, and the alternative is the figure reaching the
+   * app by memory at closing time through one of two owners.
+   *
+   * It carries navigation because recording a spend is a thing somebody does
+   * mid-shift, not something they go looking for. Behind Menu, because the menu
+   * is consulted many times an evening and this a few times a week.
+   *
+   * The day record is deliberately NOT reachable from here or anywhere in this
+   * shell: outlet staff hold no policy branch on it at all. The path sits under
+   * `ledger/` for two reasons — `admin-expenses` already owns `expenses` and is
+   * a different thing (#11's live expense record), and everything this stopgap
+   * owns should disappear in one sweep when #12 retires it.
+   */
+  'counter-expenses': {
+    role: 'biller',
+    path: 'ledger/expenses',
+    nav: { label: 'Expenses', icon: Wallet, order: 5 },
+    state: 'live',
+  },
   // The attendance kiosk is gone, not hidden: the owner rejected it (one
   // shared device, usually busy billing), and a manager's manual entry on the
   // attendance day is the escape hatch instead (staff-as-accounts).
@@ -293,10 +336,25 @@ const defs = {
     nav: { label: 'My attendance', icon: CalendarCheck, order: 2 },
     state: 'live',
   },
+  /**
+   * The same surface as `counter-expenses`, reached from the Employee shell.
+   *
+   * Two entries rather than one, because a surface belongs to exactly one role's
+   * shell here — the same reason `admin-menu` and `counter-menu` are separate
+   * entries reaching one component. The owner asked for "all staff", and an
+   * Employee who goes to the market for vegetables is precisely the person the
+   * change exists for.
+   */
+  'staff-expenses': {
+    role: 'employee',
+    path: 'ledger/expenses',
+    nav: { label: 'Expenses', icon: Wallet, order: 3 },
+    state: 'live',
+  },
   'staff-profile': {
     role: 'employee',
     path: 'profile',
-    nav: { label: 'Profile', icon: UserRound, order: 3 },
+    nav: { label: 'Profile', icon: UserRound, order: 4 },
     state: 'hidden',
   },
 } as const satisfies Record<string, SurfaceDefInput>

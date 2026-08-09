@@ -292,7 +292,16 @@ export function InventorySurface() {
                     className={buttonVariants({ variant: 'ghost', size: 'phone' })}
                     data-testid={`ledger-${item.id}`}
                   >
-                    Ledger
+                    {/*
+                      "Movements", not "Ledger". The manager's shell gained a
+                      Ledger tab of its own — the manual cash notebook
+                      (the-ledger-opens-to-the-outlet) — and two links a thumb's
+                      width apart reading the same word mean different things.
+                      This one is a per-item movement history and the component
+                      behind it is `MovementLedger`, so the more specific word is
+                      also the more accurate one.
+                    */}
+                    Movements
                   </Link>
                 </div>
               </Card>

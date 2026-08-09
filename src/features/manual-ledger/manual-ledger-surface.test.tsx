@@ -11,7 +11,7 @@ import { formatBusinessDate, formatPaise, shiftBusinessDate } from '@/domain'
 import { appRoutes } from '@/routes'
 import { SessionContext } from '@/session/context'
 import { demoSessionFor } from '@/test/session'
-import type { Role } from '@/session/session'
+import { ROLE_SEGMENTS, type Role } from '@/session/session'
 import { chooseOutlet } from '@/test/outlet-scope'
 
 import { monthOf } from './ledger'
@@ -256,6 +256,37 @@ describe('the manual ledger surface', () => {
     expect(screen.getByTestId('reading-cash-expenses')).toHaveTextContent(formatPaise(0))
   })
 
+  it('withdraws an expense through the row’s menu, and the drawer stops counting it', async () => {
+    renderLedger()
+    await screen.findByTestId('ledger-day-form')
+    await userEvent.type(screen.getByTestId('cash-revenue'), '12000')
+    await userEvent.type(screen.getByTestId('counted-cash'), '19950')
+
+    await userEvent.click(screen.getByTestId('add-ledger-expense'))
+    await userEvent.type(screen.getByTestId('expense-category'), 'Gas')
+    await userEvent.type(screen.getByTestId('expense-amount'), '1600')
+    await userEvent.click(screen.getByRole('button', { name: /record expense/i }))
+
+    const list = await screen.findByTestId('ledger-expense-list')
+    await waitFor(() =>
+      expect(screen.getByTestId('reading-cash-expenses')).toHaveTextContent('1,600'),
+    )
+
+    // Edit and Withdraw live behind one kebab, so a row stays one control wide.
+    await userEvent.click(within(list).getByRole('button', { name: /actions for gas/i }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Withdraw' }))
+    await userEvent.click(await screen.findByRole('button', { name: /withdraw it/i }))
+
+    // The row keeps its name and loses everything else: struck through, no menu,
+    // and — the point of a withdrawal rather than a delete — still on the list.
+    const withdrawn = await within(list).findByText('Gas')
+    expect(withdrawn).toHaveClass('line-through')
+    expect(within(list).queryByRole('button', { name: /actions for gas/i })).toBeNull()
+
+    // And the drawer no longer counts it.
+    expect(screen.getByTestId('reading-cash-expenses')).toHaveTextContent(formatPaise(0))
+  })
+
   it('names the month’s basis in words beside the figure', async () => {
     renderLedger()
 
@@ -274,12 +305,25 @@ describe('the manual ledger surface', () => {
     await screen.findByTestId('month-profit-figure')
 
     const month = await adapters.manualLedger.getMonth(OUTLET_KALYANI_ID, await currentMonth())
-    const spent = month.expenses.reduce((running, expense) => running + expense.amountPaise, 0)
+    const counted = month.expenses.filter((expense) => expense.voidedAt === null)
+    const withdrawn = month.expenses.filter((expense) => expense.voidedAt !== null)
+    const spent = counted.reduce((running, expense) => running + expense.amountPaise, 0)
+
+    // The premise: the demo month really does contain a withdrawn row, so the
+    // filter above is doing something rather than passing vacuously.
+    expect(withdrawn.length).toBeGreaterThan(0)
 
     expect(screen.getByTestId('month-expenses-total')).toHaveTextContent(formatPaise(spent))
-    // Every expense is shown with its optional note when one exists.
-    for (const expense of month.expenses) {
+    // Every counted expense is shown with its optional note when one exists.
+    for (const expense of counted) {
       if (expense.note) expect(screen.getByTestId('month-expenses')).toHaveTextContent(expense.note)
+    }
+    // And a withdrawn one is absent from the month's breakdown entirely — the
+    // month is a total, and a row that counts toward nothing has no line in it.
+    for (const expense of withdrawn) {
+      if (expense.note) {
+        expect(screen.getByTestId('month-expenses')).not.toHaveTextContent(expense.note)
+      }
     }
   })
 
@@ -548,7 +592,12 @@ describe('who the manual ledger is for', () => {
     return render(<RouterProvider router={router} />)
   }
 
-  for (const role of ['franchise_admin', 'biller', 'employee'] as const) {
+  // Outlet staff only. `the-ledger-opens-to-the-outlet` gave the manager this
+  // surface at the outlets they are assigned to — the capability was owner-only
+  // because production happened to have no live Franchise Admin, not because a
+  // manager should be refused — so the manager's case is asserted below as
+  // reachable rather than here as absent.
+  for (const role of ['biller', 'employee'] as const) {
     it(`is absent for a ${role}, by the gate rather than by a message`, async () => {
       render(
         <MemoryRouter>
@@ -569,18 +618,46 @@ describe('who the manual ledger is for', () => {
     })
 
     it(`renders nothing at the manual-ledger path for a ${role}`, async () => {
-      const segment = { franchise_admin: 'admin', biller: 'counter', employee: 'staff' }[role]
-      renderAt(`/demo/${segment}/ledger`)
+      // `ROLE_SEGMENTS`, not a literal. A hand-written map read `counter` for a
+      // biller — the biller's segment is `biller`, and `counter` is the physical
+      // counter — and the test still passed, because a URL that matches no route
+      // renders the same not-found as a gated one. It was asserting a typo.
+      renderAt(`/demo/${ROLE_SEGMENTS[role]}/ledger`)
 
       // Absent, not forbidden: no such surface is declared for these roles, so the
       // route resolves to the shell's own not-found rather than to a refusal.
       expect(await screen.findByText(/does not exist/i)).toBeInTheDocument()
       expect(screen.queryByTestId('ledger-day-form')).not.toBeInTheDocument()
     })
+
+    it(`reaches their own expenses surface, and no day figures on it`, async () => {
+      renderAt(`/demo/${ROLE_SEGMENTS[role]}/ledger/expenses`)
+
+      await screen.findByTestId('ledger-expense-list')
+
+      // Not one figure the day record holds. The drawer figures are refused by
+      // the database rather than hidden here; the day's takings are left off
+      // because a screen showing four kinds of financial truth is a screen
+      // nobody reads (design D5).
+      expect(screen.queryByTestId('day-reading')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('expected-cash')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('counted-cash')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('ledger-day-form')).not.toBeInTheDocument()
+      expect(screen.queryByText(/commission/i)).not.toBeInTheDocument()
+      expect(screen.queryByTestId('ledger-view-month')).not.toBeInTheDocument()
+    })
   }
 
   it('is reachable at its own path for the owner', async () => {
     renderAt('/demo/owner/ledger')
+    expect(await screen.findByTestId('ledger-day-form')).toBeInTheDocument()
+  })
+
+  it('is reachable for a manager at the outlet they are assigned to', async () => {
+    renderAt('/demo/admin/ledger')
+    // The full surface, day figures included: a manager who counts the drawer
+    // nightly but cannot read whether the month covered its costs is running
+    // half a shop.
     expect(await screen.findByTestId('ledger-day-form')).toBeInTheDocument()
   })
 })

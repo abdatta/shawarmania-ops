@@ -135,6 +135,16 @@ itself**, and only while that expense's business date is still the current
 business date. An expense that outlives its own business date SHALL be
 immutable to the account that recorded it.
 
+**This ownership rule holds only while a Biller signs in as themselves.** When
+the counter tablet becomes an enrolled device with a shift PIN, that PIN selects
+attribution and is not a security boundary, so `recorded_by` will name whoever
+the shift claims to be and Row-Level Security will have no session identity to
+check it against. "Only expenses it recorded itself" SHALL at that point degrade
+to "only expenses recorded during this shift", and the change that enrols the
+device SHALL state which of the two it is enforcing rather than leaving this
+requirement to quietly stop meaning what it says. This limitation is recorded
+now, before it bites, rather than discovered when the rule is already wrong.
+
 An account holding a live Franchise Admin assignment SHALL be able to record,
 correct and void any expense at the outlets that assignment names, against any
 business date the capability allows. An account holding a live Super Admin
@@ -142,6 +152,16 @@ assignment SHALL be able to do so at every outlet.
 
 Every expense SHALL name the account that recorded it wherever it is listed, so
 that which rows a reader may still correct is legible rather than remembered.
+
+An expense that both comes from the drawer and was recorded by an account
+holding no live assignment at that outlet SHALL be marked as recorded from away,
+beyond naming its recorder. Unlike the live expense record, which refuses a
+remote cash expense outright so that the owner's remote entries cannot move an
+outlet's drawer, this notebook permits one: the owner may write any figure at
+any outlet, and a drawer expense they enter from elsewhere changes what the
+people counting that drawer should expect to find. The marking is what tells
+them. A non-cash expense recorded from away SHALL carry no such marking, because
+it moves no drawer and the recorder's name is the whole story.
 
 A cash expense that was never made SHALL NOT be detectable by the drawer count,
 because an invented expense lowers expected cash and the count still matches.
@@ -184,6 +204,16 @@ trace, and no requirement SHALL imply the nightly count is a check on it.
 - **WHEN** a Biller or Employee attempts to correct or void an expense they recorded, whose business date is no longer the current business date
 - **THEN** the database refuses it, and the same expense remains correctable by a Franchise Admin at that outlet and by the owner
 
+#### Scenario: The owner's drawer expense at an outlet they are not at is marked
+
+- **WHEN** a Super Admin holding no live assignment at an outlet records an expense there as coming from the drawer
+- **THEN** the row is marked as recorded from away wherever it is listed, so that whoever counts that drawer can see why the expected cash moved
+
+#### Scenario: A non-cash expense from away is not marked
+
+- **WHEN** the same account records a non-cash expense at that outlet
+- **THEN** the row names its recorder and carries no from-away marking, because it moves no drawer
+
 #### Scenario: A manager corrects any row at their outlet
 
 - **WHEN** a Franchise Admin corrects or voids an expense recorded by a staff member at an outlet they are assigned to
@@ -192,8 +222,15 @@ trace, and no requirement SHALL imply the nightly count is a check on it.
 ### Requirement: A removed expense leaves a trace rather than disappearing
 
 An expense SHALL NOT be deletable. Removing one SHALL void it: the row SHALL
-remain stored and readable, carrying the moment it was voided, the account that
-voided it, and a required reason.
+remain stored and readable, carrying the moment it was voided and the account
+that voided it.
+
+A reason SHALL be optional. Voiding is the fastest correction on a surface used
+with thumbs, and the failure it answers is a row disappearing, which the moment
+and the account already answer. Where a reason is given it SHALL be stored and
+shown; where one is absent the trace SHALL still read as complete rather than as
+missing a field. A reason SHALL NOT be stored blank or whitespace-only: it is
+either present with content or absent.
 
 A voided expense SHALL be shown to every reader of that outlet, including
 outlet staff, marked so that it reads as withdrawn rather than as an ordinary
@@ -211,7 +248,7 @@ only owners and managers can reach it.
 #### Scenario: Voiding keeps the row
 
 - **WHEN** an expense is voided
-- **THEN** the row remains stored with the moment, the account and the reason, and appears in the day's list marked as withdrawn
+- **THEN** the row remains stored with the moment and the account, and appears in the day's list marked as withdrawn
 
 #### Scenario: A voided expense stops counting
 
@@ -223,10 +260,15 @@ only owners and managers can reach it.
 - **WHEN** a Biller or Employee reads their outlet's expenses after one has been voided
 - **THEN** the voided expense is visible and marked as withdrawn, rather than absent
 
-#### Scenario: Voiding without a reason is refused
+#### Scenario: Voiding without a reason succeeds
 
-- **WHEN** a void is submitted with a missing, blank or whitespace-only reason, including by a hand-crafted request
-- **THEN** the database refuses it and the expense is unchanged
+- **WHEN** a void is submitted with no reason
+- **THEN** the write succeeds, the row is marked as withdrawn, and its trace names the moment and the account
+
+#### Scenario: A blank reason is not stored as a reason
+
+- **WHEN** a void is submitted with a blank or whitespace-only reason, including by a hand-crafted request
+- **THEN** the row is not stored carrying an empty reason, so a reader is never shown a reason field with nothing in it
 
 #### Scenario: Deletion is refused by the database
 
