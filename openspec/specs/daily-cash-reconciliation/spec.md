@@ -8,31 +8,30 @@ Protects the one number a human signs their name to. The daily cash record is co
 
 ### Requirement: Day close snapshots figures computed by the database
 
-Closing a business day SHALL be performed by a database operation that
-computes the day's cash sales, cash expenses, and cash withdrawals
-server-side, from that outlet's rows for that business date, inside the same
-transaction that writes the record. Clients MUST NOT be able to supply derived
-figures or write the daily cash record directly.
+Closing a business day SHALL be performed by a database operation that computes
+cash receipts from paid cash bills whose `payment_business_date` is that day,
+plus that day's cash expenses and withdrawals, inside the transaction that
+writes the record. Clients MUST NOT supply derived figures or write the record directly.
 
 #### Scenario: A day is closed
 
-- **WHEN** a Franchise Admin closes a business day supplying only opening cash, counted closing cash, and notes
-- **THEN** the stored record's cash sales, cash expenses, and withdrawal figures equal what the database computed from that outlet and date's settled cash bills, cash expenses, and withdrawals
+- **WHEN** an FA closes a day supplying only opening cash, counted closing cash, and notes
+- **THEN** stored cash sales equal cash actually paid on that payment business date, regardless of the orders' revenue dates
 
 #### Scenario: A client writes the record directly
 
-- **WHEN** any session attempts to insert or update a daily cash record through the data API
+- **WHEN** any session attempts direct insert or update of a daily cash record
 - **THEN** the database rejects the write
 
 ### Requirement: A closed day is a snapshot and is never recomputed
 
-Once a business day is closed, its stored figures SHALL NOT change — including
-when a bill for that business date arrives after the close.
+Once a business day is closed, its stored figures SHALL NOT change, including
+when a cash payment for that payment business date synchronizes after close.
 
-#### Scenario: A late bill lands on a closed day
+#### Scenario: A late payment lands on a closed drawer day
 
-- **WHEN** a bill whose business date is already closed syncs after the close
-- **THEN** the closed record's figures are unchanged
+- **WHEN** a cash bill whose payment business date is already closed arrives later
+- **THEN** the closed record remains unchanged and the payment is an exception
 
 ### Requirement: The reconciliation arithmetic is enforced as constraints
 
@@ -64,22 +63,21 @@ deliberately not the Super Admin, and never another outlet's admin.
 
 ### Requirement: The daily cash surface shows every input to the expected closing figure
 
-The daily cash surface SHALL show, for one outlet and one business date, the
-opening float, the cash sales, the cash expenses, the cash withdrawals and the
-expected closing amount, with each derived figure labelled as derived. Cash
-sales SHALL be taken from settled bills paid in cash for that business date,
-and cash expenses from expenses paid in cash for that business date; no other
-payment method SHALL contribute to either.
+The daily cash surface SHALL show, for one outlet/payment business date, opening
+float, cash receipts, cash expenses, withdrawals, and expected closing, with each
+derived value labelled. Cash receipts SHALL include only paid cash bills whose
+payment business date matches; revenue business date and non-cash methods SHALL
+not move that drawer.
 
-#### Scenario: A day with mixed payment methods
+#### Scenario: Deferred cash payment crosses cutoff
 
-- **WHEN** the surface is opened for a business date whose bills include cash and UPI sales
-- **THEN** the cash sales figure counts only the cash bills
+- **WHEN** an earlier-date order is paid cash on the selected payment business date
+- **THEN** its amount contributes to that selected day's cash receipts
 
 #### Scenario: The expected closing figure
 
-- **WHEN** the surface renders a business date's figures
-- **THEN** the expected closing equals opening float plus cash sales minus cash expenses minus cash withdrawals
+- **WHEN** the surface renders a date's figures
+- **THEN** expected closing equals opening plus cash receipts minus cash expenses and withdrawals
 
 ### Requirement: The difference appears the moment the counted amount is entered
 

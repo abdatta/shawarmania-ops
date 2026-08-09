@@ -8,93 +8,105 @@ The write contract for bills, enforced in the database so that every writer — 
 
 ### Requirement: Bill numbers are server-assigned and per-outlet sequential
 
-Bill numbers SHALL be assigned by the database at insert time from a
-per-outlet sequence. A client-supplied bill number MUST be ignored. Bill
-numbers SHALL be unique within an outlet, and an insert that fails (including
-a duplicate retry of the same client UUID) MUST NOT consume a number.
+Bill numbers SHALL be assigned by the database when a paid bill is created from
+a pay-now or pay-order command, from a per-outlet sequence inside that command's
+transaction. Orders SHALL consume no bill number. A client-supplied number MUST
+be ignored. Numbers SHALL be unique within an outlet, and a failed command or
+exact replay MUST NOT consume another number.
 
-#### Scenario: Concurrent settlement at one outlet
+#### Scenario: Concurrent payment at one outlet
 
-- **WHEN** two bills are inserted for the same outlet concurrently
+- **WHEN** two valid payment commands for the same outlet execute concurrently
 - **THEN** they receive distinct consecutive numbers in that outlet's sequence
 
 #### Scenario: Client supplies its own number
 
-- **WHEN** a bill insert carries a bill number chosen by the client
-- **THEN** the stored bill carries the server-assigned number instead
+- **WHEN** a payment command carries a bill number chosen by the client
+- **THEN** the stored bill carries the database-assigned number instead
 
-#### Scenario: A duplicate retry burns no number
+#### Scenario: Exact replay burns no number
 
-- **WHEN** a bill insert is retried with a client UUID that already exists, and a new bill is then inserted
-- **THEN** the new bill's number is exactly one greater than the last successfully inserted bill's number
+- **WHEN** an accepted payment command is replayed and a new payment then succeeds
+- **THEN** the replay returns its original number and the new bill receives the next number with no gap
 
 ### Requirement: Bills are append-only once settled
 
-A settled bill SHALL accept no modification other than the void transition,
-which changes only the status and void-attribution fields. Deleting a bill
-SHALL be impossible for every client role. Voiding SHALL be available only to
-the outlet's Franchise Admin and the Super Admin.
+A paid bill SHALL accept no modification other than the void transition, which
+changes only status and void-attribution fields. Deleting a bill SHALL be
+impossible for every client role. Voiding SHALL be available only to the bill's
+outlet FA and SA, require a reason, and preserve any replacement link as a
+separate new bill rather than edited totals.
 
-#### Scenario: Editing a settled bill's totals
+#### Scenario: Editing a paid bill's totals
 
-- **WHEN** any session attempts to update a settled bill's amounts, items, or attribution
+- **WHEN** any session attempts to update a paid bill's amounts, items, clocks, or attribution
 - **THEN** the database rejects the update
 
 #### Scenario: Voiding a bill
 
-- **WHEN** a Franchise Admin of the bill's outlet marks it void with a reason
-- **THEN** the bill's status becomes void with the voider and time recorded, and every other field is unchanged
+- **WHEN** an authorized admin voids with a reason
+- **THEN** status/void attribution change and every original sale field remains unchanged
 
-#### Scenario: A Biller attempts to void
+#### Scenario: Counter attempts to void
 
 - **WHEN** a counter device session attempts the void transition
 - **THEN** the database rejects the update
 
 ### Requirement: Bill line items snapshot the sale and stay internally consistent
 
-Bill line items SHALL store the item name and unit price as charged at the
-moment of sale, and SHALL remain valid if the referenced menu item is later
-changed or removed. The database SHALL enforce `line_total = unit_price ×
-quantity` on every line and `total = subtotal − discount + tax` on every bill,
-in integer paise.
+Bill line items SHALL store final item name and unit price snapshots and remain
+valid if the menu later changes or removes the item. The database SHALL enforce
+line total equals unit price times quantity, bill subtotal equals the sum of all
+line totals, and total equals subtotal minus discount plus tax, in integer paise.
+Bill and every line SHALL be inserted atomically.
 
-#### Scenario: Menu price changes after the sale
+#### Scenario: Menu price changes after order creation
 
-- **WHEN** a menu item's price changes after a bill referencing it was settled
-- **THEN** the bill's stored line items and totals are unchanged
+- **WHEN** an existing captured order line is paid after the live menu price changes
+- **THEN** the bill uses the order's captured name/price and historical values never change
 
-#### Scenario: Inconsistent totals are rejected
+#### Scenario: Parent subtotal differs from lines
 
-- **WHEN** a bill or line item is inserted whose stored totals violate the arithmetic invariants
-- **THEN** the database rejects the insert with a constraint violation
+- **WHEN** a payment command's bill subtotal does not equal its submitted line totals
+- **THEN** the entire command is refused without a numbered bill
 
 ### Requirement: Counter writes are idempotent by client identity
 
-Bills SHALL use the client-generated UUID as their primary key. Submitting the
-same bill twice SHALL store it exactly once, and the second submission SHALL
-fail as a duplicate rather than create a second row.
+Every bill and command SHALL have client-generated UUIDs. Submitting an exact
+command twice SHALL store its effects once and return the same result. Reusing
+an identity with different content SHALL be refused as conflict.
 
-#### Scenario: The same bill arrives twice
+#### Scenario: The same paid command arrives twice
 
-- **WHEN** the same bill payload with the same client UUID is inserted twice
-- **THEN** exactly one row exists, and the second insert is reported as a duplicate
+- **WHEN** the same payload, version, hash, and command UUID are submitted twice
+- **THEN** exactly one bill exists and both responses identify it
 
-### Requirement: Business date is validated against the outlet cutover
+#### Scenario: Identity content differs
 
-Every bill SHALL carry an explicit business date resolved from the outlet's
-cutover time, and the database SHALL reject a bill whose business date does
-not match what the outlet's cutover implies for its creation time. A bill
-rung after midnight but before cutover belongs to the previous business day.
+- **WHEN** the UUID is replayed with a changed payment method or total
+- **THEN** no second bill exists and the response is an identity conflict
 
-#### Scenario: A bill rung at 00:20
+### Requirement: Revenue date and payment date are explicit and independently validated
 
-- **WHEN** a bill created at 00:20 local time is inserted with the previous day as its business date
-- **THEN** the insert succeeds
+Every paid bill SHALL carry `ordered_at` and an explicit `business_date` for
+revenue, plus `paid_at` and an explicit `payment_business_date` for the drawer.
+Each date SHALL equal what the outlet cutover implies for its matching timestamp.
+Paying an order SHALL preserve that order's original pair; a pay-now sale SHALL
+resolve both pairs from that transaction's actual times.
 
-#### Scenario: A bill with an impossible business date
+The two dates are almost always the same, because an order is paid minutes after
+it is taken. They are stored separately so that the exception is representable
+rather than silently mis-dated.
 
-- **WHEN** a bill is inserted whose business date contradicts its creation time under the outlet's cutover
-- **THEN** the database rejects the insert
+#### Scenario: Order before cutover is paid after cutover
+
+- **WHEN** an order created at 03:50 is paid in cash at 04:10 under a 04:00 cutover
+- **THEN** its revenue business date is the earlier day and its payment business date is the later day
+
+#### Scenario: Either date is impossible
+
+- **WHEN** a command supplies a revenue or payment date contradicting its matching timestamp/cutover
+- **THEN** the database refuses the entire command
 
 ### Requirement: The whole menu is visible at once on a counter tablet
 
@@ -332,4 +344,3 @@ drain, and SHALL never interrupt billing with a dialog about it.
 
 - **WHEN** the number of pending bills reaches the escalation threshold, or the oldest pending bill exceeds the escalation age
 - **THEN** the indicator escalates to a warning, and no dialog is shown
-
