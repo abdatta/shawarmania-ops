@@ -4,7 +4,9 @@
 
 The system SHALL write an immutable, versioned billing command envelope to the
 tablet's IndexedDB before it reports success or clears the operator's form, and
-SHALL NOT require a network response for that acknowledgement.
+SHALL NOT require a network response for that acknowledgement. A Pay now envelope
+SHALL remain ineligible for delivery during the existing six-second Undo window;
+Undo SHALL remove it while still unsent and restore the complete composer.
 
 #### Scenario: Local commit succeeds while the backend is unreachable
 - **WHEN** an operator submits a valid counter mutation during a live shift and the backend request cannot complete
@@ -13,6 +15,10 @@ SHALL NOT require a network response for that acknowledgement.
 #### Scenario: Durable storage fails
 - **WHEN** IndexedDB cannot durably commit a submitted command
 - **THEN** the system does not report success, does not clear the form, and explains that the operation was not saved
+
+#### Scenario: Pay now is undone before delivery
+- **WHEN** the operator uses Undo during the guaranteed window
+- **THEN** no request has begun, the envelope is removed, and its lines, customer form and payment method return to the composer
 
 ### Requirement: Unsent work survives session and application lifecycle
 
@@ -63,7 +69,9 @@ hints only to trigger attempts, never as proof the backend is reachable.
 An accepted response or an exact replay SHALL resolve one local command to the
 same server result. Retryable failures SHALL stay unsent. A correctable permanent
 refusal SHALL move to needs attention, and a correction SHALL use a new UUID
-linked to the refused command. A discard SHALL retain actor, time and reason.
+linked to the refused command. A discard SHALL retain actor, time and a non-blank
+reason. Correction and discard SHALL be available only on the originating tablet
+to an operator holding its live shift, and both SHALL retain the refused trace.
 
 #### Scenario: The response is lost after the server commits
 - **WHEN** the server commits a command, the response is lost, and the same UUID and payload are retried
@@ -88,7 +96,8 @@ Tablets surface SHALL warn before removing a tablet reporting unsent work.
 
 Operational status and telemetry SHALL expose counts, age, command type,
 non-identifying references and result categories, without logging customer phone
-numbers or command payloads.
+numbers or command payloads. Manager diagnostics SHALL be read-only and SHALL
+offer no correction or discard action.
 
 #### Scenario: A manager inspects a delayed queue
 - **WHEN** a manager views delivery diagnostics

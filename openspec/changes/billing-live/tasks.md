@@ -8,18 +8,18 @@
 ## 2. Local delivery store
 
 - [ ] 2.1 Add the versioned Dexie envelope, dependency, result, tombstone and lease records, with migrations that preserve unsent data across application updates.
-- [ ] 2.2 Implement transactional local acceptance so a command is acknowledged and its form clears only after the IndexedDB commit, with a non-destructive blocking state when storage fails.
+- [ ] 2.2 Implement transactional local acceptance so a command is acknowledged and its form clears only after the IndexedDB commit, with a non-destructive blocking state when storage fails; keep Pay now commands ineligible for delivery during the six-second Undo window, and restore the complete composer when one is undone.
 - [ ] 2.3 Implement Web Locks leader election with the IndexedDB lease fallback, and dependency-aware draining that does not freeze unrelated order chains.
 - [ ] 2.4 Implement bounded retry and backoff driven by actual request evidence, with browser connectivity events used only as retry hints.
-- [ ] 2.5 Map accepted, exact replay, retryable, order-not-open, identity conflict, permanent refusal, corrected and discarded outcomes to durable local states.
+- [ ] 2.5 Map accepted, exact replay, retryable, order-not-open, identity conflict, permanent refusal, corrected and discarded outcomes to durable local states; permit correction/discard only on the originating tablet under its live shift, retaining actor, time, reason and refused trace.
 - [ ] 2.6 Report the unsent count through `report_counter_device_state`, so the `last_reported_unsent` column and the Tablets surface column that #9 shipped start carrying real numbers, without logging payloads or customer phone numbers. **Moved here from #33 §4 on 2026-08-09**, with the rest of the store.
 
 ## 3. Real billing adapters
 
 - [ ] 3.1 Connect the live menu adapter so reachable sessions always fetch the latest outlet menu and a live shift falls back only after a real backend failure.
 - [ ] 3.2 Connect customer exact lookup and create-or-get adapters without exposing directory browse, cross-outlet history, or phone values in logs.
-- [ ] 3.3 Connect local-first adapters for pay-now and create, revise, cancel and pay-order commands, keeping a bill unnumbered on screen until the server result arrives.
-- [ ] 3.4 Connect live open-order, shift-summary, bill-history, void and re-ring, manager cancellation of a stranded order, and needs-attention correction and discard reads to their authorised contracts.
+- [ ] 3.3 Connect local-first adapters for pay-now and create, revise, cancel and pay-order commands, keeping a bill unnumbered on screen until the server result arrives, keeping `discount_paise` zero with no discount control, and preserving Pay now's guaranteed Undo.
+- [ ] 3.4 Connect live open-order, shift-summary, revenue-business-date bill-history, manager void, manual counter re-ring guidance, manager cancellation of a stranded order, originating-tablet needs-attention correction/discard, and read-only non-identifying manager diagnostics to their authorised contracts; create no manager payment command or cross-device draft.
 - [ ] 3.5 Preserve typed adapter composition so screens import neither Supabase nor Dexie directly.
 
 ## 4. V1 session and cutover behaviour
@@ -47,11 +47,11 @@
 
 ## 7. Verification and rollout
 
-- [ ] 7.1 Add unit tests for local acceptance, dependency ordering, leader failover, retry classification, envelope upgrades, correction linkage and diagnostics carrying no customer details, including a local-store schema upgrade that preserves unsent work across an application update, and a two-tab leadership test.
-- [ ] 7.2 Add integration tests for pay-now, payment on handover, an aggregator order collected by a rider, needs-attention handling, exact replay, delivery after cutover, and menu fallback.
+- [ ] 7.1 Add unit tests for local acceptance, the six-second Pay now delivery hold and exact composer restoration on Undo, zero-discount commands, dependency ordering, leader failover, retry classification, originating-tablet correction linkage, reasoned discard and read-only manager diagnostics carrying no customer details, including a local-store schema upgrade that preserves unsent work across an application update, and a two-tab leadership test.
+- [ ] 7.2 Add integration tests for pay-now and Undo, payment on handover, an aggregator order collected by a rider, manager void followed by manual counter re-ring, needs-attention handling on the originating tablet, revenue-date history filtering across cutover, exact replay, delivery after cutover, and menu fallback.
 - [ ] 7.3 Run browser tests that drop the backend before and after local commit, lose the response after the server commits, restart with unsent work, refuse to start new work offline, prove eventual exactly-once settlement, and refuse finish-day until the queue is resolved.
 - [ ] 7.4 Run `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` and `npm run test:e2e`, then inspect phone and tablet layouts in light and dark.
 - [ ] 7.5 Run `npm run db:start && npm run db:reset`, then `npm run test:db`, `npm run test:rls` and `npm run test:e2e:auth`.
 - [ ] 7.6 Adversarial review pass: a separate session reads these spec deltas against the delivered adapters, gates and ledger handover, and reports every requirement it cannot find satisfied.
 - [ ] 7.7 ROLLOUT: set up the first outlet's tablet, run shadow smoke tests before any customer money, promote, hand its ledger over, and trade one full day closed cleanly. Only then repeat for the second outlet.
-- [ ] 7.8 PHASE GATE — Billing V1 live: at both outlets, one tablet takes real immediate and on-handover payments against a menu entered through the app; accepted writes survive restart and land exactly once after forced response loss; menu and cutover rules hold; a stranded order is cleared by a manager; an unresolved queue cannot receive an end-of-day confirmation; counter revenue appears exactly once in the ledger; the real gates are live and the demo walkthrough is still isolated.
+- [ ] 7.8 PHASE GATE — Billing V1 live: at both outlets, one tablet takes real immediate and on-handover payments against a menu entered through the app; Pay now retains its guaranteed Undo and no discount control exists; accepted writes survive restart and land exactly once after forced response loss; manager void is followed by a manual counter re-ring with no personal-device billing path; needs-attention work is corrected or discarded only on its originating tablet while manager diagnostics stay read-only; menu and cutover rules hold; a stranded order is cleared by a manager; an unresolved queue cannot receive an end-of-day confirmation; counter revenue appears exactly once in the ledger; the real gates are live and the demo walkthrough is still isolated.

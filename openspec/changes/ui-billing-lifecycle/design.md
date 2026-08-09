@@ -20,7 +20,9 @@ promotes no gate.
 
 - Supabase calls, local durability, synchronisation or gate promotion.
 - Order transfer, recovery surfaces, version-conflict screens.
-- Several tablets, partial payment, profile editing, printing or GST.
+- Several tablets, discounts, partial payment, profile editing, printing or GST.
+- Manager-side billing, automatic re-ring handoff or prefill, and manager mutation
+  of a tablet's local delivery queue.
 
 ## Decisions
 
@@ -30,6 +32,20 @@ The current cart stays the composition surface. Pay now opens the single-method
 payment action and creates a paid result. Save order creates an order and clears
 the composer. Requiring every sale to pass through a saved order was rejected
 because it adds steps to the common case where somebody pays at once.
+
+The direct-payment path also keeps its existing six-second Undo. A Pay now command
+is accepted into the demo queue and the composer clears, but delivery cannot begin
+while Undo is visible. Undo removes that still-unsent command and restores the
+composer. Once the window ends, only an attributed manager void can correct the
+paid bill.
+
+### V1 offers no discount
+
+The schema and arithmetic retain `discount_paise`, but every command in this
+change sends zero and no discount control appears. A discount is a pricing and
+authority decision the business has not made; exposing the dormant column as a
+form field would make that decision accidentally. Partial payment and tax breakup
+remain absent for the same reason.
 
 ### The order number is the loudest thing on the screen after saving
 
@@ -69,16 +85,27 @@ along with the version contract behind it in #33.
 
 My shift shows only paid bills from this tablet's current shift and totals by
 payment method. The manager's history is a phone-oriented outlet surface with
-filters, detail, void and re-ring, and the outlet's open orders with a cancel
-action. Tablet context never inherits the wider history just because a manager
-happens to be holding the shift.
+revenue-business-date, status and payment filters, immutable detail, reasoned
+void, and the outlet's open orders with a cancel action. Detail shows payment time
+and payment business date when they differ from the order clock. Tablet context
+never inherits the wider history just because a manager happens to be holding the
+shift.
+
+A manager never re-rings from this personal-device surface. After voiding, the
+screen instructs that the corrected contents must be rung manually on the enrolled
+counter tablet. There is no cross-device draft, automatic prefill or manager-side
+payment command: each would create a new billing authority path that #9 and #33 do
+not grant.
 
 ### Correction never mutates an accepted paid bill
 
-A paid bill is voided with a reason and re-rung as a new bill. A local command
-that will never succeed reads as needing attention, and correcting it produces a
-new client UUID linked to the original. Discard records who and why and leaves the
-trace. Open orders are cancelled, never deleted.
+A paid bill is voided with a reason and manually re-rung as a new bill at the
+counter. A local command that will never succeed reads as needing attention on
+the originating tablet. An operator holding that tablet's live shift may correct
+it, producing a new client UUID linked to the original, or discard it with a
+non-blank reason; both retain actor, time and the refused trace. A manager's phone
+may show non-identifying diagnostic metadata, but cannot read the payload or
+mutate the local queue. Open orders are cancelled, never deleted.
 
 ### Plain words for every delivery state
 

@@ -4,11 +4,16 @@
 
 The live billing adapter SHALL support direct paid bills and editable open
 orders, using the same typed lifecycle demonstrated in `ui-billing-lifecycle`. A
-bill SHALL exist only after full payment succeeds.
+bill SHALL exist only after full payment succeeds. V1 SHALL expose no discount
+control and SHALL submit `discount_paise` as zero.
 
 #### Scenario: Customer pays upfront
 - **WHEN** an operator chooses Pay now and the command is durably accepted locally
 - **THEN** the counter clears, reads as not sent yet, and later shows the exactly-once bill number
+
+#### Scenario: Customer undoes Pay now
+- **WHEN** an operator uses Undo during the guaranteed six-second window
+- **THEN** delivery has not begun, the local command is removed, and the complete composer is restored
 
 #### Scenario: Customer pays on handover
 - **WHEN** an operator saves an order and later pays it from the tablet that took it
@@ -30,11 +35,25 @@ exist.
 - **WHEN** an order remains open at an outlet whose tablet cannot be used
 - **THEN** the outlet's manager cancels it with a reason from their own device, and nothing is transferred
 
+### Requirement: Paid correction respects the personal-device boundary
+
+An authorised manager SHALL void a paid bill with a reason from bill history.
+The replacement SHALL be manually rung on the enrolled counter tablet as a new
+bill. The manager surface SHALL create no payment command, automatic prefill or
+cross-device draft. Bill history SHALL filter on revenue `business_date` and
+SHALL show payment time and payment business date separately when they differ.
+
+#### Scenario: A manager corrects a paid bill
+- **WHEN** the manager voids it and the counter operator manually rings the corrected contents
+- **THEN** the original remains immutable as void and the replacement receives a new identity and bill number
+
 ### Requirement: Live billing shows delivery states in plain words
 
 The counter and authorised history surfaces SHALL distinguish not sent yet,
 retrying, sent, needs attention, void and cancelled, without making a paid bill
-mutable.
+mutable. Needs-attention correction and reasoned discard SHALL exist only on the
+originating tablet under its live shift. Manager diagnostics SHALL be read-only
+and expose no payload or customer details.
 
 #### Scenario: A command lands after cutover
 - **WHEN** a valid pre-cutover command is accepted after cutover

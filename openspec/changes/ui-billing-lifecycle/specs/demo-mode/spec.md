@@ -2,11 +2,13 @@
 
 ### Requirement: Demo data walks the complete order-to-payment lifecycle
 
-The coherent demo store SHALL include a direct payment, an editable open order
-paid on handover, an aggregator order collected by a rider, a cancellation with
-its reason, a bill that is not sent yet, and one command needing attention. Every
-customer, bill, revenue and drawer figure SHALL stay internally consistent across
-role surfaces.
+The coherent demo store SHALL include a direct payment with its guaranteed Undo,
+an editable open order paid on handover, an aggregator order collected by a
+rider, a cancellation with its reason, a bill that is not sent yet, and one
+command needing attention on its originating tablet. Manager diagnostics for the
+same command SHALL be read-only and non-identifying. Every accepted command SHALL
+carry zero discount, and every customer, bill, revenue and drawer figure SHALL
+stay internally consistent across role surfaces.
 
 #### Scenario: An order taken before cutover is paid after it
 - **WHEN** the demo order is created on one business date and paid in cash after that date's cutover
@@ -19,6 +21,10 @@ role surfaces.
 #### Scenario: Demo reset
 - **WHEN** the lifecycle is changed during a walkthrough and demo reset is used
 - **THEN** every open order, bill, customer, exception and aggregate returns to the canonical scenario
+
+#### Scenario: Demo correction respects the device boundary
+- **WHEN** the originating tablet corrects or discards the needs-attention command and a manager later opens diagnostics
+- **THEN** the tablet retains the attributed trace while the manager sees only non-identifying read-only status
 
 ### Requirement: Demo customer identity is global without exposing outlet history
 

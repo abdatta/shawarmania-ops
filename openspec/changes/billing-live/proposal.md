@@ -16,12 +16,14 @@ during rollout.
   outlets' real menus through it. Nothing about billing can go live until a real
   menu exists, and the roadmap forbids it arriving by any route a franchisee could
   not repeat.
-- Connect the counter, open orders, customer lookup, shift history, void and
-  correction adapters to the real contracts from #9, #32 and #33.
+- Connect the counter, open orders, customer lookup, shift history, manager void,
+  originating-tablet correction/discard and read-only manager-diagnostic adapters
+  to the real contracts from #9, #32 and #33.
 - Read the latest menu while reachable, and keep the active shift's menu snapshot
   so a transient failure does not interrupt an already-open counter.
 - Commit every accepted counter command to IndexedDB before clearing its form,
-  never await the network, and retry through one page leader with backoff.
+  never await the network, preserve Pay now's six-second guaranteed Undo before
+  that command becomes deliverable, and retry through one page leader with backoff.
 - Preserve unsent work through the shift ending, restart, cutover and app update.
   A restart may drain old work, but starting or resuming billing requires online
   approval on the operator's phone.
@@ -80,8 +82,10 @@ integration tests, transient-failure Playwright tests, and live gates change.
 - Redesigning #31, or weakening the #9, #32 and #33 contracts.
 - Order transfer or any recovery path; a manager cancels a stranded order.
 - Retiring the manual ledger, which #12 owns.
-- Attendance from the tablet, emergency personal-device billing, printing, GST,
-  digital sharing, partial payments or split tender.
+- Attendance from the tablet, emergency personal-device billing, manager-side
+  re-ring or cross-device draft handoff, printing, GST, digital sharing,
+  discounts, partial payments or split tender. V1 sends `discount_paise = 0` and
+  exposes no discount control.
 
 ## Docs to update before archive
 

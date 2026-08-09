@@ -25,6 +25,8 @@ billing is the day its counter revenue must stop being typed in by hand.
 - Wire every #31 surface to the real #9, #32 and #33 contracts.
 - Acknowledge counter writes only after a durable IndexedDB commit, then deliver
   them exactly once without making the operator wait.
+- Preserve Pay now's guaranteed six-second Undo before its command becomes
+  deliverable, and keep every V1 discount at zero with no discount control.
 - Preserve unsent work through the shift ending, cutover, restart and app update.
 - Hand counter revenue over from the ledger to the app, once, per outlet.
 - Promote the billing gates to live while keeping the coherent demo.
@@ -35,7 +37,10 @@ billing is the day its counter revenue must stop being typed in by hand.
 - Several tablets at one outlet, or emergency billing from a personal device.
 - Order transfer or any recovery path.
 - Retiring the manual ledger, which #12 owns.
-- Attendance, partial or split payments, refunds, GST, printing or digital sharing.
+- Attendance, discounts, partial or split payments, refunds, GST, printing or
+  digital sharing.
+- Manager-side billing, automatic re-ring handoff or prefill, and manager mutation
+  of a tablet's local delivery queue.
 
 ## Decisions
 
@@ -59,8 +64,11 @@ or clearing the form. **The store itself is this change's**, moved on from #33 o
 2026-08-09 because its adapters, its screens and its dependency ordering all live
 here.
 
-Network delivery starts afterwards. If durable storage fails, the UI stays
-populated and reports that the action was not saved.
+Network delivery starts afterwards, except that a Pay now envelope remains
+ineligible for delivery during the existing six-second Undo window. Undo removes
+that still-unsent envelope and restores the composer; after the window, the
+ordinary drain rules apply. If durable storage fails, the UI stays populated and
+reports that the action was not saved.
 
 Waiting for the server before clearing was rejected because a brief outage would
 stop the counter. Clearing before the local commit was rejected because a tab
@@ -108,11 +116,34 @@ references. Retryable transport or server failures stay unsent. An order that is
 no longer open, reuse of a UUID with different content, an invalid historical
 shift, or any other correctable permanent refusal moves to needs attention.
 Correction creates a new linked UUID; discard writes an attributed tombstone.
-Neither mutates the refused envelope.
+Neither mutates the refused envelope. Both actions exist only on the originating
+tablet for an operator holding its live shift. Manager diagnostics expose only
+non-identifying metadata and are read-only, because the payload and the queue do
+not leave that tablet.
 
 Treating every conflict as success was rejected because different money could hide
 behind UUID reuse. Retrying a deterministic refusal forever was rejected because
 it conceals action somebody must take.
+
+### Correction authority stays on the device that holds the facts
+
+A manager voids a paid bill from their personal history surface, but does not
+create its replacement there. The corrected sale is manually rung on the enrolled
+counter tablet as a new bill. There is no manager payment command, cross-device
+draft or automatic prefill.
+
+Manager bill history filters on the revenue `business_date`. Detail separately
+shows `paid_at` and `payment_business_date` when the payment crossed the outlet
+cutover. Delivery diagnostics on the same phone are read-only. A needs-attention
+command can be corrected or discarded only on its originating tablet, where the
+immutable payload and local evidence actually exist.
+
+### Dormant discount columns do not create a discount feature
+
+The transactional contract retains `discount_paise` for arithmetic and future
+compatibility, but Billing V1 always submits zero and renders no discount control.
+Adding discounts later requires an explicit pricing and authority decision rather
+than exposing a schema field by accident.
 
 ### A removed tablet stops, and nothing uploads from it
 

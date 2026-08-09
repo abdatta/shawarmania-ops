@@ -5,15 +5,36 @@
 The billing composer SHALL offer Pay now and Save order once at least one line
 exists. Pay now SHALL retain the existing single-method fast path. Save order
 SHALL create a tablet-owned order without assigning a bill number, and SHALL
-clear the composer only after the adapter accepts it.
+clear the composer only after the adapter accepts it. V1 SHALL offer no discount
+control, and both paths SHALL carry `discount_paise` as zero.
 
 #### Scenario: Customer pays upfront
 - **WHEN** an operator selects one payment method and confirms Pay now
 - **THEN** a paid result is created directly, with no order saved first
 
+#### Scenario: No discount is offered
+- **WHEN** an operator composes, saves, reopens or pays an order
+- **THEN** no discount control appears and the accepted command carries a zero discount
+
 #### Scenario: Food has to be made first
 - **WHEN** an operator chooses Save order
 - **THEN** the order appears in Open orders with its order number and no bill number
+
+### Requirement: Pay now retains a guaranteed unsent Undo
+
+After local acceptance, a Pay now confirmation SHALL offer Undo for the existing
+six-second window and SHALL NOT begin delivery while that action is visible. Undo
+SHALL remove the still-unsent command and restore the composer exactly. Once the
+window ends or delivery begins, no Undo SHALL appear and correction SHALL require
+an attributed manager void plus a new bill.
+
+#### Scenario: Operator undoes Pay now
+- **WHEN** the operator uses Undo during the confirmation window
+- **THEN** the command is removed before delivery and its lines, customer form and payment method return to the composer
+
+#### Scenario: The Undo window has ended
+- **WHEN** the Pay now command becomes eligible for delivery
+- **THEN** Undo is absent and the accepted sale cannot be edited in place
 
 ### Requirement: A saved order shows its order number where it cannot be missed
 
@@ -34,9 +55,9 @@ distinct from a bill number wherever both could be seen.
 
 Open orders SHALL list only orders owned by this tablet, each with its order
 number, age, customer label, items and total. Any operator holding the tablet's
-live shift SHALL reopen and change lines, quantities, customer form values and
-discount, until payment or cancellation. The original order time and business
-date SHALL remain visible and unchanged.
+live shift SHALL reopen and change lines, quantities and customer form values
+until payment or cancellation. No discount control SHALL appear. The original
+order time and business date SHALL remain visible and unchanged.
 
 #### Scenario: Incoming operator edits an order
 - **WHEN** a different operator's shift begins on the same tablet and they edit its open order
@@ -105,13 +126,20 @@ totals, or another outlet.
 ### Requirement: A manager reviews outlet history, voids, and clears stranded orders
 
 A Franchise Admin SHALL review their outlets' paid bills and a Super Admin any
-outlet, with date, status and payment filters, and bill detail. They SHALL void a
-paid bill with a reason and re-ring a replacement without editing the original.
-They SHALL see any open order at that outlet and cancel it with a reason.
+outlet, with revenue-business-date, status and payment filters, and bill detail.
+Detail SHALL show payment time and payment business date when they differ from
+the order clock. They SHALL void a paid bill with a reason. The corrected sale
+SHALL then be manually rung as a new bill on the enrolled counter tablet; the
+manager surface SHALL create no payment command, cross-device draft or automatic
+prefill. They SHALL see any open order at that outlet and cancel it with a reason.
 
 #### Scenario: A paid bill is corrected
-- **WHEN** an authorised admin voids a paid bill and re-rings the corrected contents
+- **WHEN** an authorised admin voids a paid bill and an operator manually rings the corrected contents at the counter
 - **THEN** the original stays unchanged as void and the replacement carries a new identity and number
+
+#### Scenario: History is filtered by revenue date
+- **WHEN** an order and its payment fall on different business dates
+- **THEN** the bill is found under its order business date and detail separately names the later payment time and payment business date
 
 #### Scenario: An order is stranded on a tablet
 - **WHEN** an order remains open at an outlet whose tablet is unavailable and the manager cancels it with a reason
@@ -121,7 +149,12 @@ They SHALL see any open order at that outlet and cancel it with a reason.
 
 The surface SHALL distinguish not sent yet, retrying, needs attention, void,
 cancelled and sent, in plain words. It SHALL keep the composer usable and SHALL
-NOT present ordinary unsent state as a dialog.
+NOT present ordinary unsent state as a dialog. Correction and discard of a
+needs-attention command SHALL be available only on its originating tablet to an
+operator holding that tablet's live shift. Correction SHALL use a new UUID linked
+to the refused command. Discard SHALL require a non-blank reason, and both SHALL
+retain actor, time and the refused trace. Manager diagnostics SHALL be read-only
+and SHALL expose no payload or customer details.
 
 #### Scenario: A paid command has not reached the server
 - **WHEN** local acceptance succeeded but delivery has not
@@ -130,3 +163,11 @@ NOT present ordinary unsent state as a dialog.
 #### Scenario: A command will never succeed
 - **WHEN** the server refuses a command permanently
 - **THEN** it reads as needing attention, in a sentence naming what a person should do, and the counter keeps working
+
+#### Scenario: The originating tablet corrects a command
+- **WHEN** its current operator corrects a needs-attention command
+- **THEN** a new linked UUID carries the correction and the refused command remains in the trace
+
+#### Scenario: A manager inspects the same problem
+- **WHEN** an authorised manager opens delivery diagnostics on their phone
+- **THEN** they see non-identifying status metadata and no correction, discard, payload or customer details
