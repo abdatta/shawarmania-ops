@@ -39,32 +39,26 @@
 - [ ] 3.5 Add date tests proving revenue stays on the order business date while cash uses the payment business date across a cutover.
 - [ ] 3.6 Add tests proving open orders, live shifts, and missing or stale end-of-day confirmations block settlement readiness even through hand-crafted requests.
 
-## 4. The local operation store that carries the commands
+## 4. Typed command contract and documentation
 
-**Moved here from #9 on 2026-08-09.** The queue's envelope, its canonical hash
-and its idempotency key are the same design as sections 1 to 3, and building it
-in #9 meant building it against a payload shape that did not exist yet. It now
-follows the contract rather than guessing at it.
+**The local operation store is #10's, not this change's.** It arrived here from #9
+on 2026-08-09 because the queue's envelope, canonical hash and idempotency key are
+this change's design, and #9 would have invented a payload shape. That reasoning is
+about a **shape**, and the shape stays here in 4.1. The **store** moved on to #10 on
+2026-08-09, where the adapters that fill it and the screens that drive it also live,
+and where dependency-ordered draining is already specified. Building it here would
+mean a queue with nothing to put in it, no promoted gate to run it, and no ordering
+rule for the create-revise-pay chains this change introduces.
 
-- [ ] 4.1 Add Dexie and a versioned device-scoped schema for immutable envelopes, canonical hashes, lifecycle states and migrations, keyed by the same client UUID and payload hash the command receipts use.
-- [ ] 4.2 Implement atomic local acknowledgement that leaves forms intact on IndexedDB or quota failure and survives shift end, reload, restart and cutover.
-- [ ] 4.3 Implement Web Locks leadership with an IndexedDB lease fallback and response-driven retry state, without treating `navigator.onLine` as truth.
-- [ ] 4.4 Map every refusal category from section 2 onto a queue state, so a permanent refusal reaches needs-attention with a reason a person can act on and an identity conflict is never reported as success.
-- [ ] 4.5 Implement unsent, retrying and needs-attention telemetry through `report_counter_device_state`, without logging payloads or customer phone numbers.
-- [ ] 4.6 Add unit and browser tests for two tabs, process restart, schema upgrade, local failure, shift handover, cutover and tablet removal.
-- [ ] 4.7 GATE: a command accepted locally survives logout and restart, drains exactly once, and a tablet reporting unsent work says so on the Tablets surface.
+- [ ] 4.1 Add typed adapter and domain command and result shapes for the order lifecycle, payment, void, refusal categories and delayed acceptance, without promoting any feature gate. **This includes the immutable command envelope and the canonical hash**, which lives in `shared/` beside `phone.ts` so the client and the database compute the same hash from the same payload, and idempotency cannot fail on a formatting difference.
+- [ ] 4.2 Update `docs/DATA_MODEL.md`, `docs/ARCHITECTURE.md` and `docs/BUSINESS_CONTEXT.md` with orders, the two numbers, atomic payment conversion, both clocks and immutable bills.
+- [ ] 4.3 Update `docs/GLOSSARY.md` with order, bill, order number, bill number, shift and end-of-day confirmation, each defined once.
+- [ ] 4.4 Update `docs/OFFLINE_AND_SYNC.md`, `docs/SECURITY_AND_PRIVACY.md` and `docs/LIMITATIONS.md` with command receipts, historical shifts, and the launch exclusions, including that there is no order transfer and no recovery path, and that the durable queue arrives with #10.
 
-## 5. Typed adapter contract and documentation
+## 5. Verification and phase gate
 
-- [ ] 5.1 Add typed adapter and domain command and result shapes for the order lifecycle, payment, void, refusal categories and delayed acceptance, without promoting any feature gate.
-- [ ] 5.2 Update `docs/DATA_MODEL.md`, `docs/ARCHITECTURE.md` and `docs/BUSINESS_CONTEXT.md` with orders, the two numbers, atomic payment conversion, both clocks and immutable bills.
-- [ ] 5.3 Update `docs/GLOSSARY.md` with order, bill, order number, bill number, shift and end-of-day confirmation, each defined once.
-- [ ] 5.4 Update `docs/OFFLINE_AND_SYNC.md`, `docs/SECURITY_AND_PRIVACY.md` and `docs/LIMITATIONS.md` with command receipts, historical shifts, and the launch exclusions, including that there is no order transfer and no recovery path.
-
-## 6. Verification and phase gate
-
-- [ ] 6.1 Run `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` and `npm run test:e2e`.
-- [ ] 6.2 Run `npm run db:start && npm run db:reset`, then `npm run test:db`, `npm run test:rls` and `npm run test:e2e:auth`.
-- [ ] 6.3 Run `npm run db:types` and confirm `git diff --exit-code src/data-access/database.types.ts` is clean once the regenerated file is staged.
-- [ ] 6.4 Adversarial review pass: a separate session reads these spec deltas against the delivered migration, functions and policies, and reports every requirement it cannot find enforced at the database. Findings are fixed before archive.
-- [ ] 6.5 PHASE GATE: demonstrate an order taken, prepared and paid, and a sale paid outright, producing the same immutable bill; a daily order number that restarts and never resembles a bill number; an exact retry that lands once; a changed-payload reuse refused; a pay racing a manager's cancellation refused with no number consumed; revenue and drawer dates separated across a cutover; database-enforced sign-off blockers, and a command accepted on the tablet that survives a restart and lands exactly once, all before `ui-billing-lifecycle` begins.
+- [ ] 5.1 Run `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` and `npm run test:e2e`.
+- [ ] 5.2 Run `npm run db:start && npm run db:reset`, then `npm run test:db`, `npm run test:rls` and `npm run test:e2e:auth`.
+- [ ] 5.3 Run `npm run db:types` and confirm `git diff --exit-code src/data-access/database.types.ts` is clean once the regenerated file is staged.
+- [ ] 5.4 Adversarial review pass: a separate session reads these spec deltas against the delivered migration, functions and policies, and reports every requirement it cannot find enforced at the database. Findings are fixed before archive.
+- [ ] 5.5 PHASE GATE: demonstrate an order taken, prepared and paid, and a sale paid outright, producing the same immutable bill; a daily order number that restarts and never resembles a bill number; an exact retry that lands once; a changed-payload reuse refused; a pay racing a manager's cancellation refused with no number consumed; revenue and drawer dates separated across a cutover; and database-enforced sign-off blockers, all before `ui-billing-lifecycle` begins.

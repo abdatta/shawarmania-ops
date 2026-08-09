@@ -276,27 +276,41 @@ derived from a timestamp when it is read.
 - **WHEN** a bill is settled at 00:20 local time at an outlet whose cutover is 04:00
 - **THEN** the bill carries the previous calendar day as its business date
 
-### Requirement: Billing requires an open shift, and a shift is opened by a biller with a PIN
+### Requirement: Billing requires a shift, confirmed by a code on the operator's own device
 
-The billing surface SHALL NOT settle a bill unless a shift is open, and SHALL
-say what to do when none is. Opening a shift SHALL require choosing a biller
-and entering that biller's PIN, and a wrong PIN SHALL be refused with a single
-message that does not distinguish a wrong PIN from an unknown biller.
+The billing surface SHALL NOT accept counter work unless a shift is live, and
+SHALL say what to do when none is. Opening one SHALL require a username on the
+tablet, and that person entering the tablet's displayed code from a session that
+is not the tablet's, and SHALL succeed only for an active Biller of that outlet,
+that outlet's active Franchise Admin, or an active Super Admin. **No counter PIN
+SHALL exist, and no password SHALL be typed on the tablet.**
 
-#### Scenario: No shift open
+The shift SHALL be attributed to the confirming person and the tablet, carry an
+explicit business date, and expire at the outlet's next cutover.
 
-- **WHEN** the billing surface is opened with no shift open
-- **THEN** it states that a shift must be opened and offers the way to open one, rather than showing a disabled settle control
+#### Scenario: No shift live
+- **WHEN** the billing surface opens with no live shift
+- **THEN** it asks for a username rather than showing an actionable billing form
 
-#### Scenario: A wrong PIN
+#### Scenario: Waiting for confirmation
+- **WHEN** a request has been submitted and not yet resolved
+- **THEN** the tablet displays the code large enough to read across the counter, states which person was asked, and offers to cancel
 
-- **WHEN** a PIN that does not match the chosen biller is entered
-- **THEN** the shift is not opened and one message is shown that does not reveal which part was wrong
+#### Scenario: The counter opens by itself
+- **WHEN** the named person enters the correct code on their own device
+- **THEN** the tablet enters billing without anybody touching it again
 
-#### Scenario: Handover
+#### Scenario: Unknown username
+- **WHEN** a username belonging to nobody is submitted
+- **THEN** the tablet displays a code and waits, and times out after the same interval as an unconfirmed real request
 
-- **WHEN** the biller on an open shift closes it and another biller opens one
-- **THEN** the open shift is attributed to the incoming biller
+#### Scenario: Handover on the same tablet
+- **WHEN** one operator's shift ends and another eligible operator's request is approved
+- **THEN** new work is attributed to the incoming operator while old work keeps its original attribution
+
+#### Scenario: Cutover expires the shift
+- **WHEN** the outlet reaches its cutover
+- **THEN** the shift accepts no new work until a fresh request is approved
 
 ### Requirement: Sync state is a persistent indicator with an escalated state, never a dialog
 

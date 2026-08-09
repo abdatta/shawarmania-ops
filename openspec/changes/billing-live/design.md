@@ -53,10 +53,14 @@ cannot wait for a later change: without it there is nothing to sell.
 
 ### Local commit is the V1 acknowledgement boundary
 
-Every mutating adapter builds the envelope defined by #9 and #33 and commits it to
-Dexie before reporting success or clearing the form. Network delivery starts
-afterwards. If durable storage fails, the UI stays populated and reports that the
-action was not saved.
+Every mutating adapter builds the envelope defined by #33, hashed by the shared
+canonical function #33 publishes, and commits it to Dexie before reporting success
+or clearing the form. **The store itself is this change's**, moved on from #33 on
+2026-08-09 because its adapters, its screens and its dependency ordering all live
+here.
+
+Network delivery starts afterwards. If durable storage fails, the UI stays
+populated and reports that the action was not saved.
 
 Waiting for the server before clearing was rejected because a brief outage would
 stop the counter. Clearing before the local commit was rejected because a tab
@@ -64,10 +68,10 @@ crash would erase a transaction the operator believed was recorded.
 
 ### One ordered drain leader delivers dependency chains
 
-One visible page becomes drain leader through Web Locks, with the #9 IndexedDB
-lease fallback. Commands are first-in-first-out within a chain: create precedes
-revise, revise precedes pay or cancel, and a correction follows the command it
-replaces. Independent commands proceed while a blocked chain waits. Retries use
+One visible page becomes drain leader through Web Locks, with a short IndexedDB
+lease fallback where Web Locks is unavailable. Commands are first-in-first-out
+within a chain: create precedes revise, revise precedes pay or cancel, and a
+correction follows the command it replaces. Independent commands proceed while a blocked chain waits. Retries use
 bounded exponential backoff with jitter, resuming on foreground, on connectivity
 evidence, and on periodic leader ticks.
 

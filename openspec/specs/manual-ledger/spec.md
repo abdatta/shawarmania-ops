@@ -111,15 +111,15 @@ itself**, and only while that expense's business date is still the current
 business date. An expense that outlives its own business date SHALL be
 immutable to the account that recorded it.
 
-**This ownership rule holds only while a Biller signs in as themselves.** When
-the counter tablet becomes an enrolled device with a shift PIN, that PIN selects
-attribution and is not a security boundary, so `recorded_by` will name whoever
-the shift claims to be and Row-Level Security will have no session identity to
-check it against. "Only expenses it recorded itself" SHALL at that point degrade
-to "only expenses recorded during this shift", and the change that enrols the
-device SHALL state which of the two it is enforcing rather than leaving this
-requirement to quietly stop meaning what it says. This limitation is recorded
-now, before it bites, rather than discovered when the rule is already wrong.
+**On a counter tablet this rule means "recorded while you held this counter",
+and that is now settled.** This paragraph used to anticipate a shift PIN, note
+that a PIN selects attribution and is not a security boundary, and leave open
+which of two readings would survive. `counter-devices-and-offline` answered it:
+a tablet has no `auth.uid()` belonging to a person, so an expense recorded from
+one SHALL be attributed to **the operator named on the live shift**, read from
+the shift row and never from the request body. The reading that survived is the
+stronger one, because a shift names somebody who confirmed it from their own
+phone rather than somebody whose four digits were typed at the counter.
 
 An account holding a live Franchise Admin assignment SHALL be able to record,
 correct and void any expense at the outlets that assignment names, against any
@@ -776,3 +776,39 @@ a month's trading is worse than a refused one.
 
 - **WHEN** the conversion would leave any existing row with a blank category, or would convert fewer rows than exist
 - **THEN** the transaction fails and every row is left exactly as it was
+
+### Requirement: An expense may be recorded from the counter tablet, attributed to the shift's operator
+
+A counter device session SHALL be able to record a manual-ledger expense for its
+own tablet's outlet **only while it holds a live shift**, and the row SHALL be
+attributed to that shift's operator, read from the shift rather than from the
+request body. The device session SHALL gain no other reach over the ledger: it
+SHALL NOT read or write a day record, SHALL NOT read a month's aggregate, and
+SHALL NOT record an expense for a past business date.
+
+Voiding an expense recorded this way SHALL remain governed by the rules already
+in force for the outlet's staff, and a voided expense SHALL stay visible.
+
+#### Scenario: Biller records a cash expense at the counter
+- **WHEN** a tablet holding a live shift records a cash expense for today at its own outlet
+- **THEN** the row is stored, attributed to the person holding that shift, and appears in the outlet's expense list
+
+#### Scenario: No live shift
+- **WHEN** a tablet with no live shift hand-crafts an expense insert
+- **THEN** the database refuses it
+
+#### Scenario: Another outlet
+- **WHEN** a tablet hand-crafts an expense insert naming an outlet that is not its own
+- **THEN** the database refuses it
+
+#### Scenario: A past day
+- **WHEN** a tablet hand-crafts an expense insert for an earlier business date
+- **THEN** the database refuses it
+
+#### Scenario: The body names somebody else
+- **WHEN** a tablet submits an expense naming a different person as the one who recorded it
+- **THEN** the stored row is attributed to the shift's operator instead
+
+#### Scenario: The day record stays out of reach
+- **WHEN** a tablet hand-crafts a read or write of a manual-ledger day record or a month aggregate
+- **THEN** the database returns no rows and accepts no write

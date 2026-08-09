@@ -27,6 +27,22 @@ npm run auth:readiness # hosted read-only pre-publication identity readiness pro
 
 `test:e2e:auth` has its own Playwright config and its own port, because it is the one browser suite that needs a **real backend** — everything in `e2e/` runs against a build wired to a deliberately unreachable Supabase, which is what lets `npm run test:e2e` work on a laptop with no Docker. That unreachable build also proves sign-in shows connection guidance without implying whether an identifier or password is valid. The real-backend suite separately proves unknown usernames and wrong passwords keep identical refusal copy. Keeping the ports apart means a preview server left running by one suite can never be reused by the other.
 
+**Running `test:rls` twice in a row will fail, and the failure lies about why.**
+The suite signs real users in through GoTrue, which rate-limits the token
+endpoint over a rolling window and answers with an empty error body — so a
+sign-in that trips it surfaces as `sign-in failed for owner@…: {}` and the
+suite reports twenty assertions failing on their content rather than one on its
+credentials. CI never meets this because it starts a fresh stack per run. Locally,
+run it once and read the result; if you must run it again, take the whole stack
+down and up (`npx supabase stop && npm run db:start`) rather than restarting the
+auth container on its own — Kong resolves its upstreams at startup, so a
+restarted GoTrue behind a running Kong answers `502` on every request and looks
+exactly like a broken suite.
+
+**A new function needs the stack restarted, not just the runtime.** Adding a
+directory under `supabase/functions/` gets a `404` until Kong has seen it, which
+means a full `db:stop`/`db:start`.
+
 **Editing an Edge Function? Restart the runtime.** The bundled edge-runtime container caches function modules, so a change to anything under `supabase/functions/` is invisible until `docker restart supabase_edge_runtime_shawarmania-ops` (or a full `db:stop`/`db:start`). A test that keeps failing against code you have already fixed is almost always this.
 
 `npm test` runs `.test.ts` / `.test.tsx` under `src/` in a jsdom environment and `.test.mjs` under `scripts/` in a node environment. The shared setup file guards its DOM work, so the build-tooling suites do not need a second Vitest project to live alongside the app suites.

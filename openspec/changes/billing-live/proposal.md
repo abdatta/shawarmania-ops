@@ -48,6 +48,10 @@ during rollout.
 
 - `billing-delivery`: Local envelopes, retry ordering, exact replay, cutover
   behaviour, needs-attention handling, and end-of-day confirmation for the counter.
+  **This is the only capability describing the durable queue.** #33 briefly carried
+  a second one, `offline-operation-store`, which was deleted on 2026-08-09 rather
+  than archived, because two capabilities describing one queue would have drifted
+  and because #34 extends this one.
 
 ### Modified Capabilities
 

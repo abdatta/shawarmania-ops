@@ -12,6 +12,7 @@
 - [ ] 2.3 Implement Web Locks leader election with the IndexedDB lease fallback, and dependency-aware draining that does not freeze unrelated order chains.
 - [ ] 2.4 Implement bounded retry and backoff driven by actual request evidence, with browser connectivity events used only as retry hints.
 - [ ] 2.5 Map accepted, exact replay, retryable, order-not-open, identity conflict, permanent refusal, corrected and discarded outcomes to durable local states.
+- [ ] 2.6 Report the unsent count through `report_counter_device_state`, so the `last_reported_unsent` column and the Tablets surface column that #9 shipped start carrying real numbers, without logging payloads or customer phone numbers. **Moved here from #33 §4 on 2026-08-09**, with the rest of the store.
 
 ## 3. Real billing adapters
 
@@ -46,7 +47,7 @@
 
 ## 7. Verification and rollout
 
-- [ ] 7.1 Add unit tests for local acceptance, dependency ordering, leader failover, retry classification, envelope upgrades, correction linkage and diagnostics carrying no customer details.
+- [ ] 7.1 Add unit tests for local acceptance, dependency ordering, leader failover, retry classification, envelope upgrades, correction linkage and diagnostics carrying no customer details, including a local-store schema upgrade that preserves unsent work across an application update, and a two-tab leadership test.
 - [ ] 7.2 Add integration tests for pay-now, payment on handover, an aggregator order collected by a rider, needs-attention handling, exact replay, delivery after cutover, and menu fallback.
 - [ ] 7.3 Run browser tests that drop the backend before and after local commit, lose the response after the server commits, restart with unsent work, refuse to start new work offline, prove eventual exactly-once settlement, and refuse finish-day until the queue is resolved.
 - [ ] 7.4 Run `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` and `npm run test:e2e`, then inspect phone and tablet layouts in light and dark.

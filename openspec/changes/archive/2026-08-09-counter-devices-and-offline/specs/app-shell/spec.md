@@ -17,9 +17,9 @@ navigation based on the person who holds the shift.
 
 ### Requirement: Every personal home surfaces a waiting request and a live shift
 
-The home surface of each personal shell (Employee, Franchise Admin and Super
-Admin) SHALL show any shift request awaiting the reader, and any shift the reader
-currently holds, with the outlet, the tablet and the time. The request card SHALL
+Each personal shell SHALL show, on its home surface, any shift request awaiting
+the reader and any shift the reader currently holds — Employee, Franchise Admin
+and Super Admin alike — with the outlet, the tablet and the time. The request card SHALL
 ask for the code displayed on that tablet and SHALL offer rejection without one. A
 waiting request SHALL raise the same attention count the shell already renders for
 other waiting work. Neither SHALL appear on a shell belonging to anybody else.

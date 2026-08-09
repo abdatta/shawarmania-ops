@@ -1,6 +1,6 @@
 # Proposal: Billing Transaction Contract
 
-> **Model**: Opus · **Wave**: D · **Depends on**: #9, #32 · **Gate**: an order can be taken, prepared and paid, or paid outright, and both produce the same immutable bill; an order carries a daily order number and a bill carries a permanent bill number; a retry lands the money once; a bill and every line commit together or not at all; a command accepted on the tablet survives logout and restart without duplicating or vanishing; and an unpaid order or an unconfirmed tablet blocks the day from being signed off, refused by the database rather than by a screen.
+> **Model**: Opus · **Wave**: D · **Depends on**: #9, #32 · **Gate**: an order can be taken, prepared and paid, or paid outright, and both produce the same immutable bill; an order carries a daily order number and a bill carries a permanent bill number; a retry lands the money once; a bill and every line commit together or not at all; and an unpaid order or an unconfirmed tablet blocks the day from being signed off, refused by the database rather than by a screen.
 
 ## Why
 
@@ -46,10 +46,9 @@ This proposal is scoped to exactly that and no further.
   that worked the date.
 - Require every command argument to be transmitted explicitly, so a value nobody
   supplied cannot be dropped in transit and leave the command unmatched.
-- Establish the versioned IndexedDB operation store that carries those commands:
-  it commits locally before a screen reports success, survives logout, cutover and
-  browser restart, elects one page to drain, retries transient failures, and keeps
-  refused entries for a human rather than discarding them.
+- Define the immutable command envelope and its canonical hash once, in `shared/`,
+  so the client and the database compute the same hash from the same payload. The
+  durable queue that stores those envelopes is #10's.
 
 ## Capabilities
 
@@ -58,13 +57,9 @@ This proposal is scoped to exactly that and no further.
 - `order-lifecycle`: Editable unpaid orders, tablet ownership, daily order
   numbers, cancellation, and conversion to a paid bill.
 - `billing-command-contract`: Versioned atomic commands, exact idempotency,
-  historical authorisation, refusal categories, and replay responses.
-- `offline-operation-store`: Durable device-scoped operation storage, queue
-  states, local acknowledgement, leader election, and lifecycle persistence.
-  **Moved here from #9 on 2026-08-09**, because the queue's envelope, its
-  canonical hash and its idempotency key are the same design as the command
-  contract, and building it before the contract existed meant building it against
-  a made-up payload shape.
+  historical authorisation, refusal categories, and replay responses. **This is
+  where the envelope and its canonical hash are defined**, which is what #9 could
+  not have invented for itself.
 
 ### Modified Capabilities
 
@@ -78,16 +73,22 @@ This proposal is scoped to exactly that and no further.
 ## Impact
 
 Billing migrations, tables, triggers and RPCs, end-of-day confirmations,
-generated types, RLS and grants, domain arithmetic, Supabase command adapters,
-IndexedDB infrastructure, tablet telemetry, seeds, and DB, RLS and browser tests
-change. Production billing tables are expected to be
-empty; the migration refuses to proceed if they are not.
+generated types, RLS and grants, domain arithmetic, the shared canonical hash,
+typed command and result shapes, seeds, and DB and RLS tests change. No
+IndexedDB, no Dexie dependency and no browser queue tests belong to this change.
+Production billing tables are expected to be empty; the migration refuses to
+proceed if they are not.
 
 ## Non-goals
 
+- **The durable local operation store.** Moved on to #10 on 2026-08-09. It arrived
+  from #9 because the queue's envelope, canonical hash and idempotency key are this
+  change's design, and that shape stays here. The store itself belongs with the
+  adapters that fill it and the screens that drive it, and #10 already specifies it
+  with the dependency-ordered draining that create-revise-pay chains require and
+  that this change never defined.
 - Deliberate offline restart or prolonged offline trading. Roadmap change #34
-  adds that after Billing V1; what lands here is the durable acknowledgement
-  boundary, not offline operation as a mode.
+  adds that after Billing V1.
 - Gate promotion. #10 makes billing live.
 - Several active tablets at one outlet, or ordinary cross-tablet order editing.
 - **Order transfer between tablets, and any privileged recovery path.** Cut

@@ -17,10 +17,11 @@ Launch runs one tablet per outlet, but the server contract stays safe under
 concurrent requests so #35 is later a setup change, not a rewrite of money
 history.
 
-**The local operation store moved here from #9 on 2026-08-09.** #9 would have
-built the queue before anything defined what it carries, against a payload shape
-invented for the purpose. The envelope, the canonical hash and the idempotency
-key below are that shape, so the queue belongs with them.
+**The local operation store passed through here on 2026-08-09 and went on to #10.**
+#9 would have built the queue before anything defined what it carries, against a
+payload shape invented for the purpose. The envelope, the canonical hash and the
+idempotency key below are that shape, and they stay here. The store that holds
+them belongs where its adapters and screens are, which is #10.
 
 ## Goals / Non-Goals
 
@@ -31,11 +32,12 @@ key below are that shape, so the queue belongs with them.
 - Give the customer a number to be called by that is not a bill number.
 - Preserve both clocks in storage without building exception machinery on them.
 - Remove direct client writes from the money path.
-- Give the tablet a durable local acknowledgement boundary, so money already
-  taken cannot be lost to a request that never completed.
+- Settle the command envelope and its canonical hash, so the tablet's durable
+  acknowledgement boundary in #10 stores a shape the database already agrees with.
 
 **Non-Goals:**
 
+- **The durable local operation store, which is #10's.**
 - Caching, prolonged offline trading, or gate promotion.
 - Order transfer, privileged recovery, or a version-conflict contract.
 - Partial, split or deposit payment, refunds, GST, printing or digital sharing.
@@ -197,44 +199,33 @@ Rechecking only current assignment at sync was rejected because it would discard
 honest work. Trusting any backdated client timestamp was rejected because it would
 nullify tablet removal.
 
-### IndexedDB is the local acknowledgement boundary
+### This change defines the envelope; #10 builds the queue that holds it
 
-Dexie stores versioned immutable operation envelopes by client UUID, tablet,
-shift, type, created time, payload version, and canonical payload hash — the same
-five values the command receipt is keyed on, which is the whole reason this
-section sits in this change rather than the previous one. The local transaction
-must commit before a screen reports acceptance or clears input. If it fails, the
-form stays exactly as it was.
+The envelope is immutable and keyed by client UUID, tablet, shift, type, created
+time, payload version and canonical payload hash: the same values the command
+receipt above is keyed on. That shape is defined here, and the canonical hash goes
+in `shared/` beside `phone.ts`, because the client hash and the database hash must
+agree byte for byte or idempotency silently fails on a formatting difference.
 
-The network response cannot be the acknowledgement boundary, because a payment
-already taken could be lost during an outage. In-memory state was rejected
-because the demo's synchronous behaviour does not survive process death.
+**The durable store is #10's.** It came here from #9 on 2026-08-09 and moved on the
+same day, once it was clear the argument for the move was about the payload shape
+rather than the storage engine. Three things put the store in #10:
 
-Queue rows survive shift end, device session refresh, reload and browser restart.
-Logging never includes payload contents, and never includes a customer's phone
-number.
+- **Nothing here would fill it.** This change promotes no feature gate, and #31 has
+  not built the screens. A queue would land with no live surface pointing at it and
+  a test harness that #10's real adapters then replace.
+- **This change never specified ordering.** Orders are created, revised and paid as
+  three commands about one order, and a payment must never reach the server before
+  the create it depends on. #10 specifies dependency-ordered draining with blocked
+  chains that do not stall unrelated ones. A queue built here would be rebuilt there.
+- **The telemetry has no reader yet.** #9 shipped `report_counter_device_state` and
+  the Tablets column, but no real tablet reports into it until #10 turns billing on.
 
-### One page drains, and the response says what happened
-
-Web Locks elects a foreground drain leader, with a short IndexedDB lease fallback
-where unavailable. `navigator.onLine` is only a wake-up hint; the response
-categories defined above drive state. A removed tablet cannot drain or read.
-
-Every refusal category the command surface defines maps onto exactly one queue
-state, so there is no category a person could meet that the queue has no answer
-for. An identity conflict in particular moves to needs-attention rather than
-being reported as success, because "the same id already carried different
-content" is not a delivery.
-
-Service-worker Background Sync was rejected as a correctness dependency, because
-availability differs by browser.
-
-**Upload-only recovery from a removed tablet is cut.** It existed to rescue
-unpaid orders stranded on dead hardware, and orders are short-lived kitchen
-tickets that get re-rung rather than rescued. Removing a tablet with unsent paid
-bills remains possible, and is recorded as a limitation with an operational
-answer — remove the tablet only once its queue is clear, which the Tablets
-surface shows — rather than a privileged upload path nobody will ever exercise.
+**Upload-only recovery from a removed tablet stays cut**, and that decision is
+recorded here because it is a product decision, not a delivery one: unpaid orders
+are short-lived kitchen tickets that get re-rung rather than rescued, so a manager
+cancelling with a reason is the whole answer. #10 carries the enforcement and the
+Tablets warning before removing a tablet that still reports unsent work.
 
 ## Risks / Trade-offs
 
@@ -249,12 +240,10 @@ surface shows — rather than a privileged upload path nobody will ever exercise
   transaction as the order insert.
 - **Cutting order events removes forensic detail** → attribution columns cover who
   did what; the `audit-log` todo is where this returns if a dispute ever needs more.
-- **IndexedDB can be cleared or quota-exhausted** → fail before the UI reports
-  success, request persistence best-effort, and surface storage failure rather
-  than swallowing it.
-- **A removed tablet still holds queued customer phone numbers** → origin-scoped
-  storage, no payload logging, and the Tablets surface warns before removing a
-  tablet that still reports unsent work.
+- **The envelope shape proves wrong once a real queue stores it in #10** → the
+  canonical hash and the receipt key are exercised by this change's own concurrency
+  and replay tests before #10 stores anything, so a mismatch surfaces against the
+  database rather than against a device.
 
 ## Migration Plan
 
@@ -265,8 +254,8 @@ surface shows — rather than a privileged upload path nobody will ever exercise
    stays demo-gated.
 3. Migrate synthetic fixtures and regenerate types.
 4. Revoke direct client mutation on money tables and prove RPC-only operation.
-5. Add the local operation store against the settled envelope, behind the same
-   non-live gates.
+5. Publish the shared canonical hash and the typed command and result shapes, so
+   #10 stores the settled envelope rather than inventing one.
 6. Run the concurrency, idempotency and tenancy suites before #31 builds against
    the generated types.
 

@@ -407,8 +407,10 @@ inside a window of a few hundred milliseconds. The alternative is a pending
 device state that does not hold the one-tablet slot until the browser proves it
 signed in, which is a schema change to the invariant that everything else about
 tablets rests on. It was judged not worth making that invariant more complicated
-for this; if setup ever fails in practice, that is the fix, and it is written
-down here so it is a decision rather than an oversight.
+for this; if setup ever fails in practice, that is the fix. It is tracked in
+[A tablet setup that fails at the last step takes the outlet's slot](../openspec/todos/tablet-setup-consumes-its-slot-before-it-is-proven.md),
+whose trigger is `multiple-billing-devices` (#35) — that change reshapes the same
+index, so the two belong in one migration rather than two on the same invariant.
 
 ### No automated data retention
 
