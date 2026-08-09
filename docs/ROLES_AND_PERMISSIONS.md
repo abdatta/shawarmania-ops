@@ -1,6 +1,6 @@
 # Roles And Permissions
 
-> The policies exist and are enforced (`data-model-and-tenancy`), and all four roles now sign in against them (`auth-and-roles`). The counter tablet's own story — device enrolment and shift PINs — is still as designed; see the note under [Counter tablet](#counter-tablet--device-enrolment--shift-pin).
+> The policies exist and are enforced (`data-model-and-tenancy`), all four roles sign in against them (`auth-and-roles`), and since `counter-devices-and-offline` the counter tablet is a machine principal with a real setup path and a real shift — see [Counter tablet](#counter-tablet--setup--the-two-device-shift).
 
 Four roles. The governing rule: **a role's scope is enforced by Row-Level Security in Postgres, and the UI merely reflects it.** If the two ever disagree, the database is right and the UI is a bug.
 
@@ -93,7 +93,7 @@ assignment cannot be ended by anyone, including its holder.
 | Assign **themselves** to an outlet | ✓ outlet roles only — never the owner role | — | — | — |
 | End an assignment | ✓ | ✓ own outlets | — | — |
 | Edit staff facts (name, job title) | ✓ any outlet | ✓ own outlets | — | R own row |
-| Enrol / revoke counter device | ✓ | ✓ own outlet | — | — |
+| Set up / remove counter tablet | ✓ | ✓ own outlet | — | — |
 | **Menu** |
 | View menu | R all | ✓ own outlet | R own outlet | — |
 | Add / edit / disable items and prices | ✓ | ✓ own outlet | — | — |
@@ -225,7 +225,7 @@ the paragraph above is untouched by it. See
 [Limitations](LIMITATIONS.md#the-manual-ledger-is-a-stopgap-with-a-stated-exit)
 for the capability's stated exit, which belongs to #12.
 
-Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to an enrolled device and a shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it.
+Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to a set-up tablet and a live shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it.
 
 ## Authentication
 
@@ -344,23 +344,31 @@ Historical foreign keys are NO ACTION; only assignment, invite and private
 account-email plumbing cascades. Remove access by deactivating and remove
 placement by ending assignments.
 
-### Counter tablet — device enrolment + shift PIN
+### Counter tablet — setup, and the two-device shift
 
-> **Not built yet.** Device enrolment and shift PINs arrive with
-> `counter-devices-and-offline`. In the meantime a Biller signs in on the
-> tablet with their own username and password — still a personal credential on
-> a shared device, accepted briefly and recorded in
-> [Limitations](LIMITATIONS.md). RLS scopes them to one outlet's billing
-> surfaces either way.
+Two layers, because a shared device has a different threat model than a personal one — and **no password is ever typed on the tablet**, at setup or afterwards. That is the whole point of both of them.
 
-Two layers, because a shared device has a different threat model than a personal one:
+1. **Setup (once per tablet).** A Franchise Admin or Super Admin generates a **setup code** on their *own* phone, from the Tablets surface, and types it into the tablet at the counter. The privileged function re-derives the issuing admin's authority from the stored record, enforces one active tablet per outlet, creates the machine Auth identity and the `counter_devices` row, and hands back the credential that establishes the device session. The code is stored only as a hash, is shown once, is single-use, and expires in fifteen minutes — exactly the shape `account_invites` already has, because it does the same job for a person.
 
-1. **Enrolment (once per tablet).** A Franchise Admin or Super Admin signs in on the tablet and enrols it as that outlet's counter device. The device receives a long-lived session whose RLS scope is exactly one outlet. This is the real credential.
-2. **Shift unlock (per biller).** The biller picks their name and enters a short PIN. This opens a shift and determines bill attribution. **The PIN is not the security boundary** — it prevents casual misattribution and walk-up use, nothing more. A 4-digit PIN alone would be far too weak to protect outlet data, which is exactly why it does not.
+   The earlier design had an admin sign in on the tablet and destroyed that session afterwards. It was rejected: it types a personal password on the exact hardware this exists to keep passwords away from, and "we delete it immediately after" is a promise rather than a boundary.
+
+2. **Opening a shift (per person, per evening).** The tablet takes a **username and nothing else** and displays a **four-digit confirmation code**. The named person, already signed in on their own phone, sees a card stating the outlet, the tablet and the time; they type those four digits and the shift opens. The tablet, watching its own request, enters billing without anybody touching it again.
+
+   **A plain Approve button was rejected, and this is the substantive decision.** A request approved by one tap is approved by habit: anybody who can reach the tablet submits requests until the person taps through one without reading it. Requiring the code makes approval impossible unless the person can physically see the tablet, which is the property actually wanted — the premise is that they are standing at the counter. Same reasoning as number matching at GitHub and Microsoft.
+
+   **This is one factor, not two**, and it is written that way rather than called two-factor. The factor it uses is stronger than the one it replaces, because an observer behind the counter can no longer collect a password by watching.
+
+**A tablet is not a person.** Its Auth user *is* its `counter_devices` row; it has no profile and no assignment, and the session path asks the tablet question before the profile one so a machine can never resolve as a person with some rows missing. Everything it reaches — the outlet, the menu, bills, the expense it may record — comes from `app_counter_shift_outlet()`, so **no shift means no reach at all**.
+
+**There is no fallback approver.** Only the named person may confirm their own shift: not the outlet's manager holding the correct code, not the owner. The cost is recorded in [Limitations](LIMITATIONS.md) rather than softened, along with the read-it-out-loud valve that goes with it.
+
+**Enumeration safety is the database's.** An unknown username produces the same code, the same waiting state and the same timeout as a real one that is never confirmed, so the tablet cannot be used to discover who works here. The confirmation code is readable by nobody at all: `code_hash` is withheld by column grant from every client role, **including the person the request names**, who is expected to read the digits off the screen.
 
 Why not full logins on the tablet: a shared device holding personal credentials is *worse* security, not better — sessions get left open, passwords get typed on a greasy counter screen dozens of times a day, and every biller learns every other biller's password within a week.
 
-The honest trade-off: **the tablet's session is the credential, so a lost tablet is a real incident.** Mitigations are built in from the start, not retrofitted — `counter_devices.revoked_at` is checked by policy so revocation is immediate, the device is scoped to one outlet and to billing surfaces only, and `last_seen_at` makes a missing device visible. Losing the tablet exposes one outlet's billing screen; it never exposes another outlet, admin functions, or the owner's cross-outlet view.
+The honest trade-off: **the tablet's session is the credential, so a lost tablet is a real incident.** Mitigations are built in rather than retrofitted — `counter_devices.removed_at` is checked by every policy so removal is immediate and permanent, the tablet is scoped to one outlet and to the counter's own surfaces, and `last_seen_at` makes a missing tablet visible. Losing the tablet exposes one outlet's counter; it never exposes another outlet, admin functions, or the owner's cross-outlet view. And because it holds no password, a lost tablet compromises nobody's account.
+
+**A Biller assignment includes an Employee's attendance.** Holding `biller` at an outlet is enough to check in there, without a second assignment and without widening what a manager or the owner may do — `attendance_submit_attempt` accepts either role, and `supabase/tests/25_the_biller_turns_up_too.sql` asserts it.
 
 ## Attendance and location
 

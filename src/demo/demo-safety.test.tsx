@@ -321,10 +321,11 @@ describe('demo mode safety', () => {
   })
 
   it('a deep link to a hidden surface lands on not-found inside the shell', async () => {
-    // `devices` is still `hidden`; `pnl` used to be, and is now `demo`. The
-    // assertion is about a hidden surface, so it follows the gate rather than
-    // the path.
-    renderDemo('/demo/admin/devices')
+    // `counter-my-shift` is `hidden`. `devices` used to be, and went `live` with
+    // #9; `pnl` used to be, and is now `demo`. The assertion is about a hidden
+    // surface, so it follows the gate rather than the path — which is why it has
+    // now moved twice without ever changing what it claims.
+    renderDemo('/demo/biller/my-shift')
     expect(await screen.findByText('That page does not exist')).toBeInTheDocument()
     // Inside the shell: the demo banner is still there, because the URL is
     // still a demo URL — the surface is what is absent.

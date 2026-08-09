@@ -993,7 +993,7 @@ export type Database = {
       counter_shift_requests: {
         Row: {
           attempts: number
-          code_hash: string
+          code_hash: string | null
           created_at: string
           device_id: string
           expires_at: string
@@ -1007,7 +1007,7 @@ export type Database = {
         }
         Insert: {
           attempts?: number
-          code_hash: string
+          code_hash?: string | null
           created_at?: string
           device_id: string
           expires_at: string
@@ -1021,7 +1021,7 @@ export type Database = {
         }
         Update: {
           attempts?: number
-          code_hash?: string
+          code_hash?: string | null
           created_at?: string
           device_id?: string
           expires_at?: string
@@ -1905,6 +1905,10 @@ export type Database = {
         Returns: string
       }
       app_counter_device: { Args: never; Returns: string }
+      app_counter_device_concerns_me: {
+        Args: { p_device: string }
+        Returns: boolean
+      }
       app_counter_device_outlet: { Args: never; Returns: string }
       app_counter_shift: { Args: never; Returns: string }
       app_counter_shift_operator: { Args: never; Returns: string }

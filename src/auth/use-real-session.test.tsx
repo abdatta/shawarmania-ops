@@ -22,6 +22,8 @@ const auth = vi.hoisted(() => ({
   currentUser: vi.fn(),
   loadOwnProfile: vi.fn(),
   loadOwnAssignments: vi.fn(),
+  loadOwnCounterDevice: vi.fn(),
+  loadCounterShift: vi.fn(),
   signOut: vi.fn(),
   onAuthChange: vi.fn(),
 }))
@@ -67,6 +69,102 @@ beforeEach(() => {
   auth.currentUser.mockResolvedValue({ userId: 'u-1', username: 'admin.kalyani' })
   auth.loadOwnProfile.mockResolvedValue(PROFILE)
   auth.loadOwnAssignments.mockResolvedValue([MANAGES_KALYANI])
+  auth.loadOwnCounterDevice.mockResolvedValue(null)
+  auth.loadCounterShift.mockResolvedValue(null)
+})
+
+/**
+ * The machine half of the session, which is the whole of what
+ * counter-devices-and-offline separated.
+ *
+ * A tablet used to carry a synthetic profile and a Biller assignment, so every
+ * check that asked "is this an active member of staff who bills here" said yes
+ * to a piece of hardware. These assertions are what stop that being rebuilt by
+ * accident: the tablet question is asked first, and a tablet is never asked the
+ * person questions at all.
+ */
+describe('useRealSession, resolving a counter tablet', () => {
+  const TABLET = {
+    deviceId: 'device-1',
+    outletId: KALYANI,
+    label: 'Kalyani counter tablet',
+  }
+  const SHIFT = {
+    id: 'shift-1',
+    personId: 'u-9',
+    outletId: KALYANI,
+    openedAt: '2026-08-10T13:30:00+00:00',
+    businessDate: '2026-08-10',
+    expiresAt: '2026-08-10T22:30:00+00:00',
+  }
+
+  it('resolves a set-up tablet without ever asking who it is', async () => {
+    auth.loadOwnCounterDevice.mockResolvedValue(TABLET)
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('counter'))
+
+    // The assertion that carries the separation. A tablet has no profile and no
+    // assignment, so asking for either would either invent one or read an
+    // absence as deactivation.
+    expect(auth.loadOwnProfile).not.toHaveBeenCalled()
+    expect(auth.loadOwnAssignments).not.toHaveBeenCalled()
+  })
+
+  it('reports the shift on it, when somebody has opened one', async () => {
+    auth.loadOwnCounterDevice.mockResolvedValue(TABLET)
+    auth.loadCounterShift.mockResolvedValue(SHIFT)
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('counter'))
+
+    expect(result.current.state).toEqual({
+      status: 'counter',
+      device: { kind: 'counter-device', device: TABLET, shift: SHIFT },
+    })
+  })
+
+  it('and reports no shift as the ordinary resting state, not an error', async () => {
+    auth.loadOwnCounterDevice.mockResolvedValue(TABLET)
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('counter'))
+
+    const state = result.current.state
+    if (state.status !== 'counter') throw new Error('expected a counter session')
+    expect(state.device.shift).toBeNull()
+    expect(auth.signOut).not.toHaveBeenCalled()
+  })
+
+  it('never carries a person session, so nothing can read assignments off it', async () => {
+    auth.loadOwnCounterDevice.mockResolvedValue(TABLET)
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('counter'))
+
+    expect(result.current.state).not.toHaveProperty('session')
+  })
+
+  it('treats a removed tablet as a signed-in nobody, and ends the session', async () => {
+    // Removal makes the row unreadable, so the tablet arrives here as "not a
+    // tablet" and then as a person with no profile — which is deactivation's
+    // path, and the same answer removal is meant to give.
+    auth.loadOwnCounterDevice.mockResolvedValue(null)
+    auth.loadOwnProfile.mockResolvedValue(null)
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('anonymous'))
+    expect(auth.signOut).toHaveBeenCalled()
+  })
+
+  it('never downgrades to a person when the tablet lookup itself fails', async () => {
+    auth.loadOwnCounterDevice.mockRejectedValue(new Error('offline'))
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('unavailable'))
+    expect(auth.loadOwnProfile).not.toHaveBeenCalled()
+    expect(auth.signOut).not.toHaveBeenCalled()
+  })
 })
 
 describe('useRealSession', () => {

@@ -274,12 +274,63 @@ select throws_ok($q$
   select * from public.customer_create_or_get('9000000003', 'Invented')
 $q$, '42501', null, 'and an Employee cannot create a customer either');
 
--- A revoked tablet keeps a valid session until its token expires. `app_device_ok`
--- is what makes revocation immediate, and the lookup must honour it.
+-- A removed tablet keeps a valid session until its token expires. Removal is
+-- what makes that immediate, and the lookup must honour it.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000009'::uuid);
 select throws_ok($q$
   select * from public.customer_lookup_by_phone('9000000001')
-$q$, '42501', null, 'a revoked device is refused the moment it is revoked');
+$q$, '42501', null, 'a removed tablet is refused the moment it is removed');
+
+reset role;
+
+-- ---------------------------------------------------------------------------
+-- 7a. The shift, not the job title.
+--
+-- **Tightened by counter-devices-and-offline.** This function was written before
+-- shifts existed, so it admitted an active tablet or anybody holding a live
+-- `biller` assignment — which was exactly the set that could ring a bill at the
+-- time. An assignment is a standing fact: true at 3am, true on a day off, true
+-- from a phone at home. A live shift is the fact the directory actually exists
+-- to serve, and it ends by itself at the cutover.
+--
+-- The seed opens one shift on each tablet, held by that outlet's Biller, so both
+-- principals below start eligible and are watched losing it.
+
+select pg_temp.impersonate('10000000-0000-4000-a000-00000000000a'::uuid);
+select lives_ok($q$
+  select * from public.customer_lookup_by_phone('9000000001')
+$q$, 'the Biller holding the counter looks a customer up from their own device');
+
+reset role;
+select is(
+  public.end_counter_shift(
+    '10000000-0000-4000-a000-00000000000a',
+    '90000000-0000-4000-a000-000000000001'),
+  'ok',
+  'they hand the counter over');
+
+-- The assignment is untouched. Only the shift ended.
+select is(
+  (select count(*) from public.assignments
+    where person_id = '10000000-0000-4000-a000-00000000000a'
+      and role = 'biller' and ended_on is null),
+  1::bigint,
+  'and still hold the Biller assignment they were hired under');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-00000000000a'::uuid);
+select throws_ok($q$
+  select * from public.customer_lookup_by_phone('9000000001')
+$q$, '42501', null,
+  'but the lookup is gone with the shift, because the job title was never the reason');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
+select throws_ok($q$
+  select * from public.customer_lookup_by_phone('9000000001')
+$q$, '42501', null, 'and the tablet is a screen in an empty shop until somebody opens it again');
+
+select throws_ok($q$
+  select * from public.customer_create_or_get('9000000004', 'Invented')
+$q$, '42501', null, 'the create-or-get path closes with it, through the same check');
 
 reset role;
 

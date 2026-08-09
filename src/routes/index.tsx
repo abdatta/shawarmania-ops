@@ -1,6 +1,8 @@
 import { createBrowserRouter, redirect, type RouteObject } from 'react-router'
 
 import { Activate } from '@/auth/activate'
+import { CounterRoot } from '@/auth/counter-root'
+import { CounterSetup } from '@/auth/counter-setup'
 import { RealRoot } from '@/auth/real-root'
 import { RealSessionProvider } from '@/auth/real-session-provider'
 import { SignIn } from '@/auth/sign-in'
@@ -74,6 +76,16 @@ export const appRoutes: RouteObject[] = [
           { path: '*', Component: NotFound },
         ],
       },
+      // The counter tablet's branch. A static segment, so it outranks the
+      // dynamic role one, and `counter` names no role — `roleFromSegment`
+      // returns undefined for it — so the two trees cannot overlap. The tablet
+      // is the only session that reaches it and the only session that cannot
+      // reach the role tree.
+      // Setting a tablet up, before it is one. A static child of the same
+      // segment, so a tablet that has not been set up has exactly one address
+      // and a person who wanders here is sent to their own shell.
+      { path: '/counter/setup', Component: CounterSetup },
+      { path: '/counter', Component: CounterRoot },
       {
         path: '/:roleSegment',
         Component: RealRoot,

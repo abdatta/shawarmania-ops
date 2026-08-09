@@ -25,11 +25,25 @@ removal timestamp, including under concurrent setup requests.
 
 ### Requirement: Shift requests and shifts are outlet-bound and person-bound
 
-A shift request and a shift SHALL each name exactly one outlet and one tablet,
-and SHALL be readable only by that tablet's device session, the named person, and
-the admins already entitled to that outlet's data. No client role SHALL read
-another outlet's requests or shifts, and no person SHALL read a request naming
-somebody else.
+A shift request and a shift SHALL each name exactly one outlet and one tablet.
+
+A **shift** SHALL be readable by that tablet's device session, the person holding
+it, and the admins already entitled to that outlet's data — who is standing at a
+counter is an operational fact about the outlet. The tablet's own reach SHALL be
+limited to the shift that is live on it, not to every shift it has ever held.
+
+A **request** SHALL be readable by that tablet and the named person, and by
+nobody else, including those admins. There is no fallback approver, so no third
+party has a reason to read a pending request, and a row fewer parties can read is
+one fewer place the handshake can be observed from.
+
+No client role SHALL read another outlet's requests or shifts, no person SHALL
+read a request naming somebody else, and **no reader SHALL be able to tell from a
+request whether the username it names belongs to anybody**.
+
+#### Scenario: The request names a name that belongs to nobody
+- **WHEN** a tablet reads back its own request for an invented username
+- **THEN** nothing it can read distinguishes that request from one naming a real person
 
 #### Scenario: Another outlet's manager reads a request
 - **WHEN** an FA hand-crafts a read of a shift request at an outlet they do not manage

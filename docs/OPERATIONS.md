@@ -6,7 +6,8 @@
 > and the same new password twice. Ordinary account creation needs no email;
 > any associated email is an alternate sign-in, and every live Super Admin
 > requires one as a future recovery/security foundation. Forgotten passwords
-> for every role use an admin-issued one-time link. Menu, tablet enrolment
+> for every role use an admin-issued one-time link. Counter tablets are set up
+> with a one-time code and open a shift through a two-device handshake. Menu
 > and opening cash float are still to come, and the steps below say which.
 
 ## Environments
@@ -212,7 +213,7 @@ Three pieces must agree:
 
 To test the production shape locally, use PowerShell (`$env:BASE_PATH="/"; npm run build`). Git Bash on Windows rewrites a bare `/` into a Windows path before Node sees it, and the build silently comes out with a base of `/Program Files/Git/`.
 
-The 2026-07-30 cutover changed the origin, so **every PWA installed from the old GitHub URL must be reinstalled from `ops.shawarmania.in`** — an installed app is bound to its origin. Re-enrol counter tablets deliberately once device enrolment exists; the current personal-login counter path only needs the app reinstalled.
+The 2026-07-30 cutover changed the origin, so **every PWA installed from the old GitHub URL must be reinstalled from `ops.shawarmania.in`** — an installed app is bound to its origin. A counter tablet moved to a new origin holds no session there, so it has to be **set up again**: remove the old tablet under Tablets, then generate a fresh setup code and type it at the counter.
 
 Privatising the repo at the same time needs a paid GitHub plan for Pages, or a move to different hosting. Worth deciding together with the domain, since both are disruptive in the same window.
 
@@ -290,10 +291,17 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    runs several outlets, select all now — one account and code cover every
    assignment.
 4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ. *(Not built — demo only until #10.)*
-5. **Enrol the counter tablet**: sign in on the device, enrol it to this outlet,
-   confirm it appears under Devices. *(Not built — #9.)* Until then a Biller
-   signs in with their own username on the tablet; shift PINs arrive with
-   enrolment.
+5. **Set the counter tablet up**: on your own phone, open **Tablets**, choose
+   the outlet, name the tablet what is written on the back of it, and generate a
+   **setup code**. Walk to the counter, open the app on the tablet at
+   `/counter/setup`, and type the code. The tablet is then that outlet's counter
+   and appears under Tablets.
+
+   Three things worth knowing before you do it. The code is shown **once**, is
+   good for **fifteen minutes**, and works **once** — generate another if you
+   lose it, which costs nothing. **No password is ever typed on the tablet**, at
+   setup or afterwards. And an outlet holds **one active tablet**: replacing one
+   means removing the old one first, which is permanent and immediate.
 6. **Add employees and billers** (People), sending each activation link.
    Creating a person requires name, username, one role and one or more outlets;
    job title, phone and joined date are optional. It writes the account and
@@ -650,7 +658,7 @@ block remains manually typeable.
 
 ## Runbook stubs
 
-**A counter tablet is lost or stolen** → revoke the device immediately (Franchise Admin → Devices). Any unsynced bills on it are lost; note the gap on that day's cash record. Enrol a replacement.
+**A counter tablet is lost or stolen** → remove it immediately (Tablets → Remove). Removal is permanent and takes the live shift with it, so nothing further can be rung on it. Any unsynced bills on it are lost; the confirmation names how many it last reported, and that number belongs on the day's cash record. Set a replacement up with a fresh code. **Nobody's account is compromised** — a tablet holds no password.
 
 **Bills are not syncing** → check the device's pending count and network. The queue is durable; bills are not lost while the device is intact. Do not reinstall or clear site data — that destroys the outbox.
 

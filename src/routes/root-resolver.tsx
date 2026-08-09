@@ -54,6 +54,10 @@ export function RootResolver() {
     case 'anonymous':
       return <Navigate to="/sign-in" replace />
 
+    // A tablet, which has no roles to be sent to the most senior of.
+    case 'counter':
+      return <Navigate to="/counter" replace />
+
     case 'ready': {
       // The most senior role they hold. Somebody assigned nowhere has none, and
       // the role root is where that gets said rather than here.

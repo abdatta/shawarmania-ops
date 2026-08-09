@@ -116,3 +116,17 @@ verify_jwt = false
 # Supabase Auth to verify the password with the public anon credential.
 [functions.email-sign-in]
 verify_jwt = false
+
+# The counter handshake, and tablet administration. Every action re-derives its
+# own caller — an admin, an operator, or a tablet — because the gateway check
+# only proves somebody holds a token, and a tablet holds one too.
+[functions.counter-devices]
+verify_jwt = true
+
+# Setting a tablet up. Open for the same reason redeeming an invite is: a tablet
+# that has never been set up has no token to present. Its protection is the setup
+# code (50 bits, hashed at rest, single use, five attempts, fifteen minutes), the
+# one-active-tablet-per-outlet invariant in Postgres, and a response that looks
+# the same however the code fails.
+[functions.counter-setup]
+verify_jwt = false

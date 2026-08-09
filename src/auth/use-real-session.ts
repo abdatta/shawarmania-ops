@@ -3,13 +3,16 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Assignment } from '@/data-access/adapters'
 import {
   currentUser,
+  loadCounterShift,
   loadOwnAssignments,
+  loadOwnCounterDevice,
   loadOwnProfile,
   onAuthChange,
   signOut,
   type Profile,
 } from '@/data-access/auth'
 import { forgetRememberedOutlets } from '@/features/remembered-outlet'
+import type { CounterDeviceSession } from '@/session/counter-session'
 import { deriveSessionScope, type Session } from '@/session/session'
 
 /**
@@ -32,6 +35,14 @@ import { deriveSessionScope, type Session } from '@/session/session'
  * A failed *request* is neither of those. Losing the network must never sign
  * anyone out, so a throw leaves the current state exactly as it was and the
  * next revalidation tries again.
+ *
+ * **A tablet is asked about first, and it is never asked the person questions**
+ * (counter-devices-and-offline). A counter tablet holds no profile and no
+ * assignment, so resolving the person first and falling back would make a
+ * machine a person who happens to be missing rows — which is precisely the
+ * shape this change exists to remove. The two paths do not meet: if the caller
+ * is a set-up tablet the resolution ends there, and `loadOwnProfile` is never
+ * called at all.
  */
 
 export type SessionEndReason = 'deactivated'
@@ -40,6 +51,8 @@ export type RealSessionState =
   | { status: 'loading' }
   | { status: 'anonymous'; reason?: SessionEndReason }
   | { status: 'ready'; session: Session }
+  /** The caller is a counter tablet. Never carries a `Session`, by construction. */
+  | { status: 'counter'; device: CounterDeviceSession }
   /** A session probably exists, but we could not confirm it. Offer a retry, never a sign-out. */
   | { status: 'unavailable' }
 
@@ -49,6 +62,7 @@ export const REVALIDATE_INTERVAL_MS = 5 * 60 * 1000
 type Resolution =
   | { kind: 'anonymous' }
   | { kind: 'session'; session: Session }
+  | { kind: 'counter'; device: CounterDeviceSession }
   | { kind: 'ended'; reason: SessionEndReason }
   /** Nothing could be determined: change nothing at all. */
   | { kind: 'indeterminate' }
@@ -71,6 +85,19 @@ async function resolveSession(): Promise<Resolution> {
     return { kind: 'indeterminate' }
   }
   if (!user) return { kind: 'anonymous' }
+
+  // The tablet question, first and on its own. A removed tablet reads no row,
+  // so it lands here as "not a tablet" and then as a person with no profile,
+  // which ends the session — the same answer removal is supposed to give.
+  try {
+    const device = await loadOwnCounterDevice(user.userId)
+    if (device) {
+      const shift = await loadCounterShift(device.deviceId)
+      return { kind: 'counter', device: { kind: 'counter-device', device, shift } }
+    }
+  } catch {
+    return { kind: 'indeterminate' }
+  }
 
   let profile: Profile | null
   let assignments: Assignment[]
@@ -117,6 +144,9 @@ export function useRealSession(): RealSession {
       switch (resolution.kind) {
         case 'session':
           setState({ status: 'ready', session: resolution.session })
+          return
+        case 'counter':
+          setState({ status: 'counter', device: resolution.device })
           return
         case 'anonymous':
           setState({ status: 'anonymous' })

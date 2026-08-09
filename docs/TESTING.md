@@ -91,7 +91,7 @@ For **every** outlet-scoped table, with sessions for each role:
 - A Franchise Admin, Biller, or Employee scoped to outlet A **cannot read** outlet B's rows.
 - The same session **cannot write** outlet B's rows, including by supplying B's `outlet_id` directly.
 - A Super Admin **can** read across outlets.
-- A revoked counter device **cannot** read or write anything.
+- A removed counter tablet **cannot** read or write anything, and neither can a set-up one holding no live shift.
 - A deactivated account **cannot** read or write anything, without waiting for token expiry.
 - An Employee can read **only their own** attendance rows.
 

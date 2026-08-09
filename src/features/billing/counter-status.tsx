@@ -14,13 +14,25 @@ import { useCounterState } from './use-counter-state'
  * exactly what will still be true until #10.
  */
 
-/** Who holds the counter, and since when. */
+/**
+ * Who holds the counter, and since when.
+ *
+ * **Silent when there is no shift**, which since counter-devices-and-offline is
+ * not a stylistic choice. A shift is now a fact about a *tablet*, and this
+ * chrome is the Biller shell on somebody's own phone — so "No shift open" was a
+ * claim about hardware this screen knows nothing about, and it appeared directly
+ * above the card saying "You are on the counter" the moment a person opened one.
+ * Two sentences contradicting each other a thumb's width apart is worse than one
+ * sentence missing.
+ */
 export function ShiftStatus() {
   const { shift } = useCounterState()
 
+  if (!shift) return null
+
   return (
     <span className="text-xs text-content-muted" data-testid="shift-status">
-      {shift ? `${shift.billerName} · since ${formatTime(shift.openedAt)}` : 'No shift open'}
+      {`${shift.billerName} · since ${formatTime(shift.openedAt)}`}
     </span>
   )
 }

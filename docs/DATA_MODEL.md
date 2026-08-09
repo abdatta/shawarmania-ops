@@ -107,10 +107,30 @@ retains the association until a separately authorized operation removes it.
 short-window abuse ledgers. They store hashes of caller IP and submitted
 identifier, never raw addresses, and have no client-readable policy.
 
-**`counter_devices`** — enrolled tablets.
-`id`, `outlet_id`, `label`, `enrolled_by`, `enrolled_at`, `revoked_at`, `last_seen_at`.
+**`counter_devices`** — the tablets set up at each counter.
+`id`, `outlet_id`, `label`, `set_up_by`, `set_up_at`, `removed_at`, `last_seen_at`, `last_reported_unsent`.
 
-A revoked device's session must stop working immediately, so policies on billing tables check `revoked_at is null`.
+`id` **is** the machine's `auth.users.id`. A tablet has no profile and no assignment: it is a machine principal, and what it may reach comes from the shift open on it rather than from anything it is.
+
+At most one active tablet per outlet, by a partial unique index on `(outlet_id) where removed_at is null`. A removed tablet's session must stop working immediately, so every policy it goes through checks `removed_at is null` — and removal is permanent, taking the live shift and any pending request with it in the same transaction.
+
+`last_seen_at` and `last_reported_unsent` are written by the tablet's own heartbeat and are read as **what it last said**, never as what is true now.
+
+**`counter_device_setup_codes`** — `id`, `outlet_id`, `label`, `code_hash`, `issued_by`, `issued_at`, `expires_at`, `attempts`, `consumed_at`, `consumed_device_id`, `superseded_at`.
+
+Hash only, single-use, fifteen minutes, one live code per outlet. **No client role holds any privilege on this table at all** — not even select.
+
+**`counter_shift_requests`** — `id`, `device_id`, `outlet_id`, `person_id` (nullable), `requested_username`, `code_hash`, `attempts`, `created_at`, `expires_at`, `resolution`, `resolved_at`, `shift_id`.
+
+`person_id` is **nullable on purpose**: an unrecognised username produces a row exactly like a recognised one, so the tablet cannot be used to discover who works here. `resolution` is one of `confirmed`, `rejected`, `cancelled`, `superseded`, `exhausted`, `not_eligible`, and it is paired with `resolved_at` by constraint. One pending request per tablet, by partial unique index.
+
+`code_hash` is **withheld by column grant from every client role**, including the person the request names, so `select *` is refused with 42501. The four digits exist on the tablet's screen and in the response that created it, and nowhere else.
+
+Readable by the tablet and by the person named, and by nobody else — not the outlet's manager, not the owner. There is no fallback approver, so there is nobody else with a reason to look at a pending request.
+
+**`counter_shifts`** — `id`, `device_id`, `outlet_id`, `person_id`, `opened_at`, `business_date`, `expires_at`, `ended_at`, `ended_reason`.
+
+The approved counter session, and what a bill or a counter expense is attributed to. `expires_at` is the outlet's next cutover, stored rather than computed by a job, so "is this shift live?" is a `where` clause and there is nothing scheduled to fail. One open shift per tablet. Readable by the tablet, the operator, the outlet's manager and the owner — unlike the request, a shift is an operational fact about the outlet.
 
 ## Menu
 
@@ -152,7 +172,7 @@ Access is correspondingly narrow, and none of it is a table grant:
 
 | Who | May | Through |
 |---|---|---|
-| An enrolled device, or an account with a live `biller` assignment | Retrieve one customer by their **complete** phone; create one the first time a phone is seen | `customer_lookup_by_phone()`, `customer_create_or_get()` |
+| A tablet holding a live shift, or the person holding that shift | Retrieve one customer by their **complete** phone; create one the first time a phone is seen | `customer_lookup_by_phone()`, `customer_create_or_get()` |
 | Super Admin | Read the directory | `customer_directory()` |
 | Everybody else, including a direct `select` from any role | Nothing | — |
 

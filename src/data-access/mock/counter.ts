@@ -1,0 +1,311 @@
+import {
+  CounterActionError,
+  type AppRole,
+  type CounterAdapter,
+  type CounterDeviceSummary,
+  type CounterShiftRequest,
+  type IssuedShiftRequest,
+  type LiveCounterShift,
+} from '../adapters'
+import {
+  counterDeviceFixtures,
+  DEMO_COUNTER_DEVICE_ID,
+  DEMO_KANCHRAPARA_DEVICE_ID,
+} from './fixtures/billing'
+import { outletFixtures } from './fixtures/outlets'
+
+/**
+ * The mock counter tablets and handshake.
+ *
+ * It reproduces the **observable states** of the real thing — a code that shows
+ * once, a request waiting with four digits on it, a wrong code counted, a
+ * request that expires, a tablet whose telemetry has gone stale — and none of
+ * its security. There is no hashing here and no Postgres transaction; a demo
+ * that pretended otherwise would be teaching the wrong lesson about where the
+ * boundary is.
+ *
+ * Two rules from the real design are mirrored deliberately, because they are
+ * behaviour a walkthrough should show rather than read about:
+ *
+ *  - **an unknown username is indistinguishable from a known one.** The request
+ *    is created either way, with the same code, the same wait and the same
+ *    timeout. Nothing in this file branches on whether the name is real.
+ *  - **three wrong codes destroy the request.** A typo loop ends in a fresh
+ *    start rather than an indefinite retry.
+ */
+
+/** The state one demo session holds. Outlives a role switch, like the rest. */
+export interface DemoCounter {
+  devices: CounterDeviceSummary[]
+  requests: MockRequest[]
+  shifts: LiveCounterShift[]
+  listeners: Set<() => void>
+}
+
+interface MockRequest extends CounterShiftRequest {
+  /** In the real system this is a hash no client may read. Here it is the code. */
+  code: string
+  username: string
+  attempts: number
+  resolution: string | null
+}
+
+const SHIFT_REQUEST_VALID_MS = 2 * 60 * 1000
+const MAX_ATTEMPTS = 3
+
+function outletName(outletId: string): string | null {
+  return outletFixtures.find((outlet) => outlet.id === outletId)?.name ?? null
+}
+
+export function createDemoCounter(): DemoCounter {
+  return {
+    devices: counterDeviceFixtures
+      .filter((device) => device.removed_at === null)
+      .map((device) => ({
+        id: device.id,
+        outletId: device.outlet_id,
+        label: device.label,
+        setUpAt: device.set_up_at,
+        // Kalyani reported a minute ago; Kanchrapara has said nothing for two
+        // days, so the management surface has something genuinely stale to mark
+        // rather than a screenshot of one healthy row.
+        lastSeenAt:
+          device.id === DEMO_COUNTER_DEVICE_ID
+            ? new Date(Date.now() - 60_000).toISOString()
+            : device.id === DEMO_KANCHRAPARA_DEVICE_ID
+              ? new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+              : null,
+        lastReportedUnsent: device.id === DEMO_KANCHRAPARA_DEVICE_ID ? 3 : 0,
+      })),
+    requests: [],
+    shifts: [],
+    listeners: new Set(),
+  }
+}
+
+function announce(counter: DemoCounter): void {
+  for (const listener of [...counter.listeners]) listener()
+}
+
+function fourDigits(): string {
+  return String(Math.floor(Math.random() * 10000)).padStart(4, '0')
+}
+
+/** Loose enough that "Priya Sharma", "priya.sharma" and "PriyaSharma" all match. */
+function looseName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+/**
+ * The requests waiting for this persona.
+ *
+ * Demo mode has no usernames, so the name typed on the tablet is matched against
+ * the persona's own name. A name that matches nobody produces a request exactly
+ * like one that does — it simply never appears on anybody's phone, and times out
+ * — which is the enumeration-safety property, demonstrable rather than asserted.
+ */
+function livePendingFor(counter: DemoCounter, displayName: string): MockRequest[] {
+  const now = Date.now()
+  const me = looseName(displayName)
+  return counter.requests.filter(
+    (request) =>
+      request.resolution === null &&
+      Date.parse(request.expiresAt) > now &&
+      looseName(request.username) === me,
+  )
+}
+
+/**
+ * @param role         who is asking, so the tablet list is scoped as RLS will scope it
+ * @param personId     the caller, so a shift they open is attributed to them
+ * @param displayName  the caller's name, which stands in for their username here
+ * @param reach        the outlets this caller manages or works at
+ */
+export function createMockCounterAdapter(
+  counter: DemoCounter,
+  role: AppRole,
+  personId: string,
+  displayName: string,
+  reach: readonly string[],
+): CounterAdapter {
+  const mayAdminister = (outletId: string) =>
+    role === 'super_admin' || (role === 'franchise_admin' && reach.includes(outletId))
+
+  return {
+    async listDevices(): Promise<CounterDeviceSummary[]> {
+      return counter.devices
+        .filter((device) => mayAdminister(device.outletId))
+        .sort((a, b) => a.label.localeCompare(b.label))
+    },
+
+    async issueSetupCode(outletId: string, label: string) {
+      if (!mayAdminister(outletId)) {
+        throw new CounterActionError('forbidden', 'You are not allowed to do that.')
+      }
+      if (counter.devices.some((device) => device.outletId === outletId)) {
+        throw new CounterActionError(
+          'tablet_exists',
+          'This outlet already has a tablet. Remove that one first.',
+        )
+      }
+      // Shown once here too, because "write it down now" is the habit the real
+      // flow depends on and a demo that let you look again would not teach it.
+      void label
+      return { code: 'DEMO0-SETUP', validFor: '15 minutes' }
+    },
+
+    async removeDevice(deviceId: string): Promise<void> {
+      const device = counter.devices.find((candidate) => candidate.id === deviceId)
+      if (!device || !mayAdminister(device.outletId)) {
+        throw new CounterActionError('forbidden', 'You are not allowed to do that.')
+      }
+      counter.devices = counter.devices.filter((candidate) => candidate.id !== deviceId)
+      counter.shifts = counter.shifts.filter((shift) => shift.deviceId !== deviceId)
+      counter.requests = counter.requests.map((request) =>
+        request.deviceId === deviceId && request.resolution === null
+          ? { ...request, resolution: 'cancelled' }
+          : request,
+      )
+      announce(counter)
+    },
+
+    async requestShift(username: string): Promise<IssuedShiftRequest> {
+      const device = counter.devices[0]
+      if (!device) throw new CounterActionError('request_failed', 'No tablet is set up.')
+
+      // One open request per tablet: the previous one is superseded rather than
+      // left to be answered after the name was corrected.
+      counter.requests = counter.requests.map((request) =>
+        request.deviceId === device.id && request.resolution === null
+          ? { ...request, resolution: 'superseded' }
+          : request,
+      )
+
+      const code = fourDigits()
+      const expiresAt = new Date(Date.now() + SHIFT_REQUEST_VALID_MS).toISOString()
+      const requestId = crypto.randomUUID()
+      counter.requests.push({
+        id: requestId,
+        deviceId: device.id,
+        deviceLabel: device.label,
+        outletId: device.outletId,
+        outletName: outletName(device.outletId),
+        createdAt: new Date().toISOString(),
+        expiresAt,
+        code,
+        username,
+        attempts: 0,
+        resolution: null,
+      })
+      announce(counter)
+      return { requestId, code, expiresAt }
+    },
+
+    async cancelRequest(): Promise<void> {
+      counter.requests = counter.requests.map((request) =>
+        request.resolution === null ? { ...request, resolution: 'cancelled' } : request,
+      )
+      announce(counter)
+    },
+
+    async getRequestResolution(requestId: string): Promise<string | null> {
+      const request = counter.requests.find((candidate) => candidate.id === requestId)
+      if (!request) return null
+      if (request.resolution === null && Date.parse(request.expiresAt) <= Date.now()) {
+        return 'expired'
+      }
+      return request.resolution
+    },
+
+    async listPendingRequests(): Promise<CounterShiftRequest[]> {
+      return livePendingFor(counter, displayName).map((request) => ({
+        id: request.id,
+        deviceId: request.deviceId,
+        deviceLabel: request.deviceLabel,
+        outletId: request.outletId,
+        outletName: request.outletName,
+        createdAt: request.createdAt,
+        expiresAt: request.expiresAt,
+      }))
+    },
+
+    /**
+     * Every live shift in the demo session, because a demo has one person in it
+     * at a time. The real adapter is scoped by `counter_shifts_select`, which
+     * returns the reader's own shifts and their outlets'; nothing here needs to
+     * reproduce that, since there is only ever one operator on screen.
+     */
+    async listLiveShifts(): Promise<LiveCounterShift[]> {
+      return [...counter.shifts]
+    },
+
+    async confirmShift(requestId: string, code: string): Promise<void> {
+      const request = counter.requests.find((candidate) => candidate.id === requestId)
+      if (!request || request.resolution !== null || Date.parse(request.expiresAt) <= Date.now()) {
+        throw new CounterActionError('invalid_request', 'That request is no longer waiting.')
+      }
+      if (request.code !== code.replace(/\D/g, '')) {
+        request.attempts += 1
+        if (request.attempts >= MAX_ATTEMPTS) {
+          request.resolution = 'exhausted'
+          announce(counter)
+          throw new CounterActionError(
+            'exhausted',
+            'Too many wrong codes. Ask the tablet to try again with a new one.',
+          )
+        }
+        throw new CounterActionError(
+          'wrong_code',
+          'That is not the code on the tablet. Check it and try again.',
+        )
+      }
+
+      request.resolution = 'confirmed'
+      counter.shifts = counter.shifts.filter((shift) => shift.deviceId !== request.deviceId)
+      counter.shifts.push({
+        id: crypto.randomUUID(),
+        personId,
+        deviceId: request.deviceId,
+        deviceLabel: request.deviceLabel,
+        outletId: request.outletId,
+        outletName: request.outletName,
+        openedAt: new Date().toISOString(),
+        businessDate: new Date().toISOString().slice(0, 10),
+        expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString(),
+      })
+      announce(counter)
+    },
+
+    async rejectRequest(requestId: string): Promise<void> {
+      const request = counter.requests.find((candidate) => candidate.id === requestId)
+      if (!request || request.resolution !== null) {
+        throw new CounterActionError('invalid_request', 'That request is no longer waiting.')
+      }
+      request.resolution = 'rejected'
+      announce(counter)
+    },
+
+    async endShift(shiftId: string): Promise<void> {
+      counter.shifts = counter.shifts.filter((shift) => shift.id !== shiftId)
+      announce(counter)
+    },
+
+    subscribeToOwnHandshake(_personId: string, onChange: () => void): () => void {
+      counter.listeners.add(onChange)
+      return () => {
+        counter.listeners.delete(onChange)
+      }
+    },
+
+    subscribeToDeviceHandshake(_deviceId: string, onChange: () => void): () => void {
+      counter.listeners.add(onChange)
+      return () => {
+        counter.listeners.delete(onChange)
+      }
+    },
+
+    async reportState(): Promise<void> {
+      // A demo tablet has nothing unsent that anybody else can see.
+    },
+  }
+}

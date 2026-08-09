@@ -18,7 +18,10 @@ const PERSONAS = {
   biller: {
     username: 'biller.kalyani',
     segment: 'biller',
-    lands: (page: Page) => page.getByText('No shift open'),
+    // The counter's own placeholder, not the shift strip: since
+    // counter-devices-and-offline the strip says nothing at all when no tablet
+    // holds a shift, because a person's phone is not where that fact lives.
+    lands: (page: Page) => page.getByText('The billing counter lands here next'),
   },
   staff: {
     username: 'staff.kalyani',

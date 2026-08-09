@@ -121,10 +121,12 @@ test('the demo index lands on the owner shell', async ({ page }) => {
 test('a hidden surface is absent: its deep link lands on not-found inside the shell', async ({
   page,
 }) => {
-  // `devices` is still `hidden`; `pnl` used to be, and is `demo` since
+  // `counter-my-shift` is `hidden`. `devices` used to be and went `live` with
+  // counter-devices-and-offline; `pnl` used to be and is `demo` since
   // ui-owner-console-and-demo. The assertion is about a hidden surface, so it
-  // follows the gate rather than the path.
-  await page.goto('demo/admin/devices')
+  // follows the gate rather than the path — which is why it has now moved twice
+  // without ever changing what it claims.
+  await page.goto('demo/biller/my-shift')
   await expect(page.getByText('That page does not exist')).toBeVisible()
   // Still a demo URL, so the banner still stands.
   await expect(page.getByTestId('demo-banner')).toBeVisible()

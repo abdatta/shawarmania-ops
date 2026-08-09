@@ -1,3 +1,4 @@
+import { CounterHandshakeCards } from '@/features/counter/counter-handshake-cards'
 import { useSession } from '@/session/context'
 
 import { AdminHome } from './admin-home'
@@ -10,17 +11,23 @@ import { StaffHome } from './staff-home'
  * components serve a real session and a demo one — which is the whole point of
  * the seam: they read the session and the adapters, and neither tells them
  * which they got.
+ *
+ * **The counter's approval cards sit above all four rather than inside each**
+ * (#9). Any of these roles may be the person a tablet is asking for — an
+ * Employee holding a Biller assignment, a manager covering an evening, the owner
+ * — and a card put into each home separately is a card that gets forgotten in
+ * one of them. It renders nothing when nothing is waiting, which is nearly
+ * always, so the four homes below are unchanged the rest of the time.
  */
 export function RoleHome() {
   const session = useSession()
-  switch (session.role) {
-    case 'super_admin':
-      return <OwnerHome />
-    case 'franchise_admin':
-      return <AdminHome />
-    case 'biller':
-      return <CounterHome />
-    case 'employee':
-      return <StaffHome />
-  }
+  return (
+    <>
+      <CounterHandshakeCards />
+      {session.role === 'super_admin' && <OwnerHome />}
+      {session.role === 'franchise_admin' && <AdminHome />}
+      {session.role === 'biller' && <CounterHome />}
+      {session.role === 'employee' && <StaffHome />}
+    </>
+  )
 }

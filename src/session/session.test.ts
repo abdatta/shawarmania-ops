@@ -50,14 +50,32 @@ describe('reachableRoles', () => {
     expect(reachableRoles(ownerManager)).toEqual(['super_admin', 'franchise_admin'])
   })
 
-  it('gives every other role exactly what it holds', () => {
-    const manager = sessionWith([live('franchise_admin', OUTLET_KALYANI_ID)])
+  it('lets a Biller reach the Employee surfaces, holding no Employee assignment', () => {
+    // A Biller works at the shop and therefore turns up to it. The database
+    // already reads their assignment that way: the attendance command accepts
+    // `employee` or `biller` at the outlet. Without this they would need a second
+    // assignment saying they also work where they already work.
     const biller = sessionWith([live('biller', OUTLET_KALYANI_ID)])
+
+    expect(heldRoles(biller)).toEqual(['biller'])
+    expect(reachableRoles(biller)).toEqual(['biller', 'employee'])
+  })
+
+  it('gives the manager exactly what it holds, and no attendance surface', () => {
+    // Deliberately NOT extended to a manager or the owner: their attendance is
+    // not kept here, and reaching the Employee shell would offer them a check-in
+    // for a shift nobody rosters them onto.
+    const manager = sessionWith([live('franchise_admin', OUTLET_KALYANI_ID)])
     const staff = sessionWith([live('employee', OUTLET_KALYANI_ID)])
 
     expect(reachableRoles(manager)).toEqual(['franchise_admin'])
-    expect(reachableRoles(biller)).toEqual(['biller'])
     expect(reachableRoles(staff)).toEqual(['employee'])
+  })
+
+  it('gives the owner no Employee surfaces either, despite reaching every outlet', () => {
+    const owner = sessionWith([live('super_admin', null)])
+
+    expect(reachableRoles(owner)).not.toContain('employee')
   })
 
   it('reaches the union for a person holding several, in seniority order', () => {

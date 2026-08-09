@@ -24,7 +24,7 @@
 │  │  (no       │  │ person × role ×      │  │ (service-role only, never    │ │
 │  │   claims)  │  │ outlet — the truth   │  │  exposed to the browser):    │ │
 │  └────────────┘  └──────────┬───────────┘  │  · provision staff account   │ │
-│                             │              │  · enrol / revoke device     │ │
+│                             │              │  · set up / remove tablet    │ │
 │  ┌──────────────────────────▼─────────────┐│                              │ │
 │  │  Postgres — RLS on every table         ││                              │ │
 │  │  policies resolve live assignments     │└──────────────────────────────┘ │
@@ -132,7 +132,7 @@ The helpers are `stable security definer`, which is what avoids the **RLS recurs
 
 The per-row cost the old JWT claims existed to avoid is avoided differently. `app_outlets_for` is **set-returning**, so `outlet_id in (select public.app_outlets_for('franchise_admin'))` is a non-correlated subquery Postgres hoists to a hashed SubPlan — one lookup per query, not per row. `app_is_owner()` takes no argument, so `(select public.app_is_owner())` becomes an InitPlan for the same reason.
 
-Because the policies read the table, **an assignment granted or ended bites at the very next request** — nothing is reissued and nobody is signed out. The same is true of everything else that must be immediate: revoking a counter device and deactivating an account are status checks inside the policy, exactly as they always were. There is no longer any category of change that waits for a token.
+Because the policies read the table, **an assignment granted or ended bites at the very next request** — nothing is reissued and nobody is signed out. The same is true of everything else that must be immediate: removing a counter tablet and deactivating an account are status checks inside the policy, exactly as they always were. There is no longer any category of change that waits for a token.
 
 ## Privileged operations
 
@@ -144,7 +144,16 @@ Anything requiring the service-role key runs in an Edge Function. The service-ro
 - **Sign in by associated email** — privately resolve the email to the current
   Auth alias, apply hashed abuse limits, ask Supabase Auth to verify the
   password with the public credential, and return only Supabase session tokens.
-- **Enrol or revoke a counter device** — mints and invalidates the device's long-lived scoped session.
+- **Set up or remove a counter tablet** — mints the machine Auth identity behind a
+  one-time setup code, and removes a tablet permanently along with its live shift.
+  Setup takes no session at all, because a tablet that has never been set up has
+  none; its protection is the code, the one-tablet-per-outlet invariant in
+  Postgres, and a response that looks the same however the code fails.
+- **The counter handshake** — mints the four-digit confirmation code for a
+  requesting tablet, and confirms, rejects, cancels or ends on behalf of the
+  person whose token presented itself. The two secrets are minted here rather
+  than in Postgres for one reason: only the hash may ever reach the database, and
+  the plaintext must be returned to exactly one caller and stored nowhere.
 
 Each privileged function re-derives the caller from their token and reads live
 assignments from the database. Being an Edge Function is not authorisation.
@@ -170,7 +179,13 @@ Bill numbers were originally sketched as a third Edge Function and deliberately 
 Deliberately asymmetric, because the risk is asymmetric:
 
 - **Reads that must work offline**: menu, current shift, today's bills on this device.
-- **Writes that must work offline**: bills, and attendance check-in from the counter tablet.
+- **Writes that must work offline**: bills.
+- **Opening a shift is online-only**, and deliberately so: the handshake is a
+  conversation between the tablet, the server and somebody else's phone, and
+  nothing local can stand in for the person who types the four digits. The cost is
+  bounded by the shape of the day — a shift lasts to the outlet's cutover, so the
+  connection is needed once an evening rather than continuously, and a shift
+  already open survives losing it.
 - **Everything else is online-only.** Inventory, expenses, cash close, P&L and admin screens are used by managers on phones who can wait for a connection. Making them offline-capable would multiply conflict-resolution complexity for no operational gain.
 
 That line is a design commitment, not an accident. Revisit it in a proposal, not in passing.

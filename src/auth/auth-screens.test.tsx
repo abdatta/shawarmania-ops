@@ -34,6 +34,10 @@ const auth = vi.hoisted(() => {
     // Needed since design D11: sign-in waits for a resolved session before it
     // leaves, and resolving one reads assignments as well as the profile.
     loadOwnAssignments: vi.fn(),
+    // Asked before either of those since counter-devices-and-offline: a session
+    // is a tablet or a person, and the tablet question comes first.
+    loadOwnCounterDevice: vi.fn(),
+    loadCounterShift: vi.fn(),
     currentClaims: vi.fn(),
     refreshClaims: vi.fn(),
     onAuthChange: vi.fn(),
@@ -55,6 +59,8 @@ beforeEach(() => {
   auth.onAuthChange.mockReturnValue(() => {})
   auth.currentUser.mockResolvedValue(null)
   auth.signOut.mockResolvedValue(undefined)
+  auth.loadOwnCounterDevice.mockResolvedValue(null)
+  auth.loadCounterShift.mockResolvedValue(null)
   auth.loadOwnProfile.mockResolvedValue({
     id: 'u-1',
     full_name: 'Synthetic Admin Kal',

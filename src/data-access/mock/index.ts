@@ -5,6 +5,7 @@ import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
 import { createMockAlertsAdapter } from './alerts'
 import { createMockAttendanceAdapter } from './attendance'
 import { createMockBillingAdapter } from './billing'
+import { createDemoCounter, createMockCounterAdapter, type DemoCounter } from './counter'
 import { createDemoCustomers, createMockCustomersAdapter } from './customers'
 import { createMockDailyCashAdapter } from './daily-cash'
 import { createMockExpensesAdapter } from './expenses'
@@ -50,6 +51,13 @@ export interface DemoData {
    * exactly the thing being demonstrated.
    */
   customers: ReturnType<typeof createDemoCustomers>
+  /**
+   * The tablets, the pending requests and the live shifts. Session-scoped for
+   * the reason everything here is: asking for a shift as the tablet and then
+   * flipping to the phone to approve it is the walkthrough this feature exists
+   * for, and role-scoped state would lose the request in between.
+   */
+  counter: DemoCounter
 }
 
 export function createDemoData(): DemoData {
@@ -58,6 +66,7 @@ export function createDemoData(): DemoData {
     store: createDemoStore(),
     attendance: createMockAttendanceAdapter(),
     customers: createDemoCustomers(),
+    counter: createDemoCounter(),
   }
 }
 
@@ -128,6 +137,16 @@ export function createMockAdapters(
     // where `menu_items_write` will refuse it.
     menu: createMockMenuAdapter(store, role),
     billing: createMockBillingAdapter(store),
+    // The role scopes the tablet list as `counter_devices_select` will, and the
+    // persona's name stands in for the username the tablet types — demo mode has
+    // no usernames, and a handshake with nobody to name is not a handshake.
+    counter: createMockCounterAdapter(
+      data.counter,
+      role,
+      persona.profile.id,
+      persona.profile.full_name,
+      assignedOutlets(persona.assignments),
+    ),
     // The role reaches the customer mock so it refuses everybody the database
     // refuses: only a billing context may resolve a phone at all.
     customers: createMockCustomersAdapter(data.customers, role),

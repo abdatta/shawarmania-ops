@@ -10,15 +10,20 @@ Deliberately asymmetric, because the risk is asymmetric.
 
 | Works offline | Online only |
 |---|---|
-| Ring up and settle a bill | Inventory, expenses |
-| Read the menu | Daily cash close |
-| View this device's bills for today | Profit and loss, reports |
-| Open and close a shift | All admin and owner screens |
-| Attendance check-in from the counter tablet | Attendance from personal phones |
+| Ring up and settle a bill | Opening and ending a shift |
+| Read the menu | Inventory, expenses |
+| View this device's bills for today | Daily cash close |
+| | Profit and loss, reports |
+| | All admin and owner screens |
+| | Attendance, from any device |
+
+**Opening a shift moved to the online-only column with `counter-devices-and-offline`, and that is a real cost.** The handshake is a conversation between the tablet, the server and somebody else's phone: nothing local can stand in for the person who has to type four digits. So a tablet that comes up with no connection cannot open a counter, however much billing it could do once one was open. The mitigation is the shape of the day rather than a feature — a shift lasts until the outlet's cutover, so the connection is needed once an evening rather than continuously, and a shift already open survives the connection dropping afterwards.
+
+Attendance is online-only from every device now, including the counter, because attendance is an RPC that evaluates the geofence server-side at the moment of the claim.
 
 Manager and owner screens are used by people who can wait thirty seconds for a connection. Making them offline-capable would multiply conflict-resolution complexity for no operational gain — and every additional offline write path is another way for two devices to disagree about the truth.
 
-Attendance from a personal phone stays online-only for a second reason: an offline check-in cannot be geofence-verified at the moment it happens, and a queued check-in that is validated later is a check-in that can be gamed.
+Attendance stays online-only for a second reason: an offline check-in cannot be geofence-verified at the moment it happens, and a queued check-in that is validated later is a check-in that can be gamed.
 
 ## The outbox
 
@@ -78,7 +83,7 @@ The rule: **a closed cash record is a snapshot and is never silently recomputed.
 | Server rejects a bill as malformed | Quarantined, not silently dropped; surfaced to the manager with the reason |
 | Clock skew on the tablet | Both client and server timestamps are stored. Material disagreement is a signal worth surfacing, not something to paper over |
 | Two tablets at one outlet | Supported. Disjoint bill sets, server-assigned numbers, overlapping shifts flagged |
-| Device revoked while holding a queue | Drain fails with an auth error and quarantines. Revoking a device with pending bills should warn the admin first |
+| Tablet removed while holding a queue | Drain fails with an auth error and quarantines. The removal confirmation names what the tablet last reported it had not sent, so the admin is told before rather than after |
 
 The dead-tablet case is the one real hole, and it is stated plainly rather than hidden: an unsynced bill exists in exactly one place. Reducing that window — drain aggressively, warn loudly on a growing backlog — is the mitigation. Eliminating it would require a second local device, which is out of proportion to the risk at this scale.
 

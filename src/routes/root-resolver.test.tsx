@@ -27,6 +27,8 @@ const auth = vi.hoisted(() => ({
   currentUser: vi.fn(),
   loadOwnProfile: vi.fn(),
   loadOwnAssignments: vi.fn(),
+  loadOwnCounterDevice: vi.fn(),
+  loadCounterShift: vi.fn(),
   signIn: vi.fn(),
   signOut: vi.fn(),
   previewInvite: vi.fn(),
@@ -93,6 +95,10 @@ function renderDemoOwner() {
 beforeEach(() => {
   vi.clearAllMocks()
   auth.onAuthChange.mockReturnValue(() => {})
+  // A person unless a test says otherwise. The tablet question is asked first
+  // on every resolution since counter-devices-and-offline.
+  auth.loadOwnCounterDevice.mockResolvedValue(null)
+  auth.loadCounterShift.mockResolvedValue(null)
   auth.signOut.mockResolvedValue(undefined)
   auth.currentUser.mockResolvedValue({ userId: 'u-1', username: 'admin.kalyani' })
   auth.loadOwnProfile.mockResolvedValue(PROFILE)
@@ -287,5 +293,77 @@ describe('the screens that need no session', () => {
 
     expect(await screen.findByTestId('activate-username')).toHaveTextContent('new.staff')
     expect(screen.queryByText('Loading the app…')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Where a counter tablet goes, and everywhere it does not.
+ *
+ * A tablet is a machine principal with no profile, no assignment and no name.
+ * The role tree asks a session which roles it holds, which shell it gets and
+ * where it lands; none of those are questions a tablet can answer, so the
+ * boundary is that it never enters that tree at all.
+ */
+describe('a counter tablet', () => {
+  const TABLET = {
+    deviceId: 'device-1',
+    outletId: 'outlet-kalyani',
+    label: 'Kalyani counter tablet',
+  }
+
+  beforeEach(() => {
+    auth.currentUser.mockResolvedValue({ userId: 'device-1', username: 'tablet.kalyani' })
+    auth.loadOwnCounterDevice.mockResolvedValue(TABLET)
+  })
+
+  it('is sent to its own branch from the application root', async () => {
+    const router = mountAt('/')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/counter'))
+  })
+
+  it('is sent back there from a role path it could never fill', async () => {
+    const router = mountAt('/owner')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/counter'))
+  })
+
+  it('renders the tablet label rather than a person name', async () => {
+    mountAt('/counter')
+    expect(await screen.findByText('Kalyani counter tablet')).toBeVisible()
+  })
+
+  it('offers no sign-out, because a tablet is set up rather than signed in', async () => {
+    mountAt('/counter')
+    await screen.findByText('Kalyani counter tablet')
+    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull()
+  })
+
+  it('asks for no password anywhere, which is the point of the whole change', async () => {
+    // A tripwire rather than an observation. Nothing in this tree has a form
+    // yet, so this passes trivially today — and it is exactly the assertion that
+    // has to keep passing when the shift-request screen and the billing shell
+    // arrive. What a tablet may reach is the database's answer; what it may ASK
+    // FOR is this one.
+    const { container } = render(
+      <RouterProvider router={createMemoryRouter(appRoutes, { initialEntries: ['/counter'] })} />,
+    )
+    await screen.findAllByText('Kalyani counter tablet')
+
+    expect(container.querySelectorAll('input[type="password"]')).toHaveLength(0)
+    expect(screen.queryByLabelText(/password/i)).toBeNull()
+  })
+
+  it('never asks the person questions on the way', async () => {
+    mountAt('/counter')
+    await screen.findByText('Kalyani counter tablet')
+    expect(auth.loadOwnProfile).not.toHaveBeenCalled()
+    expect(auth.loadOwnAssignments).not.toHaveBeenCalled()
+  })
+
+  it('and a person who types /counter is sent to their own shell instead', async () => {
+    auth.currentUser.mockResolvedValue({ userId: 'u-1', username: 'admin.kalyani' })
+    auth.loadOwnCounterDevice.mockResolvedValue(null)
+
+    const router = mountAt('/counter')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin'))
   })
 })

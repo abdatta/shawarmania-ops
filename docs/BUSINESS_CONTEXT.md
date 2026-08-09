@@ -89,7 +89,7 @@ Two consequences worth stating plainly:
 
 ## Devices in the field
 
-- **One tablet per outlet, at the counter.** Shared across billers and shifts, stays in the shop, always the same physical device. This is the enrolment anchor for the billing role.
+- **One tablet per outlet, at the counter.** Shared across billers and shifts, stays in the shop, always the same physical device. This is what the billing role is anchored to: the tablet is set up to one outlet, and a person opens a shift on it from their own phone.
 - **Personal smartphones for everyone else.** Owner, franchise admins, and employees use their own phones. Android-dominant, mixed and sometimes old hardware, on mobile data.
 
 Mobile data in small-town West Bengal is generally fine and occasionally not. The counter cannot care. See [Offline And Sync](OFFLINE_AND_SYNC.md).

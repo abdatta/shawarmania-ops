@@ -753,5 +753,146 @@ select is(
   0::bigint,
   'and the other outlet''s manager sees none of it');
 
+-- ---------------------------------------------------------------------------
+-- 10. The tablet a person can see, and the tablet they cannot.
+--
+-- The approval card has to name the tablet, in the words somebody wrote on the
+-- back of the hardware, or it reads "somebody wants you to open a counter" —
+-- the exact shape of prompt people tap through without reading. So a person may
+-- read a tablet that has asked for them, or one they are standing at, and the
+-- reach starts and stops with the request and the shift rather than with the
+-- employment.
+
+select pg_temp.impersonate(:'BILLER_KPA'::uuid);
+
+select is(
+  (select count(*) from public.counter_devices
+    where id = '10000000-0000-4000-a000-000000000005'),
+  1::bigint,
+  'the operator holding a shift can read the tablet they are standing at');
+
+select is(
+  (select count(*) from public.counter_devices
+    where id = '10000000-0000-4000-a000-000000000004'),
+  0::bigint,
+  'and still cannot read the other outlet''s tablet');
+
+-- The Kalyani Biller holds an assignment and no request and no shift, which is
+-- the state the widening must NOT admit: employment alone reveals no hardware.
+select pg_temp.impersonate(:'BILLER_KAL'::uuid);
+
+select is(
+  (select count(*) from public.counter_devices),
+  0::bigint,
+  'a Biller with no request and no shift sees no tablet at all');
+
+select pg_temp.unimpersonate();
+
+-- The owner is excluded from shift requests too, which is why the cross-outlet
+-- sweep in 02 skips this table by name. Asserted here, where the reason lives,
+-- rather than left as an absence somewhere else.
+select pg_temp.impersonate(:'OWNER'::uuid);
+
+-- Scoped to requests naming somebody else, because a request naming the owner is
+-- theirs to read exactly as anybody's own is — the point is that seniority
+-- confers nothing here.
+select is(
+  (select count(*) from public.counter_shift_requests where requested_username <> 'owner'),
+  0::bigint,
+  'the owner reads no request naming anybody but themselves: no fallback approver');
+
+select pg_temp.unimpersonate();
+
+-- ---------------------------------------------------------------------------
+-- 11. What the adversarial review found, pinned so it cannot come back.
+--
+-- Every assertion below is written from the seat the finding was reproduced
+-- from, rather than from the owner's, because four of the five were invisible
+-- from anywhere else.
+
+-- The tablet asks for a name that exists, and a name that does not, and must not
+-- be able to tell which was which. This is the enumeration-safety property, and
+-- it was FALSE at the boundary while being true of the screen: `person_id` was
+-- in the column grant, so a real name read back a UUID and an invented one read
+-- back NULL.
+select is(
+  (select status from public.request_counter_shift(
+     :'DEVICE_KPA', 'biller.kanchrapara',
+     pg_temp.hash('1111'), interval '2 minutes')),
+  'ok',
+  'the tablet asks for somebody who works here');
+
+select pg_temp.impersonate(:'DEVICE_KPA'::uuid);
+
+select throws_ok(
+  'select person_id from public.counter_shift_requests',
+  '42501',
+  null,
+  'and cannot read who, if anybody, that name resolved to');
+
+select throws_ok(
+  'select * from public.counter_shift_requests',
+  '42501',
+  null,
+  'nor reach it through select *, which expands to the same column');
+
+select lives_ok(
+  'select id, device_id, outlet_id, requested_username, attempts, created_at, '
+  'expires_at, resolution, resolved_at, shift_id from public.counter_shift_requests',
+  'while everything the tablet actually needs is still readable');
+
+select pg_temp.unimpersonate();
+
+-- An eligibility oracle over the whole staff list, callable by anybody holding
+-- any session — including a tablet that was removed. It is used from exactly one
+-- SECURITY DEFINER function, so no client ever needed it.
+select pg_temp.impersonate(:'DEVICE_GONE'::uuid);
+
+select throws_ok(
+  format('select public.app_may_hold_counter_shift(%L, %L)', :'BILLER_KPA', :'KPA'),
+  '42501',
+  null,
+  'a removed tablet cannot ask whether somebody is allowed to bill somewhere');
+
+select pg_temp.impersonate(:'EMPLOYEE_KAL'::uuid);
+
+select throws_ok(
+  format('select public.app_may_hold_counter_shift(%L, %L)', :'BILLER_KPA', :'KPA'),
+  '42501',
+  null,
+  'and neither can an ordinary Employee, about anybody, anywhere');
+
+select pg_temp.unimpersonate();
+
+-- The code is destroyed with its request, on every path out of pending rather
+-- than only on the happy one. Four digits is 10,000 possibilities, so a retained
+-- hash is the code written down.
+select is(
+  (select count(*) from public.counter_shift_requests
+    where resolution is not null and code_hash is not null),
+  0::bigint,
+  'no resolved request anywhere still carries its code');
+
+select throws_ok(
+  'update public.counter_shift_requests set resolution = ''rejected'', '
+  'resolved_at = now() where resolution is null',
+  '23514',
+  null,
+  'and the table itself refuses a resolution that leaves the code behind');
+
+-- The bounds are the database''s, not the calling layer''s.
+select is(
+  (select r.expires_at < now() + interval '10 minutes'
+     from public.request_counter_shift(
+       -- Kanchrapara's, because Kalyani's has been removed by the section above
+       -- and a removed tablet is refused before the bound is ever reached.
+       :'DEVICE_KPA', 'biller.kanchrapara',
+       pg_temp.hash('2222'), interval '365 days') as r
+    where r.status = 'ok'),
+  true,
+  'a request cannot be asked to live for a year, whatever the caller passes');
+
+select pg_temp.unimpersonate();
+
 select * from finish();
 rollback;

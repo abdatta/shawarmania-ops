@@ -92,16 +92,17 @@ Seven bounds worth knowing, because each is a decision:
   purchase is unrecorded now and stays unrecorded — but it means the month
   understates in the month goods arrive and overstates in the month they are paid
   for. Its own change if the owner starts buying on terms.
-- **"Your own rows" degrades when the counter tablet stops having personal
-  logins.** A staff member may correct or withdraw only expenses they recorded,
-  which Row-Level Security enforces against `auth.uid()`. #9 replaces the
-  Biller's login with an enrolled device plus a shift PIN, and that PIN *selects
-  attribution and is not the security boundary* — so `recorded_by` will name
-  whoever the shift claims to be, and RLS will have no session identity to check
-  it against. The rule then means "only expenses recorded during this shift". The
-  owner deferred this deliberately (2026-08-07); it is written down here and in
-  the `manual-ledger` capability spec now, so #9 states which of the two it
-  enforces rather than letting the rule quietly stop meaning what it says.
+- **"Your own rows" means "this shift's rows" on a counter tablet, and that is
+  now settled.** A staff member may correct or withdraw only expenses they
+  recorded, which Row-Level Security enforces against `auth.uid()`. A tablet has
+  no `auth.uid()` belonging to a person, so `counter-devices-and-offline`
+  resolved the question the previous version of this entry left open: an expense
+  recorded from a tablet is attributed to **the operator named on the live
+  shift**, taken from the shift row and never from the request body, and the rule
+  therefore means "expenses recorded while you held this counter". That is
+  stronger than the arrangement this entry used to anticipate, because the shift
+  names a person who confirmed it from their own phone rather than one whose name
+  was picked off a grid at the counter.
 
 **Its exit belongs to #12**, and is recorded in that change's proposal as
 inherited scope: the change that removes this capability must first carry every
@@ -347,15 +348,67 @@ a username change, or changing one's own Super Admin account email**. Those
 belong to [Self-Service Account Settings](../openspec/todos/self-service-account-settings.md);
 until then another authorized admin performs supported corrections.
 
-### Billers use a personal username session, for now
+### Opening a counter needs your own phone, and nobody can do it for you
 
-The counter tablet is meant to hold a *device* credential with a shift PIN
-selecting attribution — that design is in
-[Roles And Permissions](ROLES_AND_PERMISSIONS.md) and arrives with
-`counter-devices-and-offline`. Until it does, a Biller signs in on the tablet
-with their personal username and password.
+A shift opens only when the person named on the request types the tablet's four
+digits **on their own device**. There is no fallback approver: not the outlet's
+manager holding the correct code, not the owner. So a phone with a flat battery,
+a phone left at home, or a phone with no mobile data means **that person cannot
+open the counter**, and somebody else has to.
 
-This is exactly the arrangement that document argues against: a shared device holding a personal credential gets left signed in, and the password gets typed on a greasy counter screen in front of whoever is standing there. It is accepted deliberately and briefly, because the alternative was to leave one of the four roles unable to sign in at all. The exposure is bounded by RLS to that one outlet's billing surfaces, which is the same scope enrolment will give the device anyway.
+This was chosen deliberately over an override, and the cost is real rather than
+theoretical: at 8pm on a Saturday with a queue, "my phone is dead" is not a rare
+sentence. It is stated here rather than softened because whoever operates this
+shop should meet it in a document rather than at the counter.
+
+**The approval is one factor, not two.** It proves possession of that person's
+phone and nothing else — no password is entered anywhere in the handshake. That
+is stronger than what it replaces, because an observer behind the counter can no
+longer collect a password by watching somebody type it forty times an evening,
+but it is not two-factor and is not written up as though it were. A stolen,
+unlocked phone can approve a shift.
+
+**The code can be read out over the phone, and that is the documented way out of
+a flat battery.** Somebody at the counter types the owner's username, telephones
+them, reads the four digits aloud, and the owner taps them in from wherever they
+are. Nothing secret changes hands: the code lives on the tablet's screen, belongs
+to that one request, and dies with it. What it costs is that **every bill that
+evening is attributed to the owner**, which is visible in the records and
+correct.
+
+This is written down as a property rather than left to be discovered, because
+staff will otherwise find it during a rush and assume it is a loophole. It is
+not. The code was never meant to stop a person who deliberately decides to open a
+counter in their own name after a conversation; it stops the thing that actually
+goes wrong, which is a card appearing on a phone and being tapped through out of
+habit.
+
+**Recovery when a phone is genuinely lost** is the path that already exists: an
+admin deactivates the account, which ends every session it holds, and issues a
+fresh activation link.
+
+### A tablet setup that fails at the last step needs an admin, not a retry
+
+Setting a tablet up is two acts that cannot share one transaction: a machine
+identity is created in Auth, then the setup code is redeemed in Postgres, and
+only then does the tablet sign in. The first boundary is handled — if redemption
+is refused for any reason, the identity is deleted again, the code is not
+consumed, and the same code still works.
+
+**The second boundary is not, and this is the honest statement of it.** Once
+redemption succeeds the code is spent and the tablet row exists, holding that
+outlet's one active slot. If the response is then lost, or the sign-in fails, the
+tablet has no session and there is nothing on the device to retry with. The
+screen says so plainly rather than blaming the code, and the recovery is manual:
+an admin removes that tablet under Tablets and generates another code.
+
+That is two taps and a walk, on a failure that needs a network interruption
+inside a window of a few hundred milliseconds. The alternative is a pending
+device state that does not hold the one-tablet slot until the browser proves it
+signed in, which is a schema change to the invariant that everything else about
+tablets rests on. It was judged not worth making that invariant more complicated
+for this; if setup ever fails in practice, that is the fix, and it is written
+down here so it is a decision rather than an oversight.
 
 ### No automated data retention
 

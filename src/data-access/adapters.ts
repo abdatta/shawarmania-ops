@@ -936,6 +936,137 @@ export interface BillingAdapter {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Counter tablets, and the two-device handshake that opens a shift (#9).
+
+/**
+ * One tablet, as the management surface reads it.
+ *
+ * `lastSeenAt` and `lastReportedUnsent` are **what the tablet last said**, never
+ * what is true now: they are written by the tablet's own heartbeat, so a tablet
+ * that is switched off, offline or broken reports nothing at all and its figures
+ * simply stop moving. The surface says "as of" for that reason, and stale
+ * telemetry is marked rather than rendered as though it were current.
+ */
+export interface CounterDeviceSummary {
+  id: string
+  outletId: string
+  label: string
+  setUpAt: string
+  lastSeenAt: string | null
+  lastReportedUnsent: number
+}
+
+/**
+ * A pending request for somebody to open a counter, as the person it names sees
+ * it on their own phone.
+ *
+ * **There is no code on this type, and that absence is the design.** The column
+ * is withheld by grant from every client role, including this person: the code
+ * lives on the tablet's screen, which is the whole point of asking for it.
+ */
+export interface CounterShiftRequest {
+  id: string
+  deviceId: string
+  deviceLabel: string | null
+  outletId: string
+  outletName: string | null
+  createdAt: string
+  expiresAt: string
+}
+
+/** A live shift, on somebody's hardware. */
+export interface LiveCounterShift {
+  id: string
+  /**
+   * Who is accountable. Carried because `counter_shifts_select` admits an
+   * outlet's manager and the owner as well as the operator, so "is this mine?"
+   * is a question the reader has to be able to answer rather than assume.
+   */
+  personId: string
+  deviceId: string
+  deviceLabel: string | null
+  outletId: string
+  outletName: string | null
+  openedAt: string
+  businessDate: string
+  expiresAt: string
+}
+
+/** What the tablet gets back for asking, and the only place the code exists. */
+export interface IssuedShiftRequest {
+  requestId: string
+  /** Four digits, displayed large. Returned to the requesting tablet alone. */
+  code: string
+  expiresAt: string
+}
+
+/**
+ * A refusal from the counter handshake.
+ *
+ * `wrong_code`, `exhausted` and `not_eligible` are deliberately distinct: each
+ * is a different thing for the person holding the phone to do next, and none of
+ * them says anything about an account other than their own.
+ */
+export class CounterActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
+    this.name = 'CounterActionError'
+  }
+}
+
+/**
+ * Tablets, and the handshake.
+ *
+ * One interface for three callers — an admin, an operator's phone, and the
+ * tablet itself — because the boundary between them is the database's and the
+ * Edge Function's, not this seam's. A method offered to a caller who may not use
+ * it is refused where refusals belong; splitting the interface would only move
+ * the appearance of a boundary somewhere it is not enforced.
+ */
+export interface CounterAdapter {
+  /** Tablets at outlets the caller may see. Removed ones are not listed. */
+  listDevices(): Promise<CounterDeviceSummary[]>
+  /**
+   * Mint a setup code for an outlet with no live tablet. Returned once and never
+   * retrievable: only its hash is kept.
+   */
+  issueSetupCode(outletId: string, label: string): Promise<{ code: string; validFor: string }>
+  /** Permanent, immediate, and it ends any live shift with it. */
+  removeDevice(deviceId: string): Promise<void>
+
+  /** The tablet asks for a named person to open the counter. */
+  requestShift(username: string): Promise<IssuedShiftRequest>
+  /** The tablet withdraws its own request, for the ordinary mistyped name. */
+  cancelRequest(): Promise<void>
+  /** One request by id, for the tablet watching its own resolve. */
+  getRequestResolution(requestId: string): Promise<string | null>
+
+  /** Requests naming the reader, pending and unexpired. */
+  listPendingRequests(): Promise<CounterShiftRequest[]>
+  /**
+   * Live shifts the reader can see, which for a manager or the owner is more
+   * than their own. Callers narrow by `personId`.
+   */
+  listLiveShifts(): Promise<LiveCounterShift[]>
+  confirmShift(requestId: string, code: string): Promise<void>
+  rejectRequest(requestId: string): Promise<void>
+  endShift(shiftId: string): Promise<void>
+
+  /**
+   * Be told when a request naming this person, or a shift they hold, changes.
+   *
+   * Returns an unsubscribe function. **Every surface that uses this must resolve
+   * correctly without it** — it is a live nudge over a channel that may be
+   * unavailable, not the way the data arrives.
+   */
+  subscribeToOwnHandshake(personId: string, onChange: () => void): () => void
+  /** The tablet's own version of the above, watching its request and its shift. */
+  subscribeToDeviceHandshake(deviceId: string, onChange: () => void): () => void
+  /** The tablet's heartbeat: what it last said about itself. */
+  reportState(unsent: number): Promise<void>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Customers: one identity for the whole business, reachable only by phone.
 
 /**
@@ -1610,6 +1741,8 @@ export interface DataAdapters {
   attendance: AttendanceAdapter
   menu: MenuAdapter
   billing: BillingAdapter
+  /** Tablets, and the handshake that opens a shift on one (#9). */
+  counter: CounterAdapter
   customers: CustomersAdapter
   inventory: InventoryAdapter
   expenses: ExpensesAdapter

@@ -87,15 +87,29 @@ export function heldRoles(session: Session): Role[] {
 /**
  * Every role whose surfaces this session may **reach**, most senior first.
  *
- * Held roles, plus one addition: **a session holding the owner role reaches the
- * outlet-level surfaces, at every outlet, holding no assignment at any of them**
- * (owner-reaches-every-outlet, design D1). Running every outlet is what that
- * role is, and the database has always answered it that way — every
- * outlet-scoped policy carries an owner branch, and the attendance guard reads
- * "an admin here" as *the owner, or a manager at this outlet*. Before this,
- * navigation and routing asked `heldRoles`, so the owner had to grant themselves
- * a manager assignment at each outlet to see its attendance, which is authority
- * they already had.
+ * Held roles, plus two additions.
+ *
+ * **A session holding the owner role reaches the outlet-level surfaces, at every
+ * outlet, holding no assignment at any of them** (owner-reaches-every-outlet,
+ * design D1). Running every outlet is what that role is, and the database has
+ * always answered it that way — every outlet-scoped policy carries an owner
+ * branch, and the attendance guard reads "an admin here" as *the owner, or a
+ * manager at this outlet*. Before this, navigation and routing asked
+ * `heldRoles`, so the owner had to grant themselves a manager assignment at each
+ * outlet to see its attendance, which is authority they already had.
+ *
+ * **A session holding a Biller assignment reaches the Employee surfaces**
+ * (counter-devices-and-offline). A Biller is a person who works at the shop and
+ * therefore turns up to it: they mark their own attendance and record what they
+ * spent, and the database already reads their assignment that way — the
+ * attendance command accepts `employee` or `biller` at the outlet, and the
+ * ledger admits both. Without this they would need a second assignment saying
+ * they also work where they already work, which is a row that can drift out of
+ * step with the first one and mean nothing when it does.
+ *
+ * The owner and a manager get **no** such addition, deliberately. Their
+ * attendance is not kept here, and a manager who reaches the Employee shell
+ * would be offered a check-in for a shift nobody rosters them onto.
  *
  * Three things this deliberately is not:
  *
@@ -111,6 +125,7 @@ export function heldRoles(session: Session): Role[] {
 export function reachableRoles(session: Session): Role[] {
   const reachable = new Set(heldRoles(session))
   if (reachable.has('super_admin')) reachable.add('franchise_admin')
+  if (reachable.has('biller')) reachable.add('employee')
   return ROLE_ORDER.filter((role) => reachable.has(role))
 }
 

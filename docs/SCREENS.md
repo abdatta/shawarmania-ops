@@ -87,9 +87,15 @@ a username change or changing a password you still know is
 
 The only role that gets a purpose-built layout. Landscape tablet, fixed chrome, nothing that scrolls unexpectedly.
 
-The tablet's navigation is in its fixed header — Counter, Shift, Menu — derived from the same gate registry the phone shells read, so a surface this role has no entry for is absent rather than greyed out.
+The tablet's own tree has **no navigation, no account menu and no sign-out** since `counter-devices-and-offline`. A tablet is not signed in, it is set up; the way out is an admin removing it, and a sign-out control would offer whoever is standing at the counter a way to strand the hardware.
 
-**Shift unlock** — a grid of the outlet's billers by name; tap yours, enter your PIN, shift opens on the fourth digit. Big targets, no keyboard, and no extra confirm tap after the last digit. Also where a shift is handed over: the outgoing biller closes it — with the consequence stated plainly, because nothing already rung is affected — and the incoming one opens theirs. **A wrong PIN and an unknown biller get one identical sentence**: this tablet sits on a counter anybody can reach across, and telling the two apart would confirm which names are real. The PIN selects attribution and is not the security boundary; the device's own enrolled session is, and that arrives with #9.
+**Set up this tablet** — one field, and it is not a password. An admin generates a setup code on their own phone and types it here. Nothing personal is entered on a tablet at setup, and nothing personal is entered on it afterwards either.
+
+**Ask to open the counter** — what a set-up tablet shows when nobody is on it. Type the username of the person taking the counter, and the tablet displays a **four-digit confirmation code**, rendered as large as the screen allows because the person approving is standing on the other side reading it off. That is the entire property the code buys: approval is impossible unless you can see the tablet. The tablet holds no secret belonging to that person and learns nothing about them from the response — **an unknown username produces the same code, the same wait and the same two-minute timeout as a real one**, so a counter anybody can reach across cannot be used to discover who works here. One open request per tablet, and the tablet can withdraw its own for the ordinary case of a mistyped name, which takes the card off the person's phone rather than leaving it there to be puzzled over.
+
+**Open the counter?** — the card on the *person's own phone*, on whichever home surface they land on. It names the outlet, the tablet and how long it has been waiting, takes the four digits, and offers a rejection that **needs no code at all**: saying "that was not me" is not an act anybody should have to walk to a counter to take. Three wrong codes destroy the request, so a typo loop ends in a fresh start rather than an indefinite retry. Once confirmed, the same place shows the shift they now hold and one action that ends it — from their phone, not from the tablet.
+
+**Tablets** (manager and owner) — the hardware standing at each counter, with **last reported** rather than current figures beside each one: the time and the unsent count are both written by the tablet's own heartbeat, so a tablet that is off, offline or broken simply stops moving them, and one that has gone quiet is marked as out of touch rather than shown as healthy. Setting one up is offered only where there is room for one, because one active tablet per outlet is a database invariant. Removing one is permanent, ends any live shift immediately, and the confirmation names what the tablet last reported it had not sent.
 
 **Billing counter** — the heart of the product, and the screen most worth getting right.
 
@@ -255,7 +261,7 @@ The basis is never merely selected — it is **named in words beside the figure*
 
 **Alerts** — raise an issue to the owner (category, priority, message) and track responses. Four fields and no more: what it is about, how urgent, a subject, and what happened — the last two refused if blank, by name. An alert is always raised **open**; acknowledging it is somebody else's action, and raising something pre-acknowledged would be acknowledging it on their behalf.
 
-**Devices** — enrolled counter tablets, last seen, and revoke.
+**Tablets** — the counter tablets set up at this outlet, what each last reported and when, a setup code where there is room for one, and removal. Described in full under [Biller](#biller--the-counter-tablet).
 
 ## Super Admin — all outlets, on a phone
 

@@ -25,9 +25,13 @@ tablet at setup or at any time afterwards.
 - **WHEN** a setup code that has already been consumed or has expired is entered
 - **THEN** setup is refused and the response reveals nothing about the code's history
 
-#### Scenario: Setup fails midway
-- **WHEN** the privileged setup operation cannot complete
-- **THEN** no tablet able to authenticate remains, the code is not silently consumed, and retry is safe
+#### Scenario: Setup fails midway, before the code is consumed
+- **WHEN** the machine identity is created and the redemption is refused for any reason
+- **THEN** that identity is deleted, the code is not consumed, and the same code still works
+
+#### Scenario: Setup fails after the code is consumed
+- **WHEN** redemption succeeds but the tablet does not establish its session — the response is lost, or the sign-in fails
+- **THEN** the code is spent and the tablet row stands, the tablet says so plainly rather than blaming the code, and an admin removes it and issues another
 
 ### Requirement: A shift opens only when the named person enters the tablet's code on their own device
 

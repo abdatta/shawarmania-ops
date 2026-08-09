@@ -130,8 +130,11 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
   authority. The real-backend suite hand-crafts this attempt and proves the old
   alias remains.
 - **Provisioning authority is re-derived from the caller's own token** inside the privileged function, never taken from the request. A Franchise Admin cannot mint an administrator, cannot reach another outlet, and cannot deactivate themselves.
-- **Counter PINs are not a security boundary.** They select which biller a bill is attributed to. The device session is the credential — see [Roles And Permissions](ROLES_AND_PERMISSIONS.md). Do not extend a PIN to gate anything sensitive.
-- **Device revocation is immediate**, enforced by a `revoked_at` check inside the policy rather than by waiting for a token to expire.
+- **No password is ever typed on the counter tablet**, at setup or afterwards. Setting one up takes a one-time code generated on an admin's own phone; opening a shift takes a username on the tablet and four digits on the operator's own phone. The device session is the tablet's only credential — see [Roles And Permissions](ROLES_AND_PERMISSIONS.md).
+- **The confirmation code is readable by nobody**, including the person the request names. `counter_shift_requests.code_hash` is withheld by column grant from every client role, so `select *` on that table is refused with 42501; the code exists on the tablet's screen and in the response that created it, and nowhere else.
+- **Only the named person may confirm their own shift.** Not the outlet's manager holding the correct code, not the owner. There is no fallback approver, by decision, and the cost is written down in [Limitations](LIMITATIONS.md).
+- **An unknown username is indistinguishable from a known one** at the tablet: same code, same waiting state, same timeout. One failure value for every failure mode, exactly as with account activation.
+- **Tablet removal is immediate and permanent**, enforced by a `removed_at` check inside every policy rather than by waiting for a token to expire. It ends the live shift and cancels any pending request in the same transaction. There is no paused state: a paused tablet is a security question that a removed one is not.
 - **An assignment change is immediate too**, and for a stronger reason: the policies read `assignments` on every request, so granting or ending one needs no reissue and no sign-out. Nothing in this system waits for a token any more.
 - Deactivating an account is likewise a policy-level `is_active` check, not just a claim change.
 
@@ -140,8 +143,8 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
 Roughly in order of likelihood:
 
 1. **A curious or disgruntled franchisee** trying to see another outlet's numbers. Mitigated by RLS, which is why RLS is structural rather than procedural.
-2. **A lost or stolen counter tablet.** It holds a long-lived session. Mitigated by scoping it to one outlet and to billing surfaces only, immediate revocation, and `last_seen_at` making a missing device visible. Impact is bounded: one outlet's billing screen, never admin functions or the owner's view.
-3. **A biller ringing bills under someone else's name.** Mitigated weakly by PINs, and properly by the fact that shifts and attribution are recorded and reviewable.
+2. **A lost or stolen counter tablet.** It holds a long-lived session. Mitigated by scoping it to one outlet and to the counter's own surfaces, by immediate and permanent removal, and by `last_seen_at` making a missing tablet visible. Impact is bounded: one outlet's counter, never admin functions or the owner's view — and because a tablet holds no password, it compromises nobody's account. **A stolen tablet with no live shift reaches nothing at all**, because every policy it goes through asks for the shift rather than for the hardware.
+3. **A biller ringing bills under someone else's name.** Mitigated properly rather than weakly since `counter-devices-and-offline`: a shift only opens when the named person types the tablet's code on their own phone, so misattribution now needs that person's cooperation. Where they *do* cooperate — reading the code out over the phone — the trade is deliberate and visible, because every bill that evening carries their name. See [Limitations](LIMITATIONS.md).
 4. **Attendance gaming** via a spoofed location. Mitigated by storing the evidence for review, and by the counter-tablet path being available and stronger.
 5. **Accidental PII exposure** through logs, exports, or an error report. Mitigated by not logging PII in the first place.
 6. **Associated-email sign-in enumeration or credential stuffing.** Mitigated

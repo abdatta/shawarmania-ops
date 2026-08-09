@@ -7,6 +7,7 @@ import { OutletAttendance } from '@/features/attendance/outlet-attendance'
 import { BillingCounter } from '@/features/billing/billing-counter'
 import { ShiftUnlock } from '@/features/billing/shift-unlock'
 import { DailyCashSurface } from '@/features/cash/daily-cash-surface'
+import { DevicesSurface } from '@/features/counter/devices-surface'
 import { ExpenseCategoriesSurface } from '@/features/expense-categories/expense-categories-surface'
 import { ExpensesSurface } from '@/features/expenses/expenses-surface'
 import { StaffExpensesSurface } from '@/features/expenses/staff-expenses-surface'
@@ -165,6 +166,18 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="ledger/categories">
         <ExpenseCategoriesSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // One path, two roles: `admin-devices` carries navigation and
+    // `owner-devices` deliberately does not. Both reach this component, and the
+    // difference between them is what the privileged functions accept — the
+    // owner administers a tablet at any outlet, a manager only at theirs.
+    path: 'devices',
+    element: (
+      <GatedSurface path="devices">
+        <DevicesSurface />
       </GatedSurface>
     ),
   },

@@ -64,6 +64,11 @@ export function RealRoot() {
 
   if (state.status === 'unavailable') return <UnconfirmedSession onRetry={revalidate} />
 
+  // A tablet asked for a person's shell. It holds no assignment, so every
+  // question below — which roles it holds, where it lands, which shell it gets —
+  // is one it has no answer to. Sending it to its own branch is the answer.
+  if (state.status === 'counter') return <Navigate to="/counter" replace />
+
   if (state.status === 'anonymous') {
     return (
       <Navigate

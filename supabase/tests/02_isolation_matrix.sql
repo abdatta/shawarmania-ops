@@ -81,6 +81,7 @@ begin
        and exists (select 1 from pg_attribute a
                     where a.attrelid = c.oid and a.attname = 'outlet_id'
                       and not a.attisdropped)
+       and c.relname <> 'counter_shift_requests'
      order by c.relname
   loop
     n := pg_temp.cross_read_count(t.tbl, other_outlet);
@@ -112,6 +113,14 @@ select * from pg_temp.isolation_sweep('employee_kalyani',
 -- Super Admin reads across: for every outlet-scoped table the Super Admin
 -- sees exactly the rows the database owner sees (or the table is closed to
 -- clients entirely, as the bill-number counters are).
+--
+-- **One table is deliberately not in that set**, and it is named here rather
+-- than discovered as a mysterious failure by whoever next seeds a row. A shift
+-- request is between one tablet and one person: there is no fallback approver,
+-- so nobody else — not the outlet's manager, not the owner — has a reason to
+-- read a pending one, and the policy says so. The sweep would have passed today
+-- either way, because nothing seeds a request; that is exactly the kind of
+-- accident this exclusion exists to stop being load-bearing.
 
 create function pg_temp.superadmin_sweep(p_sub uuid)
 returns setof text language plpgsql as $$
@@ -128,6 +137,7 @@ begin
        and exists (select 1 from pg_attribute a
                     where a.attrelid = c.oid and a.attname = 'outlet_id'
                       and not a.attisdropped)
+       and c.relname <> 'counter_shift_requests'
      order by c.relname
   loop
     execute 'reset role';

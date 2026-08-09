@@ -4,6 +4,7 @@ import { createAddressLookupAdapter } from './address-lookup'
 import { createSupabaseAccountsAdapter } from './accounts'
 import { createSupabaseAttendanceAdapter } from './attendance'
 import { createSupabaseBillingAdapter } from './billing'
+import { createSupabaseCounterAdapter } from './counter'
 import { createSupabaseCustomersAdapter } from './customers'
 import { createSupabaseExpenseCategoriesAdapter } from './expense-categories'
 import { createSupabaseManualLedgerAdapter } from './manual-ledger'
@@ -33,6 +34,10 @@ export function createSupabaseAdapters(): DataAdapters {
     // Likewise not connected: #9 brings the enrolled device and the outbox, #10
     // the settlement path. See supabase-adapters/billing.ts.
     billing: createSupabaseBillingAdapter(),
+    // Real from the day it ships, like the customer directory and for the same
+    // reason: the tablets, the handshake and the shift are what #9 is, and a
+    // stub would leave the boundary untested by the only screens that use it.
+    counter: createSupabaseCounterAdapter(client),
     // The exception among the not-yet-connected adapters: the global customer
     // directory is REAL from today, because the boundary that protects it is.
     // The billing surfaces that call it are still `demo`-gated (#31, #10).

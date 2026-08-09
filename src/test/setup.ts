@@ -48,6 +48,38 @@ if (typeof window !== 'undefined') {
     }
   }
 
+  /**
+   * A unit test opens no sockets.
+   *
+   * Since counter-devices-and-offline a resolved session subscribes to a
+   * Supabase Realtime channel, and jsdom has no WebSocket of its own — so Node's
+   * undici one is used, whose events are not the `Event` jsdom's `dispatchEvent`
+   * accepts. The mismatch surfaces as an uncaught `ERR_INVALID_ARG_TYPE` from
+   * inside the socket, attributed to whichever test happened to be running.
+   *
+   * Stubbed rather than mocked per suite, for the same reason `showModal` and
+   * `matchMedia` are: this is a gap in the environment, not a behaviour any test
+   * is asserting. What the channel delivers is proved in the browser, by #9's
+   * two-browser gate; what every surface does **without** it is what the unit
+   * suites cover, and this stub is exactly that condition.
+   */
+  class SilentWebSocket {
+    static readonly CONNECTING = 0
+    static readonly OPEN = 1
+    static readonly CLOSING = 2
+    static readonly CLOSED = 3
+    readonly readyState = SilentWebSocket.CLOSED
+    close(): void {}
+    send(): void {}
+    addEventListener(): void {}
+    removeEventListener(): void {}
+    dispatchEvent(): boolean {
+      return false
+    }
+  }
+  Object.defineProperty(window, 'WebSocket', { writable: true, value: SilentWebSocket })
+  Object.defineProperty(globalThis, 'WebSocket', { writable: true, value: SilentWebSocket })
+
   // jsdom does not implement matchMedia, which the theme module reads.
   if (!window.matchMedia) {
     Object.defineProperty(window, 'matchMedia', {

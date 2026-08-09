@@ -45,7 +45,7 @@ export type GateState = 'hidden' | 'demo' | 'live'
  * `src/features/attention/sources.ts` supplies exactly one implementation per
  * id, so an id added here without one fails to compile.
  */
-export type AttentionSourceId = 'attendance-waiting'
+export type AttentionSourceId = 'attendance-waiting' | 'counter-request-waiting'
 
 interface SurfaceDefInput {
   /** Which role's shell mounts this surface. */
@@ -65,10 +65,21 @@ interface SurfaceDefInput {
 
 const defs = {
   // ── Super Admin — all outlets, on a phone ────────────────────────────────
+  /**
+   * Badged by `counter-request-waiting`: a tablet has asked for this person and
+   * the request dies in two minutes. Every home carries it, because any of the
+   * three roles may be the one standing at a counter — an Employee holding a
+   * Biller assignment, a manager covering an evening, the owner.
+   */
   'owner-dashboard': {
     role: 'super_admin',
     path: '',
-    nav: { label: 'Overview', icon: LayoutDashboard, order: 1 },
+    nav: {
+      label: 'Overview',
+      icon: LayoutDashboard,
+      order: 1,
+      attention: 'counter-request-waiting',
+    },
     state: 'live',
   },
   /**
@@ -150,6 +161,21 @@ const defs = {
     path: 'ledger/categories',
     state: 'live',
   },
+  /**
+   * The owner's counterpart to `admin-devices`, across every outlet.
+   *
+   * Two entries rather than one, for the reason the ledger has two: a surface
+   * belongs to exactly one role's shell here. It declares no navigation of its
+   * own because it needs none — the owner reaches every manager surface, so
+   * `admin-devices`'s entry is already in their bar under `/owner/devices`, and a
+   * second "Tablets" would be deduplicated by label anyway. What this entry does
+   * is make that path resolve inside the owner's shell.
+   */
+  'owner-devices': {
+    role: 'super_admin',
+    path: 'devices',
+    state: 'live',
+  },
   /** Drop into one outlet's Franchise Admin view, read-only. */
   'owner-outlet-view': {
     role: 'super_admin',
@@ -161,7 +187,12 @@ const defs = {
   'admin-dashboard': {
     role: 'franchise_admin',
     path: '',
-    nav: { label: 'Today', icon: LayoutDashboard, order: 1 },
+    nav: {
+      label: 'Today',
+      icon: LayoutDashboard,
+      order: 1,
+      attention: 'counter-request-waiting',
+    },
     state: 'live',
   },
   'admin-menu': {
@@ -189,9 +220,10 @@ const defs = {
     state: 'demo',
   },
   /**
-   * The one badged surface, and the reason the mechanism exists: an arrival
-   * nobody approves is invisible until somebody queries their pay, and the
-   * person who could settle it is rarely already looking at this screen.
+   * The surface the badge mechanism was built for: an arrival nobody approves
+   * is invisible until somebody queries their pay, and the person who could
+   * settle it is rarely already looking at this screen. Since #9 the three homes
+   * are badged too, for something far more perishable.
    */
   'admin-attendance': {
     role: 'franchise_admin',
@@ -235,11 +267,21 @@ const defs = {
     nav: { label: 'Alerts', icon: Bell, order: 10 },
     state: 'demo',
   },
+  /**
+   * The tablets standing at this outlet's counter (#9).
+   *
+   * `live` from this change, because a tablet cannot be set up any other way:
+   * the setup code is generated here and nowhere else, and a `demo` gate would
+   * mean production hardware with no door to it.
+   *
+   * Called **Tablets** rather than Devices. A phone is a device too, and every
+   * person reading this screen is holding one.
+   */
   'admin-devices': {
     role: 'franchise_admin',
     path: 'devices',
-    nav: { label: 'Devices', icon: TabletSmartphone, order: 11 },
-    state: 'hidden',
+    nav: { label: 'Tablets', icon: TabletSmartphone, order: 11 },
+    state: 'live',
   },
   /**
    * This outlet's people — accounts and staff list in one surface, because
@@ -327,7 +369,7 @@ const defs = {
   'staff-home': {
     role: 'employee',
     path: '',
-    nav: { label: 'Home', icon: Home, order: 1 },
+    nav: { label: 'Home', icon: Home, order: 1, attention: 'counter-request-waiting' },
     state: 'live',
   },
   'staff-attendance': {
