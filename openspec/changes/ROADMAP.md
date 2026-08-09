@@ -72,10 +72,10 @@ Promoting a surface from `demo` to `live` is the visible outcome of every `*-liv
 | ✅ | 36 | D | `manual-ledger-stopgap` | **Opus** | **archived 2026-08-03** | #3, #4 | **the owner records a full trading day at each outlet from a phone** (four revenue channels, cash in and out with reasons, expenses by category, and a counted drawer), then reads that day's cash difference and the month's cash-basis operating profit with its basis named on screen; a large equipment purchase paid from the drawer leaves that day reconciled without entering the month's expenses; a Franchise Admin, Biller and Employee are refused every read and write on both tables by the database, proved by a hand-crafted request; an earlier day's edit moves no later day's stored opening cash, commission rate or expected cash; and the four-role demo walkthrough still walks |
 | ✅ | 37 | D | `expense-categories-grow-from-use` | **Opus** | **archived 2026-08-07** | #2, #36 | a category typed once at one outlet is offered from then on at both; the month groups by the text the row stored, so a rename reaches new rows only until the owner deliberately rewrites history; a merge collapses two spellings across every past month and its log says what it moved; the nine production rows arrive carrying `Hyperpure`, `Chicken` and `Staff Food` as their categories with the note left free for detail; and neither `manual_ledger_expenses` nor `expenses` still reads the enum |
 | ✅ | 38 | D | `the-ledger-opens-to-the-outlet` | **Opus** | **archived 2026-08-09** | #22, #36, #37 | a Biller records a cash expense at their own outlet from their own phone and is refused yesterday's by the database; a Franchise Admin reads the full day and month at outlets they are assigned to and no others; a staff member is refused a past day's revenue, a month's aggregate and any alteration of a day's counted cash by the database, not by a hidden screen; and a voided expense stays visible, struck through, and stops counting |
-| 📝 | 9 | D | `counter-devices-and-offline` | **Fable** | proposed | #4, #21, #22, #24, #26, #30 | each outlet enrols exactly one billing device; normal eligible credentials create a daily billing-only grant without retaining personal authority; revoke is immediate; every accepted command commits locally and survives logout/restart |
-| 📝 | 33 | D | `billing-transaction-contract` | **Fable** | proposed | **#9**, #32 | direct and deferred payment produce the same immutable bill; orders are device-owned/versioned; revenue and drawer dates remain distinct; retries are exact and bill plus lines commit atomically under concurrency |
-| 📝 | 31 | D | `ui-billing-lifecycle` | **GPT-5.6 Sol** | proposed | #6, #7, **#9**, #32, **#33** | the complete immediate/deferred billing lifecycle, exact-phone autofill, history, correction, quarantine, and stranded-order recovery are walkable in demo mode without touching Supabase |
-| 📝 | 10 | D | `billing-live` | **Opus** | proposed | #7, **#9**, #30, **#31**, #32, **#33** | **Billing V1:** one device at each outlet takes real immediate/deferred payments; every accepted command commits locally before UI success, survives logout/restart, lands exactly once after response loss, and only a resolved online queue can receive the device-day seal consumed by #12 |
+| 🔄 | 9 | D | `counter-devices-and-offline` | **Opus** | active | #4, #21, #22, #24, #26, #27, #30, #38 | each outlet sets up exactly one billing tablet and **no password is ever typed on it**; a shift opens only when the named person enters the tablet's four-digit code on their own phone, and can be ended from there; an unknown username is indistinguishable from an unconfirmed one; removing a tablet stops it at once; the tablet records an expense attributed to the shift's operator and can reach nothing else in the ledger |
+| 📝 | 33 | D | `billing-transaction-contract` | **Opus** | proposed | **#9**, #32 | an order taken, prepared and paid and a sale paid outright produce the same immutable bill; a daily order number restarts each business day and never resembles a bill number; a retry lands the money once; a pay racing a manager's cancellation is refused with no number consumed; revenue and drawer dates stay distinct; a command accepted on the tablet survives logout and restart and lands exactly once; open orders and unconfirmed tablets block sign-off at the database |
+| 📝 | 31 | D | `ui-billing-lifecycle` | **GPT-5.6 Sol** | proposed | #6, #7, **#9**, #32, **#33** | the counter takes immediate payment, or saves an order with a number that is called out, reopens, edits, pays and cancels it, including an aggregator order collected by a rider; exact-phone autofill, shift history, a manager's void and re-ring, and a manager clearing a stranded order are all walkable in demo mode without touching Supabase |
+| 📝 | 10 | D | `billing-live` | **Opus** | proposed | #7, **#9**, #30, **#31**, #32, **#33**, #36, #38 | **Billing V1:** the real menu is entered through the app with no SQL; one tablet at each outlet takes real payments, immediate and on handover; every accepted command commits locally before UI success, survives logout/restart and lands exactly once after response loss; only a resolved online queue receives the end-of-day confirmation consumed by #12; and the ledger stops carrying that outlet's counter revenue on the day it goes live |
 | 📝 | 34 | D | `extended-offline-billing` | **Opus** | proposed | **#10** | **Billing V2.1:** after one online daily sign-in, the device reloads and continues through an extended outage until cutoff; twenty commands survive restart, block sign-off until reconciled, and later land exactly once; the next day still requires online reauthentication |
 | 📝 | 35 | D | `multiple-billing-devices` | **Opus** | proposed | **#34** | **Billing V2.2:** two devices at one outlet bill concurrently online/offline with device-owned orders, unique sequential server numbers, isolated queues, audited transfer, independent revocation, all-device settlement seals, and proven outlet isolation |
 |  | 11 | E | `expenses-and-inventory-live` | **Opus** | seeded | #4, #7 | a cash expense moves the day's cash figures and a UPI expense does not; the movements ledger reconciles exactly to current quantity; a correction is a movement with a note; low-stock fires at threshold |
@@ -87,26 +87,35 @@ Promoting a surface from `demo` to `live` is the visible outcome of every `*-liv
 
 **Model column** — the model recommended to drive each change's `/opsx:propose`
 and implementation session. Archived rows retain their historical assignment;
-the policy below applies to remaining work. **Opus is the default, GPT-5.6 Sol
-handles bounded work, and Fable is an exceptional choice because it is very
-expensive. Use it only where a mistake would corrupt a foundational security or
-money contract inherited by every later billing change.**
+the policy below applies to remaining work. **Opus is the default and GPT-5.6 Sol
+handles bounded work.**
 
-**Only #9 and #33 currently clear that Fable threshold:**
+**Fable is no longer available**, and #9 and #33 were the two rows assigned to it.
+They now read Opus. The reason they were exceptional has not gone away: a mistake
+in either corrupts a contract every later billing change inherits, and the
+dangerous failures are silent ones, where a policy written a clause too wide
+passes every test while an Employee reads the month. **What replaces the model is
+structure**, applied to those two changes and to #10:
 
-- **#9** — the machine/human authority split, device revocation, daily grants,
-  and durable local-acceptance boundary.
-- **#33** — atomic orders/bills, idempotency, numbering, snapshots, settlement
-  readiness, and both accounting clocks.
+- **Tests before implementation.** Every database rule in `tasks.md` is written as
+  a failing test before the migration, function or policy that satisfies it, so
+  the spec is executable rather than aspirational.
+- **Sectional gates instead of one gate at the end.** Each numbered section ends
+  in something provable in one sitting. #9's expense policy is a section of its
+  own precisely because over-permission there is invisible.
+- **An adversarial review pass before archive.** A separate session reads the
+  spec deltas against the delivered code and reports every requirement it cannot
+  find enforced at the database. Findings are fixed, not filed.
 
-**Opus drives #32, #10, #34, #35, #11, #12, #13, #14, and #38.** These still require
-substantial security, offline, accounting, or integration judgment, but they
-build on the authority and transaction contracts fixed by #9/#33: global customer
-access (#32), Billing V1 integration (#10), extended-offline operation (#34),
-multi-device coordination (#35), expenses/inventory (#11), cash sign-off (#12),
-owner reporting/P&L (#13), and end-to-end third-outlet onboarding (#14). Revisit
-Fable only if proposing or implementing one of these exposes a genuinely new
-foundational invariant that #9/#33 did not settle.
+If a future change genuinely exceeds what that protocol covers, the answer is to
+split it into smaller changes with their own gates, not to wait for a model.
+
+**Opus drives #9, #33, #10, #34, #35, #11, #12, #13 and #14.** These require
+substantial security, offline, accounting or integration judgment: the tablet and
+shift authority split (#9), the order and bill transaction contract (#33), Billing
+V1 integration (#10), extended-offline operation (#34), multi-device coordination
+(#35), expenses and inventory (#11), cash sign-off (#12), owner reporting and P&L
+(#13), and end-to-end third-outlet onboarding (#14).
 
 **#38 stays Opus after its scope was cut, and the cut is not what decides it.**
 Dropping pending expenses removed the accounting judgment from that change and
@@ -121,15 +130,14 @@ every verb, the implementation session behind it is genuinely Sol-sized, and a
 future change of this shape that inherits a settled matrix should be assigned
 that way.
 
-**GPT-5.6 Sol drives #30 and #31.** The unreachable-backend classification (#30)
-is narrow and heavily testable. The billing-lifecycle UI (#31) is broad but bounded
-to typed mocks and existing design-system/adapters, with no real money write or
-new authority boundary. Their complete proposals make both suitable for an
-agentic coding model without paying the Fable premium.
+**GPT-5.6 Sol drives #31.** The billing-lifecycle UI is broad but bounded to typed
+mocks and the existing design system and adapters, with no real money write and no
+new authority boundary. Its complete proposal makes it suitable for an agentic
+coding model.
 
 Archived labels are not rewritten to this policy: for example, #23 and #24 remain
-recorded as GPT-5.6 Sol, while earlier Opus/Fable rows remain evidence of the model
-actually prescribed when those changes were delivered.
+recorded as GPT-5.6 Sol, and earlier Opus and Fable rows remain evidence of the
+model actually prescribed when those changes were delivered.
 
 **Status icon (leading column) & Status column** — a human-readable projection of each change's lifecycle, shown twice: a glyph in the unlabeled leading column that reads like a to-do list filling in left to right, and the same state as a word in the Status column. The four states progress from `seeded` (blank cell — proposal seed only) → `📝 proposed` (`tasks.md` present) → `🔄 active` (a task checked) → `✅ **archived YYYY-MM-DD**` (folder under `archive/`). The **source of truth is the openspec files and folders**, never these cells; both are *derived*. Every lifecycle skill runs the shared reconciler `npm run roadmap:sync` (`openspec/tools/sync-roadmap-status.mjs`), which writes the icon and the word from one derivation so they cannot drift. It self-corrects manual drift and works identically from Claude, Codex, or a plain shell.
 
@@ -188,7 +196,9 @@ graph TD
     C22 --> C9
     C24 --> C9
     C26 --> C9
+    C27 --> C9
     C30 --> C9
+    C38 --> C9
     C9 --> C33[33 billing-transaction-contract]
     C32 --> C33
     C6 --> C31[31 ui-billing-lifecycle]
@@ -202,6 +212,8 @@ graph TD
     C31 --> C10
     C32 --> C10
     C33 --> C10
+    C36 --> C10
+    C38 --> C10
     C10 --> C34[34 extended-offline-billing]
     C34 --> C35[35 multiple-billing-devices]
     C4 --> C11[11 expenses-and-inventory-live]
@@ -227,7 +239,11 @@ Changes within a wave can run in any order or in parallel; a wave starts when it
 
 - **Wave C — the full experience, demo-gated (#6–#8)**: `ui-billing-counter` and `ui-outlet-operations` are **fully parallel** — each builds on the shell from #3 and touches no shared state, and since they depend only on #3 they **may run alongside Wave B** if bandwidth allows. `ui-owner-console-and-demo` follows, because the scenario dataset it builds must reconcile across every surface. Its dependency on #5 is about the attendance *surfaces and fixtures*, not the production rollout — #8 may start while #5's only open items are the 🧍 live-verification gates. **This wave ends with the demo milestone**: a deployed URL where the entire four-role experience walks through coherently.
 
-- **Wave D — the counter takes money (#21–#24, #26–#30, #32, #9, #33, #31, #10, #34, #35)**: the people/account/attendance foundation is already complete. **#30 fixes transport-aware sign-in before credentials become the counter's daily unlock. #32 creates global customer identity without granting outlet-wide directory browse. #9 then enrols exactly one device at each outlet and establishes the billing-only daily grant plus durable local acceptance. #33 lands the atomic order/bill command contract before #31 extends the existing demo UI to the approved unpaid-order, customer, history, correction, quarantine, and recovery lifecycle. #10 is the Billing V1 milestone:** real billing goes live on one device per outlet with local-save-and-retry protection, but restart into an outage still requires online resumption. **Billing V2 is deliberately after that live milestone:** #34 adds offline restart and extended-outage work within the already-verified daily grant; #35 then removes the one-device enrollment limit after both the transaction and offline contracts are proven. #11 may still proceed independently, but #12/#13 need only Billing V1 and do not hold V1 hostage to V2.
+- **Wave D — the counter takes money (#21–#24, #26–#30, #32, #9, #33, #31, #10, #34, #35)**: the people, account and attendance foundation is already complete. **#30 fixes transport-aware sign-in before credentials matter at the counter. #32 creates global customer identity without granting outlet-wide directory browse. #9 then sets up exactly one tablet at each outlet and establishes the shift and its two-device approval. #33 lands the atomic order and bill command contract, and the local operation store that carries it, before #31 extends the existing demo UI to the order lifecycle, customer, history and correction surfaces. #10 is the Billing V1 milestone:** the real menu is entered through the app and billing goes live on one tablet per outlet with local-save-and-retry protection, but a restart into an outage still requires the backend. **Billing V2 is deliberately after that milestone:** #34 adds offline restart and extended-outage work; #35 then removes the one-tablet limit once both the transaction and offline contracts are proven. #11 may proceed independently, and #12 and #13 need only Billing V1, so V1 is never held hostage to V2.
+
+  **The billing chain was rescoped on 2026-08-09 after the owner described the actual counter workflow**, and the scope it lost is worth recording so nobody reinstates it by reflex. An order is a short-lived working record so the kitchen knows what to cook, paid minutes later on handover, to a walk-in customer or an aggregator's rider. It is never a tab. So **order transfer between tablets, the privileged upload-only recovery path, the optimistic-version conflict contract, and the late-payment accounting machinery are all cut**: a stranded order is cancelled by that outlet's manager with a reason, and a pay racing that cancellation is reported as a cancellation. What was added in their place is smaller and more useful: a **daily order number** the customer is called by, and a **two-device shift handshake** where the tablet takes a username and shows a four-digit code, and the named person enters that code on their own phone, so no password is ever typed on shared hardware and nobody who cannot see the tablet can open a counter. A plain approve button was rejected because a request approved by one tap is eventually approved by habit. There is deliberately **no fallback approver**, and `docs/LIMITATIONS.md` says so plainly, along with the way out: the code can be read aloud over the phone, so somebody with a flat battery can call the owner and open the counter in the owner's name, at the cost of every bill that evening carrying it.
+
+  **The local operation store moved from #9 to #33 on 2026-08-09**, mid-implementation, once #9's database sections were done. It is the queue that holds a write on the tablet until the server has it, and its envelope, canonical hash and idempotency key are the same design as #33's command contract. Building it in #9 meant building it against a payload shape nothing had defined yet, which is speculative work by construction. #9 is now the tablet and who is standing at it; #33 is what a write is and the queue that carries it.
 
   **#36 is in this wave by timing, not by dependency.** It needs only #3 and #4, blocks nothing, and exists because the counter is trading *now* while #10, #11 and #12 are not live: the owner records revenue, expenses and the drawer by hand so August 2026 has a month-end P&L and a daily cash check at all. It is a deliberate stopgap with a stated exit, and **#12 owns that exit** (carry its rows into the live cash and expense records, then drop the tables). It grants the owner no cash authority that survives it.
 
@@ -251,14 +267,15 @@ Every live capability needs configuration rows before it does anything, and **a 
 | Outlet assignments (person × role × outlet) | anyone's second outlet | **#22** (later grants) · **#23** (several at hire) |
 | Employee roster rows | #5 attendance | #5 — **merged into accounts by #21**, which replaces this row and the next with a one-step People flow |
 | **Account ↔ roster link** | #5 check-in | **#15** — **removed by #21**: the account *is* the staff record |
-| Menu categories and items | #10 billing | #7 demo → **#10 makes it real** |
+| Menu categories, items and prices | #10 billing | #7 demo → **#10 makes the editor real and the owner enters both outlets' menus through it.** Nothing sells until this exists, and it must not arrive by SQL |
 | Global customer identity by normalized phone | #10 customer reuse | **#32**, created automatically from a new exact phone; outlet roles cannot browse it |
 | Inventory items and thresholds | #11 | #7 demo → #11 makes it real |
-| First counter device enrolment | #9, #10 | **#9**, exactly one active device per outlet for V1 |
-| Additional counter devices | #35 | **#35**, after single-device V1 and extended-offline V2.1 are proven |
-| Daily billing operator grant | #10, #34, #35 | **#9**, created only by online eligible-account authentication and expiring at cutoff |
+| First counter tablet | #9, #10 | **#9**, set up with a one-time code the admin generates on their own phone; exactly one active tablet per outlet for V1 |
+| Additional counter tablets | #35 | **#35**, after single-tablet V1 and extended-offline V2.1 are proven |
+| A shift on the counter | #10, #34, #35 | **#9**, opened by a username on the tablet and the tablet's four-digit code entered on the operator's own phone, expiring at cutover. **No fallback approver exists**, so an eligible person with a working phone must be standing at the tablet |
 | Persisted offline bootstrap generation | #34 | **#34**, hydrated automatically after a successful online counter load |
-| Device-day settlement seal | #12 sign-off | **#33 contract + #10 device flow**; one per participating device/date after online queue resolution |
+| The tablet's end-of-day confirmation | #12 sign-off | **#33 contract + #10 tablet flow**; one per participating tablet and date, after the queue reaches the server |
+| An outlet's billing go-live date | #10 ledger handover | **#10**; from that business date the ledger reads that outlet's counter revenue from bills instead of accepting a typed figure |
 | Opening cash float | #12 | #12 |
 | First tracked day's opening cash and aggregator commission rates | #36 readings | **#36** (day form; every later day inherits the previous day's count and rates, editable) |
 

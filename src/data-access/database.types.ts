@@ -878,38 +878,105 @@ export type Database = {
           },
         ]
       }
-      counter_devices: {
+      counter_device_setup_codes: {
         Row: {
-          enrolled_at: string
-          enrolled_by: string | null
+          attempts: number
+          code_hash: string
+          consumed_at: string | null
+          consumed_device_id: string | null
+          expires_at: string
           id: string
+          issued_at: string
+          issued_by: string
           label: string
-          last_seen_at: string | null
           outlet_id: string
-          revoked_at: string | null
+          superseded_at: string | null
         }
         Insert: {
-          enrolled_at?: string
-          enrolled_by?: string | null
-          id: string
+          attempts?: number
+          code_hash: string
+          consumed_at?: string | null
+          consumed_device_id?: string | null
+          expires_at: string
+          id?: string
+          issued_at?: string
+          issued_by: string
           label: string
-          last_seen_at?: string | null
           outlet_id: string
-          revoked_at?: string | null
+          superseded_at?: string | null
         }
         Update: {
-          enrolled_at?: string
-          enrolled_by?: string | null
+          attempts?: number
+          code_hash?: string
+          consumed_at?: string | null
+          consumed_device_id?: string | null
+          expires_at?: string
+          id?: string
+          issued_at?: string
+          issued_by?: string
+          label?: string
+          outlet_id?: string
+          superseded_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "counter_device_setup_codes_consumed_device_id_fkey"
+            columns: ["consumed_device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "counter_device_setup_codes_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "counter_device_setup_codes_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      counter_devices: {
+        Row: {
+          id: string
+          label: string
+          last_reported_unsent: number
+          last_seen_at: string | null
+          outlet_id: string
+          removed_at: string | null
+          set_up_at: string
+          set_up_by: string | null
+        }
+        Insert: {
+          id: string
+          label: string
+          last_reported_unsent?: number
+          last_seen_at?: string | null
+          outlet_id: string
+          removed_at?: string | null
+          set_up_at?: string
+          set_up_by?: string | null
+        }
+        Update: {
           id?: string
           label?: string
+          last_reported_unsent?: number
           last_seen_at?: string | null
           outlet_id?: string
-          revoked_at?: string | null
+          removed_at?: string | null
+          set_up_at?: string
+          set_up_by?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "counter_devices_enrolled_by_fkey"
-            columns: ["enrolled_by"]
+            columns: ["set_up_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -919,6 +986,131 @@ export type Database = {
             columns: ["outlet_id"]
             isOneToOne: false
             referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      counter_shift_requests: {
+        Row: {
+          attempts: number
+          code_hash: string
+          created_at: string
+          device_id: string
+          expires_at: string
+          id: string
+          outlet_id: string
+          person_id: string | null
+          requested_username: string
+          resolution: string | null
+          resolved_at: string | null
+          shift_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          code_hash: string
+          created_at?: string
+          device_id: string
+          expires_at: string
+          id?: string
+          outlet_id: string
+          person_id?: string | null
+          requested_username: string
+          resolution?: string | null
+          resolved_at?: string | null
+          shift_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          code_hash?: string
+          created_at?: string
+          device_id?: string
+          expires_at?: string
+          id?: string
+          outlet_id?: string
+          person_id?: string | null
+          requested_username?: string
+          resolution?: string | null
+          resolved_at?: string | null
+          shift_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "counter_shift_requests_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "counter_shift_requests_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "counter_shift_requests_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      counter_shifts: {
+        Row: {
+          business_date: string
+          device_id: string
+          ended_at: string | null
+          ended_reason: string | null
+          expires_at: string
+          id: string
+          opened_at: string
+          outlet_id: string
+          person_id: string
+        }
+        Insert: {
+          business_date: string
+          device_id: string
+          ended_at?: string | null
+          ended_reason?: string | null
+          expires_at: string
+          id?: string
+          opened_at?: string
+          outlet_id: string
+          person_id: string
+        }
+        Update: {
+          business_date?: string
+          device_id?: string
+          ended_at?: string | null
+          ended_reason?: string | null
+          expires_at?: string
+          id?: string
+          opened_at?: string
+          outlet_id?: string
+          person_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "counter_shifts_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "counter_shifts_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "counter_shifts_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1712,6 +1904,11 @@ export type Database = {
         Args: { cutover: string; ts: string }
         Returns: string
       }
+      app_counter_device: { Args: never; Returns: string }
+      app_counter_device_outlet: { Args: never; Returns: string }
+      app_counter_shift: { Args: never; Returns: string }
+      app_counter_shift_operator: { Args: never; Returns: string }
+      app_counter_shift_outlet: { Args: never; Returns: string }
       app_device_ok: { Args: never; Returns: boolean }
       app_distance_m: {
         Args: { lat1: number; lat2: number; lng1: number; lng2: number }
@@ -1725,9 +1922,17 @@ export type Database = {
         Returns: boolean
       }
       app_is_owner: { Args: never; Returns: boolean }
+      app_may_hold_counter_shift: {
+        Args: { outlet: string; person: string }
+        Returns: boolean
+      }
       app_may_look_up_customer: { Args: never; Returns: boolean }
       app_may_manage_person: { Args: { person: string }; Returns: boolean }
       app_may_see_person: { Args: { person: string }; Returns: boolean }
+      app_next_cutover: {
+        Args: { cutover: string; ts: string }
+        Returns: string
+      }
       app_normalize_account_email: { Args: { input: string }; Returns: string }
       app_normalize_username: { Args: { input: string }; Returns: string }
       app_outlets_for: {
@@ -1993,6 +2198,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cancel_counter_shift_request: {
+        Args: { p_device_id: string }
+        Returns: string
+      }
       close_business_day: {
         Args: {
           p_actual_closing_paise: number
@@ -2022,6 +2231,18 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      confirm_counter_shift: {
+        Args: {
+          p_code_hash: string
+          p_max_attempts?: number
+          p_person_id: string
+          p_request_id: string
+        }
+        Returns: {
+          shift_id: string
+          status: string
+        }[]
       }
       customer_create_or_get: {
         Args: { p_name?: string; p_phone: string }
@@ -2072,6 +2293,10 @@ export type Database = {
           person_id: string
         }[]
       }
+      end_counter_shift: {
+        Args: { p_person_id: string; p_shift_id: string }
+        Returns: string
+      }
       grant_assignment_with_invite: {
         Args: {
           p_account_email: string
@@ -2106,6 +2331,19 @@ export type Database = {
           p_valid_for: string
         }
         Returns: string
+      }
+      issue_counter_device_setup_code: {
+        Args: {
+          p_code_hash: string
+          p_issued_by: string
+          p_label: string
+          p_outlet_id: string
+          p_valid_for: string
+        }
+        Returns: {
+          code_id: string
+          status: string
+        }[]
       }
       manual_ledger_people: {
         Args: never
@@ -2172,11 +2410,48 @@ export type Database = {
           user_id: string
         }[]
       }
+      redeem_counter_device_setup_code: {
+        Args: {
+          p_code_hash: string
+          p_device_id: string
+          p_max_attempts?: number
+        }
+        Returns: {
+          device_id: string
+          outlet_id: string
+          status: string
+        }[]
+      }
+      reject_counter_shift_request: {
+        Args: { p_person_id: string; p_request_id: string }
+        Returns: string
+      }
+      remove_counter_device: {
+        Args: { p_device_id: string; p_removed_by: string }
+        Returns: string
+      }
       rename_expense_category: {
         Args: { p_from: string; p_rewrite_history: boolean; p_to: string }
         Returns: {
           expense_rows_moved: number
           ledger_rows_moved: number
+        }[]
+      }
+      report_counter_device_state: {
+        Args: { p_unsent: number }
+        Returns: string
+      }
+      request_counter_shift: {
+        Args: {
+          p_code_hash: string
+          p_device_id: string
+          p_username: string
+          p_valid_for: string
+        }
+        Returns: {
+          expires_at: string
+          request_id: string
+          status: string
         }[]
       }
       resolve_email_sign_in: {

@@ -37,7 +37,7 @@ separate new bill rather than edited totals.
 - **THEN** status/void attribution change and every original sale field remains unchanged
 
 #### Scenario: Counter attempts to void
-- **WHEN** a counter machine session attempts the void transition
+- **WHEN** a counter device session attempts the void transition
 - **THEN** the database rejects the update
 
 ### Requirement: Bill line items snapshot the sale and stay internally consistent
@@ -68,19 +68,23 @@ an identity with different content SHALL be refused as conflict.
 
 #### Scenario: Identity content differs
 - **WHEN** the UUID is replayed with a changed payment method or total
-- **THEN** no second bill exists and the response is an idempotency conflict
+- **THEN** no second bill exists and the response is an identity conflict
 
 ### Requirement: Revenue date and payment date are explicit and independently validated
 
-Every paid bill SHALL carry `ordered_at` and explicit `business_date` for sales/
-revenue plus `paid_at` and explicit `payment_business_date` for payment/drawer
-accounting. Each date SHALL equal what the outlet cutover implies for its matching
-timestamp. Deferred payment SHALL preserve the order's original pair; direct
-payment SHALL resolve both pairs from that transaction's actual times.
+Every paid bill SHALL carry `ordered_at` and an explicit `business_date` for
+revenue, plus `paid_at` and an explicit `payment_business_date` for the drawer.
+Each date SHALL equal what the outlet cutover implies for its matching timestamp.
+Paying an order SHALL preserve that order's original pair; a pay-now sale SHALL
+resolve both pairs from that transaction's actual times.
 
-#### Scenario: Order before cutoff is paid after cutoff
-- **WHEN** an order created at 03:50 is paid cash at 04:10 under a 04:00 cutover
-- **THEN** its revenue business date is the earlier day and payment business date is the later day
+The two dates are almost always the same, because an order is paid minutes after
+it is taken. They are stored separately so that the exception is representable
+rather than silently mis-dated.
+
+#### Scenario: Order before cutover is paid after cutover
+- **WHEN** an order created at 03:50 is paid in cash at 04:10 under a 04:00 cutover
+- **THEN** its revenue business date is the earlier day and its payment business date is the later day
 
 #### Scenario: Either date is impossible
 - **WHEN** a command supplies a revenue or payment date contradicting its matching timestamp/cutover

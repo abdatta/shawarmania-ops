@@ -56,7 +56,7 @@ const PERSONAS = {
     email: 'deactivated.kalyani@login.shawarmania.invalid',
     sub: '10000000-0000-4000-a000-000000000008',
   },
-  revokedDevice: {
+  removedDevice: {
     email: 'revoked.tablet.kalyani@login.shawarmania.invalid',
     sub: '10000000-0000-4000-a000-000000000009',
   },
@@ -438,11 +438,11 @@ describe('a deactivated account with a still-valid session', () => {
   })
 })
 
-describe('a revoked counter device with a still-valid session', () => {
+describe('a removed counter tablet with a still-valid session', () => {
   let revoked: Client
 
   beforeAll(async () => {
-    revoked = (await signIn(PERSONAS.revokedDevice.email)).client
+    revoked = (await signIn(PERSONAS.removedDevice.email)).client
   })
 
   it('reads nothing — menu, bills, shifts, even its own device row', async () => {
@@ -459,7 +459,7 @@ describe('a revoked counter device with a still-valid session', () => {
       outlet_id: OUTLETS.kalyani,
       business_date: resolveBusinessDate(new Date(), '04:00'),
       biller_profile_id: '10000000-0000-4000-a000-00000000000a',
-      counter_device_id: PERSONAS.revokedDevice.sub,
+      counter_device_id: PERSONAS.removedDevice.sub,
       shift_id: '40000000-0000-4000-a000-000000000002',
       subtotal_paise: 13900,
       total_paise: 13900,
@@ -771,7 +771,7 @@ describe('the global customer directory', () => {
   it.each([
     ['a Franchise Admin', PERSONAS.faKalyani.email],
     ['an Employee', PERSONAS.employeeKalyani.email],
-    ['a revoked device', PERSONAS.revokedDevice.email],
+    ['a revoked device', PERSONAS.removedDevice.email],
   ])('%s has no billing lookup at all', async (_who, email) => {
     const client = (await session(email)).client
     const { error } = await client.rpc('customer_lookup_by_phone', { p_phone: '9000000001' })
@@ -843,6 +843,112 @@ describe('the global customer directory', () => {
       .eq('outlet_id', OUTLETS.kalyani)
     expect(error).toBeNull()
     expect(data).toEqual([])
+  })
+})
+
+/**
+ * The two-device handshake over HTTP.
+ *
+ * The pgTAP file proves the functions and the policies exhaustively. What this
+ * layer adds is what a real session can reach through PostgREST, and the claim
+ * worth making at this level is a negative one: **the confirmation code exists
+ * on the tablet's screen and nowhere a client can ask for it** — not for the
+ * person it was generated for, not for their manager, not for the owner.
+ *
+ * These probes read; the one write each attempts is a denied one, so the seeded
+ * database is left as it was.
+ */
+describe('the counter handshake over HTTP', () => {
+  it('the tablet sees the shift it is holding, and its own outlet', async () => {
+    const tablet = (await session(PERSONAS.deviceKalyani.email)).client
+
+    const { data: shifts, error } = await tablet
+      .from('counter_shifts')
+      .select('device_id, outlet_id, person_id, ended_at')
+    expect(error).toBeNull()
+    expect(shifts).toHaveLength(1)
+    expect(shifts?.[0]?.device_id).toBe(PERSONAS.deviceKalyani.sub)
+    expect(shifts?.[0]?.outlet_id).toBe(OUTLETS.kalyani)
+    expect(shifts?.[0]?.ended_at).toBeNull()
+
+    const { data: outlets } = await tablet.from('outlets').select('id')
+    expect(outlets?.map((row) => row.id)).toEqual([OUTLETS.kalyani])
+  })
+
+  it('and sees no other tablet shift', async () => {
+    const tablet = (await session(PERSONAS.deviceKalyani.email)).client
+    const { data } = await tablet
+      .from('counter_shifts')
+      .select('id')
+      .eq('outlet_id', OUTLETS.kanchrapara)
+    expect(data).toEqual([])
+  })
+
+  it('the operator sees the shift they hold, which is what the end button acts on', async () => {
+    const biller = (await session(PERSONAS.billerKalyani.email)).client
+    const { data, error } = await biller
+      .from('counter_shifts')
+      .select('person_id, device_id')
+      .is('ended_at', null)
+    expect(error).toBeNull()
+    expect(data).toHaveLength(1)
+    expect(data?.[0]?.person_id).toBe(PERSONAS.billerKalyani.sub)
+  })
+
+  it('a colleague at the same outlet sees none of it', async () => {
+    const employee = (await session(PERSONAS.employeeKalyani.email)).client
+    const { data } = await employee.from('counter_shifts').select('id')
+    expect(data).toEqual([])
+  })
+
+  it('nobody can read a confirmation code, including the person it names', async () => {
+    for (const persona of [
+      PERSONAS.billerKalyani,
+      PERSONAS.faKalyani,
+      PERSONAS.superAdmin,
+      PERSONAS.deviceKalyani,
+    ]) {
+      const client = (await session(persona.email)).client
+      const { error } = await client.from('counter_shift_requests').select('code_hash' as 'id')
+      expect(error?.code).toBe('42501')
+    }
+  })
+
+  it('nor can anyone select * on the requests, because that expands to the code', async () => {
+    const biller = (await session(PERSONAS.billerKalyani.email)).client
+    const { error } = await biller.from('counter_shift_requests').select('*')
+    expect(error?.code).toBe('42501')
+  })
+
+  it('the setup codes are closed to every client role', async () => {
+    const sa = (await session(PERSONAS.superAdmin.email)).client
+    const { error } = await sa.from('counter_device_setup_codes' as 'counter_devices').select('id')
+    expect(error?.code).toBe('42501')
+  })
+
+  it('nobody hand-writes themselves a shift', async () => {
+    const biller = (await session(PERSONAS.billerKalyani.email)).client
+    const { error } = await biller.from('counter_shifts').insert({
+      device_id: PERSONAS.deviceKalyani.sub,
+      outlet_id: OUTLETS.kalyani,
+      person_id: PERSONAS.billerKalyani.sub,
+      business_date: resolveBusinessDate(new Date(), '04:00'),
+      expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+    })
+    expect(error?.code).toBe('42501')
+  })
+
+  it('and the privileged handshake functions are not RPCs anybody may call', async () => {
+    const biller = (await session(PERSONAS.billerKalyani.email)).client
+    const { error } = await biller.rpc(
+      'confirm_counter_shift' as 'app_business_date',
+      {
+        p_person_id: PERSONAS.billerKalyani.sub,
+        p_request_id: crypto.randomUUID(),
+        p_code_hash: 'whatever',
+      } as never,
+    )
+    expect(error).not.toBeNull()
   })
 })
 

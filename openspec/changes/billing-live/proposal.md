@@ -1,70 +1,86 @@
 # Proposal: Billing Live
 
-> **Model**: Opus · **Wave**: D · **Depends on**: #7, #9, #30, #31, #32, #33 · **Gate**: one registered device at each outlet takes immediate and deferred payments; every accepted write commits locally before UI success and lands exactly once; pending writes survive logout/restart; official numbers do not collide; history and recovery reconcile; only a resolved online queue receives the device-day seal; gates promote `demo → live`.
+> **Model**: Opus · **Wave**: D · **Depends on**: #7, #9, #30, #31, #32, #33 · **Gate**: **Billing V1.** The real menu is entered through the app by a person with no SQL; one tablet at each outlet takes real payments, immediate and on handover; every accepted write commits locally before the UI reports success and lands exactly once; unsent work survives logout and restart; bill numbers never collide; only a resolved online queue receives the tablet's end-of-day confirmation; and the ledger stops carrying that outlet's counter revenue on the day it goes live.
 
 ## Why
 
-This final integration lets both counters take real money. The UI, device/session
-boundary, customer identity, and transaction contract land first so this remains
-a true `*-live` adapter swap rather than a redesign during rollout.
+This is the integration and rollout change: the counter starts taking real money.
+The tablet boundary, customer identity, transaction contract and the whole
+lifecycle UI land first, so this stays a true adapter swap rather than a redesign
+during rollout.
 
 ## What Changes
 
-- Connect counter, open-order, customer lookup, history, void, correction,
-  device recovery, and manager recovery adapters to real contracts.
-- Read the latest menu while reachable and retain the active session's menu
-  snapshot so a transient request failure does not interrupt an already-open counter.
+- **Make menu management real.** The manager's menu surface becomes a live editor
+  for categories, items, prices and availability, and the owner enters both
+  outlets' real menus through it. Nothing about billing can go live until a real
+  menu exists, and the roadmap forbids it arriving by any route a franchisee could
+  not repeat.
+- Connect the counter, open orders, customer lookup, shift history, void and
+  correction adapters to the real contracts from #9, #32 and #33.
+- Read the latest menu while reachable, and keep the active shift's menu snapshot
+  so a transient failure does not interrupt an already-open counter.
 - Commit every accepted counter command to IndexedDB before clearing its form,
   never await the network, and retry through one page leader with backoff.
-- Preserve pending operations through logout, restart, cutoff, and app updates;
-  a restart may drain old work but starting or resuming billing requires online sign-in.
+- Preserve unsent work through the shift ending, restart, cutover and app update.
+  A restart may drain old work, but starting or resuming billing requires online
+  approval on the operator's phone.
 - Show an offline banner, classify actual request results instead of trusting
-  `navigator.onLine`, and stop new work at cutoff until online authentication succeeds.
-- Treat exact replay as success, UUID reuse with different content as conflict,
-  and permanent rejection as quarantine with the approved correction/discard flow.
-- Sync valid pre-cutoff commands later and recover valid pre-revocation writes
-  through the authenticated upload-only path, with admin-visible flags.
-- Let the counter finish a business date only after its queue is resolved, end
-  the grant, and write the current device-day seal consumed by #12 sign-off.
-- Enforce exactly one active registered billing device at each outlet while
-  retaining concurrency-safe server numbering/idempotency for later expansion.
-- Promote billing, menu, history, customer, and device surfaces from `demo` to
-  `live` while preserving the synthetic demo walkthrough.
+  `navigator.onLine`, and stop new work at cutover.
+- Treat an exact replay as success, reuse of a UUID with different content as a
+  conflict, and a permanent refusal as needing attention with the approved
+  correction or discard flow.
+- Let the counter finish a business date only once its queue is resolved, end the
+  shift, and write the end-of-day confirmation #12 consumes.
+- Enforce exactly one active tablet at each outlet while keeping server numbering
+  and idempotency concurrency-safe for #35.
+- Promote billing, menu, history, customer and tablet surfaces from `demo` to
+  `live`, one outlet at a time, while preserving the synthetic walkthrough.
+- **Mark the handover in the manual ledger.** From the day an outlet goes live,
+  that outlet's counter revenue comes from bills, and the ledger's revenue entry
+  for it says so on screen rather than inviting the figure to be typed twice.
+  Aggregator commission, cash in and out, and the counted drawer stay manual until
+  #12 and #13.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `billing-delivery`: Billing-specific local envelopes, retry ordering, exact
-  replay, cutoff behavior, quarantine, and recovery for transient failures.
+- `billing-delivery`: Local envelopes, retry ordering, exact replay, cutover
+  behaviour, needs-attention handling, and end-of-day confirmation for the counter.
 
 ### Modified Capabilities
 
-- `counter-billing`: Immediate/deferred payment operates on real data with
-  durable local acknowledgement and one-device ownership.
-- `menu-management`: Billing reads the latest live menu and uses the active
-  session snapshot only after real backend failure.
-- `demo-mode`: Promoted surfaces retain their coherent synthetic adapter path.
-- `app-shell`: Device, billing, history, and recovery gates reach final live
-  states without exposing personal-role navigation on the counter.
+- `counter-billing`: Immediate payment and payment on handover operate on real
+  data with durable local acknowledgement and one-tablet ownership.
+- `menu-management`: The menu becomes a real editable record, and billing reads
+  the latest live menu, falling back to the active shift's snapshot only after a
+  real backend failure.
+- `manual-ledger`: A live outlet's counter revenue is sourced from bills, and the
+  ledger says so instead of accepting a second hand-typed figure.
+- `demo-mode`: Promoted surfaces keep their coherent synthetic path.
+- `app-shell`: Tablet, billing, history and menu gates reach their final live
+  states without exposing personal navigation on the counter.
 
 ## Impact
 
-Dexie dependency/schema, billing/menu/customer/history adapters, feature
-registry, sync indicators, recovery wiring, page lifecycle coordination,
-device-day finish/seal wiring, integration tests, transient-failure Playwright
-tests, and live gates change.
+Dexie dependency and schema, billing, menu, customer and history adapters, the
+live menu editor, the feature registry, sync indicators, page lifecycle
+coordination, end-of-day confirmation wiring, the manual ledger's revenue entry,
+integration tests, transient-failure Playwright tests, and live gates change.
 
 ## Non-goals
 
-- Multiple active devices at one outlet; roadmap change #35 adds them after V1.
-- Deliberate offline restart and extended-outage operation; roadmap change #34 adds them after V1.
-- Redesigning #31 or weakening #9/#32/#33 contracts.
-- Attendance, emergency personal-device billing, printing, GST, digital sharing,
-  partial payments, or split tender.
+- Several active tablets at one outlet; #35 adds them after V1.
+- Deliberate offline restart and extended-outage operation; #34 adds them after V1.
+- Redesigning #31, or weakening the #9, #32 and #33 contracts.
+- Order transfer or any recovery path; a manager cancels a stranded order.
+- Retiring the manual ledger, which #12 owns.
+- Attendance from the tablet, emergency personal-device billing, printing, GST,
+  digital sharing, partial payments or split tender.
 
 ## Docs to update before archive
 
 `docs/ARCHITECTURE.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/SCREENS.md`,
-`docs/DEMO_MODE.md`, `docs/OPERATIONS.md`, `docs/TESTING.md`, and
+`docs/DEMO_MODE.md`, `docs/OPERATIONS.md`, `docs/TESTING.md` and
 `docs/LIMITATIONS.md`.

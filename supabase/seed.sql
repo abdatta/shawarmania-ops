@@ -16,6 +16,7 @@
 --   40000000-…  shifts              50000000-…     bills
 --   60000000-…  inventory           70000000-…     alerts
 --   80000000-…  customers (business-wide, not per outlet — see #32)
+--   90000000-…  counter shifts (who is on which tablet today)
 
 -- ---------------------------------------------------------------------------
 -- Outlets. Cutover 04:00 and radius 150 m are owner-confirmed (2026-07-26).
@@ -131,12 +132,14 @@ values
   ('10000000-0000-4000-a000-000000000001', 'Synthetic Owner',        '911111111001', true,  null),
   ('10000000-0000-4000-a000-000000000002', 'Synthetic Admin Kal',    '911111111002', true,  'Manager'),
   ('10000000-0000-4000-a000-000000000003', 'Synthetic Admin Kpa',    '911111111003', true,  'Manager'),
-  ('10000000-0000-4000-a000-000000000004', 'Counter Tablet Kal',     '911111111004', true,  null),
-  ('10000000-0000-4000-a000-000000000005', 'Counter Tablet Kpa',     '911111111005', true,  null),
+  -- The three tablets are NOT here. A counter tablet has no profile and no
+  -- assignment since counter-devices-and-offline: it is a machine principal, and
+  -- a synthetic person for it would inherit human behaviour by accident rather
+  -- than by decision. Their auth users exist above; their rows are in
+  -- `counter_devices` below and nowhere else.
   ('10000000-0000-4000-a000-000000000006', 'Synthetic Staff Kal',    '911111111006', true,  'Counter staff'),
   ('10000000-0000-4000-a000-000000000007', 'Synthetic Staff Kpa',    '911111111007', true,  'Counter staff'),
   ('10000000-0000-4000-a000-000000000008', 'Deactivated Admin Kal',  '911111111008', false, 'Manager'),
-  ('10000000-0000-4000-a000-000000000009', 'Revoked Tablet Kal',     '911111111009', true,  null),
   ('10000000-0000-4000-a000-00000000000a', 'Synthetic Biller Kal',   '911111111010', true,  null),
   ('10000000-0000-4000-a000-00000000000b', 'Synthetic Biller Kpa',   '911111111011', true,  null),
   ('10000000-0000-4000-a000-00000000000c', 'Pending Staff Kal',      '911111111014', true,  'Prep'),
@@ -181,12 +184,9 @@ insert into public.assignments (person_id, role, outlet_id, started_on)
 values
   ('10000000-0000-4000-a000-000000000002', 'franchise_admin', '00000000-0000-4000-a000-000000000001', current_date - 500),
   ('10000000-0000-4000-a000-000000000003', 'franchise_admin', '00000000-0000-4000-a000-000000000002', current_date - 450),
-  ('10000000-0000-4000-a000-000000000004', 'biller',          '00000000-0000-4000-a000-000000000001', current_date - 400),
-  ('10000000-0000-4000-a000-000000000005', 'biller',          '00000000-0000-4000-a000-000000000002', current_date - 400),
   ('10000000-0000-4000-a000-000000000006', 'employee',        '00000000-0000-4000-a000-000000000001', current_date - 200),
   ('10000000-0000-4000-a000-000000000007', 'employee',        '00000000-0000-4000-a000-000000000002', current_date - 150),
   ('10000000-0000-4000-a000-000000000008', 'franchise_admin', '00000000-0000-4000-a000-000000000001', current_date - 400),
-  ('10000000-0000-4000-a000-000000000009', 'biller',          '00000000-0000-4000-a000-000000000001', current_date - 90),
   ('10000000-0000-4000-a000-00000000000a', 'biller',          '00000000-0000-4000-a000-000000000001', current_date - 300),
   ('10000000-0000-4000-a000-00000000000b', 'biller',          '00000000-0000-4000-a000-000000000002', current_date - 300),
   ('10000000-0000-4000-a000-00000000000c', 'employee',        '00000000-0000-4000-a000-000000000001', current_date - 10),
@@ -219,20 +219,53 @@ values
    '10000000-0000-4000-a000-000000000003', now(), now() + interval '7 days');
 
 -- ---------------------------------------------------------------------------
--- Counter devices. One live per outlet, plus one revoked (its profile stays
--- active — the tests must prove the device check alone blocks it).
+-- Counter devices. One active per outlet — the database now enforces that — plus
+-- one removed, so the partial index is exercised by data rather than only by a
+-- test, and so the tests have a still-tokened tablet that must be refused.
+--
+-- None of these has a profile or an assignment. That is the point: a tablet is a
+-- machine principal, and what it reaches comes from the shift below rather than
+-- from a synthetic Biller assignment it used to carry.
 
-insert into public.counter_devices (id, outlet_id, label, enrolled_by, enrolled_at, revoked_at, last_seen_at)
+insert into public.counter_devices
+  (id, outlet_id, label, set_up_by, set_up_at, removed_at, last_seen_at, last_reported_unsent)
 values
   ('10000000-0000-4000-a000-000000000004', '00000000-0000-4000-a000-000000000001',
    'Kalyani counter tablet', '10000000-0000-4000-a000-000000000002',
-   now() - interval '30 days', null, now()),
+   now() - interval '30 days', null, now(), 0),
   ('10000000-0000-4000-a000-000000000005', '00000000-0000-4000-a000-000000000002',
    'Kanchrapara counter tablet', '10000000-0000-4000-a000-000000000003',
-   now() - interval '30 days', null, now()),
+   now() - interval '30 days', null, now(), 3),
   ('10000000-0000-4000-a000-000000000009', '00000000-0000-4000-a000-000000000001',
-   'Kalyani old tablet (revoked)', '10000000-0000-4000-a000-000000000002',
-   now() - interval '90 days', now() - interval '7 days', now() - interval '8 days');
+   'Kalyani old tablet (removed)', '10000000-0000-4000-a000-000000000002',
+   now() - interval '90 days', now() - interval '7 days', now() - interval '8 days', 0);
+
+-- ---------------------------------------------------------------------------
+-- A live shift on each active tablet, held by that outlet's Biller.
+--
+-- Seeded rather than opened by the handshake, because a handshake needs a code
+-- somebody read off a screen and there is no screen here. What it gives the
+-- suite is the state every counter policy is written against: this tablet, this
+-- person, this outlet, this trading day. Expiry is the outlet's own next
+-- cutover, so a seeded shift dies at 04:00 exactly as a real one does.
+
+insert into public.counter_shifts
+  (id, device_id, outlet_id, person_id, opened_at, business_date, expires_at)
+select v.id, v.device_id, v.outlet_id, v.person_id,
+       now() - interval '2 hours',
+       public.app_business_date(now(), o.business_day_cutover),
+       public.app_next_cutover(now(), o.business_day_cutover)
+  from (values
+    ('90000000-0000-4000-a000-000000000001'::uuid,
+     '10000000-0000-4000-a000-000000000004'::uuid,
+     '00000000-0000-4000-a000-000000000001'::uuid,
+     '10000000-0000-4000-a000-00000000000a'::uuid),
+    ('90000000-0000-4000-a000-000000000002'::uuid,
+     '10000000-0000-4000-a000-000000000005'::uuid,
+     '00000000-0000-4000-a000-000000000002'::uuid,
+     '10000000-0000-4000-a000-00000000000b'::uuid)
+  ) as v (id, device_id, outlet_id, person_id)
+  join public.outlets o on o.id = v.outlet_id;
 
 -- ---------------------------------------------------------------------------
 -- Menu. The real live menu (business facts), per outlet. All items are

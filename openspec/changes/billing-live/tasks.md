@@ -1,41 +1,56 @@
-## 1. Local Delivery Store
+## 1. The menu becomes real
 
-- [ ] 1.1 Add the versioned Dexie billing envelope, dependency, result, tombstone, and lease records with migrations that preserve pending data across application updates.
-- [ ] 1.2 Implement transactional local acceptance so a command is acknowledged and its form clears only after IndexedDB commit, with a non-destructive blocking state when storage fails.
-- [ ] 1.3 Implement Web Locks leader election with the IndexedDB lease fallback and dependency-aware draining that does not freeze unrelated order chains.
-- [ ] 1.4 Implement bounded retry/backoff and lifecycle triggers using actual request evidence, with browser connectivity events used only as retry hints.
-- [ ] 1.5 Map accepted, exact-replay, retryable, version-conflict, idempotency-conflict, permanent-rejection, corrected, and discarded outcomes to durable local states.
+- [ ] 1.1 Promote `admin-menu` to `live` with full create, rename, reprice, reorder, availability and retirement, prices entered and stored in integer paise, scoped by assignment.
+- [ ] 1.2 Add RLS tests proving a manager writes only their own outlets' menu and reads no other outlet's.
+- [ ] 1.3 Prove from an empty database that an outlet's whole menu can be created through the UI with no SQL, and that a retired item leaves every captured line unchanged.
+- [ ] 1.4 GATE: both outlets' real menus are entered through the app by the owner before any tablet is set up.
 
-## 2. Real Billing Adapters
+## 2. Local delivery store
 
-- [ ] 2.1 Connect the live menu adapter so reachable sessions always fetch the latest outlet menu and an active session falls back only after a real backend failure.
-- [ ] 2.2 Connect customer exact lookup and create-or-get adapters without exposing directory browse, cross-outlet bill history, or phone values in logs.
-- [ ] 2.3 Connect local-first adapters for direct pay and create/revise/cancel/pay order commands, preserving provisional references until official server results arrive.
-- [ ] 2.4 Connect live open-order, shift-summary, bill-history, void/replacement, quarantine correction/discard, and late/recovery status reads to their authorized contracts.
-- [ ] 2.5 Connect FA/SA stranded-order transfer/recovery cancellation and revoked-device upload-only recovery without restoring device access.
-- [ ] 2.6 Preserve typed adapter composition so screens import neither Supabase nor Dexie directly.
+- [ ] 2.1 Add the versioned Dexie envelope, dependency, result, tombstone and lease records, with migrations that preserve unsent data across application updates.
+- [ ] 2.2 Implement transactional local acceptance so a command is acknowledged and its form clears only after the IndexedDB commit, with a non-destructive blocking state when storage fails.
+- [ ] 2.3 Implement Web Locks leader election with the IndexedDB lease fallback, and dependency-aware draining that does not freeze unrelated order chains.
+- [ ] 2.4 Implement bounded retry and backoff driven by actual request evidence, with browser connectivity events used only as retry hints.
+- [ ] 2.5 Map accepted, exact replay, retryable, order-not-open, identity conflict, permanent refusal, corrected and discarded outcomes to durable local states.
 
-## 3. V1 Session, Cutoff, And Recovery Behavior
+## 3. Real billing adapters
 
-- [ ] 3.1 Keep pending and quarantined envelopes through operator logout, daily cutoff, browser restart, and compatible app updates while clearing ordinary human credentials.
-- [ ] 3.2 Allow an already-open authenticated counter to continue from its active menu snapshot during a transient outage, with a persistent offline banner and captured line snapshots.
-- [ ] 3.3 Require online authentication and a fresh menu to start or resume new billing after reload, missing grant, or cutoff while still permitting old queue delivery/status.
-- [ ] 3.4 Stop ordinary drain after device revocation and expose authenticated FA/SA upload-only recovery for eligible historical envelopes.
-- [ ] 3.5 Add pending, delivered, blocked, quarantined, late, recovered, void, and replacement indicators using semantic tokens in both themes.
-- [ ] 3.6 Add the online finish-day flow that drains and verifies the date, refuses unresolved local states, ends the grant, writes the server seal/watermark, and locks further work under that grant.
+- [ ] 3.1 Connect the live menu adapter so reachable sessions always fetch the latest outlet menu and a live shift falls back only after a real backend failure.
+- [ ] 3.2 Connect customer exact lookup and create-or-get adapters without exposing directory browse, cross-outlet history, or phone values in logs.
+- [ ] 3.3 Connect local-first adapters for pay-now and create, revise, cancel and pay-order commands, keeping a bill unnumbered on screen until the server result arrives.
+- [ ] 3.4 Connect live open-order, shift-summary, bill-history, void and re-ring, manager cancellation of a stranded order, and needs-attention correction and discard reads to their authorised contracts.
+- [ ] 3.5 Preserve typed adapter composition so screens import neither Supabase nor Dexie directly.
 
-## 4. Gate Promotion And Demo Preservation
+## 4. V1 session and cutover behaviour
 
-- [ ] 4.1 Promote device enrollment, counter billing, open orders, customer lookup, billing history, and recovery surfaces from `demo` to `live` for their authorized contexts.
-- [ ] 4.2 Verify personal Biller sessions retain Employee navigation while the enrolled device exposes only billing pages after daily operator authentication.
-- [ ] 4.3 Keep `/demo` on the synthetic #31 adapters without opening the real Dexie queue or making Supabase writes.
-- [ ] 4.4 Update `docs/ARCHITECTURE.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/SCREENS.md`, `docs/DEMO_MODE.md`, `docs/OPERATIONS.md`, `docs/TESTING.md`, and `docs/LIMITATIONS.md` for the exact V1 boundary and V2 follow-ups.
+- [ ] 4.1 Keep unsent and needs-attention envelopes through the shift ending, cutover, browser restart and compatible app updates.
+- [ ] 4.2 Let an already-open counter continue from its shift's menu snapshot during a transient outage, with a persistent offline banner and captured line snapshots.
+- [ ] 4.3 Require the backend and a freshly approved shift to start or resume new billing after a reload, a missing shift or cutover, while still permitting old queue delivery and status.
+- [ ] 4.4 Stop draining once a tablet is removed, keep its envelopes, and warn on the Tablets surface before removing a tablet reporting unsent work.
+- [ ] 4.5 Add not-sent-yet, retrying, sent, needs-attention, void and cancelled indicators using semantic tokens in both themes.
+- [ ] 4.6 Add the online finish-day flow that drains and verifies the date, refuses while anything is unresolved, ends the shift, writes the end-of-day confirmation, and locks further work under it.
 
-## 5. Verification And Phase Gate
+## 5. The ledger handover
 
-- [ ] 5.1 Add unit tests for local acceptance, dependency ordering, leader failover, retry classification, envelope upgrades, correction linkage, and PII-free diagnostics.
-- [ ] 5.2 Add integration tests for direct pay, deferred payment, conflict/quarantine, exact replay, cutoff delivery, revoked-device recovery, and current-menu fallback behavior.
-- [ ] 5.3 Run browser tests that drop the backend before and after local commit, lose the response after server commit, logout/restart with pending work, reject offline restart of new work, prove eventual exactly-once settlement, and refuse finish-day until the queue is resolved and sealed online.
-- [ ] 5.4 Run `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build`, and `npm run test:e2e`, then inspect phone/tablet light and dark layouts.
-- [ ] 5.5 Run `npm run db:start && npm run db:reset`, then `npm run test:db`, `npm run test:rls`, and `npm run test:e2e:auth` against the local backend.
-- [ ] 5.6 PHASE GATE — Billing V1 live: at both outlets, one enrolled device records direct and deferred payment; accepted writes survive logout/restart and land exactly once after forced response loss; current-menu and cutoff rules hold; quarantine/recovery is accountable; an unresolved order/queue cannot receive a device-day seal; real gates are live and the demo walkthrough remains isolated.
+- [ ] 5.1 Source a live outlet's counter revenue from paid bills for business dates on and after that outlet's go-live date, labelled on screen as coming from the counter, with the typed field removed for those dates.
+- [ ] 5.2 Leave earlier business dates, and an outlet that is not live yet, exactly as they are, each labelled for what it is.
+- [ ] 5.3 Add the test that fails if a live outlet's day or month counts counter revenue more than once.
+- [ ] 5.4 Leave aggregator commission, cash in and out, expenses and the counted drawer on the manual path, and say in `docs/LIMITATIONS.md` that #12 and #13 own their retirement.
+
+## 6. Gate promotion and demo preservation
+
+- [ ] 6.1 Promote tablet setup, counter billing, open orders, customer lookup and billing history from `demo` to `live` for their authorised contexts.
+- [ ] 6.2 Verify personal Biller sessions keep Employee navigation while the tablet exposes only billing pages under an approved shift.
+- [ ] 6.3 Keep `/demo` on the synthetic #31 adapters, opening no real queue and making no Supabase write.
+- [ ] 6.4 Update `docs/ARCHITECTURE.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/SCREENS.md`, `docs/DEMO_MODE.md`, `docs/OPERATIONS.md`, `docs/TESTING.md` and `docs/LIMITATIONS.md` for the exact V1 boundary and the V2 follow-ups.
+
+## 7. Verification and rollout
+
+- [ ] 7.1 Add unit tests for local acceptance, dependency ordering, leader failover, retry classification, envelope upgrades, correction linkage and diagnostics carrying no customer details.
+- [ ] 7.2 Add integration tests for pay-now, payment on handover, an aggregator order collected by a rider, needs-attention handling, exact replay, delivery after cutover, and menu fallback.
+- [ ] 7.3 Run browser tests that drop the backend before and after local commit, lose the response after the server commits, restart with unsent work, refuse to start new work offline, prove eventual exactly-once settlement, and refuse finish-day until the queue is resolved.
+- [ ] 7.4 Run `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` and `npm run test:e2e`, then inspect phone and tablet layouts in light and dark.
+- [ ] 7.5 Run `npm run db:start && npm run db:reset`, then `npm run test:db`, `npm run test:rls` and `npm run test:e2e:auth`.
+- [ ] 7.6 Adversarial review pass: a separate session reads these spec deltas against the delivered adapters, gates and ledger handover, and reports every requirement it cannot find satisfied.
+- [ ] 7.7 ROLLOUT: set up the first outlet's tablet, run shadow smoke tests before any customer money, promote, hand its ledger over, and trade one full day closed cleanly. Only then repeat for the second outlet.
+- [ ] 7.8 PHASE GATE — Billing V1 live: at both outlets, one tablet takes real immediate and on-handover payments against a menu entered through the app; accepted writes survive restart and land exactly once after forced response loss; menu and cutover rules hold; a stranded order is cleared by a manager; an unresolved queue cannot receive an end-of-day confirmation; counter revenue appears exactly once in the ledger; the real gates are live and the demo walkthrough is still isolated.

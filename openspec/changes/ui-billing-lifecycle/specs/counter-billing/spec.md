@@ -1,121 +1,132 @@
 ## ADDED Requirements
 
-### Requirement: The composer supports immediate payment and an unpaid order
+### Requirement: The composer supports immediate payment and saving an order
 
-The billing composer SHALL offer Pay now and Save unpaid after at least one line
-exists. Pay now SHALL retain the existing single-method fast path. Save unpaid
-SHALL create a device-owned order reference without assigning a bill number and
-SHALL clear the composer only after the adapter accepts it.
+The billing composer SHALL offer Pay now and Save order once at least one line
+exists. Pay now SHALL retain the existing single-method fast path. Save order
+SHALL create a tablet-owned order without assigning a bill number, and SHALL
+clear the composer only after the adapter accepts it.
 
 #### Scenario: Customer pays upfront
 - **WHEN** an operator selects one payment method and confirms Pay now
-- **THEN** a paid result is created directly without first requiring a saved order
+- **THEN** a paid result is created directly, with no order saved first
 
-#### Scenario: Customer will pay later
-- **WHEN** an operator chooses Save unpaid
-- **THEN** the order appears in that device's Open orders with an order reference and no official bill number
+#### Scenario: Food has to be made first
+- **WHEN** an operator chooses Save order
+- **THEN** the order appears in Open orders with its order number and no bill number
 
-### Requirement: Open orders remain editable on their originating device
+### Requirement: A saved order shows its order number where it cannot be missed
 
-Open orders SHALL list only orders owned by the registered device. Any eligible
-operator using that device SHALL reopen and change lines, quantities, customer
-form values, and discount until payment or cancellation. The original creation
-time and business date SHALL remain visible and unchanged, including after cutoff.
+On saving, the surface SHALL show the order number prominently enough to be read
+aloud across a counter, and SHALL keep it visible on that order everywhere it
+appears until it is paid or cancelled. The order number SHALL be visually
+distinct from a bill number wherever both could be seen.
+
+#### Scenario: The order is saved
+- **WHEN** an order is accepted
+- **THEN** its order number is displayed immediately and large enough to be called out
+
+#### Scenario: The order is paid
+- **WHEN** an order becomes a paid bill
+- **THEN** the bill number identifies it from that point and the two numbers are never presented as interchangeable
+
+### Requirement: Open orders remain editable on the tablet that took them
+
+Open orders SHALL list only orders owned by this tablet, each with its order
+number, age, customer label, items and total. Any operator holding the tablet's
+live shift SHALL reopen and change lines, quantities, customer form values and
+discount, until payment or cancellation. The original order time and business
+date SHALL remain visible and unchanged.
 
 #### Scenario: Incoming operator edits an order
-- **WHEN** a different eligible operator signs in on the same device and edits its unpaid order
+- **WHEN** a different operator's shift begins on the same tablet and they edit its open order
 - **THEN** the order keeps its creator and original date while recording the new acting operator
 
-#### Scenario: Another healthy device requests the order
-- **WHEN** a different device requests an ordinary edit or payment
-- **THEN** the order is not offered as editable there
+#### Scenario: A manager cancelled it first
+- **WHEN** an operator tries to pay an order that the outlet's manager cancelled moments earlier
+- **THEN** the attempt stops, states that the order was cancelled and by whom, and creates no bill
 
-### Requirement: Stale order edits stop instead of merging silently
+### Requirement: Payment finalises the displayed order in one method
 
-An edit SHALL carry the version displayed. If that version is stale, the surface
-SHALL preserve the attempted input, explain that the order changed, and require
-reload/reapplication rather than silently merging or overwriting.
+An open order SHALL be payable in full through exactly one payment method,
+including the aggregator methods used when a rider collects. Successful payment
+SHALL show the bill number once known, or state plainly that it is not sent yet
+while delivery is pending. No partial, deposit or split payment control SHALL
+appear.
 
-#### Scenario: Two tabs edit one order
-- **WHEN** one tab saves version 4 and another submits a change based on version 3
-- **THEN** the second save is refused and the operator is offered the current order
+#### Scenario: A rider collects an aggregator order
+- **WHEN** an operator opens an aggregator order and pays it by that aggregator's method
+- **THEN** the order becomes a paid bill with that method and leaves Open orders
 
-### Requirement: Payment finalizes the displayed order in one method
+#### Scenario: An order is paid after cutover
+- **WHEN** an operator pays an order taken before the outlet's cutover
+- **THEN** the paid view keeps the order's original business date and shows the payment time separately
 
-An unpaid order SHALL be payable in full through exactly one payment method.
-Successful payment SHALL show the official bill number when available or a
-clearly non-official pending reference while delivery is pending. No partial,
-deposit, or split payment control SHALL appear.
+### Requirement: Open orders are cancelled with attribution, never deleted
 
-#### Scenario: Order is paid after cutoff
-- **WHEN** an eligible operator signs in online after cutoff and pays an older order
-- **THEN** the paid view retains the order's original business date and displays the later payment time/date separately
-
-### Requirement: Unpaid orders are cancelled with attribution, never deleted
-
-An eligible operator on the originating device SHALL cancel an unpaid order only
-after confirming a non-empty reason. The cancelled order SHALL leave actionable
-lists but remain reviewable with actor, device, time, and reason.
+An operator holding the live shift SHALL cancel an open order only after
+confirming a non-empty reason. A cancelled order SHALL leave the actionable list
+but remain reviewable with actor, tablet, time and reason.
 
 #### Scenario: Operator cancels an order
-- **WHEN** an eligible operator confirms cancellation with a reason
-- **THEN** the order becomes cancelled and cannot later be edited or paid
+- **WHEN** an operator confirms cancellation with a reason
+- **THEN** the order becomes cancelled and can no longer be edited or paid
 
 ### Requirement: Exact phone lookup offers form-local autofill
 
 After a complete valid phone is entered, the surface SHALL request an exact
 customer match. A match SHALL prompt before replacing current form details and
-SHALL warn when values conflict. Accepting SHALL affect only this order form;
-declining SHALL change nothing. A new phone SHALL be automatically saved when
-the order or paid bill is accepted.
+SHALL say when values conflict. Accepting SHALL affect only this order's form;
+declining SHALL change nothing. A new phone SHALL be saved automatically when the
+order or paid bill is accepted.
 
 #### Scenario: Saved customer matches an empty form
 - **WHEN** a complete phone matches and the remaining customer fields are empty
-- **THEN** the surface offers to fill the saved details
+- **THEN** the surface offers to fill in the saved details
 
 #### Scenario: Saved name conflicts
-- **WHEN** a complete phone matches but the form contains a different name
-- **THEN** the prompt states that accepting will replace the form name and does not update the saved profile
+- **WHEN** a complete phone matches but the form holds a different name
+- **THEN** the prompt states that accepting replaces the form name, and the saved profile is not updated
 
 #### Scenario: No customer matches
 - **WHEN** a complete phone has no match and the order is accepted
 - **THEN** a global customer is saved automatically from the supplied details
 
-### Requirement: Counter history is limited to the current device shift
+### Requirement: Counter history is limited to the current shift
 
-My shift SHALL show paid bills belonging to the current shift/device and running
-totals by payment method. It SHALL NOT show other shifts, outlet-wide totals,
-quarantined payload contents, or another outlet.
+My shift SHALL show paid bills belonging to this tablet's current shift and
+running totals by payment method. It SHALL NOT show other shifts, outlet-wide
+totals, or another outlet.
 
 #### Scenario: Operator opens My shift
-- **WHEN** the current device has bills from its shift and older outlet bills exist
-- **THEN** only the current shift bills and their method totals appear
+- **WHEN** this tablet has bills from its shift and older outlet bills exist
+- **THEN** only the current shift's bills and their method totals appear
 
-### Requirement: Admin billing history supports immutable correction and recovery
+### Requirement: A manager reviews outlet history, voids, and clears stranded orders
 
-FA SHALL review their outlet's paid bills and SA SHALL review any outlet, with
-date/status/payment filters and bill detail. They SHALL void a paid bill with a
-reason and create a replacement without editing the original. They SHALL review
-quarantined attempts and transfer/cancel orders stranded by an unavailable device.
+A Franchise Admin SHALL review their outlets' paid bills and a Super Admin any
+outlet, with date, status and payment filters, and bill detail. They SHALL void a
+paid bill with a reason and re-ring a replacement without editing the original.
+They SHALL see any open order at that outlet and cancel it with a reason.
 
-#### Scenario: Paid bill is corrected
-- **WHEN** an authorized admin voids a paid bill and re-rings corrected contents
-- **THEN** the original remains unchanged as void and the replacement has a new identity and number
+#### Scenario: A paid bill is corrected
+- **WHEN** an authorised admin voids a paid bill and re-rings the corrected contents
+- **THEN** the original stays unchanged as void and the replacement carries a new identity and number
 
-#### Scenario: Quarantined attempt is corrected
-- **WHEN** an authorized admin edits a quarantined attempt
-- **THEN** submission creates a new linked client UUID and preserves the original attempt
+#### Scenario: An order is stranded on a tablet
+- **WHEN** an order remains open at an outlet whose tablet is unavailable and the manager cancels it with a reason
+- **THEN** the order is cancelled with that manager recorded, and nothing is transferred anywhere
 
-#### Scenario: Stranded order is transferred
-- **WHEN** an FA/SA transfers an open order from a revoked or unavailable device to the outlet's replacement device
-- **THEN** the surface records the actor, time, reason, old device, and new device
+### Requirement: Delivery states are shown in words, without blocking the counter
 
-### Requirement: Exceptional delivery states are visible without blocking the composer
+The surface SHALL distinguish not sent yet, retrying, needs attention, void,
+cancelled and sent, in plain words. It SHALL keep the composer usable and SHALL
+NOT present ordinary unsent state as a dialog.
 
-The surface SHALL distinguish pending, retrying, late-synced, recovery-required,
-quarantined, void, cancelled, and synced states in words. It SHALL keep the main
-composer usable and SHALL NOT present routine pending state as a modal dialog.
+#### Scenario: A paid command has not reached the server
+- **WHEN** local acceptance succeeded but delivery has not
+- **THEN** the bill reads as not sent yet, with the sync indicator, and shows no bill number
 
-#### Scenario: Paid command is pending
-- **WHEN** local acceptance succeeded but server delivery has not
-- **THEN** a pending reference and sync indicator are shown without an official bill number
+#### Scenario: A command will never succeed
+- **WHEN** the server refuses a command permanently
+- **THEN** it reads as needing attention, in a sentence naming what a person should do, and the counter keeps working

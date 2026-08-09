@@ -59,8 +59,12 @@ $$;
 \set OWNER '10000000-0000-4000-a000-000000000001'
 \set FA_KAL '10000000-0000-4000-a000-000000000002'
 \set FA_KPA '10000000-0000-4000-a000-000000000003'
-\set BILLER_KAL '10000000-0000-4000-a000-000000000004'
-\set BILLER_KPA '10000000-0000-4000-a000-000000000005'
+-- The Billers are people. Until counter-devices-and-offline these two ids were
+-- the counter TABLETS, which carried a synthetic Biller assignment and therefore
+-- passed every staff branch below; a tablet is a machine principal now, and what
+-- it may write to this ledger is asserted in 23_counter_tablet_and_shift.sql.
+\set BILLER_KAL '10000000-0000-4000-a000-00000000000a'
+\set BILLER_KPA '10000000-0000-4000-a000-00000000000b'
 \set EMPLOYEE_KAL '10000000-0000-4000-a000-000000000006'
 \set EMPLOYEE_KPA '10000000-0000-4000-a000-000000000007'
 \set KAL '00000000-0000-4000-a000-000000000001'

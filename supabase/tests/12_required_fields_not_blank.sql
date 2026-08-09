@@ -299,7 +299,8 @@ $$, $$ values
   -- correction path collects a column of "mistake", and the moment and the
   -- account already answer what the trace is for. What is refused is a reason
   -- that occupies the field and says nothing.
-  ('manual_ledger_expenses_void_reason_not_blank')
+  ('manual_ledger_expenses_void_reason_not_blank'),
+  ('counter_device_setup_codes_label_not_blank')
 $$, 'every not-blank constraint in the schema is accounted for, and no others exist');
 
 -- The manual ledger's two cash-movement reasons are blank-checked too, under

@@ -199,9 +199,9 @@ select is(
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select throws_ok($q$
-  update public.counter_devices set revoked_at = null
+  update public.counter_devices set removed_at = null
    where id = '10000000-0000-4000-a000-000000000009'
-$q$, '42501', null, 'no client can un-revoke a device');
+$q$, '42501', null, 'no client can un-remove a tablet');
 
 select throws_ok($q$
   select count(*) from public.bill_number_counters

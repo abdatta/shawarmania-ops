@@ -1,104 +1,174 @@
 ## ADDED Requirements
 
-### Requirement: An authorized admin enrolls one active billing device per outlet
+### Requirement: A tablet is set up with a one-time code, and no password is typed on it
 
-The system SHALL let a Franchise Admin enroll the current device only for an
-outlet they manage and SHALL let a Super Admin enroll it for any active outlet.
-Enrollment SHALL bind a machine credential to exactly one outlet and the
-database SHALL permit no more than one unrevoked device for that outlet.
+An authorised admin SHALL generate a single-use setup code for one outlet: a
+Franchise Admin only for an outlet they manage, a Super Admin for any active
+outlet. The code SHALL be stored only as a hash, be readable by no client role,
+expire, and be consumed by its first successful use. Entering it on the tablet
+SHALL create the device session. No account password SHALL be accepted on a
+tablet at setup or at any time afterwards.
 
-#### Scenario: Franchise Admin enrolls their outlet tablet
-- **WHEN** an FA enrolls the current browser for their assigned outlet and no active device exists there
-- **THEN** one active device is created for that outlet and the browser receives its machine session
+#### Scenario: Manager sets up their outlet tablet
+- **WHEN** an FA generates a setup code on their own phone and it is entered on the counter tablet, and no active tablet exists for that outlet
+- **THEN** one active tablet is created for that outlet and the browser receives its device session
 
-#### Scenario: A second active device is refused
-- **WHEN** any admin attempts to enroll another device while the outlet already has an unrevoked device
-- **THEN** enrollment is refused without changing either device
+#### Scenario: A second active tablet is refused
+- **WHEN** a setup code is used while the outlet already has an active tablet
+- **THEN** setup is refused and neither tablet changes
 
-#### Scenario: Cross-outlet enrollment is refused
-- **WHEN** an FA hand-crafts enrollment for an outlet they do not manage
-- **THEN** no Auth identity or device row is created
+#### Scenario: Cross-outlet setup is refused
+- **WHEN** an FA hand-crafts a setup code request for an outlet they do not manage
+- **THEN** no code, Auth identity or tablet row is created
 
-### Requirement: Enrollment leaves no personal admin session on the tablet
+#### Scenario: A code is reused
+- **WHEN** a setup code that has already been consumed or has expired is entered
+- **THEN** setup is refused and the response reveals nothing about the code's history
 
-After successful enrollment, the application SHALL remove the enrolling
-person's session and establish only the machine session. Failure SHALL leave the
-person signed in and SHALL NOT leave a usable partial device.
+#### Scenario: Setup fails midway
+- **WHEN** the privileged setup operation cannot complete
+- **THEN** no tablet able to authenticate remains, the code is not silently consumed, and retry is safe
 
-#### Scenario: Enrollment succeeds
-- **WHEN** an FA or SA completes enrollment
-- **THEN** the app reloads in billing-device context and their personal session cannot call personal or admin adapters
+### Requirement: A shift opens only when the named person enters the tablet's code on their own device
 
-#### Scenario: Enrollment fails midway
-- **WHEN** the privileged enrollment operation cannot complete
-- **THEN** the admin remains signed in, no active partial device can authenticate, and retry is safe
+On a set-up tablet, opening a shift SHALL take a username and nothing else, and
+SHALL create a pending shift request rather than a shift. The server SHALL return
+a confirmation code, which the tablet SHALL display. The shift SHALL be created
+only when the person that username identifies submits that code from a session
+that is not the tablet's. It SHALL succeed only for an active Biller assigned to
+that outlet, that outlet's active Franchise Admin, or an active Super Admin. The
+shift SHALL record person, tablet, outlet, opened time, business date and expiry.
 
-### Requirement: Normal credentials create a daily billing grant without persisting a personal session
-
-On a registered device, normal username/password verification SHALL create a
-billing grant only for an active Biller assigned to that outlet, that outlet's
-active FA, or an active SA. The grant SHALL record person, device, outlet,
-opened time, business date, and expiry. Human tokens SHALL NOT be persisted.
+**Confirming SHALL NOT be possible without the code**, so no single action on the
+personal device can open a counter the person cannot see.
 
 #### Scenario: Biller opens the outlet counter
-- **WHEN** the outlet's active Biller authenticates correctly on its registered device
-- **THEN** a grant for that person, device, outlet, and business date opens and only billing context is available
+- **WHEN** the outlet's active Biller enters their username on the tablet and then enters the displayed code on their own phone
+- **THEN** a shift opens for that person, tablet, outlet and business date, and only billing context is available
 
-#### Scenario: Franchise Admin covers the counter
-- **WHEN** that outlet's FA authenticates on the device
-- **THEN** the same billing-only grant opens without exposing manager navigation or authority
+#### Scenario: Manager covers the counter
+- **WHEN** that outlet's FA does the same
+- **THEN** the same billing-only shift opens without exposing manager navigation or authority
 
-#### Scenario: Super Admin covers the counter
-- **WHEN** an SA authenticates on the registered device
-- **THEN** a billing-only grant opens for the device's fixed outlet without exposing owner navigation or cross-outlet access
+#### Scenario: Owner covers the counter
+- **WHEN** an SA does the same
+- **THEN** a billing-only shift opens for the tablet's own outlet without exposing owner navigation or cross-outlet access
+
+#### Scenario: A wrong code
+- **WHEN** the named person submits a code that does not match the request
+- **THEN** no shift opens, the attempt is counted, and the surface says only that the code did not match
+
+#### Scenario: Repeated wrong codes
+- **WHEN** three wrong codes are submitted for one request
+- **THEN** the request is destroyed, no shift opens, and the tablet offers to ask again with a new code
 
 #### Scenario: Ordinary Employee is refused
-- **WHEN** an Employee who is not a Biller authenticates on the counter
-- **THEN** no grant opens and the response reveals no additional account information
+- **WHEN** an active Employee with no Biller assignment submits the correct code for a tablet
+- **THEN** no shift opens and the response discloses no further account or role detail
 
-### Requirement: Billing grants expire at the outlet cutover
+#### Scenario: Nobody may confirm on another person's behalf
+- **WHEN** an FA or SA hand-crafts a confirmation for a request naming a different person, with the correct code
+- **THEN** the database refuses it and no shift opens
 
-A billing grant SHALL expire at the next cutover of its outlet. The application
-SHALL require online credential verification for another grant and SHALL NOT
-automatically roll the former operator into the new business day.
+#### Scenario: The tablet learns nothing from a username
+- **WHEN** a username that belongs to nobody is submitted on the tablet
+- **THEN** the tablet displays a code and waits, and times out after the same interval as a real request that is never confirmed
+
+### Requirement: The confirmation code is single-use and never stored in the clear
+
+The confirmation code SHALL be generated by the server, stored only as a hash,
+consumed by its first correct use, and destroyed with its request. It SHALL be
+readable by no client role, and SHALL NOT be returned to any caller other than
+the tablet that created the request.
+
+#### Scenario: The code is requested from elsewhere
+- **WHEN** any session other than the requesting tablet reads the shift request
+- **THEN** the outlet, tablet and time are available and the code is not
+
+#### Scenario: The code is reused
+- **WHEN** a code that already opened a shift is submitted again
+- **THEN** it is refused and no second shift opens
+
+### Requirement: A shift request is short-lived, single-use, cancellable, and describes itself
+
+A pending shift request SHALL expire within a few minutes, SHALL be consumed by
+the first successful confirmation or rejection, and a tablet SHALL hold at most
+one pending request at a time. The confirmation surface SHALL state the outlet,
+the tablet and the request time, and SHALL offer rejection without the code. A
+rejection SHALL be recorded with its time. The tablet SHALL be able to cancel its
+own pending request at any point before it resolves.
+
+#### Scenario: A request is left unanswered
+- **WHEN** nobody acts on a pending request before it expires
+- **THEN** it can no longer be confirmed and the tablet offers to ask again
+
+#### Scenario: A person rejects a request they did not make
+- **WHEN** the named person rejects the request, which needs no code
+- **THEN** no shift opens, the rejection is recorded with its time, and the tablet reports that the request was declined
+
+#### Scenario: The tablet cancels a mistyped request
+- **WHEN** the tablet cancels its pending request
+- **THEN** the request resolves as cancelled, no shift opens, and the card is withdrawn from the named person's device rather than left waiting
+
+#### Scenario: A second request while one is pending
+- **WHEN** the tablet submits another request while one is still pending
+- **THEN** the earlier request is superseded, a new code is issued, and at most one pending request exists for that tablet
+
+### Requirement: A person can end their own shift from their own device
+
+A person holding a live shift SHALL see it on the home surface of their own
+shell, with its outlet, tablet and opening time, and SHALL be able to end it from
+there. Ending SHALL take effect at the database, and the tablet SHALL stop
+accepting new counter work at its next request. Locally accepted work SHALL NOT
+be discarded.
+
+#### Scenario: Ending a shift remotely
+- **WHEN** the operator ends their live shift from their own phone
+- **THEN** the shift is no longer live, the tablet returns to the shift-request screen, and no already-committed local operation is lost
+
+#### Scenario: Somebody else's shift
+- **WHEN** any person hand-crafts a request to end a shift they do not hold
+- **THEN** the database refuses it
+
+### Requirement: Shifts expire at the outlet cutover
+
+A shift SHALL expire at the next cutover of its outlet. Another shift SHALL
+require a fresh request and approval, and the former operator SHALL NOT roll
+automatically into the new business day.
 
 #### Scenario: Cutover arrives during an open counter
 - **WHEN** the outlet reaches cutover
-- **THEN** new work is blocked, the operator is signed out of billing context, and online sign-in is required
+- **THEN** new work is blocked and the tablet returns to the shift-request screen
 
 #### Scenario: Old work remains attributable
-- **WHEN** a command created under the former grant drains after cutoff
-- **THEN** it retains that grant, operator, creation time, and original business date
+- **WHEN** a command created under the former shift drains after cutoff
+- **THEN** it retains that shift, operator, creation time and original business date
 
-### Requirement: Device revocation is immediate and recovery is upload-only
+### Requirement: Removing a tablet stops it immediately and permanently
 
-Revoking a device SHALL block its machine session at the next ordinary request.
-An FA for that outlet or an SA MAY authenticate physically on the revoked device
-to submit historically valid pending operations through a recovery-only path.
-Recovery SHALL NOT restore reads, registration, grants, or new command creation.
+Removing a tablet SHALL block its device session at its next request. Removal
+SHALL be permanent: there SHALL be no paused state, and returning that hardware
+to service SHALL require a fresh setup code. Any live shift on it SHALL end.
 
-#### Scenario: Revoked device makes an ordinary request
-- **WHEN** a still-tokened revoked device requests billing data or submits through the ordinary path
+#### Scenario: A removed tablet makes an ordinary request
+- **WHEN** a still-tokened removed tablet requests billing data or submits work
 - **THEN** the request is refused by the database boundary
 
-#### Scenario: Admin recovers pending work
-- **WHEN** an authorized admin authenticates on that tablet and submits an operation proven to predate revocation under a valid grant
-- **THEN** the operation may be accepted through recovery and is visibly flagged with the recovering admin
+#### Scenario: Removal with unsent work
+- **WHEN** an admin removes a tablet that still reports unsent operations
+- **THEN** the surface states what will be left unsent before the removal is confirmed
 
-#### Scenario: Recovery attempts a new operation
-- **WHEN** recovery submits an operation without valid historical grant and creation evidence
-- **THEN** it is refused and the device remains revoked
+### Requirement: Tablet management exposes operational facts without queued contents
 
-### Requirement: Device management exposes operational facts without queued PII
+An FA SHALL see the tablet for outlets they manage and an SA SHALL see every
+tablet, each with its setup state, last seen time, last reported unsent count,
+and removal. The surface SHALL NOT expose queued payload contents or customer
+phone numbers.
 
-FA SHALL see the device for their outlet and SA SHALL see every device, including
-registration state, last seen time, last reported pending count, and revocation.
-The management surface SHALL NOT expose queued payload contents or customer phones.
-
-#### Scenario: Manager checks their device
-- **WHEN** an FA opens Devices
-- **THEN** only their outlet's device and non-PII telemetry are returned
+#### Scenario: Manager checks their tablet
+- **WHEN** an FA opens Tablets
+- **THEN** only their outlets' tablets and non-identifying telemetry are returned
 
 #### Scenario: Telemetry is stale
-- **WHEN** the device has not reported since its displayed timestamp
-- **THEN** the surface labels the values as last reported rather than claiming a current queue count
+- **WHEN** the tablet has not reported since its displayed timestamp
+- **THEN** the surface labels the values as last reported rather than claiming a current count

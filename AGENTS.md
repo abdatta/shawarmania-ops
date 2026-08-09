@@ -75,7 +75,7 @@ Rationale for each of these choices is recorded in [Architecture](docs/ARCHITECT
 Two device contexts, deliberately different:
 
 - **Personal human accounts** (all four roles until shared counter-device enrollment): an admin-chosen, business-wide username plus password. An account with a private associated email may use either identifier with the same password. Supabase stores the username as a reserved non-deliverable Auth alias; it is provider plumbing, never contact data. Phone numbers remain optional contact facts, not credentials. **Built.**
-- **Counter tablet** (Biller): the *device* is enrolled once and holds a long-lived session scoped by RLS to exactly one outlet. Billers then unlock a shift with a short PIN, which selects attribution — it is not the security boundary. **Not built** — arrives with `counter-devices-and-offline`; until then a Biller signs in with their own username and password, which is recorded in [Limitations](docs/LIMITATIONS.md).
+- **Counter tablet** (Biller): the *tablet* is set up once, with a one-time code an admin generates on their own phone, and holds a long-lived device session scoped by RLS to exactly one outlet. A person then opens a **shift** by typing their username on the tablet and entering the tablet's four-digit code on their own phone; no password is ever typed on the tablet, nobody who cannot see the tablet can open a counter, and there is no fallback approver. **Not built** — arrives with `counter-devices-and-offline`, which also removes the PIN the demo currently uses; until then a Biller signs in with their own username and password, which is recorded in [Limitations](docs/LIMITATIONS.md).
 
 Three rules that follow, and that a change touching auth must not quietly undo:
 

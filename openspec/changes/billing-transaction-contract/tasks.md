@@ -1,40 +1,70 @@
-## 1. Preflight And Schema
+> **Verification protocol for this change.** Every database rule below is written
+> as a failing test **before** the function, trigger or policy that satisfies it,
+> and each numbered section ends in its own provable gate. This is what replaces
+> the model originally assigned to this change; see the Model column note in
+> `ROADMAP.md`.
 
-- [ ] 1.1 Inspect production and seed counts for bills, bill items, and customers; abort the migration with non-PII diagnostics if unexpected real money history exists.
-- [ ] 1.2 Add outlet-scoped orders, order items, order events, billing command receipts, and device-day seals with UUID keys, explicit business dates, integer-paise totals, device/grant attribution, optimistic versions, and required foreign keys.
-- [ ] 1.3 Extend bills with order and payment clocks, payment business date, optional source-order linkage, payment operator/device attribution, and late/recovery flags without weakening immutable paid-history constraints.
-- [ ] 1.4 Add database constraints and triggers for order state transitions, aggregate line arithmetic, captured item snapshots, version increments, and immutable paid/cancelled states.
-- [ ] 1.5 Preserve the transactional per-outlet bill-number allocator so only successful paid-bill creation consumes an official number.
-- [ ] 1.6 Regenerate Supabase schema types and update typed seeds/fixtures for the new order and billing command contract.
+## 1. Preflight and schema
 
-## 2. Atomic Billing Commands
+- [ ] 1.1 Inspect production and seed counts for bills, bill items and customers, and abort the migration with non-identifying diagnostics if unexpected real money history exists.
+- [ ] 1.2 Write the failing DB tests first for every invariant in sections 1 and 2, so the migration is written against assertions rather than the other way round.
+- [ ] 1.3 Add outlet-scoped `orders` and `order_items` with UUID keys, owning tablet, creator and shift, explicit business date, integer-paise totals, captured line snapshots, customer form snapshot, and attribution columns for change, cancellation and payment.
+- [ ] 1.4 Add the daily order-number sequence, allocated per outlet per resolved business date in the same transaction as the order insert, restarting each business day.
+- [ ] 1.5 Add `billing_commands` receipts and end-of-day confirmations with their watermarks.
+- [ ] 1.6 Extend `bills` with the order and payment clocks, payment business date, and the optional link to its source order, without weakening the immutable paid-history constraints.
+- [ ] 1.7 Add constraints and triggers for order state transitions, aggregate line arithmetic, captured snapshots, and immutable paid and cancelled states.
+- [ ] 1.8 Preserve the transactional per-outlet bill-number allocator so only a successful payment consumes a permanent number.
+- [ ] 1.9 Regenerate schema types and update typed seeds and fixtures.
+- [ ] 1.10 GATE: order creation, daily numbering across a cutover, and the two-number separation are provable from `npm run test:db`.
 
-- [ ] 2.1 Implement canonical command-envelope hashing, schema-version validation, UUID claiming, exact replay responses, and changed-payload idempotency conflicts.
-- [ ] 2.2 Implement atomic create, revise, and cancel order commands with originating-device ownership, expected-version checks, actor attribution, and order events.
-- [ ] 2.3 Implement atomic pay-now and pay-order commands that validate all lines/totals, allocate one bill number, persist final snapshots, and commit the receipt and result together.
-- [ ] 2.4 Implement attributed bill void and corrected-replacement linkage while preventing in-place mutation of settled bill facts.
-- [ ] 2.5 Implement FA/SA recovery transfer and recovery cancellation for open orders whose source device is revoked, requiring same-outlet replacement context and a reason.
-- [ ] 2.6 Enforce historical grant bounds, pre-revocation creation, future-clock tolerances, and explicit late/recovery result flags for delayed commands.
-- [ ] 2.7 Revoke direct client insert/update/delete privileges on orders, order items, bills, and bill items so all money mutations use the transactional command surface.
-- [ ] 2.8 Implement online end-grant/device-day sealing, command-watermark invalidation, and the locked server readiness check over open orders, live grants, and every participating device.
+## 2. Atomic billing commands
 
-## 3. Tenancy, Authority, And Concurrency Tests
+- [ ] 2.1 Implement canonical envelope hashing, schema-version validation, UUID claiming, exact replay responses, and identity conflicts on changed payloads.
+- [ ] 2.2 Implement atomic create, revise and cancel order commands with owning-tablet enforcement, status-at-lock checks, and actor attribution.
+- [ ] 2.3 Implement atomic pay-now and pay-order commands that validate every line and total, allocate one bill number, persist final snapshots, and commit the receipt and the result together.
+- [ ] 2.4 Implement attributed bill void, preventing in-place mutation of settled facts.
+- [ ] 2.5 Implement manager cancellation of any open order at an outlet they are entitled to, with a reason, requiring no shift and no tablet state.
+- [ ] 2.6 Enforce historical shift bounds, pre-removal creation time, and future-clock tolerance for delayed commands.
+- [ ] 2.7 Revoke direct client insert, update and delete on orders, order items, bills and bill items, so every money mutation uses the command surface.
+- [ ] 2.8 Implement the end-of-day confirmation command, watermark invalidation, and the locked readiness check over open orders, live shifts and every participating tablet.
+- [ ] 2.9 Make every command default all optional arguments and add the test that fails if any client payload omits a declared key. **Inherited from `undefined-command-arguments-vanish-on-the-wire`**, which is this exact failure reaching production in attendance on 2026-08-04.
+- [ ] 2.10 GATE: pay-now and pay-order produce byte-identical bill shapes, an exact retry lands the money once, and a changed-payload replay is refused.
 
-- [ ] 3.1 Add RLS policies for every new outlet-scoped table and prove Biller/FA sessions cannot read or mutate another outlet while SA cross-outlet access remains limited to designed surfaces.
-- [ ] 3.2 Add database tests for eligible operator authority, same-device ownership, expected-version conflicts, revoked-device recovery, and ordinary Employee denial.
-- [ ] 3.3 Add concurrent command tests proving exact retries return one result, changed UUID payloads fail, competing order revisions do not merge, and successful payments allocate one non-reused bill number.
-- [ ] 3.4 Add database tests for atomic parent/line failure, integer-paise aggregate arithmetic, historical snapshots, and direct-DML denial.
-- [ ] 3.5 Add accounting-date tests proving deferred revenue remains on the order business date while cash and payment method totals use the payment business date, including payment after cutoff.
-- [ ] 3.6 Add database tests proving open orders, live grants, unresolved device queues, missing/stale seals, and commands accepted after sealing block settlement readiness even through hand-crafted requests.
+## 3. Tenancy, authority and concurrency tests
 
-## 4. Typed Adapter Contract And Documentation
+- [ ] 3.1 Add RLS policies for every new outlet-scoped table and prove a Biller or FA session cannot read or mutate another outlet, while SA cross-outlet access stays limited to designed surfaces.
+- [ ] 3.2 Add database tests for operator eligibility, owning-tablet enforcement, manager cancellation scope, and ordinary Employee denial.
+- [ ] 3.3 Add concurrency tests proving exact retries return one result, changed UUID payloads fail, a pay racing a cancel refuses cleanly with no bill and no consumed number, and successful payments allocate one non-reused bill number.
+- [ ] 3.4 Add tests for atomic parent and line failure, integer-paise aggregate arithmetic, historical snapshots, and direct-write denial.
+- [ ] 3.5 Add date tests proving revenue stays on the order business date while cash uses the payment business date across a cutover.
+- [ ] 3.6 Add tests proving open orders, live shifts, and missing or stale end-of-day confirmations block settlement readiness even through hand-crafted requests.
 
-- [ ] 4.1 Add typed adapter/domain command and result shapes for order lifecycle, payment, void/replacement, conflicts, late acceptance, and recovery without promoting any feature gate.
-- [ ] 4.2 Update `docs/DATA_MODEL.md`, `docs/ARCHITECTURE.md`, and `docs/BUSINESS_CONTEXT.md` with orders, atomic payment conversion, dual accounting clocks, and immutable bills.
-- [ ] 4.3 Update `docs/OFFLINE_AND_SYNC.md`, `docs/SECURITY_AND_PRIVACY.md`, and `docs/LIMITATIONS.md` with command receipts, historical grants, recovery authority, and the launch exclusions.
+## 4. The local operation store that carries the commands
 
-## 5. Verification And Phase Gate
+**Moved here from #9 on 2026-08-09.** The queue's envelope, its canonical hash
+and its idempotency key are the same design as sections 1 to 3, and building it
+in #9 meant building it against a payload shape that did not exist yet. It now
+follows the contract rather than guessing at it.
 
-- [ ] 5.1 Run `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build`, and `npm run test:e2e`.
-- [ ] 5.2 Run `npm run db:start && npm run db:reset`, then `npm run test:db`, `npm run test:rls`, and `npm run test:e2e:auth` against the local backend.
-- [ ] 5.3 PHASE GATE — Billing transaction contract: demonstrate direct pay and deferred pay producing the same immutable bill shape, exact retry without duplication, rejected changed-payload reuse, optimistic edit conflict, same-device enforcement, audited recovery, distinct revenue/payment business dates, and database-enforced settlement blockers before `ui-billing-lifecycle` begins.
+- [ ] 4.1 Add Dexie and a versioned device-scoped schema for immutable envelopes, canonical hashes, lifecycle states and migrations, keyed by the same client UUID and payload hash the command receipts use.
+- [ ] 4.2 Implement atomic local acknowledgement that leaves forms intact on IndexedDB or quota failure and survives shift end, reload, restart and cutover.
+- [ ] 4.3 Implement Web Locks leadership with an IndexedDB lease fallback and response-driven retry state, without treating `navigator.onLine` as truth.
+- [ ] 4.4 Map every refusal category from section 2 onto a queue state, so a permanent refusal reaches needs-attention with a reason a person can act on and an identity conflict is never reported as success.
+- [ ] 4.5 Implement unsent, retrying and needs-attention telemetry through `report_counter_device_state`, without logging payloads or customer phone numbers.
+- [ ] 4.6 Add unit and browser tests for two tabs, process restart, schema upgrade, local failure, shift handover, cutover and tablet removal.
+- [ ] 4.7 GATE: a command accepted locally survives logout and restart, drains exactly once, and a tablet reporting unsent work says so on the Tablets surface.
+
+## 5. Typed adapter contract and documentation
+
+- [ ] 5.1 Add typed adapter and domain command and result shapes for the order lifecycle, payment, void, refusal categories and delayed acceptance, without promoting any feature gate.
+- [ ] 5.2 Update `docs/DATA_MODEL.md`, `docs/ARCHITECTURE.md` and `docs/BUSINESS_CONTEXT.md` with orders, the two numbers, atomic payment conversion, both clocks and immutable bills.
+- [ ] 5.3 Update `docs/GLOSSARY.md` with order, bill, order number, bill number, shift and end-of-day confirmation, each defined once.
+- [ ] 5.4 Update `docs/OFFLINE_AND_SYNC.md`, `docs/SECURITY_AND_PRIVACY.md` and `docs/LIMITATIONS.md` with command receipts, historical shifts, and the launch exclusions, including that there is no order transfer and no recovery path.
+
+## 6. Verification and phase gate
+
+- [ ] 6.1 Run `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` and `npm run test:e2e`.
+- [ ] 6.2 Run `npm run db:start && npm run db:reset`, then `npm run test:db`, `npm run test:rls` and `npm run test:e2e:auth`.
+- [ ] 6.3 Run `npm run db:types` and confirm `git diff --exit-code src/data-access/database.types.ts` is clean once the regenerated file is staged.
+- [ ] 6.4 Adversarial review pass: a separate session reads these spec deltas against the delivered migration, functions and policies, and reports every requirement it cannot find enforced at the database. Findings are fixed before archive.
+- [ ] 6.5 PHASE GATE: demonstrate an order taken, prepared and paid, and a sale paid outright, producing the same immutable bill; a daily order number that restarts and never resembles a bill number; an exact retry that lands once; a changed-payload reuse refused; a pay racing a manager's cancellation refused with no number consumed; revenue and drawer dates separated across a cutover; database-enforced sign-off blockers, and a command accepted on the tablet that survives a restart and lands exactly once, all before `ui-billing-lifecycle` begins.
