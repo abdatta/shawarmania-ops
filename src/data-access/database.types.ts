@@ -712,22 +712,175 @@ export type Database = {
           },
         ]
       }
+      billing_commands: {
+        Row: {
+          actor_id: string | null
+          business_date: string | null
+          client_created_at: string
+          command_type: string
+          device_id: string | null
+          id: string
+          outlet_id: string
+          payload_hash: string
+          payment_business_date: string | null
+          received_at: string
+          result: Json
+          result_category: string
+          schema_version: number
+          shift_id: string | null
+          watermark: number
+        }
+        Insert: {
+          actor_id?: string | null
+          business_date?: string | null
+          client_created_at: string
+          command_type: string
+          device_id?: string | null
+          id: string
+          outlet_id: string
+          payload_hash: string
+          payment_business_date?: string | null
+          received_at?: string
+          result?: Json
+          result_category: string
+          schema_version: number
+          shift_id?: string | null
+          watermark?: never
+        }
+        Update: {
+          actor_id?: string | null
+          business_date?: string | null
+          client_created_at?: string
+          command_type?: string
+          device_id?: string | null
+          id?: string
+          outlet_id?: string
+          payload_hash?: string
+          payment_business_date?: string | null
+          received_at?: string
+          result?: Json
+          result_category?: string
+          schema_version?: number
+          shift_id?: string | null
+          watermark?: never
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_commands_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_commands_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_commands_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_commands_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_end_of_day_confirmations: {
+        Row: {
+          business_date: string
+          command_watermark: number
+          confirmed_at: string
+          device_id: string
+          id: string
+          invalidated_at: string | null
+          invalidated_by_command_id: string | null
+          outlet_id: string
+          shift_id: string
+        }
+        Insert: {
+          business_date: string
+          command_watermark: number
+          confirmed_at?: string
+          device_id: string
+          id?: string
+          invalidated_at?: string | null
+          invalidated_by_command_id?: string | null
+          outlet_id: string
+          shift_id: string
+        }
+        Update: {
+          business_date?: string
+          command_watermark?: number
+          confirmed_at?: string
+          device_id?: string
+          id?: string
+          invalidated_at?: string | null
+          invalidated_by_command_id?: string | null
+          outlet_id?: string
+          shift_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_end_of_day_confirmations_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_end_of_day_confirmations_invalidated_by_command_id_fkey"
+            columns: ["invalidated_by_command_id"]
+            isOneToOne: false
+            referencedRelation: "billing_commands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_end_of_day_confirmations_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_end_of_day_confirmations_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bills: {
         Row: {
           bill_number: number
           biller_profile_id: string
           business_date: string
           counter_device_id: string
+          counter_shift_id: string | null
           created_at: string
           customer_id: string | null
           customer_name: string | null
           customer_phone: string | null
           discount_paise: number
           id: string
+          order_id: string | null
+          ordered_at: string
           outlet_id: string
+          paid_at: string
+          payment_business_date: string
           payment_method: Database["public"]["Enums"]["payment_method"]
           pricing_mode: Database["public"]["Enums"]["pricing_mode"]
-          shift_id: string
+          shift_id: string | null
           status: Database["public"]["Enums"]["bill_status"]
           subtotal_paise: number
           synced_at: string
@@ -742,16 +895,21 @@ export type Database = {
           biller_profile_id: string
           business_date: string
           counter_device_id: string
+          counter_shift_id?: string | null
           created_at?: string
           customer_id?: string | null
           customer_name?: string | null
           customer_phone?: string | null
           discount_paise?: number
           id: string
+          order_id?: string | null
+          ordered_at?: string
           outlet_id: string
+          paid_at?: string
+          payment_business_date?: string
           payment_method: Database["public"]["Enums"]["payment_method"]
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
-          shift_id: string
+          shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal_paise: number
           synced_at?: string
@@ -766,16 +924,21 @@ export type Database = {
           biller_profile_id?: string
           business_date?: string
           counter_device_id?: string
+          counter_shift_id?: string | null
           created_at?: string
           customer_id?: string | null
           customer_name?: string | null
           customer_phone?: string | null
           discount_paise?: number
           id?: string
+          order_id?: string | null
+          ordered_at?: string
           outlet_id?: string
+          paid_at?: string
+          payment_business_date?: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
-          shift_id?: string
+          shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal_paise?: number
           synced_at?: string
@@ -801,10 +964,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "bills_counter_shift_id_fkey"
+            columns: ["counter_shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "bills_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bills_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
           {
@@ -1748,6 +1925,268 @@ export type Database = {
           },
         ]
       }
+      order_items: {
+        Row: {
+          id: string
+          item_name: string
+          line_total_paise: number
+          menu_item_id: string | null
+          order_id: string
+          quantity: number
+          unit_price_paise: number
+        }
+        Insert: {
+          id: string
+          item_name: string
+          line_total_paise: number
+          menu_item_id?: string | null
+          order_id: string
+          quantity: number
+          unit_price_paise: number
+        }
+        Update: {
+          id?: string
+          item_name?: string
+          line_total_paise?: number
+          menu_item_id?: string | null
+          order_id?: string
+          quantity?: number
+          unit_price_paise?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_menu_item_id_fkey"
+            columns: ["menu_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_number_counters: {
+        Row: {
+          business_date: string
+          last_number: number
+          outlet_id: string
+        }
+        Insert: {
+          business_date: string
+          last_number?: number
+          outlet_id: string
+        }
+        Update: {
+          business_date?: string
+          last_number?: number
+          outlet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_number_counters_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          bill_id: string | null
+          business_date: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          cancelled_device_id: string | null
+          cancelled_shift_id: string | null
+          changed_at: string | null
+          changed_by: string | null
+          changed_shift_id: string | null
+          created_at: string
+          created_by: string
+          created_shift_id: string
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          device_id: string
+          discount_paise: number
+          id: string
+          order_number: number
+          ordered_at: string
+          outlet_id: string
+          paid_at: string | null
+          paid_by: string | null
+          paid_shift_id: string | null
+          pricing_mode: Database["public"]["Enums"]["pricing_mode"]
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal_paise: number
+          tax_paise: number
+          total_paise: number
+        }
+        Insert: {
+          bill_id?: string | null
+          business_date: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cancelled_device_id?: string | null
+          cancelled_shift_id?: string | null
+          changed_at?: string | null
+          changed_by?: string | null
+          changed_shift_id?: string | null
+          created_at?: string
+          created_by: string
+          created_shift_id: string
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          device_id: string
+          discount_paise?: number
+          id: string
+          order_number: number
+          ordered_at: string
+          outlet_id: string
+          paid_at?: string | null
+          paid_by?: string | null
+          paid_shift_id?: string | null
+          pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
+          status?: Database["public"]["Enums"]["order_status"]
+          subtotal_paise: number
+          tax_paise?: number
+          total_paise: number
+        }
+        Update: {
+          bill_id?: string | null
+          business_date?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cancelled_device_id?: string | null
+          cancelled_shift_id?: string | null
+          changed_at?: string | null
+          changed_by?: string | null
+          changed_shift_id?: string | null
+          created_at?: string
+          created_by?: string
+          created_shift_id?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          device_id?: string
+          discount_paise?: number
+          id?: string
+          order_number?: number
+          ordered_at?: string
+          outlet_id?: string
+          paid_at?: string | null
+          paid_by?: string | null
+          paid_shift_id?: string | null
+          pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
+          status?: Database["public"]["Enums"]["order_status"]
+          subtotal_paise?: number
+          tax_paise?: number
+          total_paise?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_cancelled_by_fkey"
+            columns: ["cancelled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_cancelled_device_id_fkey"
+            columns: ["cancelled_device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_cancelled_shift_id_fkey"
+            columns: ["cancelled_shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_changed_shift_id_fkey"
+            columns: ["changed_shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_created_shift_id_fkey"
+            columns: ["created_shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_paid_by_fkey"
+            columns: ["paid_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_paid_shift_id_fkey"
+            columns: ["paid_shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       outlets: {
         Row: {
           address_line1: string | null
@@ -2202,6 +2641,82 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      billing_assert_day_ready: {
+        Args: { p_business_date: string; p_outlet_id: string }
+        Returns: undefined
+      }
+      billing_begin_command: {
+        Args: {
+          p_actor_id: string
+          p_command_id: string
+          p_created_at: string
+          p_device_id: string
+          p_outlet_id: string
+          p_payload_hash: string
+          p_schema_version: number
+          p_shift_id: string
+          p_type: string
+        }
+        Returns: Json
+      }
+      billing_canonical_json: { Args: { p_value: Json }; Returns: string }
+      billing_content_payload_well_typed: {
+        Args: { p_payload: Json }
+        Returns: boolean
+      }
+      billing_day_readiness: {
+        Args: { p_business_date: string; p_outlet_id: string }
+        Returns: Json
+      }
+      billing_device_context: {
+        Args: { p_created_at: string; p_shift_id: string }
+        Returns: Json
+      }
+      billing_envelope_error: {
+        Args: {
+          p_command_id: string
+          p_created_at: string
+          p_keys: string[]
+          p_payload: Json
+          p_payload_hash: string
+          p_schema_version: number
+        }
+        Returns: string
+      }
+      billing_finish_command: {
+        Args: {
+          p_business_date?: string
+          p_command_id: string
+          p_payment_business_date?: string
+          p_result: Json
+        }
+        Returns: Json
+      }
+      billing_next_order_number: {
+        Args: { p_business_date: string; p_outlet_id: string }
+        Returns: number
+      }
+      billing_payload_has_keys: {
+        Args: { p_keys: string[]; p_payload: Json }
+        Returns: boolean
+      }
+      billing_payload_hash: { Args: { p_payload: Json }; Returns: string }
+      billing_validate_lines: {
+        Args: { p_lines: Json; p_order_id?: string; p_outlet_id: string }
+        Returns: boolean
+      }
+      billing_validate_totals: { Args: { p_payload: Json }; Returns: boolean }
+      cancel_billing_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
       cancel_counter_shift_request: {
         Args: { p_device_id: string }
         Returns: string
@@ -2236,6 +2751,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      confirm_billing_end_of_day: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
       confirm_counter_shift: {
         Args: {
           p_code_hash: string
@@ -2247,6 +2773,17 @@ export type Database = {
           shift_id: string
           status: string
         }[]
+      }
+      create_billing_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
       }
       customer_create_or_get: {
         Args: { p_name?: string; p_phone: string }
@@ -2349,6 +2886,17 @@ export type Database = {
           status: string
         }[]
       }
+      manager_cancel_billing_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
       manual_ledger_people: {
         Args: never
         Returns: {
@@ -2371,6 +2919,28 @@ export type Database = {
           row_count: number
           table_name: string
         }[]
+      }
+      pay_billing_now: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
+      pay_billing_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
       }
       preview_account_invite: {
         Args: { p_code_hash: string; p_ip_hash?: string }
@@ -2470,11 +3040,33 @@ export type Database = {
         Returns: string
       }
       retire_expense_category: { Args: { p_name: string }; Returns: undefined }
+      revise_billing_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
       set_super_admin_account_email: {
         Args: { p_email: string; p_profile_id: string }
         Returns: undefined
       }
       username_rollout_ready: { Args: never; Returns: boolean }
+      void_billing_bill: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       alert_category:
@@ -2502,6 +3094,7 @@ export type Database = {
       check_in_source: "phone" | "counter_tablet" | "manual"
       inventory_unit: "kg" | "litre" | "packet" | "piece"
       movement_type: "added" | "used" | "wasted" | "correction"
+      order_status: "open" | "paid" | "cancelled"
       payment_method: "cash" | "upi" | "card" | "swiggy" | "zomato" | "other"
       pricing_mode: "no_tax" | "gst_inclusive" | "gst_exclusive"
     }
@@ -2661,6 +3254,7 @@ export const Constants = {
       check_in_source: ["phone", "counter_tablet", "manual"],
       inventory_unit: ["kg", "litre", "packet", "piece"],
       movement_type: ["added", "used", "wasted", "correction"],
+      order_status: ["open", "paid", "cancelled"],
       payment_method: ["cash", "upi", "card", "swiggy", "zomato", "other"],
       pricing_mode: ["no_tax", "gst_inclusive", "gst_exclusive"],
     },

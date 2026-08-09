@@ -137,6 +137,13 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
 - **Tablet removal is immediate and permanent**, enforced by a `removed_at` check inside every policy rather than by waiting for a token to expire. It ends the live shift and cancels any pending request in the same transaction. There is no paused state: a paused tablet is a security question that a removed one is not.
 - **An assignment change is immediate too**, and for a stronger reason: the policies read `assignments` on every request, so granting or ending one needs no reissue and no sign-out. Nothing in this system waits for a token any more.
 - Deactivating an account is likewise a policy-level `is_active` check, not just a claim change.
+- **Money writes are command-only.** Clients hold no direct insert, update or
+  delete privilege on orders, lines, bills, command receipts or end-of-day
+  confirmations. RPCs re-derive tablet, outlet, historical shift or manager
+  authority before locking a money row.
+- **Receipts duplicate no customer data.** `billing_commands` keeps identifiers,
+  type/version/hash, clocks, result references and watermarks—never a phone,
+  customer name or line payload.
 
 ## Threat model — what actually worries us
 

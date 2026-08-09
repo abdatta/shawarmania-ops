@@ -14,6 +14,38 @@
 
 import { NotPaiseError } from './money'
 
+/** Permanent and retryable outcomes the counter can handle without SQL details. */
+export type BillingCommandRefusal =
+  | 'order_not_open'
+  | 'retryable_failure'
+  | 'authorization_refused'
+  | 'removed_tablet'
+  | 'unsupported_schema'
+  | 'malformed_payload'
+  | 'arithmetic_invalid'
+  | 'unresolved_operations'
+  | 'identity_conflict'
+
+export interface AcceptedBillingCommandResult {
+  readonly status: 'accepted' | 'replay'
+  readonly commandId: string
+  readonly delayed?: boolean
+  readonly orderId?: string
+  readonly orderNumber?: number
+  readonly billId?: string
+  readonly billNumber?: number
+  readonly businessDate?: string
+  readonly watermark?: number
+}
+
+export interface RefusedBillingCommandResult {
+  readonly status: BillingCommandRefusal
+  readonly commandId?: string
+  readonly orderStatus?: 'paid' | 'cancelled'
+}
+
+export type BillingCommandResult = AcceptedBillingCommandResult | RefusedBillingCommandResult
+
 function assertPaise(value: number): number {
   if (!Number.isInteger(value)) throw new NotPaiseError(value)
   return value

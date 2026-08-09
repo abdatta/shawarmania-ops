@@ -1,5 +1,13 @@
-import type { MovementType, ProfitBasis, ProfitEstimate, SyncStateKind } from '@/domain'
+import type {
+  BillingCommandResult,
+  MovementType,
+  ProfitBasis,
+  ProfitEstimate,
+  SyncStateKind,
+} from '@/domain'
 import type { PositionReading } from '@/lib/geolocation'
+
+import type { BillingCommand } from '../../shared/billing-command'
 
 import type { Tables } from './database.types'
 
@@ -933,6 +941,26 @@ export interface BillingAdapter {
    * append-only. Refused once the bill has gone.
    */
   cancelQueuedBill(clientId: string): Promise<void>
+}
+
+/**
+ * The settled live command seam. It is intentionally separate from the
+ * demo-gated BillingAdapter until #10 promotes the surface and supplies the
+ * durable dependency-ordered queue.
+ */
+export interface BillingCommandAdapter {
+  execute(command: BillingCommand): Promise<BillingCommandResult>
+  readiness(
+    outletId: string,
+    businessDate: string,
+  ): Promise<{
+    status: 'ok' | 'authorization_refused'
+    ready?: boolean
+    openOrders?: number
+    liveShifts?: number
+    missingConfirmations?: number
+    staleConfirmations?: number
+  }>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

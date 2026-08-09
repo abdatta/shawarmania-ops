@@ -275,6 +275,7 @@ $$, $$ values
   ('alerts_message_not_blank'),
   ('alert_responses_message_not_blank'),
   ('bill_items_item_name_not_blank'),
+  ('orders_customer_name_not_blank'),
   -- A customer name is OPTIONAL — plenty of bills carry only a phone. What is
   -- refused is the third state: a name that is present, occupies the field, and
   -- says nothing. Null means "not given"; '   ' would mean it twice, in a way

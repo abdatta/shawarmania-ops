@@ -251,8 +251,13 @@ export function createDemoStore(): DemoStore {
       biller_profile_id: billerForOutlet(outletId),
       counter_device_id: deviceForOutlet(outletId),
       shift_id: shiftForOutlet(outletId),
+      counter_shift_id: null,
+      order_id: null,
       business_date: date,
       created_at: createdAt,
+      ordered_at: createdAt,
+      paid_at: createdAt,
+      payment_business_date: date,
       // A bill that arrived after its day was closed reached the server the
       // next morning. `created_at` is when it was rung; `synced_at` is when it
       // landed, and the gap between them is the whole reconciliation problem.

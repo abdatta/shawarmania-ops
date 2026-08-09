@@ -106,15 +106,21 @@ A registry entry may also **declare that its surface has work waiting**, by nami
 
 ## How a bill flows
 
-The critical path, and the reason the outbox exists:
+The database accepts one immutable, versioned command envelope. Recording an
+order allocates a small daily order number; paying it atomically writes final
+bill snapshots, marks the order paid, allocates one permanent bill number and
+stores the replay receipt. Pay-now runs the same payment path without an order
+and produces the same bill shape.
 
-1. Biller taps items. State is local; **nothing is awaited**.
-2. Biller settles. The client generates a UUID, resolves the business date, computes totals in the domain layer, and writes the bill to the IndexedDB outbox. The screen clears immediately.
-3. The outbox drains in the background: it posts to Supabase keyed by the client UUID, so a retry that arrives twice inserts once.
-4. The server assigns the per-outlet `bill_number` (sequence allocation must be server-side; two offline devices cannot safely agree on a number). The client shows a provisional local reference until the real number returns.
-5. On success the outbox entry is dropped. On failure it stays queued with backoff, and the UI shows an honest pending count.
+Envelope identity is command UUID, tablet, shift, type, creation time, schema
+version and the SHA-256 of canonical payload JSON. The browser and PostgreSQL
+share one canonicalization vector. Exact retry returns the stored result; a
+changed envelope under the UUID is a permanent identity conflict.
 
-The biller is never blocked on the network at any step. Detail and failure modes in [Offline And Sync](OFFLINE_AND_SYNC.md).
+The durable dependency-ordered IndexedDB queue is deliberately **not** part of
+this contract change. `billing-live` (#10) supplies the adapters, store and
+drain loop before the feature gate moves to live. Detail and failure modes are
+in [Offline And Sync](OFFLINE_AND_SYNC.md).
 
 ## How permissions are evaluated
 
@@ -172,7 +178,10 @@ this version sends no authentication mail. Secure Email Change and double
 confirmation keep a signed-in client from silently replacing the reserved Auth
 alias.
 
-Bill numbers were originally sketched as a third Edge Function and deliberately moved **into the database**: a `before insert` trigger allocates from a per-outlet counter inside the insert transaction, which is atomic with the bill in a way a separate network call can never be — gapless on failure, race-safe under two devices, and the client's value is overwritten regardless.
+Bill numbers live **inside the payment command transaction**: the landed trigger
+allocates from a per-outlet counter, so a failed payment, cancelled order or
+exact replay consumes none. Daily order numbers use a separate
+per-outlet/per-business-date counter and restart after cutover.
 
 ## Offline boundary
 

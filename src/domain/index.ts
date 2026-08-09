@@ -20,6 +20,8 @@ export {
   UNDO_WINDOW_MS,
   type BillLineAmounts,
   type BillTotals,
+  type BillingCommandRefusal,
+  type BillingCommandResult,
   type SyncStateKind,
 } from './billing'
 export {

@@ -76,10 +76,14 @@ Swiggy and Zomato are recorded as bills so revenue and item-level sales stay com
 
 This is the workflow the billing screen must not fight:
 
-1. A customer orders at the counter, usually 1–3 items, often while others queue behind.
-2. The biller taps items, adjusts quantity, takes payment, and moves on. **Speed here is the product.**
+1. A customer orders at the counter, usually 1–3 items. The counter records an
+   editable order and calls its small daily order number while the kitchen cooks.
+2. When food is handed over, the whole order is paid and becomes one immutable
+   bill. Pay-now creates the same bill shape when order and payment happen
+   together, without allocating an order number. **Speed here is the product.**
 3. Customer name and phone are captured when convenient — for a walk-in queue at peak, often not at all. Both must be optional, and neither should ever block settling a bill.
-4. Aggregator orders arrive on a separate tablet or phone and get entered as bills when there's a gap.
+4. Aggregator orders follow the same order → prepare → full-payment path, with
+   the rider collecting, or use pay-now when appropriate.
 5. At close, the manager counts the drawer and reconciles against what the app expected.
 
 Two consequences worth stating plainly:

@@ -304,23 +304,34 @@ The count is also **read on arrival rather than kept live**. It is correct when 
 
 Check-out was removed in #26 (owner decision, 2026-07-31) with the cost stated: the check-out times and locations already recorded in production were dropped by the migration. A full production dump was taken and verified beforehand and lives outside the repo under the snapshot procedure, so the data exists — but no screen can show it again, and there is no down migration. Nobody had used the feature, and unused monitoring data is the kind [Security And Privacy](SECURITY_AND_PRIVACY.md) says not to keep; that is the trade, not an accident.
 
-### An unsynced bill exists in exactly one place
+### The durable billing queue arrives with billing-live
 
-Between settling a bill offline and syncing it, the only copy is in that tablet's IndexedDB. **A destroyed or wiped tablet loses those bills.**
+The server accepts immutable, exactly replayable command envelopes now, but no
+live screen stores them yet: billing remains demo-gated. `billing-live` (#10)
+adds the IndexedDB queue, dependency-ordered draining and visible backlog.
 
-Mitigated by draining aggressively, keeping the pending count always visible, and escalating a growing backlog to a warning. Not eliminated — that would need a second local device, which is out of proportion to the risk at this scale. See [Offline And Sync](OFFLINE_AND_SYNC.md).
+Once live, an unacknowledged envelope exists only on its tablet. There is no
+order transfer and no privileged recovery upload. A manager cancels a stranded
+open order with a reason and the counter re-rings it; a destroyed tablet's
+unsent pay-now sale has no recovery path.
 
 ### Late bills against a closed day
 
-A bill synced after its business date was reconciled becomes a **reconciliation exception**, not a silent recalculation. The manager decides whether to reopen and re-close the day or accept the discrepancy with a note. Deliberate: a number a human signed off must never change by itself.
+A bill accepted after its payment business date was closed leaves the signed
+cash snapshot unchanged. Its explicit payment clock makes the mismatch
+detectable, but the exception flag, reconciliation UI, and any reopen or recovery
+workflow are not built. Deliberate: a number a human signed off must never change
+by itself.
 
 ### Clock skew on the counter tablet
 
 Both client and server timestamps are stored. A badly wrong tablet clock can produce a wrong `business_date`, since the business date is resolved on the device at settlement. Material disagreement between the two clocks should be surfaced as a signal. There is no automatic correction — repairing a business date automatically could move revenue between days, which is worse than flagging it.
 
-### Two tablets at one outlet
+### One active tablet per outlet at launch
 
-Supported, but shift overlaps are flagged for a human rather than resolved automatically, because the right answer depends on what actually happened in the shop.
+The database enforces one active tablet per outlet. Multiple counters are
+deferred to `multiple-billing-devices` (#35); command execution is already
+concurrency-safe, but setup and operations are not yet a multi-tablet product.
 
 ## Operational gaps
 

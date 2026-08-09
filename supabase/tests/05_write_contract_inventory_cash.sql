@@ -123,6 +123,195 @@ select is(
 -- ---------------------------------------------------------------------------
 -- Day close.
 
+reset role;
+
+-- A historical tablet shift participated in D-1 and has explicitly confirmed
+-- that date. It is ended, so it does not block close; the late command below
+-- will invalidate this confirmation without rewriting the closed snapshot.
+insert into public.counter_shifts
+  (id, device_id, outlet_id, person_id, opened_at, business_date, expires_at,
+   ended_at, ended_reason)
+values
+  ('bbbbbbbb-0000-4000-a000-000000000010',
+   '10000000-0000-4000-a000-000000000004',
+   '00000000-0000-4000-a000-000000000001',
+   '10000000-0000-4000-a000-00000000000a',
+   ((current_date - 1) + time '21:00') at time zone 'Asia/Kolkata',
+   current_date - 1,
+   ((current_date - 1) + time '23:00') at time zone 'Asia/Kolkata',
+   ((current_date - 1) + time '23:00') at time zone 'Asia/Kolkata',
+   'operator');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
+
+select is(
+  public.confirm_billing_end_of_day(
+    'bbbbbbbb-0000-4000-a000-000000000015', 1,
+    public.billing_payload_hash(jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', null,
+      'needsAttentionCount', 0)),
+    now(), null,
+    jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', null,
+      'needsAttentionCount', 0)
+  ) ->> 'status',
+  'malformed_payload',
+  'an explicit null unsent count cannot bypass confirmation');
+
+select is(
+  public.confirm_billing_end_of_day(
+    'bbbbbbbb-0000-4000-a000-000000000016', 1,
+    public.billing_payload_hash(jsonb_build_object(
+      'outletId', null,
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 0)),
+    now(), null,
+    jsonb_build_object(
+      'outletId', null,
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 0)
+  ) ->> 'status',
+  'malformed_payload',
+  'an explicit null outlet cannot bypass confirmation');
+
+select is(
+  public.confirm_billing_end_of_day(
+    'bbbbbbbb-0000-4000-a000-000000000017', 1,
+    public.billing_payload_hash(jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', '0',
+      'needsAttentionCount', '0')),
+    now(), null,
+    jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', '0',
+      'needsAttentionCount', '0')
+  ) ->> 'status',
+  'malformed_payload',
+  'string counts cannot masquerade as JSON numbers');
+
+select is(
+  public.confirm_billing_end_of_day(
+    'bbbbbbbb-0000-4000-a000-000000000012', 1,
+    public.billing_payload_hash(jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 1)),
+    now(), null,
+    jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 1)
+  ) ->> 'status',
+  'unresolved_operations',
+  'a needs-attention operation blocks end-of-day confirmation');
+
+select is(
+  public.confirm_billing_end_of_day(
+    'bbbbbbbb-0000-4000-a000-000000000011', 1,
+    public.billing_payload_hash(jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 0)),
+    now(), null,
+    jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 0)
+  ) ->> 'status',
+  'accepted',
+  'the participating tablet confirms D-1 after its historical shift ended');
+
+select is(
+  public.confirm_billing_end_of_day(
+    'bbbbbbbb-0000-4000-a000-000000000011', 1,
+    public.billing_payload_hash(jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 0)),
+    now(), null,
+    jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 0)
+  ) ->> 'watermark',
+  (select watermark::text from public.billing_commands
+    where id='bbbbbbbb-0000-4000-a000-000000000011'),
+  'an exact confirmation replay returns its original watermark');
+
+select is(
+  public.confirm_billing_end_of_day(
+    'bbbbbbbb-0000-4000-a000-000000000011', 1,
+    public.billing_payload_hash(jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 0)),
+    now(), null,
+    jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 0)
+  ) ->> 'status',
+  'replay',
+  'an exact confirmation retry is explicitly classified as replay');
+
+reset role;
+insert into public.counter_shifts
+  (id, device_id, outlet_id, person_id, opened_at, business_date, expires_at,
+   ended_at, ended_reason)
+values
+  ('bbbbbbbb-0000-4000-a000-000000000013',
+   '10000000-0000-4000-a000-000000000004',
+   '00000000-0000-4000-a000-000000000001',
+   '10000000-0000-4000-a000-00000000000a',
+   ((current_date - 1) + time '23:10') at time zone 'Asia/Kolkata',
+   current_date - 1,
+   ((current_date - 1) + time '23:20') at time zone 'Asia/Kolkata',
+   ((current_date - 1) + time '23:20') at time zone 'Asia/Kolkata',
+   'operator');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
+select ok(
+  (public.billing_day_readiness(
+    '00000000-0000-4000-a000-000000000001', current_date - 1
+  )->>'staleConfirmations')::integer > 0,
+  'a later no-sale shift invalidates the earlier tablet confirmation');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
+select is(
+  public.confirm_billing_end_of_day(
+    'bbbbbbbb-0000-4000-a000-000000000014', 1,
+    public.billing_payload_hash(jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 0)),
+    now(), null,
+    jsonb_build_object(
+      'outletId', '00000000-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'unsentCount', 0,
+      'needsAttentionCount', 0)
+  ) ->> 'status',
+  'accepted',
+  'the tablet must reconfirm after its final shift');
+
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 -- D-1 at Kalyani: no cash bills (the 00:20 bill belongs to D-2), one cash
@@ -159,18 +348,41 @@ select throws_ok($q$
     '00000000-0000-4000-a000-000000000001', current_date, 100000, 100000, null)
 $q$, 'P0001', null, 'even the super admin cannot close a day — deliberately');
 
--- A late bill against the closed D-1 does not rewrite the snapshot.
+-- A late payment command against the closed D-1 does not rewrite the snapshot.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
-select lives_ok($q$
-  insert into public.bills (id, outlet_id, business_date, biller_profile_id, counter_device_id,
-                            shift_id, subtotal_paise, total_paise, payment_method, created_at)
-  values ('bbbbbbbb-0000-4000-a000-000000000001', '00000000-0000-4000-a000-000000000001',
-          current_date - 1,
-          '10000000-0000-4000-a000-00000000000a', '10000000-0000-4000-a000-000000000004',
-          '40000000-0000-4000-a000-000000000002', 13900, 13900, 'cash',
-          ((current_date - 1) + time '22:00') at time zone 'Asia/Kolkata')
-$q$, 'a late offline bill lands with its true business date');
+select is(
+  public.pay_billing_now(
+    'bbbbbbbb-0000-4000-a000-000000000012', 1,
+    public.billing_payload_hash(jsonb_build_object(
+      'billId', 'bbbbbbbb-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'paymentBusinessDate', current_date - 1,
+      'customerId', null, 'customerName', null, 'customerPhone', null,
+      'subtotalPaise', 13900, 'discountPaise', 0, 'taxPaise', 0,
+      'totalPaise', 13900, 'pricingMode', 'no_tax', 'paymentMethod', 'cash',
+      'lines', jsonb_build_array(jsonb_build_object(
+        'id', 'bbbbbbbb-0000-4000-a000-000000000013',
+        'menuItemId', '31000000-0000-4000-a000-000000000001',
+        'itemName', 'Classic Chicken Shawarma', 'unitPricePaise', 13900,
+        'quantity', 1, 'lineTotalPaise', 13900)))),
+    ((current_date - 1) + time '22:00') at time zone 'Asia/Kolkata',
+    'bbbbbbbb-0000-4000-a000-000000000010',
+    jsonb_build_object(
+      'billId', 'bbbbbbbb-0000-4000-a000-000000000001',
+      'businessDate', current_date - 1,
+      'paymentBusinessDate', current_date - 1,
+      'customerId', null, 'customerName', null, 'customerPhone', null,
+      'subtotalPaise', 13900, 'discountPaise', 0, 'taxPaise', 0,
+      'totalPaise', 13900, 'pricingMode', 'no_tax', 'paymentMethod', 'cash',
+      'lines', jsonb_build_array(jsonb_build_object(
+        'id', 'bbbbbbbb-0000-4000-a000-000000000013',
+        'menuItemId', '31000000-0000-4000-a000-000000000001',
+        'itemName', 'Classic Chicken Shawarma', 'unitPricePaise', 13900,
+        'quantity', 1, 'lineTotalPaise', 13900)))
+  ) ->> 'status',
+  'accepted',
+  'a late offline payment lands with its true payment business date');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
@@ -180,6 +392,13 @@ select is(
       and business_date = current_date - 1),
   0::bigint,
   'the closed record is a snapshot: the late bill changed nothing');
+
+select is(
+  (public.billing_day_readiness(
+    '00000000-0000-4000-a000-000000000001', current_date - 1
+  ) ->> 'staleConfirmations')::integer,
+  1,
+  'a command accepted after confirmation makes that tablet stale at the database');
 
 -- ---------------------------------------------------------------------------
 -- The owner's bounded remote writes (multi-outlet-people, design D8).
