@@ -5,6 +5,7 @@ import {
   formatBusinessDate,
   formatDate,
   formatDateTime,
+  formatRecentAge,
   formatTime,
   QUIET_HOURS_FROM,
   QUIET_HOURS_UNTIL,
@@ -50,6 +51,28 @@ describe('formatDateTime', () => {
   it('renders date and time together in IST', () => {
     expect(formatDateTime(AFTERNOON_UTC)).toMatch(/^25 Jul 2026/)
     expect(formatDateTime(AFTERNOON_UTC)).toMatch(/08:00/)
+  })
+})
+
+describe('formatRecentAge', () => {
+  const NOW = '2026-08-10T10:00:00+05:30'
+
+  it.each([
+    ['2026-08-10T10:00:00+05:30', 'now'],
+    ['2026-08-10T09:59:00+05:30', '1 min ago'],
+    ['2026-08-10T09:48:00+05:30', '12 mins ago'],
+    ['2026-08-10T09:00:00+05:30', '1 hr ago'],
+    ['2026-08-10T07:30:00+05:30', '2 hrs ago'],
+  ])('renders %s as %s for today', (instant, expected) => {
+    expect(formatRecentAge(instant, NOW)).toBe(expected)
+  })
+
+  it('keeps the full outlet-local date and time for an older order', () => {
+    expect(formatRecentAge('2026-08-09T23:59:00+05:30', NOW)).toMatch(/^09 Aug 2026, 11:59/)
+  })
+
+  it('does not show a negative age when a tablet clock is slightly behind', () => {
+    expect(formatRecentAge('2026-08-10T10:01:00+05:30', NOW)).toBe('now')
   })
 })
 

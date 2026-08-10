@@ -1,4 +1,4 @@
-import { KeyRound, Undo2 } from 'lucide-react'
+import { KeyRound, Undo2, UserRoundCheck } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
@@ -11,15 +11,20 @@ import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
   type BillLineDraft,
+  type BillingOrder,
+  type CustomerIdentity,
   type MenuCategoryWithItems,
-  type PaymentMethod,
+  type PaymentAllocation,
 } from '@/data-access/adapters'
-import { provisionalReference, resolveBusinessDate, UNDO_WINDOW_MS } from '@/domain'
+import { resolveBusinessDate, UNDO_WINDOW_MS } from '@/domain'
 import { newUuid } from '@/lib/uuid'
 import { useSession } from '@/session/context'
+import { validateIndianPhone } from '../../../shared/phone'
 
 import { BillPanel } from './bill-panel'
+import { CounterActivityRail } from './counter-activity-rail'
 import { MenuGrid } from './menu-grid'
+import { PaymentDialog } from './payment-dialog'
 import { useCounterState } from './use-counter-state'
 
 /**
@@ -31,7 +36,7 @@ import { useCounterState } from './use-counter-state'
  *
  * **Settling does not wait for anything.** The bill goes to the queue and the
  * panel clears in the same tick, because the next customer is already there.
- * What appears afterwards is a confirmation with the bill's provisional
+ * What appears afterwards is a confirmation with the bill's short local
  * reference and an Undo, and it clears itself: a queue that waits for an
  * acknowledgement is a queue that stops.
  *
@@ -44,7 +49,7 @@ interface Restorable {
   lines: BillLineDraft[]
   customerName: string
   customerPhone: string
-  paymentMethod: PaymentMethod | null
+  payments: PaymentAllocation[]
 }
 
 interface Confirmation extends Restorable {
@@ -54,7 +59,7 @@ interface Confirmation extends Restorable {
 
 export function BillingCounter() {
   const session = useSession()
-  const { billing, menu: menuAdapter, outlets } = useAdapters()
+  const { billing, customers, menu: menuAdapter, outlets } = useAdapters()
   const { shift } = useCounterState()
 
   const [menu, setMenu] = useState<MenuCategoryWithItems[] | null>(null)
@@ -62,13 +67,20 @@ export function BillingCounter() {
   const [lines, setLines] = useState<BillLineDraft[]>([])
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null)
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [paymentPreset, setPaymentPreset] = useState<PaymentAllocation[]>([])
   const [error, setError] = useState<string | null>(null)
   const [settling, setSettling] = useState(false)
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
+  const [customerMatch, setCustomerMatch] = useState<CustomerIdentity | null>(null)
+  const [customerMatchPhone, setCustomerMatchPhone] = useState<string | null>(null)
+  const [declinedPhone, setDeclinedPhone] = useState<string | null>(null)
+  const [activityRefresh, setActivityRefresh] = useState(0)
+  const [editingOrder, setEditingOrder] = useState<BillingOrder | null>(null)
 
   const outletId = session.outletId
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const suspendedDraft = useRef<Restorable | null>(null)
 
   useEffect(() => {
     if (!outletId) return
@@ -93,6 +105,34 @@ export function BillingCounter() {
     },
     [],
   )
+
+  useEffect(() => {
+    const validation = validateIndianPhone(customerPhone)
+    if (!validation.phone || validation.phone === declinedPhone) {
+      return
+    }
+    let active = true
+    void customers
+      .lookupByPhone(validation.phone)
+      .then((match) => {
+        if (active) {
+          setCustomerMatch(match)
+          setCustomerMatchPhone(validation.phone)
+        }
+      })
+      .catch(() => {
+        if (active) setCustomerMatch(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [customerPhone, customers, declinedPhone])
+
+  const currentPhone = validateIndianPhone(customerPhone).phone
+  const visibleCustomerMatch =
+    currentPhone && currentPhone === customerMatchPhone && currentPhone !== declinedPhone
+      ? customerMatch
+      : null
 
   const quantities = useMemo(
     () => new Map(lines.map((line) => [line.menuItemId, line.quantity])),
@@ -143,17 +183,116 @@ export function BillingCounter() {
     setLines([])
     setCustomerName('')
     setCustomerPhone('')
-    setPaymentMethod(null)
+    setCustomerMatch(null)
+    setCustomerMatchPhone(null)
+    setDeclinedPhone(null)
+    setPaymentPreset([])
   }
 
-  function settle() {
+  function putDraftOnPanel(draft: Restorable) {
+    setLines(structuredClone(draft.lines))
+    setCustomerName(draft.customerName)
+    setCustomerPhone(draft.customerPhone)
+    setPaymentPreset(structuredClone(draft.payments))
+    setCustomerMatch(null)
+    setCustomerMatchPhone(null)
+    setDeclinedPhone(null)
+  }
+
+  function beginOrderEdit(order: BillingOrder) {
+    if (editingOrder) return
+    suspendedDraft.current = { lines, customerName, customerPhone, payments: paymentPreset }
+    setEditingOrder(order)
+    putDraftOnPanel({
+      lines: order.lines,
+      customerName: order.customerName ?? '',
+      customerPhone: order.customerPhone ?? '',
+      payments: [],
+    })
+    setPaymentDialogOpen(false)
+    setError(null)
+  }
+
+  function leaveOrderEdit() {
+    const draft = suspendedDraft.current
+    suspendedDraft.current = null
+    setEditingOrder(null)
+    if (draft) putDraftOnPanel(draft)
+    else clearPanel()
+    setError(null)
+  }
+
+  async function saveCustomerIfComplete(): Promise<string | null> {
+    const validation = validateIndianPhone(customerPhone)
+    if (!validation.phone) return null
+    const identity = await customers.createOrGet({ phone: validation.phone, name: customerName })
+    return identity.id
+  }
+
+  async function saveOrder() {
+    if (!shift || !outlet || !outletId || lines.length === 0) return
+    setSettling(true)
+    setError(null)
+    try {
+      const customerId = await saveCustomerIfComplete()
+      await billing.saveOrder({
+        clientId: newUuid(),
+        outletId,
+        shiftId: shift.id,
+        businessDate: resolveBusinessDate(new Date(), outlet.business_day_cutover),
+        lines,
+        customerId,
+        customerName,
+        customerPhone,
+      })
+      clearPanel()
+      setActivityRefresh((value) => value + 1)
+    } catch (cause) {
+      setError(cause instanceof DataActionError ? cause.message : 'That order could not be saved.')
+    } finally {
+      setSettling(false)
+    }
+  }
+
+  async function saveEditedOrder() {
+    if (!editingOrder || lines.length === 0) return
+    setSettling(true)
+    setError(null)
+    try {
+      const customerId = await saveCustomerIfComplete()
+      await billing.reviseOrder(editingOrder.id, {
+        lines,
+        customerId,
+        customerName,
+        customerPhone,
+      })
+      leaveOrderEdit()
+      setActivityRefresh((value) => value + 1)
+    } catch (cause) {
+      setError(
+        cause instanceof DataActionError ? cause.message : 'That order could not be updated.',
+      )
+    } finally {
+      setSettling(false)
+    }
+  }
+
+  function settle(payments: PaymentAllocation[]) {
     if (!shift || !outlet || !outletId) return
     if (lines.length === 0) {
       setError('There is nothing on this bill yet.')
       return
     }
-    if (!paymentMethod) {
-      setError('Choose how this was paid, then settle.')
+    const totalPaise = lines.reduce(
+      (running, line) => running + line.unitPricePaise * line.quantity,
+      0,
+    )
+    if (
+      payments.length === 0 ||
+      payments.some((payment) => payment.amountPaise <= 0) ||
+      payments.reduce((sum, payment) => sum + payment.amountPaise, 0) !== totalPaise
+    ) {
+      setError('The payment split must exactly match the bill total.')
       return
     }
 
@@ -162,10 +301,13 @@ export function BillingCounter() {
     // timestamp when the bill is read. A bill rung at 00:20 belongs to the
     // evening that is still going on.
     const businessDate = resolveBusinessDate(new Date(), outlet.business_day_cutover)
-    const settled: Restorable = { lines, customerName, customerPhone, paymentMethod }
+    const settled: Restorable = { lines, customerName, customerPhone, payments }
 
     setSettling(true)
     setError(null)
+    setPaymentDialogOpen(false)
+    // Customer identity is helpful, never a condition of sale.
+    void saveCustomerIfComplete().catch(() => undefined)
 
     // Deliberately not awaited: the counter never blocks on the queue.
     void billing
@@ -174,7 +316,7 @@ export function BillingCounter() {
         outletId,
         shiftId: shift.id,
         businessDate,
-        paymentMethod,
+        payments,
         lines,
         customerName,
         customerPhone,
@@ -188,10 +330,6 @@ export function BillingCounter() {
       })
       .finally(() => setSettling(false))
 
-    const totalPaise = lines.reduce(
-      (running, line) => running + line.unitPricePaise * line.quantity,
-      0,
-    )
     setConfirmation({ clientId, totalPaise, ...settled })
     clearPanel()
 
@@ -213,7 +351,7 @@ export function BillingCounter() {
     setLines(target.lines)
     setCustomerName(target.customerName)
     setCustomerPhone(target.customerPhone)
-    setPaymentMethod(target.paymentMethod)
+    setPaymentPreset(target.payments)
   }
 
   if (!shift) {
@@ -238,7 +376,7 @@ export function BillingCounter() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className="flex h-full min-h-0 flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_20rem] lg:grid-cols-[minmax(18rem,1fr)_minmax(18rem,22rem)_minmax(20rem,26rem)]">
       <div className="order-2 min-h-0 md:order-1 md:overflow-y-auto">
         {error && (
           <p
@@ -257,7 +395,7 @@ export function BillingCounter() {
             {[6, 3].map((tiles, section) => (
               <div key={section}>
                 <Shimmer className="mb-1.5 h-4 w-24" />
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   {Array.from({ length: tiles }, (_, tile) => (
                     <Shimmer key={tile} className="h-20" />
                   ))}
@@ -275,17 +413,62 @@ export function BillingCounter() {
           lines={lines}
           customerName={customerName}
           customerPhone={customerPhone}
-          paymentMethod={paymentMethod}
           settling={settling}
           onChangeQuantity={changeQuantity}
           onCustomerNameChange={setCustomerName}
           onCustomerPhoneChange={setCustomerPhone}
-          onPaymentMethodChange={(method) => {
+          onPaid={() => {
             setError(null)
-            setPaymentMethod(method)
+            setPaymentDialogOpen(true)
           }}
-          onSettle={settle}
+          onSaveOrder={editingOrder ? saveEditedOrder : saveOrder}
+          onCancelEdit={leaveOrderEdit}
+          {...(editingOrder ? { editingOrderNumber: editingOrder.orderNumber } : {})}
         />
+
+        {visibleCustomerMatch && (
+          <div
+            className="rounded-xl border border-primary bg-surface p-3"
+            role="status"
+            data-testid="customer-match"
+          >
+            <div className="flex gap-2">
+              <UserRoundCheck aria-hidden className="mt-0.5 text-primary" size={20} />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-content">Returning customer found</p>
+                <p className="text-sm text-content-muted">
+                  {visibleCustomerMatch.name
+                    ? customerName.trim() && customerName.trim() !== visibleCustomerMatch.name
+                      ? `Use ${visibleCustomerMatch.name}? This replaces the name in this order only.`
+                      : `Fill this order with ${visibleCustomerMatch.name}?`
+                    : 'This phone has no saved name.'}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="phone"
+                    onClick={() => {
+                      if (visibleCustomerMatch.name) setCustomerName(visibleCustomerMatch.name)
+                      setCustomerMatch(null)
+                      setDeclinedPhone(validateIndianPhone(customerPhone).phone)
+                    }}
+                  >
+                    Use saved details
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="phone"
+                    onClick={() => {
+                      setCustomerMatch(null)
+                      setDeclinedPhone(validateIndianPhone(customerPhone).phone)
+                    }}
+                  >
+                    Keep this order
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {confirmation && (
           <div
@@ -298,10 +481,10 @@ export function BillingCounter() {
                 Settled <Money paise={confirmation.totalPaise} />
               </p>
               <p className="truncate text-xs text-content-muted">
-                <span data-testid="provisional-reference">
-                  {provisionalReference(confirmation.clientId)}
+                <span data-testid="local-reference">
+                  Local · {confirmation.clientId.replaceAll('-', '').slice(0, 4).toUpperCase()}
                 </span>{' '}
-                — its number is given when it syncs.
+                — not sent yet. Its bill number appears after delivery.
               </p>
             </div>
             <Button
@@ -316,6 +499,24 @@ export function BillingCounter() {
           </div>
         )}
       </div>
+
+      <CounterActivityRail
+        refreshKey={activityRefresh}
+        editingOrderId={editingOrder?.id ?? null}
+        onEditOrder={beginOrderEdit}
+      />
+
+      <PaymentDialog
+        open={paymentDialogOpen}
+        totalPaise={lines.reduce(
+          (running, line) => running + line.unitPricePaise * line.quantity,
+          0,
+        )}
+        initialPayments={paymentPreset}
+        busy={settling}
+        onClose={() => setPaymentDialogOpen(false)}
+        onConfirm={settle}
+      />
     </div>
   )
 }

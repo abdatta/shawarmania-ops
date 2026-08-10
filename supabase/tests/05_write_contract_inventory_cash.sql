@@ -7,6 +7,23 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
+select is(
+  enum_range(null::public.payment_method)::text[],
+  array['cash', 'upi', 'swiggy', 'zomato']::text[],
+  'the payment enum contains the four methods the outlets actually accept');
+
+select throws_ok(
+  $q$ select 'card'::public.payment_method $q$,
+  '22P02',
+  null,
+  'a handcrafted card payment is refused by the database type');
+
+select throws_ok(
+  $q$ select 'other'::public.payment_method $q$,
+  '22P02',
+  null,
+  'a handcrafted other payment is refused by the database type');
+
 -- Claims carry `sub` and nothing about authority (multi-outlet-people): scope
 -- is resolved from the seeded `assignments` rows, exactly as a real session's
 -- is.
@@ -360,7 +377,8 @@ select is(
       'paymentBusinessDate', current_date - 1,
       'customerId', null, 'customerName', null, 'customerPhone', null,
       'subtotalPaise', 13900, 'discountPaise', 0, 'taxPaise', 0,
-      'totalPaise', 13900, 'pricingMode', 'no_tax', 'paymentMethod', 'cash',
+      'totalPaise', 13900, 'pricingMode', 'no_tax',
+      'payments', jsonb_build_array(jsonb_build_object('method','cash','amountPaise',13900)),
       'lines', jsonb_build_array(jsonb_build_object(
         'id', 'bbbbbbbb-0000-4000-a000-000000000013',
         'menuItemId', '31000000-0000-4000-a000-000000000001',
@@ -374,7 +392,8 @@ select is(
       'paymentBusinessDate', current_date - 1,
       'customerId', null, 'customerName', null, 'customerPhone', null,
       'subtotalPaise', 13900, 'discountPaise', 0, 'taxPaise', 0,
-      'totalPaise', 13900, 'pricingMode', 'no_tax', 'paymentMethod', 'cash',
+      'totalPaise', 13900, 'pricingMode', 'no_tax',
+      'payments', jsonb_build_array(jsonb_build_object('method','cash','amountPaise',13900)),
       'lines', jsonb_build_array(jsonb_build_object(
         'id', 'bbbbbbbb-0000-4000-a000-000000000013',
         'menuItemId', '31000000-0000-4000-a000-000000000001',

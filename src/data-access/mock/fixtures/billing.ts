@@ -84,7 +84,7 @@ export interface BillSeed {
   daysAgo: number
   /** IST wall-clock time on that business day, `HH:MM`. */
   time: string
-  paymentMethod: Tables<'bills'>['payment_method']
+  paymentMethod: NonNullable<Tables<'bills'>['payment_method']>
   lines: BillLineSeed[]
   customerName?: string
   /**
@@ -279,7 +279,7 @@ export const billSeeds: BillSeed[] = [
   {
     daysAgo: 0,
     time: '14:31',
-    paymentMethod: 'card',
+    paymentMethod: 'upi',
     lines: [{ item: 'burger', quantity: 2 }],
   },
   {

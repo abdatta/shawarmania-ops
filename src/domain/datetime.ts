@@ -52,6 +52,28 @@ export function formatDateTime(instant: Date | string): string {
 }
 
 /**
+ * Operational age for recent work at the counter.
+ *
+ * Today's orders read as age because that is faster to scan while food is being
+ * prepared. Older orders keep their full outlet-local date and time so the age
+ * never obscures which trading day the reference came from.
+ */
+export function formatRecentAge(instant: Date | string, now: Date | string = new Date()): string {
+  const at = toDate(instant)
+  const current = toDate(now)
+
+  if (formatDate(at) !== formatDate(current)) return formatDateTime(at)
+
+  const elapsedMinutes = Math.max(0, Math.floor((current.getTime() - at.getTime()) / 60_000))
+  if (elapsedMinutes < 1) return 'now'
+  if (elapsedMinutes === 1) return '1 min ago'
+  if (elapsedMinutes < 60) return `${elapsedMinutes} mins ago`
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60)
+  return elapsedHours === 1 ? '1 hr ago' : `${elapsedHours} hrs ago`
+}
+
+/**
  * Render an already-resolved business date (`2026-07-25`) as a date.
  *
  * Parsed as UTC midnight and formatted in UTC, not Asia/Kolkata — a business

@@ -75,7 +75,7 @@ function payNowPayload(billId: string, lineId: string, businessDate: string): Pa
     taxPaise: 0,
     totalPaise: 13900,
     pricingMode: 'no_tax',
-    paymentMethod: 'cash',
+    payments: [{ method: 'cash', amountPaise: 13900 }],
     lines: [line(lineId)],
   }
 }
@@ -124,7 +124,10 @@ describe.sequential('billing command races over PostgREST', () => {
     expect(bills.error).toBeNull()
     expect(bills.data).toHaveLength(1)
 
-    const changedPayload = { ...command.payload, paymentMethod: 'upi' as const }
+    const changedPayload = {
+      ...command.payload,
+      payments: [{ method: 'upi' as const, amountPaise: 13900 }],
+    }
     const changed = await createBillingCommand({
       commandId: command.commandId,
       tabletId: command.tabletId,
@@ -181,7 +184,7 @@ describe.sequential('billing command races over PostgREST', () => {
     const payPayload: PayOrderPayload = {
       billId,
       orderId,
-      paymentMethod: 'cash',
+      payments: [{ method: 'cash', amountPaise: 13900 }],
       paidAt,
       paymentBusinessDate: businessDate,
     }

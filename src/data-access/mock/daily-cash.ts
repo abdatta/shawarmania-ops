@@ -6,6 +6,7 @@ import {
   type DailyCashAdapter,
   type DailyCashDay,
   type NewWithdrawal,
+  type PaymentMethod,
   type ReconciliationException,
 } from '../adapters'
 import type { Tables } from '../database.types'
@@ -33,6 +34,15 @@ const CLOSED_BY = personaFixtures.franchise_admin.profile.id
 export function createMockDailyCashAdapter(store: DemoStore): DailyCashAdapter {
   let nextWithdrawal = 1
 
+  const billMethodAmount = (bill: Tables<'bills'>, method: Tables<'bills'>['payment_method']) =>
+    (
+      store.billPayments.get(bill.id) ?? [
+        { method: bill.payment_method, amountPaise: bill.total_paise },
+      ]
+    )
+      .filter((payment) => payment.method === method)
+      .reduce((sum, payment) => sum + payment.amountPaise, 0)
+
   const closedRecord = (outletId: string, businessDate: string) =>
     store.dailyCashRecords.find(
       (record) => record.outlet_id === outletId && record.business_date === businessDate,
@@ -44,11 +54,10 @@ export function createMockDailyCashAdapter(store: DemoStore): DailyCashAdapter {
         (bill) =>
           bill.outlet_id === outletId &&
           bill.business_date === businessDate &&
-          bill.payment_method === 'cash' &&
           bill.status === 'settled' &&
           (before === undefined || bill.synced_at <= before),
       )
-      .reduce((running, bill) => running + bill.total_paise, 0)
+      .reduce((running, bill) => running + billMethodAmount(bill, 'cash'), 0)
 
   const cashExpenses = (outletId: string, businessDate: string) =>
     store.expenses
@@ -90,15 +99,21 @@ export function createMockDailyCashAdapter(store: DemoStore): DailyCashAdapter {
           bill.status === 'settled' &&
           bill.synced_at > closed.closed_at,
       )
-      .map((bill) => ({
-        billId: bill.id,
-        billNumber: bill.bill_number,
-        businessDate: bill.business_date,
-        totalPaise: bill.total_paise,
-        paymentMethod: bill.payment_method,
-        createdAt: bill.created_at,
-        syncedAt: bill.synced_at,
-      }))
+      .map((bill) => {
+        const allocations = store.billPayments.get(bill.id) ?? []
+        const paymentMethod =
+          allocations.length > 1 ? 'mixed' : (allocations[0]?.method ?? bill.payment_method)
+        if (!paymentMethod) throw new Error(`Settled bill ${bill.id} has no payment method.`)
+        return {
+          billId: bill.id,
+          billNumber: bill.bill_number,
+          businessDate: bill.business_date,
+          totalPaise: bill.total_paise,
+          paymentMethod: paymentMethod as PaymentMethod | 'mixed',
+          createdAt: bill.created_at,
+          syncedAt: bill.synced_at,
+        }
+      })
       .sort((a, b) => a.syncedAt.localeCompare(b.syncedAt))
   }
 

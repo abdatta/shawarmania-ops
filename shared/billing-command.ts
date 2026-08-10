@@ -17,8 +17,13 @@ export type BillingCommandType =
   | 'manager_cancel_order'
   | 'confirm_end_of_day'
 
-export type BillingPaymentMethod = 'cash' | 'upi' | 'card' | 'swiggy' | 'zomato' | 'other'
+export type BillingPaymentMethod = 'cash' | 'upi' | 'swiggy' | 'zomato'
 export type BillingPricingMode = 'no_tax'
+
+export interface BillingPaymentAllocation {
+  readonly method: BillingPaymentMethod
+  readonly amountPaise: number
+}
 
 export interface BillingLineSnapshot {
   readonly id: string
@@ -54,7 +59,7 @@ export interface CancelOrderPayload {
 export interface PayOrderPayload {
   readonly billId: string
   readonly orderId: string
-  readonly paymentMethod: BillingPaymentMethod
+  readonly payments: readonly BillingPaymentAllocation[]
   readonly paidAt: string
   readonly paymentBusinessDate: string
 }
@@ -71,7 +76,7 @@ export interface PayNowPayload {
   readonly taxPaise: number
   readonly totalPaise: number
   readonly pricingMode: BillingPricingMode
-  readonly paymentMethod: BillingPaymentMethod
+  readonly payments: readonly BillingPaymentAllocation[]
   readonly lines: readonly BillingLineSnapshot[]
 }
 

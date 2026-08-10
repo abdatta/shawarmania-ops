@@ -59,7 +59,7 @@ returns jsonb language sql immutable as $$
   select jsonb_build_object(
     'billId', p_bill_id,
     'orderId', p_order_id,
-    'paymentMethod', 'cash',
+    'payments', jsonb_build_array(jsonb_build_object('method','cash','amountPaise',13900)),
     'paidAt', p_paid_at,
     'paymentBusinessDate', p_payment_business_date
   )
@@ -85,7 +85,7 @@ returns jsonb language sql volatile as $$
     'taxPaise', 0,
     'totalPaise', 13900,
     'pricingMode', 'no_tax',
-    'paymentMethod', 'cash',
+    'payments', jsonb_build_array(jsonb_build_object('method','cash','amountPaise',13900)),
     'lines', jsonb_build_array(jsonb_build_object(
       'id', p_line_id,
       'menuItemId', '31000000-0000-4000-a000-000000000001',
@@ -323,6 +323,53 @@ select is(
   1::bigint,
   'the exact retry lands one bill');
 
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
+insert into pg_temp.command_values values (
+  'split_payload',
+  pg_temp.pay_now_payload(
+    'a4000000-0000-4000-a000-000000000042',
+    public.app_business_date(now(),time '04:00'),now(),
+    public.app_business_date(now(),time '04:00'),
+    'a3000000-0000-4000-a000-000000000042')
+  || jsonb_build_object('payments',jsonb_build_array(
+    jsonb_build_object('method','cash','amountPaise',10000),
+    jsonb_build_object('method','upi','amountPaise',3900))));
+select is(public.pay_billing_now(
+  'a1000000-0000-4000-a000-000000000042',1,
+  public.billing_payload_hash((select value from pg_temp.command_values where name='split_payload')),
+  now(),'90000000-0000-4000-a000-000000000001',
+  (select value from pg_temp.command_values where name='split_payload'))->>'status',
+  'accepted','a bill accepts an exact split across two tender methods');
+reset role;
+select ok((select payment_method is null from public.bills
+  where id='a4000000-0000-4000-a000-000000000042'),
+  'a mixed bill does not pretend one tender was the whole payment');
+select results_eq(
+  $$select method::text,amount_paise from public.bill_payments
+    where bill_id='a4000000-0000-4000-a000-000000000042' order by method::text$$,
+  $$values ('cash',10000::bigint),('upi',3900::bigint)$$,
+  'split allocations preserve each exact paise amount');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
+select is(public.pay_billing_now(
+  'a1000000-0000-4000-a000-000000000043',1,
+  public.billing_payload_hash(pg_temp.pay_now_payload(
+    'a4000000-0000-4000-a000-000000000043',
+    public.app_business_date(now(),time '04:00'),now(),
+    public.app_business_date(now(),time '04:00'),
+    'a3000000-0000-4000-a000-000000000043')
+    || jsonb_build_object('payments',jsonb_build_array(
+      jsonb_build_object('method','cash','amountPaise',13899)))),
+  now(),'90000000-0000-4000-a000-000000000001',
+  pg_temp.pay_now_payload(
+    'a4000000-0000-4000-a000-000000000043',
+    public.app_business_date(now(),time '04:00'),now(),
+    public.app_business_date(now(),time '04:00'),
+    'a3000000-0000-4000-a000-000000000043')
+    || jsonb_build_object('payments',jsonb_build_array(
+      jsonb_build_object('method','cash','amountPaise',13899)) ))->>'status',
+  'arithmetic_invalid','an under-allocated payment creates no bill');
+
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
 select is(
   public.void_billing_bill(
@@ -377,7 +424,7 @@ select is((select count(*) from public.bills
   'the failed parent/line command leaves no bill');
 reset role;
 select is((select last_number from public.bill_number_counters
-  where outlet_id = '00000000-0000-4000-a000-000000000001'), 11::bigint,
+  where outlet_id = '00000000-0000-4000-a000-000000000001'), 12::bigint,
   'failed arithmetic consumes no number');
 
 -- Direct money-table writes have no client privilege.
@@ -865,12 +912,12 @@ select is(public.pay_billing_order('a1000000-0000-4000-a000-00000000003c',1,
   public.billing_payload_hash(pg_temp.pay_order_payload(
     'a4000000-0000-4000-a000-00000000003c',
     'a2000000-0000-4000-a000-000000000005',now(),
-    public.app_business_date(now(),time '04:00')) || jsonb_build_object('paymentMethod',null)),
+    public.app_business_date(now(),time '04:00')) || jsonb_build_object('payments',null)),
   now(),'90000000-0000-4000-a000-000000000001',pg_temp.pay_order_payload(
     'a4000000-0000-4000-a000-00000000003c',
     'a2000000-0000-4000-a000-000000000005',now(),
-    public.app_business_date(now(),time '04:00')) || jsonb_build_object('paymentMethod',null)
-  )->>'status','malformed_payload','pay-order refuses a null payment method cleanly');
+    public.app_business_date(now(),time '04:00')) || jsonb_build_object('payments',null)
+  )->>'status','malformed_payload','pay-order refuses null payment allocations cleanly');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
 select is(public.manager_cancel_billing_order('a1000000-0000-4000-a000-000000000035',1,

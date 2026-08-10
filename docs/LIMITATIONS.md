@@ -171,6 +171,14 @@ This keeps the billing screen minimal and ships the counter faster. All three ex
 
 Tracked as three backlog items: `bill-thermal-printing`, `bill-gst-breakup`, `bill-digital-share` in [`openspec/todos/`](../openspec/todos/README.md).
 
+### No discounts or partial payment in billing v1
+
+The schema retains integer-paise discount fields for a later pricing-policy change, but the counter exposes no discount control and writes zero. Orders and bills must be paid in full, but that full total may be split across exact tender allocations such as Cash and UPI. There are no deposits, partially paid orders or manager-side payment shortcuts. A later discount change must update both the UI contract and `billing-live` command construction together so the demo and live adapter do not drift.
+
+### No card tender
+
+Billing accepts Cash, UPI, Swiggy or Zomato, and expenses accept Cash or UPI. Card and the vague Other escape hatch were removed from the database payment enum only after a read-only production audit proved there were no matching bills or expenses to migrate; the guarded forward migration refuses rather than relabel any unexpected historical row. A future payment category is added explicitly when the business adopts it.
+
 ### Profit and loss is an estimate, not accounting
 
 This is not a filing-grade financial report and must not be used as one. Specifically it does not model depreciation, opening and closing stock valuation properly, accruals, aggregator commission, or taxes. It answers "is this shop making money this month?" — a genuinely useful question, and a different one from what an accountant needs.
@@ -194,6 +202,8 @@ Each outlet owns its menu. Two outlets selling the same item means two rows. For
 ### One customer identity, and deliberately nothing built on it
 
 Customers are business-wide since `global-customer-identity` (#32): one normalized phone is one person at either outlet. What that change deliberately did **not** build is anything that reads across outlets *about* them. There is no visit count, no spend total, no cross-outlet history, no loyalty, no marketing and no export — a counter that could see any of those could see the other outlet's trade through a customer both shops serve. See [`openspec/todos/customer-loyalty-and-cross-outlet-insights.md`](../openspec/todos/customer-loyalty-and-cross-outlet-insights.md), which is where that work waits for a real decision to justify it.
+
+The billing composer currently requires either a customer name or phone before Order or Mark Paid enables. That is an operating trial in the UI only: both bill snapshots remain nullable in the database, so the rule can be relaxed without rewriting historical data or adding a migration.
 
 Three consequences worth stating plainly:
 
@@ -310,7 +320,7 @@ The server accepts immutable, exactly replayable command envelopes now, but no
 live screen stores them yet: billing remains demo-gated. `billing-live` (#10)
 adds the IndexedDB queue, dependency-ordered draining and visible backlog.
 
-Once live, an unacknowledged envelope exists only on its tablet. There is no
+Once live, an unacknowledged command exists only on its tablet. There is no
 order transfer and no privileged recovery upload. A manager cancels a stranded
 open order with a reason and the counter re-rings it; a destroyed tablet's
 unsent pay-now sale has no recovery path.

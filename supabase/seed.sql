@@ -481,7 +481,7 @@ values
    public.app_business_date(now() - interval '4 hours', time '04:00'),
    '10000000-0000-4000-a000-00000000000a',
    '10000000-0000-4000-a000-000000000004', '40000000-0000-4000-a000-000000000005',
-   null, null, null, 25000, 0, 25000, 'card', 'settled', null, null, null,
+   null, null, null, 25000, 0, 25000, 'upi', 'settled', null, null, null,
    now() - interval '4 hours'),
   -- ------------------------------------------------ Kanchrapara D-2 (shift 3)
   ('50000000-0000-4000-a000-000000000021', '00000000-0000-4000-a000-000000000002',
@@ -503,7 +503,7 @@ values
   ('50000000-0000-4000-a000-000000000024', '00000000-0000-4000-a000-000000000002',
    current_date - 2, '10000000-0000-4000-a000-00000000000b',
    '10000000-0000-4000-a000-000000000005', '40000000-0000-4000-a000-000000000003',
-   null, null, null, 21900, 0, 21900, 'other', 'settled', null, null, null,
+   null, null, null, 21900, 0, 21900, 'upi', 'settled', null, null, null,
    ((current_date - 2) + time '21:15') at time zone 'Asia/Kolkata'),
   -- ------------------------------------------------ Kanchrapara today, open shift
   ('50000000-0000-4000-a000-000000000031', '00000000-0000-4000-a000-000000000002',
@@ -512,6 +512,11 @@ values
    '10000000-0000-4000-a000-000000000005', '40000000-0000-4000-a000-000000000004',
    null, null, null, 13900, 0, 13900, 'cash', 'settled', null, null, null,
    now() - interval '30 minutes');
+
+insert into public.bill_payments (bill_id,outlet_id,method,amount_paise,created_at)
+select id,outlet_id,payment_method,total_paise,paid_at
+from public.bills
+where payment_method is not null;
 
 -- Line items: name and unit price snapshotted at sale time.
 insert into public.bill_items
@@ -707,10 +712,12 @@ begin
        '10000000-0000-4000-a000-000000000003'::uuid, 150000::bigint, 0::bigint)
     ) as t (outlet_id, fa, opening, short)
   loop
-    select coalesce(sum(total_paise), 0) into v_sales
-      from public.bills
-     where outlet_id = v_outlet and business_date = current_date - 2
-       and payment_method = 'cash' and status = 'settled';
+    select coalesce(sum(bp.amount_paise), 0) into v_sales
+      from public.bill_payments bp
+      join public.bills b
+        on b.id = bp.bill_id and b.outlet_id = bp.outlet_id
+     where b.outlet_id = v_outlet and b.business_date = current_date - 2
+       and bp.method = 'cash' and b.status = 'settled';
 
     select coalesce(sum(amount_paise), 0) into v_expenses
       from public.expenses

@@ -144,7 +144,7 @@ describe('demo mode safety', () => {
       outletId,
       shiftId: openShift.id,
       businessDate: today,
-      paymentMethod: 'cash',
+      payments: [{ method: 'cash', amountPaise: firstItem.price_paise }],
       lines: [
         {
           menuItemId: firstItem.id,
@@ -321,11 +321,10 @@ describe('demo mode safety', () => {
   })
 
   it('a deep link to a hidden surface lands on not-found inside the shell', async () => {
-    // `counter-my-shift` is `hidden`. `devices` used to be, and went `live` with
-    // #9; `pnl` used to be, and is now `demo`. The assertion is about a hidden
-    // surface, so it follows the gate rather than the path — which is why it has
-    // now moved twice without ever changing what it claims.
-    renderDemo('/demo/biller/my-shift')
+    // `staff-profile` is `hidden`. My shift used to be, and became a demo
+    // surface with ui-billing-lifecycle. The assertion follows whichever gate
+    // remains hidden rather than pinning a surface that is expected to evolve.
+    renderDemo('/demo/staff/profile')
     expect(await screen.findByText('That page does not exist')).toBeInTheDocument()
     // Inside the shell: the demo banner is still there, because the URL is
     // still a demo URL — the surface is what is absent.

@@ -63,10 +63,8 @@ Payment methods the system must record, taken from how the business actually sel
 |---|---|
 | **Cash** | The only method that affects the cash drawer, and therefore the only one in daily cash reconciliation |
 | **UPI** | Expected to be the dominant digital method |
-| **Card** | |
 | **Swiggy** | Aggregator order, entered manually at the counter |
 | **Zomato** | Aggregator order, entered manually at the counter |
-| **Other** | Escape hatch; should be rare and is worth reviewing if it isn't |
 
 **Only `cash` flows into the daily cash record.** This is the single most important rule connecting billing to reconciliation — a UPI sale increases revenue but not the drawer.
 
@@ -85,6 +83,8 @@ This is the workflow the billing screen must not fight:
 4. Aggregator orders follow the same order → prepare → full-payment path, with
    the rider collecting, or use pay-now when appropriate.
 5. At close, the manager counts the drawer and reconciles against what the app expected.
+
+V1 has no discount, deposit or partially paid order. A fully paid bill may use exact mixed tender—for example ₹100 Cash and ₹39 UPI on ₹139—and only its Cash allocation reaches drawer reconciliation. Every order and bill carries `discount_paise = 0`; exposing a dormant discount field would make a pricing and authority decision the business has not made.
 
 Two consequences worth stating plainly:
 

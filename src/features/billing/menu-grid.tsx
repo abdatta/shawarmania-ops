@@ -39,7 +39,7 @@ export function MenuGrid({
           <h2 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-content-muted">
             {category.name}
           </h2>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {items.map((item) => {
               const quantity = quantities.get(item.id) ?? 0
               return (

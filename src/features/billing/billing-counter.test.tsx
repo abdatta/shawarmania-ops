@@ -6,14 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BillDraft, DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters, createDemoStore } from '@/data-access/mock'
-import { createMockBillingAdapter } from '@/data-access/mock/billing'
-import { createMockMenuAdapter } from '@/data-access/mock/menu'
+import { DEMO_MORNING_BILLER_ID } from '@/data-access/mock/fixtures/billing'
 import {
   MENU_ITEM_CLASSIC_ID,
   MENU_ITEM_MAYO_ID,
   MENU_ITEM_STUFFED_ID,
 } from '@/data-access/mock/fixtures/menu'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
+import { createMockBillingAdapter } from '@/data-access/mock/billing'
+import { createMockMenuAdapter } from '@/data-access/mock/menu'
 import { UNDO_WINDOW_MS } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
@@ -65,6 +66,16 @@ function user() {
   return userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
 }
 
+async function recordPaid(person: ReturnType<typeof user>, method = 'Cash') {
+  const name = screen.getByPlaceholderText('Customer name') as HTMLInputElement
+  const phone = screen.getByPlaceholderText('Phone number') as HTMLInputElement
+  if (!name.value.trim() && !phone.value.trim()) await person.type(name, 'Test customer')
+  await person.click(screen.getByTestId('settle'))
+  const dialog = screen.getByRole('dialog', { name: 'Record payment' })
+  await person.click(within(dialog).getByRole('button', { name: method }))
+  await person.click(within(dialog).getByRole('button', { name: 'Mark Paid' }))
+}
+
 describe('BillingCounter', () => {
   it('adds an item on the first tap and increments on the next', async () => {
     const person = user()
@@ -109,23 +120,32 @@ describe('BillingCounter', () => {
     expect(screen.queryByTestId(`bill-line-${MENU_ITEM_STUFFED_ID}`)).not.toBeInTheDocument()
   })
 
-  it('settles with both customer fields empty, and clears for the next customer', async () => {
+  it('requires either customer name or phone in the UI before either action', async () => {
     const person = user()
     const { adapters } = renderCounter()
     const settleBill = vi.spyOn(adapters.billing, 'settleBill')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.click(screen.getByTestId('method-cash'))
-    await person.click(screen.getByTestId('settle'))
+    expect(screen.getByTestId('save-order')).toBeDisabled()
+    expect(screen.getByTestId('settle')).toBeDisabled()
+    expect(screen.getByText('Add a customer name or phone to continue.')).toBeInTheDocument()
+    expect(settleBill).not.toHaveBeenCalled()
 
-    expect(settleBill).toHaveBeenCalledTimes(1)
-    const draft = settleBill.mock.calls[0]![0] as BillDraft
-    expect(draft.customerName).toBe('')
-    expect(draft.customerPhone).toBe('')
+    await person.type(screen.getByPlaceholderText('Phone number'), '9000000000')
+    expect(screen.getByTestId('save-order')).toBeEnabled()
+    expect(screen.getByTestId('settle')).toBeEnabled()
+    await person.clear(screen.getByPlaceholderText('Phone number'))
+    expect(screen.getByTestId('save-order')).toBeDisabled()
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
+    expect(screen.getByTestId('save-order')).toBeEnabled()
+    expect(screen.getByTestId('settle')).toBeEnabled()
 
-    // Cleared in the same tick: the next customer is already there.
-    expect(screen.queryByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).not.toBeInTheDocument()
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹0')
+    const order = screen.getByRole('button', { name: 'Order' })
+    const markPaid = screen.getByTestId('settle')
+    expect(markPaid).toHaveTextContent('Mark Paid')
+    expect(order.compareDocumentPosition(markPaid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(order).toHaveClass('bg-primary')
+    expect(markPaid).toHaveClass('bg-surface')
   })
 
   it('carries the customer details when they were given', async () => {
@@ -134,54 +154,109 @@ describe('BillingCounter', () => {
     const settleBill = vi.spyOn(adapters.billing, 'settleBill')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer (optional)'), 'Demo Regular')
-    await person.type(screen.getByPlaceholderText('Phone (optional)'), '9000000000')
-    await person.click(screen.getByTestId('method-upi'))
-    await person.click(screen.getByTestId('settle'))
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
+    await person.type(screen.getByPlaceholderText('Phone number'), '9000000000')
+    await recordPaid(person, 'UPI')
 
     const draft = settleBill.mock.calls[0]![0] as BillDraft
     expect(draft.customerName).toBe('Demo Regular')
     expect(draft.customerPhone).toBe('9000000000')
-    expect(draft.paymentMethod).toBe('upi')
+    expect(draft.payments).toEqual([{ method: 'upi', amountPaise: 13900 }])
   })
 
-  it('refuses to settle with no payment method, and says which thing is missing', async () => {
+  it('keeps payment unconfirmed until a tender allocation covers the bill', async () => {
     const person = user()
     const { adapters } = renderCounter()
     const settleBill = vi.spyOn(adapters.billing, 'settleBill')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
     await person.click(screen.getByTestId('settle'))
 
-    expect(screen.getByTestId('counter-error')).toHaveTextContent(/how this was paid/i)
+    const dialog = screen.getByRole('dialog', { name: 'Record payment' })
+    expect(within(dialog).getByRole('button', { name: 'Mark Paid' })).toBeDisabled()
     expect(settleBill).not.toHaveBeenCalled()
     // And the order is still there — nothing was thrown away.
     expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toBeInTheDocument()
   })
 
-  it('refuses to settle an empty bill', async () => {
-    const person = user()
-    const { adapters } = renderCounter()
-    const settleBill = vi.spyOn(adapters.billing, 'settleBill')
-
-    await screen.findByTestId('menu-grid')
-    await person.click(screen.getByTestId('method-cash'))
-    await person.click(screen.getByTestId('settle'))
-
-    expect(screen.getByTestId('counter-error')).toHaveTextContent(/nothing on this bill/i)
-    expect(settleBill).not.toHaveBeenCalled()
-  })
-
-  it('shows a provisional reference that is not a bill number, and clears itself', async () => {
+  it('offers only the four payment methods the outlets accept', async () => {
     const person = user()
     renderCounter()
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.click(screen.getByTestId('method-cash'))
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
     await person.click(screen.getByTestId('settle'))
+    const dialog = screen.getByRole('dialog', { name: 'Record payment' })
+    for (const method of ['Cash', 'UPI', 'Swiggy', 'Zomato']) {
+      expect(within(dialog).getByRole('button', { name: method })).toBeInTheDocument()
+    }
+    expect(within(dialog).queryByText('Card')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('Other')).not.toBeInTheDocument()
+  })
 
-    const reference = screen.getByTestId('provisional-reference').textContent!
-    expect(reference).toMatch(/^Queued · [A-Z][0-9A-Z]{3}$/)
+  it('records an exact cash and UPI split without using the tablet keyboard', async () => {
+    const person = user()
+    const { adapters } = renderCounter()
+    const settleBill = vi.spyOn(adapters.billing, 'settleBill')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
+    await person.click(screen.getByTestId('settle'))
+    const dialog = screen.getByRole('dialog', { name: 'Record payment' })
+    await person.click(within(dialog).getByRole('button', { name: '1' }))
+    await person.click(within(dialog).getByRole('button', { name: '0' }))
+    await person.click(within(dialog).getByRole('button', { name: '0' }))
+    await person.click(within(dialog).getByRole('button', { name: 'Cash' }))
+    await person.click(within(dialog).getByRole('button', { name: 'UPI' }))
+    await person.click(within(dialog).getByRole('button', { name: 'Mark Paid' }))
+
+    expect((settleBill.mock.calls[0]![0] as BillDraft).payments).toEqual([
+      { method: 'cash', amountPaise: 10000 },
+      { method: 'upi', amountPaise: 3900 },
+    ])
+  })
+
+  it('combines open orders above expandable shift bills in the tablet activity rail', async () => {
+    const person = user()
+    renderCounter()
+
+    const rail = await screen.findByTestId('counter-activity-rail')
+    const openHeading = await within(rail).findByRole('heading', { name: 'Open orders' })
+    const billsHeading = within(rail).getByRole('heading', { name: 'Bills this shift' })
+    expect(
+      openHeading.compareDocumentPosition(billsHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(within(rail).getByTestId('shift-total-swiggy')).toHaveTextContent('₹0')
+    expect(within(rail).getByTestId('shift-total-zomato')).toHaveTextContent('₹318')
+
+    const disclosure = rail.querySelector('details')
+    expect(disclosure).not.toBeNull()
+    await person.click(within(disclosure as HTMLElement).getByText(/^Bill \d+$/))
+    expect(disclosure).toHaveAttribute('open')
+    expect(within(disclosure as HTMLElement).getByTestId(/^shift-bill-detail-/)).toHaveTextContent(
+      /×/,
+    )
+  })
+
+  it('refuses to settle an empty bill', async () => {
+    const { adapters } = renderCounter()
+    const settleBill = vi.spyOn(adapters.billing, 'settleBill')
+
+    await screen.findByTestId('menu-grid')
+    expect(screen.getByTestId('settle')).toBeDisabled()
+    expect(settleBill).not.toHaveBeenCalled()
+  })
+
+  it('shows a local reference that is not a bill number, and clears itself', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await recordPaid(person)
+
+    const reference = screen.getByTestId('local-reference').textContent!
+    expect(reference).toMatch(/^Local · [0-9A-Z]{4}$/)
     expect(reference).not.toMatch(/^Bill /)
 
     // No acknowledgement needed: a queue that waits for one is a queue that
@@ -199,16 +274,18 @@ describe('BillingCounter', () => {
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
     await person.click(screen.getByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.type(screen.getByPlaceholderText('Customer (optional)'), 'Demo Regular')
-    await person.click(screen.getByTestId('method-cash'))
-    await person.click(screen.getByTestId('settle'))
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
+    await recordPaid(person)
 
     await person.click(screen.getByTestId('undo-settle'))
 
     expect(cancel).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('2')
-    expect(screen.getByPlaceholderText('Customer (optional)')).toHaveValue('Demo Regular')
-    expect(screen.getByTestId('method-cash')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Demo Regular')
+    await person.click(screen.getByTestId('settle'))
+    const restored = screen.getByRole('dialog', { name: 'Record payment' })
+    expect(within(restored).getByRole('list', { name: 'Payment split' })).toHaveTextContent('Cash')
+    expect(within(restored).getByRole('button', { name: 'Mark Paid' })).toBeEnabled()
     expect(screen.queryByTestId('settled-confirmation')).not.toBeInTheDocument()
   })
 
@@ -231,8 +308,7 @@ describe('BillingCounter', () => {
 
     await adapters.menu.updateItem(MENU_ITEM_CLASSIC_ID, { pricePaise: 19900 })
 
-    await person.click(screen.getByTestId('method-cash'))
-    await person.click(screen.getByTestId('settle'))
+    await recordPaid(person)
 
     const draft = settleBill.mock.calls[0]![0] as BillDraft
     expect(draft.lines[0]!.unitPricePaise).toBe(13900)
@@ -248,8 +324,7 @@ describe('BillingCounter', () => {
     const settleBill = vi.spyOn(adapters.billing, 'settleBill')
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-    await person.click(screen.getByTestId('method-cash'))
-    await person.click(screen.getByTestId('settle'))
+    await recordPaid(person)
 
     const draft = settleBill.mock.calls[0]![0] as BillDraft
     expect(draft.businessDate).toBe('2026-07-28')
@@ -262,8 +337,7 @@ describe('BillingCounter', () => {
 
     for (let index = 0; index < 2; index += 1) {
       await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
-      await person.click(screen.getByTestId('method-cash'))
-      await person.click(screen.getByTestId('settle'))
+      await recordPaid(person)
     }
 
     const ids = settleBill.mock.calls.map((call) => (call[0] as BillDraft).clientId)
@@ -271,6 +345,134 @@ describe('BillingCounter', () => {
     for (const id of ids) {
       expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
     }
+  })
+
+  it('saves food-first work directly into the persistent open-order rail', async () => {
+    const person = user()
+    const { adapters } = renderCounter()
+    const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByRole('button', { name: 'Mayonnaise Chicken Shawarma' }))
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Asha')
+    await person.click(screen.getByTestId('save-order'))
+
+    expect(saveOrder).toHaveBeenCalledWith(expect.objectContaining({ lines: expect.any(Array) }))
+    const rail = await screen.findByTestId('counter-activity-rail')
+    const saved = await within(rail).findByTestId('open-order-105')
+    expect(within(saved).getByText('Asha')).toBeInTheDocument()
+    expect(within(saved).getByText('Classic Chicken Shawarma')).toBeInTheDocument()
+    expect(within(saved).getByText('Mayonnaise Chicken Shawarma')).toBeInTheDocument()
+    expect(within(saved).getByText(/Order #\d+/)).toBeInTheDocument()
+    expect(within(saved).getByText('now')).toBeInTheDocument()
+    expect(within(saved).queryByText('Demo Biller')).not.toBeInTheDocument()
+    expect(
+      within(within(saved).getByText('Classic Chicken Shawarma').closest('li')!).getByText('₹139'),
+    ).toBeInTheDocument()
+    expect(
+      within(within(saved).getByText('Mayonnaise Chicken Shawarma').closest('li')!).getByText(
+        '₹159',
+      ),
+    ).toBeInTheDocument()
+    expect(saved).toHaveTextContent('₹298')
+    expect(screen.queryByTestId('saved-order-confirmation')).not.toBeInTheDocument()
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹0')
+  })
+
+  it('shows another creator while omitting the current shift holder', async () => {
+    const store = createDemoStore()
+    const openOrder = store.orders.find((order) => order.order_number === 104)
+    if (!openOrder) throw new Error('Expected the demo open order')
+    openOrder.created_by = DEMO_MORNING_BILLER_ID
+
+    const adapters: DataAdapters = {
+      ...createMockAdapters('biller'),
+      billing: createMockBillingAdapter(store),
+    }
+    renderCounter(adapters)
+
+    const rail = await screen.findByTestId('counter-activity-rail')
+    const order = await within(rail).findByTestId('open-order-104')
+    expect(within(order).getByText(/Demo Morning Biller/)).toBeInTheDocument()
+  })
+
+  it('edits every order field in the composer and restores the suspended draft', async () => {
+    const person = user()
+    const { adapters } = renderCounter()
+    const reviseOrder = vi.spyOn(adapters.billing, 'reviseOrder')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Waiting customer')
+
+    const rail = await screen.findByTestId('counter-activity-rail')
+    const openOrder = await within(rail).findByTestId('open-order-104')
+    await person.click(within(openOrder).getByRole('button', { name: 'Edit order 104' }))
+
+    const editHeading = screen.getByRole('heading', { name: /Editing order/ })
+    expect(editHeading).toHaveTextContent('104')
+    expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('2')
+    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Demo Customer')
+    expect(screen.getByPlaceholderText('Phone number')).toHaveAttribute('inputmode', 'numeric')
+
+    await person.click(screen.getByRole('button', { name: 'Mayonnaise Chicken Shawarma' }))
+    await person.clear(screen.getByPlaceholderText('Customer name'))
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Updated customer')
+    await person.type(screen.getByPlaceholderText('Phone number'), '9000000222')
+    await person.click(screen.getByTestId('save-order'))
+
+    await waitFor(() => expect(reviseOrder).toHaveBeenCalledTimes(1))
+    expect(reviseOrder).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        customerName: 'Updated customer',
+        customerPhone: '9000000222',
+        lines: expect.arrayContaining([
+          expect.objectContaining({ menuItemId: MENU_ITEM_MAYO_ID, quantity: 1 }),
+        ]),
+      }),
+    )
+    expect(screen.getByRole('heading', { name: 'Current bill' })).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Waiting customer')
+    expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('1')
+    expect(screen.queryByTestId(`bill-line-${MENU_ITEM_MAYO_ID}`)).not.toBeInTheDocument()
+
+    const updated = await within(rail).findByTestId('open-order-104')
+    await waitFor(() => expect(within(updated).getByText('Updated customer')).toBeInTheDocument())
+    expect(within(updated).getByText('Mayonnaise Chicken Shawarma')).toBeInTheDocument()
+
+    await person.click(within(updated).getByRole('button', { name: 'Edit order 104' }))
+    await person.click(screen.getByRole('button', { name: 'One more Classic Chicken Shawarma' }))
+    await person.click(screen.getByTestId('cancel-edit'))
+    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Waiting customer')
+    expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('1')
+  })
+
+  it('prompts before replacing a conflicting name from an exact full-phone match', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Ria')
+    await person.type(screen.getByPlaceholderText('Phone number'), '9000000101')
+
+    const prompt = await screen.findByTestId('customer-match')
+    expect(prompt).toHaveTextContent(/replaces the name in this order only/i)
+    await person.click(within(prompt).getByRole('button', { name: /Use saved details/i }))
+    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Ritika Sen')
+  })
+
+  it('automatically saves a complete new phone when an order is accepted', async () => {
+    const person = user()
+    const { adapters } = renderCounter()
+    const createOrGet = vi.spyOn(adapters.customers, 'createOrGet')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.type(screen.getByPlaceholderText('Customer name'), 'New Customer')
+    await person.type(screen.getByPlaceholderText('Phone number'), '9000000999')
+    await person.click(screen.getByTestId('save-order'))
+
+    await waitFor(() =>
+      expect(createOrGet).toHaveBeenCalledWith({ phone: '+919000000999', name: 'New Customer' }),
+    )
   })
 
   it('says what to do when no shift is open, rather than showing a dead settle button', async () => {

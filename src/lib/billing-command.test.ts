@@ -22,7 +22,7 @@ const payload: PayNowPayload = {
   taxPaise: 0,
   totalPaise: 13900,
   pricingMode: 'no_tax',
-  paymentMethod: 'cash',
+  payments: [{ method: 'cash', amountPaise: 13900 }],
   lines: [
     {
       id: '30000000-0000-4000-a000-000000000001',

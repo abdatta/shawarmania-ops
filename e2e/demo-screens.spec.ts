@@ -20,7 +20,7 @@ const SHELLS = [
   // The counter chrome names whoever holds the open shift. The demo store
   // starts with one open, so a walkthrough lands able to ring a bill rather
   // than behind a PIN nobody was handed.
-  { segment: 'biller', anchor: (page: Page) => page.getByText('Demo Biller') },
+  { segment: 'biller', anchor: (page: Page) => page.getByTestId('shift-status') },
   { segment: 'staff', anchor: (page: Page) => page.getByText('Hello, Demo Staff') },
 ] as const
 

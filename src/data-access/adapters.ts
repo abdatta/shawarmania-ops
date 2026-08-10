@@ -814,7 +814,19 @@ export interface MenuAdapter {
 // ─────────────────────────────────────────────────────────────────────────────
 // The counter: shifts, bills, and the queue they leave through.
 
-export type PaymentMethod = Tables<'bills'>['payment_method']
+export type PaymentMethod = NonNullable<Tables<'bills'>['payment_method']>
+export const BILLING_PAYMENT_METHODS = [
+  'cash',
+  'upi',
+  'swiggy',
+  'zomato',
+] as const satisfies readonly PaymentMethod[]
+
+/** One exact tender allocation. Several allocations may settle one bill. */
+export interface PaymentAllocation {
+  method: PaymentMethod
+  amountPaise: number
+}
 
 /** Somebody who can hold a shift at this counter. */
 export interface CounterBiller {
@@ -859,7 +871,7 @@ export interface BillDraft {
   shiftId: string
   /** Resolved from the outlet's cutover at the moment of settle, never at read time. */
   businessDate: string
-  paymentMethod: PaymentMethod
+  payments: PaymentAllocation[]
   lines: BillLineDraft[]
   customerName?: string | null
   customerPhone?: string | null
@@ -882,6 +894,100 @@ export interface QueuedBill {
   businessDate: string
   /** Epoch milliseconds it entered the queue — what the escalation clock reads. */
   queuedAt: number
+}
+
+export type OrderStatus = Tables<'orders'>['status']
+export type BillStatus = Tables<'bills'>['status']
+
+/** A saved order as the counter and manager surfaces read it. */
+export interface BillingOrder {
+  id: Tables<'orders'>['id']
+  outletId: Tables<'orders'>['outlet_id']
+  deviceId: Tables<'orders'>['device_id']
+  orderNumber: Tables<'orders'>['order_number']
+  businessDate: Tables<'orders'>['business_date']
+  orderedAt: Tables<'orders'>['ordered_at']
+  status: OrderStatus
+  creatorId: Tables<'orders'>['created_by']
+  creatorName: string
+  customerName: Tables<'orders'>['customer_name']
+  customerPhone: Tables<'orders'>['customer_phone']
+  lines: BillLineDraft[]
+  totalPaise: Tables<'orders'>['total_paise']
+  cancelReason: Tables<'orders'>['cancel_reason']
+  cancelledAt: Tables<'orders'>['cancelled_at']
+  cancelledByName: string | null
+  billId: Tables<'orders'>['bill_id']
+}
+
+export interface SaveOrderInput {
+  clientId: string
+  outletId: string
+  shiftId: string
+  businessDate: string
+  lines: BillLineDraft[]
+  customerId?: string | null
+  customerName?: string | null
+  customerPhone?: string | null
+}
+
+export interface BillingBill {
+  id: Tables<'bills'>['id']
+  outletId: Tables<'bills'>['outlet_id']
+  billNumber: Tables<'bills'>['bill_number']
+  orderNumber: Tables<'orders'>['order_number'] | null
+  businessDate: Tables<'bills'>['business_date']
+  orderedAt: Tables<'bills'>['ordered_at']
+  paidAt: Tables<'bills'>['paid_at']
+  paymentBusinessDate: Tables<'bills'>['payment_business_date']
+  /** Exact tender allocations; their sum is always the bill total. */
+  payments: PaymentAllocation[]
+  /** Convenience label for summaries; `mixed` is not itself a tender method. */
+  paymentMethod: PaymentMethod | 'mixed'
+  status: BillStatus
+  customerName: Tables<'bills'>['customer_name']
+  customerPhone: Tables<'bills'>['customer_phone']
+  lines: BillLineDraft[]
+  totalPaise: Tables<'bills'>['total_paise']
+  voidReason: Tables<'bills'>['void_reason']
+  voidedAt: Tables<'bills'>['voided_at']
+}
+
+export interface BillingHistoryFilters {
+  outletId: string
+  businessDate?: string
+  status?: BillStatus | 'all'
+  paymentMethod?: PaymentMethod | 'all'
+}
+
+export interface BillingMethodTotal {
+  method: PaymentMethod
+  totalPaise: number
+}
+
+export interface ShiftBillingHistory {
+  bills: BillingBill[]
+  totals: BillingMethodTotal[]
+}
+
+/** Non-identifying delivery metadata safe to show on a manager phone. */
+export interface BillingDeliveryDiagnostic {
+  reference: Tables<'billing_commands'>['id']
+  commandType: Tables<'billing_commands'>['command_type']
+  resultCategory: Tables<'billing_commands'>['result_category']
+  receivedAt: Tables<'billing_commands'>['received_at']
+  ageMs: number
+}
+
+/** The richer local trace that never leaves the originating tablet surface. */
+export interface BillingAttentionItem extends BillingDeliveryDiagnostic {
+  deviceId: NonNullable<Tables<'billing_commands'>['device_id']>
+  refusedTrace: string
+  state: 'needs_attention' | 'corrected' | 'discarded'
+  linkedCorrectionId: string | null
+  resolvedAt: string | null
+  resolvedBy: string | null
+  discardReason: string | null
 }
 
 export interface SyncState {
@@ -941,6 +1047,24 @@ export interface BillingAdapter {
    * append-only. Refused once the bill has gone.
    */
   cancelQueuedBill(clientId: string): Promise<void>
+  saveOrder(input: SaveOrderInput): Promise<BillingOrder>
+  reviseOrder(
+    orderId: string,
+    input: Pick<SaveOrderInput, 'lines' | 'customerId' | 'customerName' | 'customerPhone'>,
+  ): Promise<BillingOrder>
+  listOpenOrders(outletId: string): Promise<BillingOrder[]>
+  payOrder(orderId: string, payments: PaymentAllocation[]): Promise<BillingBill>
+  cancelOrder(orderId: string, reason: string): Promise<BillingOrder>
+  listShiftHistory(shiftId: string): Promise<ShiftBillingHistory>
+  listManagerHistory(filters: BillingHistoryFilters): Promise<BillingBill[]>
+  getBill(billId: string): Promise<BillingBill | null>
+  voidBill(billId: string, reason: string): Promise<BillingBill>
+  listManagerOpenOrders(outletId: string): Promise<BillingOrder[]>
+  managerCancelOrder(orderId: string, reason: string): Promise<BillingOrder>
+  listAttention(): Promise<BillingAttentionItem[]>
+  correctAttention(reference: string, correctionId: string): Promise<BillingAttentionItem>
+  discardAttention(reference: string, reason: string): Promise<BillingAttentionItem>
+  listDeliveryDiagnostics(outletId: string): Promise<BillingDeliveryDiagnostic[]>
 }
 
 /**
@@ -1339,7 +1463,7 @@ export interface ReconciliationException {
   billNumber: number
   businessDate: string
   totalPaise: number
-  paymentMethod: PaymentMethod
+  paymentMethod: PaymentMethod | 'mixed'
   /** When it was rung, and when it landed. The gap is the whole problem. */
   createdAt: string
   syncedAt: string

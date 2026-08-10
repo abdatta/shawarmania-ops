@@ -712,6 +712,48 @@ export type Database = {
           },
         ]
       }
+      bill_payments: {
+        Row: {
+          amount_paise: number
+          bill_id: string
+          created_at: string
+          id: string
+          method: Database["public"]["Enums"]["payment_method"]
+          outlet_id: string
+        }
+        Insert: {
+          amount_paise: number
+          bill_id: string
+          created_at?: string
+          id?: string
+          method: Database["public"]["Enums"]["payment_method"]
+          outlet_id: string
+        }
+        Update: {
+          amount_paise?: number
+          bill_id?: string
+          created_at?: string
+          id?: string
+          method?: Database["public"]["Enums"]["payment_method"]
+          outlet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_payments_bill_outlet_fk"
+            columns: ["bill_id", "outlet_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id", "outlet_id"]
+          },
+          {
+            foreignKeyName: "bill_payments_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_commands: {
         Row: {
           actor_id: string | null
@@ -878,7 +920,7 @@ export type Database = {
           outlet_id: string
           paid_at: string
           payment_business_date: string
-          payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_method: Database["public"]["Enums"]["payment_method"] | null
           pricing_mode: Database["public"]["Enums"]["pricing_mode"]
           shift_id: string | null
           status: Database["public"]["Enums"]["bill_status"]
@@ -907,7 +949,7 @@ export type Database = {
           outlet_id: string
           paid_at?: string
           payment_business_date?: string
-          payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
@@ -936,7 +978,7 @@ export type Database = {
           outlet_id?: string
           paid_at?: string
           payment_business_date?: string
-          payment_method?: Database["public"]["Enums"]["payment_method"]
+          payment_method?: Database["public"]["Enums"]["payment_method"] | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
@@ -2705,6 +2747,10 @@ export type Database = {
         Args: { p_lines: Json; p_order_id?: string; p_outlet_id: string }
         Returns: boolean
       }
+      billing_validate_payments: {
+        Args: { p_payments: Json; p_total: number }
+        Returns: boolean
+      }
       billing_validate_totals: { Args: { p_payload: Json }; Returns: boolean }
       cancel_billing_order: {
         Args: {
@@ -3095,7 +3141,7 @@ export type Database = {
       inventory_unit: "kg" | "litre" | "packet" | "piece"
       movement_type: "added" | "used" | "wasted" | "correction"
       order_status: "open" | "paid" | "cancelled"
-      payment_method: "cash" | "upi" | "card" | "swiggy" | "zomato" | "other"
+      payment_method: "cash" | "upi" | "swiggy" | "zomato"
       pricing_mode: "no_tax" | "gst_inclusive" | "gst_exclusive"
     }
     CompositeTypes: {
@@ -3255,7 +3301,7 @@ export const Constants = {
       inventory_unit: ["kg", "litre", "packet", "piece"],
       movement_type: ["added", "used", "wasted", "correction"],
       order_status: ["open", "paid", "cancelled"],
-      payment_method: ["cash", "upi", "card", "swiggy", "zomato", "other"],
+      payment_method: ["cash", "upi", "swiggy", "zomato"],
       pricing_mode: ["no_tax", "gst_inclusive", "gst_exclusive"],
     },
   },

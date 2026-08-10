@@ -162,10 +162,10 @@ snapshot through later menu changes.
 `id` (client UUID), `outlet_id`, permanent `bill_number`, optional source
 `order_id`, `ordered_at` and `business_date` (revenue), `paid_at` and
 `payment_business_date` (drawer), operator/tablet/counter-shift attribution,
-customer snapshot, integer-paise totals, payment method, status and void
+customer snapshot, integer-paise totals, optional single-method summary, status and void
 attribution.
 
-- `payment_method`: `cash` | `upi` | `card` | `swiggy` | `zomato` | `other`.
+- `payment_method`: nullable compatibility summary. It is one of `cash` | `upi` | `swiggy` | `zomato` for a single-tender bill and null for mixed tender. Card and Other are not accepted payment categories.
 - `pricing_mode`: `no_tax` | `gst_inclusive` | `gst_exclusive`. **v1 always writes `no_tax` and `tax_paise = 0`.** It exists now so that when GST is enabled, historical bills stay unambiguous instead of being silently reinterpreted under new rules.
 - `unique (outlet_id, bill_number)` — bill numbers are unique within an outlet, not globally.
 - **`bill_number` is assigned by the database**: a `before insert` trigger allocates from a per-outlet counter row (`bill_number_counters`, invisible to clients) inside the insert transaction — race-safe, and gapless because a failed insert rolls the allocation back with it. A client-supplied value is overwritten, never trusted; the column's `default 0` exists only so generated client types treat it as server-supplied. *Divergence:* this replaced the "issue bill number" Edge Function sketched in the architecture — a trigger is atomic with the insert, an extra network hop cannot be.
@@ -179,6 +179,10 @@ attribution.
 `id`, `bill_id`, `menu_item_id` (nullable reference, for analytics only), `item_name` (**snapshot**), `unit_price_paise` (**snapshot**), `quantity`, `line_total_paise`.
 
 The snapshot is the point. `menu_item_id` is nullable and advisory — if an item is later removed, the bill still reads correctly. Never compute a historical bill's value by joining to `menu_items`.
+
+**`bill_payments`** — `id`, `bill_id`, `outlet_id`, `method`, `amount_paise`, `created_at`.
+
+These append-only rows are the canonical tender truth. Each method appears at most once per bill, every amount is positive integer paise, and the deferred integrity guard requires their sum to equal the bill total. A mixed bill remains one fully paid bill, never a partially paid order. Daily cash sums only rows whose method is `cash`, so ₹100 Cash + ₹39 UPI contributes ₹100 to the drawer and ₹139 to revenue.
 
 **`billing_commands`** — compact idempotency receipts containing envelope
 identity, attribution, command type/version/hash, client and server clocks,

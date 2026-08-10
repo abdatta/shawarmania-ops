@@ -49,6 +49,14 @@ const auth = vi.hoisted(() => {
 
 vi.mock('@/data-access/auth', () => auth)
 
+// These are routing/auth tests, not integration tests for the real data
+// adapters. Supplying a typed in-memory bag prevents a successfully redirected
+// screen from leaking a late network rejection after the assertion completes.
+vi.mock('@/data-access/supabase-adapters', async () => {
+  const { createMockAdapters } = await import('@/data-access/mock')
+  return { createSupabaseAdapters: () => createMockAdapters('franchise_admin') }
+})
+
 function renderAt(path: string) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
   return { router, ...render(<RouterProvider router={router} />) }
@@ -73,7 +81,7 @@ beforeEach(() => {
     {
       id: 'a-1',
       role: 'franchise_admin',
-      outletId: 'outlet-kalyani',
+      outletId: '00000000-0000-4000-8000-000000000001',
       startedOn: '2025-08-01',
       endedOn: null,
     },
@@ -115,7 +123,10 @@ describe('sign in', () => {
     const user = userEvent.setup()
     signInSucceeds()
     const router = createMemoryRouter(appRoutes, {
-      initialEntries: [{ pathname: '/sign-in', state: { from: '/admin/people' } }],
+      // A demo-gated destination proves the redirect without mounting a real
+      // data surface. Mounting People here leaked a late, unauthenticated
+      // Supabase request after the redirect assertion had already passed.
+      initialEntries: [{ pathname: '/sign-in', state: { from: '/admin/billing-history' } }],
     })
     render(<RouterProvider router={router} />)
 
@@ -123,7 +134,7 @@ describe('sign in', () => {
     await user.type(screen.getByLabelText('Password'), 'a-real-password')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/people'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/admin/billing-history'))
   })
 
   it('keeps invalid username and password failures indistinguishable', async () => {

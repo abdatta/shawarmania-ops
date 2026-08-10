@@ -5,13 +5,20 @@
 The live billing adapter SHALL support direct paid bills and editable open
 orders, using the same typed lifecycle demonstrated in `ui-billing-lifecycle`. A
 bill SHALL exist only after full payment succeeds. V1 SHALL expose no discount
-control and SHALL submit `discount_paise` as zero.
+control and SHALL submit `discount_paise` as zero. Live commands SHALL accept
+one or more exact allocations of Cash, UPI, Swiggy or Zomato and SHALL
+NOT accept Card or Other. Allocations SHALL be positive integer paise, unique by method
+and sum exactly to the bill total before the command is locally accepted. The
+composer SHALL keep Order as its primary action and Mark Paid as its secondary
+upfront-payment action, and SHALL enable either only when customer name or phone
+is nonblank. That identification check SHALL remain a UI rule, not a database
+constraint.
 
 #### Scenario: Customer pays upfront
-- **WHEN** an operator chooses Pay now and the command is durably accepted locally
+- **WHEN** an operator confirms Mark Paid and the command is durably accepted locally
 - **THEN** the counter clears, reads as not sent yet, and later shows the exactly-once bill number
 
-#### Scenario: Customer undoes Pay now
+#### Scenario: Customer undoes Mark Paid
 - **WHEN** an operator uses Undo during the guaranteed six-second window
 - **THEN** delivery has not begun, the local command is removed, and the complete composer is restored
 
@@ -19,13 +26,24 @@ control and SHALL submit `discount_paise` as zero.
 - **WHEN** an operator saves an order and later pays it from the tablet that took it
 - **THEN** the order stays editable until payment, and the payment produces one immutable bill
 
+#### Scenario: Customer uses mixed tender
+- **WHEN** exact Cash and UPI allocations together cover the bill total
+- **THEN** one immutable paid bill retains both allocations and only the Cash amount reaches drawer reconciliation
+
 ### Requirement: Live open-order actions stay on the tablet that took the order
 
 Ordinary edit, payment and cancellation of an open order SHALL be available only
 on the tablet that owns it, to any operator holding its live shift. Clearing an
 order stranded on an unavailable tablet SHALL be an ordinary reasoned
 cancellation by that outlet's manager, and no transfer or recovery path SHALL
-exist.
+exist. The card SHALL label its secondary number as Order #, show complete item
+lines with line amounts, use relative age for today's order, and omit the creator
+when the current shift holder created it. Its payment action SHALL read Mark Paid.
+On the combined tablet workspace, edit SHALL hand the order to the full composer
+and restore any suspended new-order draft after Save changes or Cancel edit.
+
+Shift summaries SHALL show Cash, UPI, Swiggy and Zomato even when a method's
+total is zero.
 
 #### Scenario: Another operator uses the same tablet
 - **WHEN** a different operator's shift begins on the order's tablet

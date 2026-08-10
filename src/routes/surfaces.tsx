@@ -5,6 +5,9 @@ import { AlertsSurface } from '@/features/alerts/alerts-surface'
 import { MyAttendance } from '@/features/attendance/my-attendance'
 import { OutletAttendance } from '@/features/attendance/outlet-attendance'
 import { BillingCounter } from '@/features/billing/billing-counter'
+import { ManagerBillingHistory } from '@/features/billing/manager-billing-history'
+import { MyShiftSurface } from '@/features/billing/my-shift-surface'
+import { OpenOrdersSurface } from '@/features/billing/open-orders-surface'
 import { ShiftUnlock } from '@/features/billing/shift-unlock'
 import { DailyCashSurface } from '@/features/cash/daily-cash-surface'
 import { DevicesSurface } from '@/features/counter/devices-surface'
@@ -80,6 +83,30 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="shift">
         <ShiftUnlock />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'open-orders',
+    element: (
+      <GatedSurface path="open-orders">
+        <OpenOrdersSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'my-shift',
+    element: (
+      <GatedSurface path="my-shift">
+        <MyShiftSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'billing-history',
+    element: (
+      <GatedSurface path="billing-history">
+        <ManagerBillingHistory />
       </GatedSurface>
     ),
   },

@@ -4,7 +4,7 @@
 
 The system SHALL write an immutable, versioned billing command envelope to the
 tablet's IndexedDB before it reports success or clears the operator's form, and
-SHALL NOT require a network response for that acknowledgement. A Pay now envelope
+SHALL NOT require a network response for that acknowledgement. A direct-payment envelope
 SHALL remain ineligible for delivery during the existing six-second Undo window;
 Undo SHALL remove it while still unsent and restore the complete composer.
 
@@ -16,7 +16,7 @@ Undo SHALL remove it while still unsent and restore the complete composer.
 - **WHEN** IndexedDB cannot durably commit a submitted command
 - **THEN** the system does not report success, does not clear the form, and explains that the operation was not saved
 
-#### Scenario: Pay now is undone before delivery
+#### Scenario: Mark Paid is undone before delivery
 - **WHEN** the operator uses Undo during the guaranteed window
 - **THEN** no request has begun, the envelope is removed, and its lines, customer form and payment method return to the composer
 

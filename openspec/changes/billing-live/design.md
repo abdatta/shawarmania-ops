@@ -25,7 +25,7 @@ billing is the day its counter revenue must stop being typed in by hand.
 - Wire every #31 surface to the real #9, #32 and #33 contracts.
 - Acknowledge counter writes only after a durable IndexedDB commit, then deliver
   them exactly once without making the operator wait.
-- Preserve Pay now's guaranteed six-second Undo before its command becomes
+- Preserve Mark Paid's guaranteed six-second Undo before its command becomes
   deliverable, and keep every V1 discount at zero with no discount control.
 - Preserve unsent work through the shift ending, cutover, restart and app update.
 - Hand counter revenue over from the ledger to the app, once, per outlet.
@@ -64,7 +64,7 @@ or clearing the form. **The store itself is this change's**, moved on from #33 o
 2026-08-09 because its adapters, its screens and its dependency ordering all live
 here.
 
-Network delivery starts afterwards, except that a Pay now envelope remains
+Network delivery starts afterwards, except that a direct-payment envelope remains
 ineligible for delivery during the existing six-second Undo window. Undo removes
 that still-unsent envelope and restores the composer; after the window, the
 ordinary drain rules apply. If durable storage fails, the UI stays populated and

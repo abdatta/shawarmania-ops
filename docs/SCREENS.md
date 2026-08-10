@@ -100,22 +100,18 @@ The tablet's own tree has **no navigation, no account menu and no sign-out** sin
 **Billing counter** — the heart of the product, and the screen most worth getting right.
 
 ```
-┌──────────────────────────────────────┬─────────────────────────┐
-│  MENU GRID                           │  CURRENT BILL           │
-│  ┌────────┐ ┌────────┐ ┌────────┐    │  Classic Shawarma ×2    │
-│  │Classic │ │Mayo    │ │Double  │    │  Mozzarella       ×1    │
-│  │ ₹139   │ │ ₹159   │ │ ₹179   │    │                         │
-│  └────────┘ └────────┘ └────────┘    │  ─────────────────────  │
-│  ┌────────┐ ┌────────┐ ┌────────┐    │  TOTAL      ₹477        │
-│  │Mozzare.│ │Salad   │ │Stuffed │    │                         │
-│  │ ₹199   │ │ ₹219   │ │ ₹238   │    │  Customer (optional)    │
-│  └────────┘ └────────┘ └────────┘    │  ┌───────────────────┐  │
-│                                      │  │ CASH │ UPI │ CARD │  │
-│  Whole menu visible — no search,     │  │ SWIGGY │ ZOMATO   │  │
-│  no category drilling               │  └───────────────────┘  │
-│                                      │  ┌───────────────────┐  │
-│  [● synced]                          │  │     SETTLE        │  │
-└──────────────────────────────────────┴──┴───────────────────┴──┘
+┌──────────────────────┬────────────────────┬────────────────────────┐
+│ MENU                 │ CURRENT BILL       │ ORDERS & BILLS         │
+│ Classic       ₹139   │ Classic ×2   ₹278 │ OPEN ORDERS            │
+│ Mayo          ₹159   │ Mayo    ×1   ₹159 │ Order 31 · ₹437        │
+│ Double        ₹179   │                    │ Order 32 · ₹318        │
+│ Mozzarella    ₹199   │ Total        ₹437 │ ────────────────────── │
+│ Salad         ₹219   │ Customer · Phone   │ BILLS THIS SHIFT       │
+│ Stuffed       ₹238   │ Cash               │ Bill 28 · cash · ₹318 │
+│ Burger        ₹250   │ UPI · Swiggy       │ Bill 27 · UPI  · ₹139 │
+│                      │ Zomato              │ each expands to items, │
+│ tap tiles to add     │ Order · Mark Paid  │ prices and payment     │
+└──────────────────────┴────────────────────┴────────────────────────┘
 ```
 
 Design commitments:
@@ -123,20 +119,22 @@ Design commitments:
 - **The whole menu fits on one screen.** Seven items today, and unlikely to exceed twenty. A search box or category tabs would be slower than looking. A test compares the grid's content height with its visible height at the smallest supported tablet size, so a menu that outgrows the screen fails a build rather than a shift.
 - **Tap to add, tap again to increment.** The tile *only* adds: a −/+ pair on it would halve the target at exactly the moment speed matters, and a mis-tap would then quietly decrement an order rather than visibly miss it. The count rides on the tile as feedback. Quantity is adjusted on the bill line instead, where the thumb already is.
 - **An item that is off the menu stays on the grid and refuses to be sold.** A tile that vanished when the kitchen ran out would read as a bug to whoever was looking straight at it.
-- **Customer name and phone are optional and never block settling.** At peak they will be skipped, and a required field would just get filled with junk. **Whether the counter may read the customer list is now settled, and the answer is no** (`global-customer-identity`, #32): a complete phone resolves to one business-wide customer and fills the name in, and there is no browse, no prefix search and no list — not on the screen and not in the database behind it. A number that matches nobody, a lookup that is refused, and a lookup that is rate-limited all read the same to a biller: carry on with the bill. The autofilled name stays editable, and what is typed is what the bill snapshots; the saved profile is never rewritten from a till. The surface for all of this is built by #31 and made real by #10 — customer phone numbers are PII on a shared device, and the boundary landed before the screen that uses it.
-- **Payment method is one tap, then settle.** Two taps from a complete order to a cleared screen. **Cash is distinguished by size and position as well as colour** — it is the only method on its own full-width row, labelled as the one that reaches the drawer.
-- **Settling is instant.** The bill goes to the queue; nothing is awaited. The screen clears for the next customer in the same tick.
+- **Either customer name or phone is required by the composer UI.** This is a reversible operating trial, not a database invariant: both snapshots remain nullable. **Whether the counter may read the customer list is settled, and the answer is no** (`global-customer-identity`, #32): a complete phone resolves to one business-wide customer and fills the name in, and there is no browse, no prefix search and no list — not on the screen and not in the database behind it. A number that matches nobody, a lookup that is refused, and a lookup that is rate-limited all read the same to a biller: carry on with the bill. The autofilled name stays editable, and what is typed is what the bill snapshots; the saved profile is never rewritten from a till. The surface for all of this is built by #31 and made real by #10 — customer phone numbers are PII on a shared device, and the boundary landed before the screen that uses it.
+- **Order is the primary composer action.** It records the ordinary food-first sequence; **Mark Paid** is secondary for the rarer upfront payment and opens tap-first tender capture. With no amount keyed, one method takes the whole remaining balance. A touch keypad supports exact splits such as ₹100 Cash + ₹39 UPI; allocations must equal the bill total before Mark Paid enables. Cash is distinguished by icon and primary treatment because only its allocation reaches the drawer. UPI, Swiggy and Zomato are supported; Card and Other are absent.
+- **Mark Paid is instant after confirmation.** The bill goes to the queue; nothing is awaited. The screen clears for the next customer in the same tick.
 - **Sync state is a small persistent indicator**, never a dialog — synced, *N* pending, or an escalated warning once five are waiting or the oldest has waited two minutes.
 
-**Bill confirmation** — a brief summary after settling: the total, the bill's provisional reference, and **Undo**. It clears itself; a queue does not wait for an acknowledgement.
+**Bill confirmation** — a brief summary after Mark Paid: the total, a short local reference, the plain words **not sent yet**, and **Undo**. It clears itself; a queue does not wait for an acknowledgement, and delivery cannot begin during the six seconds in which Undo is visible.
 
 A queued bill is identified as `Queued · A3F9` and never as an integer, because **bill numbers are the server's** — assigned per outlet and sequentially at insert — and showing a plausible-looking number before the bill has landed would be the worst possible lie to tell a biller or a customer. The number appears when it syncs.
 
 **Undo cancels an unsent queue entry; it never edits a bill.** It is offered for the few seconds the confirmation is on screen, which is exactly the window during which the bill cannot yet have been sent — so an Undo that is visible is always an Undo that works. Once the bill has gone, the only correction is a void, and that ships with #10.
 
+**Open orders** — only this tablet's unfinished orders, as compact preparation cards. Every quantity, item name and line amount stays readable without expansion; an available customer name and the total are prominent, while `Order #xyz` is only a small reference. Mark Paid, edit and cancel are grouped below that information, with edit and cancel as touch-sized icon actions. Mark Paid opens the same exact tender dialog as a direct bill. Today's order shows a relative age; older orders show outlet-local date and time. The creator appears only when different from the current shift holder. Edit hands the order to the full composer, including menu tiles and customer fields, while preserving any new-order draft. Cancellation reason tiles fill one always-editable field. Saving adds the order directly here—there is no separate latest-order card that can go stale after rapid orders.
+
 **Menu (read-only)** — the same screen a manager edits, seen from the counter: what is on, what is off, and what everything costs, so *"is that still available?"* does not need a walk to the kitchen. No editing affordances, and a sentence saying a manager makes the changes — but the boundary is the data layer's refusal, not the missing button.
 
-**My shift** — bills created during this biller's current shift, with a running total by payment method. Read-only. Not the outlet's whole history — reviewing the day is a manager's job, and a shared tablet should not display the outlet's takings to whoever is standing at it. *(Not built — it is bill history, and that ships with #10.)*
+**My shift** — paid bills created during this tablet's current shift, with Cash, UPI, Swiggy and Zomato totals always present, including ₹0. Every bill is collapsed by default and expands to its immutable item names, quantities, captured prices, line totals, payment facts, total and optional customer name. On a landscape tablet this list sits below Open orders in the Counter's continuous right rail; on narrower screens the dedicated route remains. It also holds the originating tablet's needs-attention work: correct by creating a linked command with a new identity, or discard with a reason, while retaining the refused trace. It is not the outlet's whole history — reviewing the day is a manager's job, and a shared tablet should not display the outlet's takings to whoever is standing at it.
 
 **Expenses** — *temporary (#36), and it goes with the Ledger.* The manual ledger's expense list, mounted alone, for the people who spend the money. It opens on the **two most recent business days** at the chosen outlet, resolved through that outlet's own cutover so something bought at 00:30 belongs to the trading day still running. That window is where the screen opens rather than a boundary: no policy carries a date predicate on reads, and hiding an old expense row protects nothing, since it is not a revenue figure.
 
@@ -151,6 +149,8 @@ A staff member assigned at more than one outlet chooses which outlet this screen
 ## Franchise Admin — one outlet, on a phone
 
 **Outlet dashboard** — today at a glance: sales so far split by payment method, cash position, low-stock items, open alerts, who is checked in. The screen a manager opens twenty times a day, so it answers questions without navigation. *(Still a placeholder. It is a `live` surface, so it may not render mock figures; it gets its real summary when the figures behind it become real — #11, #13.)*
+
+**Billing history** — a phone-first outlet record for Franchise Admin and Super Admin. Bills filter by revenue business date, status and payment method, and immutable detail names a later payment clock and payment business date separately when they differ. Voiding requires a reason and leaves the original bill visible; the corrected sale is then rung manually on the enrolled tablet, with no phone-side payment, draft or prefill. A second view lets a manager cancel a stranded open order with a reason. Delivery diagnostics are read-only counts and non-identifying metadata — command type, short reference, age and result category — never customer details, command contents or tablet correction controls.
 
 **Menu** — categories and their items, each with its price, its availability, and a vegetarian marker that carries **shape as well as colour**, because the familiar square-and-dot mark is a colour-only distinction. Two frequent actions, deliberately different sizes of thing: **availability is one tap on the row**, because it happens mid-service when the kitchen runs out, and it changes the row in place without opening anything; **a price change is a form**, because it is rare and consequential and deserves the sentence saying it applies to future bills only. An item turned off stays on the list, labelled — a row that vanished would leave a manager nowhere to turn it back on. Bills already recorded keep the price they were charged at, because their line items snapshot it.
 

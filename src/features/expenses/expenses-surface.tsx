@@ -28,7 +28,7 @@ import { useOutletScope } from '@/features/outlet-scope'
  *
  * **Cash rows are marked, and marked in words.** They are the only ones that
  * reach the drawer, so at close somebody has to find them by eye among the UPI
- * and card entries; a colour alone would not survive a bright counter or a
+ * and other entries; a colour alone would not survive a bright counter or a
  * colour-blind reader.
  *
  * Four fields and no more. An expense form that asked for a supplier, a bill
@@ -48,17 +48,13 @@ const REMOTE_ENTRY_NOTE =
 const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'cash', label: 'Cash' },
   { value: 'upi', label: 'UPI' },
-  { value: 'card', label: 'Card' },
-  { value: 'other', label: 'Other' },
 ]
 
 const METHOD_WORDS: Record<PaymentMethod, string> = {
   cash: 'Cash',
   upi: 'UPI',
-  card: 'Card',
   swiggy: 'Swiggy',
   zomato: 'Zomato',
-  other: 'Other',
 }
 
 interface Draft {
@@ -339,8 +335,8 @@ export function ExpensesSurface() {
               <Money paise={cashTotal} className="font-semibold" data-testid="expense-cash-total" />
             </p>
             <p className="text-xs text-content-muted">
-              Only the cash figure reaches the day&rsquo;s count. A UPI or card expense is real
-              money, but it never came out of this drawer.
+              Only the cash figure reaches the day&rsquo;s count. A UPI expense is real money, but
+              it never came out of this drawer.
             </p>
           </Card>
         </>

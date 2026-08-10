@@ -210,6 +210,8 @@ describe('the owner, on an outlet they do not manage', () => {
       .map((option) => option.textContent)
     expect(methods).not.toContain('Cash')
     expect(methods).toContain('UPI')
+    expect(methods).not.toContain('Card')
+    expect(methods).not.toContain('Other')
   })
 
   it('still offers cash at the outlet they do run', async () => {
@@ -226,6 +228,8 @@ describe('the owner, on an outlet they do not manage', () => {
       .getAllByRole('option')
       .map((option) => option.textContent)
     expect(methods).toContain('Cash')
+    expect(methods).not.toContain('Card')
+    expect(methods).not.toContain('Other')
   })
 
   it('records the entry as the owner, at the outlet they chose', async () => {

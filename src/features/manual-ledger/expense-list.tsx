@@ -594,7 +594,7 @@ export function ExpenseList({
               onChange={(event) => setDraft({ ...draft, isCash: event.target.value === 'cash' })}
             >
               <option value="cash">Cash, out of the drawer</option>
-              <option value="other">Anything else — UPI, card, transfer</option>
+              <option value="other">Anything else — UPI, transfer, cheque</option>
             </Select>
             <p className="text-xs text-content-muted">
               Only cash reaches the day&rsquo;s count. Everything else is still an expense.

@@ -11,6 +11,7 @@ import {
 } from '@/domain'
 
 import type { Tables } from '../database.types'
+import type { BillDraft, PaymentAllocation } from '../adapters'
 import {
   billSeedItemId,
   billSeedOutlet,
@@ -83,6 +84,18 @@ export interface DemoStore {
   bills: Tables<'bills'>[]
   /** Owned by the billing adapter. */
   billItems: Tables<'bill_items'>[]
+  /** Exact tender allocation for each bill, including split payments. */
+  billPayments: Map<string, PaymentAllocation[]>
+  /** Owned by the billing adapter; open, paid and cancelled lifecycle records. */
+  orders: Tables<'orders'>[]
+  /** Immutable snapshots belonging to `orders`. */
+  orderItems: Tables<'order_items'>[]
+  /** Per-outlet, per-business-date order-number counters. */
+  orderNumbers: Map<string, number>
+  /** Server-side command metadata used by read-only manager diagnostics. */
+  billingCommands: Tables<'billing_commands'>[]
+  /** Local-only accepted payments that have no server bill number yet. */
+  billingQueueSeeds: BillDraft[]
   /**
    * The per-outlet bill number sequence, mirroring `bill_number_counters`.
    *
@@ -167,7 +180,7 @@ function instantAt(businessDate: string, time: string): string {
   return new Date(`${businessDate}T${time}:00+05:30`).toISOString()
 }
 
-export function createDemoStore(): DemoStore {
+export function createDemoStore(options: { billingLifecycle?: boolean } = {}): DemoStore {
   const tradingOutletIds = [OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID]
 
   // Resolved once, through the outlet's own cutover — never derived from a
@@ -216,7 +229,13 @@ export function createDemoStore(): DemoStore {
 
   const bills: Tables<'bills'>[] = []
   const billItems: Tables<'bill_items'>[] = []
+  const billPayments = new Map<string, PaymentAllocation[]>()
   const billNumbers = new Map<string, number>()
+  const orders: Tables<'orders'>[] = []
+  const orderItems: Tables<'order_items'>[] = []
+  const orderNumbers = new Map<string, number>()
+  const billingCommands: Tables<'billing_commands'>[] = []
+  const billingQueueSeeds: BillDraft[] = []
 
   /**
    * A seed becomes a bill the way the counter makes one: line totals from the
@@ -278,6 +297,7 @@ export function createDemoStore(): DemoStore {
       voided_at: null,
       voided_by: null,
     })
+    billPayments.set(billId, [{ method: seed.paymentMethod, amountPaise: totals.totalPaise }])
 
     lines.forEach((line, lineIndex) => {
       billItems.push({
@@ -319,6 +339,124 @@ export function createDemoStore(): DemoStore {
           `which is not a gapless per-outlet sequence from 1.`,
       )
     }
+  }
+
+  // Three existing sales become lifecycle examples without inventing extra
+  // revenue: paid on handover, aggregator rider collection, and direct pay.
+  // A cancelled and an open order add the two non-revenue states.
+  const lifecycleBills = bills
+    .filter((bill) => bill.outlet_id === DEMO_OUTLET_ID && bill.business_date === today)
+    .slice(2, 4)
+  const lifecycle: Array<{
+    status: Tables<'orders'>['status']
+    bill: Tables<'bills'> | null
+    reason?: string
+  }> = [
+    { status: 'paid', bill: lifecycleBills[0] ?? null },
+    { status: 'paid', bill: lifecycleBills[1] ?? null },
+    { status: 'cancelled', bill: null, reason: 'Customer changed their mind' },
+    { status: 'open', bill: null },
+  ]
+  lifecycle.forEach((seed, index) => {
+    const number = index + 101
+    const id = `e2000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`
+    const sourceBill = seed.bill
+    const sourceLines = sourceBill
+      ? billItems.filter((line) => line.bill_id === sourceBill.id)
+      : billItems
+          .filter(
+            (line) => line.bill_id === bills.find((bill) => bill.outlet_id === DEMO_OUTLET_ID)?.id,
+          )
+          .slice(0, 1)
+    const orderedAt = sourceBill?.ordered_at ?? instantAt(today, index === 2 ? '18:15' : '18:40')
+    const totals = billTotals(
+      sourceLines.map((line) => ({
+        unitPricePaise: line.unit_price_paise,
+        quantity: line.quantity,
+      })),
+    )
+    const cancelled = seed.status === 'cancelled'
+    orders.push({
+      id,
+      outlet_id: DEMO_OUTLET_ID,
+      device_id: DEMO_COUNTER_DEVICE_ID,
+      order_number: number,
+      business_date: today,
+      ordered_at: orderedAt,
+      created_at: orderedAt,
+      created_by: DEMO_BILLER_ID,
+      created_shift_id: DEMO_OPEN_SHIFT_ID,
+      changed_at: null,
+      changed_by: null,
+      changed_shift_id: null,
+      customer_id: null,
+      customer_name: sourceBill?.customer_name ?? (index === 3 ? 'Demo Customer' : null),
+      customer_phone: sourceBill?.customer_phone ?? null,
+      pricing_mode: 'no_tax',
+      subtotal_paise: totals.subtotalPaise,
+      discount_paise: 0,
+      tax_paise: 0,
+      total_paise: totals.totalPaise,
+      status: seed.status,
+      bill_id: sourceBill?.id ?? null,
+      paid_at: sourceBill?.paid_at ?? null,
+      paid_by: sourceBill ? DEMO_BILLER_ID : null,
+      paid_shift_id: sourceBill ? DEMO_OPEN_SHIFT_ID : null,
+      cancel_reason: seed.reason ?? null,
+      cancelled_at: cancelled ? instantAt(today, '18:25') : null,
+      cancelled_by: cancelled ? MANAGER_ID : null,
+      cancelled_device_id: cancelled ? DEMO_COUNTER_DEVICE_ID : null,
+      cancelled_shift_id: cancelled ? DEMO_OPEN_SHIFT_ID : null,
+    })
+    sourceLines.forEach((line, lineIndex) =>
+      orderItems.push({
+        id: `${id}-${lineIndex}`,
+        order_id: id,
+        menu_item_id: line.menu_item_id,
+        item_name: line.item_name,
+        unit_price_paise: line.unit_price_paise,
+        quantity: line.quantity,
+        line_total_paise: line.line_total_paise,
+      }),
+    )
+    if (sourceBill) sourceBill.order_id = id
+  })
+  orderNumbers.set(`${DEMO_OUTLET_ID}:${today}`, 104)
+
+  billingCommands.push({
+    id: 'e3000000-0000-4000-a000-000000000001',
+    outlet_id: DEMO_OUTLET_ID,
+    device_id: DEMO_COUNTER_DEVICE_ID,
+    shift_id: DEMO_OPEN_SHIFT_ID,
+    actor_id: DEMO_BILLER_ID,
+    business_date: today,
+    payment_business_date: today,
+    client_created_at: instantAt(today, '19:00'),
+    received_at: instantAt(today, '19:01'),
+    command_type: 'pay_now',
+    payload_hash: 'demo-redacted',
+    schema_version: 1,
+    result_category: 'permanent_refusal',
+    result: {},
+    watermark: 1,
+  })
+  if (options.billingLifecycle) {
+    const item = menuItems.find(
+      (candidate) => candidate.outlet_id === DEMO_OUTLET_ID && candidate.is_available,
+    )
+    if (!item) throw new Error('The demo billing queue needs one available menu item.')
+    billingQueueSeeds.push({
+      clientId: 'e4000000-0000-4000-a000-000000000001',
+      outletId: DEMO_OUTLET_ID,
+      shiftId: DEMO_OPEN_SHIFT_ID,
+      businessDate: today,
+      payments: [{ method: 'upi', amountPaise: item.price_paise }],
+      lines: [
+        { menuItemId: item.id, itemName: item.name, unitPricePaise: item.price_paise, quantity: 1 },
+      ],
+      customerName: null,
+      customerPhone: null,
+    })
   }
 
   // ── Stock ────────────────────────────────────────────────────────────────
@@ -412,13 +550,23 @@ export function createDemoStore(): DemoStore {
             (bill) =>
               bill.outlet_id === outletId &&
               bill.business_date === date &&
-              bill.payment_method === 'cash' &&
               bill.status === 'settled' &&
               // Rung before the close; anything that landed afterwards is the
               // exception, not part of the signed-off figure.
               bill.synced_at <= closedAt,
           )
-          .reduce((running, bill) => running + bill.total_paise, 0)
+          .reduce(
+            (running, bill) =>
+              running +
+              (
+                billPayments.get(bill.id) ?? [
+                  { method: bill.payment_method, amountPaise: bill.total_paise },
+                ]
+              )
+                .filter((payment) => payment.method === 'cash')
+                .reduce((sum, payment) => sum + payment.amountPaise, 0),
+            0,
+          )
         const closedCashExpenses = expenses
           .filter(
             (expense) =>
@@ -604,6 +752,12 @@ export function createDemoStore(): DemoStore {
     shifts,
     bills,
     billItems,
+    billPayments,
+    orders,
+    orderItems,
+    orderNumbers,
+    billingCommands,
+    billingQueueSeeds,
     billNumbers,
     inventoryItems,
     inventoryMovements,

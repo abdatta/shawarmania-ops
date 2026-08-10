@@ -50,7 +50,7 @@ import type { DemoStore } from './store'
  * nothing rather than throwing — an excluded row is what RLS produces.
  */
 
-const METHOD_ORDER: PaymentMethod[] = ['cash', 'upi', 'card', 'swiggy', 'zomato', 'other']
+const METHOD_ORDER: PaymentMethod[] = ['cash', 'upi', 'swiggy', 'zomato']
 
 function outletNameOf(outletId: string): string {
   return outletFixtures.find((outlet) => outlet.id === outletId)?.name ?? 'Unknown outlet'
@@ -101,9 +101,18 @@ export function createMockInsightsAdapter(
   function salesByMethod(bills: readonly Tables<'bills'>[]): MethodTotal[] {
     return METHOD_ORDER.map((method) => ({
       method,
-      amountPaise: bills
-        .filter((bill) => bill.payment_method === method)
-        .reduce((running, bill) => running + bill.total_paise, 0),
+      amountPaise: bills.reduce(
+        (running, bill) =>
+          running +
+          (
+            store.billPayments.get(bill.id) ?? [
+              { method: bill.payment_method, amountPaise: bill.total_paise },
+            ]
+          )
+            .filter((payment) => payment.method === method)
+            .reduce((sum, payment) => sum + payment.amountPaise, 0),
+        0,
+      ),
     })).filter((total) => total.amountPaise > 0)
   }
 
@@ -154,9 +163,18 @@ export function createMockInsightsAdapter(
       ? closed.expected_closing_paise
       : expectedClosingPaise({
           openingCashPaise: store.openingCashPaise,
-          cashSalesPaise: bills
-            .filter((bill) => bill.payment_method === 'cash')
-            .reduce((running, bill) => running + bill.total_paise, 0),
+          cashSalesPaise: bills.reduce(
+            (running, bill) =>
+              running +
+              (
+                store.billPayments.get(bill.id) ?? [
+                  { method: bill.payment_method, amountPaise: bill.total_paise },
+                ]
+              )
+                .filter((payment) => payment.method === 'cash')
+                .reduce((sum, payment) => sum + payment.amountPaise, 0),
+            0,
+          ),
           cashExpensesPaise: expenses
             .filter((expense) => expense.payment_method === 'cash')
             .reduce((running, expense) => running + expense.amount_paise, 0),

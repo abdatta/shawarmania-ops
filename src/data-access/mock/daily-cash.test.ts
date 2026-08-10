@@ -25,13 +25,10 @@ describe('mock daily cash adapter', () => {
     // Scoped to this outlet as well as to cash: the drawer at Kalyani is moved
     // by Kalyani's cash bills and by nothing that happened at Kanchrapara.
     const cashOnly = store.bills
-      .filter(
-        (bill) =>
-          bill.outlet_id === DEMO_OUTLET_ID &&
-          bill.business_date === store.today &&
-          bill.payment_method === 'cash',
-      )
-      .reduce((running, bill) => running + bill.total_paise, 0)
+      .filter((bill) => bill.outlet_id === DEMO_OUTLET_ID && bill.business_date === store.today)
+      .flatMap((bill) => store.billPayments.get(bill.id) ?? [])
+      .filter((payment) => payment.method === 'cash')
+      .reduce((running, payment) => running + payment.amountPaise, 0)
     const everything = store.bills
       .filter((bill) => bill.outlet_id === DEMO_OUTLET_ID && bill.business_date === store.today)
       .reduce((running, bill) => running + bill.total_paise, 0)
@@ -49,6 +46,30 @@ describe('mock daily cash adapter', () => {
     // The scenario has to actually contain the thing being excluded, or the
     // assertion above would pass against a single-outlet dataset by accident.
     expect(otherOutletCash).toBeGreaterThan(0)
+  })
+
+  it('adds only the Cash allocation from a mixed-tender bill', async () => {
+    const { store, adapter } = over()
+    const bill = store.bills.find(
+      (candidate) =>
+        candidate.outlet_id === DEMO_OUTLET_ID &&
+        candidate.business_date === store.today &&
+        candidate.status === 'settled' &&
+        candidate.total_paise > 10000,
+    )!
+    const before = await adapter.getDay(DEMO_OUTLET_ID, store.today)
+    const oldCash = (store.billPayments.get(bill.id) ?? [])
+      .filter((payment) => payment.method === 'cash')
+      .reduce((sum, payment) => sum + payment.amountPaise, 0)
+
+    bill.payment_method = null
+    store.billPayments.set(bill.id, [
+      { method: 'cash', amountPaise: 10000 },
+      { method: 'upi', amountPaise: bill.total_paise - 10000 },
+    ])
+
+    const after = await adapter.getDay(DEMO_OUTLET_ID, store.today)
+    expect(after.cashSalesPaise - before.cashSalesPaise).toBe(10000 - oldCash)
   })
 
   it('counts only cash expenses against the drawer', async () => {

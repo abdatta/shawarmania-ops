@@ -9,6 +9,7 @@ import {
   KeyRound,
   LayoutDashboard,
   NotepadText,
+  ListOrdered,
   Package,
   Store,
   TabletSmartphone,
@@ -17,6 +18,7 @@ import {
   Users,
   UtensilsCrossed,
   Wallet,
+  ReceiptText,
 } from 'lucide-react'
 
 import type { Role, SessionMode } from '@/session/session'
@@ -116,6 +118,12 @@ const defs = {
     nav: { label: 'Alerts', icon: Bell, order: 6 },
     state: 'demo',
   },
+  'owner-billing-history': {
+    role: 'super_admin',
+    path: 'billing-history',
+    nav: { label: 'Billing', icon: ReceiptText, order: 7 },
+    state: 'demo',
+  },
   /**
    * Profit and loss, and period reports — **deliberately without navigation
    * entries**. Six tabs is already as much as a bottom bar holds on a phone,
@@ -198,25 +206,25 @@ const defs = {
   'admin-menu': {
     role: 'franchise_admin',
     path: 'menu',
-    nav: { label: 'Menu', icon: UtensilsCrossed, order: 2 },
+    nav: { label: 'Menu', icon: UtensilsCrossed, order: 3 },
     state: 'demo',
   },
   'admin-inventory': {
     role: 'franchise_admin',
     path: 'inventory',
-    nav: { label: 'Stock', icon: Package, order: 3 },
+    nav: { label: 'Stock', icon: Package, order: 4 },
     state: 'demo',
   },
   'admin-expenses': {
     role: 'franchise_admin',
     path: 'expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 4 },
+    nav: { label: 'Expenses', icon: Wallet, order: 5 },
     state: 'demo',
   },
   'admin-daily-cash': {
     role: 'franchise_admin',
     path: 'cash',
-    nav: { label: 'Cash', icon: Banknote, order: 5 },
+    nav: { label: 'Cash', icon: Banknote, order: 6 },
     state: 'demo',
   },
   /**
@@ -231,10 +239,16 @@ const defs = {
     nav: {
       label: 'Attendance',
       icon: CalendarCheck,
-      order: 6,
+      order: 7,
       attention: 'attendance-waiting',
     },
     state: 'live',
+  },
+  'admin-billing-history': {
+    role: 'franchise_admin',
+    path: 'billing-history',
+    nav: { label: 'Billing', icon: ReceiptText, order: 2 },
+    state: 'demo',
   },
   /**
    * The manager's counterpart to `owner-manual-ledger`, scoped by assignment.
@@ -252,19 +266,19 @@ const defs = {
   'admin-manual-ledger': {
     role: 'franchise_admin',
     path: 'ledger',
-    nav: { label: 'Ledger', icon: NotepadText, order: 7 },
+    nav: { label: 'Ledger', icon: NotepadText, order: 8 },
     state: 'live',
   },
   'admin-pnl': {
     role: 'franchise_admin',
     path: 'pnl',
-    nav: { label: 'P&L', icon: TrendingUp, order: 9 },
+    nav: { label: 'P&L', icon: TrendingUp, order: 10 },
     state: 'demo',
   },
   'admin-alerts': {
     role: 'franchise_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 10 },
+    nav: { label: 'Alerts', icon: Bell, order: 11 },
     state: 'demo',
   },
   /**
@@ -280,7 +294,7 @@ const defs = {
   'admin-devices': {
     role: 'franchise_admin',
     path: 'devices',
-    nav: { label: 'Tablets', icon: TabletSmartphone, order: 11 },
+    nav: { label: 'Tablets', icon: TabletSmartphone, order: 12 },
     state: 'live',
   },
   /**
@@ -291,7 +305,7 @@ const defs = {
   'admin-people': {
     role: 'franchise_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 8 },
+    nav: { label: 'People', icon: Users, order: 9 },
     state: 'live',
   },
 
@@ -305,7 +319,13 @@ const defs = {
   'counter-shift-unlock': {
     role: 'biller',
     path: 'shift',
-    nav: { label: 'Shift', icon: KeyRound, order: 2 },
+    nav: { label: 'Shift', icon: KeyRound, order: 3 },
+    state: 'demo',
+  },
+  'counter-open-orders': {
+    role: 'biller',
+    path: 'open-orders',
+    nav: { label: 'Open orders', icon: ListOrdered, order: 2 },
     state: 'demo',
   },
   /**
@@ -328,14 +348,14 @@ const defs = {
   'counter-menu': {
     role: 'biller',
     path: 'menu',
-    nav: { label: 'Menu', icon: UtensilsCrossed, order: 3 },
+    nav: { label: 'Menu', icon: UtensilsCrossed, order: 4 },
     state: 'demo',
   },
   'counter-my-shift': {
     role: 'biller',
     path: 'my-shift',
-    nav: { label: 'My shift', icon: ClipboardList, order: 4 },
-    state: 'hidden',
+    nav: { label: 'My shift', icon: ClipboardList, order: 5 },
+    state: 'demo',
   },
   /**
    * What this outlet spent — **the manual ledger's expense list, and nothing
@@ -358,7 +378,7 @@ const defs = {
   'counter-expenses': {
     role: 'biller',
     path: 'ledger/expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 5 },
+    nav: { label: 'Expenses', icon: Wallet, order: 6 },
     state: 'live',
   },
   // The attendance kiosk is gone, not hidden: the owner rejected it (one

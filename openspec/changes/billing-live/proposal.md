@@ -19,10 +19,17 @@ during rollout.
 - Connect the counter, open orders, customer lookup, shift history, manager void,
   originating-tablet correction/discard and read-only manager-diagnostic adapters
   to the real contracts from #9, #32 and #33.
+- Accept only Cash, UPI, Swiggy or Zomato in live billing commands, and Cash or
+  UPI for expenses. Card and Other are not dormant options: #31 removes them
+  from the shared vocabulary and database enum after proving production
+  contains no matching bills or expenses.
+- Carry one or more exact `payments` allocations through IndexedDB and the
+  command RPC; mixed bills remain one fully paid bill, and drawer close sums
+  only their Cash allocations.
 - Read the latest menu while reachable, and keep the active shift's menu snapshot
   so a transient failure does not interrupt an already-open counter.
 - Commit every accepted counter command to IndexedDB before clearing its form,
-  never await the network, preserve Pay now's six-second guaranteed Undo before
+  never await the network, preserve Mark Paid's six-second guaranteed Undo before
   that command becomes deliverable, and retry through one page leader with backoff.
 - Preserve unsent work through the shift ending, restart, cutover and app update.
   A restart may drain old work, but starting or resuming billing requires online
@@ -84,7 +91,7 @@ integration tests, transient-failure Playwright tests, and live gates change.
 - Retiring the manual ledger, which #12 owns.
 - Attendance from the tablet, emergency personal-device billing, manager-side
   re-ring or cross-device draft handoff, printing, GST, digital sharing,
-  discounts, partial payments or split tender. V1 sends `discount_paise = 0` and
+  discounts, deposits or partially paid orders. V1 sends `discount_paise = 0` and
   exposes no discount control.
 
 ## Docs to update before archive

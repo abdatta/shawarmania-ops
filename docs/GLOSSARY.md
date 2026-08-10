@@ -98,7 +98,7 @@ The four digits the tablet displays while it waits. Its only job is to prove the
 
 The sum of settled cash bills by `payment_business_date`. **The only sales
 figure that affects the cash drawer.** Revenue uses the order business date;
-UPI, card, Swiggy and Zomato never move the drawer.
+UPI, Swiggy and Zomato never move the drawer.
 
 ### Expected closing cash
 

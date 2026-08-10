@@ -81,6 +81,8 @@ export function CounterShell({
                   cn(
                     'flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold',
                     'focus-visible:focus-ring',
+                    (surface.id === 'counter-open-orders' || surface.id === 'counter-my-shift') &&
+                      'lg:hidden',
                     isActive
                       ? 'bg-surface-raised text-accent-text'
                       : 'text-content-muted hover:bg-surface-raised hover:text-content',

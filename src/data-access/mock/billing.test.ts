@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SYNC_ESCALATION_COUNT, SYNC_ESCALATION_MS, UNDO_WINDOW_MS } from '@/domain'
 
-import type { BillDraft } from '../adapters'
+import type { BillDraft, SaveOrderInput } from '../adapters'
 import { createMockBillingAdapter } from './billing'
 import { DEMO_BILLER_PIN, DEMO_MORNING_BILLER_ID, DEMO_OPEN_SHIFT_ID } from './fixtures/billing'
 import { MENU_ITEM_CLASSIC_ID } from './fixtures/menu'
+import { personaFixtures } from './fixtures/personas'
 import { createDemoStore, DEMO_OUTLET_ID, type DemoStore } from './store'
 
 /**
@@ -23,7 +24,7 @@ function draft(store: DemoStore, clientId: string, quantity = 1): BillDraft {
     outletId: DEMO_OUTLET_ID,
     shiftId: DEMO_OPEN_SHIFT_ID,
     businessDate: store.today,
-    paymentMethod: 'cash',
+    payments: [{ method: 'cash', amountPaise: 13900 * quantity }],
     lines: [
       {
         menuItemId: MENU_ITEM_CLASSIC_ID,
@@ -32,6 +33,17 @@ function draft(store: DemoStore, clientId: string, quantity = 1): BillDraft {
         quantity,
       },
     ],
+  }
+}
+
+function orderDraft(store: DemoStore, clientId: string): SaveOrderInput {
+  const bill = draft(store, clientId)
+  return {
+    clientId,
+    outletId: bill.outletId,
+    shiftId: bill.shiftId,
+    businessDate: bill.businessDate,
+    lines: bill.lines,
   }
 }
 
@@ -269,5 +281,136 @@ describe('mock billing adapter', () => {
 
     await adapter.settleBill(draft(store, '0d000000-0000-4000-8000-000000000001'))
     expect(adapter.getCounterState()).not.toBe(first)
+  })
+
+  it('saves only zero-discount orders and keeps another tablet out of its workspace', async () => {
+    const store = createDemoStore()
+    const adapter = createMockBillingAdapter(store)
+    const saved = await adapter.saveOrder(orderDraft(store, '10000000-0000-4000-8000-000000000001'))
+
+    expect(store.orders.find((order) => order.id === saved.id)?.discount_paise).toBe(0)
+    store.orders.find((order) => order.id === saved.id)!.device_id = 'another-tablet'
+    expect((await adapter.listOpenOrders(DEMO_OUTLET_ID)).map((order) => order.id)).not.toContain(
+      saved.id,
+    )
+  })
+
+  it('reports a manager-cancelled order by name when the tablet tries to pay it', async () => {
+    const store = createDemoStore()
+    const biller = createMockBillingAdapter(store)
+    const managerPersona = personaFixtures.franchise_admin
+    const manager = createMockBillingAdapter(store, {
+      role: 'franchise_admin',
+      userId: managerPersona.profile.id,
+      outletIds: [DEMO_OUTLET_ID],
+    })
+    const saved = await biller.saveOrder(orderDraft(store, '20000000-0000-4000-8000-000000000001'))
+    await manager.managerCancelOrder(saved.id, 'Kitchen closed')
+
+    await expect(
+      biller.payOrder(saved.id, [{ method: 'cash', amountPaise: saved.totalPaise }]),
+    ).rejects.toThrow(/cancelled by Demo Manager/)
+    expect(store.bills.some((bill) => bill.order_id === saved.id)).toBe(false)
+  })
+
+  it('pays an order as a new immutable bill and voids it without changing its contents', async () => {
+    const store = createDemoStore()
+    const biller = createMockBillingAdapter(store)
+    const managerPersona = personaFixtures.franchise_admin
+    const manager = createMockBillingAdapter(store, {
+      role: 'franchise_admin',
+      userId: managerPersona.profile.id,
+      outletIds: [DEMO_OUTLET_ID],
+    })
+    const saved = await biller.saveOrder(orderDraft(store, '30000000-0000-4000-8000-000000000001'))
+    const paid = await biller.payOrder(saved.id, [
+      { method: 'zomato', amountPaise: saved.totalPaise },
+    ])
+    const beforeLines = structuredClone(paid.lines)
+    const voided = await manager.voidBill(paid.id, 'Wrong item rung')
+
+    expect(voided.status).toBe('void')
+    expect(voided.voidReason).toBe('Wrong item rung')
+    expect(voided.lines).toEqual(beforeLines)
+    expect(store.orders.find((order) => order.id === saved.id)?.discount_paise).toBe(0)
+    expect(store.bills.find((bill) => bill.id === paid.id)?.discount_paise).toBe(0)
+  })
+
+  it('preserves an exact split and attributes only each allocation to its tender total', async () => {
+    const store = createDemoStore()
+    const biller = createMockBillingAdapter(store)
+    const before = await biller.listShiftHistory(DEMO_OPEN_SHIFT_ID)
+    const saved = await biller.saveOrder(orderDraft(store, '31000000-0000-4000-8000-000000000001'))
+    const paid = await biller.payOrder(saved.id, [
+      { method: 'cash', amountPaise: 10000 },
+      { method: 'upi', amountPaise: 3900 },
+    ])
+    const history = await biller.listShiftHistory(DEMO_OPEN_SHIFT_ID)
+
+    expect(paid.paymentMethod).toBe('mixed')
+    expect(paid.payments).toEqual([
+      { method: 'cash', amountPaise: 10000 },
+      { method: 'upi', amountPaise: 3900 },
+    ])
+    expect(store.bills.find((bill) => bill.id === paid.id)?.payment_method).toBeNull()
+    const totalFor = (method: 'cash' | 'upi', source: typeof history) =>
+      source.totals.find((total) => total.method === method)?.totalPaise ?? 0
+    expect(totalFor('cash', history) - totalFor('cash', before)).toBe(10000)
+    expect(totalFor('upi', history) - totalFor('upi', before)).toBe(3900)
+    expect(history.totals.map((total) => total.method)).toEqual(['cash', 'upi', 'swiggy', 'zomato'])
+  })
+
+  it('limits My shift to the open shift business date and tablet', async () => {
+    const store = createDemoStore()
+    const adapter = createMockBillingAdapter(store)
+    const history = await adapter.listShiftHistory(DEMO_OPEN_SHIFT_ID)
+
+    expect(history.bills.length).toBeGreaterThan(0)
+    expect(history.bills.every((bill) => bill.businessDate === store.today)).toBe(true)
+    expect(history.bills.length).toBeLessThan(
+      store.bills.filter((bill) => bill.shift_id === DEMO_OPEN_SHIFT_ID).length,
+    )
+  })
+
+  it('keeps needs-attention resolution on the originating tablet and diagnostics read-only', async () => {
+    const store = createDemoStore()
+    const biller = createMockBillingAdapter(store)
+    const managerPersona = personaFixtures.franchise_admin
+    const manager = createMockBillingAdapter(store, {
+      role: 'franchise_admin',
+      userId: managerPersona.profile.id,
+      outletIds: [DEMO_OUTLET_ID],
+    })
+    const [item] = await biller.listAttention()
+    expect(item?.state).toBe('needs_attention')
+    const corrected = await biller.correctAttention(
+      item!.reference,
+      '40000000-0000-4000-8000-000000000001',
+    )
+    expect(corrected.linkedCorrectionId).not.toBe(corrected.reference)
+    expect(corrected.refusedTrace).toMatch(/server refused/)
+
+    const diagnostics = await manager.listDeliveryDiagnostics(DEMO_OUTLET_ID)
+    expect(diagnostics[0]).toEqual(expect.objectContaining({ reference: item!.reference }))
+    expect(diagnostics[0]).not.toHaveProperty('refusedTrace')
+    expect(diagnostics[0]).not.toHaveProperty('customerPhone')
+    await expect(manager.correctAttention(item!.reference, 'different')).rejects.toThrow(
+      /originating tablet/,
+    )
+  })
+
+  it('requires reasons for cancellation and discard, and a fresh store resets both', async () => {
+    const store = createDemoStore()
+    const adapter = createMockBillingAdapter(store)
+    const saved = await adapter.saveOrder(orderDraft(store, '50000000-0000-4000-8000-000000000001'))
+    await expect(adapter.cancelOrder(saved.id, ' ')).rejects.toThrow(/reason/)
+    const [item] = await adapter.listAttention()
+    await expect(adapter.discardAttention(item!.reference, '')).rejects.toThrow(/reason/)
+    await adapter.discardAttention(item!.reference, 'Duplicate attempt')
+
+    const resetStore = createDemoStore()
+    const reset = createMockBillingAdapter(resetStore)
+    expect(resetStore.orders.some((order) => order.id === saved.id)).toBe(false)
+    expect((await reset.listAttention())[0]?.state).toBe('needs_attention')
   })
 })

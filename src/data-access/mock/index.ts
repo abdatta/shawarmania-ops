@@ -63,7 +63,7 @@ export interface DemoData {
 export function createDemoData(): DemoData {
   return {
     accounts: createDemoAccounts(),
-    store: createDemoStore(),
+    store: createDemoStore({ billingLifecycle: true }),
     attendance: createMockAttendanceAdapter(),
     customers: createDemoCustomers(),
     counter: createDemoCounter(),
@@ -136,7 +136,11 @@ export function createMockAdapters(
     // The persona's role reaches the menu mock so it refuses a Biller's write
     // where `menu_items_write` will refuse it.
     menu: createMockMenuAdapter(store, role),
-    billing: createMockBillingAdapter(store),
+    billing: createMockBillingAdapter(store, {
+      role,
+      userId: persona.profile.id,
+      outletIds: assignedOutlets(persona.assignments),
+    }),
     // The role scopes the tablet list as `counter_devices_select` will, and the
     // persona's name stands in for the username the tablet types — demo mode has
     // no usernames, and a handshake with nobody to name is not a handshake.
