@@ -165,7 +165,7 @@ describe('MenuSurface — the manager', () => {
     expect(screen.queryByText('Mystery Wrap')).not.toBeInTheDocument()
   })
 
-  it('has one item-first Add action and confirms an unrecognised category', async () => {
+  it('has one item-first Add action and asks nothing for a category resembling none', async () => {
     const user = userEvent.setup()
     renderMenu()
     await screen.findByTestId('menu-list')
@@ -178,12 +178,60 @@ describe('MenuSurface — the manager', () => {
     await user.type(screen.getByLabelText('Price (₹)'), '50')
     await user.click(screen.getByRole('button', { name: 'Create item' }))
 
-    expect(await screen.findByRole('dialog', { name: 'Create “Beverages”?' })).toHaveTextContent(
-      /burger.*burgers/i,
-    )
-    await user.click(screen.getByRole('button', { name: 'Create category and item' }))
     expect(await screen.findByRole('heading', { name: 'Beverages' })).toBeInTheDocument()
     expect(await screen.findByText('Fresh Lime Soda')).toBeInTheDocument()
+    expect(screen.queryByTestId('category-match-list')).not.toBeInTheDocument()
+  })
+
+  it('offers the near match as a choice and files the item under it', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    const list = await screen.findByTestId('menu-list')
+
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.type(screen.getByLabelText('Name'), 'Spicy Chicken Shawarma')
+    await user.type(screen.getByRole('combobox', { name: 'Category' }), 'Shwarma')
+    await user.type(screen.getByLabelText('Price (₹)'), '180')
+    await user.click(screen.getByRole('button', { name: 'Create item' }))
+
+    // The candidate is offered in the dialog itself, so the correction happens
+    // here rather than behind a cancel and a retype — but picking it and
+    // committing it are two acts, so a mistaken tap files nothing.
+    await screen.findByTestId('category-match-list')
+    const confirm = screen.getByTestId('confirm-category-choice')
+    expect(confirm).toBeDisabled()
+
+    await user.click(screen.getByTestId('use-category-Shawarma'))
+    expect(screen.getByTestId(`menu-item-${MENU_ITEM_CLASSIC_ID}`)).toBeInTheDocument()
+    expect(screen.queryByText('Spicy Chicken Shawarma')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Use “Shawarma”' }))
+
+    const added = await screen.findByText('Spicy Chicken Shawarma')
+    expect(
+      within(added.closest('[data-testid^="category-"]')!).getByRole('heading', { level: 2 }),
+    ).toHaveTextContent('Shawarma')
+    expect(
+      within(list).queryByRole('heading', { level: 2, name: 'Shwarma' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('still creates the typed category when the near miss is deliberate', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await screen.findByTestId('menu-list')
+
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.type(screen.getByLabelText('Name'), 'Veg Burger')
+    await user.type(screen.getByRole('combobox', { name: 'Category' }), 'Burger')
+    await user.type(screen.getByLabelText('Price (₹)'), '200')
+    await user.click(screen.getByRole('button', { name: 'Create item' }))
+
+    await screen.findByTestId('category-match-list')
+    await user.click(screen.getByTestId('use-category-new'))
+    await user.click(screen.getByRole('button', { name: 'Create “Burger”' }))
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Burger' })).toBeInTheDocument()
+    expect(await screen.findByText('Veg Burger')).toBeInTheDocument()
   })
 
   it('reorders categories deliberately and retires the final item without an empty heading', async () => {

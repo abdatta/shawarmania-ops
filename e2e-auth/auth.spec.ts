@@ -108,12 +108,30 @@ test('an owner builds a sellable menu for a new outlet entirely through the app'
   await page.getByLabel('Name', { exact: true }).fill('E2E Chicken Roll')
   await page.getByRole('combobox', { name: 'Category' }).fill('Rolls')
   await page.getByLabel('Price (₹)').fill('125')
+  // The outlet is empty, so nothing resembles "Rolls" and nothing is asked.
   await page.getByRole('button', { name: 'Create item' }).click()
-  await page.getByRole('button', { name: 'Create category and item' }).click()
 
   await expect(page.getByRole('heading', { name: 'Rolls' })).toBeVisible()
   await expect(page.getByText('E2E Chicken Roll')).toBeVisible()
   await expect(page.getByText('₹125')).toBeVisible()
+
+  // A second item under a near miss of that category: the existing spelling is
+  // offered, picking it commits nothing until it is confirmed, and the item
+  // lands under the heading that already exists rather than beside it.
+  await page.getByTestId('add-menu-item').click()
+  await page.getByLabel('Name', { exact: true }).fill('E2E Paneer Roll')
+  await page.getByRole('combobox', { name: 'Category' }).fill('Rols')
+  await page.getByLabel('Price (₹)').fill('135')
+  await page.getByRole('button', { name: 'Create item' }).click()
+
+  await expect(page.getByTestId('category-match-list')).toBeVisible()
+  await expect(page.getByTestId('confirm-category-choice')).toBeDisabled()
+  await page.getByTestId('use-category-Rolls').check()
+  await page.getByRole('button', { name: 'Use “Rolls”' }).click()
+
+  await expect(page.getByText('E2E Paneer Roll')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Rolls', exact: true })).toHaveCount(1)
+  await expect(page.getByRole('heading', { name: 'Rols' })).toHaveCount(0)
 })
 
 async function signOut(page: Page) {

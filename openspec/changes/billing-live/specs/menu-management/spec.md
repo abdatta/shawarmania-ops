@@ -17,9 +17,32 @@ is the item; a category is the heading items are grouped under, entered as a
 free-form field on the item that suggests the outlet's existing categories and
 creates an unrecognised one on the way through — the pattern the expense list
 already uses. The surface SHALL therefore offer one add action, and SHALL NOT be
-able to leave an empty category behind. Because a near-miss silently fragments the
-counter's grid, creating a category the outlet does not already have SHALL be
-confirmed rather than assumed.
+able to leave an empty category behind.
+
+**A near miss SHALL be caught by comparison, and offered as a choice.** Because a
+near miss silently fragments the counter's grid, a category the outlet does not
+already have SHALL be compared against the ones it does before it is created. The
+comparison SHALL ignore case, accents, punctuation and spacing, and SHALL find the
+same name spelled differently, a singular beside a plural, a transposition or a
+dropped or added letter, and one name sitting inside another. Where it finds
+candidates, the surface SHALL present them as selectable choices at the moment of
+confirmation, and choosing one SHALL file the item under that existing category
+under its existing spelling — the correction belongs where the mistake was caught,
+not behind a cancel and a retype. Creating the typed category anyway SHALL be one
+of those choices rather than a separate route.
+
+Selecting a choice SHALL NOT commit it. One action SHALL commit whichever choice
+is selected, and SHALL be unavailable until one is, because a row that filed the
+item the instant it was touched would put it under the wrong heading on a
+mistaken tap — the fault this whole requirement exists to prevent. No choice SHALL
+be selected by default, so the category is one the manager picked rather than one
+the dialog did.
+
+**Where nothing matches, nothing SHALL be asked.** A confirmation that fires on
+every new category is read by nobody by the fourth item, and an outlet's whole menu
+is entered in one sitting. An unmatched category SHALL therefore be created
+without a dialog, which is what leaves the dialog meaning something when it does
+appear.
 
 **A newly added item or category SHALL be scrolled into view and briefly
 highlighted.** Appending puts new work at the bottom, off screen, and a manager who
@@ -38,12 +61,24 @@ price immediately left of it, SHALL mark an unavailable item beside its name, an
 SHALL render that row in the same disabled treatment as a deleted expense row.
 
 #### Scenario: The first item at a new outlet
-- **WHEN** a manager adds an item and types a category the outlet has none of
-- **THEN** they are asked to confirm the new category, and it exists with that item inside it — with no separate step that could have created it empty
+- **WHEN** a manager adds an item and types a category that resembles none the outlet has
+- **THEN** the category exists with that item inside it and nothing was confirmed — with no separate step that could have created it empty
 
 #### Scenario: A near-miss on an existing category
-- **WHEN** the typed category differs from an existing one only by a character or a plural
-- **THEN** the existing category is offered before a new one is created, because two headings for one group split that group at the counter
+- **WHEN** the typed category differs from an existing one only by a character, a plural, capitalisation, an accent, punctuation or spacing
+- **THEN** the existing category is offered as a choice before a new one is created, because two headings for one group split that group at the counter
+
+#### Scenario: The near-miss is corrected where it was caught
+- **WHEN** the manager picks an offered category and commits that choice
+- **THEN** the item is filed under that existing category, spelled as that category already is, without the form being reopened or the name retyped
+
+#### Scenario: A mistaken tap files nothing
+- **WHEN** an offered category is touched but the choice is not committed
+- **THEN** no item and no category has been written, and nothing can be committed until a choice is selected
+
+#### Scenario: The deliberate near-miss is still allowed
+- **WHEN** the manager means the new name despite the offered candidates
+- **THEN** creating the typed category is available in the same dialog, and the category is created as typed
 
 #### Scenario: The added item lands below the fold
 - **WHEN** an item or a category is added and its place on the list is off screen

@@ -10,6 +10,7 @@ import { AddButton } from '@/components/ui/add-button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { CategoryInput } from '@/components/ui/category-input'
+import { CategoryMatchDialog } from '@/components/ui/category-match-dialog'
 import { Input } from '@/components/ui/input'
 import { LoadingList } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
@@ -17,7 +18,7 @@ import { RevealAdded } from '@/components/ui/reveal-added'
 import { VegMarker } from '@/components/ui/veg-marker'
 import { useAdapters, type Tables } from '@/data-access'
 import { DataActionError, type MenuCategoryWithItems } from '@/data-access/adapters'
-import { paiseToRupees, rupeesToPaise } from '@/domain'
+import { matchCategory, paiseToRupees, rupeesToPaise, type CategoryMatch } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
 
 interface ItemDraft {
@@ -45,7 +46,7 @@ export function MenuSurface() {
   const [itemFormOpen, setItemFormOpen] = useState(false)
   const [editing, setEditing] = useState<Tables<'menu_items'> | null>(null)
   const [draft, setDraft] = useState<ItemDraft>(EMPTY_DRAFT)
-  const [pendingNewCategory, setPendingNewCategory] = useState(false)
+  const [pendingMatches, setPendingMatches] = useState<CategoryMatch[] | null>(null)
   const [renaming, setRenaming] = useState<Tables<'menu_categories'> | null>(null)
   const [categoryName, setCategoryName] = useState('')
   const [retiring, setRetiring] = useState<Tables<'menu_items'> | null>(null)
@@ -76,6 +77,9 @@ export function MenuSurface() {
 
   const categories = useMemo(() => menu ?? [], [menu])
   const suggestions = useMemo(() => categories.map(({ category }) => category.name), [categories])
+  // The database resolves a category by `lower(btrim(name))`, so that exact rule
+  // is what counts as already existing. Anything short of it — an accent, a
+  // hyphen, a doubled space — is a near miss the matcher below has to catch.
   const categoryExists = suggestions.some(
     (name) => name.toLocaleLowerCase() === draft.categoryName.trim().toLocaleLowerCase(),
   )
@@ -136,19 +140,26 @@ export function MenuSurface() {
       return
     }
     if (!categoryExists) {
-      setPendingNewCategory(true)
-      return
+      // A confirmation shown for every new category is read for none of them,
+      // and an outlet's whole menu is entered in one sitting. So only a real
+      // resemblance stops the save.
+      const matches = matchCategory(draft.categoryName, suggestions)
+      if (matches.length > 0) {
+        setPendingMatches(matches)
+        return
+      }
     }
     void saveItem()
   }
 
-  async function saveItem() {
+  async function saveItem(categoryOverride?: string) {
     if (!outletId) return
+    const chosenCategory = categoryOverride ?? draft.categoryName
     const pricePaise = rupeesToPaise(Number(draft.price.trim()))
     await run(async () => {
       if (editing) {
         const item = await adapter.updateItemWithCategory(editing.id, {
-          categoryName: draft.categoryName,
+          categoryName: chosenCategory,
           name: draft.name,
           pricePaise,
           description: draft.description,
@@ -158,7 +169,7 @@ export function MenuSurface() {
       } else {
         const created = await adapter.createItemWithCategory({
           outletId,
-          categoryName: draft.categoryName,
+          categoryName: chosenCategory,
           name: draft.name,
           pricePaise,
           description: draft.description,
@@ -167,7 +178,7 @@ export function MenuSurface() {
         setRevealedCategory(created.category.id)
         setRevealedItem(created.item.id)
       }
-      setPendingNewCategory(false)
+      setPendingMatches(null)
       setItemFormOpen(false)
       await load()
     })
@@ -399,14 +410,22 @@ export function MenuSurface() {
         </form>
       </FormSheet>
 
-      <ConfirmDialog
-        open={pendingNewCategory}
-        title={`Create “${draft.categoryName.trim()}”?`}
-        consequence={`This is a new category. Check the suggestions first so a near-match such as “Burger” beside “Burgers” is deliberate.`}
-        confirmLabel="Create category and item"
-        onClose={() => setPendingNewCategory(false)}
-        onConfirm={() => void saveItem()}
-      />
+      {/* Mounted only while there is something to ask, so its selection starts
+          empty every time it opens. */}
+      {pendingMatches !== null && (
+        <CategoryMatchDialog
+          open
+          typed={draft.categoryName.trim()}
+          matches={pendingMatches}
+          busy={busy}
+          onChoose={(name) => {
+            setDraft((current) => ({ ...current, categoryName: name }))
+            void saveItem(name)
+          }}
+          onCreate={() => void saveItem()}
+          onClose={() => setPendingMatches(null)}
+        />
+      )}
 
       <FormSheet
         open={renaming !== null}

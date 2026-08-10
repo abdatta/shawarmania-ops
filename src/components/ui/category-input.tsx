@@ -1,7 +1,7 @@
 import { AlertTriangle, X } from 'lucide-react'
 import { useId, useMemo, useState, type KeyboardEvent } from 'react'
 
-import { normalizeCategory } from '@/domain'
+import { matchCategory, normalizeCategory } from '@/domain'
 import { cn } from '@/lib/cn'
 
 import { Button } from './button'
@@ -48,7 +48,14 @@ export function CategoryInput({
 
   const filtered = useMemo(() => {
     const query = normalizeCategory(value).toLocaleLowerCase()
-    return suggestions.filter((candidate) => candidate.toLocaleLowerCase().includes(query))
+    const contains = suggestions.filter((candidate) =>
+      candidate.toLocaleLowerCase().includes(query),
+    )
+    // A typo takes the substring filter to nothing, which reads as "there is no
+    // such category" and is exactly when somebody creates a second spelling of
+    // one they already have. Fall back to the near-match rules instead.
+    if (contains.length > 0) return contains
+    return matchCategory(value, suggestions).map(({ name }) => name)
   }, [suggestions, value])
   const warning = expenseCategoryWarning(value)
   const warningVisible =

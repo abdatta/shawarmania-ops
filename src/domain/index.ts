@@ -76,6 +76,12 @@ export {
 export { formatPaise, NotPaiseError, paiseToRupees, rupeesToPaise } from './money'
 export { normalizeCategory } from './expense-category'
 export {
+  foldCategory,
+  matchCategory,
+  type CategoryMatch,
+  type CategoryMatchReason,
+} from './category-match'
+export {
   cashBasisProfitPaise,
   consumptionBasisProfitPaise,
   inventoryConsumedPaise,
