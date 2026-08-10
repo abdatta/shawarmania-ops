@@ -21,6 +21,18 @@ able to leave an empty category behind. Because a near-miss silently fragments t
 counter's grid, creating a category the outlet does not already have SHALL be
 confirmed rather than assumed.
 
+**A newly added item or category SHALL be scrolled into view and briefly
+highlighted.** Appending puts new work at the bottom, off screen, and a manager who
+cannot see what they just added reads it as a failure and adds it again — so the
+cost of not doing this is duplicate menu items, not mild confusion. The highlight
+SHALL be suppressed under a reduced-motion preference; the scroll SHALL NOT be,
+because it is orientation rather than decoration.
+
+A newly created category SHALL be appended after the outlet's existing ones, and
+the manager SHALL be able to reorder categories deliberately. Category order SHALL
+NOT be alphabetical or fixed at creation: it is the order the counter groups by,
+which is a decision the business makes.
+
 The manager's item row SHALL carry its actions in one menu at the right with the
 price immediately left of it, SHALL mark an unavailable item beside its name, and
 SHALL render that row in the same disabled treatment as a deleted expense row.
@@ -32,6 +44,14 @@ SHALL render that row in the same disabled treatment as a deleted expense row.
 #### Scenario: A near-miss on an existing category
 - **WHEN** the typed category differs from an existing one only by a character or a plural
 - **THEN** the existing category is offered before a new one is created, because two headings for one group split that group at the counter
+
+#### Scenario: The added item lands below the fold
+- **WHEN** an item or a category is added and its place on the list is off screen
+- **THEN** the list scrolls to it and it is briefly highlighted, so it is never mistaken for an add that failed
+
+#### Scenario: A category's place at the counter is wrong
+- **WHEN** a category was created later but should be read before another
+- **THEN** the manager reorders it on the menu screen and the counter's grouping follows, without any item being retyped
 
 #### Scenario: The last item leaves a category
 - **WHEN** an item is retired and its category holds nothing else

@@ -35,6 +35,7 @@ Keep entries behavior-focused:
 | [Outlet Deletion: The Populated Refusal Never Walked](./outlet-deletion-refusal-unwalked-in-production.md) | Verification gap | Accepted at archive | Outlets | The first real staff member is added to a live outlet |
 | [On The First Of A Month, The Demo's Ranges Open Empty](./month-boundary-empties-fixture-ranges.md) | Demo-data weakness | Open | Demo data | A demo walked on the 1st or 2nd, or the next range-based surface |
 | [Page Headers Reserve Their Own Space](./page-headers-reserve-their-own-space.md) | Defect | Found, not scheduled | Design system | The next change touching `PageHeader`, or a demo where the stock ledger's header jump is noticed |
+| [A Freshly Added Row Should Come Into View And Say So](./reveal-what-was-just-added.md) | Feature | Open | Design system | Any time — `billing-live` (#10) builds the primitive for the menu editor, and this is it reaching the other six add flows |
 | [Expense Payment Method Inherits The Bill Enum](./expense-payment-method-inherits-the-bill-enum.md) | Design gap | Open | Expenses | `expenses-and-inventory-live` (#11), while the table is still empty and the fix is one migration rather than a data migration |
 | [Raw Materials Is Identified By A Word Nobody Types](./raw-materials-is-identified-by-a-word-nobody-types.md) | Design gap | Open | Reporting | `expenses-and-inventory-live` (#11), which puts the first real rows in front of the consumption basis |
 

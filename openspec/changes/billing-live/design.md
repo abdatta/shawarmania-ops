@@ -167,12 +167,47 @@ person signing off is on another device and a stale report is bypassable. Sealin
 automatically when a shift ends was rejected because a shift can end with work
 unresolved and does not express an end-of-day decision.
 
+### An outlet's go-live is a date on the outlet, and it turns at a cutover
+
+`outlets.billing_live_from date NULL` — null until that outlet is promoted, set by
+the Super Admin on the night it goes live. Everything about the handover then reads
+as a date comparison against a business date the app already resolves.
+
+Deriving it from the earliest paid bill was rejected: task 7.7 deliberately rings
+**shadow smoke-test bills before any customer money**, so a derived boundary would
+move itself backwards onto a day whose revenue had already been typed, and blank a
+figure the owner entered by hand. A separate rollout table was rejected as a table
+and an RLS policy for one date per outlet. An explicit column is also what makes
+the stated rollback executable: "restore the typed field for dates after the
+reversal" needs a date it can actually move.
+
+**Go-live turns at a cutover, never mid-day.** The handover is by business date, so
+a day that starts hand-typed and ends sourced from bills is exactly the
+double-count task 5.3 exists to catch. `billing_live_from` is therefore set to a
+business date that has not started yet, and an outlet already trading today goes
+live at its next cutover at the earliest.
+
+### A category is created by appending, and reordered on purpose
+
+Once a category is only ever created as a side effect of adding an item, nothing is
+left to set `menu_categories.sort_order` — and the counter's grouping order is a
+decision the business makes, not an accident of typing. A new category therefore
+takes `max(sort_order) + 1`, and the manager's menu screen gains an explicit
+reorder action.
+
+This is the promise already in this change's menu-management delta being kept
+rather than a feature being added: it says a manager may "create, rename, reprice,
+reorder, mark unavailable and retire". Alphabetical order was rejected because it
+puts Burgers before Shawarma on the screen that matters most, and creation order
+with no control was rejected because the only way to fix a wrong order would be to
+retype the items.
+
 ### Counter revenue leaves the ledger on the day the outlet goes live
 
-From an outlet's go-live business date, the ledger reads that outlet's counter
+From an outlet's `billing_live_from` date, the ledger reads that outlet's counter
 revenue from paid bills, labels it as coming from the counter, and removes the
 field that invited it to be typed. Earlier dates keep their typed figures
-untouched, and the other outlet keeps typing until its own go-live date.
+untouched, and the other outlet keeps typing until its own date is set.
 
 Everything else in the ledger keeps working by hand: aggregator commission, cash
 in and out, expenses, and the counted drawer. Aggregator revenue itself now
@@ -237,4 +272,11 @@ dates after the reversal, never by editing a date already sourced from bills.
 
 ## Open Questions
 
-None.
+**Which outlet goes live first: settled as Kalyani**, which is the outlet that has
+a tablet. Kanchrapara's hardware is on its way, so the one-at-a-time rollout this
+change already required is the shape the hardware was going to force anyway.
+
+**When: not decided here, and not decidable by this change.** Go-live turns at a
+cutover, and nothing in this change is built yet, so the date is whatever the first
+cutover after task 7.7 turns out to be. Recorded in `docs/OPERATIONS.md` on the
+night rather than fixed in advance.

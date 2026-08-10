@@ -1,6 +1,6 @@
 # Proposal: Billing Live
 
-> **Model**: Opus · **Wave**: D · **Depends on**: #7, #9, #30, #31, #32, #33 · **Gate**: **Billing V1.** The real menu is entered through the app by a person with no SQL; one tablet at each outlet takes real payments, immediate and on handover; every accepted write commits locally before the UI reports success and lands exactly once; unsent work survives logout and restart; bill numbers never collide; only a resolved online queue receives the tablet's end-of-day confirmation; and the ledger stops carrying that outlet's counter revenue on the day it goes live.
+> **Model**: Opus · **Wave**: D · **Depends on**: #7, #9, #30, #31, #32, #33, #36, #38 · **Gate**: **Billing V1.** The real menu is entered through the app by a person with no SQL; one tablet at each outlet takes real payments, immediate and on handover; every accepted write commits locally before the UI reports success and lands exactly once; unsent work survives logout and restart; bill numbers never collide; only a resolved online queue receives the tablet's end-of-day confirmation; and the ledger stops carrying that outlet's counter revenue on the day it goes live.
 
 ## Why
 
