@@ -187,7 +187,7 @@ zero, so a missing category cannot be confused with zero takings.
 - **WHEN** the operator expands a bill in My shift or the combined tablet rail
 - **THEN** its item snapshots, quantities, prices, line totals, payment facts and total appear without exposing another shift
 
-### Requirement: Landscape tablets combine the counter lifecycle
+### Requirement: The counter is one three-column workspace at every width
 
 The counter SHALL render three touch-safe columns at **every** width: the
 tappable menu, the current bill, and one continuous activity column. The activity
@@ -235,7 +235,7 @@ list SHALL name today as today rather than repeating the date on every row.
 - **WHEN** the biller reads this shift's closed bills
 - **THEN** each row says Today with the time, saying Yesterday instead for a shift that has crossed midnight, and the full date only once it is neither
 
-### Requirement: Editing a saved order is unmistakable on the combined workspace
+### Requirement: Editing a saved order is unmistakable, and it is one object
 
 While the composer holds a saved order, that mode SHALL be legible without reading
 a label, and the order under edit SHALL be a single object on screen rather than
@@ -279,23 +279,6 @@ item list, which is live beside it, and not a second total.
 - **WHEN** the biller saves the changes or cancels the edit
 - **THEN** the card leaves the composer's edge, the outline returns to neutral, the footer returns to the composer, and the order reappears in the ordinary list
 
-### Requirement: A customer phone is a phone or it is refused
-
-The composer SHALL canonicalise a typed customer phone by the same rule the
-database uses, and SHALL NOT accept an order or a payment while the field holds
-something that is not a complete Indian mobile number. It SHALL say so under the
-field once the biller has left it, not while they are still typing it. An empty
-field SHALL remain acceptable, since name or phone satisfies the identity
-requirement.
-
-#### Scenario: Biller mistypes a number
-- **WHEN** the phone field holds an incomplete or malformed number and the biller leaves the field
-- **THEN** the field is marked invalid with the reason, and neither Order nor Mark Paid can be used until it is corrected or cleared
-
-#### Scenario: Biller is still typing
-- **WHEN** the biller has entered part of a number and has not left the field
-- **THEN** nothing is reported, because every number is incomplete for the first nine digits of entering it
-
 ### Requirement: Frequent counter actions are tap-first and actor-neutral
 
 The direct-payment and saved-order payment actions SHALL be labelled Mark Paid,
@@ -315,6 +298,50 @@ SHALL remain optional for cancellation and otherwise limited to customer details
 - **THEN** cancellation completes without opening the keyboard
 
 ## MODIFIED Requirements
+
+### Requirement: Customer identity is optional to the database and prompted by the counter
+
+Both customer snapshots SHALL remain nullable, and the **database** SHALL never
+require either: a bill or order carrying no customer at all is valid, and nothing
+downstream may assume one.
+
+The counter UI SHALL nonetheless require **either** a customer name or a customer
+phone before Order or Mark Paid, as a reversible operating trial the owner can end
+without a migration. Neither individual field SHALL be required. A phone that has
+been typed SHALL be a complete Indian mobile number, canonicalised by the same rule
+the database uses, or be refused — reported once the biller leaves the field rather
+than while they are still typing it. An empty phone SHALL remain acceptable.
+
+#### Scenario: A bill with no customer reaches the database
+- **WHEN** a bill or order is written with both customer fields null
+- **THEN** the database accepts it, because the requirement is the counter's habit and not the schema's promise
+
+#### Scenario: The counter is given only a name
+- **WHEN** the biller enters a customer name and no phone
+- **THEN** both terminal actions are available
+
+#### Scenario: The counter is given a number that is not one
+- **WHEN** the phone field holds an incomplete or malformed number and the biller leaves the field
+- **THEN** the reason is stated under the field and neither terminal action can be used until it is corrected or cleared, so a bad number cannot reach a bill while the customer record silently fails to save
+
+### Requirement: A queued bill carries a local reference, never a bill number
+
+Until a bill has been sent, the surface SHALL identify it by a short local
+reference that cannot be mistaken for a bill number, and SHALL state in plain words
+that it is not sent yet and that its number arrives when it does. A bill number
+SHALL be assigned only on a successful send, per outlet and sequentially.
+
+**No surface SHALL use the word provisional**, here or anywhere else in billing. A
+biller at 9pm needs to know what to do next, and a word nobody says out loud is
+where that stops.
+
+#### Scenario: A bill that has not yet synced
+- **WHEN** a settled bill is still queued
+- **THEN** it is shown with a short local reference that is not formatted as a bill number, and the words not sent yet
+
+#### Scenario: A cancelled bill consumes no number
+- **WHEN** a queued bill is cancelled before it is sent and a later bill is then sent
+- **THEN** the later bill's number is the next in the outlet's sequence, with no gap left by the cancelled one
 
 ### Requirement: Mark Paid opens exact tender capture with cash visually distinct
 
@@ -386,3 +413,14 @@ and SHALL expose no payload or customer details.
 #### Scenario: A manager inspects the same problem
 - **WHEN** an authorised manager opens delivery diagnostics on their phone
 - **THEN** they see non-identifying status metadata and no correction, discard, payload or customer details
+
+## RENAMED Requirements
+
+- FROM: `### Requirement: Payment is one tap, then settle, with cash visually distinct`
+- TO: `### Requirement: Mark Paid opens exact tender capture with cash visually distinct`
+
+- FROM: `### Requirement: Customer name and phone are optional and never block settling`
+- TO: `### Requirement: Customer identity is optional to the database and prompted by the counter`
+
+- FROM: `### Requirement: A queued bill carries a provisional reference, never a bill number`
+- TO: `### Requirement: A queued bill carries a local reference, never a bill number`
