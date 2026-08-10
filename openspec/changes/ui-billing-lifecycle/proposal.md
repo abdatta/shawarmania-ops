@@ -25,10 +25,21 @@ adapter replaces them.
 - Make edit hand the saved order to the full composer, where menu items,
   quantities, customer name and phone all remain editable; temporarily suspend
   and then restore any new-order draft already in progress.
-- On a landscape tablet, compose those three counter concerns into one fixed
-  workspace: menu at left, current bill in the middle, and one continuous
-  Open orders + this shift's bills rail at right. The narrower routes remain
-  available where three touch-safe columns do not fit.
+- Compose those three counter concerns into one fixed workspace at every width:
+  menu at left, current bill in the middle, and one continuous Open orders + this
+  shift's bills rail at right. Below the width three columns need, the workspace
+  scrolls sideways rather than folding a column into a tab; Open orders and My
+  shift therefore lose their navigation entries while keeping their routes.
+- Make editing a saved order unmistakable: the composer takes the accent outline,
+  the order's own card leaves the list to meet the composer's edge as one piece of
+  work, and the composer's footer moves onto that card for the duration.
+- Never truncate an item name, put a menu tile's price at its top right, show Off
+  instead of a price for an unavailable item, and name today as today in a shift's
+  bill list.
+- Refuse a customer phone that is not a complete Indian mobile number, instead of
+  silently dropping it from customer identity while writing it to the bill.
+- Retire the Biller's read-only Menu page, which the counter's own menu column now
+  answers, and the always-true authority branch that served it.
 - Record one or several exact tender allocations, including mixed Cash + UPI and
   the aggregator methods used when a rider collects, through a tap-first modal.
 - Add exact-phone customer lookup and prompted autofill; accepting a conflict
@@ -65,7 +76,11 @@ None.
   shift history and manager correction, while preserving immediate payment.
 - `demo-mode`: The two-outlet scenario includes the complete order-to-bill
   lifecycle, including an aggregator order collected by a rider.
-- `app-shell`: Tablet navigation exposes only counter-context surfaces.
+- `menu-management`: A Biller reads the menu from the counter column rather than
+  from a surface of its own; the refusal stays the data layer's.
+- `app-shell`: Tablet navigation exposes only counter-context surfaces, and only
+  those the counter does not already show — Open orders, My shift and the Biller's
+  read-only Menu all lose their entries to columns that never leave the screen.
 
 ## Impact
 

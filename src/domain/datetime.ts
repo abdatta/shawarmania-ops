@@ -52,6 +52,33 @@ export function formatDateTime(instant: Date | string): string {
 }
 
 /**
+ * `Today, 08:00 pm` for a calendar day the reader is standing in, otherwise the
+ * full `25 Jul 2026, 08:00 pm`.
+ *
+ * For lists of closed work — a shift's bills — where the whole list is nearly
+ * always the same day and repeating that day down every row spends the reader's
+ * attention on the one part they already know. `Today` and `Yesterday` because
+ * an evening shift crosses midnight and the previous label would then be wrong
+ * without being obviously wrong.
+ *
+ * This is the **calendar** day in Asia/Kolkata, not the outlet's business day:
+ * it labels a wall-clock timestamp, and a bill rung at 00:20 belongs to the
+ * business day before but genuinely happened today. Business dates are rendered
+ * by `formatBusinessDate`, which is a different question.
+ */
+export function formatDayTime(instant: Date | string, now: Date | string = new Date()): string {
+  const at = toDate(instant)
+  const today = formatDate(now)
+
+  if (formatDate(at) === today) return `Today, ${formatTime(at)}`
+
+  const yesterday = new Date(toDate(now).getTime() - 24 * 60 * 60 * 1000)
+  if (formatDate(at) === formatDate(yesterday)) return `Yesterday, ${formatTime(at)}`
+
+  return formatDateTime(at)
+}
+
+/**
  * Operational age for recent work at the counter.
  *
  * Today's orders read as age because that is faster to scan while food is being

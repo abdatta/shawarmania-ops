@@ -136,14 +136,23 @@ test.describe('the operations surfaces', () => {
     await expect(page.getByRole('table')).toContainText(expected)
   })
 
-  test('a Biller reads the menu and is offered nothing that changes it', async ({ page }) => {
-    await page.goto('demo/biller/menu')
-    await expect(page.getByTestId('menu-list')).toBeVisible()
-    await expect(page.getByTestId('menu-read-only')).toContainText('changed by a manager')
+  test('a Biller has no menu page, and the counter answers what it used to', async ({ page }) => {
+    // The read-only Menu screen is retired: the Counter's own menu column carries
+    // every item, price and availability marker, permanently, beside the bill.
+    await page.goto('demo/biller')
+    await expect(page.getByRole('link', { name: 'Menu' })).toHaveCount(0)
 
-    await expect(page.getByRole('button', { name: 'Turn off' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Add category' })).toHaveCount(0)
+    const menu = page.getByTestId('menu-grid')
+    await expect(menu.getByRole('button', { name: 'Classic Chicken Shawarma' })).toBeVisible()
+    await expect(menu).toContainText('₹139')
+    // Unavailable items stay on the grid, marked, and without a price to quote.
+    const off = menu.getByRole('button', { name: /Stuffed Lebanese.*off the menu/ })
+    await expect(off).toContainText('Off')
+    await expect(off).not.toContainText('₹')
+
+    // And the route itself no longer resolves to a menu for this role.
+    await page.goto('demo/biller/menu')
+    await expect(page.getByTestId('menu-list')).toHaveCount(0)
   })
 })
 

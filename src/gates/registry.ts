@@ -4,12 +4,10 @@ import {
   Bell,
   Banknote,
   CalendarCheck,
-  ClipboardList,
   Home,
   KeyRound,
   LayoutDashboard,
   NotepadText,
-  ListOrdered,
   Package,
   Store,
   TabletSmartphone,
@@ -322,10 +320,13 @@ const defs = {
     nav: { label: 'Shift', icon: KeyRound, order: 3 },
     state: 'demo',
   },
+  /**
+   * Open orders, and **deliberately without a navigation entry** — see
+   * `counter-my-shift` for the reason the pair lost theirs.
+   */
   'counter-open-orders': {
     role: 'biller',
     path: 'open-orders',
-    nav: { label: 'Open orders', icon: ListOrdered, order: 2 },
     state: 'demo',
   },
   /**
@@ -339,22 +340,31 @@ const defs = {
     path: 'billing',
     state: 'demo',
   },
+  /*
+    There was a `counter-menu` here — the manager's menu surface without the
+    editing, so a biller could answer "is that still on?" without walking to the
+    kitchen. **Retired**, because the Counter's own menu column now answers that
+    question and never leaves the screen: every item, its price, its veg marker
+    and an Off marker on anything the kitchen has run out of. The only thing the
+    read-only page still showed that the counter does not is an item's
+    description, which is recorded in `docs/LIMITATIONS.md`.
+  */
   /**
-   * The menu as the counter sees it: the same surface a manager edits, without
-   * the editing. It exists so the permission difference is visible rather than
-   * asserted — and so a biller can answer "is that still on?" without walking
-   * to the kitchen. The refusal behind it is the data layer's, not this entry's.
+   * This shift's bills, and **deliberately without a navigation entry**, as of
+   * the counter's three-column workspace.
+   *
+   * Both this and `counter-open-orders` are permanently on screen in the
+   * Counter's activity rail, which no longer folds away on a narrow viewport —
+   * the workspace scrolls sideways instead. A tab leading to a second copy of a
+   * column the biller is already looking at is the second door into one room that
+   * `counter-billing` above declines for the same reason. The surfaces and their
+   * routes stay, because the gate is still what decides whether the content
+   * renders at all, and the standalone layouts are what a link into either one
+   * still resolves to.
    */
-  'counter-menu': {
-    role: 'biller',
-    path: 'menu',
-    nav: { label: 'Menu', icon: UtensilsCrossed, order: 4 },
-    state: 'demo',
-  },
   'counter-my-shift': {
     role: 'biller',
     path: 'my-shift',
-    nav: { label: 'My shift', icon: ClipboardList, order: 5 },
     state: 'demo',
   },
   /**
@@ -402,7 +412,7 @@ const defs = {
    * The same surface as `counter-expenses`, reached from the Employee shell.
    *
    * Two entries rather than one, because a surface belongs to exactly one role's
-   * shell here — the same reason `admin-menu` and `counter-menu` are separate
+   * shell here — the same reason `owner-devices` and `admin-devices` are separate
    * entries reaching one component. The owner asked for "all staff", and an
    * Employee who goes to the market for vegetables is precisely the person the
    * change exists for.

@@ -161,19 +161,15 @@ describe('MenuSurface — the manager', () => {
   })
 })
 
-describe('MenuSurface — the Biller', () => {
-  it('shows the menu, says a manager changes it, and offers no editing action', async () => {
-    renderMenu('biller')
-
-    await screen.findByTestId('menu-list')
-    expect(screen.getByTestId('menu-read-only')).toHaveTextContent(/changed by a manager/i)
-
-    expect(screen.queryByTestId(`toggle-${MENU_ITEM_CLASSIC_ID}`)).not.toBeInTheDocument()
-    expect(screen.queryByTestId(`edit-${MENU_ITEM_CLASSIC_ID}`)).not.toBeInTheDocument()
-    expect(screen.queryByTestId('add-category')).not.toBeInTheDocument()
-  })
-
-  it('is refused by the data layer, not merely by the missing button', async () => {
+/**
+ * The Biller's read-only copy of this screen is retired — the Counter's own menu
+ * column answers "is that still on?" without leaving the till, so there is no
+ * longer a page to assert about. What remains is the half that always mattered:
+ * the refusal is the data layer's, so it does not depend on a screen existing or
+ * on a button being absent from it.
+ */
+describe('MenuSurface — a Biller cannot write the menu', () => {
+  it('is refused by the data layer, not merely by an absent surface', async () => {
     const adapters = createMockAdapters('biller')
     renderMenu('biller', adapters)
     await screen.findByTestId('menu-list')

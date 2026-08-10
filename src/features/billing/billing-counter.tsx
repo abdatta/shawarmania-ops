@@ -21,8 +21,10 @@ import { newUuid } from '@/lib/uuid'
 import { useSession } from '@/session/context'
 import { validateIndianPhone } from '../../../shared/phone'
 
+import { BillComposerFooter } from './bill-composer-footer'
 import { BillPanel } from './bill-panel'
 import { CounterActivityRail } from './counter-activity-rail'
+import { EditingOrderPin } from './editing-order-pin'
 import { MenuGrid } from './menu-grid'
 import { PaymentDialog } from './payment-dialog'
 import { useCounterState } from './use-counter-state'
@@ -30,19 +32,32 @@ import { useCounterState } from './use-counter-state'
 /**
  * The billing counter — the screen this whole product is for.
  *
- * Two panes on a tablet, neither of which scrolls the page: the whole menu on
- * the left, the current bill on the right. Two taps from a complete order to a
- * cleared screen — a payment method, then Settle.
+ * Three columns, always, none of which scrolls the page: the whole menu at left,
+ * the current bill in the middle, and one continuous Open orders + Bills this
+ * shift rail at right. Each column scrolls its own content. **Nothing rearranges
+ * on a narrow screen** — the workspace scrolls sideways instead, because the
+ * three columns are the counter, and a biller who loses one of them to a tab has
+ * to go looking for the order they were about to take money for.
  *
- * **Settling does not wait for anything.** The bill goes to the queue and the
- * panel clears in the same tick, because the next customer is already there.
- * What appears afterwards is a confirmation with the bill's short local
+ * Food-first is the default. **Order** saves the preparation so the kitchen can
+ * start, and the money is taken on handover, from the rail. **Mark Paid** is the
+ * secondary path for the rarer upfront payment; neither settles on the spot —
+ * tender is captured in a tap-first dialog.
+ *
+ * **A direct payment does not wait for anything.** The bill goes to the queue
+ * and the panel clears in the same tick, because the next customer is already
+ * there. What appears afterwards is a confirmation with the bill's short local
  * reference and an Undo, and it clears itself: a queue that waits for an
  * acknowledgement is a queue that stops.
  *
  * Undo removes an unsent queue entry. It is not an edit, and there is no path
- * here to one — a settled bill is append-only, and once it has gone the only
- * correction is a void, which arrives with `billing-live` (#10).
+ * here to one — a settled bill is append-only, and the only correction is a
+ * manager's reasoned void followed by a manual re-ring on this tablet.
+ *
+ * Editing a saved order borrows this same composer: the order goes onto the
+ * panel, any draft already in progress is suspended and restored afterwards, and
+ * both the panel and the rail take the accent outline with the order pinned
+ * beside the panel, so the mode and its subject are never in doubt.
  */
 
 interface Restorable {
@@ -375,9 +390,47 @@ export function BillingCounter() {
     )
   }
 
+  /*
+    One footer, rendered in one of two places: the panel while a new bill is being
+    composed, the docked card while a saved order is being edited. Built here
+    because this is where the draft it edits lives.
+  */
+  const composerFooter = (
+    <BillComposerFooter
+      lines={lines}
+      customerName={customerName}
+      customerPhone={customerPhone}
+      settling={settling}
+      editing={editingOrder !== null}
+      onCustomerNameChange={setCustomerName}
+      onCustomerPhoneChange={setCustomerPhone}
+      onPaid={() => {
+        setError(null)
+        setPaymentDialogOpen(true)
+      }}
+      onSaveOrder={editingOrder ? saveEditedOrder : saveOrder}
+      onCancelEdit={leaveOrderEdit}
+    />
+  )
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 md:grid md:grid-cols-[minmax(0,1fr)_20rem] lg:grid-cols-[minmax(18rem,1fr)_minmax(18rem,22rem)_minmax(20rem,26rem)]">
-      <div className="order-2 min-h-0 md:order-1 md:overflow-y-auto">
+    /*
+      Three columns, always, all the same width — the width the current bill
+      wants. Slack goes to the menu, which is the column that reads better wide;
+      the other two are exactly as wide as they need to be.
+
+      Below three columns' worth of viewport this **scrolls sideways** rather than
+      rearranging itself. A counter that reflows is a counter whose controls move
+      while somebody is reaching for them, and 22rem is about a phone's width, so
+      the narrow case ends up as three swipeable panels rather than as a
+      compromise. `overflow-y-hidden` keeps that to one axis: each column still
+      scrolls its own content, and the page never scrolls sideways as a whole.
+    */
+    <div
+      data-testid="counter-workspace"
+      className="grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_22rem_22rem] gap-3 overflow-x-auto overflow-y-hidden"
+    >
+      <div className="@container min-h-0 overflow-y-auto">
         {error && (
           <p
             role="alert"
@@ -395,7 +448,7 @@ export function BillingCounter() {
             {[6, 3].map((tiles, section) => (
               <div key={section}>
                 <Shimmer className="mb-1.5 h-4 w-24" />
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 @md:grid-cols-3 @2xl:grid-cols-4">
                   {Array.from({ length: tiles }, (_, tile) => (
                     <Shimmer key={tile} className="h-20" />
                   ))}
@@ -408,22 +461,13 @@ export function BillingCounter() {
         )}
       </div>
 
-      <div className="order-1 flex min-h-0 flex-col gap-2 md:order-2">
+      <div className="flex min-h-0 flex-col gap-2">
         <BillPanel
           lines={lines}
-          customerName={customerName}
-          customerPhone={customerPhone}
-          settling={settling}
           onChangeQuantity={changeQuantity}
-          onCustomerNameChange={setCustomerName}
-          onCustomerPhoneChange={setCustomerPhone}
-          onPaid={() => {
-            setError(null)
-            setPaymentDialogOpen(true)
-          }}
-          onSaveOrder={editingOrder ? saveEditedOrder : saveOrder}
-          onCancelEdit={leaveOrderEdit}
-          {...(editingOrder ? { editingOrderNumber: editingOrder.orderNumber } : {})}
+          {...(editingOrder
+            ? { editingOrderNumber: editingOrder.orderNumber }
+            : { footer: composerFooter })}
         />
 
         {visibleCustomerMatch && (
@@ -502,8 +546,18 @@ export function BillingCounter() {
 
       <CounterActivityRail
         refreshKey={activityRefresh}
-        editingOrderId={editingOrder?.id ?? null}
+        editingOrder={editingOrder}
         onEditOrder={beginOrderEdit}
+        pin={
+          editingOrder && (
+            <EditingOrderPin
+              order={editingOrder}
+              lines={lines}
+              customerName={customerName}
+              footer={composerFooter}
+            />
+          )
+        }
       />
 
       <PaymentDialog

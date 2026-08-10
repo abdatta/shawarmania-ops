@@ -2,7 +2,7 @@ import { ChevronDown } from 'lucide-react'
 
 import { Money } from '@/components/ui/money'
 import type { BillingBill } from '@/data-access/adapters'
-import { formatDateTime, lineTotalPaise } from '@/domain'
+import { formatDayTime, lineTotalPaise } from '@/domain'
 import { cn } from '@/lib/cn'
 
 function methodLabel(method: BillingBill['paymentMethod']) {
@@ -38,7 +38,7 @@ export function ShiftBillList({
                   )}
                 </div>
                 <p className="truncate text-xs text-content-muted">
-                  {formatDateTime(bill.paidAt)} · {methodLabel(bill.paymentMethod)}
+                  {formatDayTime(bill.paidAt)} · {methodLabel(bill.paymentMethod)}
                 </p>
               </div>
               <Money paise={bill.totalPaise} className="shrink-0 font-bold" />
@@ -57,7 +57,9 @@ export function ShiftBillList({
                 {bill.lines.map((line) => (
                   <li key={line.menuItemId} className="grid grid-cols-[1fr_auto] gap-x-3 py-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-content">{line.itemName}</p>
+                      <p className="text-sm font-semibold leading-tight text-content">
+                        {line.itemName}
+                      </p>
                       <p className="text-xs text-content-muted">
                         {line.quantity} × <Money paise={line.unitPricePaise} />
                       </p>
@@ -73,7 +75,7 @@ export function ShiftBillList({
               <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 border-t border-border pt-2 text-xs">
                 <dt className="text-content-muted">Paid</dt>
                 <dd className="text-right font-semibold text-content">
-                  {formatDateTime(bill.paidAt)}
+                  {formatDayTime(bill.paidAt)}
                 </dd>
                 <dt className="text-content-muted">Tender</dt>
                 <dd className="space-y-0.5 text-right font-semibold text-content">

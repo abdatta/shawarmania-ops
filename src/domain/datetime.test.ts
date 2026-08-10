@@ -5,6 +5,7 @@ import {
   formatBusinessDate,
   formatDate,
   formatDateTime,
+  formatDayTime,
   formatRecentAge,
   formatTime,
   QUIET_HOURS_FROM,
@@ -51,6 +52,28 @@ describe('formatDateTime', () => {
   it('renders date and time together in IST', () => {
     expect(formatDateTime(AFTERNOON_UTC)).toMatch(/^25 Jul 2026/)
     expect(formatDateTime(AFTERNOON_UTC)).toMatch(/08:00/)
+  })
+})
+
+describe('formatDayTime', () => {
+  const NOW = '2026-08-10T22:00:00+05:30'
+
+  it('names today rather than repeating its date down a list of bills', () => {
+    expect(formatDayTime('2026-08-10T20:40:00+05:30', NOW)).toBe('Today, 08:40 pm')
+  })
+
+  it('names yesterday, because an evening shift crosses midnight', () => {
+    expect(formatDayTime('2026-08-09T23:50:00+05:30', NOW)).toBe('Yesterday, 11:50 pm')
+  })
+
+  it('keeps the full date once it is neither', () => {
+    expect(formatDayTime('2026-08-08T13:05:00+05:30', NOW)).toMatch(/^08 Aug 2026, 01:05/)
+  })
+
+  it('reads the day in IST, not UTC — a late bill is still today at the counter', () => {
+    // 00:20 IST on the 11th is 18:50 UTC on the 10th. Asked at 00:30 IST on the
+    // 11th, that is today; a UTC reading would have called it yesterday.
+    expect(formatDayTime(LATE_NIGHT_UTC, '2026-07-26T00:30:00+05:30')).toBe('Today, 12:20 am')
   })
 })
 

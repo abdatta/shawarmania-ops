@@ -195,6 +195,12 @@ This is the single largest known inaccuracy in the P&L. Worth fixing when aggreg
 
 There is no salary data anywhere in the schema or the UI — `staff-as-accounts` (#21) removed the roster's `salary_paise` rather than migrating it, by owner decision. Attendance feeds whatever payroll process the business runs outside the app, and wages actually paid are recorded as ordinary expenses under a free-text category such as `Staff wages`. If payroll ever becomes in-scope, salary fields return by migration onto the person's account record — nothing else has to move.
 
+### The counter does not show an item's description
+
+Retiring the Biller's read-only Menu screen took the one thing the Counter's menu column does not carry: an item's description line — *Bestseller*, *Saaj / pita style*, *25.8g protein per 100g*. Names, prices, veg markers and availability are all on the tiles, so the question that screen existed to answer is still answered; a biller asked what is in something now asks the kitchen, as they did before the app.
+
+This is a deliberate trade rather than an oversight: a description on a tile costs the height that keeps the whole menu on one screen, which is a stated commitment. If it turns out to matter, the honest place for it is on the bill line or a tap on the tile, not a second page.
+
 ### Menu is per-outlet, with no shared catalogue
 
 Each outlet owns its menu. Two outlets selling the same item means two rows. For two outlets this is fine and keeps isolation simple; at ten franchises, brand-wide menu consistency will want a master catalogue that outlets inherit from and override. Deferred until the franchise count makes it worth the complexity.

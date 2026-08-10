@@ -39,7 +39,13 @@ export function MenuGrid({
           <h2 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-content-muted">
             {category.name}
           </h2>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {/*
+            Sized against **this column**, not the viewport. The counter's menu
+            column is a fixed 22rem once the layout starts scrolling sideways, so
+            a viewport-keyed `sm:grid-cols-3` would put three tiles in a phone's
+            width of space at exactly the wrong moment.
+          */}
+          <div className="grid grid-cols-2 gap-2 @md:grid-cols-3 @2xl:grid-cols-4">
             {items.map((item) => {
               const quantity = quantities.get(item.id) ?? 0
               return (
@@ -51,7 +57,10 @@ export function MenuGrid({
                   aria-label={`${item.name}${item.is_available ? '' : ' — off the menu'}`}
                   onClick={() => onAdd(item)}
                   className={cn(
-                    'flex h-20 flex-col justify-between rounded-xl border p-2 text-left',
+                    // `min-h-20` rather than `h-20`: a tile grows to fit its name.
+                    // Every row of the grid stretches to its tallest tile, so the
+                    // grid stays even without any tile having to truncate.
+                    'flex min-h-20 items-start gap-2 rounded-xl border p-2 text-left',
                     'focus-visible:focus-ring',
                     item.is_available
                       ? 'border-border bg-surface hover:bg-surface-raised'
@@ -59,25 +68,47 @@ export function MenuGrid({
                     quantity > 0 && 'border-primary',
                   )}
                 >
-                  <span className="flex items-start gap-1.5">
+                  <span className="flex min-w-0 flex-1 items-start gap-1.5">
                     <VegMarker isVeg={item.is_veg} className="mt-0.5" />
-                    <span className="line-clamp-2 text-sm font-semibold leading-tight text-content">
+                    {/*
+                      Never truncated. A biller picking between "Mozzarella Cheese
+                      Chicken Shawarma" and "Mayonnaise Chicken Shawarma" needs the
+                      end of the name, and an ellipsis takes exactly the part that
+                      tells them apart.
+                    */}
+                    <span className="text-sm font-semibold leading-tight text-content">
                       {item.name}
                     </span>
                   </span>
-                  <span className="flex items-end justify-between gap-2">
-                    <Money paise={item.price_paise} className="text-sm font-bold" />
+
+                  {/*
+                    Top-right on every tile — the one place the eye can sweep down
+                    a column without the figure moving because the name above it
+                    wrapped onto a second line.
+
+                    An unavailable item shows **Off instead of its price**, not as
+                    well as it. The price of something nobody can sell is the one
+                    number on this screen that cannot be acted on, and next to a
+                    column of prices that can be, it is a figure a biller might
+                    quote to a customer before noticing the tile is dashed.
+                  */}
+                  <span className="flex shrink-0 flex-col items-end gap-1">
                     {item.is_available ? (
-                      quantity > 0 && (
-                        <span
-                          data-testid={`tile-count-${item.id}`}
-                          className="rounded-lg bg-primary px-2 text-xs font-bold text-on-primary"
-                        >
-                          ×{quantity}
-                        </span>
-                      )
+                      <>
+                        <Money paise={item.price_paise} className="text-sm font-bold" />
+                        {quantity > 0 && (
+                          <span
+                            data-testid={`tile-count-${item.id}`}
+                            className="rounded-lg bg-primary px-2 text-xs font-bold text-on-primary"
+                          >
+                            ×{quantity}
+                          </span>
+                        )}
+                      </>
                     ) : (
-                      <span className="text-xs font-semibold text-content-muted">Off</span>
+                      <span className="rounded-md border border-border px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-content-muted">
+                        Off
+                      </span>
                     )}
                   </span>
                 </button>

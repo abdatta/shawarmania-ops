@@ -16,17 +16,19 @@ import { VegMarker } from '@/components/ui/veg-marker'
 import { useAdapters, type Tables } from '@/data-access'
 import { DataActionError, type MenuCategoryWithItems } from '@/data-access/adapters'
 import { paiseToRupees, rupeesToPaise } from '@/domain'
-import { useSession } from '@/session/context'
 import { useOutletScope } from '@/features/outlet-scope'
 
 /**
  * Menu — what this outlet sells, and for how much.
  *
- * One component, two authorities. A Franchise Admin edits; a Biller reads the
- * same screen and is told, in a sentence, that a manager changes it. The
- * boundary is not the missing button: the mock refuses a Biller's write exactly
- * where `menu_items_write` will, so the demo teaches the product that exists
- * rather than the one the buttons imply (design D6).
+ * A manager's screen, and only a manager's. It carried a read-only rendering for
+ * the Biller until the Counter's own menu column made that page redundant — every
+ * item, price, veg marker and an Off marker on anything the kitchen has run out
+ * of, permanently on screen next to the bill.
+ *
+ * **The missing button was never the boundary and still is not.** The mock refuses
+ * a Biller's write exactly where `menu_items_write` will, so a hand-crafted
+ * request meets the same answer this screen's absence gives (design D6).
  *
  * Two frequent actions, and they are deliberately different sizes of thing.
  * **Availability is one tap on the row** — it happens when the kitchen runs out,
@@ -58,15 +60,19 @@ const EMPTY_ITEM_DRAFT: ItemDraft = {
 }
 
 export function MenuSurface() {
-  const session = useSession()
   const { menu: adapter } = useAdapters()
 
-  /**
-   * Who may write. The control is the convenience; the refusal is the boundary,
-   * and it lives one layer down — the same division the roster screen makes
-   * about staff codes.
-   */
-  const canEdit = session.role === 'super_admin' || session.role === 'franchise_admin'
+  /*
+    There was a `canEdit` here, and a whole read-only rendering behind it, for the
+    Biller's copy of this screen. That surface is retired — the Counter's own menu
+    column answers "is that still on?" without leaving the till — so every role
+    that can now reach this page can write to it, and a branch that is always true
+    is worse than no branch: it reads as a boundary while enforcing nothing.
+
+    **The boundary was never here anyway.** It is the menu policies one layer
+    down, which is what a hand-crafted write meets. The controls were only ever
+    the convenience.
+  */
   // Which outlet this surface is about. One for nearly everybody; a
   // per-surface choice for somebody who manages more than one, which
   // confers nothing — the database decides every write from the
@@ -219,7 +225,7 @@ export function MenuSurface() {
     draft.price.trim() !== '' &&
     rupeesToPaise(Number(draft.price.trim())) !== editing.price_paise
 
-  const addCategoryButton = canEdit ? (
+  const addCategoryButton = (
     <AddButton
       label="Add category"
       data-testid="add-category"
@@ -228,30 +234,16 @@ export function MenuSurface() {
         setCategoryFormOpen(true)
       }}
     />
-  ) : undefined
+  )
 
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
         scope={outletSelector}
         title="Menu"
-        subtitle={
-          canEdit
-            ? 'What this outlet sells. Turning an item off takes it out of the counter’s reach without removing it.'
-            : 'What this outlet sells. Changes are made by a manager.'
-        }
+        subtitle="What this outlet sells. Turning an item off takes it out of the counter’s reach without removing it."
         action={categories.length > 0 ? addCategoryButton : undefined}
       />
-
-      {!canEdit && (
-        <p
-          data-testid="menu-read-only"
-          className="mb-3 rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted"
-        >
-          This is the menu as it stands. Prices and availability are changed by a manager — if
-          something has run out, tell them and it will disappear from the counter here.
-        </p>
-      )}
 
       {error && (
         <p role="alert" data-testid="menu-error" className="mb-3 text-sm font-semibold text-danger">
@@ -272,11 +264,7 @@ export function MenuSurface() {
       ) : categories.length === 0 ? (
         <EmptyState
           icon={UtensilsCrossed}
-          title={
-            canEdit
-              ? 'Nothing on the menu yet. Start with a category — Shawarma, Burgers — and the items go inside it.'
-              : 'Nothing is on the menu yet. A manager sets it up.'
-          }
+          title="Nothing on the menu yet. Start with a category — Shawarma, Burgers — and the items go inside it."
           action={addCategoryButton}
         />
       ) : (
@@ -285,23 +273,20 @@ export function MenuSurface() {
             <Card key={category.id} className="space-y-2" data-testid={`category-${category.id}`}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="text-sm font-bold text-content">{category.name}</h2>
-                {canEdit && (
-                  <Button
-                    variant="ghost"
-                    size="phone"
-                    disabled={busy}
-                    onClick={() => openAdd(category.id)}
-                    data-testid={`add-item-${category.id}`}
-                  >
-                    Add item
-                  </Button>
-                )}
+                <Button
+                  variant="ghost"
+                  size="phone"
+                  disabled={busy}
+                  onClick={() => openAdd(category.id)}
+                  data-testid={`add-item-${category.id}`}
+                >
+                  Add item
+                </Button>
               </div>
 
               {items.length === 0 ? (
                 <p className="text-xs text-content-muted">
-                  Nothing in this category yet.
-                  {canEdit && ' Add the first item and it appears at the counter.'}
+                  Nothing in this category yet. Add the first item and it appears at the counter.
                 </p>
               ) : (
                 <ul className="divide-y divide-border">
@@ -331,32 +316,28 @@ export function MenuSurface() {
                         </span>
                       )}
 
-                      {canEdit && (
-                        <div className="flex shrink-0 gap-1">
-                          <Button
-                            variant={item.is_available ? 'ghost' : 'secondary'}
-                            size="phone"
-                            disabled={busy}
-                            data-testid={`toggle-${item.id}`}
-                            onClick={() =>
-                              void run(() =>
-                                adapter.setItemAvailability(item.id, !item.is_available),
-                              )
-                            }
-                          >
-                            {item.is_available ? 'Turn off' : 'Turn on'}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="phone"
-                            disabled={busy}
-                            data-testid={`edit-${item.id}`}
-                            onClick={() => openEdit(item)}
-                          >
-                            Edit
-                          </Button>
-                        </div>
-                      )}
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          variant={item.is_available ? 'ghost' : 'secondary'}
+                          size="phone"
+                          disabled={busy}
+                          data-testid={`toggle-${item.id}`}
+                          onClick={() =>
+                            void run(() => adapter.setItemAvailability(item.id, !item.is_available))
+                          }
+                        >
+                          {item.is_available ? 'Turn off' : 'Turn on'}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="phone"
+                          disabled={busy}
+                          data-testid={`edit-${item.id}`}
+                          onClick={() => openEdit(item)}
+                        >
+                          Edit
+                        </Button>
+                      </div>
                     </li>
                   ))}
                 </ul>

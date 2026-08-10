@@ -410,6 +410,29 @@ describe('BillingCounter', () => {
 
     const editHeading = screen.getByRole('heading', { name: /Editing order/ })
     expect(editHeading).toHaveTextContent('104')
+
+    // The mode is unmistakable: the panel is marked as editing, the order's own
+    // card is docked to it carrying the composer's controls, and that order is no
+    // longer offered as an ordinary card that could be paid or edited again.
+    expect(screen.getByTestId('bill-panel')).toHaveAttribute('data-editing')
+    const pin = within(rail).getByTestId('editing-order-pin')
+    // A pattern rather than a literal: `scripts/check-no-hex.mjs` reads a hash
+    // followed by three hex digits as a colour outside the brand layer.
+    expect(pin).toHaveTextContent(/Order\s*#\s*104/)
+    expect(within(rail).queryByTestId('open-order-104')).not.toBeInTheDocument()
+
+    // The footer moved rather than being copied. Two of it would mean two Save
+    // changes buttons and two fields sharing one id.
+    expect(within(pin).getByTestId('save-order')).toBeInTheDocument()
+    expect(within(pin).getByTestId('cancel-edit')).toBeInTheDocument()
+    expect(within(pin).getByPlaceholderText('Customer name')).toBeInTheDocument()
+    expect(within(screen.getByTestId('bill-panel')).queryByTestId('save-order')).toBeNull()
+    expect(screen.getAllByPlaceholderText('Customer name')).toHaveLength(1)
+    // The items are the composer's job; the card does not show a second copy.
+    expect(within(pin).queryByRole('list', { name: /Items for order/ })).toBeNull()
+    // And one total, at the top of the card.
+    expect(within(pin).queryByTestId('bill-total')).toBeNull()
+
     expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('2')
     expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Demo Customer')
     expect(screen.getByPlaceholderText('Phone number')).toHaveAttribute('inputmode', 'numeric')
@@ -432,6 +455,10 @@ describe('BillingCounter', () => {
       }),
     )
     expect(screen.getByRole('heading', { name: 'Current bill' })).toBeInTheDocument()
+    expect(screen.getByTestId('bill-panel')).not.toHaveAttribute('data-editing')
+    expect(within(rail).queryByTestId('editing-order-pin')).not.toBeInTheDocument()
+    // And the footer is back in the panel, still just the one.
+    expect(within(screen.getByTestId('bill-panel')).getByTestId('save-order')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Waiting customer')
     expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('1')
     expect(screen.queryByTestId(`bill-line-${MENU_ITEM_MAYO_ID}`)).not.toBeInTheDocument()
@@ -458,6 +485,32 @@ describe('BillingCounter', () => {
     expect(prompt).toHaveTextContent(/replaces the name in this order only/i)
     await person.click(within(prompt).getByRole('button', { name: /Use saved details/i }))
     expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Ritika Sen')
+  })
+
+  it('refuses a phone that is not a phone, rather than dropping it silently', async () => {
+    const person = user()
+    const { adapters } = renderCounter()
+    const createOrGet = vi.spyOn(adapters.customers, 'createOrGet')
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.type(screen.getByPlaceholderText('Phone number'), '12345')
+
+    // Nothing said while they are still typing — a number is incomplete for the
+    // first nine digits of every number anybody enters.
+    expect(screen.queryByTestId('customer-phone-error')).not.toBeInTheDocument()
+    await person.tab()
+    expect(screen.getByTestId('customer-phone-error')).toHaveTextContent(/complete 10-digit/i)
+
+    // And it cannot be completed: a bad number would reach the bill as PII
+    // written wrong while the customer record quietly failed to save.
+    expect(screen.getByTestId('save-order')).toBeDisabled()
+    expect(screen.getByTestId('settle')).toBeDisabled()
+    expect(createOrGet).not.toHaveBeenCalled()
+
+    await person.clear(screen.getByPlaceholderText('Phone number'))
+    await person.type(screen.getByPlaceholderText('Phone number'), '9000000999')
+    expect(screen.queryByTestId('customer-phone-error')).not.toBeInTheDocument()
+    expect(screen.getByTestId('save-order')).toBeEnabled()
   })
 
   it('automatically saves a complete new phone when an order is accepted', async () => {

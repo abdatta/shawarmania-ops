@@ -175,6 +175,43 @@ test.describe('the counter', () => {
     const order = rail.getByTestId('open-order-104')
     await order.getByRole('button', { name: 'Edit order 104' }).click()
     await expect(page.getByRole('heading', { name: 'Editing order #104' })).toBeVisible()
+
+    // The mode is spatial, not just labelled: the order leaves the list and its
+    // card docks against the current-bill column, touching it, so the two read
+    // as one surface. Assert the geometry, because that join is the whole point
+    // and a stylesheet change can undo it while every text assertion stays green.
+    const pin = rail.getByTestId('editing-order-pin')
+    await expect(pin).toContainText('Order')
+    await expect(order).toHaveCount(0)
+
+    // The composer footer moved into the card rather than being duplicated: one
+    // Save changes, one set of customer fields, and no second total or item list.
+    await expect(pin.getByTestId('save-order')).toBeVisible()
+    await expect(pin.getByTestId('cancel-edit')).toBeVisible()
+    await expect(page.getByPlaceholder('Customer name')).toHaveCount(1)
+    await expect(pin.getByTestId('bill-total')).toHaveCount(0)
+    await expect(pin.getByRole('list', { name: /Items for order/ })).toHaveCount(0)
+
+    // The card's left edge meets the panel's right edge, within a pixel either
+    // way. That join is the whole point of the dock, and a stylesheet change can
+    // undo it while every text assertion here stays green.
+    // Measured after the dock animation finishes, not on a timer: mid-flight the
+    // card is still part-way through its travel and the join reads as the gap it
+    // is in the middle of closing.
+    await pin.evaluate(async (card) => {
+      await Promise.all(card.parentElement!.getAnimations().map((a) => a.finished))
+    })
+
+    // Both edges read in one evaluate. Two `boundingBox()` calls can straddle a
+    // layout change — a scrollbar appearing as the card arrives is enough — and
+    // then the numbers are each correct and their difference is not.
+    const join = await page.evaluate(() => {
+      const panel = document.querySelector('[data-testid="bill-panel"]')!
+      const card = document.querySelector('[data-testid="editing-order-pin"]')!
+      return card.getBoundingClientRect().left - panel.getBoundingClientRect().right
+    })
+    expect(Math.round(join)).toBe(-1)
+
     const classicQuantity = page
       .getByRole('button', { name: 'One more Classic Chicken Shawarma' })
       .locator('xpath=preceding-sibling::span[1]')
@@ -187,6 +224,7 @@ test.describe('the counter', () => {
     await page.getByTestId('save-order').click()
 
     await expect(page.getByRole('heading', { name: 'Current bill' })).toBeVisible()
+    await expect(pin).toHaveCount(0)
     await expect(page.getByPlaceholder('Customer name')).toHaveValue('Waiting customer')
     await expect(classicQuantity).toHaveText('1')
     await expect(order.getByText('Updated customer', { exact: true })).toBeVisible()
@@ -271,13 +309,36 @@ test.describe('the counter', () => {
     ).toHaveCount(0)
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('counter-activity-rail')).toBeVisible()
+  })
 
-    await page.setViewportSize({ width: 820, height: 900 })
-    await expect(page.getByTestId('counter-activity-rail')).toBeHidden()
-    await page.getByRole('link', { name: 'Open orders' }).click()
-    await expect(page.getByRole('heading', { name: 'Open orders' })).toBeVisible()
-    await page.getByRole('link', { name: 'My shift' }).click()
-    await expect(page.getByRole('heading', { name: 'My shift' })).toBeVisible()
+  test('keeps all three columns at every width, scrolling sideways instead', async ({ page }) => {
+    const rail = page.getByTestId('counter-activity-rail')
+    const panel = page.getByTestId('bill-panel')
+    const grid = page.getByTestId('counter-workspace')
+
+    // Wide: the two right columns are the same width and the menu takes the slack.
+    const wide = { panel: (await panel.boundingBox())!, rail: (await rail.boundingBox())! }
+    expect(Math.round(wide.rail.width)).toBe(Math.round(wide.panel.width))
+    await expect(grid).toHaveJSProperty('scrollWidth', await grid.evaluate((el) => el.clientWidth))
+
+    // Narrow enough that three of them cannot fit: still three, same widths, and
+    // the workspace scrolls sideways rather than folding a column into a tab.
+    await page.setViewportSize({ width: 700, height: 900 })
+    await expect(rail).toBeVisible()
+    await expect(panel).toBeVisible()
+    const narrow = { panel: (await panel.boundingBox())!, rail: (await rail.boundingBox())! }
+    expect(Math.round(narrow.panel.width)).toBe(Math.round(wide.panel.width))
+    expect(Math.round(narrow.rail.width)).toBe(Math.round(wide.panel.width))
+    expect(await grid.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+
+    // Sideways only. A counter whose page scrolls horizontally has lost its chrome.
+    expect(
+      await page.evaluate(() => document.scrollingElement!.scrollWidth <= window.innerWidth),
+    ).toBe(true)
+
+    // And there is no second door to a column that never left.
+    await expect(page.getByRole('link', { name: 'Open orders' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'My shift' })).toHaveCount(0)
   })
 
   test('requests the native numeric keypad for customer phone', async ({ page }) => {

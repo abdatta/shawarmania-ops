@@ -189,16 +189,112 @@ zero, so a missing category cannot be confused with zero takings.
 
 ### Requirement: Landscape tablets combine the counter lifecycle
 
-At the supported landscape-tablet breakpoint the counter SHALL render three
-touch-safe columns: the tappable menu, the current bill, and one continuous
-activity column. The activity column SHALL show this tablet's Open orders first,
-then a labelled divider, then this shift's closed bills. Each column SHALL scroll
-internally and SHALL NOT move the current bill's payment controls off screen.
-Narrower viewports SHALL retain the dedicated Open orders and My shift surfaces.
+The counter SHALL render three touch-safe columns at **every** width: the
+tappable menu, the current bill, and one continuous activity column. The activity
+column SHALL show this tablet's Open orders first, then a labelled divider, then
+this shift's closed bills. Each column SHALL scroll internally and SHALL NOT move
+the current bill's controls off screen.
+
+The current bill and activity columns SHALL be the same width as each other, and
+spare width SHALL go to the menu. Below the width three columns need, the
+workspace SHALL **scroll horizontally** rather than rearrange: no column SHALL
+fold into a tab, a route or a disclosure. The page itself SHALL NOT scroll
+horizontally — only the workspace. Menu tiles SHALL be laid out against the width
+of their own column rather than the viewport's.
 
 #### Scenario: Open and closed work share one rail
 - **WHEN** a biller uses the counter at landscape-tablet width
 - **THEN** open orders are above closed bills in one continuous right column, separated by a labelled divider
+
+#### Scenario: The workspace is wider than the screen
+- **WHEN** the viewport is narrower than three columns and their gaps
+- **THEN** all three columns keep their width and the workspace scrolls sideways, with the current bill's controls reachable by scrolling to that column rather than by navigating
+
+#### Scenario: Spare width
+- **WHEN** the viewport is wider than three columns need
+- **THEN** the extra width goes to the menu, and the current bill and activity columns stay equal to one another
+
+### Requirement: Item names and prices are read, not decoded
+
+A menu tile, a bill line and a closed bill's line SHALL show the item's full name,
+never truncated with an ellipsis, because the end of the name is what
+distinguishes items on this menu from each other. A menu tile SHALL carry its
+price at the top right, in the same place whatever the name above it does, and an
+unavailable item SHALL show that it is off **instead of** its price. Bills in a
+list SHALL name today as today rather than repeating the date on every row.
+
+#### Scenario: Two items with a long shared prefix
+- **WHEN** a category holds items whose names differ only near the end
+- **THEN** both names are shown in full, the tile growing to fit rather than clipping, and every tile in that row keeps the same height
+
+#### Scenario: An item the kitchen has run out of
+- **WHEN** an item is unavailable
+- **THEN** its tile shows an Off marker where its price would be, and shows no price at all, so a figure that cannot be sold cannot be quoted
+
+#### Scenario: A shift's bills, all from today
+- **WHEN** the biller reads this shift's closed bills
+- **THEN** each row says Today with the time, saying Yesterday instead for a shift that has crossed midnight, and the full date only once it is neither
+
+### Requirement: Editing a saved order is unmistakable on the combined workspace
+
+While the composer holds a saved order, that mode SHALL be legible without reading
+a label, and the order under edit SHALL be a single object on screen rather than
+two representations of one.
+
+The composer SHALL carry the accent outline and name the order it is editing. The
+order SHALL leave the ordinary Open orders list, and its card SHALL travel left
+out of the activity column's own margin to meet the composer's edge — flat on that
+side, accent-outlined — so the two read as one piece of work. **The activity
+column itself SHALL NOT take the accent outline**: the accent marks what is being
+edited, and outlining the whole column would sweep this shift's bills and every
+other open order into the same highlight.
+
+The card SHALL keep the presentation and the position it had in the list, so that
+opening an order changes where it is and not what it is. It SHALL keep its place
+in the column's scroll and be `sticky` — pinned at an edge only while scrolling
+would otherwise take it out of view, and released on the way back — never fixed.
+Arriving SHALL be animated, and the animation SHALL be suppressed under a
+reduced-motion preference; the docked position SHALL NOT depend on the animation
+having run.
+
+**The composer's footer SHALL move into that card for the duration of the edit** —
+the total, the customer fields and the terminal actions — leaving the composer as
+the items and nothing else. Exactly one footer SHALL be mounted at any time. The
+card SHALL NOT show a second copy of anything the composer is editing: not the
+item list, which is live beside it, and not a second total.
+
+#### Scenario: Biller opens a saved order for editing
+- **WHEN** the biller taps edit on an open order
+- **THEN** the card leaves the list, travels left to meet the composer's edge, and both it and the composer take the accent outline while the rest of the activity column does not
+
+#### Scenario: Biller scrolls the activity column while editing
+- **WHEN** the biller scrolls the activity column through this shift's bills during an edit
+- **THEN** the card holds its place until scrolling would take it out of view, pins at that edge, and returns to its place when the column is scrolled back
+
+#### Scenario: Where the controls are during an edit
+- **WHEN** an order is being edited
+- **THEN** the total, customer fields and Save changes / Cancel edit are on the card, the composer shows the items alone, and no duplicate of either exists
+
+#### Scenario: Biller finishes or abandons the edit
+- **WHEN** the biller saves the changes or cancels the edit
+- **THEN** the card leaves the composer's edge, the outline returns to neutral, the footer returns to the composer, and the order reappears in the ordinary list
+
+### Requirement: A customer phone is a phone or it is refused
+
+The composer SHALL canonicalise a typed customer phone by the same rule the
+database uses, and SHALL NOT accept an order or a payment while the field holds
+something that is not a complete Indian mobile number. It SHALL say so under the
+field once the biller has left it, not while they are still typing it. An empty
+field SHALL remain acceptable, since name or phone satisfies the identity
+requirement.
+
+#### Scenario: Biller mistypes a number
+- **WHEN** the phone field holds an incomplete or malformed number and the biller leaves the field
+- **THEN** the field is marked invalid with the reason, and neither Order nor Mark Paid can be used until it is corrected or cleared
+
+#### Scenario: Biller is still typing
+- **WHEN** the biller has entered part of a number and has not left the field
+- **THEN** nothing is reported, because every number is incomplete for the first nine digits of entering it
 
 ### Requirement: Frequent counter actions are tap-first and actor-neutral
 

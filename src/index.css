@@ -44,6 +44,24 @@
 @layer base {
   :root {
     color-scheme: light;
+
+    /*
+      Docking the order card under edit against the current-bill panel, in two
+      measurements, because a scrolling column cannot paint outside itself.
+
+      `--dock-overhang` is how far the activity rail's scroller is pulled past
+      the rail's own left border, and given straight back as padding: the column
+      gap, that 1px border, and 1px of overlap so the card's accent outline meets
+      the panel's rather than leaving a hairline of canvas between them. Nothing
+      moves — it only means the scroller's clip reaches the panel, so a card that
+      travels that far is not cut off at the border.
+
+      `--dock-reach` is how far the card itself travels: out of the scroller's own
+      inner padding, then the overhang. It starts at its place in the Open orders
+      list and ends against the panel.
+    */
+    --dock-overhang: calc(0.75rem + 2px);
+    --dock-reach: calc(1.5rem + 2px);
   }
 
   [data-theme='dark'] {
@@ -80,6 +98,22 @@
      app that is a correctness problem. */
   [data-numeric] {
     font-variant-numeric: tabular-nums;
+  }
+}
+
+/*
+ * The open-order card travelling left to dock against the composer when its
+ * order is opened for editing.
+ *
+ * An entry animation rather than a transition, deliberately: the card's resting
+ * state is the docked one, so nothing has to run for it to end up in the right
+ * place. A transition would need a first frame in the undocked position, and a
+ * tab that is not visible gets no animation frame — which would leave the card
+ * sitting a centimetre short of the panel with no way back.
+ */
+@keyframes dock-in {
+  from {
+    transform: translateX(var(--dock-reach));
   }
 }
 

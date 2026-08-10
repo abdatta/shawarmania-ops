@@ -1,27 +1,57 @@
-import { Check, Minus, Pencil, Plus, ReceiptText, UserRound, X } from 'lucide-react'
+import { Check, Minus, Pencil, Plus, ReceiptText, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { Button } from '@/components/ui/button'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
-import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
 import { DataActionError, type BillingOrder, type PaymentAllocation } from '@/data-access/adapters'
-import { formatRecentAge } from '@/domain'
 import { useSession } from '@/session/context'
 
 import { CancelOrderDialog } from './cancel-order-dialog'
+import { OpenOrderCardBody } from './open-order-card-body'
 import { PaymentDialog } from './payment-dialog'
 import { useCounterState } from './use-counter-state'
 
+/**
+ * The list's own title, separable from it.
+ *
+ * The combined tablet rail renders this itself so that the card for an order
+ * under edit can sit directly beneath it — in the place that order occupied in
+ * the list — while still being a child of the rail's scroller. That parentage is
+ * what gives the card a sticky range covering the whole column; parented inside
+ * the list it would come unstuck as soon as the short list scrolled past.
+ */
+export function OpenOrdersHeading({ embedded }: { embedded: boolean }) {
+  return (
+    <div>
+      {embedded ? (
+        <h3 id="open-orders-title" className="text-sm font-black text-content">
+          Open orders
+        </h3>
+      ) : (
+        <h1 id="open-orders-title" className="text-2xl font-black text-content">
+          Open orders
+        </h1>
+      )}
+      <p className={embedded ? 'text-xs text-content-muted' : 'text-sm text-content-muted'}>
+        This tablet&rsquo;s unpaid orders.
+      </p>
+    </div>
+  )
+}
+
 export function OpenOrdersSurface({
   embedded = false,
+  hideHeading = false,
   refreshKey = 0,
   onActivityChanged,
   editingOrderId = null,
   onEditOrder,
 }: {
   embedded?: boolean
+  /** The combined rail renders `OpenOrdersHeading` itself. */
+  hideHeading?: boolean
   refreshKey?: number
   onActivityChanged?: () => void
   editingOrderId?: string | null
@@ -77,6 +107,8 @@ export function OpenOrdersSurface({
     )
   }
 
+  const listed = orders?.filter((order) => order.id !== editingOrderId) ?? []
+
   if (orders === null) {
     return (
       <LoadingRegion label="open orders" className="space-y-2">
@@ -90,20 +122,7 @@ export function OpenOrdersSurface({
 
   return (
     <section className={embedded ? 'space-y-2' : 'space-y-4'} aria-labelledby="open-orders-title">
-      <div>
-        {embedded ? (
-          <h3 id="open-orders-title" className="text-sm font-black text-content">
-            Open orders
-          </h3>
-        ) : (
-          <h1 id="open-orders-title" className="text-2xl font-black text-content">
-            Open orders
-          </h1>
-        )}
-        <p className={embedded ? 'text-xs text-content-muted' : 'text-sm text-content-muted'}>
-          This tablet&rsquo;s unpaid orders.
-        </p>
-      </div>
+      {!hideHeading && <OpenOrdersHeading embedded={embedded} />}
 
       {message && (
         <p
@@ -123,78 +142,31 @@ export function OpenOrdersSurface({
           <EmptyState icon={ReceiptText} title="No open orders on this tablet." />
         )
       ) : (
+        /*
+          An order held in the composer is not listed here — the rail renders its
+          card directly above this list, in the place it occupied, so it is never
+          a second card competing with the one being edited. The list can
+          therefore be empty while orders exist, which is why the empty state
+          above keys off `orders` and not what survives this filter, and why
+          nothing needs to be said about the missing row.
+        */
         <ul className={embedded ? 'space-y-2' : 'grid gap-3 lg:grid-cols-2'}>
-          {orders.map((order) => {
+          {listed.map((order) => {
             const active = editing?.id === order.id ? editing : order
             const showCreator = order.creatorId !== shift?.billerProfileId
-            const editingInComposer = editingOrderId === order.id
-            const activeTotalPaise = active.lines.reduce(
-              (sum, line) => sum + line.unitPricePaise * line.quantity,
-              0,
-            )
             return (
               <li
                 key={order.id}
                 data-testid={`open-order-${order.orderNumber}`}
                 className="rounded-xl border border-border bg-surface-raised p-3"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    {active.customerName && (
-                      <p className="flex items-start gap-1.5 text-base font-black leading-5 text-content">
-                        <UserRound
-                          aria-hidden
-                          className="mt-0.5 shrink-0 text-accent-text"
-                          size={17}
-                        />
-                        <span>{active.customerName}</span>
-                      </p>
-                    )}
-                    <div
-                      className={
-                        active.customerName
-                          ? 'mt-1 flex flex-wrap items-center gap-1.5'
-                          : 'flex flex-wrap items-center gap-1.5'
-                      }
-                    >
-                      <span className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-xs font-bold text-content-muted">
-                        Order #{order.orderNumber}
-                      </span>
-                      <span className="text-xs text-content-muted">
-                        {formatRecentAge(order.orderedAt)}
-                        {showCreator && <> · {order.creatorName}</>}
-                      </span>
-                    </div>
-                  </div>
-                  <Money
-                    paise={activeTotalPaise}
-                    display
-                    className="shrink-0 font-black text-content"
-                  />
-                </div>
-
-                <ul
-                  className="mt-3 space-y-1.5"
-                  aria-label={`Items for order ${order.orderNumber}`}
-                >
-                  {active.lines.map((line) => (
-                    <li
-                      key={line.menuItemId}
-                      className="flex items-start gap-2 text-sm text-content"
-                    >
-                      <span className="min-w-7 rounded-md bg-primary px-1.5 py-0.5 text-center font-black leading-5 text-on-primary">
-                        {line.quantity}×
-                      </span>
-                      <span className="min-w-0 flex-1 pt-0.5 font-bold leading-5">
-                        {line.itemName}
-                      </span>
-                      <Money
-                        paise={line.unitPricePaise * line.quantity}
-                        className="shrink-0 pt-0.5 text-sm font-bold"
-                      />
-                    </li>
-                  ))}
-                </ul>
+                <OpenOrderCardBody
+                  orderNumber={order.orderNumber}
+                  orderedAt={order.orderedAt}
+                  customerName={active.customerName}
+                  lines={active.lines}
+                  {...(showCreator ? { creatorName: order.creatorName } : {})}
+                />
 
                 {editing?.id === order.id && (
                   <div className="mt-2 border-t border-border pt-2">
@@ -273,11 +245,7 @@ export function OpenOrdersSurface({
                 )}
 
                 <div className="mt-3 grid grid-cols-[minmax(0,1fr)_2.75rem_2.75rem] gap-2">
-                  <Button
-                    size="phone"
-                    disabled={busy || editingInComposer}
-                    onClick={() => setPaying(order)}
-                  >
+                  <Button size="phone" disabled={busy} onClick={() => setPaying(order)}>
                     Mark Paid
                   </Button>
                   <Button
@@ -297,7 +265,6 @@ export function OpenOrdersSurface({
                     size="phone"
                     className="px-0"
                     aria-label={`Cancel order ${order.orderNumber}`}
-                    disabled={editingInComposer}
                     onClick={() => setCancelling(order)}
                   >
                     <X aria-hidden size={18} />

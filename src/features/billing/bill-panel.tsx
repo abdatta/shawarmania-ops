@@ -1,72 +1,67 @@
-import { Check, ListPlus, Minus, Plus } from 'lucide-react'
+import { Minus, Pencil, Plus } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Money } from '@/components/ui/money'
 import type { BillLineDraft } from '@/data-access/adapters'
-import { billTotals, lineTotalPaise } from '@/domain'
+import { lineTotalPaise } from '@/domain'
+import { cn } from '@/lib/cn'
 
 /**
- * The current bill: what is on it, who it is for, and how work leaves the composer.
+ * The current bill: what is on it, and — for a new order — how it leaves.
  *
- * Everything below the line list is pinned. An order that runs long scrolls
- * *inside* the list, so the total, the payment methods and Settle are never
- * scrolled off — a settle control that can hide is a settle control that costs
- * a queue.
+ * Composing a new bill, everything below the line list is pinned: an order that
+ * runs long scrolls *inside* the list, so the total, the customer fields and both
+ * terminal actions are never scrolled off. A control that can hide is a control
+ * that costs a queue. **Order is the primary action**, because the ordinary sale
+ * is cooked before it is paid for, and Mark Paid is the secondary upfront path.
+ * Neither captures tender here; that is a dialog, so method buttons cannot crowd
+ * the panel.
  *
- * **Cash is distinguished by size and position as well as colour**: it is the
- * only method on its own full-width row, with a note that it is the one that
- * reaches the drawer. It is also the most-tapped, so the largest target is the
- * right one anyway.
- *
- * Either customer name or phone is required by this UI trial. The database keeps
- * both nullable so the owner can reverse the trial without a migration.
+ * Editing a saved order, the footer is not here at all — it has moved into the
+ * card docked against this column at the top of the activity rail, beside the
+ * order it is changing. What is left is exactly what editing is about: the items,
+ * and the accent outline and title saying which order they belong to. See
+ * `BillComposerFooter`, which is the one instance moving between the two.
  */
-
 export function BillPanel({
   lines,
-  customerName,
-  customerPhone,
-  settling,
   onChangeQuantity,
-  onCustomerNameChange,
-  onCustomerPhoneChange,
-  onPaid,
-  onSaveOrder,
   editingOrderNumber,
-  onCancelEdit,
+  footer,
 }: {
   lines: BillLineDraft[]
-  customerName: string
-  customerPhone: string
-  settling: boolean
   onChangeQuantity: (menuItemId: string, delta: number) => void
-  onCustomerNameChange: (value: string) => void
-  onCustomerPhoneChange: (value: string) => void
-  onPaid: () => void
-  onSaveOrder: () => void
   editingOrderNumber?: number
-  onCancelEdit?: () => void
+  /** The composer footer, when this panel is the one holding it. */
+  footer?: ReactNode
 }) {
-  const totals = billTotals(
-    lines.map((line) => ({ unitPricePaise: line.unitPricePaise, quantity: line.quantity })),
-  )
-  const hasCustomerIdentity = customerName.trim() !== '' || customerPhone.trim() !== ''
-  const canComplete = !settling && lines.length > 0 && hasCustomerIdentity
   const editing = editingOrderNumber !== undefined
 
   return (
     /*
-      `flex-1` so the panel fills its column: Settle then sits at the bottom of
-      the screen, under the hand holding the tablet, rather than floating
-      wherever the current order happens to end.
+      `flex-1` so the panel fills its column: the footer then sits at the bottom
+      of the screen rather than floating wherever the current order happens to
+      end.
     */
     <aside
       aria-label="Current bill"
       data-testid="bill-panel"
-      className="flex min-h-0 flex-1 flex-col rounded-xl border border-border bg-surface"
+      data-editing={editing ? '' : undefined}
+      className={cn(
+        'flex min-h-0 flex-1 flex-col rounded-xl border bg-surface',
+        // A ring rather than a thicker border: an accent outline that appears on
+        // edit must not reflow the column it appears in.
+        editing ? 'border-primary ring-1 ring-primary' : 'border-border',
+      )}
     >
-      <h2 className="border-b border-border px-3 py-2 text-sm font-bold text-content">
+      <h2
+        className={cn(
+          'flex items-center gap-1.5 border-b px-3 py-2 text-sm font-bold',
+          editing ? 'border-primary text-accent-text' : 'border-border text-content',
+        )}
+      >
+        {editing && <Pencil aria-hidden size={15} />}
         {editing ? `Editing order #${editingOrderNumber}` : 'Current bill'}
       </h2>
 
@@ -83,8 +78,12 @@ export function BillPanel({
                 data-testid={`bill-line-${line.menuItemId}`}
                 className="flex items-center gap-2 py-2"
               >
+                {/* Wraps rather than truncating: this column is a fixed width, and
+                    the end of an item's name is the part that distinguishes it. */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-content">{line.itemName}</p>
+                  <p className="text-sm font-semibold leading-tight text-content">
+                    {line.itemName}
+                  </p>
                   <Money paise={line.unitPricePaise} className="text-xs text-content-muted" />
                 </div>
 
@@ -126,86 +125,7 @@ export function BillPanel({
         )}
       </div>
 
-      <div className="space-y-3 border-t border-border p-3">
-        <div className="flex items-baseline justify-between">
-          <span className="text-sm font-semibold text-content-muted">Total</span>
-          <Money paise={totals.totalPaise} display data-testid="bill-total" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <label className="sr-only" htmlFor="customer-name">
-            Customer name
-          </label>
-          <Input
-            id="customer-name"
-            className="h-11"
-            autoComplete="off"
-            placeholder="Customer name"
-            aria-describedby={
-              lines.length > 0 && !hasCustomerIdentity ? 'customer-requirement' : undefined
-            }
-            value={customerName}
-            onChange={(event) => onCustomerNameChange(event.target.value)}
-          />
-          <label className="sr-only" htmlFor="customer-phone">
-            Customer phone
-          </label>
-          <Input
-            id="customer-phone"
-            className="h-11"
-            type="tel"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            autoComplete="off"
-            placeholder="Phone number"
-            aria-describedby={
-              lines.length > 0 && !hasCustomerIdentity ? 'customer-requirement' : undefined
-            }
-            value={customerPhone}
-            onChange={(event) => onCustomerPhoneChange(event.target.value)}
-          />
-        </div>
-
-        {lines.length > 0 && !hasCustomerIdentity && (
-          <p id="customer-requirement" className="text-xs font-semibold text-danger">
-            Add a customer name or phone to continue.
-          </p>
-        )}
-
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-          <Button
-            size="control"
-            className="w-full text-lg"
-            disabled={!canComplete}
-            data-testid="save-order"
-            onClick={onSaveOrder}
-          >
-            {editing ? <Check aria-hidden size={18} /> : <ListPlus aria-hidden size={18} />}
-            {editing ? 'Save changes' : 'Order'}
-          </Button>
-          {editing ? (
-            <Button
-              variant="secondary"
-              size="control"
-              disabled={settling}
-              data-testid="cancel-edit"
-              onClick={onCancelEdit}
-            >
-              Cancel edit
-            </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              size="control"
-              disabled={!canComplete}
-              data-testid="settle"
-              onClick={onPaid}
-            >
-              Mark Paid
-            </Button>
-          )}
-        </div>
-      </div>
+      {footer && <div className="border-t border-border p-3">{footer}</div>}
     </aside>
   )
 }

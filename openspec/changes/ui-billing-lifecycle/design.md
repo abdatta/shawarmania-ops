@@ -15,8 +15,8 @@ promotes no gate.
 - Make the full order lifecycle walkable on the tablet that took the order.
 - Give counter and manager contexts only the history each needs.
 - Define adapter shapes #10 can swap to real implementations unchanged.
-- Keep the landscape tablet's whole working set in one touch-safe three-column
-  workspace, without making the phone layout imitate it.
+- Keep the counter's whole working set in one touch-safe three-column workspace at
+  every width, scrolling sideways rather than rearranging.
 
 **Non-Goals:**
 
@@ -82,10 +82,16 @@ so the later live adapter does not have to reinterpret a UI-only split.
 
 ### Open orders are a tablet workspace, not outlet history
 
-Counter navigation gains Open orders and My shift. Open orders lists only orders
-this tablet owns, with number, age, customer label, items and total. Anyone
-holding the tablet's live shift may reopen, edit, pay or cancel. The creator stays
-visible separately from the current actor.
+Open orders lists only orders this tablet owns, with number, age, customer label,
+items and total. Anyone holding the tablet's live shift may reopen, edit, pay or
+cancel. The creator stays visible separately from the current actor.
+
+Open orders and My shift **carry no navigation entry**. They began as two Counter
+tabs; the three-column workspace below made them permanently visible columns, and
+a tab leading to a second copy of a column already on screen is a second door into
+one room — the reason `counter-billing` has never had one either. Their routes and
+standalone layouts remain, because the gate still decides whether the content
+renders and a link into either has to resolve.
 
 Showing every outlet order on the counter was rejected because a shared tablet
 should not expose outlet-wide takings.
@@ -119,18 +125,93 @@ remains unchanged with both snapshots nullable. This is deliberately UI-only: it
 tests the counter habit without manufacturing a schema promise while the owner is
 still deciding the long-term rule.
 
-### The landscape counter is one three-column workspace
+### The counter is one three-column workspace, and it never rearranges
 
-At the tablet breakpoint the Counter, Open orders and My shift work stop behaving
-like three destinations. The menu occupies the left column, the current bill is
-the stable middle column, and a single activity rail at right places this
-tablet's open orders above this shift's closed bills with one labelled divider.
-Each column scrolls internally, so the page and payment controls do not jump.
+The Counter, Open orders and My shift stop behaving like three destinations. The
+menu occupies the left column, the current bill is the stable middle column, and a
+single activity rail at right places this tablet's open orders above this shift's
+closed bills with one labelled divider. Each column scrolls internally, so the
+page and payment controls do not jump.
 
-The dedicated Open orders and My shift routes remain for narrower viewports,
-where three touch-safe columns cannot fit. This is responsive composition, not a
-second workflow: both presentations use the same adapters and shared order and
-bill disclosure components.
+**This holds at every width.** The current bill and activity columns are the same
+width as each other, spare width goes to the menu, and below the width three
+columns need, the workspace scrolls **horizontally**. Nothing folds into a tab, a
+route or a disclosure.
+
+Responsive rearrangement was tried and rejected: it moves controls while somebody
+is reaching for them, and it hides the order being paid for behind a navigation
+step at exactly the moment a queue is forming. A column is about a phone's width,
+so the narrow case is three swipeable panels rather than a compromise. Only the
+workspace scrolls sideways; the page never does. Menu tiles are consequently sized
+by container query against their own column, not the viewport — a viewport-keyed
+rule would put three tiles in a phone's width of space.
+
+### The order under edit is one object that moves
+
+Editing is a mode, and the workspace has to say so without a sentence. The
+composer takes the accent outline and names the order. The order leaves the open
+list and **its own card** — same body, same position, nothing restyled on
+arrival — travels left out of the rail's margin to meet the composer's edge, flat
+and borderless on that side, so the two read as one piece of work. The rail around
+it stays neutral: outlining the whole column would sweep this shift's bills and
+every other open order into a highlight that means "being edited".
+
+The card keeps its place in the column's scroll and is `sticky`, not fixed: it pins
+at an edge only while scrolling would take it out of view, and releases on the way
+back. A fixed card was built first and rejected — it looked identical at rest and
+lied about what scrolling would do. Arrival is a CSS entry animation rather than a
+transition, so the resting state is the docked one; a transition needs a first
+frame in the undocked position, and a tab that is not visible gets no animation
+frame, which would leave the card a centimetre short with no way back.
+
+**The composer's footer moves onto that card** for the duration of the edit — the
+total, the customer fields, Save changes and Cancel edit — leaving the composer as
+the items alone. Exactly one footer is mounted at a time; two would mean two Save
+changes buttons and two fields sharing one id. The card shows no second copy of
+anything the composer is editing: not the item list live beside it, and not a
+second total. Duplicating them was tried and reads as a stale card the moment the
+biller changes anything.
+
+### An item's name is never truncated, and an unsellable price is never shown
+
+A tile, a bill line and a closed bill's line show the full name. On this menu the
+names share long prefixes — Mayonnaise Chicken Shawarma, Mozzarella Cheese Chicken
+Shawarma — so an ellipsis removes exactly the part that tells them apart. Tiles
+grow to fit and each grid row stretches to its tallest tile, so nothing has to
+clip for the grid to stay even.
+
+A tile's price sits at the top right, in the same place whatever the name above it
+does, so a column of prices can be swept without the figure moving. An unavailable
+item shows an Off marker **instead of** its price: the price of something nobody
+can sell is the one figure on the screen that cannot be acted on, and beside a
+column of prices that can be, it is a number a biller might quote before noticing
+the tile is dashed.
+
+### The Biller has no Menu page
+
+There was one — the manager's surface without the editing — and the column above
+retired it. Every item, price, veg marker and Off marker is now permanently on
+screen beside the bill, so a second page carrying the same facts is a second place
+to look. The always-true `canEdit` branch and the read-only rendering behind it go
+with it: a branch that reads as a boundary while enforcing nothing is worse than no
+branch. The boundary was never there — a Biller's menu write meets
+`menu_items_write`, which is what the retained test asserts. The one loss is an
+item's description, which no counter surface now shows; that is recorded in
+`docs/LIMITATIONS.md` rather than solved by putting it on a tile, because tile
+height is what keeps the whole menu on one screen.
+
+### A phone is a phone or it is refused
+
+The composer canonicalises a typed phone by the same `shared/phone` rule the
+database uses, and refuses both terminal actions while the field holds something
+that is not a complete Indian mobile number — reported under the field on blur, not
+mid-typing, since every number is incomplete for the first nine digits of entering
+it. An empty field stays acceptable; name or phone satisfies identity.
+
+This closes a silent hole rather than adding a rule. Validation existed only to
+decide whether to *look up* a customer, so a malformed number skipped
+`createOrGet` entirely and still landed on the bill: PII written wrong, a customer
+record that quietly failed to save, and nothing on screen saying so.
 
 ### An aggregator order is an ordinary order
 
@@ -216,9 +297,14 @@ still reconciles.
   remainder; the keypad is needed only for a split.
 - **A reference distracts from preparation** → the order number is a small chip;
   complete items, optional customer and total own the card hierarchy.
-- **Three columns become cramped on smaller screens** → the integrated workspace
-  begins only where all three meet the touch-size floor; narrower screens retain
-  the dedicated routes.
+- **Three columns become cramped on smaller screens** → they keep their width and
+  the workspace scrolls sideways instead. A column is about a phone's width, so the
+  narrow case degrades into three swipeable panels rather than into a rearrangement
+  that moves controls under a reaching hand.
+- **A biller loses a column off-screen and does not know it is there** → each is a
+  full-height panel at a fixed width with a scrollbar on the workspace, and nothing
+  is ever *only* off-screen: the composer is the middle column, so it is partly
+  visible from either end.
 - **Exception UI overwhelms ordinary billing** → correction and manager work stay
   out of the composer and appear only when relevant.
 - **Demo types drift from later adapters** → row shapes derive from generated

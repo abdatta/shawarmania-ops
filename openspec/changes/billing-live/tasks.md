@@ -3,7 +3,9 @@
 - [ ] 1.1 Promote `admin-menu` to `live` with full create, rename, reprice, reorder, availability and retirement, prices entered and stored in integer paise, scoped by assignment.
 - [ ] 1.2 Add RLS tests proving a manager writes only their own outlets' menu and reads no other outlet's.
 - [ ] 1.3 Prove from an empty database that an outlet's whole menu can be created through the UI with no SQL, and that a retired item leaves every captured line unchanged.
-- [ ] 1.4 GATE: both outlets' real menus are entered through the app by the owner before any tablet is set up.
+- [ ] 1.4 Rebuild the manager menu screen around **items**, not categories, on the pattern the expense list already uses: no separate create-a-category step and no empty category to leave behind. One right-aligned `+ Add` at the top right meaning add an item; the category is a free-form field on the item form that suggests existing categories and creates an unrecognised one on the way through, confirming before it does so that "Burger" beside "Burgers" is deliberate. Settle where `menu_categories.sort_order` comes from once nobody types a category on its own, since the counter's grouping order is a decision the manager makes and `expense_categories` has no equivalent to copy.
+- [ ] 1.5 Give every item row one actions menu on the right rather than loose Turn off and Edit buttons, with the price immediately left of it; put an `OFF` chip beside the item's name, and render an unavailable row in the disabled treatment the deleted-expense row uses, minus the strikethrough.
+- [ ] 1.6 GATE: both outlets' real menus are entered through the app by the owner before any tablet is set up.
 
 ## 2. Local delivery store
 

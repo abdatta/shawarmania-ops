@@ -111,10 +111,10 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
-    // One path, two roles, two authorities. `GatedSurface` resolves it against
-    // the session's own role, so `admin-menu` and `counter-menu` are separate
-    // gate entries reaching the same component — which is what makes the
-    // permission difference visible rather than asserted.
+    // A manager's surface. It was one path reaching two authorities until the
+    // Counter's menu column made the Biller's read-only copy redundant; the gate
+    // registry records why `counter-menu` went. A Biller landing here now meets
+    // the ordinary absent-surface answer, and their write meets the policy.
     path: 'menu',
     element: (
       <GatedSurface path="menu">
