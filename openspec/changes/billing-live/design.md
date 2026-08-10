@@ -214,10 +214,31 @@ in and out, expenses, and the counted drawer. Aggregator revenue itself now
 arrives through bills, because aggregator orders are rung at the counter, but the
 commission that platform keeps is still a ledger figure until #13.
 
-Running both by hand for a settling-in period was considered and rejected by the
-owner. The cost of that decision is that a billing bug on night one shows up as a
-wrong figure with no hand-typed twin to compare against, which is why rollout is
-one outlet at a time.
+**The owner reversed this on 2026-08-10 and will keep the written ledger in
+parallel** for the settling-in period. It was previously rejected, and the cost of
+rejecting it was that a billing bug on night one would show up as a wrong figure
+with no hand-typed twin to compare against. That cost is now bought back: for the
+first days there is a twin, and a disagreement between the paper and the app is a
+finding rather than a mystery.
+
+One outlet at a time still holds, for the different reason that Kanchrapara's
+tablet has not arrived.
+
+### A trial run needs no go-live and leaves nothing to clean up
+
+Two switches, and they are independent. Promoting the billing gates decides whether
+the tablet can ring a bill at all. `billing_live_from` decides whether the ledger
+stops asking for that outlet's revenue to be typed. **Gates on with the date unset
+is a live trial**: real bills are written on the enrolled tablet, and the ledger
+keeps reading the typed figure, because the handover boundary is the recorded date
+and not the presence of bills.
+
+Marking the outlet live and deleting the trial rows afterwards was considered and
+rejected. Bills are append-only, so the sanctioned way to neutralise one is a void
+rather than a delete; and `bill_number_counters` holds `last_number` per outlet, so
+deleting trial bills leaves the next real bill starting mid-sequence unless that row
+is also reset by hand. Two manual production edits, on the night with the least
+capacity to check them, to reach a state the unset date already gives for free.
 
 ### Live and demo remain separate adapter compositions
 
