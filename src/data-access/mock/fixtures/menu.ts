@@ -179,6 +179,7 @@ export const menuItemFixtures: Tables<'menu_items'>[] = MENU_OUTLET_IDS.flatMap(
     price_paise: blueprint.pricePaise,
     is_veg: false,
     is_available: !(outletId === OUTLET_KALYANI_ID && blueprint.key === UNAVAILABLE_AT_KALYANI),
+    is_active: true,
     sort_order: blueprint.sortOrder,
     created_at: CREATED_AT,
     updated_at: CREATED_AT,

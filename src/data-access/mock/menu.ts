@@ -5,8 +5,10 @@ import {
   type MenuCategoryPatch,
   type MenuCategoryWithItems,
   type MenuItemPatch,
+  type MenuItemWithCategoryPatch,
   type NewMenuCategory,
   type NewMenuItem,
+  type NewMenuItemWithCategory,
 } from '../adapters'
 import type { DemoStore } from './store'
 
@@ -78,15 +80,36 @@ export function createMockMenuAdapter(store: DemoStore, role: AppRole): MenuAdap
       .filter((item) => item.category_id === categoryId)
       .reduce((highest, item) => Math.max(highest, item.sort_order), 0) + 1
 
+  function makeItem(item: NewMenuItem) {
+    refuseReadOnly()
+    findCategory(item.categoryId)
+    const created = {
+      id: `d4000000-0000-4000-d000-${String(nextItem++).padStart(12, '0')}`,
+      outlet_id: item.outletId,
+      category_id: item.categoryId,
+      name: refuseBlank('An item name', item.name),
+      description: item.description?.trim() || null,
+      price_paise: refuseBadPrice(item.pricePaise),
+      is_veg: item.isVeg,
+      is_available: true,
+      is_active: true,
+      sort_order: item.sortOrder ?? nextSortOrder(item.categoryId),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    store.menuItems.push(created)
+    return structuredClone(created)
+  }
+
   return {
     async listMenu(outletId: string): Promise<MenuCategoryWithItems[]> {
       return store.menuCategories
-        .filter((category) => category.outlet_id === outletId)
+        .filter((category) => category.outlet_id === outletId && category.is_active)
         .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
         .map((category) => ({
           category: structuredClone(category),
           items: store.menuItems
-            .filter((item) => item.category_id === category.id)
+            .filter((item) => item.category_id === category.id && item.is_active)
             .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
             .map((item) => structuredClone(item)),
         }))
@@ -117,23 +140,70 @@ export function createMockMenuAdapter(store: DemoStore, role: AppRole): MenuAdap
     },
 
     async createItem(item: NewMenuItem) {
+      return makeItem(item)
+    },
+
+    async createItemWithCategory(item: NewMenuItemWithCategory) {
       refuseReadOnly()
-      findCategory(item.categoryId)
-      const created = {
-        id: `d4000000-0000-4000-d000-${String(nextItem++).padStart(12, '0')}`,
-        outlet_id: item.outletId,
-        category_id: item.categoryId,
-        name: refuseBlank('An item name', item.name),
-        description: item.description?.trim() || null,
-        price_paise: refuseBadPrice(item.pricePaise),
-        is_veg: item.isVeg,
-        is_available: true,
-        sort_order: item.sortOrder ?? nextSortOrder(item.categoryId),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+      const categoryName = refuseBlank('A category name', item.categoryName)
+      let category = store.menuCategories.find(
+        (candidate) =>
+          candidate.outlet_id === item.outletId &&
+          candidate.is_active &&
+          candidate.name.toLocaleLowerCase() === categoryName.toLocaleLowerCase(),
+      )
+      if (!category) {
+        category = {
+          id: `d4000000-0000-4000-c000-${String(nextCategory++).padStart(12, '0')}`,
+          outlet_id: item.outletId,
+          name: categoryName,
+          sort_order:
+            store.menuCategories
+              .filter((candidate) => candidate.outlet_id === item.outletId)
+              .reduce((highest, candidate) => Math.max(highest, candidate.sort_order), 0) + 1,
+          is_active: true,
+        }
+        store.menuCategories.push(category)
       }
-      store.menuItems.push(created)
-      return structuredClone(created)
+      const created = makeItem({ ...item, categoryId: category.id })
+      return { category: structuredClone(category), item: created }
+    },
+
+    async updateItemWithCategory(id: string, patch: MenuItemWithCategoryPatch) {
+      refuseReadOnly()
+      const item = findItem(id)
+      const categoryName = refuseBlank('A category name', patch.categoryName)
+      let category = store.menuCategories.find(
+        (candidate) =>
+          candidate.outlet_id === item.outlet_id &&
+          candidate.is_active &&
+          candidate.name.toLocaleLowerCase() === categoryName.toLocaleLowerCase(),
+      )
+      if (!category) {
+        category = {
+          id: `d4000000-0000-4000-c000-${String(nextCategory++).padStart(12, '0')}`,
+          outlet_id: item.outlet_id,
+          name: categoryName,
+          sort_order:
+            store.menuCategories
+              .filter((candidate) => candidate.outlet_id === item.outlet_id)
+              .reduce((highest, candidate) => Math.max(highest, candidate.sort_order), 0) + 1,
+          is_active: true,
+        }
+        store.menuCategories.push(category)
+      }
+      const previousCategory = item.category_id
+      await this.updateItem(id, { ...patch, categoryId: category.id })
+      const oldCategory = findCategory(previousCategory)
+      if (
+        previousCategory !== category.id &&
+        !store.menuItems.some(
+          (candidate) => candidate.category_id === previousCategory && candidate.is_active,
+        )
+      ) {
+        oldCategory.is_active = false
+      }
+      return structuredClone(findItem(id))
     },
 
     async updateItem(id: string, patch: MenuItemPatch) {
@@ -159,6 +229,22 @@ export function createMockMenuAdapter(store: DemoStore, role: AppRole): MenuAdap
       item.is_available = isAvailable
       item.updated_at = new Date().toISOString()
       return structuredClone(item)
+    },
+
+    async retireItem(id: string) {
+      refuseReadOnly()
+      const item = findItem(id)
+      item.is_active = false
+      item.is_available = false
+      item.updated_at = new Date().toISOString()
+      const category = findCategory(item.category_id)
+      if (
+        !store.menuItems.some(
+          (candidate) => candidate.category_id === category.id && candidate.is_active,
+        )
+      ) {
+        category.is_active = false
+      }
     },
   }
 }

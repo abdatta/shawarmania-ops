@@ -1916,6 +1916,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          is_active: boolean
           is_available: boolean
           is_veg: boolean
           name: string
@@ -1929,6 +1930,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_active?: boolean
           is_available?: boolean
           is_veg?: boolean
           name: string
@@ -1942,6 +1944,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_active?: boolean
           is_available?: boolean
           is_veg?: boolean
           name?: string
@@ -2831,6 +2834,18 @@ export type Database = {
         }
         Returns: Json
       }
+      create_menu_item_with_category: {
+        Args: {
+          p_category_name: string
+          p_description?: string
+          p_is_veg?: boolean
+          p_item_name: string
+          p_outlet_id: string
+          p_price_paise: number
+          p_sort_order?: number
+        }
+        Returns: Json
+      }
       customer_create_or_get: {
         Args: { p_name?: string; p_phone: string }
         Returns: {
@@ -3086,6 +3101,7 @@ export type Database = {
         Returns: string
       }
       retire_expense_category: { Args: { p_name: string }; Returns: undefined }
+      retire_menu_item: { Args: { p_item_id: string }; Returns: undefined }
       revise_billing_order: {
         Args: {
           p_command_id?: string
@@ -3100,6 +3116,36 @@ export type Database = {
       set_super_admin_account_email: {
         Args: { p_email: string; p_profile_id: string }
         Returns: undefined
+      }
+      update_menu_item_with_category: {
+        Args: {
+          p_category_name: string
+          p_description?: string
+          p_is_veg: boolean
+          p_item_id: string
+          p_item_name: string
+          p_price_paise: number
+        }
+        Returns: {
+          category_id: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          is_available: boolean
+          is_veg: boolean
+          name: string
+          outlet_id: string
+          price_paise: number
+          sort_order: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "menu_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       username_rollout_ready: { Args: never; Returns: boolean }
       void_billing_bill: {

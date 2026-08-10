@@ -37,7 +37,7 @@ test.describe('the operations surfaces', () => {
     await page.getByRole('link', { name: 'Menu' }).click()
     await expect(page.getByTestId('menu-list')).toBeVisible()
     await expect(page.getByText('Classic Chicken Shawarma')).toBeVisible()
-    await expect(page.getByText('Off the menu')).toBeVisible()
+    await expect(page.getByText('OFF', { exact: true })).toBeVisible()
 
     // ── Stock, with the low-stock warning on screen ──────────────────────────
     await page.getByRole('link', { name: 'Stock' }).click()

@@ -28,9 +28,7 @@ export function createSupabaseAdapters(): DataAdapters {
     outlets: createSupabaseOutletsAdapter(client),
     accounts: createSupabaseAccountsAdapter(client),
     attendance: createSupabaseAttendanceAdapter(client),
-    // Not connected yet, and says so: the menu surfaces are `demo`-gated and
-    // #10/#11 replace this. See supabase-adapters/menu.ts.
-    menu: createSupabaseMenuAdapter(),
+    menu: createSupabaseMenuAdapter(client),
     // Likewise not connected: #9 brings the enrolled device and the outbox, #10
     // the settlement path. See supabase-adapters/billing.ts.
     billing: createSupabaseBillingAdapter(),

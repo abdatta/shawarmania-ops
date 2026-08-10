@@ -205,7 +205,7 @@ const defs = {
     role: 'franchise_admin',
     path: 'menu',
     nav: { label: 'Menu', icon: UtensilsCrossed, order: 3 },
-    state: 'demo',
+    state: 'live',
   },
   'admin-inventory': {
     role: 'franchise_admin',

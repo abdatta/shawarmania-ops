@@ -768,6 +768,15 @@ export interface NewMenuItem {
   sortOrder?: number
 }
 
+/** The item-first create shape; a new category is created atomically with it. */
+export interface NewMenuItemWithCategory extends Omit<NewMenuItem, 'categoryId'> {
+  categoryName: string
+}
+
+export type MenuItemWithCategoryPatch = Omit<MenuItemPatch, 'categoryId'> & {
+  categoryName: string
+}
+
 export type MenuItemPatch = Partial<
   Omit<NewMenuItem, 'outletId'> & {
     isAvailable: boolean
@@ -795,6 +804,14 @@ export interface MenuAdapter {
   createCategory(category: NewMenuCategory): Promise<Tables<'menu_categories'>>
   updateCategory(id: string, patch: MenuCategoryPatch): Promise<Tables<'menu_categories'>>
   createItem(item: NewMenuItem): Promise<Tables<'menu_items'>>
+  createItemWithCategory(item: NewMenuItemWithCategory): Promise<{
+    category: Tables<'menu_categories'>
+    item: Tables<'menu_items'>
+  }>
+  updateItemWithCategory(
+    id: string,
+    patch: MenuItemWithCategoryPatch,
+  ): Promise<Tables<'menu_items'>>
   /**
    * Edit an item. A price change here applies to future bills only — bill line
    * items snapshot `item_name` and `unit_price_paise`, so nothing already
@@ -809,6 +826,8 @@ export interface MenuAdapter {
    * price riding along with it.
    */
   setItemAvailability(id: string, isAvailable: boolean): Promise<Tables<'menu_items'>>
+  /** Retire without deleting rows referenced by captured order or bill lines. */
+  retireItem(id: string): Promise<void>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

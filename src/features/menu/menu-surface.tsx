@@ -1,58 +1,35 @@
-import { CircleOff, UtensilsCrossed } from 'lucide-react'
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { UtensilsCrossed } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
+import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
 import { FormSheet } from '@/components/layout/form-sheet'
 import { PageHeader } from '@/components/layout/page-header'
+import { RowActionsMenu } from '@/components/layout/row-actions-menu'
 import { AddButton } from '@/components/ui/add-button'
-import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
+import { CategoryInput } from '@/components/ui/category-input'
 import { Input } from '@/components/ui/input'
 import { LoadingList } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
-import { Select } from '@/components/ui/select'
+import { RevealAdded } from '@/components/ui/reveal-added'
 import { VegMarker } from '@/components/ui/veg-marker'
 import { useAdapters, type Tables } from '@/data-access'
 import { DataActionError, type MenuCategoryWithItems } from '@/data-access/adapters'
 import { paiseToRupees, rupeesToPaise } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
 
-/**
- * Menu — what this outlet sells, and for how much.
- *
- * A manager's screen, and only a manager's. It carried a read-only rendering for
- * the Biller until the Counter's own menu column made that page redundant — every
- * item, price, veg marker and an Off marker on anything the kitchen has run out
- * of, permanently on screen next to the bill.
- *
- * **The missing button was never the boundary and still is not.** The mock refuses
- * a Biller's write exactly where `menu_items_write` will, so a hand-crafted
- * request meets the same answer this screen's absence gives (design D6).
- *
- * Two frequent actions, and they are deliberately different sizes of thing.
- * **Availability is one tap on the row** — it happens when the kitchen runs out,
- * mid-service, one-handed. **A price change is a form**, because it is rare and
- * consequential, and because it deserves the sentence explaining that it applies
- * to future bills only. Line items snapshot their price at the moment of sale,
- * so that sentence is a description of the schema rather than a promise.
- *
- * An unavailable item stays on the list. A tile that vanishes when the kitchen
- * runs out reads as a bug to whoever was looking straight at it, and the manager
- * needs somewhere to turn it back on.
- */
-
 interface ItemDraft {
-  categoryId: string
+  categoryName: string
   name: string
-  /** Rupees, as typed. Converted to integer paise at the boundary, never held as one. */
   price: string
   description: string
   isVeg: boolean
 }
 
-const EMPTY_ITEM_DRAFT: ItemDraft = {
-  categoryId: '',
+const EMPTY_DRAFT: ItemDraft = {
+  categoryName: '',
   name: '',
   price: '',
   description: '',
@@ -61,47 +38,32 @@ const EMPTY_ITEM_DRAFT: ItemDraft = {
 
 export function MenuSurface() {
   const { menu: adapter } = useAdapters()
-
-  /*
-    There was a `canEdit` here, and a whole read-only rendering behind it, for the
-    Biller's copy of this screen. That surface is retired — the Counter's own menu
-    column answers "is that still on?" without leaving the till — so every role
-    that can now reach this page can write to it, and a branch that is always true
-    is worse than no branch: it reads as a boundary while enforcing nothing.
-
-    **The boundary was never here anyway.** It is the menu policies one layer
-    down, which is what a hand-crafted write meets. The controls were only ever
-    the convenience.
-  */
-  // Which outlet this surface is about. One for nearly everybody; a
-  // per-surface choice for somebody who manages more than one, which
-  // confers nothing — the database decides every write from the
-  // assignment (multi-outlet-people, design D6).
   const { outletId, selector: outletSelector } = useOutletScope()
-
   const [menu, setMenu] = useState<MenuCategoryWithItems[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [itemFormOpen, setItemFormOpen] = useState(false)
-  const [categoryFormOpen, setCategoryFormOpen] = useState(false)
-  const [categoryName, setCategoryName] = useState('')
   const [editing, setEditing] = useState<Tables<'menu_items'> | null>(null)
-  const [draft, setDraft] = useState<ItemDraft>(EMPTY_ITEM_DRAFT)
+  const [draft, setDraft] = useState<ItemDraft>(EMPTY_DRAFT)
+  const [pendingNewCategory, setPendingNewCategory] = useState(false)
+  const [renaming, setRenaming] = useState<Tables<'menu_categories'> | null>(null)
+  const [categoryName, setCategoryName] = useState('')
+  const [retiring, setRetiring] = useState<Tables<'menu_items'> | null>(null)
+  const [revealedItem, setRevealedItem] = useState<string | null>(null)
+  const [revealedCategory, setRevealedCategory] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!outletId) return
-    setMenu(await adapter.listMenu(outletId))
+    if (!outletId) return []
+    const next = await adapter.listMenu(outletId)
+    setMenu(next)
+    return next
   }, [adapter, outletId])
 
   useEffect(() => {
     let active = true
     void (async () => {
       try {
-        if (!outletId) {
-          if (active) setMenu([])
-          return
-        }
-        const next = await adapter.listMenu(outletId)
+        const next = outletId ? await adapter.listMenu(outletId) : []
         if (active) setMenu(next)
       } catch {
         if (active) setError('Could not load the menu. Try again in a moment.')
@@ -112,12 +74,17 @@ export function MenuSurface() {
     }
   }, [adapter, outletId])
 
-  async function run(action: () => Promise<unknown>) {
+  const categories = useMemo(() => menu ?? [], [menu])
+  const suggestions = useMemo(() => categories.map(({ category }) => category.name), [categories])
+  const categoryExists = suggestions.some(
+    (name) => name.toLocaleLowerCase() === draft.categoryName.trim().toLocaleLowerCase(),
+  )
+
+  async function run(action: () => Promise<void>) {
     setBusy(true)
     setError(null)
     try {
       await action()
-      await load()
     } catch (cause) {
       setError(
         cause instanceof DataActionError
@@ -129,19 +96,18 @@ export function MenuSurface() {
     }
   }
 
-  const categories = menu ?? []
-
-  function openAdd(categoryId: string) {
+  function openAdd() {
     setEditing(null)
-    setDraft({ ...EMPTY_ITEM_DRAFT, categoryId })
+    setDraft(EMPTY_DRAFT)
     setError(null)
     setItemFormOpen(true)
   }
 
   function openEdit(item: Tables<'menu_items'>) {
+    const category = categories.find(({ category }) => category.id === item.category_id)?.category
     setEditing(item)
     setDraft({
-      categoryId: item.category_id,
+      categoryName: category?.name ?? '',
       name: item.name,
       price: String(paiseToRupees(item.price_paise)),
       description: item.description ?? '',
@@ -151,71 +117,82 @@ export function MenuSurface() {
     setItemFormOpen(true)
   }
 
-  /**
-   * The first thing wrong with the draft, as a sentence — or null.
-   *
-   * `noValidate` is on this form as on every other in the app, so refusals are
-   * written in this app's voice rather than drawn by the browser; `required`
-   * stays because it is also what sets `aria-required`.
-   */
-  function firstProblem(): string | null {
-    if (draft.name.trim() === '') {
-      return 'An item needs a name — it is what the biller taps and what the bill records.'
-    }
-    if (draft.categoryId === '') {
+  function firstProblem() {
+    if (!draft.name.trim()) return 'An item needs a name — it is what the bill records.'
+    if (!draft.categoryName.trim())
       return 'An item needs a category — that is how the counter groups it.'
-    }
     const rupees = Number(draft.price.trim())
-    if (draft.price.trim() === '' || !Number.isFinite(rupees) || rupees < 0) {
+    if (!draft.price.trim() || !Number.isFinite(rupees) || rupees < 0) {
       return 'An item needs a price, as a number of rupees.'
     }
     return null
   }
 
-  async function submitItem(event: FormEvent) {
+  function submitItem(event: FormEvent) {
     event.preventDefault()
     const problem = firstProblem()
     if (problem) {
       setError(problem)
       return
     }
-    if (!outletId) return
+    if (!categoryExists) {
+      setPendingNewCategory(true)
+      return
+    }
+    void saveItem()
+  }
 
+  async function saveItem() {
+    if (!outletId) return
     const pricePaise = rupeesToPaise(Number(draft.price.trim()))
     await run(async () => {
       if (editing) {
-        await adapter.updateItem(editing.id, {
+        const item = await adapter.updateItemWithCategory(editing.id, {
+          categoryName: draft.categoryName,
           name: draft.name,
-          categoryId: draft.categoryId,
           pricePaise,
           description: draft.description,
           isVeg: draft.isVeg,
         })
+        setRevealedItem(item.id)
       } else {
-        await adapter.createItem({
+        const created = await adapter.createItemWithCategory({
           outletId,
-          categoryId: draft.categoryId,
+          categoryName: draft.categoryName,
           name: draft.name,
           pricePaise,
           description: draft.description,
           isVeg: draft.isVeg,
         })
+        setRevealedCategory(created.category.id)
+        setRevealedItem(created.item.id)
       }
+      setPendingNewCategory(false)
       setItemFormOpen(false)
+      await load()
     })
   }
 
-  async function submitCategory(event: FormEvent) {
+  async function renameCategory(event: FormEvent) {
     event.preventDefault()
-    if (categoryName.trim() === '') {
-      setError('A category needs a name — it is the heading the counter groups under.')
-      return
-    }
-    if (!outletId) return
+    if (!renaming || !categoryName.trim()) return
     await run(async () => {
-      await adapter.createCategory({ outletId, name: categoryName })
-      setCategoryName('')
-      setCategoryFormOpen(false)
+      await adapter.updateCategory(renaming.id, { name: categoryName })
+      setRenaming(null)
+      await load()
+    })
+  }
+
+  async function moveCategory(index: number, direction: -1 | 1) {
+    const current = categories[index]
+    const other = categories[index + direction]
+    if (!current || !other) return
+    await run(async () => {
+      await Promise.all([
+        adapter.updateCategory(current.category.id, { sortOrder: other.category.sort_order }),
+        adapter.updateCategory(other.category.id, { sortOrder: current.category.sort_order }),
+      ])
+      await load()
     })
   }
 
@@ -225,24 +202,15 @@ export function MenuSurface() {
     draft.price.trim() !== '' &&
     rupeesToPaise(Number(draft.price.trim())) !== editing.price_paise
 
-  const addCategoryButton = (
-    <AddButton
-      label="Add category"
-      data-testid="add-category"
-      onClick={() => {
-        setError(null)
-        setCategoryFormOpen(true)
-      }}
-    />
-  )
+  const addButton = <AddButton label="Add" data-testid="add-menu-item" onClick={openAdd} />
 
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
         scope={outletSelector}
         title="Menu"
-        subtitle="What this outlet sells. Turning an item off takes it out of the counter’s reach without removing it."
-        action={categories.length > 0 ? addCategoryButton : undefined}
+        subtitle="What this outlet sells. Add the item; its category is created with it when needed."
+        action={addButton}
       />
 
       {error && (
@@ -252,8 +220,6 @@ export function MenuSurface() {
       )}
 
       {menu === null ? (
-        // The `space-y-4` stack of category cards, each holding a heading and
-        // the items under it.
         <LoadingList
           label="the menu"
           rows={3}
@@ -264,120 +230,103 @@ export function MenuSurface() {
       ) : categories.length === 0 ? (
         <EmptyState
           icon={UtensilsCrossed}
-          title="Nothing on the menu yet. Start with a category — Shawarma, Burgers — and the items go inside it."
-          action={addCategoryButton}
+          title="Nothing on the menu yet. Use Add above for the first item and name the category it belongs under."
         />
       ) : (
         <div className="space-y-4" data-testid="menu-list">
-          {categories.map(({ category, items }) => (
-            <Card key={category.id} className="space-y-2" data-testid={`category-${category.id}`}>
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="text-sm font-bold text-content">{category.name}</h2>
-                <Button
-                  variant="ghost"
-                  size="phone"
-                  disabled={busy}
-                  onClick={() => openAdd(category.id)}
-                  data-testid={`add-item-${category.id}`}
-                >
-                  Add item
-                </Button>
-              </div>
-
-              {items.length === 0 ? (
-                <p className="text-xs text-content-muted">
-                  Nothing in this category yet. Add the first item and it appears at the counter.
-                </p>
-              ) : (
+          {categories.map(({ category, items }, categoryIndex) => (
+            <RevealAdded key={category.id} active={revealedCategory === category.id}>
+              <Card className="space-y-2" data-testid={`category-${category.id}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-bold text-content">{category.name}</h2>
+                  <RowActionsMenu
+                    label={`Actions for ${category.name}`}
+                    compact
+                    actions={[
+                      {
+                        label: 'Rename',
+                        onSelect: () => {
+                          setRenaming(category)
+                          setCategoryName(category.name)
+                        },
+                      },
+                      {
+                        label: 'Move up',
+                        disabled: categoryIndex === 0 || busy,
+                        onSelect: () => void moveCategory(categoryIndex, -1),
+                      },
+                      {
+                        label: 'Move down',
+                        disabled: categoryIndex === categories.length - 1 || busy,
+                        onSelect: () => void moveCategory(categoryIndex, 1),
+                      },
+                    ]}
+                  />
+                </div>
                 <ul className="divide-y divide-border">
                   {items.map((item) => (
-                    <li
+                    <RevealAdded
+                      as="li"
                       key={item.id}
+                      active={revealedItem === item.id}
                       data-testid={`menu-item-${item.id}`}
-                      className="flex flex-wrap items-center gap-x-3 gap-y-2 py-2"
+                      className={`flex items-center gap-3 py-2 ${!item.is_available ? 'bg-surface-raised text-content-muted opacity-70' : ''}`}
                     >
                       <VegMarker isVeg={item.is_veg} />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-content">{item.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-semibold text-content">{item.name}</p>
+                          {!item.is_available && (
+                            <span
+                              data-testid={`unavailable-${item.id}`}
+                              className="rounded-md border border-border px-1.5 py-0.5 text-[0.6875rem] font-bold text-content-muted"
+                            >
+                              OFF
+                            </span>
+                          )}
+                        </div>
                         {item.description && (
                           <p className="truncate text-xs text-content-muted">{item.description}</p>
                         )}
                       </div>
-
-                      <Money paise={item.price_paise} className="text-sm font-semibold" />
-
-                      {!item.is_available && (
-                        <span
-                          data-testid={`unavailable-${item.id}`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-warning px-2 py-0.5 text-xs font-semibold text-content"
-                        >
-                          <CircleOff aria-hidden size={12} className="text-warning" />
-                          Off the menu
-                        </span>
-                      )}
-
-                      <div className="flex shrink-0 gap-1">
-                        <Button
-                          variant={item.is_available ? 'ghost' : 'secondary'}
-                          size="phone"
-                          disabled={busy}
-                          data-testid={`toggle-${item.id}`}
-                          onClick={() =>
-                            void run(() => adapter.setItemAvailability(item.id, !item.is_available))
-                          }
-                        >
-                          {item.is_available ? 'Turn off' : 'Turn on'}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="phone"
-                          disabled={busy}
-                          data-testid={`edit-${item.id}`}
-                          onClick={() => openEdit(item)}
-                        >
-                          Edit
-                        </Button>
-                      </div>
-                    </li>
+                      <Money paise={item.price_paise} className="shrink-0 text-sm font-semibold" />
+                      <RowActionsMenu
+                        label={`Actions for ${item.name}`}
+                        compact
+                        actions={[
+                          {
+                            label: item.is_available ? 'Turn off' : 'Turn on',
+                            disabled: busy,
+                            testId: `toggle-${item.id}`,
+                            onSelect: () =>
+                              void run(async () => {
+                                await adapter.setItemAvailability(item.id, !item.is_available)
+                                await load()
+                              }),
+                          },
+                          {
+                            label: 'Edit',
+                            disabled: busy,
+                            testId: `edit-${item.id}`,
+                            onSelect: () => openEdit(item),
+                          },
+                          {
+                            label: 'Retire',
+                            disabled: busy,
+                            testId: `retire-${item.id}`,
+                            onSelect: () => setRetiring(item),
+                          },
+                        ]}
+                      />
+                    </RevealAdded>
                   ))}
                 </ul>
-              )}
-            </Card>
+              </Card>
+            </RevealAdded>
           ))}
         </div>
       )}
 
-      <FormSheet
-        open={categoryFormOpen}
-        onClose={() => setCategoryFormOpen(false)}
-        title="Add category"
-        error={error}
-        footer={
-          <button
-            type="submit"
-            form="menu-category-form"
-            disabled={busy}
-            className={`${buttonVariants({ size: 'phone' })} w-full`}
-          >
-            {busy ? 'Saving…' : 'Create category'}
-          </button>
-        }
-      >
-        <form id="menu-category-form" onSubmit={submitCategory} className="space-y-4" noValidate>
-          <Field label="Name" id="menu-category-name">
-            <Input
-              id="menu-category-name"
-              required
-              value={categoryName}
-              placeholder="e.g. Beverages"
-              onChange={(event) => setCategoryName(event.target.value)}
-            />
-          </Field>
-        </form>
-      </FormSheet>
-
-      {/* Keyed so opening the sheet for a different item remounts rather than
-          leaving the previous one's values behind. */}
       <FormSheet
         key={editing?.id ?? 'new-item'}
         open={itemFormOpen}
@@ -401,34 +350,24 @@ export function MenuSurface() {
               id="menu-item-name"
               required
               value={draft.name}
-              placeholder="e.g. Classic Chicken Shawarma"
               onChange={(event) => setDraft({ ...draft, name: event.target.value })}
             />
           </Field>
-
           <Field label="Category" id="menu-item-category">
-            <Select
+            <CategoryInput
               id="menu-item-category"
-              required
-              value={draft.categoryId}
-              onChange={(event) => setDraft({ ...draft, categoryId: event.target.value })}
-            >
-              <option value="">Choose a category</option>
-              {categories.map(({ category }) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </Select>
+              label="Category"
+              value={draft.categoryName}
+              suggestions={suggestions}
+              onChange={(value) => setDraft({ ...draft, categoryName: value })}
+            />
           </Field>
-
           <Field label="Price (₹)" id="menu-item-price">
             <Input
               id="menu-item-price"
               required
               inputMode="decimal"
               value={draft.price}
-              placeholder="e.g. 139"
               onChange={(event) => setDraft({ ...draft, price: event.target.value })}
             />
             {priceChanged && (
@@ -436,21 +375,18 @@ export function MenuSurface() {
                 data-testid="price-change-warning"
                 className="rounded-lg border border-warning bg-surface-raised p-2 text-xs text-content"
               >
-                This price applies to bills rung from now on. Every bill already recorded keeps the
-                price it was charged at — nothing already sold is rewritten.
+                This price applies to bills rung from now on. Every captured line keeps the price it
+                recorded.
               </p>
             )}
           </Field>
-
           <Field label="Description (optional)" id="menu-item-description">
             <Input
               id="menu-item-description"
               value={draft.description}
-              placeholder="e.g. Bestseller"
               onChange={(event) => setDraft({ ...draft, description: event.target.value })}
             />
           </Field>
-
           <label className="flex items-center gap-2 text-sm font-semibold">
             <input
               type="checkbox"
@@ -462,6 +398,61 @@ export function MenuSurface() {
           </label>
         </form>
       </FormSheet>
+
+      <ConfirmDialog
+        open={pendingNewCategory}
+        title={`Create “${draft.categoryName.trim()}”?`}
+        consequence={`This is a new category. Check the suggestions first so a near-match such as “Burger” beside “Burgers” is deliberate.`}
+        confirmLabel="Create category and item"
+        onClose={() => setPendingNewCategory(false)}
+        onConfirm={() => void saveItem()}
+      />
+
+      <FormSheet
+        open={renaming !== null}
+        onClose={() => setRenaming(null)}
+        title="Rename category"
+        error={error}
+        footer={
+          <button
+            type="submit"
+            form="rename-menu-category"
+            disabled={busy}
+            className={`${buttonVariants({ size: 'phone' })} w-full`}
+          >
+            Save name
+          </button>
+        }
+      >
+        <form id="rename-menu-category" onSubmit={renameCategory} noValidate>
+          <Field label="Category name" id="rename-category">
+            <Input
+              id="rename-category"
+              required
+              value={categoryName}
+              onChange={(event) => setCategoryName(event.target.value)}
+            />
+          </Field>
+        </form>
+      </FormSheet>
+
+      <ConfirmDialog
+        open={retiring !== null}
+        title={`Retire ${retiring?.name ?? 'item'}?`}
+        consequence="It disappears from the working menu. Captured order and bill lines keep their recorded name and price."
+        confirmLabel="Retire item"
+        danger
+        onClose={() => setRetiring(null)}
+        onConfirm={() => {
+          const item = retiring
+          setRetiring(null)
+          if (item)
+            void run(async () => {
+              await adapter.retireItem(item.id)
+              await load()
+            })
+        }}
+      />
     </div>
   )
 }

@@ -71,11 +71,12 @@ describe('MenuSurface — the manager', () => {
     renderMenu()
 
     const off = await screen.findByTestId(`menu-item-${MENU_ITEM_STUFFED_ID}`)
-    expect(within(off).getByTestId(`unavailable-${MENU_ITEM_STUFFED_ID}`)).toHaveTextContent(
-      'Off the menu',
-    )
+    expect(within(off).getByTestId(`unavailable-${MENU_ITEM_STUFFED_ID}`)).toHaveTextContent('OFF')
 
-    await user.click(within(off).getByTestId(`toggle-${MENU_ITEM_STUFFED_ID}`))
+    await user.click(
+      screen.getByRole('button', { name: 'Actions for Stuffed Lebanese Chicken Shawarma' }),
+    )
+    await user.click(screen.getByTestId(`toggle-${MENU_ITEM_STUFFED_ID}`))
 
     await waitFor(() => {
       expect(screen.queryByTestId(`unavailable-${MENU_ITEM_STUFFED_ID}`)).not.toBeInTheDocument()
@@ -86,8 +87,9 @@ describe('MenuSurface — the manager', () => {
     const user = userEvent.setup()
     renderMenu()
 
-    const classic = await screen.findByTestId(`menu-item-${MENU_ITEM_CLASSIC_ID}`)
-    await user.click(within(classic).getByTestId(`toggle-${MENU_ITEM_CLASSIC_ID}`))
+    await screen.findByTestId(`menu-item-${MENU_ITEM_CLASSIC_ID}`)
+    await user.click(screen.getByRole('button', { name: 'Actions for Classic Chicken Shawarma' }))
+    await user.click(screen.getByTestId(`toggle-${MENU_ITEM_CLASSIC_ID}`))
 
     expect(await screen.findByTestId(`unavailable-${MENU_ITEM_CLASSIC_ID}`)).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -97,8 +99,9 @@ describe('MenuSurface — the manager', () => {
     const user = userEvent.setup()
     renderMenu()
 
-    const classic = await screen.findByTestId(`menu-item-${MENU_ITEM_CLASSIC_ID}`)
-    await user.click(within(classic).getByTestId(`edit-${MENU_ITEM_CLASSIC_ID}`))
+    await screen.findByTestId(`menu-item-${MENU_ITEM_CLASSIC_ID}`)
+    await user.click(screen.getByRole('button', { name: 'Actions for Classic Chicken Shawarma' }))
+    await user.click(screen.getByTestId(`edit-${MENU_ITEM_CLASSIC_ID}`))
 
     const price = await screen.findByLabelText('Price (₹)')
     expect(screen.queryByTestId('price-change-warning')).not.toBeInTheDocument()
@@ -127,13 +130,14 @@ describe('MenuSurface — the manager', () => {
       .find((heading) => heading.textContent === 'Burgers')
     expect(burgers).toBeDefined()
 
-    await user.click(screen.getAllByRole('button', { name: 'Add item' })[1]!)
+    await user.click(screen.getByRole('button', { name: 'Add' }))
 
     // Submitting empty names the field rather than the browser doing it.
     await user.click(screen.getByRole('button', { name: 'Create item' }))
     expect(await screen.findByTestId('form-sheet-error')).toHaveTextContent(/needs a name/i)
 
     await user.type(screen.getByLabelText('Name'), 'Paneer Smashed Burger')
+    await user.type(screen.getByRole('combobox', { name: 'Category' }), 'Burgers')
     await user.type(screen.getByLabelText('Price (₹)'), '230')
     await user.click(screen.getByLabelText('Vegetarian'))
     await user.click(screen.getByRole('button', { name: 'Create item' }))
@@ -151,13 +155,60 @@ describe('MenuSurface — the manager', () => {
     renderMenu()
 
     await screen.findByTestId('menu-list')
-    await user.click(screen.getAllByRole('button', { name: 'Add item' })[0]!)
+    await user.click(screen.getByRole('button', { name: 'Add' }))
     await user.type(screen.getByLabelText('Name'), 'Mystery Wrap')
+    await user.type(screen.getByRole('combobox', { name: 'Category' }), 'Shawarma')
     await user.type(screen.getByLabelText('Price (₹)'), 'lots')
     await user.click(screen.getByRole('button', { name: 'Create item' }))
 
     expect(await screen.findByTestId('form-sheet-error')).toHaveTextContent(/number of rupees/i)
     expect(screen.queryByText('Mystery Wrap')).not.toBeInTheDocument()
+  })
+
+  it('has one item-first Add action and confirms an unrecognised category', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await screen.findByTestId('menu-list')
+
+    expect(screen.getAllByRole('button', { name: 'Add' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /add category/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.type(screen.getByLabelText('Name'), 'Fresh Lime Soda')
+    await user.type(screen.getByRole('combobox', { name: 'Category' }), 'Beverages')
+    await user.type(screen.getByLabelText('Price (₹)'), '50')
+    await user.click(screen.getByRole('button', { name: 'Create item' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Create “Beverages”?' })).toHaveTextContent(
+      /burger.*burgers/i,
+    )
+    await user.click(screen.getByRole('button', { name: 'Create category and item' }))
+    expect(await screen.findByRole('heading', { name: 'Beverages' })).toBeInTheDocument()
+    expect(await screen.findByText('Fresh Lime Soda')).toBeInTheDocument()
+  })
+
+  it('reorders categories deliberately and retires the final item without an empty heading', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    const list = await screen.findByTestId('menu-list')
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Burgers' }))
+    await user.click(screen.getByRole('button', { name: 'Move up' }))
+    await waitFor(() => {
+      expect(
+        within(list)
+          .getAllByRole('heading', { level: 2 })
+          .map((heading) => heading.textContent),
+      ).toEqual(['Burgers', 'Shawarma'])
+    })
+
+    await user.click(
+      screen.getByRole('button', { name: 'Actions for Fully Loaded Smashed Burger' }),
+    )
+    await user.click(screen.getByTestId('retire-d4000000-0000-4000-b000-000000000007'))
+    await user.click(screen.getByRole('button', { name: 'Retire item' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'Burgers' })).not.toBeInTheDocument()
+    })
   })
 })
 

@@ -79,6 +79,43 @@ async function offerInstallCapability(page: Page) {
   })
 }
 
+test('an owner builds a sellable menu for a new outlet entirely through the app', async ({
+  page,
+}) => {
+  const outletName = `E2E Menu Outlet ${RUN}`
+  const outletCode = `menu-${RUN}`
+  await signIn(page, PERSONAS.owner.username)
+
+  await page.goto('owner/outlets')
+  await page.getByTestId('add-outlet').click()
+  await page.getByLabel('Name', { exact: true }).fill(outletName)
+  await page.getByLabel('Short code').fill(outletCode)
+  await page.getByLabel('Location label').fill('E2E menu test')
+  await page.getByRole('button', { name: 'Create outlet' }).click()
+  await expect(page.getByText(outletName, { exact: true })).toBeVisible()
+
+  await page.goto('owner/menu')
+  const outletChip = page.getByRole('group', { name: 'Outlet' }).getByRole('button', {
+    name: outletName,
+  })
+  if ((await outletChip.getAttribute('aria-pressed')) !== 'true') {
+    await outletChip.click()
+  }
+  await expect(outletChip).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByText(/Nothing on the menu yet/)).toBeVisible()
+
+  await page.getByTestId('add-menu-item').click()
+  await page.getByLabel('Name', { exact: true }).fill('E2E Chicken Roll')
+  await page.getByRole('combobox', { name: 'Category' }).fill('Rolls')
+  await page.getByLabel('Price (₹)').fill('125')
+  await page.getByRole('button', { name: 'Create item' }).click()
+  await page.getByRole('button', { name: 'Create category and item' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Rolls' })).toBeVisible()
+  await expect(page.getByText('E2E Chicken Roll')).toBeVisible()
+  await expect(page.getByText('₹125')).toBeVisible()
+})
+
 async function signOut(page: Page) {
   await page.getByTestId('account-menu').click()
   await page.getByRole('button', { name: 'Sign out' }).click()
