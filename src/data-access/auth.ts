@@ -342,7 +342,7 @@ export async function redeemInvite(
  */
 export class CounterSetupError extends Error {
   constructor(
-    readonly code: 'invalid_code' | 'tablet_exists' | 'unavailable',
+    readonly code: 'invalid_code' | 'tablet_exists' | 'unavailable' | 'unsendable',
     message: string,
   ) {
     super(message)
@@ -352,6 +352,15 @@ export class CounterSetupError extends Error {
 
 const DEAD_SETUP_CODE =
   'That setup code did not work. It may have expired or already been used. Ask for a new one.'
+
+/**
+ * The service faulted, or is not there at all. Not the code, and not the
+ * tablet's connection.
+ *
+ * Same wording as the attendance adapter's `unsendable`, deliberately: it is
+ * the same condition and the same advice.
+ */
+const UNSENDABLE = 'This app could not send that action. Nothing was recorded. Please report this.'
 
 /**
  * Turn a setup code into a device session on this tablet.
@@ -371,6 +380,25 @@ export async function setUpCounterDevice(code: string): Promise<void> {
     { body: { code } },
   )
 
+  /*
+    Classified by the evidence held, never by what is left over.
+
+    `invalid_code` is the function's own refusal and stays exactly as
+    indistinguishable as it was: unknown, wrong, expired, consumed, superseded
+    and exhausted all arrive as that one reason and produce that one sentence.
+
+    What changed is everything else. This used to fall through to
+    `invalid_code`, so a `setup_failed` raised BEFORE the code was compared to
+    anything, and a 404 from a function that was never deployed, both reached
+    somebody at a counter as "that setup code did not work" — inviting them to
+    burn a second code, and a third, on a service that was never going to
+    answer.
+
+    Telling those apart leaks nothing. A missing endpoint and a fault raised
+    before the hash is read are properties of the service: they happen
+    identically for a valid code, an expired one and a string of nonsense, so
+    the response still says nothing about which codes exist.
+  */
   if (error) {
     if (isUnreachable(error)) throw new CounterSetupError('unavailable', UNREACHABLE)
     const reason = await failureCode(error)
@@ -380,9 +408,12 @@ export async function setUpCounterDevice(code: string): Promise<void> {
         'That outlet already has a tablet set up. Remove it first, then use this code.',
       )
     }
-    throw new CounterSetupError('invalid_code', DEAD_SETUP_CODE)
+    if (reason === 'invalid_code') throw new CounterSetupError('invalid_code', DEAD_SETUP_CODE)
+    throw new CounterSetupError('unsendable', UNSENDABLE)
   }
-  if (!data?.email || !data.password) throw new CounterSetupError('invalid_code', DEAD_SETUP_CODE)
+  // Reached the function, which answered 200 with a body it should never send.
+  // Nothing about the code is implicated, so it is not blamed.
+  if (!data?.email || !data.password) throw new CounterSetupError('unsendable', UNSENDABLE)
 
   const { error: signInError } = await client.auth.signInWithPassword({
     email: data.email,

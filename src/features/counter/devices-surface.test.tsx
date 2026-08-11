@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
-import type { DataAdapters } from '@/data-access/adapters'
+import { CounterActionError, type DataAdapters } from '@/data-access/adapters'
 import {
   createDemoData,
   createMockAdapters,
@@ -130,6 +130,48 @@ describe('the Tablets surface', () => {
     const shown = await screen.findByText(/is not shown again/i)
     expect(shown).toBeInTheDocument()
     expect(screen.getByText('DEMO0-SETUP')).toBeInTheDocument()
+  })
+
+  /**
+   * What an owner actually reads when the backend is the problem.
+   *
+   * On 2026-08-11 this screen told somebody to check their internet connection
+   * because `counter-devices` had never been deployed and the adapter read an
+   * unrecognised failure as a transport one. The adapter classifies correctly
+   * now, and this is the other half: that the sentence it produces survives the
+   * surface's own catch and reaches the person, rather than being replaced by
+   * the generic fallback beside it.
+   */
+  it('reports a backend fault as a fault to report, not as a bad connection', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin', createDemoData())
+    await adapters.counter.removeDevice(
+      (await adapters.counter.listDevices()).find(
+        (device) => device.outletId === OUTLET_KALYANI_ID,
+      )!.id,
+    )
+    adapters.counter.issueSetupCode = () => {
+      throw new CounterActionError(
+        'unsendable',
+        'This app could not send that action. Nothing was recorded. Please report this.',
+      )
+    }
+
+    renderSurface('franchise_admin', adapters)
+    await user.click(await screen.findByRole('button', { name: /set up a tablet/i }))
+    await user.type(screen.getByLabelText('What to call it'), 'Kalyani counter tablet')
+    await user.click(screen.getByRole('button', { name: /generate a code/i }))
+
+    const alert = await screen.findByTestId('devices-error')
+    expect(alert).toHaveTextContent(/could not send that action/i)
+    expect(alert).toHaveTextContent(/report this/i)
+    // The two things it must never say: that the phone's connection is at
+    // fault, and that waiting will help.
+    expect(alert).not.toHaveTextContent(/internet connection/i)
+    expect(alert).not.toHaveTextContent(/reach shawarmania/i)
+    expect(alert).not.toHaveTextContent(/try again/i)
+    // And no code was invented to go with the failure.
+    expect(screen.queryByText(/is not shown again/i)).not.toBeInTheDocument()
   })
 
   it('names what would be left unsent before it removes a tablet', async () => {

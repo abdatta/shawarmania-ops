@@ -147,9 +147,15 @@ jobs:
         with:
           path: dist
 
-  # Schema and frontend are one release. The verified migration runs before
-  # Pages can publish, so a bundle cannot reach staff phones while production
-  # is still missing a function, table or column it calls.
+  # Schema, privileged code and frontend are one release. The verified
+  # migration runs before Pages can publish, so a bundle cannot reach staff
+  # phones while production is still missing a table or column it calls.
+  #
+  # That sentence used to say "function" too, and was wrong: Edge Functions
+  # were outside this workflow entirely until
+  # `edge-functions-ship-with-the-release`, which is how `counter-devices` and
+  # `counter-setup` sat undeployed for two days while the bundle calling them
+  # was live. The `functions` job below is the half that was missing.
   #
   # The environment secret is a project-scoped Postgres pooler URL. This job
   # receives neither the browser's public anon key nor a service-role key, and
@@ -188,11 +194,93 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: echo "Manual republication does not reverse production migrations."
 
-  # The single publication gate. Verification, the production migration and
-  # the build must all pass. Any red dependency leaves the current Pages
-  # deployment live.
+  # Privileged code, between the schema it calls and the bundle that calls it.
+  #
+  # The ordering is a dependency order rather than a preference: a function
+  # calls the schema, and a bundle calls the function, so `needs: migrate` and
+  # `deploy: needs: functions` mean every intermediate state has the newer half
+  # waiting for callers, never a caller waiting for the newer half. Running
+  # this beside `migrate` would open a window where a function is live and the
+  # RPC it calls is not, with the previous bundle still calling it.
+  #
+  # No function is named here, deliberately. `functions deploy` with no
+  # argument deploys every function in the directory, so adding one requires no
+  # edit to any list — which is the actual defect this job exists to close. A
+  # named list in this file would be the same bug in a new place.
+  #
+  # `--prune` is deliberately absent: it deletes functions present in the
+  # project and absent locally, which turns a bad checkout into production
+  # deletions. `--use-api` bundles server-side, which keeps Docker off the
+  # publication path; dropping the flag falls back to local Docker bundling
+  # with no other change.
+  #
+  # The credential is an account-level API token and lives in its own
+  # environment: `migrate` holds a Postgres URL and must not also hold a token
+  # that can deploy code.
+  functions:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment:
+      name: production-functions
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The project reference is derived from the URL the bundle is built
+      # against rather than stored a second time, so functions cannot be
+      # deployed to a project other than the one the published app talks to.
+      # Two settings can disagree; one cannot.
+      #
+      # Failing closed matters here more than usual: an access token that can
+      # reach several projects, plus a deploy with no explicit ref, is the one
+      # way this job could put counter code on the wrong database.
+      - name: Resolve the production project
+        if: github.event_name == 'push'
+        id: project
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "${VITE_SUPABASE_URL:-}" || {
+            echo "VITE_SUPABASE_URL is not set; refusing to guess a project." >&2
+            exit 1
+          }
+          ref=$(printf '%s' "$VITE_SUPABASE_URL" \
+            | sed -nE 's#^https://([a-z0-9]{20})\.supabase\.co/?$#\1#p')
+          test -n "$ref" || {
+            echo "VITE_SUPABASE_URL carries no project reference: $VITE_SUPABASE_URL" >&2
+            exit 1
+          }
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Deploying functions to project $ref"
+
+      - name: Require a function deployment credential
+        if: github.event_name == 'push'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: test -n "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Deploy every Edge Function
+        if: github.event_name == 'push'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: npx supabase functions deploy --project-ref "${{ steps.project.outputs.ref }}" --use-api
+
+      - name: Keep the deployed functions during a manual frontend rollback
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "Manual republication does not redeploy Edge Functions from an older commit."
+
+  # The single publication gate. Verification, the production migration, the
+  # Edge Functions and the build must all pass. Any red dependency leaves the
+  # current Pages deployment live.
   deploy:
-    needs: [gate, build, migrate]
+    needs: [gate, build, migrate, functions]
     runs-on: ubuntu-latest
     environment:
       name: github-pages

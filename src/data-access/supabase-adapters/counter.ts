@@ -1,4 +1,8 @@
-import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js'
+import {
+  FunctionsFetchError,
+  type RealtimeChannel,
+  type SupabaseClient,
+} from '@supabase/supabase-js'
 
 import {
   CounterActionError,
@@ -44,6 +48,10 @@ const MESSAGES: Record<string, string> = {
   invalid_request: 'That request is no longer waiting.',
   not_found: 'That tablet is already gone.',
   unavailable: 'Could not reach Shawarmania. Try again in a moment.',
+  // Reused verbatim from the attendance adapter rather than reworded. It is the
+  // same condition with the same advice, and a second phrasing for it would be
+  // the beginning of a third.
+  unsendable: 'This app could not send that action. Nothing was recorded. Please report this.',
 }
 
 /** A joined row comes back as an object or, on some shapes, a one-element array. */
@@ -83,11 +91,33 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
   /** Live channels this adapter holds, one per topic. See `subscribe` below. */
   const channels = new Map<string, SharedChannel>()
 
+  /**
+   * Every write, and the one place a failure is given a name.
+   *
+   * Three classifications, told apart by the evidence actually held, following
+   * the rule `unreachable-backend-sign-in-error` (#30) set for sign-in:
+   *
+   *  * **no response arrived** — `FunctionsFetchError`, the only positive
+   *    evidence of a transport failure supabase-js gives us — is a connection
+   *    problem, and says so;
+   *  * **a response naming a reason we know** is that reason;
+   *  * **anything else** could not be sent. A 404 because the function is not
+   *    deployed, a 500, a body in a shape `failureCode` cannot read: none of
+   *    them is the person's connection and none is a state retrying escapes.
+   *
+   * That third branch used to be `?? 'unavailable'`, which is how an owner
+   * trying to register a tablet on 2026-08-11 was told to check their internet
+   * connection about a request that had been answered in milliseconds. The
+   * gateway's own 404 body is `{"code":..., "message":...}` with no `error`
+   * key, so `failureCode` returns null for it, and null was being read as
+   * evidence of something it says nothing about.
+   */
   async function call<T>(body: Record<string, unknown>): Promise<T> {
     const { data, error } = await client.functions.invoke('counter-devices', { body })
     if (!error) return data as T
 
-    const code = (await failureCode(error)) ?? 'unavailable'
+    const named = await failureCode(error)
+    const code = named ?? (error instanceof FunctionsFetchError ? 'unavailable' : 'unsendable')
     throw new CounterActionError(
       code,
       MESSAGES[code] ?? 'That did not work. Try again in a moment.',

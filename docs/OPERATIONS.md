@@ -220,13 +220,36 @@ Privatising the repo at the same time needs a paid GitHub plan for Pages, or a m
 Database changes deploy as migrations. **Migrations are forward-only**; a
 mistake is corrected by a new migration, not by editing a released one.
 
-**The verified migration goes first, then the front end, in one workflow.** A
-push to `main` runs the complete suite, then the `production-database` job runs
-`supabase db push` through a project-scoped pooler URL stored as the environment
-secret `SUPABASE_DB_URL`. Pages publication depends on that job. A missing
-secret, connection failure, rejected migration or failed backfill assertion
-leaves the existing frontend live; a transactional migration leaves production
-unchanged when it fails.
+**A release is three things, and they land in dependency order:** the schema,
+the Edge Functions that call the schema, and the bundle that calls those
+functions. A push to `main` runs the complete suite, then `migrate`, then
+`functions`, and publishes only after all of them agree. Every intermediate
+state has the newer half waiting for callers, never a caller waiting for the
+newer half.
+
+`migrate` runs `supabase db push` through a project-scoped pooler URL stored as
+the environment secret `SUPABASE_DB_URL`. A missing secret, connection failure,
+rejected migration or failed backfill assertion leaves the existing frontend
+live; a transactional migration leaves production unchanged when it fails.
+
+`functions` deploys **every** Edge Function in `supabase/functions/`, naming
+none of them, using an account access token stored as the environment secret
+`SUPABASE_ACCESS_TOKEN`. The project it deploys to is derived from
+`VITE_SUPABASE_URL`, the same variable the published bundle is built against, so
+functions cannot reach a project other than the one the app talks to; the job
+fails rather than guessing when that variable is absent or malformed. It never
+passes `--prune`, so a function present in the project and absent locally is
+left alone rather than deleted.
+
+**Edge Functions were outside this workflow until 2026-08-11**, and that is
+worth knowing rather than quietly fixed. They were deployed by hand from step 4
+of *First production deploy*, which named three functions and was never updated
+when more were added. `counter-devices` and `counter-setup` shipped with
+`counter-devices-and-offline` on 2026-08-09, were never deployed, and answered
+404 for two days while the bundle calling them was live: the tablet handshake
+was fully built and entirely unreachable. Nothing reconciled the runbook against
+the directory, so nothing could have caught it. The list is now gone rather than
+corrected, because a corrected list drifts again on the next function.
 
 That CI identity may push migrations and nothing broader. It receives no
 service-role key, never reaches the browser bundle, and the workflow must never
@@ -235,8 +258,29 @@ schema is live briefly before the new frontend, so every migration must remain
 compatible with the currently published build for that ordering window. Split
 a change when it cannot survive that order.
 
-The repository needs one private GitHub environment named
-`production-database`. Add its `SUPABASE_DB_URL` secret with:
+The repository needs two private GitHub environments, one per credential class.
+They are kept apart on purpose: the job that pushes migrations must not also
+hold a token that can deploy code.
+
+**Create the environment before setting its secret.** `gh secret set --env` does
+not create a missing environment; it fails fetching the encryption key, and the
+error names the public-key URL rather than the environment, so it reads as a
+permissions problem:
+
+```
+failed to fetch public key: HTTP 404: Not Found
+  (.../environments/production-functions/secrets/public-key)
+```
+
+```sh
+gh api -X PUT repos/:owner/:repo/environments/production-database
+gh api -X PUT repos/:owner/:repo/environments/production-functions
+```
+
+Both are idempotent, so re-running them on an environment that already exists
+changes nothing.
+
+`production-database` holds `SUPABASE_DB_URL`:
 
 ```sh
 gh secret set SUPABASE_DB_URL --env production-database
@@ -247,6 +291,33 @@ password percent-encoded. Do not use a personal Supabase access token, anon
 key or service-role key for this job. After rotating the database password,
 replace this secret before the next push to `main`; an absent or stale value is
 expected to stop publication.
+
+`production-functions` holds `SUPABASE_ACCESS_TOKEN`:
+
+```sh
+gh secret set SUPABASE_ACCESS_TOKEN --env production-functions
+```
+
+Paste a Supabase account access token from
+**Account → Access Tokens**. It deploys function code and nothing else: it is
+not the service-role key, never reaches the browser bundle, and the job needs no
+database credential because the deployment is an API call rather than a
+connection. An absent token stops publication rather than silently skipping the
+functions, which is the whole point: a release that quietly omits half the
+backend is the failure this job was added to prevent.
+
+**One token per consumer.** A Supabase access token is scoped to the *account*,
+not to a project, so any token here can reach every project the account owns.
+That is why the `functions` job pins `--project-ref` derived from
+`VITE_SUPABASE_URL` instead of letting the CLI choose a default, and it is why
+this token is not shared with another repository's CI: sharing one would give
+that repository's workflow the ability to deploy code to this production
+backend, and would couple the two rotations so that rotating for one silently
+stops the other's releases. Confirm what is set rather than assuming:
+
+```sh
+gh secret list --env production-functions
+```
 
 A manual workflow dispatch republishes an earlier frontend but deliberately
 does not touch migration history. Database rollback remains forward-only: add a
@@ -418,18 +489,40 @@ linking this repo to it would run these migrations into someone else's data.
    `public.assignments` on every request, so a token carries nothing about what
    a person may do.
 
-4. **Deploy all identity Edge Functions.**
+4. **Deploy every Edge Function.**
 
    ```
-   npx supabase functions deploy admin-accounts
-   npx supabase functions deploy redeem-invite
-   npx supabase functions deploy email-sign-in
+   npx supabase functions deploy --project-ref <ref>
    ```
 
-   `redeem-invite` is declared `verify_jwt = false` in `config.toml`, because
-   somebody who has never set a password has no token to present. Check it took
-   effect: an unauthenticated `POST` with a wrong code must answer `400
-   invalid_code`, not `401`.
+   No function is named, deliberately: the command deploys every directory
+   under `supabase/functions/`, so a function added later cannot be left behind
+   by a list nobody updated. This step is for bootstrapping a project that has
+   no CI yet. **From 2026-08-11 the release does this on every push to `main`**,
+   between the migration and the publication, so a hand deploy afterwards is a
+   recovery action rather than routine.
+
+   Then prove the gateway is serving each token-free function as one. Any
+   function declared `verify_jwt = false` in `config.toml` exists to answer a
+   caller who holds no token — `redeem-invite` for somebody who has never set a
+   password, `counter-setup` for a tablet that has never been set up — and if
+   the declaration did not take effect they answer `401` to every legitimate
+   request while looking perfectly healthy. An unauthenticated `POST` carrying a
+   junk payload must be refused by the **function**, not the gateway:
+
+   ```sh
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+     https://<ref>.supabase.co/functions/v1/redeem-invite \
+     -H 'content-type: application/json' -d '{"action":"preview","code":"NOPE"}'
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+     https://<ref>.supabase.co/functions/v1/counter-setup \
+     -H 'content-type: application/json' -d '{"code":"NOPE"}'
+   ```
+
+   `400` is correct. `401` means the flag did not take effect. `404` means the
+   function is not deployed at all. `npm run lint:functions` checks the
+   declaration exists in the repository; only this probe checks the platform
+   honoured it, which is why both are kept.
 
 5. **Create the first Super Admin.** Nothing in the app can bootstrap authority
    from an empty database — see
@@ -498,7 +591,7 @@ never prints account emails. Do not run it in CI.
    does not add outbound mail or self-service recovery; one Super Admin remains
    the password-reset path for another.
 
-3. **Apply the schema and deploy all three functions while retaining the current
+3. **Apply the schema and deploy the functions while retaining the current
    safe frontend.** Email-or-username is the steady-state contract, not a
    temporary compatibility mode. Before an Auth alias is migrated, the current
    email still signs in directly; afterwards an approved associated email
@@ -506,9 +599,7 @@ never prints account emails. Do not run it in CI.
 
    ```powershell
    npx supabase db push
-   npx supabase functions deploy admin-accounts
-   npx supabase functions deploy redeem-invite
-   npx supabase functions deploy email-sign-in
+   npx supabase functions deploy
    ```
 
    The migration copies every current live Super Admin's real Auth email into

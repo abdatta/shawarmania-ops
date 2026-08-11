@@ -138,7 +138,7 @@ Commands:
 
 The suite runs three jobs. The first two need nothing but the repo:
 
-- **Any change**: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` — then `npm run test:e2e`, which builds for production and drives it. `npm run format` fixes formatting.
+- **Any change**: `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` — then `npm run test:e2e`, which builds for production and drives it. `npm run format` fixes formatting. `npm run lint` bundles three repo-invariant checks alongside ESLint: no hex outside tokens, the backlog index, and **`lint:functions`, which fails when an Edge Function carries no `[functions.<name>]` block** — an undeclared function silently gets `verify_jwt = true` and refuses every token-free caller at the gateway.
 
 The third job needs Docker, which is why it is the easy one to skip and the one worth being strict about:
 

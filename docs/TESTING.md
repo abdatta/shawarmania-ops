@@ -12,7 +12,7 @@ npm run test:e2e  # Playwright: shell, demo and the offline path, against a real
 npm run test:e2e:auth # Playwright: sign-in, provisioning, deactivation (needs the local stack)
 npm run test:db   # pgTAP: isolation + write-contract suites (needs the local stack)
 npm run test:rls  # REST probes: real sign-ins, hand-crafted cross-outlet requests
-npm run lint      # ESLint (incl. layer boundaries) + no-hex-outside-tokens + backlog index
+npm run lint      # ESLint (incl. layer boundaries) + no-hex-outside-tokens + backlog index + Edge Function config
 npm run typecheck # tsc --noEmit, strict
 npm run contrast  # WCAG validator over the token file, both themes
 
@@ -50,6 +50,10 @@ means a full `db:stop`/`db:start`.
 **`import.meta.url` is not a file URL under the runner.** Vitest rewrites it, so `fileURLToPath(new URL('../x', import.meta.url))` resolves against the drive root and throws or reads the wrong path. Two escapes, depending on which side of the seam the code is on: a **check script** resolves its paths inside its CLI entry rather than at module load, keeping the exported rule importable and the filesystem the entry point's business; a **test** reading repo files resolves from `process.cwd()`, which the runner sets to the repo root. Both shapes are in `scripts/` if you need an example.
 
 **`npm run lint` gates the behaviour backlog's index.** `openspec/todos/README.md` carries each item's trigger to promote, so a note the index does not mention is not deferred work but lost work — nothing looks broken while it goes unread, which is how one sat unlisted for two days. The check fails in both directions: a note no link mentions, and a row pointing at a note that is gone. The index stays authored, since no tool can derive a trigger.
+
+**`npm run lint` also gates Edge Function configuration.** Every directory under `supabase/functions/` except `_shared` must carry a `[functions.<name>]` block in `supabase/config.toml`. A function with no block does not fail — it silently receives `verify_jwt = true`, and the gateway then refuses every unauthenticated request before the function's own code runs. That is correct for three of the five functions and fatal for the two that exist to answer a caller holding no token, where it surfaces as a rejected invite code or a rejected tablet setup code, blaming the one thing that was not at fault. The check asserts the judgement was made, never which way it went; whether the platform honoured it needs a live probe, which `docs/OPERATIONS.md` carries in the first-deploy runbook.
+
+**`scripts/check-release-order.test.mjs` gates the shape of a release.** A release is the schema, then the Edge Functions that call it, then the bundle that calls those — an order held entirely in `needs:` edges that GitHub evaluates silently. Reverse or drop one and nothing errors; the workflow goes green and publishes a bundle before the thing it calls exists. That is not hypothetical: Edge Functions had no edge at all until 2026-08-11, and two of them sat undeployed for two days behind a live bundle that called them.
 
 `npm run test:e2e` builds the app and serves the build — never the dev server. The service worker only exists in a real build, and the offline gate is the whole point of that suite. Browsers install once with `npx playwright install chromium`. The install-affordance browser cases dispatch a controlled `beforeinstallprompt` capability because Playwright does not own Chromium's native install UI; they prove capture, route persistence, single consumption, installed-mode suppression, and demo omission. `test:e2e:auth` carries that same capability through sign-in into both the phone and counter shells against a real session.
 
