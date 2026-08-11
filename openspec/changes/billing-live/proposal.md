@@ -1,6 +1,6 @@
 # Proposal: Billing Live
 
-> **Model**: Opus · **Wave**: D · **Depends on**: #7, #9, #30, #31, #32, #33, #36, #38 · **Gate**: **Billing V1.** The real menu is entered through the app by a person with no SQL; one tablet at each outlet takes real payments, immediate and on handover; every accepted write commits locally before the UI reports success and lands exactly once; unsent work survives logout and restart; bill numbers never collide; only a resolved online queue receives the tablet's end-of-day confirmation; and the ledger stops carrying that outlet's counter revenue on the day it goes live.
+> **Model**: Opus · **Wave**: D · **Depends on**: #7, #9, #30, #31, #32, #33, #36, #38 · **Gate**: **Billing V1.** The real menu is entered through the app by a person with no SQL; one tablet at each outlet takes real payments, immediate and on handover; every accepted write commits locally before the UI reports success and lands exactly once; unsent work survives logout and restart; bill numbers never collide; only a resolved online queue receives the tablet's end-of-day confirmation; and the ledger stops carrying that outlet's cash and UPI revenue on the day it goes live while keeping its typed aggregator figures.
 
 ## Why
 
@@ -19,10 +19,14 @@ during rollout.
 - Connect the counter, open orders, customer lookup, shift history, manager void,
   originating-tablet correction/discard and read-only manager-diagnostic adapters
   to the real contracts from #9, #32 and #33.
-- Accept only Cash, UPI, Swiggy or Zomato in live billing commands, and Cash or
-  UPI for expenses. Card and Other are not dormant options: #31 removes them
-  from the shared vocabulary and database enum after proving production
-  contains no matching bills or expenses.
+- **Accept only Cash or UPI in live billing commands and for expenses.** Swiggy
+  and Zomato are withdrawn as tender methods by owner decision on 2026-08-11, so
+  an aggregator order is not rung at the counter and its revenue stays a typed
+  ledger figure. Card and Other were never dormant options either: #31 removed
+  them from the shared vocabulary and the database enum after proving production
+  held no matching bills or expenses. This change narrows `payment_method` to
+  `cash | upi` by the same audited migration pattern, so an aggregator bill is
+  refused by the database and not merely absent from the tender dialog.
 - Carry one or more exact `payments` allocations through IndexedDB and the
   command RPC; mixed bills remain one fully paid bill, and drawer close sums
   only their Cash allocations.
@@ -51,10 +55,11 @@ during rollout.
 - Promote billing, menu, history, customer and tablet surfaces from `demo` to
   `live`, one outlet at a time, while preserving the synthetic walkthrough.
 - **Mark the handover in the manual ledger.** From the day an outlet goes live,
-  that outlet's counter revenue comes from bills, and the ledger's revenue entry
-  for it says so on screen rather than inviting the figure to be typed twice.
-  Aggregator commission, cash in and out, and the counted drawer stay manual until
-  #12 and #13.
+  that outlet's cash and UPI revenue comes from bills, and the ledger's entry for
+  each says so on screen rather than inviting the figure to be typed twice.
+  Zomato and Swiggy revenue stays typed at every outlet on every date, because
+  there are no aggregator bills to read it from. Aggregator commission, cash in
+  and out, and the counted drawer stay manual until #12 and #13.
 
 ## Capabilities
 
@@ -74,8 +79,9 @@ during rollout.
 - `menu-management`: The menu becomes a real editable record, and billing reads
   the latest live menu, falling back to the active shift's snapshot only after a
   real backend failure.
-- `manual-ledger`: A live outlet's counter revenue is sourced from bills, and the
-  ledger says so instead of accepting a second hand-typed figure.
+- `manual-ledger`: A live outlet's cash and UPI revenue is sourced from bills, and
+  the ledger says so instead of accepting a second hand-typed figure, while its
+  aggregator revenue and rates stay hand-entered.
 - `demo-mode`: Promoted surfaces keep their coherent synthetic path.
 - `app-shell`: Tablet, billing, history and menu gates reach their final live
   states without exposing personal navigation on the counter.
@@ -85,7 +91,10 @@ during rollout.
 Dexie dependency and schema, billing, menu, customer and history adapters, the
 live menu editor, the feature registry, sync indicators, page lifecycle
 coordination, end-of-day confirmation wiring, the manual ledger's revenue entry,
-integration tests, transient-failure Playwright tests, and live gates change.
+integration tests, transient-failure Playwright tests, and live gates change. One
+migration narrows `public.payment_method` to `cash | upi`, which touches the
+shared billing vocabulary, the tender dialog, shift summaries, the expense form,
+the generated database types and the `expenses_insert` policy.
 
 ## Non-goals
 
@@ -94,6 +103,8 @@ integration tests, transient-failure Playwright tests, and live gates change.
 - Redesigning #31, or weakening the #9, #32 and #33 contracts.
 - Order transfer or any recovery path; a manager cancels a stranded order.
 - Retiring the manual ledger, which #12 owns.
+- Aggregator billing of any kind. Swiggy and Zomato orders are not rung, settled
+  or reconciled at the counter in V1, and integrating them stays a later change.
 - Attendance from the tablet, emergency personal-device billing, manager-side
   re-ring or cross-device draft handoff, printing, GST, digital sharing,
   discounts, deposits or partially paid orders. V1 sends `discount_paise = 0` and

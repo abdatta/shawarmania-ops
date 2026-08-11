@@ -257,17 +257,54 @@ puts Burgers before Shawarma on the screen that matters most, and creation order
 with no control was rejected because the only way to fix a wrong order would be to
 retype the items.
 
-### Counter revenue leaves the ledger on the day the outlet goes live
+### V1 billing takes Cash and UPI only, and the enum is what enforces it
 
-From an outlet's `billing_live_from` date, the ledger reads that outlet's counter
-revenue from paid bills, labels it as coming from the counter, and removes the
-field that invited it to be typed. Earlier dates keep their typed figures
-untouched, and the other outlet keeps typing until its own date is set.
+**Owner decision, 2026-08-11: Swiggy and Zomato are withdrawn as tender methods.**
+The counter takes Cash and UPI, and an aggregator order is not rung at the counter
+at all. Integrating aggregator trade into billing stays available as a later
+change and is out of scope here.
+
+The withdrawal is a migration on `public.payment_method`, not a shorter list of
+buttons. Aggregator revenue remains a typed ledger figure, so a bill allocated to
+Swiggy would be that money recorded twice, and this repo puts money boundaries in
+the database rather than in the interface. The migration follows the pattern
+`20260811000002_remove_unsupported_payment_methods.sql` established one day
+earlier: audit production first, refuse to run if any `swiggy` or `zomato` bill or
+expense exists, move both columns through text, replace the type with
+`cash | upi`, restore the typed columns and the one policy whose expression
+depends on the type.
+
+Re-adding a value later is a single `alter type ... add value`, which is the cheap
+direction. Removing one is the expensive direction, and it is being paid now while
+both tables are empty rather than after a month of real bills.
+
+This also settles half of the open `expense-payment-method-inherits-the-bill-enum`
+note for free: an expense "paid by Swiggy" becomes impossible at the type level
+rather than merely absent from the form. What remains open there is the question
+that note actually cares about, whether the expense record should adopt the
+ledger's smaller model instead of the bill enum.
+
+### Cash and UPI leave the ledger on the day the outlet goes live, and the aggregators do not
+
+From an outlet's `billing_live_from` date, the ledger reads that outlet's **cash
+and UPI** revenue from paid bills, labels each as coming from the counter, and
+removes the fields that invited them to be typed. Earlier dates keep their typed
+figures untouched, and the other outlet keeps typing until its own date is set.
+
+**Zomato and Swiggy revenue stays typed at every outlet, on every date.** There
+are no aggregator bills to read, so removing those fields on go-live would delete
+the only record of that trade rather than move it. Their per-day commission rates
+and computed net are unchanged, and the day now reads as two figures from the
+counter beside two entered by hand.
 
 Everything else in the ledger keeps working by hand: aggregator commission, cash
-in and out, expenses, and the counted drawer. Aggregator revenue itself now
-arrives through bills, because aggregator orders are rung at the counter, but the
-commission that platform keeps is still a ledger figure until #13.
+in and out, expenses, and the counted drawer.
+
+The consequence to keep in view is that bills are no longer a complete record of
+an outlet's revenue. Anything reading bills as total sales, including #13's
+reports, must say that aggregator trade is absent from them and lives in the
+ledger. `openspec/todos/aggregator-settlement.md` was written on the opposite
+assumption and has been corrected.
 
 **The owner reversed this on 2026-08-10 and will keep the written ledger in
 parallel** for the settling-in period. It was previously rejected, and the cost of

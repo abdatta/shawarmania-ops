@@ -16,14 +16,22 @@ Other rows in either bills or expenses. So two of this note's original complaint
 are gone: Card no longer exists anywhere, and the expense form offers Cash and UPI
 only — it never listed the aggregators to begin with after that change.
 
+## What #10 then settled
+
+`billing-live` withdrew Swiggy and Zomato as tender methods and narrowed the
+shared enum to `cash | upi`. The complaint this note opened with is therefore
+gone entirely: an expense "paid by Swiggy" is now impossible at the type level and
+not merely absent from the form, and a hand-crafted insert is refused by the
+database rather than accepted. Every value the type still holds is a way a
+business actually pays for something.
+
 ## What is still true
 
-**The expense row still carries the bill enum**, so the *type* continues to permit
-`swiggy` and `zomato` on an expense. An expense "paid by Swiggy" is not a thing
-that can happen: those are revenue channels, not sources of money leaving the
-business. Nothing but the form stops one being written, and a hand-crafted insert
-is not stopped at all — which is the shape of gap this repo treats as real, since
-outlet isolation and money rules are database boundaries here rather than UI ones.
+**The expense row still carries the bill enum**, and that is now the whole of the
+note. The type is correct for both tables today by coincidence of both being
+two-valued, which is exactly the condition under which a shared type drifts
+silently later: the first value either table needs that the other must refuse will
+be added without anyone noticing the other inherited it.
 
 Of the values that do belong, only one distinction changes any figure the app
 computes: money either leaves the drawer, moving the day's cash position, or it
@@ -31,9 +39,11 @@ does not.
 
 ## Why this is not trivial
 
-It is a shared database type, and it is *correct* for bills. Narrowing it for
-expenses means either a separate type or a check constraint, and either way a
-decision about what the column means.
+It is a shared database type, and it is *correct* for bills. Splitting it means
+either a separate type or a check constraint, and either way a decision about what
+the column means. #38 is the concrete pressure: an expense not yet paid is a state
+the bill enum cannot express at all, and adding it to a shared type would put a
+meaningless value on every bill.
 
 The manual ledger deliberately did not inherit it, storing instead the one
 distinction its arithmetic asks about. #38 extends that to three states by adding

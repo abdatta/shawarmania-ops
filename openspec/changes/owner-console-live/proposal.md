@@ -54,7 +54,7 @@ policy branch and an enum value, drop it rather than growing this change.
 
 - The Super Admin still cannot create bills. Billing is tied to an enrolled device and a shift; letting the owner ring a sale from their phone would corrupt attribution and cash reconciliation.
 - **Not accounting.** No depreciation, accruals, proper stock valuation, or tax. See `docs/LIMITATIONS.md`.
-- No aggregator commission modelling. Swiggy and Zomato revenue is recorded at order value, which makes it the largest known inaccuracy here; name it on screen rather than absorbing it silently.
+- **Aggregator revenue is not in bills at all.** #10 withdrew Swiggy and Zomato as tender methods, so those orders are never rung at the counter and every bill-derived figure here covers cash and UPI only. Whatever this console shows as revenue must say so on screen rather than presenting a partial total as the outlet's takings. Where the aggregator slice is needed, it lives as the manual ledger's typed per-day figure with its own commission rate, already net; reaching it means either #12 carrying those rows into the live cash record first, or this console stating the gap and leaving it. Deciding which is this change's work, and the decision cannot be deferred past the first revenue figure it draws.
 - No scheduled or automatically delivered reports, no BI query builder.
 
 ## Watch out for

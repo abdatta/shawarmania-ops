@@ -8,9 +8,15 @@ Aggregator revenue in reports and the P&L reflects what the business actually re
 
 ## Current behaviour
 
-Swiggy and Zomato orders are recorded as bills at order value, distinguished by their payment method. That keeps revenue and item-level sales complete, which is why it was done this way.
+**Rewritten 2026-08-11.** This note was written when aggregator orders were expected to be rung at the counter as bills. `billing-live` (#10) withdrew Swiggy and Zomato as tender methods by owner decision and narrowed the `payment_method` enum to `cash | upi`, so that is no longer what happens and the paragraphs below have been corrected rather than left to mislead.
 
-But **the recorded amount is not what lands in the bank.** Aggregators settle later, net of commission. Aggregator revenue is therefore systematically overstated relative to cash actually received, and the overstatement scales with aggregator share of trade.
+Aggregator orders are **not recorded as bills at all**. Each day's Swiggy and Zomato revenue is typed into the manual ledger as a stated figure, beside the commission rate that applied to that day, and the ledger already computes the net per day and nets it into the month. Integrating aggregator trade into billing is available as a later change and is nobody's scheduled work.
+
+Two consequences follow, and they point in opposite directions from what this note originally assumed.
+
+The **P&L is already net**, not gross, for aggregator revenue: the per-day rate does the reduction the original note was asking for. The systematic overstatement described here no longer exists on that path. What replaces it is the accuracy of a typed figure and a typed rate against a real settlement statement, which is a reconciliation gap rather than an arithmetic one.
+
+**Item-level sales for aggregator orders are lost.** Bills carry the line snapshots; the ledger carries one number per platform per day. So the app can say what Swiggy brought in on a Tuesday and cannot say what was sold. Anything reading bills as total revenue understates the outlet by the whole aggregator slice, which is the failure mode to watch now.
 
 ## Why it is deferred
 
@@ -20,8 +26,9 @@ The failure mode to watch is not the inaccuracy itself, which is documented, but
 
 ## What already exists for it
 
-- **Aggregator orders are identifiable from day one** — the payment method distinguishes `swiggy` and `zomato` from cash, UPI and card on every bill. Historical aggregator revenue can be found without guessing, so a settlement layer can be applied retrospectively to bills already rung.
-- **Bills are append-only with line-item snapshots.** A settlement record attaches alongside a bill rather than rewriting it, so reconciling a payout never mutates the sale.
+- **Aggregator revenue is identifiable from day one, per platform per day** — the ledger stores stated Zomato and Swiggy revenue in separate integer-paise columns. Historical aggregator revenue can be found without guessing, at day granularity rather than order granularity.
+- **The commission rate is already stored per day**, so a rate that changed mid-month is right on both sides of the change and a historical period recomputes on the rate that actually applied. That answers one of the open questions below outright.
+- **Bills are append-only with line-item snapshots**, so if aggregator orders are ever rung at the counter, a settlement record can attach alongside a bill rather than rewriting the sale.
 - The P&L already states which basis it is showing, so adding a gross/net distinction extends an existing habit rather than introducing one.
 
 ## Decided since (owner, 2026-07-28)
@@ -32,14 +39,24 @@ The failure mode to watch is not the inaccuracy itself, which is documented, but
 
 ## Open questions
 
-- Manual entry's exact home: an expense with a category, or a deduction on the revenue side? It changes what the P&L's "sales" line means.
-- Is settlement reconciled per order or per payout batch? Payouts are understood to batch across several days, which does not line up with the business-date model everything else uses — this needs confirming against a real settlement statement before any design.
-- Does the P&L show gross and net, or only net? Showing only net loses the item-level sales picture that made recording aggregator orders as bills worthwhile in the first place.
-- Commission rates differ by platform and change with contract terms. Is the rate per outlet, and does it need to be effective-dated so a historical period recomputes on the rate that applied then?
-- What happens to a payout that arrives short, late, or not at all? That is a reconciliation exception, and the system already has a shape for those.
+Two of the original five are now answered by where this landed.
+
+**Answered: manual entry's home.** It is a deduction on the revenue side, expressed as a per-day rate against a stated figure, not an expense with a category. The ledger settled this and it has been in nightly use since.
+
+**Answered: rate storage.** The rate is per day per platform, stored on the day row rather than looked up, so a historical period recomputes on the rate that applied then and a mid-month change is correct on both sides. Editing a past day's rate moves that day's net and the month's profit and touches no cash figure.
+
+Still open:
+
+- Is settlement reconciled per order or per payout batch? Payouts are understood to batch across several days, which does not line up with the business-date model everything else uses. This needs confirming against a real settlement statement before any design, and it is now the whole of the remaining problem rather than a detail of it.
+- What happens to a payout that arrives short, late, or not at all? The typed figure and the typed rate produce an expected net; nothing yet compares it against what the bank received. That is a reconciliation exception, and the system already has a shape for those.
+- Does anything need the item-level sales picture for aggregator orders? Recovering it means ringing aggregator orders at the counter, which is a billing change and not a settlement one. Worth separating: someone asking "what does Swiggy sell for us" wants that, and someone asking "did the payout match" does not.
 
 ## Trigger to promote
 
-Aggregator volume grows enough to distort a decision — concretely, when the owner would act differently on gross margin than on net margin for an outlet.
+Either of two, and they are different pieces of work.
+
+**Settlement reconciliation**: when the owner would act differently on the typed net than on what the bank actually paid, or when a payout is first found to disagree with the ledger.
+
+**Aggregator billing**: when the missing item-level picture changes a decision about the menu or preparation, which is the cost paid on 2026-08-11 for keeping V1 small.
 
 **Dependencies when seeded**: `owner-console-live` (#13), which owns the P&L and reports.
