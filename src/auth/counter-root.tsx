@@ -33,13 +33,14 @@ export function CounterRoot() {
   // second copy of the answer beside it.
   const onShiftChanged = revalidate
 
+  const counterSession = state.status === 'counter' ? state.device : null
   const adapters = useMemo(() => {
     try {
-      return createSupabaseAdapters()
+      return createSupabaseAdapters(counterSession)
     } catch {
       return null
     }
-  }, [])
+  }, [counterSession])
 
   if (state.status === 'loading') return <LoadingShell />
   if (state.status === 'unavailable') return <UnconfirmedSession onRetry={revalidate} />

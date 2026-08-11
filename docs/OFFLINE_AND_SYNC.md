@@ -1,7 +1,7 @@
 # Offline And Sync
 
-> The command envelope and server receipts are built. The durable browser queue
-> and live adapters arrive with `billing-live` (#10).
+> The command envelope, durable browser queue, live adapters and server receipts
+> are built by `billing-live` (#10).
 
 **The counter never stops.** A biller with a customer waiting cannot be blocked by a spinner, and a dropped connection must not cost the business a sale or a record of one. Everything on this page follows from that.
 
@@ -11,9 +11,9 @@ Deliberately asymmetric, because the risk is asymmetric.
 
 | Works offline | Online only |
 |---|---|
-| Ring up and settle a bill | Opening and ending a shift |
-| Read the menu | Inventory, expenses |
-| View this device's bills for today | Daily cash close |
+| Direct payment; create, revise, cancel and pay an order | Opening a shift |
+| Continue with an already-open shift's last loaded menu | Finish day |
+| View this tablet's local orders, bills and delivery state | Inventory, expenses |
 | | Profit and loss, reports |
 | | All admin and owner screens |
 | | Attendance, from any device |
@@ -28,10 +28,9 @@ Attendance stays online-only for a second reason: an offline check-in cannot be 
 
 ## The outbox
 
-`billing-live` (#10) will put counter writes into a durable local queue rather
-than sending them straight to the network. The server-side envelope and receipt
-contract described below already exists; the browser storage and drain loop do
-not.
+`billing-live` (#10) puts every counter mutation into a durable local queue
+rather than sending it straight to the network. The composer clears only after
+that IndexedDB transaction commits; a storage failure leaves every field intact.
 
 ```
   Biller settles a bill
@@ -44,15 +43,14 @@ not.
             │
      drain loop: online? → POST keyed by client UUID
             │
-            ├─ 2xx ────────────► drop entry, store server bill_number
-            ├─ 409 duplicate ──► drop entry (already landed — success)
-            ├─ 4xx other ──────► quarantine, surface to the manager
-            └─ network / 5xx ──► retry with backoff, entry stays queued
+            ├─ accepted / exact replay ─► retain result, show server number
+            ├─ retryable / no response ─► bounded backoff, entry stays queued
+            └─ permanent refusal ───────► needs attention on this tablet
 ```
 
-Once #10 supplies it, the queue will survive page reload, app close, and device
-restart. It has to: the realistic failure is not a five-second blip, it is a
-tablet that has been offline all evening.
+The queue survives page reload, app close, compatible application upgrades and
+device restart. It has to: the realistic failure is not a five-second blip, it
+is a tablet that has been offline all evening.
 
 ## Rules that make this safe
 
@@ -76,7 +74,16 @@ Neither is re-derived at sync or read time.
 only when its immutable creation time falls inside the named tablet shift and
 before tablet removal. Backdating outside those facts is permanent refusal.
 
-**Menu is cached and versioned.** The tablet keeps a local copy so billing works cold. Prices are snapshotted onto bill lines anyway, so an outdated cache produces an honest record of what was actually charged rather than a corrupt one. The staleness is visible in the UI, and a menu change is one of the things the drain loop refreshes first on reconnect.
+**A live screen keeps one shift menu snapshot, but a reload does not open from
+cache.** After at least one successful live read, a transient failure leaves the
+already-open counter usable with a persistent warning. Captured lines retain
+their item-name and price snapshots through every refresh. Starting or resuming
+after reload requires the backend and a fresh approved shift.
+
+**Freshness has two independent triggers.** The screen re-reads menu and
+activity on foreground, and Realtime events for menu, orders and bills are only
+nudges to make the same authorised reads. A silent subscription therefore cannot
+leave a counter stale for the rest of its shift.
 
 ## Conflicts
 
@@ -105,7 +112,7 @@ re-close, or automatic recovery path.
 | Server rejects a bill as malformed | Quarantined, not silently dropped; surfaced to the manager with the reason |
 | Clock skew on the tablet | Both client and server timestamps are stored. Material disagreement is a signal worth surfacing, not something to paper over |
 | Two tablets at one outlet | Deferred to `multiple-billing-devices` (#35). The command and number allocators are concurrency-safe, but launch setup permits one active tablet per outlet |
-| Tablet removed while holding a queue | Drain fails with an auth error and quarantines. The removal confirmation names what the tablet last reported it had not sent, so the admin is told before rather than after |
+| Tablet removed while holding a queue | Draining stops and envelopes remain on that tablet. The removal confirmation names what it last reported unsent, so the admin is told before rather than after |
 
 There is deliberately no order transfer and no privileged recovery upload.
 Open orders are short-lived kitchen tickets: a manager cancels a stranded one
@@ -119,3 +126,8 @@ Almost nothing, which is the point.
 - A small persistent indicator: synced, or *N pending*.
 - No spinner, no blocking dialog, no error toast on a failed sync — the queue handles it.
 - One honest exception: if the backlog grows past a threshold or an entry has failed repeatedly, the indicator escalates to a visible warning, because at that point someone genuinely does need to know.
+
+**Finish day** is the explicit online boundary. The tablet waits out any visible
+Undo, drains the date, refuses while any local envelope or server open order
+remains, then ends the shift and records one end-of-day confirmation atomically.
+It never treats a browser's `online` flag as proof that the server was reached.

@@ -9,8 +9,6 @@ import type { PaymentAllocation, PaymentMethod } from '@/data-access/adapters'
 const METHODS: { method: PaymentMethod; label: string }[] = [
   { method: 'cash', label: 'Cash' },
   { method: 'upi', label: 'UPI' },
-  { method: 'swiggy', label: 'Swiggy' },
-  { method: 'zomato', label: 'Zomato' },
 ]
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0'] as const
@@ -26,6 +24,7 @@ type PaymentDialogProps = {
   totalPaise: number
   initialPayments?: PaymentAllocation[]
   busy?: boolean
+  error?: string | null
   onClose: () => void
   onConfirm: (payments: PaymentAllocation[]) => void
 }
@@ -39,6 +38,7 @@ function OpenPaymentDialog({
   totalPaise,
   initialPayments = NO_PAYMENTS,
   busy = false,
+  error = null,
   onClose,
   onConfirm,
 }: PaymentDialogProps) {
@@ -90,6 +90,12 @@ function OpenPaymentDialog({
         </div>
         <Money paise={totalPaise} display className="shrink-0" />
       </div>
+
+      {error && (
+        <p role="alert" className="mt-3 text-sm font-semibold text-danger">
+          {error}
+        </p>
+      )}
 
       {payments.length > 0 && (
         <ul className="mt-3 space-y-1" aria-label="Payment split">

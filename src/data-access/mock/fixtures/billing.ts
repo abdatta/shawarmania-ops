@@ -168,7 +168,7 @@ export const billSeeds: BillSeed[] = [
   {
     daysAgo: 2,
     time: '19:50',
-    paymentMethod: 'swiggy',
+    paymentMethod: 'upi',
     lines: [{ item: 'classic', quantity: 2 }],
   },
   {
@@ -213,7 +213,7 @@ export const billSeeds: BillSeed[] = [
   {
     daysAgo: 1,
     time: '20:05',
-    paymentMethod: 'swiggy',
+    paymentMethod: 'upi',
     lines: [{ item: 'classic', quantity: 4 }],
   },
   {
@@ -267,7 +267,7 @@ export const billSeeds: BillSeed[] = [
   {
     daysAgo: 0,
     time: '13:35',
-    paymentMethod: 'zomato',
+    paymentMethod: 'upi',
     lines: [{ item: 'mayo', quantity: 2 }],
   },
   {
@@ -345,7 +345,7 @@ export const billSeeds: BillSeed[] = [
     outletId: OUTLET_KANCHRAPARA_ID,
     daysAgo: 2,
     time: '19:40',
-    paymentMethod: 'zomato',
+    paymentMethod: 'upi',
     lines: [{ item: 'mozzarella', quantity: 1 }],
   },
 
@@ -378,7 +378,7 @@ export const billSeeds: BillSeed[] = [
     outletId: OUTLET_KANCHRAPARA_ID,
     daysAgo: 1,
     time: '20:35',
-    paymentMethod: 'swiggy',
+    paymentMethod: 'upi',
     lines: [{ item: 'mozzarella', quantity: 2 }],
   },
 

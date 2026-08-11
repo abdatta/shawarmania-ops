@@ -19,9 +19,12 @@ Applied everywhere, without exception:
 ## Tenancy and identity
 
 **`outlets`** — the isolation unit.
-`id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `arrival_deadline` (`time`, default `13:00`), `is_active`, `created_at`.
+`id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `arrival_deadline` (`time`, default `13:00`), `billing_live_from` (nullable `date`), `is_active`, `created_at`.
 
 Coordinates and radius exist for attendance verification. The cutover time is what makes cross-midnight trade reconcile correctly.
+`billing_live_from` is the explicit per-outlet handover after which the temporary
+ledger reads Cash and UPI from bills. It must be scheduled for a business date
+that has not begun and becomes immutable once it starts.
 
 
 **The one table a client may delete from.** `outlets_delete` lets the Super Admin remove an outlet, and sixteen foreign keys — not one of which cascades — mean the delete succeeds only while nothing anywhere references it. There is no bookkeeping column and no maintained list: the check *is* the live referential state, so an outlet whose staff and stock have been moved elsewhere becomes deletable on its own with nothing to re-mark. A deactivated account still counts as a reference. `public.outlet_reference_counts(uuid)` reads the foreign-key set from the catalog and reports what is still attached, so a table added later is covered without anyone editing it.
@@ -165,7 +168,7 @@ snapshot through later menu changes.
 customer snapshot, integer-paise totals, optional single-method summary, status and void
 attribution.
 
-- `payment_method`: nullable compatibility summary. It is one of `cash` | `upi` | `swiggy` | `zomato` for a single-tender bill and null for mixed tender. Card and Other are not accepted payment categories.
+- `payment_method`: nullable compatibility summary. It is `cash` or `upi` for a single-tender bill and null for mixed tender. Aggregators, Card and Other are not accepted payment categories.
 - `pricing_mode`: `no_tax` | `gst_inclusive` | `gst_exclusive`. **v1 always writes `no_tax` and `tax_paise = 0`.** It exists now so that when GST is enabled, historical bills stay unambiguous instead of being silently reinterpreted under new rules.
 - `unique (outlet_id, bill_number)` — bill numbers are unique within an outlet, not globally.
 - **`bill_number` is assigned by the database**: a `before insert` trigger allocates from a per-outlet counter row (`bill_number_counters`, invisible to clients) inside the insert transaction — race-safe, and gapless because a failed insert rolls the allocation back with it. A client-supplied value is overwritten, never trusted; the column's `default 0` exists only so generated client types treat it as server-supplied. *Divergence:* this replaced the "issue bill number" Edge Function sketched in the architecture — a trigger is atomic with the insert, an extra network hop cannot be.
@@ -193,8 +196,9 @@ changed reuse of the UUID is `identity_conflict`.
 **`billing_end_of_day_confirmations`** — one tablet/business-date confirmation
 with its final shift and last acknowledged command watermark. A later shift or
 accepted command for that tablet/date makes it stale. The tablet can confirm
-only after participating, ending its shift, and reporting zero unsent and zero
-needs-attention operations. Readiness requires no open orders, no live shifts,
+only after participating and reporting zero unsent and zero needs-attention
+operations. The confirmation command itself refuses open orders and atomically
+ends that tablet's shift. Readiness requires no open orders, no live shifts,
 and a current confirmation from every participating tablet.
 
 All order and bill mutations use versioned command RPCs. Authenticated clients
@@ -418,7 +422,9 @@ closed date also refuses a new counter shift.
 ## The manual ledger (temporary, #36)
 
 Two tables that exist because billing, expenses and daily cash were not live
-while August 2026 was trading. **Both are designed to be dropped**, by
+while August 2026 was trading. Billing now replaces their Cash/UPI inputs one
+outlet/date at a time; aggregator trade, expenses and drawer facts remain here.
+**Both are designed to be dropped**, by
 the change that first carries their rows into the live records (#12 — see
 [Limitations](LIMITATIONS.md#the-manual-ledger-is-a-stopgap-with-a-stated-exit)).
 The `manual_ledger_` prefix is what makes that removal, and any accidental
@@ -440,12 +446,15 @@ reference from a live surface, greppable.
 
 Seven properties are load-bearing and easy to undo by accident:
 
-- **Nothing is derived in the database.** No view, no generated column, no
-  trigger that computes. Expected cash, the difference, net aggregator revenue
-  and the monthly estimate all live in `src/features/manual-ledger/ledger.ts`, so
-  the rounding rule has exactly one implementation. A migration that drops two
-  tables is trivially reviewable; one that also drops views invites leaving
-  something behind.
+- **Only live counter revenue is aggregated in the database.**
+  `manual_ledger_counter_revenue()` groups settled bill-payment allocations by
+  payment business date under RLS and excludes void bills. Expected cash, the
+  difference, net aggregator revenue and the monthly estimate remain in
+  `src/features/manual-ledger/ledger.ts`, so the rounding rule still has exactly
+  one implementation.
+- **Typed Cash/UPI is refused after go-live.** Ledger rows continue storing zero
+  in those temporary columns because the same row still owns the drawer and
+  aggregator inputs; the adapter replaces them from the allocation read model.
 - **`opening_cash_paise` and both `_commission_bp` columns are stored per day,
   not derived.** This is the opposite of the `daily_cash_records` treatment above
   and for the same underlying reason: correcting day 3's count must not silently

@@ -135,3 +135,42 @@ describe('classifying a counter action failure', () => {
     })
   })
 })
+
+describe('the shared outlet billing channel', () => {
+  it('subscribes once to menu and rail tables, then removes the channel with the last reader', () => {
+    const handlers: Array<() => void> = []
+    const on = vi.fn((_kind, _filter, handler: () => void) => {
+      handlers.push(handler)
+      return channel
+    })
+    const subscribe = vi.fn(() => channel)
+    const channel = { on, subscribe }
+    const client = {
+      functions: { invoke: vi.fn() },
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn().mockResolvedValue('ok'),
+    } as unknown as SupabaseClient<Database>
+    const counter = createSupabaseCounterAdapter(client)
+    const first = vi.fn()
+    const second = vi.fn()
+
+    const leaveFirst = counter.subscribeToOutletBilling('outlet-1', first)
+    const leaveSecond = counter.subscribeToOutletBilling('outlet-1', second)
+
+    expect(client.channel).toHaveBeenCalledTimes(1)
+    expect(on.mock.calls.map((call) => call[1])).toEqual([
+      { event: '*', schema: 'public', table: 'menu_categories', filter: 'outlet_id=eq.outlet-1' },
+      { event: '*', schema: 'public', table: 'menu_items', filter: 'outlet_id=eq.outlet-1' },
+      { event: '*', schema: 'public', table: 'orders', filter: 'outlet_id=eq.outlet-1' },
+      { event: '*', schema: 'public', table: 'bills', filter: 'outlet_id=eq.outlet-1' },
+    ])
+    handlers[0]?.()
+    expect(first).toHaveBeenCalledOnce()
+    expect(second).toHaveBeenCalledOnce()
+
+    leaveFirst()
+    expect(client.removeChannel).not.toHaveBeenCalled()
+    leaveSecond()
+    expect(client.removeChannel).toHaveBeenCalledWith(channel)
+  })
+})

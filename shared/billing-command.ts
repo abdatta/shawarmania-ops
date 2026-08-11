@@ -17,7 +17,7 @@ export type BillingCommandType =
   | 'manager_cancel_order'
   | 'confirm_end_of_day'
 
-export type BillingPaymentMethod = 'cash' | 'upi' | 'swiggy' | 'zomato'
+export type BillingPaymentMethod = 'cash' | 'upi'
 export type BillingPricingMode = 'no_tax'
 
 export interface BillingPaymentAllocation {

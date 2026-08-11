@@ -9,7 +9,6 @@ import { AdaptersContext } from '@/data-access/adapters-context'
 import { createSupabaseAdapters } from '@/data-access/supabase-adapters'
 import { trackAdapterWrites } from '@/data-access/track-adapter-writes'
 import { NotFound } from '@/routes/not-found'
-import { CounterShell } from '@/shell/counter-shell'
 import { PhoneShell } from '@/shell/phone-shell'
 import { SessionContext } from '@/session/context'
 import { heldRoles, reachableRoles, roleFromSegment, ROLE_SEGMENTS } from '@/session/session'
@@ -112,12 +111,18 @@ export function RealRoot() {
     return <Navigate to={`/${homeSegment}`} replace />
   }
 
-  const Shell = asked === 'biller' ? CounterShell : PhoneShell
+  // A Biller is a person on this branch, never the counter. Their assignment
+  // reaches the Employee capabilities on their phone; the enrolled device has
+  // its separate `/counter` branch and is the only place billing can render.
+  if (asked === 'biller') return <Navigate to={`/${ROLE_SEGMENTS.employee}`} replace />
 
   return (
     <SessionContext.Provider value={session}>
       <AdaptersContext.Provider value={adapters}>
-        <Shell accountMenu={<AccountMenu onSignOut={endSession} />} appAction={<AppAction />} />
+        <PhoneShell
+          accountMenu={<AccountMenu onSignOut={endSession} />}
+          appAction={<AppAction />}
+        />
       </AdaptersContext.Provider>
     </SessionContext.Provider>
   )

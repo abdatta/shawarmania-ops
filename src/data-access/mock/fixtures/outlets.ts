@@ -41,6 +41,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     geofence_radius_m: 150,
     business_day_cutover: '04:00:00',
     arrival_deadline: '13:00:00',
+    billing_live_from: null,
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: 9,
@@ -71,6 +72,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     // one-deadline-per-outlet limitation instead of the rule
     // (docs/LIMITATIONS.md).
     arrival_deadline: '20:00:00',
+    billing_live_from: null,
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
     // Never surveyed, mirroring supabase/seed.sql — so the demo shows both
@@ -98,6 +100,7 @@ export const outletFixtures: Tables<'outlets'>[] = [
     geofence_radius_m: 150,
     business_day_cutover: '04:00:00',
     arrival_deadline: '13:00:00',
+    billing_live_from: null,
     // Already closed, so the demo starts where the delete action is offered.
     // Nothing is rostered here, nobody's account points at it, and no day was
     // ever traded — which is exactly the precondition that makes deleting it

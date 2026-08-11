@@ -323,9 +323,7 @@ describe('mock billing adapter', () => {
       outletIds: [DEMO_OUTLET_ID],
     })
     const saved = await biller.saveOrder(orderDraft(store, '30000000-0000-4000-8000-000000000001'))
-    const paid = await biller.payOrder(saved.id, [
-      { method: 'zomato', amountPaise: saved.totalPaise },
-    ])
+    const paid = await biller.payOrder(saved.id, [{ method: 'upi', amountPaise: saved.totalPaise }])
     const beforeLines = structuredClone(paid.lines)
     const voided = await manager.voidBill(paid.id, 'Wrong item rung')
 
@@ -357,7 +355,7 @@ describe('mock billing adapter', () => {
       source.totals.find((total) => total.method === method)?.totalPaise ?? 0
     expect(totalFor('cash', history) - totalFor('cash', before)).toBe(10000)
     expect(totalFor('upi', history) - totalFor('upi', before)).toBe(3900)
-    expect(history.totals.map((total) => total.method)).toEqual(['cash', 'upi', 'swiggy', 'zomato'])
+    expect(history.totals.map((total) => total.method)).toEqual(['cash', 'upi'])
   })
 
   it('limits My shift to the open shift business date and tablet', async () => {

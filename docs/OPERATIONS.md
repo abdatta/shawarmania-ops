@@ -337,7 +337,7 @@ installed window, when the browser offers no supported path, and in demo mode.
 If installation should be available but the action is missing, first confirm
 the canonical HTTPS origin is open and that the browser has not already
 installed the app. Do not clear site data on a counter tablet merely to recover
-the prompt; once offline billing lands, that would destroy its pending outbox.
+the prompt; that destroys its pending billing outbox.
 
 ### Service worker caution
 
@@ -365,7 +365,11 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    runs several outlets, select all now — one account and code cover every
    assignment.
 4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ. *(Not built — demo only until #10.)*
-5. **Set the counter tablet up**: on your own phone, open **Tablets**, choose
+5. **Enter the outlet's complete real menu through Menu.** Create every item,
+   check prices, category order and availability, then retire a test item and
+   confirm historical captured lines do not change. Do this before a tablet is
+   set up; a counter with an incomplete menu is not ready for shadow billing.
+6. **Set the counter tablet up**: on your own phone, open **Tablets**, choose
    the outlet, name the tablet what is written on the back of it, and generate a
    **setup code**. Walk to the counter, open the app on the tablet at
    `/counter/setup`, and type the code. The tablet is then that outlet's counter
@@ -376,7 +380,7 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    lose it, which costs nothing. **No password is ever typed on the tablet**, at
    setup or afterwards. And an outlet holds **one active tablet**: replacing one
    means removing the old one first, which is permanent and immediate.
-6. **Add employees and billers** (People), sending each activation link.
+7. **Add employees and billers** (People), sending each activation link.
    Creating a person requires name, username, one role and one or more outlets;
    job title, phone and joined date are optional. It writes the account and
    every selected assignment before showing one code, so the person appears on
@@ -384,23 +388,32 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    keeps that outlet preselected. Later assignment changes keep the same
    account. A pending link is replaced transactionally; an activated person
    gets no code unless an admin explicitly chooses **New code**.
-7. **Set the opening cash float** for the first business day. *(Not built — #12.
+8. **Set the opening cash float** for the first business day. *(Not built — #12.
    Meanwhile the float is typed as the first day's opening cash in the manual
-   ledger, step 9.)*
-8. **Verify isolation before going live** — sign in as the new Franchise Admin and confirm no other outlet is visible anywhere. This is a real step, not a formality: it is the last point at which a misconfiguration is cheap to fix.
-9. **Start the manual ledger for the outlet** (Super Admin → Ledger). *(Temporary
-   — #36, and this step disappears when #12 lands.)* Until billing, expenses and
-   daily cash are live, this is the only record of what the outlet takes and
-   spends, so it is a step rather than a suggestion. On the first day, count the
+   ledger, step 10.)*
+9. **Verify isolation before going live** — sign in as the new Franchise Admin and confirm no other outlet is visible anywhere. This is a real step, not a formality: it is the last point at which a misconfiguration is cheap to fix.
+10. **Start the manual ledger for the outlet** (Super Admin → Ledger). *(Temporary
+   — #36, and this step disappears when #12 lands.)* This remains the record of
+   aggregator trade, expenses and drawer facts, so it is a step rather than a
+   suggestion. On the first day, count the
    drawer and type that as **opening cash**, and type both aggregator commission
    rates — nothing is inherited, because there is no earlier day to inherit from.
    Every later day offers the previous day's count and rates and needs only the
    four channel figures, the expenses as they happen, and the count at close.
+11. **Shadow billing before taking customer money.** Open a real tablet shift,
+   ring direct and handover payments with test amounts, force it offline and back
+   online, verify exactly one server bill per payment, exercise Undo, cancel the
+   test orders, and have a manager void the test bills with reasons.
+12. **Schedule the ledger handover** (Super Admin → Outlets → Edit → **Counter
+   billing starts on**) for a business date that has not started. From that date
+   the ledger removes typed Cash and UPI and labels their settled bill totals
+   **from counter**. Keep typing Zomato, Swiggy, both commission rates, cash
+   movements, expenses and the drawer count.
 
 ## Recording a trading day by hand *(temporary — #36)*
 
-The nightly job while billing, expenses and cash are not live. Two or three
-minutes per outlet, from a phone, and the figures build the month by themselves.
+The nightly job while expenses and daily cash are not live. Two or three minutes
+per outlet, from a phone, and the figures build the month by themselves.
 
 1. **Super Admin → Ledger**, pick the outlet, leave it on **One day** and today.
 2. **Check the opening cash it offers.** It is the previous recorded day's count.
@@ -408,9 +421,12 @@ minutes per outlet, from a phone, and the figures build the month by themselves.
    reports a gap between the two, correct whichever day is wrong rather than
    overwriting the figure to make the warning go away. That warning is the whole
    reason the opening is stored per day.
-3. **Type the four channels**: cash, UPI, and what Zomato and Swiggy **state**,
-   not what they settle. Each aggregator sits in its own block with the rate that
-   applies to this day, and the block shows what actually arrives as you type.
+3. **Record the four channels.** Before this outlet's billing handover, type
+   Cash and UPI. From the scheduled date those values are labelled **from
+   counter** and cannot be typed; check them against the tablet's settled bills.
+   Always type what Zomato and Swiggy **state**, not what they settle. Each
+   aggregator stays in its own block with the rate that applies to this day, and
+   the block shows what actually arrives as you type.
 4. **Check each block's rate.** It carries forward from the previous day. Edit it
    on the day the rate actually changed and no earlier day moves.
 5. **Record each expense under the words the month should group by.** Category
@@ -427,6 +443,12 @@ minutes per outlet, from a phone, and the figures build the month by themselves.
 8. **Save.** The form gives way to a reading of what you just stored: the revenue
    side with each aggregator's rate and what actually arrived, and the drawer
    below it.
+
+At the tablet, **Finish day** is a separate online boundary: use it only after
+the activity rail has no open orders and Sync says everything is sent. It drains
+again, refuses any unresolved local or server work, ends the shift and records
+the date's confirmation. A refusal is work to resolve, never a prompt to clear
+site data.
 
 To correct a day later, open it and press **Edit**. It opens as a reading, so the
 figures cannot be nudged by a stray tap on the way past; every field comes back

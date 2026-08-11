@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 import { isRenderable, surfaces } from '@/gates/registry'
 import { useSession } from '@/session/context'
-import { reachableRoles } from '@/session/session'
+import { personalNavigationRoles, reachableRoles } from '@/session/session'
 
 import { NotFound } from './not-found'
 
@@ -25,7 +25,12 @@ export function GatedSurface({ path, children }: { path: string; children: React
   // owner-reaches-every-outlet the owner also reaches the outlet-level ones. A
   // role they can neither hold nor reach still finds nothing, which is the
   // property this file exists for.
-  const reachable = reachableRoles(session)
+  // Every real role branch is a person's phone. A Biller assignment reaches
+  // Employee capabilities there, but its billing surfaces belong only to the
+  // separately authenticated `/counter` device branch. Demo keeps the Biller
+  // walkthrough, so it continues to resolve the synthetic counter surfaces.
+  const reachable =
+    session.mode === 'real' ? personalNavigationRoles(session) : reachableRoles(session)
   const surface = surfaces.find(
     (candidate) => reachable.includes(candidate.role) && candidate.path === path,
   )

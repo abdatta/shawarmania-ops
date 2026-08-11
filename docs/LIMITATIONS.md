@@ -32,11 +32,14 @@ in `daily-cash-live` (#12).
 
 ## The manual ledger is a stopgap with a stated exit
 
-August 2026 is trading while billing (#10), expenses and inventory (#11) and
-daily cash (#12) are still proposals, so nothing records what the outlets sold,
-spent, or held in the drawer. The **Ledger** surface (#36) is where the owner
-writes that down by hand until those surfaces land. It is deliberately small: two
-tables, no workflow, no sign-off and no correction history.
+Billing now records Cash and UPI at each promoted counter, but expenses and
+inventory (#11) and daily cash (#12) still do not own the nightly record. The
+**Ledger** surface (#36) therefore remains the place for aggregator trade,
+expenses and drawer facts. Each outlet changes over on an explicit future-only
+`billing_live_from`: from that day its Cash and UPI values are read from settled
+bills once, while earlier dates and an unpromoted outlet remain hand-typed. It is
+deliberately small: two tables, no workflow, no sign-off and no correction
+history.
 
 It is no longer owner-only. `the-ledger-opens-to-the-outlet` gave the **day
 record** to managers at the outlets they are assigned to, and the **expense
@@ -175,9 +178,13 @@ Tracked as three backlog items: `bill-thermal-printing`, `bill-gst-breakup`, `bi
 
 The schema retains integer-paise discount fields for a later pricing-policy change, but the counter exposes no discount control and writes zero. Orders and bills must be paid in full, but that full total may be split across exact tender allocations such as Cash and UPI. There are no deposits, partially paid orders or manager-side payment shortcuts. A later discount change must update both the UI contract and `billing-live` command construction together so the demo and live adapter do not drift.
 
-### No card tender
+### Counter billing accepts Cash and UPI only
 
-Billing accepts Cash, UPI, Swiggy or Zomato, and expenses accept Cash or UPI. Card and the vague Other escape hatch were removed from the database payment enum only after a read-only production audit proved there were no matching bills or expenses to migrate; the guarded forward migration refuses rather than relabel any unexpected historical row. A future payment category is added explicitly when the business adopts it.
+Billing and live expenses accept Cash or UPI. Card, Other, Swiggy and Zomato are
+absent from the database payment enum. The enum was narrowed only after a
+read-only production audit proved there was no aggregator history to reinterpret;
+the guarded forward migration aborts rather than relabel an unexpected row. A
+future payment category is added explicitly when the business adopts it.
 
 ### Profit and loss is an estimate, not accounting
 
@@ -185,11 +192,16 @@ This is not a filing-grade financial report and must not be used as one. Specifi
 
 The cash-basis / consumption-basis distinction is real and the UI always states which is shown. See [Data Model](DATA_MODEL.md#two-modelling-traps-in-this-domain).
 
-### No aggregator reconciliation
+### Bills are not complete revenue in v1
 
-Swiggy and Zomato orders are recorded as bills so revenue and item-level sales stay complete. But **the recorded amount is the order value, not what Shawarmania actually receives** — aggregators settle later, net of commission. Aggregator revenue in this system is therefore systematically overstated relative to cash in the bank.
+Swiggy and Zomato orders are **not rung as bills**. Their stated revenue and the
+commission rate that applied that day live only in the temporary ledger, where
+the net is computed per day. Therefore any figure quoted from `bills` as “total
+sales” understates the outlet: bills cover only Cash and UPI counter trade.
 
-This is the single largest known inaccuracy in the P&L. Worth fixing when aggregator volume matters enough to distort decisions; fixing it means either manual settlement entry or an aggregator integration.
+#12 owns retiring the remaining drawer/manual-day path and #13 owns the complete
+reporting view. Until those changes deliberately integrate aggregator trade,
+neither bill history nor an item-level bill report is a complete revenue record.
 
 ### Payroll is out of scope
 
@@ -339,17 +351,20 @@ The count on the Attendance tab reaches only somebody already holding the app. N
 
 The count is also **read on arrival rather than kept live**. It is correct when a screen is opened and again when the app is brought back to the foreground, and it may lag work that arrives while a screen sits open. That is a deliberate trade against battery on a phone that spends its day in an apron: a timer waking the radio for a number nobody is looking at is a cost paid continuously for a benefit taken occasionally. A read that fails leaves the last known number on screen rather than blanking it, because a badge that vanishes says the work is done.
 
+The billing counter is the deliberate exception. It is a mains-powered tablet
+fixed on one screen, and stale price, availability, void or cancellation state is
+charged to a customer. It re-reads on foreground and also listens for Realtime
+nudges, with neither path trusted as the only one and no timer polling the radio.
+
 ### Recorded check-out history is gone
 
 Check-out was removed in #26 (owner decision, 2026-07-31) with the cost stated: the check-out times and locations already recorded in production were dropped by the migration. A full production dump was taken and verified beforehand and lives outside the repo under the snapshot procedure, so the data exists — but no screen can show it again, and there is no down migration. Nobody had used the feature, and unused monitoring data is the kind [Security And Privacy](SECURITY_AND_PRIVACY.md) says not to keep; that is the trade, not an accident.
 
-### The durable billing queue arrives with billing-live
+### An unsent billing command exists only on its tablet
 
-The server accepts immutable, exactly replayable command envelopes now, but no
-live screen stores them yet: billing remains demo-gated. `billing-live` (#10)
-adds the IndexedDB queue, dependency-ordered draining and visible backlog.
-
-Once live, an unacknowledged command exists only on its tablet. There is no
+The live counter stores immutable command envelopes in IndexedDB and drains them
+in dependency order with one leader tab. An unacknowledged command nevertheless
+exists only on its tablet. There is no
 order transfer and no privileged recovery upload. A manager cancels a stranded
 open order with a reason and the counter re-rings it; a destroyed tablet's
 unsent pay-now sale has no recovery path.

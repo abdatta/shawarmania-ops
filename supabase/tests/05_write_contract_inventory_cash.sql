@@ -9,8 +9,20 @@ select * from no_plan();
 
 select is(
   enum_range(null::public.payment_method)::text[],
-  array['cash', 'upi', 'swiggy', 'zomato']::text[],
-  'the payment enum contains the four methods the outlets actually accept');
+  array['cash', 'upi']::text[],
+  'the payment enum contains only the two methods the counter accepts');
+
+select throws_ok(
+  $q$ select 'swiggy'::public.payment_method $q$,
+  '22P02',
+  null,
+  'a handcrafted Swiggy payment is refused by the database type');
+
+select throws_ok(
+  $q$ select 'zomato'::public.payment_method $q$,
+  '22P02',
+  null,
+  'a handcrafted Zomato payment is refused by the database type');
 
 select throws_ok(
   $q$ select 'card'::public.payment_method $q$,
@@ -487,6 +499,13 @@ select throws_ok($q$
   values ('00000000-0000-4000-a000-000000000002', current_date, 5000, 'Synthetic Owner',
           '10000000-0000-4000-a000-000000000001')
 $q$, '42501', null, 'the drawer is not reachable from the owner''s remote path at all');
+
+reset role;
+select throws_ok(
+  $$select public.assert_payment_method_narrowing_safe(true)$$,
+  'P0001',
+  'cannot remove aggregator payment methods while swiggy or zomato rows exist',
+  'the narrowing migration aborts instead of relabelling unexpected aggregator history');
 
 select throws_ok($q$
   select public.close_business_day('00000000-0000-4000-a000-000000000002', current_date, 0, 0)

@@ -6,7 +6,12 @@ import { NavAttentionBadge } from '@/features/attention/nav-badge'
 import { visibleSurfaces, type Surface } from '@/gates/registry'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
-import { heldRoles, reachableRoles, ROLE_SEGMENTS, type Role } from '@/session/session'
+import {
+  personalHeldRoles,
+  personalNavigationRoles,
+  ROLE_SEGMENTS,
+  type Role,
+} from '@/session/session'
 
 /**
  * The shell for the phone-first roles — Super Admin, Franchise Admin,
@@ -33,8 +38,8 @@ export function PhoneShell({
   // reaches the outlet-level surfaces holding no assignment at all
   // (owner-reaches-every-outlet, design D1). What they HOLD still decides which
   // homes are theirs.
-  const held = heldRoles(session)
-  const items = visibleSurfaces(reachableRoles(session), session.mode, held)
+  const held = personalHeldRoles(session)
+  const items = visibleSurfaces(personalNavigationRoles(session), session.mode, held)
   const home = held[0]
 
   const baseFor = (role: Role) => {

@@ -9,6 +9,7 @@ import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
+  type ManualLedgerCounterRevenue,
   type ManualLedgerDay,
   type ManualLedgerDayInput,
   type ManualLedgerExpense,
@@ -181,13 +182,14 @@ function draftToDay(
   draft: DayDraft,
   outletId: string,
   businessDate: string,
+  counterRevenue: ManualLedgerCounterRevenue | null,
 ): ManualLedgerDayInput | null {
   const openingCashPaise = requiredPaise(draft.openingCash)
   const countedCashPaise = requiredPaise(draft.countedCash)
   const zomatoCommissionBp = basisPoints(draft.zomatoCommission)
   const swiggyCommissionBp = basisPoints(draft.swiggyCommission)
-  const cashRevenuePaise = paise(draft.cashRevenue)
-  const upiRevenuePaise = paise(draft.upiRevenue)
+  const cashRevenuePaise = counterRevenue?.cashRevenuePaise ?? paise(draft.cashRevenue)
+  const upiRevenuePaise = counterRevenue?.upiRevenuePaise ?? paise(draft.upiRevenue)
   const zomatoRevenuePaise = paise(draft.zomatoRevenue)
   const swiggyRevenuePaise = paise(draft.swiggyRevenue)
   const cashAddedPaise = paise(draft.cashAdded)
@@ -237,6 +239,9 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
 
   const [previous, setPrevious] = useState<ManualLedgerDay | null>(null)
   const [recorded, setRecorded] = useState<ManualLedgerDay | null>(null)
+  const [counterRevenue, setCounterRevenue] = useState<
+    ManualLedgerCounterRevenue | null | undefined
+  >(undefined)
   /** Null while the day is still being read: the whole card waits behind a shape. */
   const [draft, setDraft] = useState<DayDraft | null>(null)
   const [expenses, setExpenses] = useState<ManualLedgerExpense[] | null>(null)
@@ -266,14 +271,21 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
       adapter.getDay(outletId, businessDate),
       adapter.getPreviousDay(outletId, businessDate),
       adapter.listExpenses(outletId, businessDate),
+      adapter.getCounterRevenue(outletId, businessDate),
     ])
-      .then(([day, earlier, list]) => {
+      .then(([day, earlier, list, fromCounter]) => {
         if (!active) return
         setRecorded(day)
         setPrevious(earlier)
         // A recorded day is shown as it was stored. A new one inherits the
         // previous close and rates, and inherits nothing on the first day.
-        setDraft(day ? draftFrom(day) : draftInheriting(earlier))
+        const nextDraft = day ? draftFrom(day) : draftInheriting(earlier)
+        if (fromCounter) {
+          nextDraft.cashRevenue = String(fromCounter.cashRevenuePaise / 100)
+          nextDraft.upiRevenue = String(fromCounter.upiRevenuePaise / 100)
+        }
+        setCounterRevenue(fromCounter)
+        setDraft(nextDraft)
         setExpenses(list)
       })
       .catch(() => {
@@ -295,7 +307,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
    * is what makes the difference appear as it is typed.
    */
   const stored = editingDay ? null : recorded
-  const typed = draft ? draftToDay(draft, outletId, businessDate) : null
+  const typed = draft ? draftToDay(draft, outletId, businessDate, counterRevenue ?? null) : null
   const day = stored ?? typed
   const reading: DayReading | null = day ? readDay(day, expenses ?? []) : null
   const chain: ChainSignal | null = day ? checkOpeningChain(day, previous) : null
@@ -384,10 +396,11 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
             day={stored}
             reading={reading}
             saved={saved}
+            fromCounter={counterRevenue != null}
             onEdit={edit}
           />
           <ChainBreak chain={chain} />
-          <DayReadingCard day={stored} reading={reading} />
+          <DayReadingCard day={stored} reading={reading} fromCounter={counterRevenue != null} />
         </>
       ) : (
         <>
@@ -409,22 +422,40 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
                 <p>A refund is recorded by lowering Cash, so a negative figure is allowed there.</p>
               </SectionHeading>
 
-              <div className="grid grid-cols-2 gap-2">
-                <NumberField
-                  id="cash-revenue"
-                  label="Cash"
-                  value={draft.cashRevenue}
-                  onChange={(value) => change('cashRevenue', value)}
-                  testId="cash-revenue"
-                />
-                <NumberField
-                  id="upi-revenue"
-                  label="UPI"
-                  value={draft.upiRevenue}
-                  onChange={(value) => change('upiRevenue', value)}
-                  testId="upi-revenue"
-                />
-              </div>
+              {counterRevenue ? (
+                <div
+                  className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-surface-raised p-3"
+                  data-testid="counter-revenue"
+                >
+                  <Row
+                    label="Cash · from counter"
+                    paise={counterRevenue.cashRevenuePaise}
+                    testId="cash-revenue"
+                  />
+                  <Row
+                    label="UPI · from counter"
+                    paise={counterRevenue.upiRevenuePaise}
+                    testId="upi-revenue"
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberField
+                    id="cash-revenue"
+                    label="Cash"
+                    value={draft.cashRevenue}
+                    onChange={(value) => change('cashRevenue', value)}
+                    testId="cash-revenue"
+                  />
+                  <NumberField
+                    id="upi-revenue"
+                    label="UPI"
+                    value={draft.upiRevenue}
+                    onChange={(value) => change('upiRevenue', value)}
+                    testId="upi-revenue"
+                  />
+                </div>
+              )}
 
               {/*
                 Each aggregator is one outlined block: the stated figure, the rate
@@ -576,7 +607,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
           <ChainBreak chain={chain} />
 
           {day && reading ? (
-            <DayReadingCard day={day} reading={reading} />
+            <DayReadingCard day={day} reading={reading} fromCounter={counterRevenue != null} />
           ) : (
             <Card data-testid="reading-incomplete">
               <p className="text-sm text-content-muted">
@@ -627,12 +658,14 @@ function RecordedDay({
   day,
   reading,
   saved,
+  fromCounter,
   onEdit,
 }: {
   businessDate: string
   day: ManualLedgerDayInput
   reading: DayReading
   saved: boolean
+  fromCounter: boolean
   onEdit: () => void
 }) {
   const zomatoCommissionPaise = day.zomatoRevenuePaise - reading.netZomatoPaise
@@ -663,8 +696,16 @@ function RecordedDay({
       <h3 className="text-xs font-bold uppercase tracking-wide text-content-muted">
         Sales breakdown
       </h3>
-      <Row label="Cash" paise={day.cashRevenuePaise} testId="recorded-cash" />
-      <Row label="UPI" paise={day.upiRevenuePaise} testId="recorded-upi" />
+      <Row
+        label={fromCounter ? 'Cash · from counter' : 'Cash'}
+        paise={day.cashRevenuePaise}
+        testId="recorded-cash"
+      />
+      <Row
+        label={fromCounter ? 'UPI · from counter' : 'UPI'}
+        paise={day.upiRevenuePaise}
+        testId="recorded-upi"
+      />
 
       <div className="space-y-1 border-t border-border pt-2">
         <Row
@@ -750,11 +791,23 @@ function ChainBreak({ chain }: { chain: ChainSignal | null }) {
  * well as by sign — a minus sign is the first thing a bright counter or a small
  * screen loses, and "₹250 short" is not a sentence anybody misreads.
  */
-function DayReadingCard({ day, reading }: { day: ManualLedgerDayInput; reading: DayReading }) {
+function DayReadingCard({
+  day,
+  reading,
+  fromCounter,
+}: {
+  day: ManualLedgerDayInput
+  reading: DayReading
+  fromCounter: boolean
+}) {
   return (
     <Card className="space-y-2" data-testid="day-reading">
       <Row label="Opening cash" paise={day.openingCashPaise} testId="reading-opening" />
-      <Row label="Cash from sales" paise={day.cashRevenuePaise} testId="reading-cash-revenue" />
+      <Row
+        label={fromCounter ? 'Cash from sales · from counter' : 'Cash from sales'}
+        paise={day.cashRevenuePaise}
+        testId="reading-cash-revenue"
+      />
       {/*
         The reason sits under the amount it explains, which is the only place it is
         any use: "₹2,000 brought in" a month later is a figure nobody can account

@@ -133,6 +133,19 @@ End-to-end, with the network genuinely disabled rather than mocked away.
 
 - Go offline, ring up several bills, come back online → **exactly** that many bills land, with no duplicates.
 - Reload the page mid-queue → the outbox survives and still drains.
+- Drop the backend before local commit → the composer stays; drop it after local
+  commit → the composer clears and the command remains not sent yet.
+- Let the server commit and lose only the response → replay returns the same
+  result and consumes no second bill number.
+- Direct Mark Paid cannot drain during its six-second Undo window, and Undo
+  restores lines, customer and exact tender allocation.
+- Create → revise → pay/cancel remains dependency ordered while an unrelated
+  order chain continues.
+- End the shift, cross cutover and restart with queued work → old work remains
+  deliverable, but no new work opens without the backend and a fresh shift.
+- Remove a tablet with pending work → draining stops and the envelopes remain.
+- Finish day refuses Undo-held, unsent, needs-attention and server-open work;
+  after a clean drain it ends the shift and writes exactly one confirmation.
 - Force a duplicate submission of the same client UUID → one row.
 - Bill numbers are assigned by the server, are sequential per outlet, and never collide across two devices.
 - A bill settled at 00:20, synced at 09:00, carries the **previous** business date.
@@ -158,7 +171,7 @@ That is all `clientsClaim` governs, and it is worth being exact because this pag
 
 - **PWA update changes**: `e2e/update-adoption.spec.ts` publishes a real new build by giving the built worker script one more byte, which is the whole of what a new version means to a browser, and asserts both halves — an occupied page is offered the action and is *not* reloaded, an unoccupied one reloads itself. Route interception cannot stand in for this: Playwright can observe the worker-script request but not fulfil it, because the browser rather than the page makes it. Mutating the artefact is safe because each test gets its own browser context and the original bytes are restored afterwards. **A unit test of the registration callbacks is not sufficient coverage here** — the bug this suite exists to catch was in the library's behaviour around callbacks that were themselves correct.
 - **Theme changes**: the contrast validator passes. AA is the floor.
-- **Schema changes**: migrations apply cleanly to a fresh database *and* to a copy with existing data.
+- **Schema changes**: migrations apply cleanly to a fresh database *and* to a copy with existing data. A narrowing migration needs an explicit dirty-history fixture proving it aborts rather than silently rewriting rows.
 - **Production deployment changes**: Pages depends on the `production-database` migration job; a failed or missing migration credential blocks publication, an up-to-date schema is a no-op, and manual frontend rollback leaves forward migration history untouched.
 - **Authentication/identity changes**: run username and associated-email sign-in, three-field
   activation, admin reset, alias-rename/session-survival, hand-crafted
@@ -235,6 +248,12 @@ Finally walk live and demo at phone and tablet widths in both light and dark:
 ordinary row density, approve/deny, denial sheet, retry confirmation,
 absent-plus-waiting wording, full history, compact correction action, badges and
 multi-outlet switching. Demo network capture must remain within the app origin.
+
+For billing, that walk additionally covers the three-column counter at tablet
+and narrow widths, Cash/UPI only, local reference before server numbering,
+offline banner, freshness after foreground and a reported change, manager void
+with manual re-ring wording, ledger **from counter** labels, and a personal
+Biller landing on staff navigation rather than a till.
 
 ## What only the real transport can prove
 

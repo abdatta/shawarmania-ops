@@ -245,6 +245,10 @@ export function createMockManualLedgerAdapter(
   }
 
   return {
+    async getCounterRevenue() {
+      return null
+    },
+
     async getDay(outletId, businessDate) {
       refuseDay(outletId)
       const row = store.manualLedgerDays.find(

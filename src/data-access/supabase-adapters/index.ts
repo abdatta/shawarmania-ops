@@ -16,22 +16,26 @@ import {
 } from './operations'
 import { createSupabaseOutletsAdapter } from './outlets'
 import { createSupabaseAlertsAdapter, createSupabaseInsightsAdapter } from './oversight'
+import type { CounterDeviceSession } from '@/session/counter-session'
 
 /**
  * The real-adapter factory the real session tree provides. The demo tree must
  * never import this module — eslint enforces it, and the demo-scope tripwire
  * in getSupabaseClient makes a slip loud rather than silent.
  */
-export function createSupabaseAdapters(): DataAdapters {
+export function createSupabaseAdapters(
+  counterSession: CounterDeviceSession | null = null,
+): DataAdapters {
   const client = getSupabaseClient()
   return {
     outlets: createSupabaseOutletsAdapter(client),
     accounts: createSupabaseAccountsAdapter(client),
     attendance: createSupabaseAttendanceAdapter(client),
     menu: createSupabaseMenuAdapter(client),
-    // Likewise not connected: #9 brings the enrolled device and the outbox, #10
-    // the settlement path. See supabase-adapters/billing.ts.
-    billing: createSupabaseBillingAdapter(),
+    // Real tablet sessions receive the durable local-first settlement path;
+    // personal sessions receive the same authorised manager reads and writes
+    // without opening a local queue.
+    billing: createSupabaseBillingAdapter(client, counterSession),
     // Real from the day it ships, like the customer directory and for the same
     // reason: the tablets, the handshake and the shift are what #9 is, and a
     // stub would leave the boundary untested by the only screens that use it.

@@ -26,8 +26,10 @@ export function RoleHome() {
       <CounterHandshakeCards />
       {session.role === 'super_admin' && <OwnerHome />}
       {session.role === 'franchise_admin' && <AdminHome />}
-      {session.role === 'biller' && <CounterHome />}
-      {session.role === 'employee' && <StaffHome />}
+      {session.role === 'biller' && session.mode === 'demo' && <CounterHome />}
+      {(session.role === 'employee' || (session.role === 'biller' && session.mode === 'real')) && (
+        <StaffHome />
+      )}
     </>
   )
 }

@@ -1,0 +1,332 @@
+import 'fake-indexeddb/auto'
+
+import Dexie from 'dexie'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import type { BillDraft, PaymentMethod } from '../adapters'
+import type { Database } from '../database.types'
+import {
+  BILLING_DELIVERY_DATABASE_NAME,
+  BillingDeliveryDatabase,
+  BillingDeliveryStore,
+} from '@/outbox'
+import type { CounterDeviceSession } from '@/session/counter-session'
+
+import { createSupabaseBillingAdapter } from './billing'
+import { createSupabaseBillingCommandAdapter } from './billing-command'
+
+const session: CounterDeviceSession = {
+  kind: 'counter-device',
+  device: { deviceId: '10000000-0000-4000-a000-000000000004', outletId: 'outlet-1', label: 'Till' },
+  shift: {
+    id: 'shift-1',
+    personId: 'person-1',
+    outletId: 'outlet-1',
+    openedAt: '2026-08-11T05:30:00.000Z',
+    businessDate: '2026-08-11',
+    expiresAt: '2026-08-12T00:00:00.000Z',
+  },
+}
+
+const draft: BillDraft = {
+  clientId: '10000000-0000-4000-a000-000000000099',
+  outletId: 'outlet-1',
+  shiftId: 'shift-1',
+  businessDate: '2026-08-11',
+  payments: [
+    { method: 'cash', amountPaise: 10_000 },
+    { method: 'upi', amountPaise: 3_900 },
+  ],
+  lines: [
+    {
+      menuItemId: 'item-1',
+      itemName: 'Classic Chicken Shawarma',
+      unitPricePaise: 13_900,
+      quantity: 1,
+    },
+  ],
+  customerName: 'Asha',
+  customerPhone: '+919876543210',
+}
+
+const orderInput = {
+  clientId: '10000000-0000-4000-a000-000000000088',
+  outletId: session.device.outletId,
+  shiftId: session.shift!.id,
+  businessDate: session.shift!.businessDate,
+  lines: draft.lines,
+  customerName: 'Asha',
+  customerPhone: null,
+}
+
+function clientWithRpc(rpc = vi.fn()) {
+  return { rpc } as unknown as SupabaseClient<Database>
+}
+
+function offlineClient() {
+  const failed = { data: null, error: new Error('backend unavailable') }
+  const query = {
+    select: () => query,
+    eq: () => query,
+    order: () => query,
+    maybeSingle: () => Promise.resolve(failed),
+    then: (resolve: (value: typeof failed) => unknown) => Promise.resolve(failed).then(resolve),
+  }
+  return { rpc: vi.fn(), from: () => query } as unknown as SupabaseClient<Database>
+}
+
+beforeEach(async () => Dexie.delete(BILLING_DELIVERY_DATABASE_NAME))
+afterEach(async () => Dexie.delete(BILLING_DELIVERY_DATABASE_NAME))
+
+describe('the live tablet acceptance boundary', () => {
+  it('commits an exact split-tender, zero-discount command locally before any request', async () => {
+    const rpc = vi.fn()
+    const billing = createSupabaseBillingAdapter(clientWithRpc(rpc), session)
+
+    await billing.settleBill(draft)
+
+    const database = new BillingDeliveryDatabase()
+    const envelope = await database.envelopes.get(draft.clientId)
+    expect(rpc).not.toHaveBeenCalled()
+    expect(envelope).toMatchObject({
+      state: 'held',
+      tabletId: session.device.deviceId,
+      shiftId: session.shift?.id,
+      businessDate: draft.businessDate,
+      type: 'pay_now',
+    })
+    expect(envelope?.command.type === 'pay_now' && envelope.command.payload).toMatchObject({
+      discountPaise: 0,
+      taxPaise: 0,
+      totalPaise: 13_900,
+      payments: draft.payments,
+    })
+    expect((envelope?.eligibleAtMs ?? 0) - (envelope?.createdAtMs ?? 0)).toBeGreaterThanOrEqual(
+      5_900,
+    )
+    database.close()
+  })
+
+  it.each(['swiggy', 'zomato', 'card', 'other'])(
+    'rejects a hand-crafted %s allocation before it reaches storage',
+    async (method) => {
+      const billing = createSupabaseBillingAdapter(clientWithRpc(), session)
+      const bad = {
+        ...draft,
+        clientId: crypto.randomUUID(),
+        payments: [{ method: method as PaymentMethod, amountPaise: 13_900 }],
+      }
+
+      await expect(billing.settleBill(bad)).rejects.toMatchObject({ code: 'invalid_payment' })
+      const database = new BillingDeliveryDatabase()
+      await expect(database.envelopes.count()).resolves.toBe(0)
+      database.close()
+    },
+  )
+
+  it('rejects expired and mismatched shift scope before anything reaches IndexedDB', async () => {
+    const expired = createSupabaseBillingAdapter(clientWithRpc(), {
+      ...session,
+      shift: { ...session.shift!, expiresAt: '2020-01-01T00:00:00.000Z' },
+    })
+    await expect(expired.settleBill(draft)).rejects.toMatchObject({ code: 'no_shift' })
+
+    const billing = createSupabaseBillingAdapter(clientWithRpc(), session)
+    await expect(
+      billing.saveOrder({
+        clientId: crypto.randomUUID(),
+        outletId: 'another-outlet',
+        shiftId: session.shift!.id,
+        businessDate: session.shift!.businessDate,
+        lines: draft.lines,
+        customerName: 'Asha',
+        customerPhone: null,
+      }),
+    ).rejects.toMatchObject({ code: 'not_permitted' })
+
+    const database = new BillingDeliveryDatabase()
+    await expect(database.envelopes.count()).resolves.toBe(0)
+    database.close()
+  })
+
+  it('keeps an offline order usable through its dependency chain under a local reference', async () => {
+    const billing = createSupabaseBillingAdapter(offlineClient(), session)
+    const orderId = orderInput.clientId
+
+    const created = await billing.saveOrder(orderInput)
+    expect(created.localReference).toMatch(/^Local · [0-9A-Z]{4}$/)
+    await expect(billing.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
+      { id: orderId, localReference: created.localReference, lines: [{ quantity: 1 }] },
+    ])
+
+    await billing.reviseOrder(orderId, {
+      lines: [{ ...draft.lines[0]!, quantity: 2 }],
+      customerName: 'Asha',
+      customerPhone: null,
+    })
+    await expect(billing.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
+      { id: orderId, lines: [{ quantity: 2 }], totalPaise: 27_800 },
+    ])
+
+    await billing.cancelOrder(orderId, 'Customer changed mind')
+    await expect(billing.listOpenOrders(session.device.outletId)).resolves.toEqual([])
+
+    const database = new BillingDeliveryDatabase()
+    const envelopes = (await database.envelopes.toArray()).sort(
+      (left, right) => left.createdAtMs - right.createdAtMs,
+    )
+    const dependencies = await database.dependencies.toArray()
+    expect(envelopes.map((envelope) => envelope.type)).toEqual([
+      'create_order',
+      'revise_order',
+      'cancel_order',
+    ])
+    expect(dependencies).toHaveLength(2)
+    database.close()
+  })
+
+  it('uses missing-response evidence to show the queue stopped sending immediately', async () => {
+    const rpc = vi.fn(async (name: string) =>
+      name === 'create_billing_order'
+        ? { data: null, error: new Error('no response'), status: 0 }
+        : { data: null, error: null, status: 200 },
+    )
+    const billing = createSupabaseBillingAdapter(clientWithRpc(rpc), session)
+    await billing.saveOrder(orderInput)
+    const unsubscribe = billing.subscribeCounter(() => {})
+
+    await vi.waitFor(() => expect(billing.getCounterState().sync.kind).toBe('stalled'))
+    unsubscribe()
+  })
+
+  it('keeps removed-tablet evidence but refuses more work after the server says it was removed', async () => {
+    const rpc = vi.fn(async (name: string) =>
+      name === 'create_billing_order'
+        ? {
+            data: { status: 'removed_tablet', commandId: orderInput.clientId },
+            error: null,
+            status: 200,
+          }
+        : { data: null, error: null, status: 200 },
+    )
+    const billing = createSupabaseBillingAdapter(clientWithRpc(rpc), session)
+    await billing.saveOrder(orderInput)
+    const unsubscribe = billing.subscribeCounter(() => {})
+    const database = new BillingDeliveryDatabase()
+
+    await vi.waitFor(async () =>
+      expect(await database.envelopes.get(orderInput.clientId)).toMatchObject({
+        state: 'needs_attention',
+      }),
+    )
+    await expect(
+      billing.saveOrder({ ...orderInput, clientId: crypto.randomUUID() }),
+    ).rejects.toMatchObject({ code: 'removed_tablet' })
+
+    unsubscribe()
+    database.close()
+  })
+
+  it('gives a correction a new identity without falsifying its historical shift time', async () => {
+    const billing = createSupabaseBillingAdapter(clientWithRpc(), session)
+    await billing.saveOrder(orderInput)
+    const database = new BillingDeliveryDatabase()
+    const store = new BillingDeliveryStore(database)
+    const original = (await database.envelopes.get(orderInput.clientId))!
+    await store.recordResult(
+      orderInput.clientId,
+      { status: 'identity_conflict', commandId: orderInput.clientId },
+      Date.now(),
+    )
+    const correctionId = crypto.randomUUID()
+
+    await billing.correctAttention(orderInput.clientId, correctionId)
+
+    expect(await database.envelopes.get(correctionId)).toMatchObject({
+      command: {
+        commandId: correctionId,
+        shiftId: original.command.shiftId,
+        createdAt: original.command.createdAt,
+        payloadHash: original.command.payloadHash,
+      },
+    })
+    database.close()
+  })
+})
+
+describe('the server command seam', () => {
+  it('sends every declared envelope key and parses an accepted result', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: { status: 'accepted', commandId: draft.clientId, billNumber: 12 },
+      error: null,
+    })
+    const command = await (async () => {
+      const billing = createSupabaseBillingAdapter(clientWithRpc(), session)
+      await billing.settleBill(draft)
+      const database = new BillingDeliveryDatabase()
+      const stored = await database.envelopes.get(draft.clientId)
+      database.close()
+      if (!stored) throw new Error('Expected a stored command')
+      return stored.command
+    })()
+
+    await expect(
+      createSupabaseBillingCommandAdapter(clientWithRpc(rpc)).execute(command),
+    ).resolves.toMatchObject({
+      status: 'accepted',
+      billNumber: 12,
+    })
+    expect(rpc).toHaveBeenCalledWith(
+      'pay_billing_now',
+      expect.objectContaining({
+        p_command_id: command.commandId,
+        p_schema_version: 1,
+        p_payload_hash: command.payloadHash,
+        p_created_at: command.createdAt,
+        p_shift_id: command.shiftId,
+        p_payload: command.payload,
+      }),
+    )
+  })
+
+  it.each([
+    [401, 'authorization_refused'],
+    [404, 'unsupported_schema'],
+    [422, 'malformed_payload'],
+    [503, 'retryable_failure'],
+  ] as const)(
+    'classifies a received HTTP %s response as %s, not missing transport',
+    async (status, expected) => {
+      const rpc = vi
+        .fn()
+        .mockResolvedValue({ data: null, error: new Error('received response'), status })
+      const billing = createSupabaseBillingAdapter(clientWithRpc(), session)
+      await billing.settleBill(draft)
+      const database = new BillingDeliveryDatabase()
+      const command = (await database.envelopes.get(draft.clientId))!.command
+      database.close()
+
+      await expect(
+        createSupabaseBillingCommandAdapter(clientWithRpc(rpc)).execute(command),
+      ).resolves.toMatchObject({
+        status: expected,
+        commandId: command.commandId,
+      })
+    },
+  )
+
+  it('keeps a missing response as transport evidence for the drain to retry', async () => {
+    const error = new Error('no response')
+    const rpc = vi.fn().mockResolvedValue({ data: null, error, status: 0 })
+    const billing = createSupabaseBillingAdapter(clientWithRpc(), session)
+    await billing.settleBill(draft)
+    const database = new BillingDeliveryDatabase()
+    const command = (await database.envelopes.get(draft.clientId))!.command
+    database.close()
+
+    await expect(
+      createSupabaseBillingCommandAdapter(clientWithRpc(rpc)).execute(command),
+    ).rejects.toBe(error)
+  })
+})

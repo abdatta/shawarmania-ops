@@ -15,6 +15,7 @@ const REASONS = [
 type CancelOrderDialogProps = {
   open: boolean
   orderNumber: number
+  orderReference?: string | null
   busy?: boolean
   onClose: () => void
   onConfirm: (reason: string) => void
@@ -27,20 +28,22 @@ export function CancelOrderDialog(props: CancelOrderDialogProps) {
 
 function OpenCancelOrderDialog({
   orderNumber,
+  orderReference,
   busy = false,
   onClose,
   onConfirm,
 }: CancelOrderDialogProps) {
   const [reason, setReason] = useState('')
+  const reference = orderReference ?? String(orderNumber)
 
   return (
     <Modal
       open
       onClose={onClose}
-      aria-label={`Cancel order ${orderNumber}`}
+      aria-label={`Cancel order ${reference}`}
       className="m-auto w-[min(92vw,26rem)] rounded-2xl p-4"
     >
-      <h2 className="text-lg font-black text-content">Cancel order {orderNumber}</h2>
+      <h2 className="text-lg font-black text-content">Cancel order {reference}</h2>
       <p className="mt-1 text-sm text-content-muted">
         The order leaves active work, but its reason and audit trail remain.
       </p>

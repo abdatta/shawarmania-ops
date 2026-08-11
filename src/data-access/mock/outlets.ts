@@ -110,6 +110,7 @@ export function createMockOutletsAdapter(): OutletsAdapter {
         geofence_radius_m: 150,
         business_day_cutover: outlet.businessDayCutover ?? '04:00:00',
         arrival_deadline: outlet.arrivalDeadline ?? '13:00:00',
+        billing_live_from: null,
         is_active: true,
         created_at: new Date().toISOString(),
         // A new outlet has never been stood in, so it judges nobody until
@@ -137,6 +138,12 @@ export function createMockOutletsAdapter(): OutletsAdapter {
         ...(patch.phone !== undefined && { phone: trimmed(patch.phone) }),
         ...(patch.businessDayCutover !== undefined && {
           business_day_cutover: patch.businessDayCutover,
+        }),
+        ...(patch.arrivalDeadline !== undefined && {
+          arrival_deadline: patch.arrivalDeadline,
+        }),
+        ...(patch.billingLiveFrom !== undefined && {
+          billing_live_from: patch.billingLiveFrom,
         }),
         ...(patch.isActive !== undefined && { is_active: patch.isActive }),
       })

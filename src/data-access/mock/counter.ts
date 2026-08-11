@@ -304,6 +304,10 @@ export function createMockCounterAdapter(
       }
     },
 
+    subscribeToOutletBilling(_outletId: string, _onChange: () => void): () => void {
+      return () => {}
+    },
+
     async reportState(): Promise<void> {
       // A demo tablet has nothing unsent that anybody else can see.
     },

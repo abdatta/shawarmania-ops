@@ -1,14 +1,27 @@
-/**
- * Outbox layer — the durable queue for counter writes.
- *
- * Feature code enqueues an intent here and returns immediately; it never
- * awaits the network on the billing path. The queue drains in the background,
- * keyed by a client-generated UUID so a retry that arrives twice inserts once.
- *
- * Deliberately empty until counter-devices-and-offline (#9). The folder exists
- * now so the boundary is established before anything is tempted to bypass it:
- * a bill written straight to Supabase from a feature is the bug this layer
- * exists to make impossible.
- */
-
-export {}
+export {
+  BILLING_DELIVERY_DATABASE_NAME,
+  BILLING_DELIVERY_DATABASE_VERSION,
+  BillingDeliveryDatabase,
+  dependencyRecordId,
+  type BillingDeliveryDependencyRecord,
+  type BillingDeliveryEnvelopeRecord,
+  type BillingDeliveryEnvelopeState,
+  type BillingDeliveryLeaseRecord,
+  type BillingDeliveryResultRecord,
+  type BillingDeliveryTombstoneRecord,
+} from './schema'
+export {
+  BillingDeliveryStore,
+  BillingDeliveryStoreError,
+  type AcceptBillingCommandInput,
+  type ResolveBillingAttentionInput,
+} from './store'
+export {
+  BILLING_DRAIN_LOCK_NAME,
+  MAX_BILLING_RETRY_MS,
+  BillingDrainCoordinator,
+  billingRetryDelayMs,
+  type BillingDrainCoordinatorOptions,
+  type BillingLockManager,
+} from './drain'
+export { BillingUnsentReporter, type BillingUnsentReporterOptions } from './reporter'

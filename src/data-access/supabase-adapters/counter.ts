@@ -326,6 +326,19 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
       )
     },
 
+    subscribeToOutletBilling(outletId: string, onChange: () => void): () => void {
+      return subscribe(
+        `counter-billing-${outletId}`,
+        [
+          ['menu_categories', `outlet_id=eq.${outletId}`],
+          ['menu_items', `outlet_id=eq.${outletId}`],
+          ['orders', `outlet_id=eq.${outletId}`],
+          ['bills', `outlet_id=eq.${outletId}`],
+        ],
+        onChange,
+      )
+    },
+
     /**
      * The heartbeat. Deliberately swallows its own failure: a tablet that cannot
      * report is a tablet that is having a bad time already, and the management

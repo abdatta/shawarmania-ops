@@ -417,6 +417,31 @@ describe('the manual ledger surface', () => {
   })
 
   describe('the entry form', () => {
+    it('replaces typed Cash and UPI with the counter values without touching aggregators', async () => {
+      const adapters = createMockAdapters('super_admin')
+      adapters.manualLedger.getCounterRevenue = async () => ({
+        cashRevenuePaise: 123_400,
+        upiRevenuePaise: 56_700,
+      })
+      renderLedger(adapters)
+
+      const counter = await screen.findByTestId('counter-revenue')
+      expect(within(counter).getByTestId('cash-revenue')).toHaveTextContent(formatPaise(123_400))
+      expect(within(counter).getByTestId('upi-revenue')).toHaveTextContent(formatPaise(56_700))
+      expect(screen.queryByLabelText(/^Cash$/)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/^UPI$/)).not.toBeInTheDocument()
+
+      // Aggregators and their per-day rates remain the temporary typed inputs.
+      await userEvent.type(screen.getByTestId('zomato-revenue'), '3310')
+      expect(screen.getByTestId('zomato-revenue-net')).toHaveTextContent(formatPaise(271_420))
+
+      await userEvent.type(screen.getByTestId('counted-cash'), '9000')
+      await userEvent.click(screen.getByTestId('save-day'))
+      const recorded = await screen.findByTestId('ledger-day-recorded')
+      expect(within(recorded).getByText(/Cash · from counter/)).toBeInTheDocument()
+      expect(within(recorded).getByTestId('recorded-cash')).toHaveTextContent(formatPaise(123_400))
+    })
+
     it('keeps the rules off the screen until they are asked for', async () => {
       renderLedger()
       await screen.findByTestId('ledger-day-form')

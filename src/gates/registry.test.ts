@@ -132,4 +132,16 @@ describe('gate registry', () => {
       ),
     ).toBe(false)
   })
+
+  it('promotes live billing only through its manager and tablet surfaces', () => {
+    for (const id of [
+      'owner-billing-history',
+      'admin-billing-history',
+      'counter-billing',
+      'counter-open-orders',
+      'counter-my-shift',
+    ]) {
+      expect(surfaces.find((surface) => surface.id === id)?.state, id).toBe('live')
+    }
+  })
 })

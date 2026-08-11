@@ -6,6 +6,8 @@ import { LoadingList } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
 import type { ManualLedgerExpense } from '@/data-access/adapters'
 import { resolveBusinessDate } from '@/domain'
+import { BillingCounter } from '@/features/billing/billing-counter'
+import { SyncIndicator } from '@/features/billing/counter-status'
 import { ExpenseList } from '@/features/manual-ledger/expense-list'
 import { getSurface, isRenderable } from '@/gates/registry'
 import { useCounterDevice } from '@/session/counter-context'
@@ -36,7 +38,7 @@ export function CounterShell({
   onShiftChanged: () => void
 }) {
   const device = useCounterDevice()
-  const { counter } = useAdapters()
+  const { billing, counter } = useAdapters()
   /**
    * The outgoing operator has stepped away and somebody else is taking the
    * counter.
@@ -52,6 +54,24 @@ export function CounterShell({
    * a shift, and asking has never been what opens one.
    */
   const [handingOver, setHandingOver] = useState(false)
+  const [finishing, setFinishing] = useState(false)
+  const [finishError, setFinishError] = useState<string | null>(null)
+
+  const finishDay = async () => {
+    if (!shift) return
+    setFinishing(true)
+    setFinishError(null)
+    try {
+      await billing.closeShift(shift.id)
+      onShiftChanged()
+    } catch (cause) {
+      setFinishError(
+        cause instanceof Error ? cause.message : 'The day could not be finished. Try again online.',
+      )
+    } finally {
+      setFinishing(false)
+    }
+  }
 
   /**
    * Watch for a shift that ended somewhere else — at the cutover, or from the
@@ -84,10 +104,11 @@ export function CounterShell({
 
   return (
     <div className="min-h-dvh bg-canvas p-4 text-content">
-      <div className="mx-auto max-w-4xl space-y-4">
+      <div className="mx-auto max-w-[100rem] space-y-4">
         <header className="flex flex-wrap items-baseline justify-between gap-2">
           <h1 className="text-lg font-semibold">{device.device.label}</h1>
           <div className="flex items-center gap-3">
+            <SyncIndicator />
             <p className="text-sm text-content-muted">
               Open since {new Date(shift.openedAt).toLocaleTimeString()}. Ended from the operator's
               own phone, or at this outlet's cutover.
@@ -99,8 +120,22 @@ export function CounterShell({
             >
               Hand over
             </button>
+            <button
+              type="button"
+              disabled={finishing}
+              onClick={() => void finishDay()}
+              className={buttonVariants({ variant: 'primary', size: 'phone' })}
+            >
+              {finishing ? 'Finishing…' : 'Finish day'}
+            </button>
           </div>
         </header>
+
+        {finishError && (
+          <p role="alert" className="text-sm font-semibold text-danger">
+            {finishError}
+          </p>
+        )}
 
         <BillingPanel />
         <CounterExpenses shift={shift} />
@@ -112,17 +147,18 @@ export function CounterShell({
 /**
  * The counter itself.
  *
- * `counter-billing` is still a `demo` surface — #10 is what makes billing live —
- * so in a real session this says so plainly rather than rendering a till that
- * cannot settle anything. Reading the gate rather than hard-coding the sentence
- * means promoting that surface is still the one-line registry edit it is
- * everywhere else.
+ * The gate remains the single switch even now it is live. This enrolled-device
+ * branch is the only real context that mounts the till; personal Biller sessions
+ * stay on their staff phone shell.
  */
 function BillingPanel() {
+  const device = useCounterDevice()
   if (isRenderable(getSurface('counter-billing').state, 'real')) {
-    // Deliberately not reached yet, and deliberately not stubbed with a fake
-    // till: #10 mounts the real counter here.
-    return null
+    return (
+      <div className="h-[calc(100dvh-8rem)] min-h-[36rem]">
+        <BillingCounter outletId={device.device.outletId} />
+      </div>
+    )
   }
   return (
     <Card>

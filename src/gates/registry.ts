@@ -120,7 +120,7 @@ const defs = {
     role: 'super_admin',
     path: 'billing-history',
     nav: { label: 'Billing', icon: ReceiptText, order: 7 },
-    state: 'demo',
+    state: 'live',
   },
   /**
    * Profit and loss, and period reports — **deliberately without navigation
@@ -246,7 +246,7 @@ const defs = {
     role: 'franchise_admin',
     path: 'billing-history',
     nav: { label: 'Billing', icon: ReceiptText, order: 2 },
-    state: 'demo',
+    state: 'live',
   },
   /**
    * The manager's counterpart to `owner-manual-ledger`, scoped by assignment.
@@ -318,7 +318,7 @@ const defs = {
     role: 'biller',
     path: 'shift',
     nav: { label: 'Shift', icon: KeyRound, order: 3 },
-    state: 'demo',
+    state: 'hidden',
   },
   /**
    * Open orders, and **deliberately without a navigation entry** — see
@@ -327,7 +327,7 @@ const defs = {
   'counter-open-orders': {
     role: 'biller',
     path: 'open-orders',
-    state: 'demo',
+    state: 'live',
   },
   /**
    * The counter itself, and **deliberately without a navigation entry**: it is
@@ -338,7 +338,7 @@ const defs = {
   'counter-billing': {
     role: 'biller',
     path: 'billing',
-    state: 'demo',
+    state: 'live',
   },
   /*
     There was a `counter-menu` here — the manager's menu surface without the
@@ -365,7 +365,7 @@ const defs = {
   'counter-my-shift': {
     role: 'biller',
     path: 'my-shift',
-    state: 'demo',
+    state: 'live',
   },
   /**
    * What this outlet spent — **the manual ledger's expense list, and nothing

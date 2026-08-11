@@ -1,65 +1,967 @@
-import { BillingActionError, type BillingAdapter, type CounterState } from '../adapters'
+import { liveQuery, type Subscription } from 'dexie'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
-/**
- * The real counter adapter — **deliberately not connected yet**.
- *
- * `DataAdapters` is total, so the real tree has to supply a `billing` today. The
- * counter surfaces are `demo`-gated and never mount against it;
- * `counter-devices-and-offline` (#9) brings the enrolled device and the durable
- * outbox, and `billing-live` (#10) replaces this file with the real settlement
- * path.
- *
- * The reads are not a placeholder lie: there genuinely is no open shift and
- * nothing pending in the real system yet, so the counter chrome resting at
- * "No shift open / synced" is the correct thing for it to say. The writes refuse
- * in this app's voice rather than throwing something raw at a screen.
- */
+import {
+  createBillingCommand,
+  type BillingCommand,
+  type BillingPaymentAllocation,
+  type OrderContentPayload,
+} from '../../../shared/billing-command'
+import {
+  BILLING_PAYMENT_METHODS,
+  BillingActionError,
+  type BillDraft,
+  type BillLineDraft,
+  type BillingAdapter,
+  type BillingAttentionItem,
+  type BillingBill,
+  type BillingCommandAdapter,
+  type BillingDeliveryDiagnostic,
+  type BillingOrder,
+  type CounterState,
+  type PaymentAllocation,
+  type SaveOrderInput,
+} from '../adapters'
+import type { Database, Tables } from '../database.types'
+import {
+  billTotals,
+  classifySync,
+  lineTotalPaise,
+  provisionalToken,
+  UNDO_WINDOW_MS,
+} from '@/domain'
+import { newUuid } from '@/lib/uuid'
+import {
+  BillingDeliveryDatabase,
+  BillingDeliveryStore,
+  BillingDeliveryStoreError,
+  BillingDrainCoordinator,
+  BillingUnsentReporter,
+  type BillingLockManager,
+} from '@/outbox'
+import type { CounterDeviceSession } from '@/session/counter-session'
 
-const RESTING: CounterState = {
-  shift: null,
-  queued: [],
-  sync: { kind: 'synced', pending: 0 },
+import { createSupabaseBillingCommandAdapter } from './billing-command'
+
+type OrderReadRow = Tables<'orders'> & {
+  order_items: Tables<'order_items'>[]
+  creator: { full_name: string } | { full_name: string }[] | null
+  canceller: { full_name: string } | { full_name: string }[] | null
 }
 
-export function createSupabaseBillingAdapter(): BillingAdapter {
+type BillReadRow = Tables<'bills'> & {
+  bill_items: Tables<'bill_items'>[]
+  bill_payments: Tables<'bill_payments'>[]
+  order: { order_number: number } | { order_number: number }[] | null
+}
+
+function joined<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : value
+}
+
+function lineView(row: Tables<'order_items'> | Tables<'bill_items'>): BillLineDraft {
+  return {
+    menuItemId: row.menu_item_id ?? '',
+    itemName: row.item_name,
+    unitPricePaise: row.unit_price_paise,
+    quantity: row.quantity,
+  }
+}
+
+function orderView(row: OrderReadRow): BillingOrder {
+  return {
+    id: row.id,
+    outletId: row.outlet_id,
+    deviceId: row.device_id,
+    orderNumber: row.order_number,
+    localReference: null,
+    businessDate: row.business_date,
+    orderedAt: row.ordered_at,
+    status: row.status,
+    creatorId: row.created_by,
+    creatorName: joined(row.creator)?.full_name ?? 'Counter operator',
+    customerName: row.customer_name,
+    customerPhone: row.customer_phone,
+    lines: row.order_items.map(lineView),
+    totalPaise: row.total_paise,
+    cancelReason: row.cancel_reason,
+    cancelledAt: row.cancelled_at,
+    cancelledByName: joined(row.canceller)?.full_name ?? null,
+    billId: row.bill_id,
+  }
+}
+
+function billView(row: BillReadRow): BillingBill {
+  const payments =
+    row.bill_payments.length > 0
+      ? row.bill_payments.map((payment) => ({
+          method: payment.method,
+          amountPaise: payment.amount_paise,
+        }))
+      : row.payment_method
+        ? [{ method: row.payment_method, amountPaise: row.total_paise }]
+        : []
+  if (payments.length === 0) {
+    throw new BillingActionError(
+      'invalid_bill_data',
+      'This bill has no payment allocation and cannot be shown as Cash or UPI.',
+    )
+  }
+  return {
+    id: row.id,
+    outletId: row.outlet_id,
+    billNumber: row.bill_number,
+    orderNumber: joined(row.order)?.order_number ?? null,
+    businessDate: row.business_date,
+    orderedAt: row.ordered_at,
+    paidAt: row.paid_at,
+    paymentBusinessDate: row.payment_business_date,
+    payments,
+    paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
+    status: row.status,
+    customerName: row.customer_name,
+    customerPhone: row.customer_phone,
+    lines: row.bill_items.map(lineView),
+    totalPaise: row.total_paise,
+    voidReason: row.void_reason,
+    voidedAt: row.voided_at,
+  }
+}
+
+function requirePayments(
+  payments: readonly PaymentAllocation[],
+  totalPaise: number,
+): BillingPaymentAllocation[] {
+  const seen = new Set<string>()
+  const valid = payments.every(
+    (payment) =>
+      BILLING_PAYMENT_METHODS.includes(payment.method) &&
+      Number.isInteger(payment.amountPaise) &&
+      payment.amountPaise > 0 &&
+      !seen.has(payment.method) &&
+      Boolean(seen.add(payment.method)),
+  )
+  if (!valid || payments.reduce((sum, payment) => sum + payment.amountPaise, 0) !== totalPaise) {
+    throw new BillingActionError(
+      'invalid_payment',
+      'Use one or more exact Cash or UPI amounts that add up to the bill total.',
+    )
+  }
+  return payments.map(({ method, amountPaise }) => ({ method, amountPaise }))
+}
+
+function orderPayload(
+  orderId: string,
+  businessDate: string,
+  lines: readonly BillLineDraft[],
+  customer: {
+    customerId?: string | null
+    customerName?: string | null
+    customerPhone?: string | null
+  },
+): OrderContentPayload {
+  const totals = billTotals(lines)
+  return {
+    orderId,
+    businessDate,
+    customerId: customer.customerId ?? null,
+    customerName: customer.customerName?.trim() || null,
+    customerPhone: customer.customerPhone?.trim() || null,
+    ...totals,
+    pricingMode: 'no_tax',
+    lines: lines.map((line) => ({
+      id: newUuid(),
+      menuItemId: line.menuItemId || null,
+      itemName: line.itemName,
+      unitPricePaise: line.unitPricePaise,
+      quantity: line.quantity,
+      lineTotalPaise: lineTotalPaise(line.unitPricePaise, line.quantity),
+    })),
+  }
+}
+
+function actionError(cause: unknown, fallback: string): BillingActionError {
+  if (cause instanceof BillingActionError) return cause
+  if (cause instanceof BillingDeliveryStoreError) {
+    return new BillingActionError(cause.code, cause.message)
+  }
+  return new BillingActionError('failed', fallback)
+}
+
+async function requireAccepted(
+  commands: BillingCommandAdapter,
+  command: BillingCommand,
+  fallback: string,
+) {
+  try {
+    const result = await commands.execute(command)
+    if (result.status === 'accepted' || result.status === 'replay') return result
+    throw new BillingActionError(result.status, fallback)
+  } catch (cause) {
+    if (cause instanceof BillingActionError) throw cause
+    throw new BillingActionError('unavailable', fallback)
+  }
+}
+
+/**
+ * Billing's live adapter. Tablet writes cross the IndexedDB commit boundary and
+ * return immediately; the one drain leader delivers them later. Manager writes
+ * are online personal-device commands and never create a second local outbox.
+ */
+export function createSupabaseBillingAdapter(
+  client: SupabaseClient<Database>,
+  counterSession: CounterDeviceSession | null = null,
+): BillingAdapter {
+  const commands = createSupabaseBillingCommandAdapter(client)
+  const orderCache = new Map<string, BillingOrder>()
+  const database = counterSession ? new BillingDeliveryDatabase() : null
+  const store = database ? new BillingDeliveryStore(database) : null
+  const listeners = new Set<() => void>()
+  let deliverySubscription: Subscription | null = null
+  let drain: BillingDrainCoordinator | null = null
+  let reporter: BillingUnsentReporter | null = null
+  let deliveryReachable: boolean | null = null
+  let oldestQueuedAt: number | null = null
+  let tabletRemoved = false
+  let state: CounterState = {
+    shift: counterSession?.shift
+      ? {
+          id: counterSession.shift.id,
+          outletId: counterSession.shift.outletId,
+          billerProfileId: counterSession.shift.personId,
+          billerName: 'Counter operator',
+          businessDate: counterSession.shift.businessDate,
+          openedAt: counterSession.shift.openedAt,
+        }
+      : null,
+    queued: [],
+    sync: { kind: 'synced', pending: 0 },
+  }
+
+  const notify = () => {
+    for (const listener of [...listeners]) listener()
+  }
+
+  function requireTablet() {
+    if (!counterSession || !store) {
+      throw new BillingActionError('not_permitted', 'This action belongs on the counter tablet.')
+    }
+    if (!counterSession.shift) {
+      throw new BillingActionError('no_shift', 'Open a shift before taking billing work.')
+    }
+    if (tabletRemoved) {
+      throw new BillingActionError(
+        'removed_tablet',
+        'This tablet has been removed. Its unsent evidence remains here, but it cannot take more work.',
+      )
+    }
+    if (
+      state.shift === null ||
+      state.shift.id !== counterSession.shift.id ||
+      Date.parse(counterSession.shift.expiresAt) <= Date.now()
+    ) {
+      throw new BillingActionError(
+        'no_shift',
+        'This shift has ended. Approve a fresh shift before taking more billing work.',
+      )
+    }
+    return { session: counterSession, shift: counterSession.shift, store }
+  }
+
+  function requireCurrentScope(outletId: string, shiftId: string, businessDate: string) {
+    const tablet = requireTablet()
+    if (
+      outletId !== tablet.session.device.outletId ||
+      shiftId !== tablet.shift.id ||
+      businessDate !== tablet.shift.businessDate
+    ) {
+      throw new BillingActionError(
+        'not_permitted',
+        'That work does not belong to this tablet’s live outlet and business date.',
+      )
+    }
+    return tablet
+  }
+
+  function deliverySync(pending: number, hasAttention = false): CounterState['sync'] {
+    return {
+      pending,
+      kind:
+        pending > 0 && (deliveryReachable === false || hasAttention)
+          ? 'stalled'
+          : classifySync({ pending, oldestQueuedAt, now: Date.now() }),
+    }
+  }
+
+  async function previousInChain(chainId: string): Promise<string[]> {
+    if (!database) return []
+    const rows = await database.envelopes
+      .where('[chainId+createdAtMs]')
+      .between([chainId, Number.MIN_SAFE_INTEGER], [chainId, Number.MAX_SAFE_INTEGER])
+      .sortBy('createdAtMs')
+    return rows.length > 0 ? [rows.at(-1)!.commandId] : []
+  }
+
+  async function accept(
+    command: BillingCommand,
+    outletId: string,
+    businessDate: string,
+    chainId: string,
+    heldForMs = 0,
+  ): Promise<void> {
+    const tablet = requireTablet()
+    const nowMs = Date.now()
+    await tablet.store.accept({
+      command,
+      tabletId: tablet.session.device.deviceId,
+      outletId,
+      businessDate,
+      chainId,
+      dependsOnCommandIds: await previousInChain(chainId),
+      eligibleAtMs: nowMs + heldForMs,
+      nowMs,
+    })
+  }
+
+  async function readOrders(outletId: string, onlyOpen: boolean): Promise<BillingOrder[]> {
+    let query = client
+      .from('orders')
+      .select(
+        '*, order_items(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)',
+      )
+      .eq('outlet_id', outletId)
+      .order('ordered_at', { ascending: false })
+    if (onlyOpen) query = query.eq('status', 'open')
+    const { data, error } = await query
+    let orders: BillingOrder[]
+    if (error) {
+      if (!counterSession?.shift) throw actionError(error, 'Could not load open orders.')
+      orders = [...orderCache.values()].filter(
+        (order) => order.outletId === outletId && (!onlyOpen || order.status === 'open'),
+      )
+    } else {
+      orders = (data as unknown as OrderReadRow[]).map(orderView)
+      for (const [id, cached] of orderCache) {
+        if (cached.outletId === outletId) orderCache.delete(id)
+      }
+      for (const order of orders) orderCache.set(order.id, order)
+    }
+
+    if (database && counterSession) {
+      const local = (await database.envelopes.where('outletId').equals(outletId).toArray())
+        .filter((envelope) => envelope.state !== 'needs_attention')
+        .sort((left, right) => left.createdAtMs - right.createdAtMs)
+      const overlaid = new Map(orders.map((order) => [order.id, order]))
+      for (const envelope of local) {
+        switch (envelope.command.type) {
+          case 'create_order': {
+            const payload = envelope.command.payload
+            overlaid.set(payload.orderId, {
+              id: payload.orderId,
+              outletId: envelope.outletId,
+              deviceId: envelope.tabletId,
+              orderNumber: 0,
+              localReference: `Local · ${provisionalToken(envelope.commandId)}`,
+              businessDate: payload.businessDate,
+              orderedAt: envelope.command.createdAt,
+              status: 'open',
+              creatorId: counterSession.shift?.personId ?? '',
+              creatorName: 'Counter operator',
+              customerName: payload.customerName,
+              customerPhone: payload.customerPhone,
+              lines: payload.lines.map((line) => ({
+                menuItemId: line.menuItemId ?? '',
+                itemName: line.itemName,
+                unitPricePaise: line.unitPricePaise,
+                quantity: line.quantity,
+              })),
+              totalPaise: payload.totalPaise,
+              cancelReason: null,
+              cancelledAt: null,
+              cancelledByName: null,
+              billId: null,
+            })
+            break
+          }
+          case 'revise_order': {
+            const payload = envelope.command.payload
+            const current = overlaid.get(payload.orderId)
+            if (current) {
+              overlaid.set(payload.orderId, {
+                ...current,
+                customerName: payload.customerName,
+                customerPhone: payload.customerPhone,
+                lines: payload.lines.map((line) => ({
+                  menuItemId: line.menuItemId ?? '',
+                  itemName: line.itemName,
+                  unitPricePaise: line.unitPricePaise,
+                  quantity: line.quantity,
+                })),
+                totalPaise: payload.totalPaise,
+              })
+            }
+            break
+          }
+          case 'cancel_order':
+          case 'pay_order':
+            overlaid.delete(envelope.command.payload.orderId)
+            break
+          default:
+            break
+        }
+      }
+      orders = [...overlaid.values()]
+    }
+
+    for (const order of orders) orderCache.set(order.id, order)
+    return orders.filter((order) => !onlyOpen || order.status === 'open')
+  }
+
+  async function readOrder(orderId: string): Promise<BillingOrder | null> {
+    const { data, error } = await client
+      .from('orders')
+      .select(
+        '*, order_items(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)',
+      )
+      .eq('id', orderId)
+      .maybeSingle()
+    if (error) throw actionError(error, 'Could not load that order.')
+    if (!data) return null
+    const order = orderView(data as unknown as OrderReadRow)
+    orderCache.set(order.id, order)
+    return order
+  }
+
+  async function readBills(filters: {
+    id?: string
+    outletId?: string
+    counterShiftId?: string
+    paymentBusinessDate?: string
+    status?: Tables<'bills'>['status']
+    limit?: number
+  }): Promise<BillingBill[]> {
+    let query = client
+      .from('bills')
+      .select('*, bill_items(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number)')
+    if (filters.id) query = query.eq('id', filters.id)
+    if (filters.outletId) query = query.eq('outlet_id', filters.outletId)
+    if (filters.counterShiftId) query = query.eq('counter_shift_id', filters.counterShiftId)
+    if (filters.paymentBusinessDate) {
+      query = query.eq('payment_business_date', filters.paymentBusinessDate)
+    }
+    if (filters.status) query = query.eq('status', filters.status)
+    if (filters.limit) query = query.limit(filters.limit)
+    const { data, error } = await query.order('paid_at', { ascending: false })
+    if (error) throw actionError(error, 'Could not load bills.')
+    return (data as unknown as BillReadRow[]).map(billView)
+  }
+
+  async function startRuntime(): Promise<void> {
+    if (!counterSession || !store || !database || deliverySubscription) return
+    const tabletId = counterSession.device.deviceId
+    deliverySubscription = liveQuery(() =>
+      database.envelopes.where('tabletId').equals(tabletId).toArray(),
+    ).subscribe({
+      next: (envelopes) => {
+        const queued = envelopes
+          .filter((envelope) => envelope.type === 'pay_now')
+          .map((envelope) => {
+            const payload = envelope.command.type === 'pay_now' ? envelope.command.payload : null
+            return {
+              clientId: envelope.commandId,
+              totalPaise: payload?.totalPaise ?? 0,
+              businessDate: envelope.businessDate,
+              queuedAt: envelope.createdAtMs,
+            }
+          })
+          .sort((left, right) => left.queuedAt - right.queuedAt)
+        oldestQueuedAt = envelopes.reduce<number | null>(
+          (value, envelope) =>
+            value === null ? envelope.createdAtMs : Math.min(value, envelope.createdAtMs),
+          null,
+        )
+        state = {
+          ...state,
+          queued,
+          sync: {
+            ...deliverySync(
+              envelopes.length,
+              envelopes.some((envelope) => envelope.state === 'needs_attention'),
+            ),
+          },
+        }
+        notify()
+      },
+      error: () => undefined,
+    })
+
+    const lockManager: BillingLockManager | null =
+      typeof navigator !== 'undefined' && navigator.locks
+        ? (navigator.locks as unknown as BillingLockManager)
+        : null
+    drain = new BillingDrainCoordinator({
+      store,
+      tabletId,
+      ownerId: newUuid(),
+      locks: lockManager,
+      execute: async (command) => {
+        const result = await commands.execute(command)
+        if (result.status === 'removed_tablet') {
+          tabletRemoved = true
+          void drain?.stop()
+        }
+        return result
+      },
+      onReachability: (reachable) => {
+        deliveryReachable = reachable
+        state = { ...state, sync: deliverySync(state.sync.pending) }
+        notify()
+      },
+    })
+    reporter = new BillingUnsentReporter({
+      store,
+      tabletId,
+      reportState: async (unsent) => {
+        const { error } = await client.rpc('report_counter_device_state', { p_unsent: unsent })
+        if (error) throw error
+      },
+    })
+    drain.start()
+    reporter.start()
+  }
+
+  async function stopRuntime(): Promise<void> {
+    deliverySubscription?.unsubscribe()
+    deliverySubscription = null
+    await Promise.all([drain?.stop(), reporter?.stop()])
+    drain = null
+    reporter = null
+  }
+
   const notLive = () =>
     Promise.reject(
-      new BillingActionError(
-        'not_live',
-        'The counter is not connected to real data yet. It is being demonstrated first.',
-      ),
+      new BillingActionError('not_live', 'This shift action uses the tablet handshake.'),
     )
 
   return {
-    getCounterState() {
-      return RESTING
-    },
-    subscribeCounter() {
-      // Nothing ever changes, so there is nothing to notify. Returning a no-op
-      // unsubscribe keeps `useSyncExternalStore` happy without a subscription.
-      return () => {}
+    getCounterState: () => state,
+    subscribeCounter(listener) {
+      listeners.add(listener)
+      void startRuntime()
+      return () => {
+        listeners.delete(listener)
+        if (listeners.size === 0) void stopRuntime()
+      }
     },
     async listBillers() {
       return []
     },
     openShift: notLive,
-    closeShift: notLive,
-    settleBill: notLive,
-    cancelQueuedBill: notLive,
-    saveOrder: notLive,
-    reviseOrder: notLive,
-    listOpenOrders: notLive,
-    payOrder: notLive,
-    cancelOrder: notLive,
-    listShiftHistory: notLive,
-    listManagerHistory: notLive,
-    getBill: notLive,
-    voidBill: notLive,
-    listManagerOpenOrders: notLive,
-    managerCancelOrder: notLive,
-    listAttention: notLive,
-    correctAttention: notLive,
-    discardAttention: notLive,
-    listDeliveryDiagnostics: notLive,
+    async closeShift(shiftId: string): Promise<void> {
+      const { session, shift, store } = requireTablet()
+      if (shift.id !== shiftId) {
+        throw new BillingActionError('not_permitted', 'That is not this tablet’s live shift.')
+      }
+      await startRuntime()
+      const held = (
+        await store.database.envelopes.where('tabletId').equals(session.device.deviceId).toArray()
+      ).filter((envelope) => envelope.eligibleAtMs > Date.now())
+      if (held.length > 0) {
+        throw new BillingActionError(
+          'unresolved_operations',
+          'A recent payment is still in its Undo window. Wait a few seconds, then finish the day.',
+        )
+      }
+      await drain?.runOnce()
+      const unresolved = await store.countUnsent(session.device.deviceId)
+      if (unresolved > 0) {
+        throw new BillingActionError(
+          'unresolved_operations',
+          `${unresolved} billing action${unresolved === 1 ? ' is' : 's are'} still unresolved on this tablet.`,
+        )
+      }
+      const command = await createBillingCommand({
+        commandId: newUuid(),
+        tabletId: session.device.deviceId,
+        shiftId: null,
+        type: 'confirm_end_of_day',
+        createdAt: new Date().toISOString(),
+        payload: {
+          outletId: session.device.outletId,
+          businessDate: shift.businessDate,
+          unsentCount: 0,
+          needsAttentionCount: 0,
+        },
+      })
+      await requireAccepted(
+        commands,
+        command,
+        'The day could not be finished. Clear every open order and try again online.',
+      )
+      state = { ...state, shift: null }
+      notify()
+    },
+
+    async settleBill(draft: BillDraft): Promise<void> {
+      const { session, shift } = requireCurrentScope(
+        draft.outletId,
+        draft.shiftId,
+        draft.businessDate,
+      )
+      const totals = billTotals(draft.lines)
+      const now = new Date().toISOString()
+      const command = await createBillingCommand({
+        commandId: draft.clientId,
+        tabletId: session.device.deviceId,
+        shiftId: shift.id,
+        type: 'pay_now',
+        createdAt: now,
+        payload: {
+          billId: draft.clientId,
+          businessDate: draft.businessDate,
+          paymentBusinessDate: draft.businessDate,
+          customerId: null,
+          customerName: draft.customerName?.trim() || null,
+          customerPhone: draft.customerPhone?.trim() || null,
+          ...totals,
+          pricingMode: 'no_tax',
+          payments: requirePayments(draft.payments, totals.totalPaise),
+          lines: draft.lines.map((line) => ({
+            id: newUuid(),
+            menuItemId: line.menuItemId || null,
+            itemName: line.itemName,
+            unitPricePaise: line.unitPricePaise,
+            quantity: line.quantity,
+            lineTotalPaise: lineTotalPaise(line.unitPricePaise, line.quantity),
+          })),
+        },
+      })
+      await accept(command, draft.outletId, draft.businessDate, draft.clientId, UNDO_WINDOW_MS)
+    },
+
+    async cancelQueuedBill(clientId: string): Promise<void> {
+      const { shift, store } = requireTablet()
+      try {
+        await store.undo(clientId, shift.personId, Date.now())
+      } catch (cause) {
+        throw actionError(cause, 'That payment could no longer be undone.')
+      }
+    },
+
+    async saveOrder(input: SaveOrderInput): Promise<BillingOrder> {
+      const { session, shift } = requireCurrentScope(
+        input.outletId,
+        input.shiftId,
+        input.businessDate,
+      )
+      const command = await createBillingCommand({
+        commandId: input.clientId,
+        tabletId: session.device.deviceId,
+        shiftId: shift.id,
+        type: 'create_order',
+        createdAt: new Date().toISOString(),
+        payload: orderPayload(input.clientId, input.businessDate, input.lines, input),
+      })
+      await accept(command, input.outletId, input.businessDate, input.clientId)
+      const localOrder: BillingOrder = {
+        id: input.clientId,
+        outletId: input.outletId,
+        deviceId: session.device.deviceId,
+        orderNumber: 0,
+        localReference: `Local · ${provisionalToken(input.clientId)}`,
+        businessDate: input.businessDate,
+        orderedAt: command.createdAt,
+        status: 'open',
+        creatorId: shift.personId,
+        creatorName: 'Counter operator',
+        customerName: input.customerName?.trim() || null,
+        customerPhone: input.customerPhone?.trim() || null,
+        lines: [...input.lines],
+        totalPaise: billTotals(input.lines).totalPaise,
+        cancelReason: null,
+        cancelledAt: null,
+        cancelledByName: null,
+        billId: null,
+      }
+      orderCache.set(input.clientId, localOrder)
+      return localOrder
+    },
+
+    async reviseOrder(orderId, input): Promise<BillingOrder> {
+      const { session, shift } = requireTablet()
+      const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
+      if (!existing) throw new BillingActionError('not_found', 'That order is no longer open.')
+      const command = await createBillingCommand({
+        commandId: newUuid(),
+        tabletId: session.device.deviceId,
+        shiftId: shift.id,
+        type: 'revise_order',
+        createdAt: new Date().toISOString(),
+        payload: orderPayload(orderId, existing.businessDate, input.lines, input),
+      })
+      await accept(command, existing.outletId, existing.businessDate, orderId)
+      const revised = { ...existing, ...input, totalPaise: billTotals(input.lines).totalPaise }
+      orderCache.set(orderId, revised)
+      return revised
+    },
+
+    listOpenOrders(outletId) {
+      return readOrders(outletId, true)
+    },
+
+    async payOrder(orderId, payments): Promise<BillingBill> {
+      const { session, shift } = requireTablet()
+      const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
+      if (!existing) throw new BillingActionError('not_found', 'That order is no longer open.')
+      const command = await createBillingCommand({
+        commandId: newUuid(),
+        tabletId: session.device.deviceId,
+        shiftId: shift.id,
+        type: 'pay_order',
+        createdAt: new Date().toISOString(),
+        payload: {
+          billId: newUuid(),
+          orderId,
+          payments: requirePayments(payments, existing.totalPaise),
+          paidAt: new Date().toISOString(),
+          paymentBusinessDate: shift.businessDate,
+        },
+      })
+      await accept(command, existing.outletId, existing.businessDate, orderId)
+      orderCache.delete(orderId)
+      return {
+        id: command.payload.billId,
+        outletId: existing.outletId,
+        billNumber: 0,
+        orderNumber: existing.orderNumber,
+        businessDate: existing.businessDate,
+        orderedAt: existing.orderedAt,
+        paidAt: command.payload.paidAt,
+        paymentBusinessDate: command.payload.paymentBusinessDate,
+        payments: [...payments],
+        paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
+        status: 'settled',
+        customerName: existing.customerName,
+        customerPhone: existing.customerPhone,
+        lines: existing.lines,
+        totalPaise: existing.totalPaise,
+        voidReason: null,
+        voidedAt: null,
+      }
+    },
+
+    async cancelOrder(orderId, reason): Promise<BillingOrder> {
+      const { session, shift } = requireTablet()
+      const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
+      if (!existing) throw new BillingActionError('not_found', 'That order is no longer open.')
+      if (!reason.trim())
+        throw new BillingActionError('blank_reason', 'A cancellation needs a reason.')
+      const command = await createBillingCommand({
+        commandId: newUuid(),
+        tabletId: session.device.deviceId,
+        shiftId: shift.id,
+        type: 'cancel_order',
+        createdAt: new Date().toISOString(),
+        payload: { orderId, reason: reason.trim() },
+      })
+      await accept(command, existing.outletId, existing.businessDate, orderId)
+      const cancelled = { ...existing, status: 'cancelled' as const, cancelReason: reason.trim() }
+      orderCache.set(orderId, cancelled)
+      return cancelled
+    },
+
+    async listShiftHistory(shiftId) {
+      const bills = await readBills({ counterShiftId: shiftId })
+      return {
+        bills,
+        totals: BILLING_PAYMENT_METHODS.map((method) => ({
+          method,
+          totalPaise: bills
+            .filter((bill) => bill.status === 'settled')
+            .flatMap((bill) => bill.payments)
+            .filter((payment) => payment.method === method)
+            .reduce((sum, payment) => sum + payment.amountPaise, 0),
+        })),
+      }
+    },
+
+    async listManagerHistory(filters) {
+      let bills = await readBills({
+        outletId: filters.outletId,
+        ...(filters.businessDate && { paymentBusinessDate: filters.businessDate }),
+        ...(filters.status && filters.status !== 'all' && { status: filters.status }),
+      })
+      if (filters.paymentMethod && filters.paymentMethod !== 'all') {
+        bills = bills.filter((bill) =>
+          bill.payments.some((payment) => payment.method === filters.paymentMethod),
+        )
+      }
+      return bills
+    },
+
+    async getBill(billId) {
+      return (await readBills({ id: billId, limit: 1 }))[0] ?? null
+    },
+
+    async voidBill(billId, reason) {
+      if (!reason.trim()) throw new BillingActionError('blank_reason', 'A void needs a reason.')
+      const command = await createBillingCommand({
+        commandId: newUuid(),
+        tabletId: null,
+        shiftId: null,
+        type: 'void_bill',
+        createdAt: new Date().toISOString(),
+        payload: { billId, reason: reason.trim() },
+      })
+      await requireAccepted(commands, command, 'That bill could not be voided.')
+      const bill = (await readBills({ id: billId, limit: 1 }))[0]
+      if (!bill) throw new BillingActionError('not_found', 'That bill was not found.')
+      return bill
+    },
+
+    listManagerOpenOrders(outletId) {
+      return readOrders(outletId, true)
+    },
+
+    async managerCancelOrder(orderId, reason) {
+      if (!reason.trim())
+        throw new BillingActionError('blank_reason', 'A cancellation needs a reason.')
+      const command = await createBillingCommand({
+        commandId: newUuid(),
+        tabletId: null,
+        shiftId: null,
+        type: 'manager_cancel_order',
+        createdAt: new Date().toISOString(),
+        payload: { orderId, reason: reason.trim() },
+      })
+      await requireAccepted(commands, command, 'That order could not be cancelled.')
+      const order = await readOrder(orderId)
+      if (!order) throw new BillingActionError('not_found', 'That order was not found.')
+      return order
+    },
+
+    async listAttention(): Promise<BillingAttentionItem[]> {
+      if (!database || !counterSession) return []
+      const envelopes = await database.envelopes
+        .where('[tabletId+state]')
+        .equals([counterSession.device.deviceId, 'needs_attention'])
+        .toArray()
+      const results = await database.results.bulkGet(envelopes.map((row) => row.commandId))
+      return envelopes.flatMap((envelope, index) => {
+        const result = results[index]
+        if (!result?.refusedTrace) return []
+        return [
+          {
+            reference: envelope.commandId,
+            commandType: envelope.type,
+            resultCategory: result.result.status,
+            receivedAt: new Date(result.recordedAtMs).toISOString(),
+            ageMs: Math.max(0, Date.now() - result.recordedAtMs),
+            deviceId: envelope.tabletId,
+            refusedTrace: result.refusedTrace,
+            state: 'needs_attention' as const,
+            linkedCorrectionId: null,
+            resolvedAt: null,
+            resolvedBy: null,
+            discardReason: null,
+          },
+        ]
+      })
+    },
+
+    async correctAttention(reference, correctionId) {
+      const { session, shift, store } = requireTablet()
+      const envelope = await store.database.envelopes.get(reference)
+      if (!envelope) throw new BillingActionError('not_found', 'That delivery item was not found.')
+      const replacement = {
+        ...envelope.command,
+        commandId: correctionId,
+        // Preserve when the refused work was actually taken. Historical queue
+        // delivery is authorised against that immutable shift timestamp; giving
+        // a copied payload "now" while retaining its original shift would turn
+        // a valid correction into a fresh historical-shift refusal.
+      } as BillingCommand
+      await store.correctAttention(
+        {
+          commandId: reference,
+          tabletId: session.device.deviceId,
+          shiftId: shift.id,
+          actorId: shift.personId,
+          nowMs: Date.now(),
+        },
+        {
+          command: replacement,
+          tabletId: session.device.deviceId,
+          outletId: envelope.outletId,
+          businessDate: envelope.businessDate,
+          chainId: envelope.chainId,
+          dependsOnCommandIds: [],
+          eligibleAtMs: Date.now(),
+          nowMs: Date.now(),
+        },
+      )
+      return {
+        reference,
+        commandType: envelope.type,
+        resultCategory: 'corrected',
+        receivedAt: new Date(envelope.createdAtMs).toISOString(),
+        ageMs: Math.max(0, Date.now() - envelope.createdAtMs),
+        deviceId: envelope.tabletId,
+        refusedTrace: (await store.database.results.get(reference))?.refusedTrace ?? '',
+        state: 'corrected',
+        linkedCorrectionId: correctionId,
+        resolvedAt: new Date().toISOString(),
+        resolvedBy: shift.personId,
+        discardReason: null,
+      }
+    },
+
+    async discardAttention(reference, reason) {
+      const { session, shift, store } = requireTablet()
+      const envelope = await store.database.envelopes.get(reference)
+      if (!envelope) throw new BillingActionError('not_found', 'That delivery item was not found.')
+      const result = await store.database.results.get(reference)
+      await store.discardAttention(
+        {
+          commandId: reference,
+          tabletId: session.device.deviceId,
+          shiftId: shift.id,
+          actorId: shift.personId,
+          nowMs: Date.now(),
+        },
+        reason,
+      )
+      return {
+        reference,
+        commandType: envelope.type,
+        resultCategory: result?.result.status ?? 'discarded',
+        receivedAt: new Date(envelope.createdAtMs).toISOString(),
+        ageMs: Math.max(0, Date.now() - envelope.createdAtMs),
+        deviceId: envelope.tabletId,
+        refusedTrace: result?.refusedTrace ?? '',
+        state: 'discarded',
+        linkedCorrectionId: null,
+        resolvedAt: new Date().toISOString(),
+        resolvedBy: shift.personId,
+        discardReason: reason.trim(),
+      }
+    },
+
+    async listDeliveryDiagnostics(outletId): Promise<BillingDeliveryDiagnostic[]> {
+      const { data, error } = await client
+        .from('billing_commands')
+        .select('id, command_type, result_category, received_at')
+        .eq('outlet_id', outletId)
+        .order('received_at', { ascending: false })
+        .limit(100)
+      if (error) throw actionError(error, 'Could not load delivery diagnostics.')
+      return (data ?? []).map((row) => ({
+        reference: row.id,
+        commandType: row.command_type,
+        resultCategory: row.result_category,
+        receivedAt: row.received_at,
+        ageMs: Math.max(0, Date.now() - Date.parse(row.received_at)),
+      }))
+    },
   }
 }

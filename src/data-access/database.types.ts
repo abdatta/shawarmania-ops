@@ -2237,6 +2237,7 @@ export type Database = {
           address_line1: string | null
           address_line2: string | null
           arrival_deadline: string
+          billing_live_from: string | null
           business_day_cutover: string
           city: string | null
           code: string
@@ -2258,6 +2259,7 @@ export type Database = {
           address_line1?: string | null
           address_line2?: string | null
           arrival_deadline?: string
+          billing_live_from?: string | null
           business_day_cutover?: string
           city?: string | null
           code: string
@@ -2279,6 +2281,7 @@ export type Database = {
           address_line1?: string | null
           address_line2?: string | null
           arrival_deadline?: string
+          billing_live_from?: string | null
           business_day_cutover?: string
           city?: string | null
           code?: string
@@ -2441,6 +2444,10 @@ export type Database = {
       }
       app_username_from_auth_alias: { Args: { input: string }; Returns: string }
       app_username_valid: { Args: { input: string }; Returns: boolean }
+      assert_payment_method_narrowing_safe: {
+        Args: { p_has_aggregator_history: boolean }
+        Returns: undefined
+      }
       attendance_approve_attempt: {
         Args: {
           p_attendance_id: string
@@ -2958,6 +2965,14 @@ export type Database = {
         }
         Returns: Json
       }
+      manual_ledger_counter_revenue: {
+        Args: { p_from: string; p_outlet_id: string; p_to: string }
+        Returns: {
+          business_date: string
+          cash_revenue_paise: number
+          upi_revenue_paise: number
+        }[]
+      }
       manual_ledger_people: {
         Args: never
         Returns: {
@@ -3187,7 +3202,7 @@ export type Database = {
       inventory_unit: "kg" | "litre" | "packet" | "piece"
       movement_type: "added" | "used" | "wasted" | "correction"
       order_status: "open" | "paid" | "cancelled"
-      payment_method: "cash" | "upi" | "swiggy" | "zomato"
+      payment_method: "cash" | "upi"
       pricing_mode: "no_tax" | "gst_inclusive" | "gst_exclusive"
     }
     CompositeTypes: {
@@ -3347,7 +3362,7 @@ export const Constants = {
       inventory_unit: ["kg", "litre", "packet", "piece"],
       movement_type: ["added", "used", "wasted", "correction"],
       order_status: ["open", "paid", "cancelled"],
-      payment_method: ["cash", "upi", "swiggy", "zomato"],
+      payment_method: ["cash", "upi"],
       pricing_mode: ["no_tax", "gst_inclusive", "gst_exclusive"],
     },
   },

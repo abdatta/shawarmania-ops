@@ -50,7 +50,7 @@ import type { DemoStore } from './store'
  * nothing rather than throwing — an excluded row is what RLS produces.
  */
 
-const METHOD_ORDER: PaymentMethod[] = ['cash', 'upi', 'swiggy', 'zomato']
+const METHOD_ORDER: PaymentMethod[] = ['cash', 'upi']
 
 function outletNameOf(outletId: string): string {
   return outletFixtures.find((outlet) => outlet.id === outletId)?.name ?? 'Unknown outlet'

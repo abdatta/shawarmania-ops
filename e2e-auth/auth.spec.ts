@@ -17,11 +17,10 @@ const PERSONAS = {
   },
   biller: {
     username: 'biller.kalyani',
-    segment: 'biller',
-    // The counter's own placeholder, not the shift strip: since
-    // counter-devices-and-offline the strip says nothing at all when no tablet
-    // holds a shift, because a person's phone is not where that fact lives.
-    lands: (page: Page) => page.getByText('The billing counter lands here next'),
+    segment: 'staff',
+    // A personal Biller login is a staff phone, never a second till. Billing is
+    // mounted only by the enrolled device principal under /counter.
+    lands: (page: Page) => page.getByText('Hello, Synthetic Biller'),
   },
   staff: {
     username: 'staff.kalyani',
@@ -196,6 +195,10 @@ test.describe('username sign-in and role routing', () => {
       await expect(persona.lands(page)).toBeVisible()
       await expect(page.getByTestId('account-menu')).toBeVisible()
       await expect(page.getByTestId('demo-banner')).toHaveCount(0)
+      if (label === 'biller') {
+        await expect(page.getByRole('link', { name: 'My attendance' })).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Counter' })).toHaveCount(0)
+      }
     })
   }
 

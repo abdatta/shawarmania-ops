@@ -100,5 +100,15 @@ select throws_ok($q$
 $q$, '42501', null, 'an Employee cannot write the menu through the item-first RPC');
 
 reset role;
+select ok(has_table_privilege('authenticated', 'public.menu_categories', 'select'),
+  'authenticated counter reads have the category grant Realtime needs');
+select ok(has_table_privilege('authenticated', 'public.menu_items', 'select'),
+  'authenticated counter reads have the item grant Realtime needs');
+select is(
+  (select count(*) from pg_publication_tables
+    where pubname='supabase_realtime' and schemaname='public'
+      and tablename in ('menu_categories','menu_items','orders','bills')),
+  4::bigint,
+  'menu and activity tables are all published as freshness nudges');
 select * from finish();
 rollback;

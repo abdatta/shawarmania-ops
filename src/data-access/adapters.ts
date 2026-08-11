@@ -81,6 +81,8 @@ export interface NewOutlet {
 export type OutletPatch = Partial<
   NewOutlet & {
     isActive: boolean
+    /** First business date whose Cash/UPI revenue comes from counter bills. */
+    billingLiveFrom: string | null
   }
 >
 
@@ -834,12 +836,7 @@ export interface MenuAdapter {
 // The counter: shifts, bills, and the queue they leave through.
 
 export type PaymentMethod = NonNullable<Tables<'bills'>['payment_method']>
-export const BILLING_PAYMENT_METHODS = [
-  'cash',
-  'upi',
-  'swiggy',
-  'zomato',
-] as const satisfies readonly PaymentMethod[]
+export const BILLING_PAYMENT_METHODS = ['cash', 'upi'] as const satisfies readonly PaymentMethod[]
 
 /** One exact tender allocation. Several allocations may settle one bill. */
 export interface PaymentAllocation {
@@ -924,6 +921,8 @@ export interface BillingOrder {
   outletId: Tables<'orders'>['outlet_id']
   deviceId: Tables<'orders'>['device_id']
   orderNumber: Tables<'orders'>['order_number']
+  /** Present only until the server assigns the permanent daily order number. */
+  localReference?: string | null
   businessDate: Tables<'orders'>['business_date']
   orderedAt: Tables<'orders'>['ordered_at']
   status: OrderStatus
@@ -1233,6 +1232,12 @@ export interface CounterAdapter {
   subscribeToOwnHandshake(personId: string, onChange: () => void): () => void
   /** The tablet's own version of the above, watching its request and its shift. */
   subscribeToDeviceHandshake(deviceId: string, onChange: () => void): () => void
+  /**
+   * Be told that this outlet's menu or billing activity moved. The event is a
+   * nudge only: callers must re-read and must also refresh on foreground so a
+   * silently dead channel cannot leave prices or open work stale all evening.
+   */
+  subscribeToOutletBilling(outletId: string, onChange: () => void): () => void
   /** The tablet's heartbeat: what it last said about itself. */
   reportState(unsent: number): Promise<void>
 }
@@ -1776,6 +1781,12 @@ export interface ManualLedgerDay {
   updatedBy: LedgerActor | null
 }
 
+/** Settled counter allocations that replace typed Cash/UPI after go-live. */
+export interface ManualLedgerCounterRevenue {
+  cashRevenuePaise: number
+  upiRevenuePaise: number
+}
+
 /**
  * Who touched a ledger row, as the surface names them.
  *
@@ -1861,6 +1872,11 @@ export class ManualLedgerActionError extends DataActionError {
 
 export interface ManualLedgerAdapter {
   getDay(outletId: string, businessDate: string): Promise<ManualLedgerDay | null>
+  /** Null before this outlet's billing-live date; zeroes are meaningful after it. */
+  getCounterRevenue(
+    outletId: string,
+    businessDate: string,
+  ): Promise<ManualLedgerCounterRevenue | null>
   /**
    * The most recent day row BEFORE this date at this outlet, or null on an
    * outlet's first tracked day.

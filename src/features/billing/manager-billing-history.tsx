@@ -143,7 +143,7 @@ export function ManagerBillingHistory() {
           onChange={(event) => setMethod(event.target.value as PaymentMethod | 'all')}
         >
           <option value="all">All payments</option>
-          {['cash', 'upi', 'swiggy', 'zomato'].map((value) => (
+          {(['cash', 'upi'] satisfies PaymentMethod[]).map((value) => (
             <option key={value} value={value}>
               {value}
             </option>

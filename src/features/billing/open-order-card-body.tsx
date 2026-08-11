@@ -20,6 +20,7 @@ import { formatRecentAge } from '@/domain'
  */
 export function OpenOrderCardBody({
   orderNumber,
+  localReference,
   orderedAt,
   customerName,
   creatorName,
@@ -27,6 +28,7 @@ export function OpenOrderCardBody({
   showLines = true,
 }: {
   orderNumber: number
+  localReference?: string | null
   orderedAt: string
   customerName: string | null
   /** Omitted for the current shift holder — they know who took the order. */
@@ -40,6 +42,7 @@ export function OpenOrderCardBody({
   showLines?: boolean
 }) {
   const totalPaise = lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
+  const reference = localReference ?? `Order #${orderNumber}`
 
   return (
     <>
@@ -59,7 +62,7 @@ export function OpenOrderCardBody({
             }
           >
             <span className="rounded-md border border-border bg-surface px-1.5 py-0.5 text-xs font-bold text-content-muted">
-              Order #{orderNumber}
+              {reference}
             </span>
             <span className="text-xs text-content-muted">
               {formatRecentAge(orderedAt)}
@@ -71,7 +74,7 @@ export function OpenOrderCardBody({
       </div>
 
       {showLines && (
-        <ul className="mt-3 space-y-1.5" aria-label={`Items for order ${orderNumber}`}>
+        <ul className="mt-3 space-y-1.5" aria-label={`Items for ${reference}`}>
           {lines.map((line) => (
             <li key={line.menuItemId} className="flex items-start gap-2 text-sm text-content">
               <span className="min-w-7 rounded-md bg-primary px-1.5 py-0.5 text-center font-black leading-5 text-on-primary">

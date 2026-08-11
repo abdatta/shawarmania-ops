@@ -1,5 +1,5 @@
 import { KeyRound, Undo2, UserRoundCheck } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
 import { EmptyState } from '@/components/layout/empty-state'
@@ -17,9 +17,10 @@ import {
   type PaymentAllocation,
 } from '@/data-access/adapters'
 import { resolveBusinessDate, UNDO_WINDOW_MS } from '@/domain'
+import { useOnForeground } from '@/features/attention/attention'
 import { newUuid } from '@/lib/uuid'
 import { declareUnsavedWork } from '@/pwa/occupancy'
-import { useSession } from '@/session/context'
+import { SessionContext } from '@/session/context'
 import { validateIndianPhone } from '../../../shared/phone'
 
 import { BillComposerFooter } from './bill-composer-footer'
@@ -45,11 +46,10 @@ import { useCounterState } from './use-counter-state'
  * secondary path for the rarer upfront payment; neither settles on the spot —
  * tender is captured in a tap-first dialog.
  *
- * **A direct payment does not wait for anything.** The bill goes to the queue
- * and the panel clears in the same tick, because the next customer is already
- * there. What appears afterwards is a confirmation with the bill's short local
- * reference and an Undo, and it clears itself: a queue that waits for an
- * acknowledgement is a queue that stops.
+ * **A direct payment waits only for durable local acceptance.** The panel clears
+ * after IndexedDB commits, never after a network response. What appears
+ * afterwards is a confirmation with the bill's short local reference and an
+ * Undo, and it clears itself: the next customer never waits for delivery.
  *
  * Undo removes an unsent queue entry. It is not an edit, and there is no path
  * here to one — a settled bill is append-only, and the only correction is a
@@ -73,12 +73,13 @@ interface Confirmation extends Restorable {
   totalPaise: number
 }
 
-export function BillingCounter() {
-  const session = useSession()
-  const { billing, customers, menu: menuAdapter, outlets } = useAdapters()
+export function BillingCounter({ outletId: counterOutletId }: { outletId?: string } = {}) {
+  const session = useContext(SessionContext)
+  const { billing, counter, customers, menu: menuAdapter, outlets } = useAdapters()
   const { shift } = useCounterState()
 
   const [menu, setMenu] = useState<MenuCategoryWithItems[] | null>(null)
+  const [menuOffline, setMenuOffline] = useState(false)
   const [outlet, setOutlet] = useState<Tables<'outlets'> | null>(null)
   const [lines, setLines] = useState<BillLineDraft[]>([])
   const [customerName, setCustomerName] = useState('')
@@ -94,26 +95,61 @@ export function BillingCounter() {
   const [activityRefresh, setActivityRefresh] = useState(0)
   const [editingOrder, setEditingOrder] = useState<BillingOrder | null>(null)
 
-  const outletId = session.outletId
+  const outletId = counterOutletId ?? session?.outletId ?? null
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const suspendedDraft = useRef<Restorable | null>(null)
+  const hasMenu = useRef(false)
+
+  const refreshMenu = useCallback(async () => {
+    if (!outletId) return
+    try {
+      const loadedMenu = await menuAdapter.listMenu(outletId)
+      hasMenu.current = true
+      setMenu(loadedMenu)
+      setMenuOffline(false)
+      setError((current) =>
+        current === 'Could not load the menu. Try again in a moment.' ? null : current,
+      )
+    } catch {
+      if (hasMenu.current) {
+        // A live shift may carry on from the last menu this screen fetched. A
+        // reload has no such snapshot and therefore opens no billing work.
+        setMenuOffline(true)
+      } else {
+        setError('Could not load the menu. Try again in a moment.')
+      }
+    }
+  }, [menuAdapter, outletId])
+
+  const refreshVisibleData = useCallback(() => {
+    void Promise.resolve().then(refreshMenu)
+    setActivityRefresh((value) => value + 1)
+  }, [refreshMenu])
 
   useEffect(() => {
     if (!outletId) return
     let active = true
-    void Promise.all([menuAdapter.listMenu(outletId), outlets.getOutlet(outletId)])
-      .then(([loadedMenu, loadedOutlet]) => {
+    void outlets
+      .getOutlet(outletId)
+      .then((loadedOutlet) => {
         if (!active) return
-        setMenu(loadedMenu)
         setOutlet(loadedOutlet)
       })
       .catch(() => {
-        if (active) setError('Could not load the menu. Try again in a moment.')
+        if (active) setError('Could not load this outlet. Try again in a moment.')
       })
+    void Promise.resolve().then(refreshMenu)
     return () => {
       active = false
     }
-  }, [menuAdapter, outlets, outletId])
+  }, [outlets, outletId, refreshMenu])
+
+  useOnForeground(refreshVisibleData)
+
+  useEffect(() => {
+    if (!outletId) return
+    return counter.subscribeToOutletBilling(outletId, refreshVisibleData)
+  }, [counter, outletId, refreshVisibleData])
 
   useEffect(
     () => () => {
@@ -176,39 +212,46 @@ export function BillingCounter() {
    * the customer was quoted, and a bill must never be joinable back to the live
    * menu.
    */
-  const addItem = useCallback((item: Tables<'menu_items'>) => {
-    if (!item.is_available) return
-    setError(null)
-    setLines((current) => {
-      const existing = current.find((line) => line.menuItemId === item.id)
-      if (existing) {
-        return current.map((line) =>
-          line.menuItemId === item.id ? { ...line, quantity: line.quantity + 1 } : line,
-        )
-      }
-      return [
-        ...current,
-        {
-          menuItemId: item.id,
-          itemName: item.name,
-          unitPricePaise: item.price_paise,
-          quantity: 1,
-        },
-      ]
-    })
-  }, [])
+  const addItem = useCallback(
+    (item: Tables<'menu_items'>) => {
+      if (settling || !item.is_available) return
+      setError(null)
+      setLines((current) => {
+        const existing = current.find((line) => line.menuItemId === item.id)
+        if (existing) {
+          return current.map((line) =>
+            line.menuItemId === item.id ? { ...line, quantity: line.quantity + 1 } : line,
+          )
+        }
+        return [
+          ...current,
+          {
+            menuItemId: item.id,
+            itemName: item.name,
+            unitPricePaise: item.price_paise,
+            quantity: 1,
+          },
+        ]
+      })
+    },
+    [settling],
+  )
 
-  const changeQuantity = useCallback((menuItemId: string, delta: number) => {
-    setLines((current) =>
-      current.flatMap((line) => {
-        if (line.menuItemId !== menuItemId) return [line]
-        const quantity = line.quantity + delta
-        // Below one there is no line: taking the last one off is how a line is
-        // removed, so there is no separate delete to hunt for.
-        return quantity < 1 ? [] : [{ ...line, quantity }]
-      }),
-    )
-  }, [])
+  const changeQuantity = useCallback(
+    (menuItemId: string, delta: number) => {
+      if (settling) return
+      setLines((current) =>
+        current.flatMap((line) => {
+          if (line.menuItemId !== menuItemId) return [line]
+          const quantity = line.quantity + delta
+          // Below one there is no line: taking the last one off is how a line is
+          // removed, so there is no separate delete to hunt for.
+          return quantity < 1 ? [] : [{ ...line, quantity }]
+        }),
+      )
+    },
+    [settling],
+  )
 
   function clearPanel() {
     setLines([])
@@ -231,7 +274,7 @@ export function BillingCounter() {
   }
 
   function beginOrderEdit(order: BillingOrder) {
-    if (editingOrder) return
+    if (settling || editingOrder) return
     suspendedDraft.current = { lines, customerName, customerPhone, payments: paymentPreset }
     setEditingOrder(order)
     putDraftOnPanel({
@@ -253,11 +296,10 @@ export function BillingCounter() {
     setError(null)
   }
 
-  async function saveCustomerIfComplete(): Promise<string | null> {
+  async function saveCustomerIfComplete(): Promise<void> {
     const validation = validateIndianPhone(customerPhone)
-    if (!validation.phone) return null
-    const identity = await customers.createOrGet({ phone: validation.phone, name: customerName })
-    return identity.id
+    if (!validation.phone) return
+    await customers.createOrGet({ phone: validation.phone, name: customerName })
   }
 
   async function saveOrder() {
@@ -265,14 +307,17 @@ export function BillingCounter() {
     setSettling(true)
     setError(null)
     try {
-      const customerId = await saveCustomerIfComplete()
+      // Directory persistence is helpful, but it is not part of the sale's
+      // acknowledgement boundary. A slow request must never hold the counter
+      // in front of an IndexedDB commit.
+      void saveCustomerIfComplete().catch(() => undefined)
       await billing.saveOrder({
         clientId: newUuid(),
         outletId,
         shiftId: shift.id,
         businessDate: resolveBusinessDate(new Date(), outlet.business_day_cutover),
         lines,
-        customerId,
+        customerId: null,
         customerName,
         customerPhone,
       })
@@ -290,10 +335,10 @@ export function BillingCounter() {
     setSettling(true)
     setError(null)
     try {
-      const customerId = await saveCustomerIfComplete()
+      void saveCustomerIfComplete().catch(() => undefined)
       await billing.reviseOrder(editingOrder.id, {
         lines,
-        customerId,
+        customerId: null,
         customerName,
         customerPhone,
       })
@@ -308,7 +353,7 @@ export function BillingCounter() {
     }
   }
 
-  function settle(payments: PaymentAllocation[]) {
+  async function settle(payments: PaymentAllocation[]) {
     if (!shift || !outlet || !outletId) return
     if (lines.length === 0) {
       setError('There is nothing on this bill yet.')
@@ -336,13 +381,13 @@ export function BillingCounter() {
 
     setSettling(true)
     setError(null)
-    setPaymentDialogOpen(false)
     // Customer identity is helpful, never a condition of sale.
     void saveCustomerIfComplete().catch(() => undefined)
 
-    // Deliberately not awaited: the counter never blocks on the queue.
-    void billing
-      .settleBill({
+    try {
+      // This resolves at the IndexedDB transaction boundary. Network delivery
+      // starts later and is never awaited by the counter.
+      await billing.settleBill({
         clientId,
         outletId,
         shiftId: shift.id,
@@ -352,37 +397,40 @@ export function BillingCounter() {
         customerName,
         customerPhone,
       })
-      .catch((cause: unknown) => {
-        setError(
-          cause instanceof DataActionError
-            ? cause.message
-            : 'That bill could not be queued. Try again.',
-        )
-      })
-      .finally(() => setSettling(false))
+      setPaymentDialogOpen(false)
+      setConfirmation({ clientId, totalPaise, ...settled })
+      clearPanel()
 
-    setConfirmation({ clientId, totalPaise, ...settled })
-    clearPanel()
-
-    // The confirmation clears itself. It is on screen for exactly the undo
-    // window, which is also exactly the period during which the bill cannot yet
-    // have been sent — so an Undo that is visible is always an Undo that works.
-    if (dismissTimer.current) clearTimeout(dismissTimer.current)
-    dismissTimer.current = setTimeout(() => setConfirmation(null), UNDO_WINDOW_MS)
+      // The confirmation clears itself. It is on screen for exactly the undo
+      // window, which is also exactly the period during which the bill cannot yet
+      // have been sent — so an Undo that is visible is always an Undo that works.
+      if (dismissTimer.current) clearTimeout(dismissTimer.current)
+      dismissTimer.current = setTimeout(() => setConfirmation(null), UNDO_WINDOW_MS)
+    } catch (cause) {
+      setError(
+        cause instanceof DataActionError
+          ? cause.message
+          : 'That payment was not saved on this tablet. Nothing was cleared; try again.',
+      )
+    } finally {
+      setSettling(false)
+    }
   }
 
-  function undo(target: Confirmation) {
-    setConfirmation(null)
+  async function undo(target: Confirmation) {
     if (dismissTimer.current) clearTimeout(dismissTimer.current)
-    void billing.cancelQueuedBill(target.clientId).catch((cause: unknown) => {
+    setSettling(true)
+    try {
+      await billing.cancelQueuedBill(target.clientId)
+      setConfirmation(null)
+      putDraftOnPanel(target)
+    } catch (cause) {
       setError(
         cause instanceof DataActionError ? cause.message : 'That bill could no longer be undone.',
       )
-    })
-    setLines(target.lines)
-    setCustomerName(target.customerName)
-    setCustomerPhone(target.customerPhone)
-    setPaymentPreset(target.payments)
+    } finally {
+      setSettling(false)
+    }
   }
 
   if (!shift) {
@@ -447,6 +495,16 @@ export function BillingCounter() {
       className="grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_22rem_22rem] gap-3 overflow-x-auto overflow-y-hidden"
     >
       <div className="@container min-h-0 overflow-y-auto">
+        {menuOffline && (
+          <p
+            role="status"
+            data-testid="menu-offline"
+            className="mb-2 rounded-lg border border-warning bg-surface p-2 text-sm font-semibold text-content"
+          >
+            The backend is unavailable. Using this shift&rsquo;s last loaded menu; captured prices
+            stay unchanged.
+          </p>
+        )}
         {error && (
           <p
             role="alert"
@@ -482,7 +540,10 @@ export function BillingCounter() {
           lines={lines}
           onChangeQuantity={changeQuantity}
           {...(editingOrder
-            ? { editingOrderNumber: editingOrder.orderNumber }
+            ? {
+                editingOrderReference:
+                  editingOrder.localReference ?? `order #${editingOrder.orderNumber}`,
+              }
             : { footer: composerFooter })}
         />
 
@@ -551,7 +612,8 @@ export function BillingCounter() {
               variant="secondary"
               size="phone"
               data-testid="undo-settle"
-              onClick={() => undo(confirmation)}
+              disabled={settling}
+              onClick={() => void undo(confirmation)}
             >
               <Undo2 aria-hidden size={16} />
               Undo
@@ -584,8 +646,9 @@ export function BillingCounter() {
         )}
         initialPayments={paymentPreset}
         busy={settling}
+        error={error}
         onClose={() => setPaymentDialogOpen(false)}
-        onConfirm={settle}
+        onConfirm={(payments) => void settle(payments)}
       />
     </div>
   )

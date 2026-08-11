@@ -129,6 +129,26 @@ export function reachableRoles(session: Session): Role[] {
   return ROLE_ORDER.filter((role) => reachable.has(role))
 }
 
+/**
+ * Role surfaces that belong on a person's phone.
+ *
+ * A Biller assignment makes its holder staff at that outlet, but billing itself
+ * belongs only to the enrolled tablet principal. Keeping `biller` in
+ * `reachableRoles` still describes the assignment honestly; removing it here
+ * prevents a personal login from becoming a second counter.
+ */
+export function personalNavigationRoles(session: Session): Role[] {
+  return reachableRoles(session).filter((role) => role !== 'biller')
+}
+
+/** Homes a personal session owns; a Biller owns the staff home on their phone. */
+export function personalHeldRoles(session: Session): Role[] {
+  const assigned = heldRoles(session)
+  return personalNavigationRoles(session).filter(
+    (role) => assigned.includes(role) || (role === 'employee' && assigned.includes('biller')),
+  )
+}
+
 /** The outlets this session may act at in the given role. */
 export function sessionOutletsFor(session: Session, role: Role): string[] {
   return outletsForRole(session.assignments, role)

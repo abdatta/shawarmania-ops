@@ -1,6 +1,8 @@
 # Architecture
 
-> The scaffold, schema, adapter seam and app shell exist (#1–#3). Feature surfaces, auth flows, Edge Functions and the outbox arrive with later roadmap changes; those parts below describe the design they will follow.
+> The scaffold, schema, adapter seam, role shells, authentication, counter
+> device flow and billing outbox exist. Later roadmap surfaces follow the same
+> boundaries described below.
 
 ## Runtime shape
 
@@ -117,10 +119,20 @@ version and the SHA-256 of canonical payload JSON. The browser and PostgreSQL
 share one canonicalization vector. Exact retry returns the stored result; a
 changed envelope under the UUID is a permanent identity conflict.
 
-The durable dependency-ordered IndexedDB queue is deliberately **not** part of
-this contract change. `billing-live` (#10) supplies the adapters, store and
-drain loop before the feature gate moves to live. Detail and failure modes are
-in [Offline And Sync](OFFLINE_AND_SYNC.md).
+The live adapter accepts that envelope into a versioned Dexie store before the
+composer clears. Dependencies preserve each order chain without blocking
+unrelated work; Web Locks elect one draining tab, with an IndexedDB lease as the
+fallback. Exact replay, durable refusals and correction/discard traces all land
+back in the same store. Detail and failure modes are in
+[Offline And Sync](OFFLINE_AND_SYNC.md).
+
+The counter is also the deliberate exception to the phone badge freshness
+convention. It reads menu and activity on mount and whenever the app returns to
+the foreground, and a shared Realtime channel treats menu, order and bill events
+only as nudges to re-read under RLS. Neither path is load-bearing alone. A
+mains-powered tablet stays on this screen for a whole shift, and its stale price
+or availability is charged to the customer rather than merely shown as a late
+count.
 
 ## How permissions are evaluated
 
@@ -187,14 +199,22 @@ per-outlet/per-business-date counter and restart after cutover.
 
 Deliberately asymmetric, because the risk is asymmetric:
 
-- **Reads that must work offline**: menu, current shift, today's bills on this device.
-- **Writes that must work offline**: bills.
+- **Reads that continue offline inside an already-open shift**: that shift's last
+  successfully loaded menu plus local orders, bills and delivery state.
+- **Writes that work offline**: direct payments and create, revise, cancel and
+  pay-order commands.
 - **Opening a shift is online-only**, and deliberately so: the handshake is a
   conversation between the tablet, the server and somebody else's phone, and
   nothing local can stand in for the person who types the four digits. The cost is
   bounded by the shape of the day — a shift lasts to the outlet's cutover, so the
   connection is needed once an evening rather than continuously, and a shift
   already open survives losing it.
+- **Reloading or starting billing needs the backend and a fresh live shift.** Old
+  queued work may still drain after cutover, but a persisted menu is not authority
+  to open new work after a restart.
+- **Finish day is online-only.** It drains the local date, refuses any unresolved
+  command or open server order, ends the shift and writes the server confirmation
+  under one outlet/date lock.
 - **Everything else is online-only.** Inventory, expenses, cash close, P&L and admin screens are used by managers on phones who can wait for a connection. Making them offline-capable would multiply conflict-resolution complexity for no operational gain.
 
 That line is a design commitment, not an accident. Revisit it in a proposal, not in passing.

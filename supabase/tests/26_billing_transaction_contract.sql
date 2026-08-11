@@ -944,12 +944,44 @@ select is(public.manager_cancel_billing_order('a1000000-0000-4000-a000-000000000
   'malformed_payload','a numeric reason cannot masquerade as text');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004');
-select is(public.confirm_billing_end_of_day('a1000000-0000-4000-a000-000000000037',1,
+select is(public.confirm_billing_end_of_day('a1000000-0000-4000-a000-000000000044',1,
   public.billing_payload_hash(jsonb_build_object('outletId','not-a-uuid',
     'businessDate',current_date,'unsentCount',0,'needsAttentionCount',0)),now(),null,
   jsonb_build_object('outletId','not-a-uuid','businessDate',current_date,
     'unsentCount',0,'needsAttentionCount',0))->>'status',
   'malformed_payload','end-of-day parses outlet UUIDs into a permanent refusal');
+
+select is(public.confirm_billing_end_of_day('a1000000-0000-4000-a000-000000000100',1,
+  public.billing_payload_hash(jsonb_build_object(
+    'outletId','00000000-0000-4000-a000-000000000001',
+    'businessDate',public.app_business_date(now(),time '04:00'),
+    'unsentCount',0,'needsAttentionCount',0)),now(),null,
+  jsonb_build_object('outletId','00000000-0000-4000-a000-000000000001',
+    'businessDate',public.app_business_date(now(),time '04:00'),
+    'unsentCount',0,'needsAttentionCount',0))->>'status',
+  'unresolved_operations','finish-day refuses while an open order remains');
+select ok((select ended_at is null from public.counter_shifts
+    where id='90000000-0000-4000-a000-000000000001'),
+  'a refused finish leaves the live shift open');
+
+select pg_temp.impersonate('10000000-0000-4000-a000-000000000005');
+select is(public.confirm_billing_end_of_day('a1000000-0000-4000-a000-000000000101',1,
+  public.billing_payload_hash(jsonb_build_object(
+    'outletId','00000000-0000-4000-a000-000000000002',
+    'businessDate',public.app_business_date(now(),time '04:00'),
+    'unsentCount',0,'needsAttentionCount',0)),now(),null,
+  jsonb_build_object('outletId','00000000-0000-4000-a000-000000000002',
+    'businessDate',public.app_business_date(now(),time '04:00'),
+    'unsentCount',0,'needsAttentionCount',0))->>'status',
+  'accepted','finish-day ends a clear shift and records its confirmation atomically');
+reset role;
+select ok((select ended_at is not null from public.counter_shifts
+    where id='90000000-0000-4000-a000-000000000002'),
+  'the accepted finish ends the tablet shift');
+select is((select count(*) from public.billing_end_of_day_confirmations
+    where device_id='10000000-0000-4000-a000-000000000005'
+      and business_date=public.app_business_date(now(),time '04:00')),1::bigint,
+  'the same accepted finish leaves one server confirmation');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
 select ok(

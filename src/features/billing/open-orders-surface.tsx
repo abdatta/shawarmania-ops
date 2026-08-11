@@ -1,12 +1,13 @@
 import { Check, Minus, Pencil, Plus, ReceiptText, X } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useContext, useEffect, useState } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { Button } from '@/components/ui/button'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
 import { DataActionError, type BillingOrder, type PaymentAllocation } from '@/data-access/adapters'
-import { useSession } from '@/session/context'
+import { SessionContext } from '@/session/context'
+import { CounterDeviceContext } from '@/session/counter-context'
 
 import { CancelOrderDialog } from './cancel-order-dialog'
 import { OpenOrderCardBody } from './open-order-card-body'
@@ -58,7 +59,8 @@ export function OpenOrdersSurface({
   onEditOrder?: (order: BillingOrder) => void
 } = {}) {
   const { billing } = useAdapters()
-  const session = useSession()
+  const session = useContext(SessionContext)
+  const counterDevice = useContext(CounterDeviceContext)
   const { shift } = useCounterState()
   const [orders, setOrders] = useState<BillingOrder[] | null>(null)
   const [editing, setEditing] = useState<BillingOrder | null>(null)
@@ -69,9 +71,10 @@ export function OpenOrdersSurface({
 
   const load = useCallback(async () => {
     await Promise.resolve()
-    if (!session.outletId || !shift) return setOrders([])
-    setOrders(await billing.listOpenOrders(session.outletId))
-  }, [billing, session.outletId, shift])
+    const outletId = counterDevice?.device.outletId ?? session?.outletId ?? null
+    if (!outletId || !shift) return setOrders([])
+    setOrders(await billing.listOpenOrders(outletId))
+  }, [billing, counterDevice?.device.outletId, session?.outletId, shift])
 
   useEffect(() => {
     void Promise.resolve()
@@ -101,9 +104,10 @@ export function OpenOrdersSurface({
 
   function recordPayment(payments: PaymentAllocation[]) {
     if (!paying) return
+    const reference = paying.localReference ?? String(paying.orderNumber)
     void act(
       () => billing.payOrder(paying.id, payments),
-      `Order ${paying.orderNumber} recorded as paid. Bill number assigned.`,
+      `Order ${reference} recorded as paid. Bill number assigned after delivery.`,
     )
   }
 
@@ -154,14 +158,22 @@ export function OpenOrdersSurface({
           {listed.map((order) => {
             const active = editing?.id === order.id ? editing : order
             const showCreator = order.creatorId !== shift?.billerProfileId
+            const reference = order.localReference ?? String(order.orderNumber)
             return (
               <li
                 key={order.id}
-                data-testid={`open-order-${order.orderNumber}`}
+                data-testid={
+                  order.localReference
+                    ? `open-order-local-${order.id}`
+                    : `open-order-${order.orderNumber}`
+                }
                 className="rounded-xl border border-border bg-surface-raised p-3"
               >
                 <OpenOrderCardBody
                   orderNumber={order.orderNumber}
+                  {...(order.localReference !== undefined
+                    ? { localReference: order.localReference }
+                    : {})}
                   orderedAt={order.orderedAt}
                   customerName={active.customerName}
                   lines={active.lines}
@@ -233,7 +245,7 @@ export function OpenOrdersSurface({
                                 customerName: active.customerName,
                                 customerPhone: active.customerPhone,
                               }),
-                            `Order ${order.orderNumber} updated.`,
+                            `Order ${reference} updated.`,
                           )
                         }
                       >
@@ -252,7 +264,7 @@ export function OpenOrdersSurface({
                     variant="secondary"
                     size="phone"
                     className="px-0"
-                    aria-label={`Edit order ${order.orderNumber}`}
+                    aria-label={`Edit order ${reference}`}
                     disabled={editingOrderId !== null}
                     onClick={() =>
                       onEditOrder ? onEditOrder(order) : setEditing(structuredClone(order))
@@ -264,7 +276,7 @@ export function OpenOrdersSurface({
                     variant="danger"
                     size="phone"
                     className="px-0"
-                    aria-label={`Cancel order ${order.orderNumber}`}
+                    aria-label={`Cancel order ${reference}`}
                     onClick={() => setCancelling(order)}
                   >
                     <X aria-hidden size={18} />
@@ -286,13 +298,16 @@ export function OpenOrdersSurface({
       <CancelOrderDialog
         open={cancelling !== null}
         orderNumber={cancelling?.orderNumber ?? 0}
+        {...(cancelling?.localReference !== undefined
+          ? { orderReference: cancelling.localReference }
+          : {})}
         busy={busy}
         onClose={() => setCancelling(null)}
         onConfirm={(reason) => {
           if (!cancelling) return
           void act(
             () => billing.cancelOrder(cancelling.id, reason),
-            `Order ${cancelling.orderNumber} cancelled.`,
+            `Order ${cancelling.localReference ?? cancelling.orderNumber} cancelled.`,
           )
         }}
       />

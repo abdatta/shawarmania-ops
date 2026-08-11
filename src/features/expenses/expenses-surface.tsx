@@ -53,8 +53,6 @@ const METHODS: { value: PaymentMethod; label: string }[] = [
 const METHOD_WORDS: Record<PaymentMethod, string> = {
   cash: 'Cash',
   upi: 'UPI',
-  swiggy: 'Swiggy',
-  zomato: 'Zomato',
 }
 
 interface Draft {

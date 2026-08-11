@@ -50,6 +50,9 @@ function toColumns(patch: OutletPatch): TablesUpdate<'outlets'> {
     ...(patch.arrivalDeadline !== undefined && {
       arrival_deadline: patch.arrivalDeadline,
     }),
+    ...(patch.billingLiveFrom !== undefined && {
+      billing_live_from: patch.billingLiveFrom,
+    }),
     ...(patch.isActive !== undefined && { is_active: patch.isActive }),
   }
 }
@@ -74,6 +77,15 @@ function asOutletError(error: { message: string; code?: string }): unknown {
     return new DataActionError(
       'outlet_in_use',
       'Something is still attached to this outlet, so it cannot be deleted.',
+    )
+  }
+  if (error.code === 'P0001' && error.message.includes('billing live date')) {
+    const nextDate = /next eligible business date is (\d{4}-\d{2}-\d{2})/.exec(error.message)?.[1]
+    return new DataActionError(
+      'billing_live_date_refused',
+      nextDate
+        ? `Choose ${nextDate} or later. Once that trading day starts, the billing start date is locked.`
+        : 'Choose a future business date. Once that trading day starts, the billing start date is locked.',
     )
   }
   return error

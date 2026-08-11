@@ -4,6 +4,7 @@ import {
   ManualLedgerActionError,
   type LedgerActor,
   type ManualLedgerAdapter,
+  type ManualLedgerCounterRevenue,
   type ManualLedgerDay,
   type ManualLedgerDayInput,
   type ManualLedgerExpense,
@@ -76,13 +77,17 @@ function optionalActor(id: string | null, people: People): LedgerActor | null {
   return id ? actor(id, people) : null
 }
 
-function toDay(row: Tables<'manual_ledger_days'>, people: People): ManualLedgerDay {
+function toDay(
+  row: Tables<'manual_ledger_days'>,
+  people: People,
+  counterRevenue: ManualLedgerCounterRevenue | null = null,
+): ManualLedgerDay {
   return {
     outletId: row.outlet_id,
     businessDate: row.business_date,
     openingCashPaise: row.opening_cash_paise,
-    cashRevenuePaise: row.cash_revenue_paise,
-    upiRevenuePaise: row.upi_revenue_paise,
+    cashRevenuePaise: counterRevenue?.cashRevenuePaise ?? row.cash_revenue_paise,
+    upiRevenuePaise: counterRevenue?.upiRevenuePaise ?? row.upi_revenue_paise,
     zomatoRevenuePaise: row.zomato_revenue_paise,
     swiggyRevenuePaise: row.swiggy_revenue_paise,
     cashAddedPaise: row.cash_added_paise,
@@ -96,6 +101,58 @@ function toDay(row: Tables<'manual_ledger_days'>, people: People): ManualLedgerD
     recordedBy: actor(row.recorded_by, people),
     updatedBy: optionalActor(row.updated_by, people),
   }
+}
+
+function nextDate(date: string): string {
+  const parsed = new Date(`${date}T00:00:00Z`)
+  if (Number.isNaN(parsed.valueOf())) {
+    throw new ManualLedgerActionError(
+      'bad_date',
+      'That is not a business date this ledger can read.',
+    )
+  }
+  parsed.setUTCDate(parsed.getUTCDate() + 1)
+  return parsed.toISOString().slice(0, 10)
+}
+
+async function readCounterRevenueRange(
+  client: SupabaseClient<Database>,
+  outletId: string,
+  from: string,
+  to: string,
+): Promise<{ liveFrom: string | null; byDate: Map<string, ManualLedgerCounterRevenue> }> {
+  const { data: outlet, error: outletError } = await client
+    .from('outlets')
+    .select('billing_live_from')
+    .eq('id', outletId)
+    .maybeSingle()
+  if (outletError) throw toLedgerError(outletError)
+
+  const liveFrom = outlet?.billing_live_from ?? null
+  const byDate = new Map<string, ManualLedgerCounterRevenue>()
+  if (!liveFrom || to <= liveFrom) return { liveFrom, byDate }
+
+  const { data, error } = await client.rpc('manual_ledger_counter_revenue', {
+    p_outlet_id: outletId,
+    p_from: from,
+    p_to: to,
+  })
+  if (error) throw toLedgerError(error)
+  for (const row of data ?? []) {
+    byDate.set(row.business_date, {
+      cashRevenuePaise: row.cash_revenue_paise,
+      upiRevenuePaise: row.upi_revenue_paise,
+    })
+  }
+  return { liveFrom, byDate }
+}
+
+function revenueOn(
+  context: Awaited<ReturnType<typeof readCounterRevenueRange>>,
+  businessDate: string,
+): ManualLedgerCounterRevenue | null {
+  if (!context.liveFrom || businessDate < context.liveFrom) return null
+  return context.byDate.get(businessDate) ?? { cashRevenuePaise: 0, upiRevenuePaise: 0 }
 }
 
 function toExpense(row: Tables<'manual_ledger_expenses'>, people: People): ManualLedgerExpense {
@@ -147,8 +204,15 @@ export function createSupabaseManualLedgerAdapter(
   client: SupabaseClient<Database>,
 ): ManualLedgerAdapter {
   return {
+    async getCounterRevenue(outletId, businessDate) {
+      return revenueOn(
+        await readCounterRevenueRange(client, outletId, businessDate, nextDate(businessDate)),
+        businessDate,
+      )
+    },
+
     async getDay(outletId, businessDate) {
-      const [{ data, error }, people] = await Promise.all([
+      const [{ data, error }, people, revenue] = await Promise.all([
         client
           .from('manual_ledger_days')
           .select(ALL)
@@ -156,9 +220,10 @@ export function createSupabaseManualLedgerAdapter(
           .eq('business_date', businessDate)
           .maybeSingle(),
         readPeople(client),
+        readCounterRevenueRange(client, outletId, businessDate, nextDate(businessDate)),
       ])
       if (error) throw toLedgerError(error)
-      return data ? toDay(data, people) : null
+      return data ? toDay(data, people, revenueOn(revenue, businessDate)) : null
     },
 
     async getPreviousDay(outletId, businessDate) {
@@ -176,10 +241,18 @@ export function createSupabaseManualLedgerAdapter(
         readPeople(client),
       ])
       if (error) throw toLedgerError(error)
-      return data ? toDay(data, people) : null
+      if (!data) return null
+      const revenue = await readCounterRevenueRange(
+        client,
+        outletId,
+        data.business_date,
+        nextDate(data.business_date),
+      )
+      return toDay(data, people, revenueOn(revenue, data.business_date))
     },
 
     async upsertDay(day: ManualLedgerDayInput) {
+      const counterRevenue = await this.getCounterRevenue(day.outletId, day.businessDate)
       const { data, error } = await client
         .from('manual_ledger_days')
         // The upsert is the edit: one row per outlet per date, corrected in
@@ -189,8 +262,8 @@ export function createSupabaseManualLedgerAdapter(
             outlet_id: day.outletId,
             business_date: day.businessDate,
             opening_cash_paise: day.openingCashPaise,
-            cash_revenue_paise: day.cashRevenuePaise,
-            upi_revenue_paise: day.upiRevenuePaise,
+            cash_revenue_paise: counterRevenue ? 0 : day.cashRevenuePaise,
+            upi_revenue_paise: counterRevenue ? 0 : day.upiRevenuePaise,
             zomato_revenue_paise: day.zomatoRevenuePaise,
             swiggy_revenue_paise: day.swiggyRevenuePaise,
             cash_added_paise: day.cashAddedPaise,
@@ -207,7 +280,7 @@ export function createSupabaseManualLedgerAdapter(
         .select(ALL)
         .single()
       if (error) throw toLedgerError(error)
-      return toDay(data, await readPeople(client))
+      return toDay(data, await readPeople(client), counterRevenue)
     },
 
     async deleteDay(outletId, businessDate) {
@@ -310,7 +383,7 @@ export function createSupabaseManualLedgerAdapter(
       const from = `${month}-01`
       const to = firstOfNextMonth(month)
 
-      const [days, expenses, people] = await Promise.all([
+      const [days, expenses, people, revenue] = await Promise.all([
         client
           .from('manual_ledger_days')
           .select(ALL)
@@ -326,13 +399,16 @@ export function createSupabaseManualLedgerAdapter(
           .lt('business_date', to)
           .order('business_date', { ascending: true }),
         readPeople(client),
+        readCounterRevenueRange(client, outletId, from, to),
       ])
 
       if (days.error) throw toLedgerError(days.error)
       if (expenses.error) throw toLedgerError(expenses.error)
 
       return {
-        days: (days.data ?? []).map((row) => toDay(row, people)),
+        days: (days.data ?? []).map((row) =>
+          toDay(row, people, revenueOn(revenue, row.business_date)),
+        ),
         expenses: (expenses.data ?? []).map((row) => toExpense(row, people)),
       } satisfies ManualLedgerMonth
     },

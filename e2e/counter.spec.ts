@@ -155,13 +155,17 @@ test.describe('the counter', () => {
     await expect(saved).toContainText('₹298')
     await saved.getByRole('button', { name: 'Mark Paid', exact: true }).click()
     const payment = page.getByRole('dialog', { name: 'Record payment' })
-    await payment.getByRole('button', { name: 'Swiggy', exact: true }).click()
+    await payment.getByRole('button', { name: 'UPI', exact: true }).click()
     await payment.getByRole('button', { name: 'Mark Paid', exact: true }).click()
     await expect(page.getByText(/recorded as paid. Bill number assigned/)).toBeVisible()
 
-    const closed = rail.locator('details').filter({ hasText: 'Swiggy' }).first()
+    const closed = rail
+      .locator('details')
+      .filter({ hasText: 'Mayonnaise Chicken Shawarma' })
+      .first()
     await expect(closed).toBeVisible()
     await closed.locator('summary').click()
+    await expect(closed).toContainText('UPI')
     await expect(closed).toContainText('Classic Chicken Shawarma')
     await expect(closed).toContainText('Mayonnaise Chicken Shawarma')
     await expect(closed).toContainText('1 × ₹139')
@@ -288,8 +292,10 @@ test.describe('the counter', () => {
   test('limits My shift and exposes originating-tablet correction', async ({ page }) => {
     const rail = page.getByTestId('counter-activity-rail')
     await expect(rail.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
-    await expect(rail.getByTestId('shift-total-swiggy')).toContainText('₹0')
-    await expect(rail.getByTestId('shift-total-zomato')).toContainText('₹318')
+    await expect(rail.getByTestId('shift-total-cash')).toBeVisible()
+    await expect(rail.getByTestId('shift-total-upi')).toBeVisible()
+    await expect(rail.getByTestId('shift-total-swiggy')).toHaveCount(0)
+    await expect(rail.getByTestId('shift-total-zomato')).toHaveCount(0)
     await expect(rail.getByText('Payment needs attention')).toBeVisible()
     await rail.getByRole('button', { name: 'Correct with new copy' }).click()
     await expect(page.getByText(/linked correction was created/)).toBeVisible()
@@ -301,12 +307,10 @@ test.describe('the counter', () => {
     await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await page.getByPlaceholder('Customer name').fill('Demo Regular')
     await page.getByTestId('settle').click()
-    await expect(
-      page.getByRole('dialog', { name: 'Record payment' }).getByText('Card'),
-    ).toHaveCount(0)
-    await expect(
-      page.getByRole('dialog', { name: 'Record payment' }).getByText('Other'),
-    ).toHaveCount(0)
+    const payment = page.getByRole('dialog', { name: 'Record payment' })
+    for (const unsupported of ['Swiggy', 'Zomato', 'Card', 'Other']) {
+      await expect(payment.getByRole('button', { name: unsupported })).toHaveCount(0)
+    }
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('counter-activity-rail')).toBeVisible()
   })
@@ -346,29 +350,14 @@ test.describe('the counter', () => {
     await expect(page.getByPlaceholder('Phone number')).toHaveAttribute('pattern', '[0-9]*')
   })
 
-  test('needs a shift, and the shift screen opens one with a PIN', async ({ page }) => {
-    await page.getByRole('link', { name: 'Shift', exact: true }).click()
-    await expect(page.getByTestId('open-shift')).toContainText('Demo Biller is on the counter')
+  test('removes the legacy PIN shift surface now that the enrolled tablet owns handover', async ({
+    page,
+  }) => {
+    await expect(page.getByRole('link', { name: 'Shift', exact: true })).toHaveCount(0)
 
-    await page.getByTestId('close-shift').click()
-    await page.getByRole('button', { name: 'Close shift' }).click()
-    await expect(page.getByTestId('biller-grid')).toBeVisible()
-
-    // The counter now says what to do rather than showing a dead Settle.
-    await page.getByRole('link', { name: 'Counter' }).click()
-    await expect(page.getByTestId('no-shift')).toContainText('No shift is open')
-    await expect(page.getByTestId('settle')).toHaveCount(0)
-
-    // A wrong PIN is refused with one sentence.
-    await page.getByTestId('open-shift-link').click()
-    await page.getByRole('button', { name: 'Demo Morning Biller' }).click()
-    for (const digit of '9999') await page.getByRole('button', { name: digit, exact: true }).click()
-    await expect(page.getByTestId('shift-error')).toContainText('did not unlock')
-
-    // The right one hands the counter over.
-    for (const digit of '1234') await page.getByRole('button', { name: digit, exact: true }).click()
-    await expect(page.getByTestId('shift-status')).toContainText('Demo Morning Biller')
-    await expect(page.getByTestId('bill-total')).toBeVisible()
+    await page.goto('demo/biller/shift')
+    await expect(page.getByRole('heading', { name: 'That page does not exist' })).toBeVisible()
+    await expect(page.getByLabel(/PIN/i)).toHaveCount(0)
   })
 })
 
@@ -436,7 +425,7 @@ test.describe('manager billing history', () => {
     await page.goto('demo/admin/billing-history')
     await expect(page.getByRole('heading', { name: 'Billing history' })).toBeVisible()
 
-    await page.getByLabel('Payment method').selectOption('zomato')
+    await page.getByLabel('Payment method').selectOption('upi')
     const bill = page.getByRole('button', { name: /Bill \d+ · Sent/ }).first()
     await bill.click()
     await expect(page.getByRole('dialog')).toContainText('Revenue date')

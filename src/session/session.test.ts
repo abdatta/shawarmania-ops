@@ -4,7 +4,13 @@ import type { Assignment } from '@/data-access/adapters'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock'
 
 import type { Role, Session } from './session'
-import { deriveSessionScope, heldRoles, reachableRoles } from './session'
+import {
+  deriveSessionScope,
+  heldRoles,
+  personalHeldRoles,
+  personalNavigationRoles,
+  reachableRoles,
+} from './session'
 
 /**
  * Held roles and reachable roles are two questions, and the difference is the
@@ -59,6 +65,8 @@ describe('reachableRoles', () => {
 
     expect(heldRoles(biller)).toEqual(['biller'])
     expect(reachableRoles(biller)).toEqual(['biller', 'employee'])
+    expect(personalNavigationRoles(biller)).toEqual(['employee'])
+    expect(personalHeldRoles(biller)).toEqual(['employee'])
   })
 
   it('gives the manager exactly what it holds, and no attendance surface', () => {

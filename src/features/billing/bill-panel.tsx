@@ -27,16 +27,16 @@ import { cn } from '@/lib/cn'
 export function BillPanel({
   lines,
   onChangeQuantity,
-  editingOrderNumber,
+  editingOrderReference,
   footer,
 }: {
   lines: BillLineDraft[]
   onChangeQuantity: (menuItemId: string, delta: number) => void
-  editingOrderNumber?: number
+  editingOrderReference?: string
   /** The composer footer, when this panel is the one holding it. */
   footer?: ReactNode
 }) {
-  const editing = editingOrderNumber !== undefined
+  const editing = editingOrderReference !== undefined
 
   return (
     /*
@@ -62,7 +62,7 @@ export function BillPanel({
         )}
       >
         {editing && <Pencil aria-hidden size={15} />}
-        {editing ? `Editing order #${editingOrderNumber}` : 'Current bill'}
+        {editing ? `Editing ${editingOrderReference}` : 'Current bill'}
       </h2>
 
       <div className="min-h-20 flex-1 overflow-y-auto px-3 md:min-h-0" data-testid="bill-lines">

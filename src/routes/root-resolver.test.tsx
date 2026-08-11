@@ -71,6 +71,14 @@ const MANAGES_KALYANI: Assignment = {
   endedOn: null,
 }
 
+const BILLS_KALYANI: Assignment = {
+  id: 'a-biller',
+  role: 'biller',
+  outletId: 'outlet-kalyani',
+  startedOn: '2025-08-01',
+  endedOn: null,
+}
+
 /** A resolution that never arrives, so `loading` can be observed at all. */
 function never<T>(): Promise<T> {
   return new Promise<T>(() => {})
@@ -123,6 +131,19 @@ describe('the application root', () => {
     const router = mountAt('/')
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/admin'))
+  })
+
+  it('takes a personal Biller to the staff home without mounting tablet billing', async () => {
+    auth.currentUser.mockResolvedValue({ userId: 'u-1', username: 'biller.kalyani' })
+    auth.loadOwnAssignments.mockResolvedValue([BILLS_KALYANI])
+
+    const router = mountAt('/')
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/staff'))
+    expect(await screen.findByText('Hello, Synthetic Admin Kal')).toBeVisible()
+    expect(screen.getAllByRole('link', { name: 'My attendance' })).not.toHaveLength(0)
+    expect(screen.queryAllByRole('link', { name: 'Counter' })).toHaveLength(0)
+    expect(screen.queryByText(/No shift is open/)).toBeNull()
   })
 
   it('takes a session that holds nothing to the role root, which says so', async () => {
