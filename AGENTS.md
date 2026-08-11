@@ -2,7 +2,12 @@
 
 Shawarmania Ops is a multi-outlet cash-counter and outlet-management PWA for **Shawarmania**, a quick-service shawarma business operating in Kalyani and Kanchrapara, West Bengal. It handles counter billing, employee attendance, menu, inventory, expenses, daily cash reconciliation, basic profit/loss estimates, and outlet↔owner messaging — with each outlet's data strictly isolated so the business can grow through franchises.
 
-**Status: the whole UI is walkable; most of it is not yet real.** The schema, tenancy policies, the adapter seam, the four role shells, demo mode and authentication all exist, and attendance runs in production. Every other surface — billing, menu, inventory, expenses, daily cash, and the owner's console, comparison, P&L, reports and alerts — is **built and demo-gated**, walkable end to end at `/demo` over one internally consistent scenario spanning both outlets. Making each one real is what the remaining `*-live` changes do. See [`openspec/changes/ROADMAP.md`](openspec/changes/ROADMAP.md) for what is built and what comes next; it is derived from the change folders, so it is never stale.
+**Status: the whole UI is walkable, and it is being made real one surface at a time.** The schema, tenancy policies, the adapter seam, the four role shells, demo mode and authentication all exist. Every surface is built and walkable end to end at `/demo` over one internally consistent scenario spanning both outlets; each one becomes real when a `*-live` change swaps its adapter and promotes its gate.
+
+**This file does not say which surfaces are real, deliberately.** That answer moves on somebody else's change, and a copy of it here goes stale silently, which is exactly what happened to the two sentences this paragraph replaced. Two sources carry it and neither can drift:
+
+- [`openspec/changes/ROADMAP.md`](openspec/changes/ROADMAP.md) — what is built and what comes next, derived from the change folders by `npm run roadmap:sync`.
+- [`src/gates/registry.ts`](src/gates/registry.ts) — `hidden`, `demo` or `live` per surface. This is the authority; it is what the app itself reads.
 
 ## North Star
 
@@ -74,8 +79,8 @@ Rationale for each of these choices is recorded in [Architecture](docs/ARCHITECT
 
 Two device contexts, deliberately different:
 
-- **Personal human accounts** (all four roles until shared counter-device enrollment): an admin-chosen, business-wide username plus password. An account with a private associated email may use either identifier with the same password. Supabase stores the username as a reserved non-deliverable Auth alias; it is provider plumbing, never contact data. Phone numbers remain optional contact facts, not credentials. **Built.**
-- **Counter tablet** (Biller): the *tablet* is set up once, with a one-time code an admin generates on their own phone, and holds a long-lived device session scoped by RLS to exactly one outlet. A person then opens a **shift** by typing their username on the tablet and entering the tablet's four-digit code on their own phone; no password is ever typed on the tablet, nobody who cannot see the tablet can open a counter, and there is no fallback approver. **Not built** — arrives with `counter-devices-and-offline`, which also removes the PIN the demo currently uses; until then a Biller signs in with their own username and password, which is recorded in [Limitations](docs/LIMITATIONS.md).
+- **Personal human accounts** (all four roles): an admin-chosen, business-wide username plus password. An account with a private associated email may use either identifier with the same password. Supabase stores the username as a reserved non-deliverable Auth alias; it is provider plumbing, never contact data. Phone numbers remain optional contact facts, not credentials.
+- **Counter tablet** (Biller): the *tablet* is set up once, with a one-time code an admin generates on their own phone, and holds a long-lived device session scoped by RLS to exactly one outlet. A person then opens a **shift** by typing their username on the tablet and entering the tablet's four-digit code on their own phone; no password is ever typed on the tablet, nobody who cannot see the tablet can open a counter, and there is no fallback approver.
 
 Three rules that follow, and that a change touching auth must not quietly undo:
 
