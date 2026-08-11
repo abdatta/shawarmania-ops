@@ -12,7 +12,7 @@ npm run test:e2e  # Playwright: shell, demo and the offline path, against a real
 npm run test:e2e:auth # Playwright: sign-in, provisioning, deactivation (needs the local stack)
 npm run test:db   # pgTAP: isolation + write-contract suites (needs the local stack)
 npm run test:rls  # REST probes: real sign-ins, hand-crafted cross-outlet requests
-npm run lint      # ESLint (incl. layer boundaries) + no-hex-outside-tokens + backlog index + Edge Function config
+npm run lint      # ESLint + no-hex + backlog/spec indexes + Edge Function config
 npm run typecheck # tsc --noEmit, strict
 npm run contrast  # WCAG validator over the token file, both themes
 
@@ -50,6 +50,23 @@ means a full `db:stop`/`db:start`.
 **`import.meta.url` is not a file URL under the runner.** Vitest rewrites it, so `fileURLToPath(new URL('../x', import.meta.url))` resolves against the drive root and throws or reads the wrong path. Two escapes, depending on which side of the seam the code is on: a **check script** resolves its paths inside its CLI entry rather than at module load, keeping the exported rule importable and the filesystem the entry point's business; a **test** reading repo files resolves from `process.cwd()`, which the runner sets to the repo root. Both shapes are in `scripts/` if you need an example.
 
 **`npm run lint` gates the behaviour backlog's index.** `openspec/todos/README.md` carries each item's trigger to promote, so a note the index does not mention is not deferred work but lost work — nothing looks broken while it goes unread, which is how one sat unlisted for two days. The check fails in both directions: a note no link mentions, and a row pointing at a note that is gone. The index stays authored, since no tool can derive a trigger.
+
+**`npm run lint` also gates the living-spec capability index.**
+`openspec/specs/README.md` must link every direct capability directory containing
+`spec.md`, and every capability link must still resolve to such a file. The
+checker names missing and dangling capabilities but never generates or rewrites
+their hand-authored summaries. The prose workflow runs both index checks because
+an archive can add or remove a living capability without changing executable
+code.
+
+**A new database command family proves what survives JSON.** A test must inspect
+the payload after `JSON.stringify` round-tripping whenever a required fact can be
+empty or unknown, asserting that the key remains with an explicit null. The same
+variant must then succeed over the real HTTP transport and assert its intended
+row or result. Mock-adapter coverage or a direct SQL call cannot prove this:
+JavaScript silently removes `undefined`, while PostgREST resolves an RPC from the
+function name and the JSON keys it actually receives. Omission is valid only for
+a parameter whose final database signature declares a default.
 
 **`npm run lint` also gates Edge Function configuration.** Every directory under `supabase/functions/` except `_shared` must carry a `[functions.<name>]` block in `supabase/config.toml`. A function with no block does not fail — it silently receives `verify_jwt = true`, and the gateway then refuses every unauthenticated request before the function's own code runs. That is correct for three of the five functions and fatal for the two that exist to answer a caller holding no token, where it surfaces as a rejected invite code or a rejected tablet setup code, blaming the one thing that was not at fault. The check asserts the judgement was made, never which way it went; whether the platform honoured it needs a live probe, which `docs/OPERATIONS.md` carries in the first-deploy runbook.
 
@@ -162,7 +179,8 @@ That is all `clientsClaim` governs, and it is worth being exact because this pag
 ## Verification before calling a change done
 
 - `npm test` green, `npm run lint` clean, `npm run typecheck` clean. CI runs all of these, plus `npm run format:check`, `npm run contrast`, the production build, and the Playwright suite, on every push and pull request **that can change what is built, served or migrated**.
-- **CI has two tiers, split by path.** A commit touching anything that can change the bundle, the schema or the policies runs the whole suite and gates the publish, exactly as it always has. A commit confined to prose — `docs/`, `openspec/changes|specs|todos/`, `.claude/`, root markdown — runs the `Prose` workflow instead: `format:check` and `lint:todos`, the two gates that genuinely apply, and no database. It publishes nothing, because there is nothing in it to publish. `openspec/tools/` is **not** prose: it is linted JavaScript and takes the full suite. The two path lists are exact complements, so every commit matches at least one tier and none goes unchecked; `scripts/check-workflow-path-tiers.test.mjs` fails if they ever drift apart.
+- **CI has two tiers, split by path.** A commit touching anything that can change the bundle, the schema or the policies runs the whole suite and gates the publish, exactly as it always has. A commit confined to prose — `docs/`, `openspec/changes|specs|todos/`, `.claude/`, root markdown — runs the `Prose` workflow instead: `format:check`, `lint:todos`, and `lint:specs`, the three gates that genuinely apply, and no database. It publishes nothing, because there is nothing in it to publish. `openspec/tools/` is **not** prose: it is linted JavaScript and takes the full suite. The two path lists are exact complements, so every commit matches at least one tier and none goes unchecked; `scripts/check-workflow-path-tiers.test.mjs` fails if they ever drift apart.
+- **Dependency-advisory refreshes** record the vulnerable version and dependency path, whether it is browser-runtime reachable, and the compatible patched resolution. Verify the committed result with a clean `npm ci`, `npm ls` for every affected package, `npm audit`, the focused build/PWA tests, the production build, and the offline-shell/update-adoption browser cases. If no compatible fix exists, document the temporary safety case and a time-bounded review trigger rather than hiding the advisory.
 - **Tenancy-touching changes**: the isolation suite passes, including new cases for any new table.
 - **Migration changes**: after `db:reset`, run `npm run db:types` and include any generated schema change. Once it is staged, `git diff --exit-code src/data-access/database.types.ts` must be clean; ordinary TypeScript checking cannot detect a stale but internally valid generated snapshot.
 - **Billing or offline changes**: the offline E2E path passes.

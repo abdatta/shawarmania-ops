@@ -52,9 +52,9 @@ concurrency:
 
 jobs:
   # Named for what it checks rather than for the tier, so the check reads
-  # `Prose / formatting and the backlog index`.
+  # `Prose / formatting and the repository indexes`.
   check:
-    name: formatting and the backlog index
+    name: formatting and repository indexes
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -79,6 +79,12 @@ jobs:
       # would have disarmed it for precisely the commits it exists to police.
       - name: Backlog index is in sync
         run: npm run lint:todos
+
+      # A living spec is also prose-only, especially when an archive adds or
+      # removes a capability. Keep its hand-authored capability map honest in
+      # this tier as well as in normal lint.
+      - name: Living-spec index is in sync
+        run: npm run lint:specs
 
       # Nothing else runs here on purpose. eslint, typecheck, the build and
       # every test suite take no input from any file this workflow's filter

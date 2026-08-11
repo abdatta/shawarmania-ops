@@ -65,6 +65,13 @@ const fullSuite = [
 ]
 
 describe('CI path tiers', () => {
+  it('the prose tier invokes both repository index checks', () => {
+    const docs = workflow('docs.yml')
+
+    expect(docs).toMatch(/run: npm run lint:todos/)
+    expect(docs).toMatch(/run: npm run lint:specs/)
+  })
+
   it.each(fullSuite)('%s declares a non-empty prose denylist', (name, key) => {
     expect(readPathList(workflow(name), key)?.length).toBeGreaterThan(0)
   })

@@ -138,18 +138,20 @@ describe('approving a day', () => {
   it('states the approver’s missing position, rather than omitting it', async () => {
     const rpc = succeeds()
     await adapterWith(rpc).approve(['a-1'], {
-      reason: 'Phone could not find a position',
+      reason: null,
       reading: null,
       approverId: 'm-1',
     })
 
     const [, args] = rpc.mock.calls[0] as [string, Record<string, unknown>]
     expect(args).toMatchObject({
+      p_reason: null,
       p_manager_lat: null,
       p_manager_lng: null,
       p_manager_accuracy_m: null,
     })
     expect(JSON.parse(JSON.stringify(args))).toMatchObject({
+      p_reason: null,
       p_manager_lat: null,
       p_manager_lng: null,
       p_manager_accuracy_m: null,

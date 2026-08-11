@@ -66,7 +66,26 @@ describe('billing command canonical identity', () => {
       'p_schema_version',
       'p_shift_id',
     ])
-    expect(billingCommandRpcArguments({ ...command, shiftId: null }).p_shift_id).toBeNull()
+
+    const serialized = JSON.parse(
+      JSON.stringify(billingCommandRpcArguments({ ...command, shiftId: null })),
+    ) as Record<string, unknown>
+    expect(Object.keys(serialized).sort()).toEqual([
+      'p_command_id',
+      'p_created_at',
+      'p_payload',
+      'p_payload_hash',
+      'p_schema_version',
+      'p_shift_id',
+    ])
+    expect(serialized).toMatchObject({
+      p_shift_id: null,
+      p_payload: {
+        customerId: null,
+        customerName: null,
+        customerPhone: null,
+      },
+    })
   })
 
   it('maps every command type to exactly one RPC', () => {

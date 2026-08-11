@@ -473,6 +473,8 @@ describe('the attendance adapter', () => {
     // The approver's position is unknown, and the distance with it. An approval
     // that recorded a distance here would be claiming a place nobody read.
     expect(settled?.approval?.latitude).toBeNull()
+    expect(settled?.approval?.longitude).toBeNull()
+    expect(settled?.approval?.accuracyMetres).toBeNull()
     expect(settled?.approval?.distanceMetres).toBeNull()
   })
 

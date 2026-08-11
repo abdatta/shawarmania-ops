@@ -20,6 +20,37 @@ From a fresh clone with only Node.js and npm installed, dependency installation,
 - **WHEN** the roadmap reconciler is run
 - **THEN** it reconciles the roadmap exactly as before, with no change to its behaviour
 
+### Requirement: High-severity dependency advisories are not buried
+
+The repository SHALL keep high-severity dependency advisories visible and
+actionable. When a compatible patched version exists, the dependency lock SHALL
+resolve to that fixed version. When no compatible fix exists, the repository
+SHALL record whether the affected package is runtime-reachable, why temporary
+acceptance is safe, and the concrete trigger for revisiting it.
+
+A previously accepted advisory SHALL NOT remain documented as unavoidable after
+a compatible fix becomes available.
+
+#### Scenario: A compatible patch is available
+
+- **WHEN** the dependency audit reports a high-severity advisory and the existing
+  parent ranges admit a patched transitive version
+- **THEN** the committed lockfile resolves the dependency to the patched version
+- **AND** a clean install, audit, tests, and production build pass
+
+#### Scenario: No compatible patch exists
+
+- **WHEN** a high-severity advisory has no compatible fixed resolution
+- **THEN** the repository records its dependency path, runtime reachability,
+  temporary safety rationale, and trigger to review it again
+
+#### Scenario: An accepted warning later becomes fixable
+
+- **WHEN** a compatible fixed version becomes available for a previously tracked
+  advisory
+- **THEN** the accepted exception is removed and the patched dependency is
+  verified without widening the change into unrelated upgrades
+
 ### Requirement: Layer boundaries are enforced by tooling
 
 The source tree SHALL be organised into the layers named in the architecture — routes, features, data access, domain, and outbox — and lint SHALL enforce that only the data-access layer imports the database client and that the domain layer imports from no other layer.
@@ -71,6 +102,36 @@ write, reorder or reword rows.
 - **THEN** the check passes, including for a note reached only from the graduated
   table
 
+### Requirement: The living-spec index lists every current capability
+
+Lint SHALL compare direct capability directories containing `spec.md` under
+`openspec/specs/` with capability links in `openspec/specs/README.md`. It SHALL
+exit non-zero and name every directory the index omits and every capability link
+whose directory or spec no longer exists.
+
+The index SHALL describe current capabilities only. Its summaries SHALL remain
+hand-authored, and the checker SHALL NOT generate, reorder, or rewrite them.
+Future sequencing SHALL remain in the roadmap rather than an expected-capability
+forecast in the living-spec index.
+
+#### Scenario: A capability added without an index entry fails
+
+- **WHEN** an archive creates a capability directory containing `spec.md` and the
+  living-spec index has no link to it
+- **THEN** the checker exits non-zero and names the missing capability
+
+#### Scenario: A removed capability leaves a dangling link
+
+- **WHEN** the living-spec index links a capability whose directory or `spec.md`
+  no longer exists
+- **THEN** the checker exits non-zero and names the dangling capability link
+
+#### Scenario: A complete current index passes
+
+- **WHEN** every current capability is linked exactly as a current capability and
+  every capability link resolves
+- **THEN** the checker passes without changing the authored summaries
+
 ### Requirement: Test harness covers unit, component, and end-to-end layers
 
 The project SHALL run a unit and component test runner and an end-to-end browser runner, both wired into the standard commands and into continuous integration. End-to-end tests SHALL run against a production build rather than a development server, so that behaviour which only exists in a real build is actually exercised.
@@ -94,10 +155,10 @@ in any step SHALL fail the workflow.
 
 A push or pull request confined to prose — the documentation tree, the change,
 spec and backlog directories, and root-level markdown — SHALL instead run a
-documentation tier that gates formatting and the behaviour backlog's index, and
-SHALL publish nothing, there being nothing in such a commit to publish.
-Executable files under those directories are not prose and SHALL take the full
-suite.
+documentation tier that gates formatting, the behaviour backlog's index, and the
+living-spec capability index, and SHALL publish nothing, there being nothing in
+such a commit to publish. Executable files under those directories are not prose
+and SHALL take the full suite.
 
 The two filters SHALL be complements **for every event either tier runs on**:
 every commit SHALL match at least one tier on both a pull request and a push to
@@ -117,7 +178,7 @@ passes, exactly as before.
 - **WHEN** a push or pull request touches only the documentation tree, the
   change, spec and backlog directories, or root-level markdown
 - **THEN** the full suite does not run, the documentation tier runs the format
-  check and the backlog index check, and nothing is published
+  check plus both index checks, and nothing is published
 
 #### Scenario: A tool living beside prose still takes the full suite
 
@@ -183,6 +244,39 @@ differ.
 
 - **WHEN** application code calls the database client with a table or column that does not exist in the schema
 - **THEN** the typecheck fails
+
+### Requirement: Database commands are verified as serialized requests
+
+Every database command caller SHALL send every parameter that the final database
+function signature requires. A required fact whose value is unknown SHALL remain
+present after JSON serialization with an explicit null value; a caller MAY omit
+an argument only when the database signature deliberately declares a default.
+
+Each new database command family SHALL cover any required empty or unknown
+variant both at the serialized payload boundary and over the real HTTP transport.
+A mock-adapter test or a direct SQL call SHALL NOT be treated as proof of that
+wire behavior.
+
+#### Scenario: A required unknown value survives serialization
+
+- **WHEN** a command is issued without a reading or other legitimately unknown
+  required fact
+- **THEN** the serialized JSON still contains that argument with a null value
+- **AND** the real transport resolves and executes the intended database function
+
+#### Scenario: A defaulted argument may be omitted
+
+- **WHEN** a caller leaves out an argument whose final database signature
+  declares a default
+- **THEN** the request resolves the intended function and the database applies
+  that declared default
+
+#### Scenario: A new command family proves its empty variant
+
+- **WHEN** a change adds a database command whose required input can be empty or
+  unknown
+- **THEN** its verification asserts the post-serialization key and value and
+  proves the same variant against the real HTTP transport
 
 ### Requirement: The database suite runs in continuous integration
 

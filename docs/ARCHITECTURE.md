@@ -96,6 +96,16 @@ Two rules keep this honest. **Mocks are typed from the generated schema types**,
 
 A third rule governs what a real adapter *sends*. **Every argument of a database command is stated explicitly, including the ones that are unknown — an omitted key is not a null.** A payload is JSON, so a property that evaluates to `undefined` disappears on the way out; a function whose parameter carries no default then matches nothing, and PostgREST answers that it cannot find the function at all. That failure looks like a broken app rather than a missing value, and it cannot be caught by the mock adapter, which is handed the object rather than the JSON. It shipped once, in `attendance_submit_attempt`: `p_lat: reading?.latitude as number` broke every check-in taken without a position, showing "try again in a moment" while writing nothing. The cast is what hid it — do not silence the generated `Args` type over an optional chain. Write `?? null` first, and cast only a value that is provably never `undefined`.
 
+That command boundary includes both typed browser adapters and the service-role
+RPC callers inside Edge Functions. Generated browser types do not express that
+a required PostgreSQL parameter accepts null, while privileged clients have no
+generated argument type at all, so neither boundary is exempt from checking the
+serialized object against the final database signature. An argument may vanish
+only when that signature declares a default. Every new command family whose
+required facts can be empty or unknown proves the serialized key and explicit
+null locally, then proves the same variant reaches the intended function over
+the real HTTP transport and returns the intended row or result.
+
 Surfaces are `hidden`, `demo`, or `live`, declared in one registry (`src/gates/registry.ts`) that navigation and routing derive from. Full detail, including the safety rules that let demo mode ship to production, is in [Demo Mode](DEMO_MODE.md).
 
 **Navigation and routing derive from the roles a session can *reach*, which is not the same question as the roles it holds** (`owner-reaches-every-outlet`, #28). `heldRoles(session)` is what a person's live assignments confer, and it stays the answer wherever the app *states* somebody's roles — the account menu is the one place that does. `reachableRoles(session)` adds one thing: a session holding the owner role reaches the outlet-level surfaces, at every outlet, holding no assignment at any of them. Three gates read it — the phone shell's navigation, `GatedSurface`, and the role-path check in `RealRoot` — and nothing else does.

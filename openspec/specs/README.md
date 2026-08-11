@@ -45,32 +45,29 @@ Write behaviour, not implementation. A spec that names a React component or a fi
 
 ## Current capabilities
 
-Foundation capabilities landed with `project-foundations`; they describe how the repository and the shell behave rather than what the business does.
+This alphabetical list maps every capability required now. For planned work, read the
+[reconciled roadmap](../changes/ROADMAP.md).
 
-- [`project-scaffold`](project-scaffold/spec.md) — a clone that builds, layer boundaries enforced by tooling, CI (including the database suite), safe client configuration, committed drift-gated schema types.
-- [`design-system`](design-system/spec.md) — token layering, both themes, verified contrast, the money and date formatters, touch sizing.
-- [`pwa-and-deployment`](pwa-and-deployment/spec.md) — installable, offline shell, non-disruptive updates, identifiable builds, sub-path hosting.
-
-Domain capabilities landed with `data-model-and-tenancy`. These are **schema-level contracts**: they bind every future writer, while their screens and flows arrive with later changes.
-
-- [`outlet-tenancy`](outlet-tenancy/spec.md) — outlet isolation enforced in the database, claims-based scoping, immediate deactivation and revocation, enumerated coverage, two-outlet synthetic seeds.
-- [`counter-billing`](counter-billing/spec.md) — server-assigned gapless bill numbers, append-only bills with a void-only transition, snapshot line items, idempotent client-UUID writes, cutover-validated business dates.
-- [`inventory-ledger`](inventory-ledger/spec.md) — the movements ledger as append-only truth with a database-maintained stock cache.
-- [`daily-cash-reconciliation`](daily-cash-reconciliation/spec.md) — day close computed and snapshotted by the database, never recomputed, arithmetic held by constraints.
-- [`attendance-and-location`](attendance-and-location/spec.md) — location evidence stored beside the verdict, one row per employee per business day.
-
-Owner-facing capabilities landed with `ui-owner-console-and-demo`. These are **surface contracts against a mocked seam**: the behaviour is required now, and `owner-console-live` (#13) makes the figures real without changing what is required of the screens.
-
-- [`cross-outlet-oversight`](cross-outlet-oversight/spec.md) — every outlet on one screen, figures derived from recorded rows, closed days read from their snapshots, a switcher that never widens, and no export of demonstration figures.
-- [`profit-estimates`](profit-estimates/spec.md) — two named bases, the basis always stated, raw materials counted exactly once, integer paise.
-- [`outlet-alerts`](outlet-alerts/spec.md) — categorised and prioritised alerts with a response thread, a one-step-at-a-time status ending terminal, and a cross-outlet inbox only the owner reads.
-
-One capability belongs to the business rather than to any outlet, landed with `global-customer-identity`. It is the single deliberate exception to outlet scoping, which is why it is called out on its own rather than filed beside the outlet contracts.
-
-- [`global-customer-identity`](global-customer-identity/spec.md) — one canonical phone is one customer business-wide, retrievable only by a complete exact phone from a billing context, with no browse or direct-table path for any role, a rate bound that logs no phone input, a separate owner read, and no widening of transaction access. `outlet-tenancy` carries the matching clause requiring the catalog to classify it as global and to keep every customer-linked transaction outlet-scoped.
-
-## Expected capabilities
-
-The remaining domain capabilities, derived from the roadmap; each arrives as its change archives:
-
-`staff-authentication` · `counter-device-trust` · `menu-catalogue` · `offline-settlement` · `expense-tracking`
+- [`app-shell`](app-shell/spec.md) — four role-appropriate shells, gate-derived navigation, uniform real and demo sessions, reachable theme controls, stable role paths, and shared layout primitives.
+- [`attention-badges`](attention-badges/spec.md) — a consistent, contextual count of work waiting for a reader, visible wherever that work can be reached.
+- [`attendance-and-location`](attendance-and-location/spec.md) — reviewable attendance evidence: capture coordinates, accuracy, distance, source, verdict, and approval beside each business-day record.
+- [`billing-command-contract`](billing-command-contract/spec.md) — an atomic, replay-safe database command boundary for billing writers, historical shift attribution, and day-close readiness.
+- [`counter-billing`](counter-billing/spec.md) — server-assigned bill numbers, append-only settlement history, snapshot line items, idempotent client UUIDs, and cutover-validated business dates.
+- [`counter-device-sessions`](counter-device-sessions/spec.md) — secure one-outlet counter-tablet enrollment and named-person shift opening from the employee's own phone.
+- [`cross-outlet-oversight`](cross-outlet-oversight/spec.md) — owner comparison of every permitted outlet from recorded rows and closed-day snapshots, without widening a switcher or exporting demo figures.
+- [`daily-cash-reconciliation`](daily-cash-reconciliation/spec.md) — database-computed cash close records that become immutable snapshots, protecting a counted drawer from later recalculation.
+- [`demo-mode`](demo-mode/spec.md) — a visibly fabricated, no-authentication four-role demo through typed adapters, structurally unable to write real data.
+- [`design-system`](design-system/spec.md) — semantic token layering, AA-verified light and dark themes, and shared money and date formatters.
+- [`expense-categories`](expense-categories/spec.md) — business-wide expense-category suggestions grown from use, with historical category text preserved and deliberate owner-led rewrites.
+- [`global-customer-identity`](global-customer-identity/spec.md) — one business-wide normalized-phone customer record with exact billing lookup, no enumeration, separate owner access, and no widened transaction access.
+- [`identity-and-access`](identity-and-access/spec.md) — admin-provisioned four-role accounts, username or private-email sign-in, assignment-derived authority, and immediate deactivation.
+- [`inventory-ledger`](inventory-ledger/spec.md) — an append-only stock-movements truth with a database-maintained current-quantity cache and correction-by-new-entry history.
+- [`manual-ledger`](manual-ledger/spec.md) — temporary hand-entered outlet takings, expenses, and drawer reconciliation, with correct per-day aggregator commissions and a guarded retirement path.
+- [`menu-management`](menu-management/spec.md) — outlet menus with role-bounded availability and deliberate non-retroactive price changes.
+- [`order-lifecycle`](order-lifecycle/spec.md) — editable counter orders with daily customer-facing numbers, ownership, terminal states, attributed cancellation, and day-close participation.
+- [`outlet-alerts`](outlet-alerts/spec.md) — categorised, prioritised outlet-to-owner issues with response threads, one-step status progression, and an owner-only cross-outlet inbox.
+- [`outlet-expenses`](outlet-expenses/spec.md) — explicit-business-date, integer-paise outlet expenses, where only cash payments reduce the drawer at close.
+- [`outlet-tenancy`](outlet-tenancy/spec.md) — database-enforced outlet isolation, immediate deactivation and device revocation, and schema-enumerated coverage that a new table cannot skip.
+- [`profit-estimates`](profit-estimates/spec.md) — stated cash- or consumption-basis profit estimates that never double-count raw materials and always use integer paise.
+- [`project-scaffold`](project-scaffold/spec.md) — a buildable, testable repository whose security and delivery boundaries are enforced by tooling and CI.
+- [`pwa-and-deployment`](pwa-and-deployment/spec.md) — installable, offline shell access, non-disruptive updates, identifiable builds, and safe static sub-path hosting.

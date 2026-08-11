@@ -9,6 +9,13 @@
 - **Every outlet-scoped table ships an RLS policy in the same migration that creates it.** A table without a policy is a data leak, not a to-do item.
 - **Never log** customer phone numbers, employee coordinates, or full bill contents.
 - Access tokens live in memory and Supabase's managed storage. No hand-rolled token persistence.
+- **Compatible high-severity dependency fixes are applied promptly.** When an
+  existing parent range admits a patched transitive release, the lockfile must
+  resolve to it and the clean install, dependency path, audit and production
+  build are rechecked. If no compatible fix exists, the exception must name the
+  affected version and path, state whether it is browser-runtime reachable,
+  explain the temporary safety rationale, and carry a time-bounded review
+  trigger. An accepted exception is removed as soon as a compatible fix exists.
 - **The repository is public.** GitHub Pages hosts the app for free only from a public repo, so everything committed here is world-readable — including `docs/`. Assume anything you write down is published. This makes the "never commit" rule above load-bearing rather than tidy.
 
 ## What being a public repo does and does not expose
