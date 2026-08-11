@@ -221,6 +221,29 @@ Three consequences worth stating plainly:
 
 ## Real-world edges
 
+### A continuously busy device defers a new build until its next launch
+
+The app takes a new build by reloading itself, and only from a state where a
+reload costs nothing. A counter tablet that is composing an order, holding
+typed work, saving, or offline for the whole of a shift never reaches that
+state, so it keeps the **Update** action and takes the build when it is next
+launched.
+
+This is not a regression — waiting for the next launch is exactly what every
+device did before this behaviour existed — but it does mean **a fix cannot be
+guaranteed to reach a busy counter within a shift**. Where that matters, the
+tablet has to be reloaded deliberately, which the Update action is there to make
+a one-tap job rather than a browser-menu one.
+
+### Connectivity is the browser's opinion, not a reachable backend
+
+The decision to reload asks the browser whether it is online. That reliably
+catches airplane mode and a dead adapter, which are the cases that matter for a
+tablet on outlet wifi, but a captive portal or a reachable router with no route
+onward reports as online. The cost of being wrong is bounded: a reload that
+lands without a backend, which a biller recovers from by reconnecting, rather
+than anything written or lost.
+
 ### Browser geolocation is spoofable
 
 Attendance location can be faked with browser devtools or a mock-location app. This **raises the bar; it is not proof.** It is stated here rather than assumed away because the consequence matters: a location flag must never be treated as evidence in a dispute about someone's pay.

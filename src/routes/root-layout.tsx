@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router'
 
 import { BuildVersion } from '@/components/build-version'
-import { InstallAppButton } from '@/components/install-app-button'
+import { AppAction } from '@/components/app-action'
 import { ThemeToggle } from '@/components/theme-toggle'
 
 /**
@@ -17,7 +17,7 @@ export function RootLayout() {
       <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
         <span className="font-display text-xl tracking-wide text-accent-text">Shawarmania Ops</span>
         <div className="flex items-center gap-2">
-          <InstallAppButton />
+          <AppAction />
           <ThemeToggle />
         </div>
       </header>

@@ -22,4 +22,7 @@ createRoot(container).render(
   </StrictMode>,
 )
 
+// Returns a disposer the app never needs — it lives as long as the document —
+// but which the tests do, and which keeps the timers and listeners it owns
+// accounted for rather than merely abandoned.
 registerServiceWorker()

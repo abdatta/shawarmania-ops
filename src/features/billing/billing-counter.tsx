@@ -18,6 +18,7 @@ import {
 } from '@/data-access/adapters'
 import { resolveBusinessDate, UNDO_WINDOW_MS } from '@/domain'
 import { newUuid } from '@/lib/uuid'
+import { declareUnsavedWork } from '@/pwa/occupancy'
 import { useSession } from '@/session/context'
 import { validateIndianPhone } from '../../../shared/phone'
 
@@ -120,6 +121,21 @@ export function BillingCounter() {
     },
     [],
   )
+
+  /**
+   * Hold off a waiting build while an order is being composed.
+   *
+   * The app takes a new build by reloading itself the moment the page is free,
+   * and it works out "free" generically, by watching typing. An order is not
+   * typing: it lives in `lines` and this whole feature renders no input, so a
+   * fifteen-item order is invisible to that measure and would be reloaded away.
+   * This is the one place in the app that has to say so for itself
+   * (updates-wait-for-a-safe-moment, design D6).
+   */
+  useEffect(() => {
+    if (lines.length === 0) return
+    return declareUnsavedWork('billing-composer')
+  }, [lines.length])
 
   useEffect(() => {
     const validation = validateIndianPhone(customerPhone)

@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
 import { Navigate, useLocation, useParams } from 'react-router'
 
-import { InstallAppButton } from '@/components/install-app-button'
+import { AppAction } from '@/components/app-action'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { LoadingShell } from '@/components/ui/loading'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createSupabaseAdapters } from '@/data-access/supabase-adapters'
+import { trackAdapterWrites } from '@/data-access/track-adapter-writes'
 import { NotFound } from '@/routes/not-found'
 import { CounterShell } from '@/shell/counter-shell'
 import { PhoneShell } from '@/shell/phone-shell'
@@ -45,7 +46,9 @@ export function RealRoot() {
   // happens — this only keeps the render from dying first.
   const adapters = useMemo(() => {
     try {
-      return createSupabaseAdapters()
+      // Wrapped so writes in flight are counted, which is what stops the app
+      // reloading itself onto a new build mid-save.
+      return trackAdapterWrites(createSupabaseAdapters())
     } catch {
       return null
     }
@@ -114,10 +117,7 @@ export function RealRoot() {
   return (
     <SessionContext.Provider value={session}>
       <AdaptersContext.Provider value={adapters}>
-        <Shell
-          accountMenu={<AccountMenu onSignOut={endSession} />}
-          installAction={<InstallAppButton />}
-        />
+        <Shell accountMenu={<AccountMenu onSignOut={endSession} />} appAction={<AppAction />} />
       </AdaptersContext.Provider>
     </SessionContext.Provider>
   )

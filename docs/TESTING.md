@@ -136,7 +136,9 @@ End-to-end, with the network genuinely disabled rather than mocked away.
 
 The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install the worker, cut the network, reload, and assert the shell and its self-hosted fonts still render. Two details there are worth knowing before writing more offline tests.
 
-**A worker must control the page before it intercepts anything.** `clientsClaim` is deliberately off, so the worker installed on the first load does not take over that page — it serves from the next load onward. That is the safe choice: a worker claiming an open page would, on an update, start serving new-build assets to old-build code mid-shift. Offline tests therefore prime with an online load, a reload, and only then go offline.
+**A worker must control the page before it intercepts anything.** `clientsClaim` is deliberately off, so the worker installed on the first load does not take over that page — it serves from the next load onward. Offline tests therefore prime with an online load, a reload, and only then go offline.
+
+That is all `clientsClaim` governs, and it is worth being exact because this page and `docs/OPERATIONS.md` both used to claim it also protected an open page from an update. It does not. An updated worker that skips waiting takes control of open pages by definition, which is what makes `controllerchange` fire. What protects an open page is `src/pwa/register-sw.ts` supplying `onNeedReload` so the app owns the reload; `e2e/update-adoption.spec.ts` proves it by publishing a real new build and asserting the page survives.
 
 **`page.waitForFunction` does not await a returned Promise** — it sees a truthy Promise object and resolves immediately. Waiting on service-worker readiness that way silently races, and the test fails later and somewhere else. Use `page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined))`, which does await.
 
@@ -149,6 +151,8 @@ The app-shell half of this already runs (`e2e/offline.spec.ts`): load, install t
 - **Billing or offline changes**: the offline E2E path passes.
 - **UI changes**: run the app and look at it — phone viewport and tablet viewport, light and dark themes.
 - **PWA install changes**: check an eligible Chromium browser, iOS Safari's manual instructions, installed display mode, and an ineligible browser. The app-owned action must survive public-to-real navigation, disappear after use, and remain absent in demo mode.
+
+- **PWA update changes**: `e2e/update-adoption.spec.ts` publishes a real new build by giving the built worker script one more byte, which is the whole of what a new version means to a browser, and asserts both halves — an occupied page is offered the action and is *not* reloaded, an unoccupied one reloads itself. Route interception cannot stand in for this: Playwright can observe the worker-script request but not fulfil it, because the browser rather than the page makes it. Mutating the artefact is safe because each test gets its own browser context and the original bytes are restored afterwards. **A unit test of the registration callbacks is not sufficient coverage here** — the bug this suite exists to catch was in the library's behaviour around callbacks that were themselves correct.
 - **Theme changes**: the contrast validator passes. AA is the floor.
 - **Schema changes**: migrations apply cleanly to a fresh database *and* to a copy with existing data.
 - **Production deployment changes**: Pages depends on the `production-database` migration job; a failed or missing migration credential blocks publication, an up-to-date schema is a no-op, and manual frontend rollback leaves forward migration history untouched.

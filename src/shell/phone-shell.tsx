@@ -20,11 +20,11 @@ import { heldRoles, reachableRoles, ROLE_SEGMENTS, type Role } from '@/session/s
 export function PhoneShell({
   banner,
   accountMenu,
-  installAction,
+  appAction,
 }: {
   banner?: ReactNode
   accountMenu?: ReactNode
-  installAction?: ReactNode
+  appAction?: ReactNode
 }) {
   const session = useSession()
   // Every role the person can reach, not just the one whose shell they are in:
@@ -73,7 +73,7 @@ export function PhoneShell({
           <span className="block truncate text-xs text-content-muted">{session.displayName}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {installAction}
+          {appAction}
           <ThemeToggle />
           {accountMenu}
         </div>

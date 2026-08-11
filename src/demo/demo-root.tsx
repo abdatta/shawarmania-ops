@@ -4,6 +4,7 @@ import { useParams } from 'react-router'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { enterDemoScope, exitDemoScope } from '@/data-access/demo-scope'
 import { createDemoData, createMockAdapters, personaFixtures } from '@/data-access/mock'
+import { trackAdapterWrites } from '@/data-access/track-adapter-writes'
 import { NotFound } from '@/routes/not-found'
 import { CounterShell } from '@/shell/counter-shell'
 import { PhoneShell } from '@/shell/phone-shell'
@@ -90,7 +91,12 @@ export function DemoRoot() {
   // The persona's role reaches the mock so it can enforce the same owner-only
   // boundary the database does — a demo that let a manager change a staff code
   // would teach a product this one is not.
-  const adapters = useMemo(() => createMockAdapters(role ?? 'super_admin', data), [role, data])
+  // Wrapped exactly as the real tree wraps its own, so a demo walked while an
+  // update is waiting is not reloaded in the middle of a write either.
+  const adapters = useMemo(
+    () => trackAdapterWrites(createMockAdapters(role ?? 'super_admin', data)),
+    [role, data],
+  )
 
   if (!session) return <NotFound />
 

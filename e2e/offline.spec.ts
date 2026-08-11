@@ -15,12 +15,21 @@ import { expect, test, type Page } from '@playwright/test'
  * Get the app into the state a real device is in on its second launch: worker
  * installed, precache populated, page controlled.
  *
- * Two loads are required because `clientsClaim` is deliberately off. A worker
- * that claims already-open pages would, on an update, start serving new-build
- * assets to old-build code mid-shift — the version skew we accept one extra
- * launch to avoid. It costs nothing in practice: the shell is precached during
- * the first load, so the app is offline-capable from the next launch onward,
- * and installing a PWA involves opening it more than once anyway.
+ * Two loads are required because `clientsClaim` is off: a **first** worker does
+ * not adopt the page that installed it, so the page that primed the precache is
+ * still uncontrolled when it finishes.
+ *
+ * That is all `clientsClaim` governs. It says nothing about updates — an
+ * updated worker that skips waiting takes control of open pages by definition,
+ * which is what makes `controllerchange` fire at all. An earlier version of
+ * this comment claimed the two were the same protection; they are not, and what
+ * actually keeps an open page from being disturbed by a new build is
+ * `src/pwa/register-sw.ts` owning the reload rather than the registration
+ * library performing it.
+ *
+ * It costs nothing in practice: the shell is precached during the first load,
+ * so the app is offline-capable from the next launch onward, and installing a
+ * PWA involves opening it more than once anyway.
  */
 async function primeServiceWorker(page: Page) {
   await page.goto('.')

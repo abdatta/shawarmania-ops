@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
+import { usePrefersReducedMotion } from '@/lib/use-prefers-reduced-motion'
 import { useInstallPrompt } from '@/pwa/install-prompt-context'
 
 const INSTALL_LABEL_DELAY_MS = 3_000
@@ -24,22 +25,6 @@ function rememberInstallLabel() {
   } catch {
     // Storage can be unavailable in hardened browser contexts.
   }
-}
-
-function usePrefersReducedMotion() {
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
-    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-  )
-
-  useEffect(() => {
-    const query = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const handleChange = (event: MediaQueryListEvent) => setPrefersReducedMotion(event.matches)
-
-    query.addEventListener('change', handleChange)
-    return () => query.removeEventListener('change', handleChange)
-  }, [])
-
-  return prefersReducedMotion
 }
 
 export function InstallAppButton() {

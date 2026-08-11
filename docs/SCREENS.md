@@ -74,6 +74,19 @@ opens briefly once per tab to teach the download icon, while reduced-motion
 users get the stable full label. A prompt captured before sign-in remains
 available after the real phone or counter shell mounts.
 
+**Update app** — the same header slot, and the same 44px control, shows an
+**Update** action when a new build is waiting and the app has decided the page
+is too busy to reload by itself. **Install takes the slot when both apply**:
+somebody who has not installed the app gains more from installing it, and
+nothing is lost by the wait, because the update applies itself the moment the
+page frees up. Unlike the install action, which teaches its label once per tab
+and then goes quiet, this one keeps expanding and collapsing for as long as it
+is unapplied — it is the app declaring that it is holding a build back, on a
+counter tablet nobody is studying, where a single reveal five minutes ago has
+not been seen. Reduced motion leaves the label up without the cycle, and the
+accessible name never changes. Demo shells render neither action, and still
+take an update automatically when their page is idle.
+
 **Account menu** — in every shell's chrome: who you are, your role, your outlet, and sign out. Demo shells do not have one; there is no session to end.
 
 It is also **the first thing in that chrome that is not the same for all four roles**: the Super Admin's carries the demo, with a **copy-link** action beside it, so the one person who pitches franchisees can produce the URL without typing it from memory. Nobody else sees the entry — a manager showing the demo to a walk-in lead is plausible enough, and no harm follows since the link is public either way, but there is no reason to widen an affordance ahead of wanting it. It links and copies `/demo` rather than a role path, because the banner's role switcher is right there and a recipient should not be pinned to whichever role the owner was looking at. **Following it while signed in still lands on the "you are signed in — this is the demo" gate**, deliberately and with no special case: somebody ringing up fake bills in a tab they thought was real is a genuine operational problem, and an owner is no less capable of losing track of a tab than a biller is.
