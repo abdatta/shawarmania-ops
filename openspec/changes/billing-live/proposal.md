@@ -27,7 +27,12 @@ during rollout.
   command RPC; mixed bills remain one fully paid bill, and drawer close sums
   only their Cash allocations.
 - Read the latest menu while reachable, and keep the active shift's menu snapshot
-  so a transient failure does not interrupt an already-open counter.
+  so a transient failure does not interrupt an already-open counter. **Keep the
+  counter fresh on two triggers, not one**: it re-reads the menu and the activity
+  rail when the screen returns to the foreground, and again when the backend
+  reports that outlet's menu or work changed. A tablet that resolved its menu once
+  when the screen opened sells the morning's prices all evening, and because a line
+  captures its price at the tap, that is wrong money rather than a stale display.
 - Commit every accepted counter command to IndexedDB before clearing its form,
   never await the network, preserve Mark Paid's six-second guaranteed Undo before
   that command becomes deliverable, and retry through one page leader with backoff.

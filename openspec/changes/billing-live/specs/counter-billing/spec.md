@@ -53,6 +53,34 @@ total is zero.
 - **WHEN** an order remains open at an outlet whose tablet cannot be used
 - **THEN** the outlet's manager cancels it with a reason from their own device, and nothing is transferred
 
+### Requirement: The counter's activity rail notices work changed elsewhere
+
+The rail of open orders and this shift's bills SHALL refresh on returning to the
+foreground and on a change reported by the backend for its own outlet, and SHALL
+NOT depend solely on this tablet's own saves. V1 has one billing tablet per outlet,
+but it also has a manager who voids a paid bill and cancels a stranded order from
+their own device, so a rail that only knows what this tablet did will offer an
+operator an order that no longer exists.
+
+As with the menu, the reported change SHALL be a signal to re-read rather than the
+data itself, and the foreground re-read SHALL be sufficient on its own if nothing
+is reported, so a silently dead channel degrades the rail to "correct whenever
+somebody comes back to it" rather than to wrong.
+
+A refresh SHALL NOT disturb an order currently held in the composer.
+
+#### Scenario: A manager clears a stranded order
+- **WHEN** the outlet's manager cancels an open order with a reason from their own device
+- **THEN** the tablet's rail stops offering it without the app being reloaded, and an operator cannot open it for payment or edit
+
+#### Scenario: A manager voids a paid bill
+- **WHEN** a bill from the current shift is voided from the manager's history surface
+- **THEN** the tablet's rail shows it as void rather than continuing to show it as an ordinary bill of the shift
+
+#### Scenario: The rail refreshes during an edit
+- **WHEN** the rail re-reads while a saved order is held in the composer
+- **THEN** the order stays under edit with its draft intact, and the rest of the rail updates around it
+
 ### Requirement: Paid correction respects the personal-device boundary
 
 An authorised manager SHALL void a paid bill with a reason from bill history.

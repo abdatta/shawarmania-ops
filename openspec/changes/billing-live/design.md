@@ -109,6 +109,61 @@ shift before new work starts. The background drain may still deliver old work.
 
 This gives short-drop protection without presenting V1 as an offline product.
 
+### The counter re-reads on foreground, and realtime is only a nudge
+
+"While reachable, billing always fetches the latest menu" is a promise about
+freshness that nothing in the current counter keeps. The billing screen resolves
+its menu once, in an effect whose dependencies never change for the life of the
+screen, and then never asks again. A tablet that has been sitting on the counter
+since morning is working from a photograph of the morning's menu.
+
+That is not a display fault, it is the wrong money. Adding a line snapshots the
+item's name and price at the moment of the tap, deliberately, so that a price
+edited mid-order cannot rewrite what a customer was already quoted. The same
+snapshot means a stale grid is quoted and charged as though it were current, and
+an item the manager marked unavailable at 7pm is still sellable at 9pm.
+
+So freshness is two independent triggers, and the counter needs both:
+
+**Read again when the screen comes back.** `useOnForeground` in
+`src/features/attention/attention.ts` already does exactly this for badge counts,
+and the billing screen re-reads its menu and its rail on the same signal, as well
+as on mount. A counter tablet is picked up, woken, and switched between screens
+many times an evening, so this alone covers most of the gap.
+
+**Let the server say something moved.** A Supabase realtime channel over that
+outlet's `menu_categories` and `menu_items` fires a nudge carrying no data, only
+"read again", and the counter re-reads. This covers the case foreground cannot:
+the tablet nobody has touched for two hours, which at a counter mid-evening is
+the ordinary state rather than the exception.
+
+**Neither one may be load-bearing on its own.** The nudge is the thorough trigger
+and the fragile one: `subscribeToOwnHandshake` in the counter adapter carries a
+note about a day lost to a server-side filter on a column granted to nobody, where
+the channel went silent without ever erroring. A silent channel is the worst
+failure available here, because everything looks correct and only the numbers are
+old. The foreground read is therefore the floor underneath it, and the guaranteed
+worst case is "come back to the screen and it is right" rather than "wrong prices
+all evening".
+
+Polling was rejected: an interval short enough to matter is a request every few
+seconds, all evening, for a menu that changes a few times a month. The
+no-subscription reasoning behind the attention badges (design D4 there) was
+considered and does not carry: that decision is about a phone in an apron paying
+battery continuously for a number nobody is looking at, while this is a
+mains-powered tablet fixed on one screen where the cost of being stale is money.
+
+**A refresh never disturbs work in progress.** Only the menu grid and the rail's
+lists are replaced. Lines already on the panel keep their captured snapshots, an
+order under edit stays under edit, and a suspended draft is untouched.
+
+The same two triggers are what make the rail honest about work changed elsewhere.
+The rail reloads today only on this tablet's own saves, so a manager voiding a
+paid bill or cancelling a stranded order from their own phone (both V1 paths this
+change delivers) leaves the tablet showing an order that no longer exists. Several
+tablets billing at one outlet stays out of scope for #35; one tablet plus one
+manager's phone is V1, and it is enough to need this.
+
 ### Server outcomes map to explicit local terminal states
 
 Accepted and exact-replay responses mark the command sent and retain its server
