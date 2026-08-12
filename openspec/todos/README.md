@@ -45,6 +45,20 @@ Two entries carry a status worth reading before the trigger column:
 - **Data Retention Policy has a nearer trigger than the roadmap states.** Employee location history begins accumulating the day attendance goes live, which is the sharpest exposure in the system and arrives well before meaningful customer volume. It now accrues about the approving manager too, not only about staff (#26).
 - **The two attendance items above are both costs #26 took deliberately**, not oversights: a day off reads as absent because nothing knows a roster, and a forgotten approval surfaces only as a count on a screen because there is no notification channel in the app to put it through. Each is recorded with what already exists for it, so promoting one is narrowing a function rather than starting a design.
 
+## Owner Feedback — Kalyani Counter, 12 Aug 2026
+
+Seven items the owner noticed while setting up billing at Kalyani on 12 Aug 2026, kept out of the Items table above deliberately: they arrived together in one session, they are ranked smallest-to-largest against each other rather than against the roadmap, and [the feedback page](./2026-08-12-owner-feedback.md) is where each one's size sits. They are linked from here because an unlisted note is lost work — the rule this index exists to hold — and not because they have been weighed against the items above yet.
+
+- [The "Awaiting Activation" Label Lies](./awaiting-activation-label-lies.md) — Staff / Roles
+- [You Can't Click Your Way to the Counter Setup Page](./counter-setup-page-has-no-link.md) — Navigation
+- [Let Me Drag to Resize the Last Two Counter Columns](./drag-resize-counter-columns.md) — Counter / Design
+- [Promoting a Staff Member Can Accidentally Lock Them Out](./promoting-staff-can-lock-them-out.md) — Staff / Roles
+- [The App Asks for a Code Before Checking If the Person Is Even Allowed](./code-request-before-eligibility-check.md) — Counter / Billing
+- [Marking a Bill "Paid" Removes It From the Kitchen List Too Soon](./paid-removes-order-from-kitchen-too-soon.md) — Billing
+- [The Owner Can't See the Real Billing Counter From Home](./owner-cant-see-real-counter-remotely.md) — Owner console / Demo
+
+Two of them sit inside the `billing-live` (#10) rollout path rather than after it: the counter setup page cannot be reached by clicking, which matters the moment a tablet needs pairing and the outlet has no second one running, and the tablet asks a person for a code before checking whether they may bill at all.
+
 ## Graduated / Absorbed
 
 | Former item | Where it went |
