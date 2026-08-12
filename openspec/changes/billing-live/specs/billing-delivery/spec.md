@@ -4,9 +4,10 @@
 
 The system SHALL write an immutable, versioned billing command envelope to the
 tablet's IndexedDB before it reports success or clears the operator's form, and
-SHALL NOT require a network response for that acknowledgement. A direct-payment envelope
-SHALL remain ineligible for delivery during the existing six-second Undo window;
-Undo SHALL remove it while still unsent and restore the complete composer.
+SHALL NOT require a network response for that acknowledgement. Payment envelopes
+SHALL become eligible for ordinary delivery without waiting for their five-minute
+tender-edit window; a later payment correction SHALL be a separate immutable
+envelope chained behind the payment it corrects.
 
 #### Scenario: Local commit succeeds while the backend is unreachable
 - **WHEN** an operator submits a valid counter mutation during a live shift and the backend request cannot complete
@@ -16,9 +17,30 @@ Undo SHALL remove it while still unsent and restore the complete composer.
 - **WHEN** IndexedDB cannot durably commit a submitted command
 - **THEN** the system does not report success, does not clear the form, and explains that the operation was not saved
 
-#### Scenario: Mark Paid is undone before delivery
-- **WHEN** the operator uses Undo during the guaranteed window
-- **THEN** no request has begun, the envelope is removed, and its lines, customer form and payment method return to the composer
+#### Scenario: Payment delivery starts before its edit window ends
+- **WHEN** an immediate or on-handover payment is durably committed locally
+- **THEN** it becomes eligible for the ordinary drain immediately and its five-minute edit action remains available on the paid-bill card
+
+### Requirement: Payment corrections preserve ancestry and local audit
+
+A payment-correction envelope SHALL carry a new client UUID, the bill identity,
+the effective revision it replaces and one exact replacement Cash/UPI allocation
+set. It SHALL depend on the payment command that creates the bill and on any prior
+correction for that bill. Local acceptance SHALL retain the original payment and
+every correction, update the tablet's effective bill and shift totals, and mark
+the new adjustment not sent yet until its authoritative result arrives.
+
+#### Scenario: Correction is made before the payment is delivered
+- **WHEN** the tablet accepts a payment edit while its parent payment remains unsent
+- **THEN** both envelopes remain immutable, the correction waits for its parent, and unrelated command chains continue draining
+
+#### Scenario: Correction is replayed after reconnecting
+- **WHEN** a valid payment correction created inside the five-minute window reaches the server later or loses its first response
+- **THEN** its immutable creation time is validated, exact replay resolves to the same revision, and no duplicate correction is appended
+
+#### Scenario: Correction is permanently refused
+- **WHEN** the server rejects a stale, late, unauthorised or malformed payment correction
+- **THEN** the envelope moves to needs attention with its ancestry and attempted allocation retained, and the original accepted payment remains effective on the server
 
 ### Requirement: Unsent work survives session and application lifecycle
 
@@ -106,9 +128,10 @@ offer no correction or discard action.
 ### Requirement: Finishing the day requires a resolved online queue
 
 The tablet SHALL offer an online finish-day action that refuses while any command
-for the business date is unsent, blocked or needing attention. Success SHALL end
-the shift and create the server end-of-day confirmation used by business-day
-sign-off. An ordinary shift ending SHALL NOT create that confirmation.
+for the business date is unsent, blocked or needing attention, or while any paid
+bill still promises its five-minute edit action. Success SHALL end the shift and
+create the server end-of-day confirmation used by business-day sign-off. An
+ordinary shift ending SHALL NOT create that confirmation.
 
 #### Scenario: The queue is fully delivered
 - **WHEN** the operator finishes billing online with nothing unresolved for the date
@@ -117,6 +140,10 @@ sign-off. An ordinary shift ending SHALL NOT create that confirmation.
 #### Scenario: A command still needs attention
 - **WHEN** the operator attempts to finish while a command needs attention
 - **THEN** the action is refused and names the unresolved category without exposing customer details
+
+#### Scenario: The last payment is still editable
+- **WHEN** the operator attempts to finish before five minutes have elapsed from the latest paid bill
+- **THEN** the action is refused until the displayed payment-edit window ends, so closing never shortens a promised edit or freezes stale tender totals
 
 #### Scenario: The counter is offline at finishing time
 - **WHEN** the operator attempts to finish with no authoritative server response

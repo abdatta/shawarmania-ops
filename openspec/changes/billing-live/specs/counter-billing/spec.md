@@ -16,15 +16,19 @@ constraint.
 
 #### Scenario: Customer pays upfront
 - **WHEN** an operator confirms Mark Paid and the command is durably accepted locally
-- **THEN** the counter clears, reads as not sent yet, and later shows the exactly-once bill number
+- **THEN** the counter clears, the paid bill appears in Bills this shift, reads as not sent yet until delivery, and later shows the exactly-once bill number
 
-#### Scenario: Customer undoes Mark Paid
-- **WHEN** an operator uses Undo during the guaranteed six-second window
-- **THEN** delivery has not begun, the local command is removed, and the complete composer is restored
+#### Scenario: Customer corrects an upfront payment
+- **WHEN** an operator edits the Cash/UPI allocation within five minutes of an upfront payment
+- **THEN** the same paid bill and any assigned bill number remain, an attributed payment correction is appended, and its effective tender becomes the replacement allocation
 
 #### Scenario: Customer pays on handover
 - **WHEN** an operator saves an order and later pays it from the tablet that took it
 - **THEN** the order stays editable until payment, and the payment produces one immutable bill
+
+#### Scenario: Customer corrects payment on handover
+- **WHEN** an operator edits the Cash/UPI allocation within five minutes of paying a saved order
+- **THEN** the same correction path, deadline and audit apply as for an upfront payment
 
 #### Scenario: Customer uses mixed tender
 - **WHEN** exact Cash and UPI allocations together cover the bill total
@@ -80,17 +84,79 @@ A refresh SHALL NOT disturb an order currently held in the composer.
 - **WHEN** the rail re-reads while a saved order is held in the composer
 - **THEN** the order stays under edit with its draft intact, and the rest of the rail updates around it
 
+### Requirement: A paid bill's tender can be corrected for five minutes
+
+An immediate payment or saved order paid on handover SHALL appear in Bills this
+shift as soon as its payment command is durably accepted locally. On the
+originating tablet, its expanded paid-bill card SHALL offer a tender edit until
+five minutes after the bill's original `paid_at`. The edit SHALL reopen the shared
+payment dialog prefilled with the bill's current effective Cash/UPI allocations.
+It SHALL permit only one or more unique positive integer-paise Cash/UPI
+allocations that sum exactly to the unchanged bill total. Item and customer
+snapshots, quantities, prices, totals, bill number, payment time and business dates
+SHALL remain locked.
+
+The control SHALL use relative text: `Edit for N min` while at least one minute
+remains, rounding up to the next whole minute, then `Edit for N sec` below one
+minute. It SHALL disappear at expiry without leaving a persistent expiry message.
+The rendered timer SHALL NOT grant authority: the database SHALL enforce that the
+immutable correction command creation time is within five minutes of the original
+stored `paid_at`. A correction SHALL NOT restart the deadline.
+
+Each accepted edit SHALL append an attributed correction and exact replacement
+allocation set without updating the bill or its original payment rows. The same
+bill identity and, once assigned, bill number SHALL remain visible. Shift totals,
+drawer cash, ledger revenue, history and reports SHALL use the latest accepted
+effective allocation.
+When the original payment is still queued, the correction SHALL be durably queued
+behind it and SHALL remain replay-safe after reconnecting.
+
+#### Scenario: An immediate payment is edited
+- **WHEN** the originating tablet corrects a direct-paid bill within five minutes
+- **THEN** the same bill stays paid, the original and replacement allocations remain auditable, and the replacement becomes effective
+
+#### Scenario: A saved order's payment is edited
+- **WHEN** the originating tablet corrects the tender of an order paid on handover within five minutes
+- **THEN** it follows the same append-only correction path and retains the order's bill identity and number
+
+#### Scenario: The edit dialog opens
+- **WHEN** the operator opens an eligible bill's payment edit
+- **THEN** its effective Cash/UPI allocations are prefilled, sale facts are locked, and confirmation is unavailable until an exact changed allocation is present
+
+#### Scenario: More than one minute remains
+- **WHEN** 4 minutes and 1 second remain in the window
+- **THEN** the control reads `Edit for 5 min`
+
+#### Scenario: Less than one minute remains
+- **WHEN** 59 seconds remain in the window
+- **THEN** the control reads `Edit for 59 sec` and counts down in seconds
+
+#### Scenario: The deadline expires
+- **WHEN** five minutes have elapsed from the original payment time
+- **THEN** the edit control disappears, the database refuses a new payment correction, and correction requires the manager void and manual re-ring path
+
+#### Scenario: The original payment is not sent yet
+- **WHEN** an operator edits its tender within the window while the backend is unreachable
+- **THEN** the correction is committed locally behind the original payment and later lands exactly once without changing the original command
+
 ### Requirement: Paid correction respects the personal-device boundary
 
-An authorised manager SHALL void a paid bill with a reason from bill history.
-The replacement SHALL be manually rung on the enrolled counter tablet as a new
-bill. The manager surface SHALL create no payment command, automatic prefill or
-cross-device draft. Bill history SHALL filter on revenue `business_date` and
-SHALL show payment time and payment business date separately when they differ.
+The originating tablet SHALL be permitted to append a tender-only correction
+during the five-minute window. An authorised manager SHALL void a paid bill with
+a reason from bill history after that window or when facts other than tender are
+wrong. The replacement SHALL be manually rung on the enrolled counter tablet as a new bill.
+The manager surface SHALL create no payment command, extend no correction window,
+and create no automatic prefill or cross-device draft. Bill history SHALL filter
+on revenue `business_date`, SHALL use the latest effective tender, and SHALL show
+payment time and payment business date separately when they differ.
 
 #### Scenario: A manager corrects a paid bill
 - **WHEN** the manager voids it and the counter operator manually rings the corrected contents
 - **THEN** the original remains immutable as void and the replacement receives a new identity and bill number
+
+#### Scenario: A manager inspects an edited tender
+- **WHEN** a tablet correction changed a bill from Cash to UPI or changed its split
+- **THEN** manager history shows the effective allocation while the append-only audit retains the original and every correction
 
 ### Requirement: Live billing shows delivery states in plain words
 
@@ -111,7 +177,10 @@ and expose no payload or customer details.
 The Mark Paid action SHALL open Cash and UPI as touch targets and SHALL NOT
 offer Swiggy, Zomato, Card or Other. It SHALL mark cash distinctly from UPI by a
 means other than colour alone, because only the cash allocation reaches the
-drawer. Confirmation SHALL require exact allocations equal to the bill total.
+drawer. When no allocation exists, Cash and UPI SHALL use the same neutral visual
+treatment and neither SHALL appear selected by default. Confirmation SHALL require
+exact allocations equal to the bill total. The two-method dialog geometry SHALL
+otherwise remain unchanged.
 
 Swiggy and Zomato were touch targets when this requirement was written for #31,
 and V1 withdraws them by owner decision on 2026-08-11: aggregator revenue stays
@@ -133,7 +202,40 @@ same rule that removed Card and Other.
 #### Scenario: Confirming with no allocation
 
 - **WHEN** the tender dialog opens and no method has been allocated
-- **THEN** its Mark Paid confirmation is disabled and the current bill remains intact
+- **THEN** Cash and UPI both appear neutral, its Mark Paid confirmation is disabled, and the current bill remains intact
+
+### Requirement: Bills are append-only once settled
+
+A paid bill SHALL accept no modification other than the void transition, which
+changes only status and void-attribution fields. Deleting a bill SHALL be
+impossible for every client role. Voiding SHALL be available only to the bill's
+outlet FA and SA, require a reason, and preserve any replacement link as a
+separate new bill rather than edited totals.
+
+A tender edit during the five-minute window SHALL append a separate attributed
+payment-correction record and replacement allocation set. It SHALL NOT update the
+bill, its item snapshots or its original payment rows. Reads that need current
+tender SHALL derive the latest effective allocation from that immutable history.
+
+#### Scenario: Editing a paid bill's totals
+
+- **WHEN** any session attempts to update a paid bill's amounts, items, clocks, or attribution
+- **THEN** the database rejects the update
+
+#### Scenario: Appending an eligible tender correction
+
+- **WHEN** the originating tablet submits an exact changed Cash/UPI allocation within five minutes
+- **THEN** the database appends the attributed correction and leaves every original bill and payment row unchanged
+
+#### Scenario: Voiding a bill
+
+- **WHEN** an authorized admin voids with a reason
+- **THEN** status/void attribution change and every original sale field remains unchanged
+
+#### Scenario: Counter attempts to void
+
+- **WHEN** a counter device session attempts the void transition
+- **THEN** the database rejects the update
 
 ### Requirement: Payment finalises the displayed bill with exact tender allocations
 
@@ -192,6 +294,12 @@ methods are Cash and UPI. A shift summary SHALL NOT carry an always-empty Swiggy
 or Zomato line, because a method the counter cannot accept reads as takings that
 failed to arrive rather than as trade recorded elsewhere.
 
+The list and running totals SHALL include locally accepted payments immediately
+and SHALL use each bill's latest effective allocation, including a durably accepted
+correction that is still unsent. An eligible expanded bill SHALL carry its relative
+`Edit for N min` or `Edit for N sec` action without making any other bill fact
+editable.
+
 #### Scenario: Operator opens My shift
 - **WHEN** this tablet has bills from its shift and older outlet bills exist
 - **THEN** only the current shift's bills and their method totals appear
@@ -207,3 +315,29 @@ failed to arrive rather than as trade recorded elsewhere.
 #### Scenario: Operator inspects a closed bill
 - **WHEN** the operator expands a bill in My shift or the combined tablet rail
 - **THEN** its item snapshots, quantities, prices, line totals, payment facts and total appear without exposing another shift
+
+#### Scenario: A tender correction changes shift cash
+- **WHEN** an eligible bill is corrected from Cash to UPI
+- **THEN** the same bill remains listed, its effective tender reads UPI, and the shift's Cash and UPI totals move by the exact corrected amount
+
+## REMOVED Requirements
+
+### Requirement: A settle can be undone only while the bill is still unsent
+
+**Reason**: The six-second, direct-payment-only cancellation is replaced by one
+five-minute tender-correction path beside every paid bill, including orders paid
+on handover. A payment is now delivered immediately and corrections append audit
+records rather than erasing an unsent sale.
+
+**Migration**: Remove the transient Undo control and queued-payment cancellation
+path. Surface the locally accepted paid bill in Bills this shift and use the new
+append-only payment-correction command during its five-minute window.
+
+### Requirement: Direct payment retains a guaranteed unsent Undo
+
+**Reason**: Direct payment no longer receives a special delivery hold. Immediate
+and on-handover payments share the same five-minute tender-only edit behavior.
+
+**Migration**: Make direct payments eligible for the ordinary drain immediately,
+replace the confirmation Undo with the paid-bill edit action, and retain manager
+void plus manual re-ring after expiry.

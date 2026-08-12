@@ -25,8 +25,9 @@ billing is the day its counter revenue must stop being typed in by hand.
 - Wire every #31 surface to the real #9, #32 and #33 contracts.
 - Acknowledge counter writes only after a durable IndexedDB commit, then deliver
   them exactly once without making the operator wait.
-- Preserve Mark Paid's guaranteed six-second Undo before its command becomes
-  deliverable, and keep every V1 discount at zero with no discount control.
+- Give immediate and on-handover payments the same five-minute, tender-only edit
+  path while keeping the paid bill and its original allocation append-only.
+- Keep every V1 discount at zero with no discount control.
 - Preserve unsent work through the shift ending, cutover, restart and app update.
 - Hand counter revenue over from the ledger to the app, once, per outlet.
 - Promote the billing gates to live while keeping the coherent demo.
@@ -37,10 +38,13 @@ billing is the day its counter revenue must stop being typed in by hand.
 - Several tablets at one outlet, or emergency billing from a personal device.
 - Order transfer or any recovery path.
 - Retiring the manual ledger, which #12 owns.
-- Attendance, discounts, partial or split payments, refunds, GST, printing or
-  digital sharing.
+- Attendance, discounts, partial payments, refunds, GST, printing or digital
+  sharing. Exact Cash/UPI split tender remains in scope.
 - Manager-side billing, automatic re-ring handoff or prefill, and manager mutation
   of a tablet's local delivery queue.
+- Editing paid items, quantities, customer facts, totals, clocks or business dates.
+- Rearranging the payment dialog to fill the space left by withdrawn aggregator
+  methods; only Cash's false default-selection treatment changes here.
 
 ## Decisions
 
@@ -64,15 +68,17 @@ or clearing the form. **The store itself is this change's**, moved on from #33 o
 2026-08-09 because its adapters, its screens and its dependency ordering all live
 here.
 
-Network delivery starts afterwards, except that a direct-payment envelope remains
-ineligible for delivery during the existing six-second Undo window. Undo removes
-that still-unsent envelope and restores the composer; after the window, the
-ordinary drain rules apply. If durable storage fails, the UI stays populated and
-reports that the action was not saved.
+Network delivery starts afterwards. A payment is not held for its five-minute edit
+window: the appends that correct its tender are separate commands, so manager
+visibility, server numbering and revenue do not wait five minutes. If durable
+storage fails, the UI stays populated and reports that the action was not saved.
 
 Waiting for the server before clearing was rejected because a brief outage would
 stop the counter. Clearing before the local commit was rejected because a tab
-crash would erase a transaction the operator believed was recorded.
+crash would erase a transaction the operator believed was recorded. Holding every
+payment for five minutes was rejected because it would delay bill numbers,
+management visibility, shift totals and finish-day readiness for an interaction
+most bills never need.
 
 ### One ordered drain leader delivers dependency chains
 
@@ -180,12 +186,71 @@ Treating every conflict as success was rejected because different money could hi
 behind UUID reuse. Retrying a deterministic refusal forever was rejected because
 it conceals action somebody must take.
 
+### A five-minute payment edit is an append-only correction, not a bill update
+
+Both immediate payments and saved orders paid on handover enter Bills this shift
+as soon as the local payment envelope is durable. The expanded bill card offers
+tender editing only on the originating tablet and only until five minutes after
+the original stored `paid_at`. Its action label is relative: `Edit for 5 min`
+through `Edit for 1 min`, rounding minutes up, then `Edit for 59 sec` through
+`Edit for 1 sec`. The action disappears at expiry and leaves no permanent expired
+message. The displayed countdown is guidance; the command RPC decides eligibility.
+
+The existing tender dialog opens with the bill's effective Cash/UPI allocations
+prefilled. Only those allocations are editable; item and customer snapshots,
+totals, `paid_at`, both business dates and the bill number stay locked. Saving an
+unchanged allocation is disabled. A successful correction does not restart the
+five-minute deadline.
+
+The database does not update `bills` or the original `bill_payments`. It appends
+one outlet-scoped `bill_payment_corrections` row per accepted command and the exact
+replacement allocation set beneath it, attributed to the command, tablet, shift,
+operator and immutable client creation time. Revisions are sequential per bill;
+the payload names the effective revision it replaces, and a stale revision is a
+classified refusal rather than last-write-wins. The original allocation is
+revision zero. A shared effective-allocation view or function selects the latest
+accepted revision, and every shift, drawer, ledger, history and report read uses
+that boundary instead of reading raw original allocations as current truth.
+
+Both new tables carry `outlet_id`, enable RLS in the creating migration and ship
+with isolation tests. Select scope follows the bill a session may already read;
+authenticated roles receive no direct insert, update or delete privilege. The
+security-definer command re-derives the device, shift, actor and outlet from the
+authenticated tablet context, never from trusted-looking payload fields. Managers
+may read the audit where their bill-history scope permits, but cannot append one.
+
+The correction RPC locks the bill and enforces all of these facts transactionally:
+the bill is still settled; it belongs to the authenticated tablet and its current
+shift view; the replacement is one or more unique positive integer-paise Cash/UPI
+allocations summing exactly to the unchanged total; its immutable command creation
+time is not before `paid_at` and is strictly within `paid_at + 5 minutes`; and the
+expected revision is current. That comparison is against the bill facts stored by
+the database, not the browser's rendered timer. Historical command validity keeps
+a correction created during a brief outage deliverable later; the outbox chains it
+behind the payment command that creates the bill.
+
+The tablet applies a durably accepted correction to its local bill and shift totals
+immediately and marks the adjustment not sent yet until delivery. A permanent
+refusal becomes needs attention with the immutable evidence retained. This
+payment-edit path is distinct from correcting a refused delivery envelope: one
+changes the effective tender of an accepted paid bill, the other replaces a
+command that never became an accepted sale.
+
+Mutating `bill_payments` in place was rejected because the original tender and the
+person who changed it would disappear. Voiding and re-ringing every wrong Cash/UPI
+tap was rejected inside the short window because it changes the bill number and
+sale identity for a correction that does not change what was sold or how much was
+taken. Reusing the old six-second Undo was rejected because it exists only before
+delivery, applies only to direct payment, and keeps the correction hidden in a
+temporary confirmation instead of beside the paid bill it concerns.
+
 ### Correction authority stays on the device that holds the facts
 
-A manager voids a paid bill from their personal history surface, but does not
-create its replacement there. The corrected sale is manually rung on the enrolled
-counter tablet as a new bill. There is no manager payment command, cross-device
-draft or automatic prefill.
+After the five-minute tender window, a manager voids a paid bill from their
+personal history surface, but does not create its replacement there. The corrected
+sale is manually rung on the enrolled counter tablet as a new bill. There is no
+manager payment command, cross-device draft or automatic prefill. Managers cannot
+extend or bypass the tablet's payment-edit deadline.
 
 Manager bill history filters on the revenue `business_date`. Detail separately
 shows `paid_at` and `payment_business_date` when the payment crossed the outlet
@@ -210,17 +275,20 @@ before removing a tablet with unsent work. This is recorded in
 
 ### Finishing the day writes a server confirmation, not a local promise
 
-The tablet offers "Finish billing for the day" only while online. It first drains
-every command for the business date and requires nothing unsent or needing
-attention. One server transaction ends the shift and records the end-of-day
-confirmation from #33. The counter then accepts no new work for that date unless a
-fresh shift is approved, which invalidates the confirmation. After #12 signs the
-day off, no shift can reopen that date.
+The tablet offers "Finish billing for the day" only while online and after the
+last paid bill's five-minute edit window has ended. It first drains every command
+for the business date and requires nothing unsent or needing attention. One server
+transaction ends the shift and records the end-of-day confirmation from #33. The
+counter then accepts no new work for that date unless a fresh shift is approved,
+which invalidates the confirmation. After #12 signs the day off, no shift can
+reopen that date.
 
 A local "queue looks empty" indicator was rejected as a close gate because the
 person signing off is on another device and a stale report is bypassable. Sealing
 automatically when a shift ends was rejected because a shift can end with work
-unresolved and does not express an end-of-day decision.
+unresolved and does not express an end-of-day decision. Ending while an edit action
+is still promised was rejected because it would silently shorten the five-minute
+window or permit drawer figures to change after confirmation.
 
 ### An outlet's go-live is a date on the outlet, and it turns at a cutover
 
@@ -283,6 +351,14 @@ note for free: an expense "paid by Swiggy" becomes impossible at the type level
 rather than merely absent from the form. What remains open there is the question
 that note actually cares about, whether the expense record should adopt the
 ledger's smaller model instead of the bill enum.
+
+The payment dialog preserves its existing geometry. Cash keeps its banknote icon
+so drawer-touching tender is not conveyed by colour alone, but both Cash and UPI
+use the same neutral treatment when a new dialog has no allocation. The previous
+hard-coded primary treatment for Cash was rejected because it looked like a
+selection the operator had not made. Filling the gap left by the withdrawn Swiggy
+and Zomato buttons is deferred; it is harmless space and unrelated to correction
+integrity.
 
 ### Cash and UPI leave the ledger on the day the outlet goes live, and the aggregators do not
 
@@ -356,6 +432,14 @@ control available given no hand-typed twin, and it costs nothing to honour.
   command, keep the form intact, and show a blocking storage diagnostic.
 - **A chain blocks** → block only its descendants and show exactly what needs
   correcting or discarding.
+- **The UI countdown and command eligibility disagree at the boundary** → derive
+  the label from the stored `paid_at`, remove it at zero, and still let the RPC's
+  timestamp comparison be authoritative.
+- **A correction is made offline before its payment has reached the server** →
+  chain it behind that payment identity and validate its immutable creation time
+  when replayed, never rewrite the ancestor envelope.
+- **A stale correction overwrites a newer one** → require the expected effective
+  revision under a bill lock and append a new sequential revision only on match.
 - **An app update changes envelope code** → version envelopes and keep readers and
   senders for every locally supported pending version through the rollout window.
 - **The ledger handover double-counts or loses a day** → the handover is by outlet
@@ -367,10 +451,12 @@ control available given no hand-typed twin, and it costs nothing to honour.
 ## Migration Plan
 
 1. Promote the menu editor, and have the owner enter both outlets' real menus.
-2. Ship Dexie schema, readers and local-first adapters while the gates stay demo.
-3. Exercise pay-now, order edit, pay and cancel, needs-attention handling, and the
-   finish-day path against local Supabase with forced transport failures and
-   browser restarts.
+2. Ship Dexie schema, append-only payment-correction tables and RLS, effective
+   allocation reads, command RPC, readers and local-first adapters while the gates
+   stay demo.
+3. Exercise pay-now, order edit, pay, five-minute payment correction, expiry,
+   cancel, needs-attention handling, and the finish-day path against local Supabase
+   with forced transport failures and browser restarts.
 4. Set up one tablet at the first outlet, load its live menu, and run shadow smoke
    tests before any customer money.
 5. Promote the billing gates, hand the ledger over for that outlet, and trade one

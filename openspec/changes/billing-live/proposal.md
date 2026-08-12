@@ -1,6 +1,6 @@
 # Proposal: Billing Live
 
-> **Model**: Opus · **Wave**: D · **Depends on**: #7, #9, #30, #31, #32, #33, #36, #38 · **Gate**: **Billing V1.** The real menu is entered through the app by a person with no SQL; one tablet at each outlet takes real payments, immediate and on handover; every accepted write commits locally before the UI reports success and lands exactly once; unsent work survives logout and restart; bill numbers never collide; only a resolved online queue receives the tablet's end-of-day confirmation; and the ledger stops carrying that outlet's cash and UPI revenue on the day it goes live while keeping its typed aggregator figures.
+> **Model**: Opus · **Wave**: D · **Depends on**: #7, #9, #30, #31, #32, #33, #36, #38 · **Gate**: **Billing V1.** The real menu is entered through the app by a person with no SQL; one tablet at each outlet takes real payments, immediate and on handover; the tablet can correct only a paid bill's Cash/UPI allocation for five minutes without rewriting the bill; every accepted write commits locally before the UI reports success and lands exactly once; unsent work survives logout and restart; bill numbers never collide; only a resolved online queue receives the tablet's end-of-day confirmation; and the ledger stops carrying that outlet's cash and UPI revenue on the day it goes live while keeping its typed aggregator figures.
 
 ## Why
 
@@ -38,8 +38,20 @@ during rollout.
   when the screen opened sells the morning's prices all evening, and because a line
   captures its price at the tap, that is wrong money rather than a stale display.
 - Commit every accepted counter command to IndexedDB before clearing its form,
-  never await the network, preserve Mark Paid's six-second guaranteed Undo before
-  that command becomes deliverable, and retry through one page leader with backoff.
+  never await the network, deliver payments without a five-minute hold, and retry
+  through one page leader with backoff.
+- **Replace the six-second direct-payment Undo with one five-minute tender-correction
+  path for every paid bill.** Immediate payments and saved orders paid on handover
+  appear in Bills this shift as soon as they are accepted locally. For five minutes
+  from the original `paid_at`, the originating tablet may reopen the existing tender
+  dialog, change only the exact Cash/UPI allocation, and keep the same bill and bill
+  number. The action reads `Edit for N min` and, below one minute, `Edit for N sec`;
+  it disappears at expiry. The database enforces the deadline. The bill, original
+  allocation and every correction remain immutable records, while drawer, shift,
+  ledger and reporting reads use the latest accepted allocation.
+- Open a new payment dialog with neither Cash nor UPI styled as already selected.
+  Cash remains identifiable without colour alone, but the current two-method layout
+  and its unused space are unchanged in this change.
 - Preserve unsent work through the shift ending, restart, cutover and app update.
   A restart may drain old work, but starting or resuming billing requires online
   approval on the operator's phone.
@@ -75,13 +87,20 @@ during rollout.
 ### Modified Capabilities
 
 - `counter-billing`: Immediate payment and payment on handover operate on real
-  data with durable local acknowledgement and one-tablet ownership.
+  data with durable local acknowledgement, one-tablet ownership and the same
+  five-minute tender-only correction path.
+- `billing-command-contract`: A payment correction becomes an atomic, replay-safe,
+  historically validated command that appends an attributed adjustment without
+  mutating the paid bill or its original allocations.
 - `menu-management`: The menu becomes a real editable record, and billing reads
   the latest live menu, falling back to the active shift's snapshot only after a
   real backend failure.
 - `manual-ledger`: A live outlet's cash and UPI revenue is sourced from bills, and
   the ledger says so instead of accepting a second hand-typed figure, while its
   aggregator revenue and rates stay hand-entered.
+- `daily-cash-reconciliation`: Cash receipts and expected drawer figures use each
+  bill's latest accepted effective allocation, never the superseded original
+  tender or more than one revision.
 - `demo-mode`: Promoted surfaces keep their coherent synthetic path.
 - `app-shell`: Tablet, billing, history and menu gates reach their final live
   states without exposing personal navigation on the counter.
@@ -94,7 +113,9 @@ coordination, end-of-day confirmation wiring, the manual ledger's revenue entry,
 integration tests, transient-failure Playwright tests, and live gates change. One
 migration narrows `public.payment_method` to `cash | upi`, which touches the
 shared billing vocabulary, the tender dialog, shift summaries, the expense form,
-the generated database types and the `expenses_insert` policy.
+the generated database types and the `expenses_insert` policy. A further migration
+adds outlet-scoped append-only payment-correction and allocation records, their RLS
+and command RPC, plus one effective-allocation read boundary used by every total.
 
 ## Non-goals
 
@@ -109,9 +130,15 @@ the generated database types and the `expenses_insert` policy.
   re-ring or cross-device draft handoff, printing, GST, digital sharing,
   discounts, deposits or partially paid orders. V1 sends `discount_paise = 0` and
   exposes no discount control.
+- Editing paid item lines, quantities, customer facts, totals, payment time or
+  business dates. After five minutes, the existing manager void and manual re-ring
+  path is the only correction.
+- Rearranging the payment dialog or filling the space left when aggregator tender
+  buttons were removed. This change only removes Cash's false default-selection
+  treatment.
 
 ## Docs to update before archive
 
-`docs/ARCHITECTURE.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/SCREENS.md`,
-`docs/DEMO_MODE.md`, `docs/OPERATIONS.md`, `docs/TESTING.md` and
-`docs/LIMITATIONS.md`.
+`docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`, `docs/OFFLINE_AND_SYNC.md`,
+`docs/SCREENS.md`, `docs/DEMO_MODE.md`, `docs/OPERATIONS.md`, `docs/TESTING.md`
+and `docs/LIMITATIONS.md`.

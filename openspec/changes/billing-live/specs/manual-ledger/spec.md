@@ -12,7 +12,10 @@ day that begins hand-typed and ends sourced from bills is counted twice.
 From that date, the manual ledger SHALL source that outlet's **cash and UPI**
 revenue from paid bills rather than from a typed figure, SHALL state on screen
 that each figure came from the counter, and SHALL NOT offer a second field
-inviting the same money to be entered again.
+inviting the same money to be entered again. Where a paid bill has one or more
+append-only tender corrections, the ledger SHALL use its latest accepted effective
+Cash/UPI allocation and SHALL NOT count the original allocation as additional
+revenue.
 
 **Zomato and Swiggy revenue SHALL remain typed, at every outlet, on every
 business date, whether or not that outlet is live.** V1 billing accepts Cash and
@@ -61,3 +64,7 @@ nothing.
 #### Scenario: The same money cannot be counted twice
 - **WHEN** a live outlet's day is read in the month view
 - **THEN** cash and UPI revenue each appear exactly once, whatever was previously typed for that outlet on that date, and the month's aggregator figures are the typed ones netted by each day's own stored rate
+
+#### Scenario: A bill's tender is corrected inside its window
+- **WHEN** a live outlet changes a paid bill from Cash to UPI or changes its split through an accepted payment correction
+- **THEN** the ledger moves that amount between Cash and UPI exactly once while total counter revenue and the immutable bill identity stay unchanged
