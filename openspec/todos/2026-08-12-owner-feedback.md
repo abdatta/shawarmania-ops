@@ -13,10 +13,10 @@ work was captured in a change or completed; it remains listed here for history.
 
 | # | Item | Area | Size | Status |
 | --- | --- | --- | --- | --- |
-| 1 | The "Awaiting Activation" Label Lies | Staff / Roles | S | **Active — [#40](../changes/account-lifecycle-truth-and-safe-transitions/proposal.md)** |
+| 1 | The "Awaiting Activation" Label Lies | Staff / Roles | S | **Implemented — [#40](../changes/account-lifecycle-truth-and-safe-transitions/proposal.md), awaiting archive** |
 | 2 | You Can't Click Your Way to the Counter Setup Page | Navigation | S | **Complete — [counter-access-and-workspace-layout](../changes/counter-access-and-workspace-layout/proposal.md), awaiting roadmap reconciliation/archive** |
 | 3 | Let Me Drag to Resize the Last Two Counter Columns | Counter / Design | S | **Complete — [counter-access-and-workspace-layout](../changes/counter-access-and-workspace-layout/proposal.md), awaiting roadmap reconciliation/archive** |
-| 4 | Promoting a Staff Member Can Accidentally Lock Them Out | Staff / Roles | M | **Active — [#40](../changes/account-lifecycle-truth-and-safe-transitions/proposal.md)** |
+| 4 | Promoting a Staff Member Can Accidentally Lock Them Out | Staff / Roles | M | **Implemented — [#40](../changes/account-lifecycle-truth-and-safe-transitions/proposal.md), awaiting archive** |
 | 5 | [The App Asks for a Code Before Checking If the Person Is Even Allowed](./code-request-before-eligibility-check.md) | Counter / Billing | L | Open |
 | 6 | [Marking a Bill "Paid" Removes It From the Kitchen List Too Soon](./paid-removes-order-from-kitchen-too-soon.md) | Billing | XL | Open |
 | 7 | The Owner Can't See the Real Billing Counter From Home | Owner console / Demo | XL | **Seeded — [#39](../changes/counter-seen-and-practised/proposal.md); reporting delivered in #10** |
@@ -28,7 +28,8 @@ work was captured in a change or completed; it remains listed here for history.
 Arpita's visible state can say "Awaiting activation" after she is already
 working because it reflects an unused invite code rather than the account's
 real lifecycle. [#40](../changes/account-lifecycle-truth-and-safe-transitions/proposal.md)
-is active and makes that state truthful, including the reset-link path.
+implements that truthful state, including the reset-link path, and is awaiting
+archive.
 
 ### 2. You Can't Click Your Way to the Counter Setup Page
 
@@ -46,9 +47,10 @@ layout limits. It is likewise awaiting roadmap reconciliation and archive.
 
 ### 4. Promoting a Staff Member Can Accidentally Lock Them Out
 
-[#40](../changes/account-lifecycle-truth-and-safe-transitions/proposal.md) is
-active. It replaces separate assignment operations with an atomic assignment
-set update, so a role transition cannot temporarily remove a person's access.
+[#40](../changes/account-lifecycle-truth-and-safe-transitions/proposal.md)
+replaces separate assignment operations with an atomic assignment-set update,
+so a role transition cannot temporarily remove a person's access. The
+implementation is complete and awaiting archive.
 
 ### 7. The Owner Can't See the Real Billing Counter From Home
 

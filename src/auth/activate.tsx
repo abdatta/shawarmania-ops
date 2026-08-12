@@ -10,6 +10,8 @@ import {
   previewInvite,
   redeemInvite,
   signIn,
+  signOut,
+  verifiedCurrentUser,
 } from '@/data-access/auth'
 import { canonicalUsername } from '../../shared/username'
 
@@ -75,7 +77,7 @@ export function Activate() {
    */
   useEffect(() => {
     if (!accepted) return
-    if (session.status !== 'ready' && session.status !== 'unavailable') return
+    if (session.status !== 'ready') return
     navigate('/', { replace: true })
   }, [accepted, session.status, navigate])
 
@@ -110,15 +112,39 @@ export function Activate() {
 
     setBusy(true)
     setError(null)
+    let redeemed = false
     try {
       await redeemInvite(state.code, submittedUsername, password)
+      redeemed = true
+      // A reset may be redeemed while an older human session is open. Clear it
+      // before ordinary sign-in so no protected request can race on stale
+      // credentials after the password has changed.
+      await signOut()
       await signIn(submittedUsername, password)
+      const verified = await verifiedCurrentUser()
+      if (!verified || verified.username !== submittedUsername) {
+        await signOut()
+        setState({
+          kind: 'dead',
+          title: 'Your password was changed',
+          message: 'Sign in with your new password to continue.',
+        })
+        setBusy(false)
+        return
+      }
       // `busy` stays set on purpose: the password is set and the code is spent,
       // so there is nothing here to submit again while the session resolves.
       setAccepted(true)
       revalidate()
     } catch (cause) {
-      if (cause instanceof ActivationError && cause.code === 'invalid_code') {
+      if (redeemed) {
+        await signOut().catch(() => undefined)
+        setState({
+          kind: 'dead',
+          title: 'Your password was changed',
+          message: 'Sign in with your new password to continue.',
+        })
+      } else if (cause instanceof ActivationError && cause.code === 'invalid_code') {
         setState({ kind: 'dead', message: cause.message })
       } else {
         setError(

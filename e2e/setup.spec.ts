@@ -79,10 +79,10 @@ test('creating a person is one act that ends in a working handover', async ({ pa
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
   // The handover, once: link and code image.
-  const panel = page.getByTestId('issued-code')
+  const panel = page.getByTestId('account-handover')
   await expect(panel).toBeVisible()
   await expect(panel).toContainText('Shown once')
-  await expect(page.getByTestId('issued-code-username')).toContainText('demo.newcomer')
+  await expect(page.getByTestId('account-handover-username')).toContainText('demo.newcomer')
 
   // And the person is on the staff list at once, already placed at an outlet —
   // there is no second surface where they still have to be added or linked.
@@ -100,21 +100,18 @@ test('the people states each say what is wrong and what to do', async ({ page })
 
   // Provisioned, activated by nobody yet.
   await expect(page.getByRole('row', { name: /Demo New Starter/ })).toContainText(
-    'Awaiting activation',
+    'Set-up link issued',
   )
 
   // Access cut without leaving: still on the list, plainly marked.
   await expect(page.getByRole('row', { name: /Demo Prep Cook/ })).toContainText('Deactivated')
 
   // Somebody who works nowhere is off the working list, and one tap away —
-  // records kept, clutter gone. "Departed" is derived since
-  // multi-outlet-people: it means holding no live assignment anywhere, because
-  // leaving ONE outlet is not leaving the business.
+  // records kept, clutter gone. Its lifecycle still states the stronger truth:
+  // sign-in is deactivated, not merely that no outlet is assigned.
   await expect(page.getByText('Demo Former Staff')).toHaveCount(0)
   await page.getByTestId('toggle-departed').click()
-  await expect(page.getByRole('row', { name: /Demo Former Staff/ })).toContainText(
-    'Not assigned to any outlet',
-  )
+  await expect(page.getByRole('row', { name: /Demo Former Staff/ })).toContainText('Deactivated')
 
   // And the person who left one outlet is still on the working list, because
   // they still work at the other.
@@ -147,7 +144,7 @@ test('the whole setup walk stays inside the app origin', async ({ page, baseURL 
   await page.getByLabel('Role', { exact: true }).selectOption('employee')
   await expect(page.locator('#account-email')).toHaveCount(0)
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
-  await expect(page.getByTestId('issued-code')).toBeVisible()
+  await expect(page.getByTestId('account-handover')).toBeVisible()
 
   expect(foreign).toEqual([])
 })

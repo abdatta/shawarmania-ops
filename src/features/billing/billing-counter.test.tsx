@@ -329,7 +329,7 @@ describe('BillingCounter', () => {
 
     const disclosure = rail.querySelector('details')
     expect(disclosure).not.toBeNull()
-    await person.click(within(disclosure as HTMLElement).getByText(/^Bill \d+$/))
+    await person.click((disclosure as HTMLElement).querySelector('summary')!)
     expect(disclosure).toHaveAttribute('open')
     expect(within(disclosure as HTMLElement).getByTestId(/^shift-bill-detail-/)).toHaveTextContent(
       /×/,

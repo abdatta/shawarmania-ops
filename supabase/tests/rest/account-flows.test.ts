@@ -45,6 +45,12 @@ const PERSONAS = {
   billerKalyani: 'biller.kalyani@login.shawarmania.invalid',
 } as const
 
+const PERSON_IDS = {
+  superAdmin: '10000000-0000-4000-a000-000000000001',
+  faKalyani: '10000000-0000-4000-a000-000000000002',
+  splitStaff: '10000000-0000-4000-a000-00000000000e',
+} as const
+
 type Client = SupabaseClient<Database>
 
 /** Unique per run, so the suite is re-runnable without a database reset. */
@@ -104,6 +110,7 @@ async function adminAccounts<T = Record<string, unknown>>(
   }
   recordCode(body)
   recordCode((body as { issuedCode?: unknown }).issuedCode)
+  recordCode((body as { replacementHandover?: unknown }).replacementHandover)
   return { status: response.status, body }
 }
 
@@ -179,11 +186,58 @@ interface Provisioned {
   username: string
   code: string
   expiresAt: string
+  purpose?: 'activation' | 'password_reset'
 }
 
 interface AssignmentChanged {
   assignmentId: string
   issuedCode: Provisioned | null
+}
+
+interface AccountIdentifier {
+  username: string
+  accountEmail: string | null
+  hasSignedIn: boolean
+  invite: { purpose: 'activation' | 'password_reset'; expiresAt: string } | null
+  stateFingerprint: string
+}
+
+interface IntendedAssignment {
+  assignmentId: string | null
+  outletId: string | null
+  role: 'super_admin' | 'franchise_admin' | 'biller' | 'employee'
+  startedOn: string
+}
+
+interface AssignmentSetResult {
+  profileId: string
+  assignments: IntendedAssignment[]
+  stateFingerprint: string
+  replacementHandover: (Provisioned & { purpose: 'activation' | 'password_reset' }) | null
+}
+
+async function identifiersFor(token: string): Promise<Record<string, AccountIdentifier>> {
+  const result = await adminAccounts<{ identifiers: Record<string, AccountIdentifier> }>(token, {
+    action: 'identifiers',
+  })
+  expect(result.status).toBe(200)
+  return result.body.identifiers
+}
+
+async function liveAssignments(profileId: string): Promise<IntendedAssignment[]> {
+  const { data, error } = await clientWithToken(superAdminToken)
+    .from('assignments')
+    .select('id, outlet_id, role, started_on')
+    .eq('person_id', profileId)
+    .is('ended_on', null)
+    .order('outlet_id')
+  expect(error).toBeNull()
+  return (data ?? []).map((row) => ({
+    assignmentId: row.id,
+    outletId: row.outlet_id,
+    role: row.role,
+    startedOn: row.started_on,
+  }))
 }
 
 async function provisionAs(
@@ -659,6 +713,356 @@ describe('assignment changes and outstanding activation links', () => {
   })
 })
 
+describe('atomic account editing over the privileged boundary', () => {
+  it('refuses self-edit and FA edits of administrator or out-of-scope complete sets', async () => {
+    const ownerIdentifiers = await identifiersFor(superAdminToken)
+    const ownerAssignments = await liveAssignments(PERSON_IDS.superAdmin)
+    const self = await adminAccounts<{ error: string }>(superAdminToken, {
+      action: 'edit-account',
+      profileId: PERSON_IDS.superAdmin,
+      expectedStateFingerprint: ownerIdentifiers[PERSON_IDS.superAdmin]!.stateFingerprint,
+      fullName: 'Must not rename self',
+      phone: null,
+      roleTitle: null,
+      accountEmail: ownerIdentifiers[PERSON_IDS.superAdmin]!.accountEmail,
+      assignments: ownerAssignments,
+    })
+    expect(self).toEqual({ status: 403, body: { error: 'forbidden' } })
+
+    for (const profileId of [PERSON_IDS.faKalyani, PERSON_IDS.superAdmin, PERSON_IDS.splitStaff]) {
+      const assignments = await liveAssignments(profileId)
+      const refused = await adminAccounts<{ error: string }>(faKalyaniToken, {
+        action: 'edit-account',
+        profileId,
+        expectedStateFingerprint: ownerIdentifiers[profileId]!.stateFingerprint,
+        fullName: 'Must not cross the boundary',
+        phone: null,
+        roleTitle: null,
+        accountEmail: null,
+        assignments,
+      })
+      expect(refused).toEqual({ status: 403, body: { error: 'forbidden' } })
+    }
+  })
+
+  it('promotes Employee to Biller without deactivation or history loss', async () => {
+    const { result } = await provisionAs(superAdminToken)
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(204)
+    const before = await liveAssignments(result.body.profileId)
+    const fingerprint = (await identifiersFor(superAdminToken))[result.body.profileId]!
+      .stateFingerprint
+
+    const changed = await adminAccounts<AssignmentSetResult>(superAdminToken, {
+      action: 'edit-account',
+      profileId: result.body.profileId,
+      expectedStateFingerprint: fingerprint,
+      fullName: 'Probe Staff Promoted',
+      phone: null,
+      roleTitle: 'Counter Biller',
+      accountEmail: null,
+      assignments: [{ ...before[0]!, role: 'biller' }],
+    })
+    expect(changed).toMatchObject({
+      status: 200,
+      body: {
+        profileId: result.body.profileId,
+        stateFingerprint: expect.any(String),
+        replacementHandover: null,
+      },
+    })
+
+    const owner = clientWithToken(superAdminToken)
+    const [{ data: profile }, { data: history }] = await Promise.all([
+      owner
+        .from('profiles')
+        .select('full_name, role_title, is_active')
+        .eq('id', result.body.profileId)
+        .single(),
+      owner
+        .from('assignments')
+        .select('id, role, ended_on')
+        .eq('person_id', result.body.profileId)
+        .order('created_at'),
+    ])
+    expect(profile).toEqual({
+      full_name: 'Probe Staff Promoted',
+      role_title: 'Counter Biller',
+      is_active: true,
+    })
+    expect(history).toEqual([
+      expect.objectContaining({
+        id: before[0]!.assignmentId,
+        role: 'employee',
+        ended_on: expect.any(String),
+      }),
+      expect.objectContaining({ role: 'biller', ended_on: null }),
+    ])
+  })
+
+  it('transfers outlets in one save and rejects reuse of the stale fingerprint', async () => {
+    const { result } = await provisionAs(superAdminToken)
+    const before = await liveAssignments(result.body.profileId)
+    const fingerprint = (await identifiersFor(superAdminToken))[result.body.profileId]!
+      .stateFingerprint
+    const command = {
+      action: 'edit-account',
+      profileId: result.body.profileId,
+      expectedStateFingerprint: fingerprint,
+      fullName: 'Probe Staff Transferred',
+      phone: null,
+      roleTitle: null,
+      accountEmail: null,
+      assignments: [{ ...before[0]!, outletId: OUTLETS.kanchrapara }],
+    }
+    expect((await adminAccounts(superAdminToken, command)).status).toBe(200)
+
+    const stale = await adminAccounts<{ error: string }>(superAdminToken, {
+      ...command,
+      fullName: 'This must roll back',
+    })
+    expect(stale).toEqual({ status: 409, body: { error: 'stale_edit' } })
+
+    const owner = clientWithToken(superAdminToken)
+    const { data: profile } = await owner
+      .from('profiles')
+      .select('full_name, is_active')
+      .eq('id', result.body.profileId)
+      .single()
+    expect(profile).toEqual({ full_name: 'Probe Staff Transferred', is_active: true })
+    expect(await liveAssignments(result.body.profileId)).toEqual([
+      expect.objectContaining({ outletId: OUTLETS.kanchrapara, role: 'employee' }),
+    ])
+  })
+
+  it('marks a person as left atomically through the dedicated action', async () => {
+    const { result } = await provisionAs(superAdminToken, {
+      outletIds: [OUTLETS.kalyani, OUTLETS.kanchrapara],
+    })
+    const fingerprint = (await identifiersFor(superAdminToken))[result.body.profileId]!
+      .stateFingerprint
+    const left = await adminAccounts<AssignmentSetResult>(superAdminToken, {
+      action: 'mark-as-left',
+      profileId: result.body.profileId,
+      expectedStateFingerprint: fingerprint,
+    })
+    expect(left).toMatchObject({
+      status: 200,
+      body: {
+        profileId: result.body.profileId,
+        assignments: [],
+        replacementHandover: null,
+      },
+    })
+    const owner = clientWithToken(superAdminToken)
+    const { data: profile } = await owner
+      .from('profiles')
+      .select('is_active')
+      .eq('id', result.body.profileId)
+      .single()
+    expect(profile?.is_active).toBe(false)
+    expect(await liveAssignments(result.body.profileId)).toEqual([])
+  })
+
+  it('rolls back the whole request when an FA includes an unmanaged outlet', async () => {
+    const { result } = await provisionAs(superAdminToken)
+    const beforeAssignments = await liveAssignments(result.body.profileId)
+    const beforeIdentifier = (await identifiersFor(superAdminToken))[result.body.profileId]!
+    const refused = await adminAccounts<{ error: string }>(faKalyaniToken, {
+      action: 'edit-account',
+      profileId: result.body.profileId,
+      expectedStateFingerprint: beforeIdentifier.stateFingerprint,
+      fullName: 'Must not partially change',
+      phone: '9999999999',
+      roleTitle: 'Must not persist',
+      accountEmail: null,
+      assignments: [
+        beforeAssignments[0],
+        {
+          assignmentId: null,
+          outletId: OUTLETS.kanchrapara,
+          role: 'employee',
+          startedOn: beforeAssignments[0]!.startedOn,
+        },
+      ],
+    })
+    expect(refused).toEqual({ status: 403, body: { error: 'forbidden' } })
+
+    const owner = clientWithToken(superAdminToken)
+    const { data: profile } = await owner
+      .from('profiles')
+      .select('full_name, phone, role_title, is_active')
+      .eq('id', result.body.profileId)
+      .single()
+    expect(profile).toEqual({
+      full_name: 'Probe Staff',
+      phone: null,
+      role_title: null,
+      is_active: true,
+    })
+    expect(await liveAssignments(result.body.profileId)).toEqual(beforeAssignments)
+    expect((await identifiersFor(superAdminToken))[result.body.profileId]).toEqual(beforeIdentifier)
+  })
+})
+
+describe('purpose-aware handover issuance and preservation', () => {
+  it('replaces only a live activation handover after the final assignment set exists', async () => {
+    const { result } = await provisionAs(superAdminToken)
+    const identifier = (await identifiersFor(superAdminToken))[result.body.profileId]!
+    const assignments = await liveAssignments(result.body.profileId)
+    const changed = await adminAccounts<AssignmentSetResult>(superAdminToken, {
+      action: 'edit-account',
+      profileId: result.body.profileId,
+      expectedStateFingerprint: identifier.stateFingerprint,
+      fullName: 'Probe Staff',
+      phone: null,
+      roleTitle: null,
+      accountEmail: null,
+      assignments: [
+        assignments[0],
+        {
+          assignmentId: null,
+          outletId: OUTLETS.kanchrapara,
+          role: 'employee',
+          startedOn: assignments[0]!.startedOn,
+        },
+      ],
+    })
+    expect(changed).toMatchObject({
+      status: 200,
+      body: {
+        replacementHandover: {
+          profileId: result.body.profileId,
+          purpose: 'activation',
+          code: expect.any(String),
+        },
+      },
+    })
+    expect(changed.body.replacementHandover!.code).not.toBe(result.body.code)
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(400)
+    expect(
+      (
+        await redeem({
+          code: changed.body.replacementHandover!.code,
+          password: NEW_PASSWORD,
+        })
+      ).status,
+    ).toBe(204)
+    expect((await liveAssignments(result.body.profileId)).map((row) => row.outletId)).toEqual([
+      OUTLETS.kalyani,
+      OUTLETS.kanchrapara,
+    ])
+  })
+
+  it('issues activation before first sign-in and password reset afterwards', async () => {
+    const { username, result } = await provisionAs(superAdminToken)
+    expect(result.body.purpose).toBe('activation')
+    const setup = await adminAccounts<Provisioned & { purpose: 'activation' }>(superAdminToken, {
+      action: 'issue-handover',
+      profileId: result.body.profileId,
+    })
+    expect(setup).toMatchObject({
+      status: 200,
+      body: { profileId: result.body.profileId, username, purpose: 'activation' },
+    })
+    expect((await redeem({ code: result.body.code, password: NEW_PASSWORD })).status).toBe(400)
+    expect((await redeem({ code: setup.body.code, password: NEW_PASSWORD })).status).toBe(204)
+    expect(
+      (
+        await anonClient().auth.signInWithPassword({
+          email: authAlias(username),
+          password: NEW_PASSWORD,
+        })
+      ).error,
+    ).toBeNull()
+
+    const reset = await adminAccounts<Provisioned & { purpose: 'password_reset' }>(
+      superAdminToken,
+      {
+        action: 'issue-handover',
+        profileId: result.body.profileId,
+      },
+    )
+    expect(reset).toMatchObject({
+      status: 200,
+      body: { profileId: result.body.profileId, username, purpose: 'password_reset' },
+    })
+    expect((await identifiersFor(superAdminToken))[result.body.profileId]).toMatchObject({
+      hasSignedIn: true,
+      invite: { purpose: 'password_reset', expiresAt: reset.body.expiresAt },
+    })
+  })
+
+  it('preserves a live reset handover through an assignment edit', async () => {
+    const { username, result } = await provisionAs(superAdminToken)
+    await redeem({ code: result.body.code, password: NEW_PASSWORD })
+    await anonClient().auth.signInWithPassword({
+      email: authAlias(username),
+      password: NEW_PASSWORD,
+    })
+    const reset = await adminAccounts<Provisioned & { purpose: 'password_reset' }>(
+      superAdminToken,
+      {
+        action: 'issue-handover',
+        profileId: result.body.profileId,
+      },
+    )
+    const identifier = (await identifiersFor(superAdminToken))[result.body.profileId]!
+    const assignments = await liveAssignments(result.body.profileId)
+    const changed = await adminAccounts<AssignmentSetResult>(superAdminToken, {
+      action: 'edit-account',
+      profileId: result.body.profileId,
+      expectedStateFingerprint: identifier.stateFingerprint,
+      fullName: 'Probe Staff',
+      phone: null,
+      roleTitle: null,
+      accountEmail: null,
+      assignments: [{ ...assignments[0]!, role: 'biller' }],
+    })
+    expect(changed.status).toBe(200)
+    expect(changed.body.replacementHandover).toBeNull()
+    expect(
+      (await redeem({ code: reset.body.code, username, password: 'reset-after-edit-password' }))
+        .status,
+    ).toBe(204)
+  })
+
+  it('refuses issuance while the account is inactive', async () => {
+    const { result } = await provisionAs(superAdminToken)
+    await adminAccounts(superAdminToken, {
+      action: 'set-active',
+      profileId: result.body.profileId,
+      isActive: false,
+    })
+    expect(
+      await adminAccounts(superAdminToken, {
+        action: 'issue-handover',
+        profileId: result.body.profileId,
+      }),
+    ).toEqual({ status: 409, body: { error: 'account_inactive' } })
+  })
+})
+
+describe('canonical account-boundary failures', () => {
+  it('distinguishes invalid sessions from verified forbidden callers', async () => {
+    expect(await adminAccounts(null, { action: 'identifiers' })).toEqual({
+      status: 401,
+      body: { error: 'session_invalid' },
+    })
+    // A syntactically valid public credential reaches the function but is not
+    // a human session. Kong rejects malformed JWT text before any function can
+    // normalize its body, so the boundary we control is proved with anon.
+    expect(await adminAccounts(SUPABASE_ANON_KEY, { action: 'identifiers' })).toEqual({
+      status: 401,
+      body: { error: 'session_invalid' },
+    })
+    const biller = await tokenFor(PERSONAS.billerKalyani)
+    expect(await adminAccounts(biller, { action: 'identifiers' })).toEqual({
+      status: 403,
+      body: { error: 'forbidden' },
+    })
+  })
+})
+
 describe('deactivation, without waiting for a token to expire', () => {
   it('blocks a live session at the next request', async () => {
     const { email, result } = await provisionAs(superAdminToken)
@@ -819,7 +1223,7 @@ describe('usernames and private Super Admin account emails', () => {
     expect(seen.status).toBe(200)
 
     const identifiers = Object.values(seen.body.identifiers)
-    expect(identifiers).toContainEqual({ username, accountEmail: null })
+    expect(identifiers).toContainEqual(expect.objectContaining({ username, accountEmail: null }))
     // The other outlet's manager and staff are outside this caller's authority.
     expect(identifiers.map((item) => item.username)).not.toContain('admin.kanchrapara')
     expect(identifiers.map((item) => item.username)).not.toContain('staff.kanchrapara')
@@ -1043,10 +1447,9 @@ describe('Super Admin account-email invariants over the privileged boundary', ()
     const identifiers = await adminAccounts<{
       identifiers: Record<string, { username: string; accountEmail: string | null }>
     }>(superAdminToken, { action: 'identifiers' })
-    expect(identifiers.body.identifiers[created.body.profileId]).toEqual({
-      username,
-      accountEmail,
-    })
+    expect(identifiers.body.identifiers[created.body.profileId]).toEqual(
+      expect.objectContaining({ username, accountEmail }),
+    )
 
     const duplicateUsername = freshUsername('owndup')
     const duplicate = await adminAccounts<{ error: string }>(superAdminToken, {
@@ -1111,10 +1514,9 @@ describe('Super Admin account-email invariants over the privileged boundary', ()
     const identifiers = await adminAccounts<{
       identifiers: Record<string, { username: string; accountEmail: string | null }>
     }>(superAdminToken, { action: 'identifiers' })
-    expect(identifiers.body.identifiers[result.body.profileId]).toEqual({
-      username,
-      accountEmail: null,
-    })
+    expect(identifiers.body.identifiers[result.body.profileId]).toEqual(
+      expect.objectContaining({ username, accountEmail: null }),
+    )
 
     const retained = await emailSignIn(accountEmail, NEW_PASSWORD, '198.51.100.45')
     expect(retained.status).toBe(200)

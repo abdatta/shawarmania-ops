@@ -113,7 +113,7 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
   another role may have zero or one. Ordinary People creation does not collect
   it. If present, it signs in to the same Auth user. For a live Super Admin it
   also provides the data foundation for a later recovery or security design.
-- **One-time provisioning codes are single-use, short-lived, and delivered out-of-band** (in practice, over WhatsApp by an admin, usually as a link that carries the code). They are not passwords and must not be reusable. As built: ten Crockford-base32 characters (50 bits), valid seven days, superseded the moment a replacement is issued, and cancelled by a role or outlet reassignment — so exactly one code per account is ever live. **A link is the same bearer credential as the code it carries**, with the same lifetime and the same single use; the expiry is what bounds its sitting in a chat thread.
+- **One-time handovers are purpose-bearing, single-use, short-lived, and delivered out-of-band** (in practice, over WhatsApp by an admin, usually as a link that carries the code). They are not passwords and must not be reusable. As built, the bearer code is ten Crockford-base32 characters (50 bits), valid for seven days. Each handover is either activation or password reset; a link is live only while unconsumed, unsuperseded, and unexpired. Replacing one supersedes the same purpose. An authorized assignment edit replaces a live activation handover only after the final placement exists, preserves a live reset handover, and never makes an unsolicited reset. **A link is the same bearer credential as the code it carries**, with the same lifetime and the same single use; expiry is what bounds its sitting in a chat thread.
 - **A code is stored only as a hash, and that column is readable by nobody.** Not by a Franchise Admin, not by the Super Admin: the invite table's column grants omit it, so a request naming it — or `select *`, which expands to it — is refused by the database. The plaintext exists only in the response that issued it, which is why the screen says it cannot be looked up again.
 - **The code is the lookup key, and the username is derived from it.**
   Preview takes no email or username. It is safe to show the one canonical
@@ -137,13 +137,20 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
   authority. The real-backend suite hand-crafts this attempt and proves the old
   alias remains.
 - **Provisioning authority is re-derived from the caller's own token** inside the privileged function, never taken from the request. A Franchise Admin cannot mint an administrator, cannot reach another outlet, and cannot deactivate themselves.
+- **People editing validates the whole transition at the privileged boundary.** It
+  checks the target's complete current and intended assignment sets, rejects
+  stale edits and self-edits, and changes facts, placements, and any activation
+  replacement together or not at all. Franchise Admins may change only
+  Employee/Biller placements at outlets they manage; Super Admin changes retain
+  the private-email and final-Super-Admin guards. Departure is a separate
+  confirmed transaction, not an empty assignment edit.
 - **No password is ever typed on the counter tablet**, at setup or afterwards. Setting one up takes a one-time code generated on an admin's own phone; opening a shift takes a username on the tablet and four digits on the operator's own phone. The device session is the tablet's only credential — see [Roles And Permissions](ROLES_AND_PERMISSIONS.md).
 - **The confirmation code is readable by nobody**, including the person the request names. `counter_shift_requests.code_hash` is withheld by column grant from every client role, so `select *` on that table is refused with 42501; the code exists on the tablet's screen and in the response that created it, and nowhere else.
 - **Only the named person may confirm their own shift.** Not the outlet's manager holding the correct code, not the owner. There is no fallback approver, by decision, and the cost is written down in [Limitations](LIMITATIONS.md).
 - **An unknown username is indistinguishable from a known one** at the tablet: same code, same waiting state, same timeout. One failure value for every failure mode, exactly as with account activation.
 - **Tablet removal is immediate and permanent**, enforced by a `removed_at` check inside every policy rather than by waiting for a token to expire. It ends the live shift and cancels any pending request in the same transaction. There is no paused state: a paused tablet is a security question that a removed one is not.
-- **An assignment change is immediate too**, and for a stronger reason: the policies read `assignments` on every request, so granting or ending one needs no reissue and no sign-out. Nothing in this system waits for a token any more.
-- Deactivating an account is likewise a policy-level `is_active` check, not just a claim change.
+- **An assignment change is immediate too**, and for a stronger reason: the policies read `assignments` on every request, so a permitted atomic edit needs no reissue and no sign-out. Nothing in this system waits for a token any more.
+- Deactivating an account is likewise a policy-level `is_active` check, not just a claim change. A definitive `session_invalid` response clears the human shell; a verified forbidden response does not, and transport uncertainty never destroys credentials.
 - **Money writes are command-only.** Clients hold no direct insert, update or
   delete privilege on orders, lines, bills, command receipts or end-of-day
   confirmations. RPCs re-derive tablet, outlet, historical shift or manager

@@ -25,12 +25,12 @@ interface SignInLocationState {
   from?: string
 }
 
-// Deactivation is the only thing that ends a session now. A changed
-// assignment used to end one too, because role and outlet were baked into the
-// token; since multi-outlet-people nothing about authority is, so an
-// assignment change is simply picked up (design D11).
+// Only definitive server evidence ends a session. An assignment change is
+// simply picked up because authority never lives in the token; an outage is
+// uncertainty and preserves the current shell.
 const ENDED_MESSAGES: Record<SessionEndReason, string> = {
   deactivated: 'Your account has been deactivated. Contact your manager.',
+  session_invalid: 'Your session ended. Sign in again.',
 }
 
 export function SignIn() {

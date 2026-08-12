@@ -28,6 +28,14 @@ interface IssuedCode {
   username: string
   code: string
   expiresAt: string
+  purpose: 'activation' | 'password_reset'
+}
+
+interface IntendedAssignment {
+  assignmentId: string | null
+  outletId: string | null
+  role: AppRole
+  startedOn: string
 }
 
 async function currentUsername(service: SupabaseClient, profileId: string): Promise<string | null> {
@@ -39,6 +47,7 @@ async function issueCodeFor(
   service: SupabaseClient,
   profileId: string,
   issuedBy: string,
+  purpose: 'activation' | 'password_reset',
 ): Promise<IssuedCode | null> {
   const code = generateCode()
   const { data: inviteId, error } = await service.rpc('issue_account_invite', {
@@ -46,6 +55,7 @@ async function issueCodeFor(
     p_issued_by: issuedBy,
     p_code_hash: await hashCode(normaliseCode(code)),
     p_valid_for: INVITE_VALID_FOR,
+    p_purpose: purpose,
   })
   if (error || !inviteId) return null
 
@@ -64,6 +74,7 @@ async function issueCodeFor(
     username,
     code,
     expiresAt: (invite?.expires_at as string | undefined) ?? '',
+    purpose,
   }
 }
 
@@ -163,6 +174,7 @@ async function provision(
       username,
       code,
       expiresAt: row.invite_expires_at,
+      purpose: 'activation',
     },
     201,
   )
@@ -180,7 +192,31 @@ async function reissue(
   if (!target) return json({ error: 'not_found' }, 404)
   if (!mayManage(caller, target)) return json({ error: 'forbidden' }, 403)
 
-  const issued = await issueCodeFor(service, target.id, caller.id)
+  const { data: authUser, error: authError } = await service.auth.admin.getUserById(target.id)
+  if (authError || !authUser.user) return json({ error: 'lookup_failed' }, 500)
+  const purpose = authUser.user.last_sign_in_at ? 'password_reset' : 'activation'
+  const issued = await issueCodeFor(service, target.id, caller.id, purpose)
+  if (!issued) return json({ error: 'invite_failed' }, 500)
+  return json(issued, 200)
+}
+
+async function issueHandover(
+  service: SupabaseClient,
+  caller: Caller,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const profileId = str(body['profileId'])
+  if (!profileId) return json({ error: 'invalid_request' }, 400)
+
+  const target = await loadAccount(service, profileId)
+  if (!target) return json({ error: 'not_found' }, 404)
+  if (!mayManage(caller, target)) return json({ error: 'forbidden' }, 403)
+  if (!target.isActive) return json({ error: 'account_inactive' }, 409)
+
+  const { data, error } = await service.auth.admin.getUserById(profileId)
+  if (error || !data.user) return json({ error: 'lookup_failed' }, 500)
+  const purpose = data.user.last_sign_in_at ? 'password_reset' : 'activation'
+  const issued = await issueCodeFor(service, profileId, caller.id, purpose)
   if (!issued) return json({ error: 'invite_failed' }, 500)
   return json(issued, 200)
 }
@@ -231,29 +267,206 @@ async function identifiers(service: SupabaseClient, caller: Caller): Promise<Res
     }
   }
 
-  const visible: Record<string, { username: string; accountEmail: string | null }> = {}
+  const { data: liveInvites, error: inviteError } = await service
+    .from('account_invites')
+    .select('profile_id, purpose, expires_at')
+    .is('consumed_at', null)
+    .is('superseded_at', null)
+    .gt('expires_at', new Date().toISOString())
+  if (inviteError) return json({ error: 'lookup_failed' }, 500)
+  const invites = new Map(
+    (liveInvites ?? []).map((invite) => [
+      invite.profile_id as string,
+      {
+        purpose: invite.purpose as 'activation' | 'password_reset',
+        expiresAt: invite.expires_at as string,
+      },
+    ]),
+  )
+
+  const visible: Record<
+    string,
+    {
+      username: string
+      accountEmail: string | null
+      hasSignedIn: boolean
+      invite: { purpose: 'activation' | 'password_reset'; expiresAt: string } | null
+      stateFingerprint: string
+    }
+  > = {}
   for (const user of data.users) {
     const username = authAliasToUsername(user.email)
     if (!username) continue
 
-    if (user.id === caller.id) {
-      visible[user.id] = {
-        username,
-        accountEmail: accountEmails.get(user.id) ?? null,
-      }
-      continue
+    const target = user.id === caller.id ? null : await loadAccount(service, user.id)
+    if (user.id !== caller.id && (!target || !mayManage(caller, target))) continue
+    const { data: fingerprint, error: fingerprintError } = await service.rpc(
+      'account_state_fingerprint',
+      { p_profile_id: user.id },
+    )
+    if (fingerprintError || typeof fingerprint !== 'string') {
+      return json({ error: 'lookup_failed' }, 500)
     }
-
-    const target = await loadAccount(service, user.id)
-    if (!target || !mayManage(caller, target)) continue
     visible[user.id] = {
       username,
       accountEmail:
-        isOwner(caller) && isOwner(target) ? (accountEmails.get(user.id) ?? null) : null,
+        user.id === caller.id || (target && isOwner(caller) && isOwner(target))
+          ? (accountEmails.get(user.id) ?? null)
+          : null,
+      hasSignedIn: Boolean(user.last_sign_in_at),
+      invite: invites.get(user.id) ?? null,
+      stateFingerprint: fingerprint,
     }
   }
 
   return json({ identifiers: visible }, 200)
+}
+
+function intendedAssignments(value: unknown): IntendedAssignment[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const parsed: IntendedAssignment[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+    const row = item as Record<string, unknown>
+    const assignmentId = row['assignmentId'] === null ? null : str(row['assignmentId'])
+    const outletId = row['outletId'] === null ? null : str(row['outletId'])
+    const role = str(row['role']) as AppRole | undefined
+    const startedOn = str(row['startedOn'])
+    if (
+      (assignmentId !== null && (!assignmentId || !UUID.test(assignmentId))) ||
+      (outletId !== null && (!outletId || !UUID.test(outletId))) ||
+      !role ||
+      !APP_ROLES.includes(role) ||
+      !startedOn
+    ) {
+      return null
+    }
+    parsed.push({ assignmentId, outletId, role, startedOn })
+  }
+  return parsed
+}
+
+function assignmentFailure(error: { code?: string; message: string; details?: string }): Response {
+  const detail = `${error.message} ${error.details ?? ''}`
+  if (error.code === 'P0001' && detail.includes('stale account state')) {
+    return json({ error: 'stale_edit' }, 409)
+  }
+  if (error.code === '42501' || error.code === 'insufficient_privilege') {
+    return json({ error: 'forbidden' }, 403)
+  }
+  if (detail.includes('last super admin')) return json({ error: 'last_super_admin' }, 409)
+  if (error.code === '23505' && detail.includes('email')) {
+    return json({ error: 'email_unavailable' }, 409)
+  }
+  if (error.code === '23505') return json({ error: 'already_assigned' }, 409)
+  return json({ error: 'invalid_request' }, 400)
+}
+
+async function editAccount(
+  service: SupabaseClient,
+  caller: Caller,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const profileId = str(body['profileId'])
+  const expectedStateFingerprint = str(body['expectedStateFingerprint'])
+  const fullName = str(body['fullName'])
+  const phone = body['phone'] === null ? null : str(body['phone'])
+  const roleTitle = body['roleTitle'] === null ? null : str(body['roleTitle'])
+  const accountEmail =
+    body['accountEmail'] === null ? null : str(body['accountEmail'])?.toLowerCase()
+  const assignments = intendedAssignments(body['assignments'])
+  if (
+    !profileId ||
+    !UUID.test(profileId) ||
+    !expectedStateFingerprint ||
+    !fullName ||
+    phone === undefined ||
+    roleTitle === undefined ||
+    accountEmail === undefined ||
+    !assignments
+  ) {
+    return json({ error: 'invalid_request' }, 400)
+  }
+
+  const code = generateCode()
+  const { data, error } = await service.rpc('edit_account_assignment_set', {
+    p_actor_id: caller.id,
+    p_profile_id: profileId,
+    p_expected_fingerprint: expectedStateFingerprint,
+    p_full_name: fullName,
+    p_phone: phone,
+    p_role_title: roleTitle,
+    p_account_email: accountEmail,
+    p_assignments: assignments,
+    p_issued_by: caller.id,
+    p_activation_code_hash: await hashCode(normaliseCode(code)),
+    p_valid_for: INVITE_VALID_FOR,
+  })
+  if (error) return assignmentFailure(error)
+  const row = (
+    data as
+      | {
+          profile_id: string
+          state_fingerprint: string
+          assignments: IntendedAssignment[]
+          invite_id: string | null
+          invite_expires_at: string | null
+        }[]
+      | null
+  )?.[0]
+  if (!row) return json({ error: 'update_failed' }, 500)
+
+  const username = row.invite_id ? await currentUsername(service, profileId) : null
+  if (row.invite_id && !username) return json({ error: 'account_integrity' }, 500)
+  return json(
+    {
+      profileId: row.profile_id,
+      assignments: row.assignments,
+      stateFingerprint: row.state_fingerprint,
+      replacementHandover: row.invite_id
+        ? {
+            profileId: row.profile_id,
+            username,
+            code,
+            expiresAt: row.invite_expires_at ?? '',
+            purpose: 'activation',
+          }
+        : null,
+    },
+    200,
+  )
+}
+
+async function markAsLeft(
+  service: SupabaseClient,
+  caller: Caller,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const profileId = str(body['profileId'])
+  const expectedStateFingerprint = str(body['expectedStateFingerprint'])
+  if (!profileId || !UUID.test(profileId) || !expectedStateFingerprint) {
+    return json({ error: 'invalid_request' }, 400)
+  }
+  const { data, error } = await service.rpc('mark_account_as_left', {
+    p_actor_id: caller.id,
+    p_profile_id: profileId,
+    p_expected_fingerprint: expectedStateFingerprint,
+  })
+  if (error) return assignmentFailure(error)
+  const row = (
+    data as
+      { profile_id: string; state_fingerprint: string; assignments: IntendedAssignment[] }[] | null
+  )?.[0]
+  if (!row) return json({ error: 'update_failed' }, 500)
+  return json(
+    {
+      profileId: row.profile_id,
+      assignments: row.assignments,
+      stateFingerprint: row.state_fingerprint,
+      replacementHandover: null,
+    },
+    200,
+  )
 }
 
 async function setUsername(
@@ -267,7 +480,7 @@ async function setUsername(
   if (!profileId || !username || !authAlias) {
     return json({ error: 'invalid_request' }, 400)
   }
-  if (profileId === caller.id) return json({ error: 'self_change_forbidden' }, 403)
+  if (profileId === caller.id) return json({ error: 'forbidden' }, 403)
 
   const target = await loadAccount(service, profileId)
   if (!target) return json({ error: 'not_found' }, 404)
@@ -290,7 +503,7 @@ async function setAccountEmail(
   const accountEmail = str(body['accountEmail'])?.toLowerCase()
   if (!profileId || !accountEmail) return json({ error: 'invalid_request' }, 400)
   if (!isOwner(caller)) return json({ error: 'forbidden' }, 403)
-  if (profileId === caller.id) return json({ error: 'self_change_forbidden' }, 403)
+  if (profileId === caller.id) return json({ error: 'forbidden' }, 403)
 
   const target = await loadAccount(service, profileId)
   if (!target) return json({ error: 'not_found' }, 404)
@@ -373,6 +586,7 @@ async function assign(
             username,
             code,
             expiresAt: row.invite_expires_at ?? '',
+            purpose: 'activation',
           }
         : null,
     },
@@ -443,6 +657,7 @@ async function endAssignment(
             username,
             code,
             expiresAt: row.invite_expires_at ?? '',
+            purpose: 'activation',
           }
         : null,
     },
@@ -455,8 +670,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
   const service = serviceClient()
-  const caller = await callerFrom(req, service)
-  if (!caller) return json({ error: 'unauthorised' }, 401)
+  const resolved = await callerFrom(req, service)
+  if (resolved.kind === 'session_invalid') return json({ error: 'session_invalid' }, 401)
+  if (resolved.kind === 'backend_failure') return json({ error: 'backend_failure' }, 503)
+  const caller = resolved.caller
 
   const body = await readJson(req)
   if (!body) return json({ error: 'invalid_request' }, 400)
@@ -466,6 +683,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return await provision(service, caller, body)
     case 'reissue':
       return await reissue(service, caller, body)
+    case 'issue-handover':
+      return await issueHandover(service, caller, body)
     case 'set-active':
       return await setActive(service, caller, body)
     case 'identifiers':
@@ -478,6 +697,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return await assign(service, caller, body)
     case 'end-assignment':
       return await endAssignment(service, caller, body)
+    case 'edit-account':
+      return await editAccount(service, caller, body)
+    case 'mark-as-left':
+      return await markAsLeft(service, caller, body)
     default:
       return json({ error: 'unknown_action' }, 400)
   }

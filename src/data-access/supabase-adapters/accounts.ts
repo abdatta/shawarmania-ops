@@ -2,15 +2,21 @@ import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import {
   AccountActionError,
+  deriveAccountLifecycle,
   type AccountSummary,
   type AccountsAdapter,
+  type AccountHandover,
   type AppRole,
+  type Assignment,
+  type AssignmentSetResult,
+  type EditAccountCommand,
   type IssuedCode,
   type NewAccount,
   type StaffFactsPatch,
 } from '../adapters'
 import { failureCode } from '../auth'
 import type { Database } from '../database.types'
+import { signalHumanSessionInvalid } from '../../session/human-session-invalid'
 
 /**
  * The real accounts adapter.
@@ -64,10 +70,6 @@ function toStaffFactsError(error: PostgrestError): AccountActionError {
   return new AccountActionError('failed', 'That did not work. Try again in a moment.')
 }
 
-// Never `select('*')`: the invite table withholds code_hash by column grant,
-// so a whole-row read is refused by design. Naming columns is the contract.
-const INVITE_COLUMNS = 'profile_id, expires_at, consumed_at, superseded_at'
-
 const MESSAGES: Record<string, string> = {
   forbidden: 'You are not allowed to do that for this account.',
   already_assigned: 'This person already works at that outlet.',
@@ -79,12 +81,42 @@ const MESSAGES: Record<string, string> = {
   too_many_accounts: 'There are more accounts than this screen can list. Tell somebody.',
   invalid_request: 'Something in that form was missing or malformed.',
   not_found: 'That account no longer exists.',
-  unauthorised: 'Your session is no longer valid. Sign in again.',
+  session_invalid: 'Your session is no longer valid. Sign in again.',
+  stale_edit: 'This account changed while you were editing it. Review the latest details.',
+  account_inactive: 'Reactivate this account before issuing a link.',
 }
 
 interface AssignmentChangeResponse {
   assignmentId: string
   issuedCode: IssuedCode | null
+}
+
+interface AssignmentSetWireResult {
+  profileId: string
+  assignments: Array<{
+    id: string
+    role: AppRole
+    outletId: string | null
+    startedOn: string
+    endedOn: string | null
+  }>
+  stateFingerprint: string
+  replacementHandover: AccountHandover | null
+}
+
+function assignmentSetResult(result: AssignmentSetWireResult): AssignmentSetResult {
+  return {
+    profileId: result.profileId,
+    assignments: result.assignments.map((assignment): Assignment => ({
+      id: assignment.id,
+      role: assignment.role,
+      outletId: assignment.outletId,
+      startedOn: assignment.startedOn,
+      endedOn: assignment.endedOn,
+    })),
+    stateFingerprint: result.stateFingerprint,
+    replacementHandover: result.replacementHandover,
+  }
 }
 
 async function callAdmin<T>(
@@ -95,58 +127,60 @@ async function callAdmin<T>(
   if (!error) return data as T
 
   const code = (await failureCode(error)) ?? 'unavailable'
+  if (code === 'session_invalid') signalHumanSessionInvalid()
   throw new AccountActionError(code, MESSAGES[code] ?? 'That did not work. Try again in a moment.')
 }
 
 export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>): AccountsAdapter {
-  const toSummary = (
-    profile: ProfileRow,
-    identifier: { username: string; accountEmail: string | null } | null,
-    invite: { expiresAt: string } | null,
-  ): AccountSummary => ({
-    id: profile.id,
-    fullName: profile.full_name,
-    username: identifier?.username ?? null,
-    accountEmail: identifier?.accountEmail ?? null,
-    phone: profile.phone,
-    isActive: profile.is_active,
-    roleTitle: profile.role_title,
-    assignments: (profile.assignments ?? []).map((a) => ({
-      id: a.id,
-      role: a.role,
-      outletId: a.outlet_id,
-      startedOn: a.started_on,
-      endedOn: a.ended_on,
-    })),
-    invite,
-  })
+  type IdentifierFacts = {
+    username: string | null
+    accountEmail: string | null
+    hasSignedIn: boolean
+    invite: { purpose: 'activation' | 'password_reset'; expiresAt: string } | null
+    stateFingerprint: string
+  }
+
+  const toSummary = (profile: ProfileRow, identifier: IdentifierFacts): AccountSummary => {
+    const facts = {
+      isActive: profile.is_active,
+      hasSignedIn: identifier.hasSignedIn,
+      invite: identifier.invite,
+    }
+    return {
+      id: profile.id,
+      fullName: profile.full_name,
+      username: identifier.username,
+      accountEmail: identifier.accountEmail,
+      phone: profile.phone,
+      isActive: profile.is_active,
+      hasSignedIn: identifier.hasSignedIn,
+      roleTitle: profile.role_title,
+      assignments: (profile.assignments ?? []).map((a) => ({
+        id: a.id,
+        role: a.role,
+        outletId: a.outlet_id,
+        startedOn: a.started_on,
+        endedOn: a.ended_on,
+      })),
+      invite: identifier.invite,
+      lifecycle: deriveAccountLifecycle(facts),
+      stateFingerprint: identifier.stateFingerprint,
+    }
+  }
 
   return {
     async listAccounts(): Promise<AccountSummary[]> {
-      const [{ data: profiles, error }, { data: invites, error: inviteError }, identifiers] =
-        await Promise.all([
-          client.from('profiles').select(PROFILE_COLUMNS).order('full_name'),
-          client.from('account_invites').select(INVITE_COLUMNS),
-          // Product identifiers are resolved through the privileged function.
-          // A refusal or outage degrades this surface to names.
-          callAdmin<{
-            identifiers: Record<string, { username: string; accountEmail: string | null }>
-          }>(client, { action: 'identifiers' })
-            .then((result) => result.identifiers)
-            .catch(() => ({}) as Record<string, { username: string; accountEmail: string | null }>),
-        ])
+      const [{ data: profiles, error }, { identifiers }] = await Promise.all([
+        client.from('profiles').select(PROFILE_COLUMNS).order('full_name'),
+        callAdmin<{ identifiers: Record<string, IdentifierFacts> }>(client, {
+          action: 'identifiers',
+        }),
+      ])
       if (error) throw error
-      if (inviteError) throw inviteError
 
-      const outstanding = new Map(
-        (invites ?? [])
-          .filter((invite) => invite.consumed_at === null && invite.superseded_at === null)
-          .map((invite) => [invite.profile_id, { expiresAt: invite.expires_at }]),
-      )
-
-      return ((profiles ?? []) as unknown as ProfileRow[]).map((profile) =>
-        toSummary(profile, identifiers[profile.id] ?? null, outstanding.get(profile.id) ?? null),
-      )
+      return ((profiles ?? []) as unknown as ProfileRow[])
+        .filter((profile) => identifiers[profile.id] !== undefined)
+        .map((profile) => toSummary(profile, identifiers[profile.id]!))
     },
 
     async provision(account: NewAccount): Promise<IssuedCode> {
@@ -161,6 +195,39 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
         roleTitle: account.roleTitle ?? null,
         joinedOn: account.joinedOn ?? null,
       })
+    },
+
+    async issueHandover(profileId: string): Promise<AccountHandover> {
+      return await callAdmin<AccountHandover>(client, {
+        action: 'issue-handover',
+        profileId,
+      })
+    },
+
+    async editAccount(command: EditAccountCommand): Promise<AssignmentSetResult> {
+      const result = await callAdmin<AssignmentSetWireResult>(client, {
+        action: 'edit-account',
+        profileId: command.profileId,
+        expectedStateFingerprint: command.expectedStateFingerprint,
+        fullName: command.fullName,
+        phone: command.phone,
+        roleTitle: command.roleTitle,
+        accountEmail: command.accountEmail,
+        assignments: command.assignments,
+      })
+      return assignmentSetResult(result)
+    },
+
+    async markAsLeft(
+      profileId: string,
+      expectedStateFingerprint: string,
+    ): Promise<AssignmentSetResult> {
+      const result = await callAdmin<AssignmentSetWireResult>(client, {
+        action: 'mark-as-left',
+        profileId,
+        expectedStateFingerprint,
+      })
+      return assignmentSetResult(result)
     },
 
     async reissue(profileId: string): Promise<IssuedCode> {
@@ -241,7 +308,17 @@ export function createSupabaseAccountsAdapter(client: SupabaseClient<Database>):
           'You are not allowed to do that for this account.',
         )
       }
-      return toSummary(data as unknown as ProfileRow, null, null)
+      const { identifiers } = await callAdmin<{
+        identifiers: Record<string, IdentifierFacts>
+      }>(client, { action: 'identifiers' })
+      const facts = identifiers[profileId]
+      if (!facts) {
+        throw new AccountActionError(
+          'forbidden',
+          'You are not allowed to do that for this account.',
+        )
+      }
+      return toSummary(data as unknown as ProfileRow, facts)
     },
 
     /**

@@ -216,12 +216,13 @@ describe('demo mode safety', () => {
     // `owner-people` is `live`, so it renders in demo mode too — served by the
     // mock accounts adapter, with no path to Supabase.
     expect(await screen.findByText('Demo Manager')).toBeInTheDocument()
-    expect(screen.getByText('Awaiting activation')).toBeInTheDocument()
+    expect(screen.getByText('Set-up link issued')).toBeInTheDocument()
 
     // A write, through the real UI: the code panel appears and no request is made.
-    await user.click(screen.getAllByRole('button', { name: /^Actions for /i })[0]!)
-    await user.click(screen.getAllByRole('button', { name: 'New code' })[0]!)
-    expect(await screen.findByTestId('issued-code')).toBeInTheDocument()
+    const pendingRow = screen.getByText('Demo New Starter').closest('tr')!
+    await user.click(within(pendingRow).getByRole('button', { name: /^Actions for /i }))
+    await user.click(screen.getAllByRole('button', { name: 'Replace set-up link' })[0]!)
+    expect(await screen.findByTestId('account-handover')).toBeInTheDocument()
 
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(isDemoScopeActive()).toBe(true)

@@ -303,3 +303,4 @@ export const assignmentFixtures: Readonly<Record<string, Assignment[]>> = {
 
 /** The one demo account whose invite is still outstanding. */
 export const PENDING_ACCOUNT_ID = 'd1000000-0000-4000-a000-000000000008'
+export const RESET_PENDING_ACCOUNT_ID = DEMO_HELPER_ACCOUNT_ID

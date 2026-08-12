@@ -73,6 +73,7 @@ export type Database = {
           issued_at: string
           issued_by: string
           profile_id: string
+          purpose: Database["public"]["Enums"]["account_invite_purpose"]
           superseded_at: string | null
         }
         Insert: {
@@ -84,6 +85,7 @@ export type Database = {
           issued_at?: string
           issued_by: string
           profile_id: string
+          purpose?: Database["public"]["Enums"]["account_invite_purpose"]
           superseded_at?: string | null
         }
         Update: {
@@ -95,6 +97,7 @@ export type Database = {
           issued_at?: string
           issued_by?: string
           profile_id?: string
+          purpose?: Database["public"]["Enums"]["account_invite_purpose"]
           superseded_at?: string | null
         }
         Relationships: [
@@ -2515,6 +2518,14 @@ export type Database = {
       }
     }
     Functions: {
+      account_actor_may_replace_set: {
+        Args: { p_actor_id: string; p_desired: Json; p_profile_id: string }
+        Returns: boolean
+      }
+      account_state_fingerprint: {
+        Args: { p_profile_id: string }
+        Returns: string
+      }
       app_account_active: { Args: never; Returns: boolean }
       app_account_email_valid: { Args: { input: string }; Returns: boolean }
       app_business_date: {
@@ -3050,6 +3061,28 @@ export type Database = {
         }
         Returns: boolean
       }
+      edit_account_assignment_set: {
+        Args: {
+          p_account_email: string
+          p_activation_code_hash: string
+          p_actor_id: string
+          p_assignments: Json
+          p_expected_fingerprint: string
+          p_full_name: string
+          p_issued_by: string
+          p_phone: string
+          p_profile_id: string
+          p_role_title: string
+          p_valid_for: string
+        }
+        Returns: {
+          assignments: Json
+          invite_expires_at: string
+          invite_id: string
+          profile_id: string
+          state_fingerprint: string
+        }[]
+      }
       end_assignment_with_invite: {
         Args: {
           p_assignment_id: string
@@ -3094,15 +3127,26 @@ export type Database = {
         Returns: boolean
       }
       invite_failure_pressure: { Args: { p_window?: string }; Returns: number }
-      issue_account_invite: {
-        Args: {
-          p_code_hash: string
-          p_issued_by: string
-          p_profile_id: string
-          p_valid_for: string
-        }
-        Returns: string
-      }
+      issue_account_invite:
+        | {
+            Args: {
+              p_code_hash: string
+              p_issued_by: string
+              p_profile_id: string
+              p_valid_for: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_code_hash: string
+              p_issued_by: string
+              p_profile_id: string
+              p_purpose: Database["public"]["Enums"]["account_invite_purpose"]
+              p_valid_for: string
+            }
+            Returns: string
+          }
       issue_counter_device_setup_code: {
         Args: {
           p_code_hash: string
@@ -3140,6 +3184,18 @@ export type Database = {
         Returns: {
           full_name: string
           id: string
+        }[]
+      }
+      mark_account_as_left: {
+        Args: {
+          p_actor_id: string
+          p_expected_fingerprint: string
+          p_profile_id: string
+        }
+        Returns: {
+          assignments: Json
+          profile_id: string
+          state_fingerprint: string
         }[]
       }
       merge_expense_category: {
@@ -3338,6 +3394,7 @@ export type Database = {
       }
     }
     Enums: {
+      account_invite_purpose: "activation" | "password_reset"
       alert_category:
         | "inventory"
         | "equipment"
@@ -3496,6 +3553,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      account_invite_purpose: ["activation", "password_reset"],
       alert_category: [
         "inventory",
         "equipment",

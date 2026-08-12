@@ -144,6 +144,20 @@ export async function currentUser(): Promise<AuthedUser | null> {
 }
 
 /**
+ * Verify the current human session with Auth rather than trusting the locally
+ * cached session. Activation/reset uses this before admitting the replacement
+ * session to the application shell.
+ */
+export async function verifiedCurrentUser(): Promise<AuthedUser | null> {
+  const { data, error } = await getSupabaseClient().auth.getUser()
+  if (error || !data.user) return null
+  return {
+    userId: data.user.id,
+    username: authAliasToUsername(data.user.email),
+  }
+}
+
+/**
  * The tablet this session IS, or null because this session is a person.
  *
  * Asked **before** the profile, on every resolution, and that order is the whole

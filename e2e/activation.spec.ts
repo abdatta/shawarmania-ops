@@ -27,10 +27,10 @@ test('an admin is handed one username-only activation link', async ({ page }) =>
   await expect(page.getByLabel('Staff code')).toHaveCount(0)
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
-  const panel = page.getByTestId('issued-code')
+  const panel = page.getByTestId('account-handover')
   await expect(panel).toBeVisible()
 
-  const link = (await panel.getByTestId('issued-code-link').innerText()).trim()
+  const link = (await panel.getByTestId('account-handover-link').innerText()).trim()
   const code = new URL(link).searchParams.get('code')!
 
   expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)
@@ -41,7 +41,7 @@ test('an admin is handed one username-only activation link', async ({ page }) =>
   // printed beside it as a second thing somebody could send instead.
   await expect(panel.getByTestId('issued-code-value')).toHaveCount(0)
   await expect(panel.getByRole('button', { name: 'Copy code' })).toHaveCount(0)
-  await expect(panel.getByTestId('issued-code-username')).toContainText('demo.fresh.hire')
+  await expect(panel.getByTestId('account-handover-username')).toContainText('demo.fresh.hire')
 
   // Drawn in the page, from real modules — not an <img> pointed somewhere.
   const qr = panel.getByRole('img', { name: /Demo Fresh Hire/ })
@@ -72,7 +72,7 @@ test('producing the handover leaves the app origin alone', async ({ page, baseUR
   await expect(page.getByLabel('Staff code')).toHaveCount(0)
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
-  await expect(page.getByTestId('issued-code')).toBeVisible()
+  await expect(page.getByTestId('account-handover')).toBeVisible()
   await expect(page.getByRole('img', { name: /Demo Second Starter/ })).toBeVisible()
 
   expect(foreign).toEqual([])

@@ -34,6 +34,11 @@ export interface Caller {
   assignments: Assignment[]
 }
 
+export type CallerResolution =
+  | { kind: 'authenticated'; caller: Caller }
+  | { kind: 'session_invalid' }
+  | { kind: 'backend_failure'; error: unknown }
+
 export interface TargetAccount {
   id: string
   assignments: Assignment[]
@@ -63,23 +68,36 @@ export function serviceClient(): SupabaseClient {
 }
 
 /**
- * The caller, or null. Null covers every way of not being a usable admin
- * session: no header, the anon key rather than a user token, an expired token,
- * a user with no profile, or a deactivated one.
+ * Resolve a human caller without collapsing a received backend failure into an
+ * authentication refusal. Missing/rejected credentials and a deactivated
+ * profile are definitive invalid sessions; a database fault is uncertainty.
  */
-export async function callerFrom(req: Request, service: SupabaseClient): Promise<Caller | null> {
+export async function callerFrom(req: Request, service: SupabaseClient): Promise<CallerResolution> {
   const header = req.headers.get('Authorization') ?? ''
-  if (!header.toLowerCase().startsWith('bearer ')) return null
+  if (!header.toLowerCase().startsWith('bearer ')) return { kind: 'session_invalid' }
   const token = header.slice(7).trim()
-  if (token === '') return null
+  if (token === '') return { kind: 'session_invalid' }
 
   const { data, error } = await service.auth.getUser(token)
-  if (error || !data.user) return null
+  if (error) {
+    const status = (error as { status?: unknown }).status
+    return typeof status === 'number' && status >= 400 && status < 500
+      ? { kind: 'session_invalid' }
+      : { kind: 'backend_failure', error }
+  }
+  if (!data.user) return { kind: 'session_invalid' }
 
-  const profile = await loadAccount(service, data.user.id)
-  if (!profile || !profile.isActive) return null
+  try {
+    const profile = await loadAccount(service, data.user.id)
+    if (!profile || !profile.isActive) return { kind: 'session_invalid' }
 
-  return { id: profile.id, assignments: profile.assignments }
+    return {
+      kind: 'authenticated',
+      caller: { id: profile.id, assignments: profile.assignments },
+    }
+  } catch (backendError) {
+    return { kind: 'backend_failure', error: backendError }
+  }
 }
 
 export async function loadAccount(
@@ -91,7 +109,8 @@ export async function loadAccount(
     .select('id, is_active, assignments(role, outlet_id, ended_on)')
     .eq('id', profileId)
     .maybeSingle()
-  if (error || !data) return null
+  if (error) throw error
+  if (!data) return null
 
   // Live rows only. An ended assignment is history, and history confers
   // nothing — the same rule the database's own helpers apply.

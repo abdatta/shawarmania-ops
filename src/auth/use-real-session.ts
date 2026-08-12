@@ -13,6 +13,7 @@ import {
 } from '@/data-access/auth'
 import { forgetRememberedOutlets } from '@/features/remembered-outlet'
 import type { CounterDeviceSession } from '@/session/counter-session'
+import { onHumanSessionInvalid } from '@/session/human-session-invalid'
 import { deriveSessionScope, type Session } from '@/session/session'
 
 /**
@@ -45,7 +46,7 @@ import { deriveSessionScope, type Session } from '@/session/session'
  * called at all.
  */
 
-export type SessionEndReason = 'deactivated'
+export type SessionEndReason = 'deactivated' | 'session_invalid'
 
 export type RealSessionState =
   | { status: 'loading' }
@@ -182,6 +183,17 @@ export function useRealSession(): RealSession {
       stopAuthListener()
     }
   }, [tick])
+
+  useEffect(
+    () =>
+      onHumanSessionInvalid(() => {
+        void signOut().finally(() => {
+          forgetRememberedOutlets()
+          setState({ status: 'anonymous', reason: 'session_invalid' })
+        })
+      }),
+    [],
+  )
 
   const endSession = useCallback(async () => {
     await signOut()

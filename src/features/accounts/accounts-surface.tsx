@@ -12,21 +12,21 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
 import { LoadingTable } from '@/components/ui/loading'
-import { QrCode } from '@/components/ui/qr-code'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
   FAILED_ACTIVATION_NOTICE,
   liveAssignments,
+  type AccountHandover,
   type AccountSummary,
   type AppRole,
-  type IssuedCode,
 } from '@/data-access/adapters'
-import { activationLink } from '@/lib/activation-link'
 import { useSession } from '@/session/context'
 import { holdsRole, ROLE_LABELS, sessionOutletsFor } from '@/session/session'
 import { validateUsername, usernameErrorMessage } from '../../../shared/username'
+
+import { AccountHandoverPanel } from './account-handover'
 
 /**
  * People — every person, for the Super Admin across all outlets and for a
@@ -58,6 +58,33 @@ interface Draft {
   roleTitle: string
   joinedOn: string
 }
+interface AssignmentDraft {
+  assignmentId: string | null
+  outletId: string
+  role: Exclude<AppRole, 'super_admin'>
+  startedOn: string
+}
+
+type OrdinaryAssignment = Exclude<
+  ReturnType<typeof liveAssignments>[number],
+  { role: 'super_admin' }
+> & { outletId: string; role: Exclude<AppRole, 'super_admin'> }
+
+const ORDINARY_ROLES: Exclude<AppRole, 'super_admin'>[] = ['franchise_admin', 'biller', 'employee']
+
+const STAFF_ROLES: Exclude<AppRole, 'super_admin' | 'franchise_admin'>[] = ['biller', 'employee']
+
+function todayInIndia() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((current) => current.type === type)?.value ?? ''
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
 
 export function AccountsSurface() {
   const session = useSession()
@@ -72,14 +99,15 @@ export function AccountsSurface() {
   const [accounts, setAccounts] = useState<AccountSummary[] | null>(null)
   const [outlets, setOutlets] = useState<Tables<'outlets'>[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [issued, setIssued] = useState<(IssuedCode & { name: string; inactive?: boolean }) | null>(
-    null,
-  )
+  const [issued, setIssued] = useState<{
+    handover: AccountHandover
+    name: string
+    replacement?: boolean
+  } | null>(null)
   const [correcting, setCorrecting] = useState<AccountSummary | null>(null)
   const [emailTarget, setEmailTarget] = useState<AccountSummary | null>(null)
   const [editing, setEditing] = useState<AccountSummary | null>(null)
-  const [departing, setDeparting] = useState<AccountSummary | null>(null)
-  const [assigning, setAssigning] = useState<AccountSummary | null>(null)
+  const [markingLeft, setMarkingLeft] = useState<AccountSummary | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pendingDeactivation, setPendingDeactivation] = useState<AccountSummary | null>(null)
@@ -210,7 +238,7 @@ export function AccountsSurface() {
     setBusy(true)
     setError(null)
     try {
-      const code = await adapter.provision({
+      const handover = await adapter.provision({
         fullName: draft.fullName,
         username: username.username,
         accountEmail: draft.role === 'super_admin' ? draft.accountEmail.trim().toLowerCase() : null,
@@ -220,7 +248,7 @@ export function AccountsSurface() {
         roleTitle: isPerson ? draft.roleTitle.trim() || null : null,
         joinedOn: isPerson ? draft.joinedOn || null : null,
       })
-      setIssued({ ...code, name: draft.fullName })
+      setIssued({ handover, name: draft.fullName })
       setFormOpen(false)
       setDraft((current) => ({
         ...current,
@@ -251,6 +279,36 @@ export function AccountsSurface() {
   const hasLeft = (row: AccountSummary) => liveAssignments(row.assignments).length === 0
   const departedCount = list.filter(hasLeft).length
   const visible = showDeparted ? list : list.filter((row) => !hasLeft(row))
+
+  function lifecycleLabel(row: AccountSummary) {
+    if (row.lifecycle.kind === 'deactivated') return 'Deactivated'
+    if (hasLeft(row)) return 'Not assigned to an outlet'
+    switch (row.lifecycle.kind) {
+      case 'needs_setup':
+        return 'Needs setup'
+      case 'setup_link_issued':
+        return 'Set-up link issued'
+      case 'password_reset_issued':
+        return 'Active · password reset issued'
+      case 'active':
+        return 'Active'
+    }
+  }
+
+  function handoverActionLabel(row: AccountSummary) {
+    switch (row.lifecycle.kind) {
+      case 'needs_setup':
+        return 'Set up account'
+      case 'setup_link_issued':
+        return 'Replace set-up link'
+      case 'active':
+        return 'Reset password'
+      case 'password_reset_issued':
+        return 'Replace reset link'
+      case 'deactivated':
+        return null
+    }
+  }
 
   const columns: DataTableColumn<AccountSummary>[] = [
     {
@@ -320,16 +378,14 @@ export function AccountsSurface() {
       header: 'Status',
       cell: (row) => (
         <span>
-          {hasLeft(row) ? (
+          {lifecycleLabel(row) === 'Not assigned to an outlet' ? (
             <span data-testid={`departed-${row.id}`} className="font-semibold text-content-muted">
               Not assigned to any outlet
             </span>
-          ) : !row.isActive ? (
+          ) : row.lifecycle.kind === 'deactivated' ? (
             <span className="font-semibold text-danger">Deactivated</span>
-          ) : row.invite ? (
-            <span className="text-content-muted">Awaiting activation</span>
           ) : (
-            <span className="text-content-muted">Active</span>
+            <span className="text-content-muted">{lifecycleLabel(row)}</span>
           )}
         </span>
       ),
@@ -347,51 +403,48 @@ export function AccountsSurface() {
               label={`Actions for ${row.fullName}`}
               actions={[
                 {
-                  label: 'New code',
+                  label: 'Edit',
                   disabled: busy,
-                  onSelect: () =>
-                    void run(async () => {
-                      const code = await adapter.reissue(row.id)
-                      setIssued({ ...code, name: row.fullName })
-                    }),
+                  onSelect: () => setEditing(row),
                 },
                 {
                   label: 'Change username',
                   disabled: busy,
+
                   onSelect: () => setCorrecting(row),
                 },
+                ...(handoverActionLabel(row)
+                  ? [
+                      {
+                        label: handoverActionLabel(row)!,
+                        disabled: busy,
+                        onSelect: () =>
+                          void run(async () => {
+                            const handover = await adapter.issueHandover(row.id)
+                            setIssued({
+                              handover,
+                              name: row.fullName,
+                              replacement:
+                                row.lifecycle.kind === 'setup_link_issued' ||
+                                row.lifecycle.kind === 'password_reset_issued',
+                            })
+                          }),
+                      },
+                    ]
+                  : []),
                 ...(isOwner &&
                 liveAssignments(row.assignments).some(
                   (assignment) => assignment.role === 'super_admin',
                 )
                   ? [
                       {
-                        label: 'Change email',
+                        label: 'Change sign-in email',
                         disabled: busy,
                         onSelect: () => setEmailTarget(row),
                       },
                     ]
                   : []),
-                {
-                  label: 'Edit person',
-                  disabled: busy,
-                  onSelect: () => setEditing(row),
-                },
-                {
-                  label: 'Assign to an outlet',
-                  disabled: busy,
-                  onSelect: () => setAssigning(row),
-                },
-                ...(liveAssignments(row.assignments).length > 0
-                  ? [
-                      {
-                        label: 'End an assignment',
-                        disabled: busy,
-                        onSelect: () => setDeparting(row),
-                      },
-                    ]
-                  : []),
-                row.isActive
+                row.lifecycle.kind !== 'deactivated'
                   ? {
                       label: 'Deactivate',
                       disabled: busy,
@@ -438,7 +491,14 @@ export function AccountsSurface() {
         </p>
       )}
 
-      {issued && <IssuedCodePanel issued={issued} onDismiss={() => setIssued(null)} />}
+      {issued && (
+        <AccountHandoverPanel
+          handover={issued.handover}
+          name={issued.name}
+          replacement={issued.replacement}
+          onDismiss={() => setIssued(null)}
+        />
+      )}
 
       {error && (
         <p
@@ -491,6 +551,7 @@ export function AccountsSurface() {
       <FormSheet
         open={formOpen}
         onClose={() => setFormOpen(false)}
+
         title="Add person"
         error={error}
         footer={
@@ -527,7 +588,7 @@ export function AccountsSurface() {
               onChange={(event) => setDraft({ ...draft, username: event.target.value })}
             />
             <p className="text-xs text-content-muted">
-              3–30 lowercase letters, numbers, periods, or underscores. No @ sign.
+              3â€“30 lowercase letters, numbers, periods, or underscores. No @ sign.
             </p>
           </Field>
 
@@ -561,6 +622,7 @@ export function AccountsSurface() {
                 name="account-email"
                 type="email"
                 autoComplete="off"
+
                 inputMode="email"
                 autoCapitalize="none"
                 spellCheck={false}
@@ -631,6 +693,7 @@ export function AccountsSurface() {
                             onChange={(event) =>
                               setDraft({
                                 ...draft,
+
                                 outletIds: event.target.checked
                                   ? [...effectiveOutletIds, outlet.id]
                                   : effectiveOutletIds.filter((id) => id !== outlet.id),
@@ -712,78 +775,27 @@ export function AccountsSurface() {
         key={editing?.id ?? 'no-edit'}
         account={editing}
         busy={busy}
+        error={error}
+        outlets={provisionableOutlets}
+        isOwner={isOwner}
         onClose={() => setEditing(null)}
-        onSubmit={(patch) => {
+        onSubmit={(command) => {
           const target = editing
           if (!target) return
           void run(async () => {
-            await adapter.updateStaffFacts(target.id, patch)
+            const result = await adapter.editAccount(command)
+            if (result.replacementHandover) {
+              setIssued({
+                handover: result.replacementHandover,
+                name: target.fullName,
+                replacement: true,
+              })
+            }
             setEditing(null)
           })
         }}
-      />
-
-      {/* Keyed so the choice and the deactivation offer reset per person. */}
-      <EndAssignmentSheet
-        key={departing?.id ?? 'no-departure'}
-        account={departing}
-        busy={busy}
-        outletName={outletName}
-        onClose={() => setDeparting(null)}
-        onSubmit={(assignmentId, alsoDeactivate) => {
-          const target = departing
-          if (!target) return
-          void run(async () => {
-            const replacement = await adapter.endAssignment(assignmentId)
-            setDeparting(null)
-            if (replacement) {
-              setIssued({
-                ...replacement,
-                name: target.fullName,
-                inactive: false,
-              })
-            }
-            // Only offered, and only meaningful, when this was their last
-            // place: cutting sign-in for somebody who still works at the other
-            // outlet would be the panic button, not a departure.
-            if (alsoDeactivate && target.isActive) {
-              await adapter.setActive(target.id, false)
-              if (replacement) {
-                setIssued({
-                  ...replacement,
-                  name: target.fullName,
-                  inactive: true,
-                })
-              }
-            }
-          })
-        }}
-      />
-
-      <AssignSheet
-        key={assigning?.id ?? 'no-assignment'}
-        account={assigning}
-        busy={busy}
-        outlets={outlets}
-        isOwner={isOwner}
-        onClose={() => setAssigning(null)}
-        onSubmit={(role, outletId) => {
-          const target = assigning
-          if (!target) return
-          void run(async () => {
-            const replacement = await adapter.grantAssignment({
-              personId: target.id,
-              role,
-              outletId,
-            })
-            setAssigning(null)
-            if (replacement) {
-              setIssued({
-                ...replacement,
-                name: target.fullName,
-              })
-            }
-          })
+        onMarkAsLeft={() => {
+          if (editing) setMarkingLeft(editing)
         }}
       />
 
@@ -802,6 +814,29 @@ export function AccountsSurface() {
           const target = pendingDeactivation
           setPendingDeactivation(null)
           if (target) void run(() => adapter.setActive(target.id, false))
+        }}
+      />
+
+      <ConfirmDialog
+        open={markingLeft !== null}
+        title="Mark this person as left?"
+        consequence={
+          markingLeft
+            ? `${markingLeft.fullName} will lose sign-in access and every current outlet assignment. Their completed work and assignment history stay on record. This cannot be done by ordinary Save.`
+            : ''
+        }
+        confirmLabel="Mark as left"
+        danger
+        onClose={() => setMarkingLeft(null)}
+        onConfirm={() => {
+          const target = markingLeft
+          if (!target) return
+          setMarkingLeft(null)
+          void run(async () => {
+            await adapter.markAsLeft(target.id, target.stateFingerprint)
+
+            setEditing(null)
+          })
         }}
       />
     </div>
@@ -870,6 +905,7 @@ function ChangeUsernameSheet({
             name="username"
             type="text"
             autoCapitalize="none"
+
             spellCheck={false}
             required
             value={username}
@@ -885,7 +921,6 @@ function ChangeUsernameSheet({
     </FormSheet>
   )
 }
-
 /**
  * The staff facts, edited as this session under Row-Level Security. What is
  * left of them since multi-outlet-people: who the person is and what they do.
@@ -954,24 +989,120 @@ function AccountEmailSheet({
 function EditPersonSheet({
   account,
   busy,
+  error,
+  outlets,
+  isOwner,
   onClose,
   onSubmit,
+  onMarkAsLeft,
 }: {
   account: AccountSummary | null
   busy: boolean
+  error: string | null
+  outlets: Tables<'outlets'>[]
+  isOwner: boolean
   onClose: () => void
-  onSubmit: (patch: { fullName?: string; roleTitle?: string | null }) => void
+  onSubmit: (command: {
+    profileId: string
+    expectedStateFingerprint: string
+    fullName: string
+    phone: string | null
+    roleTitle: string | null
+    accountEmail: string | null
+    assignments: Array<{
+      assignmentId: string | null
+      outletId: string | null
+      role: AppRole
+      startedOn: string
+    }>
+  }) => void
+  onMarkAsLeft: () => void
 }) {
   const [fullName, setFullName] = useState(account?.fullName ?? '')
+  const [phone, setPhone] = useState(account?.phone ?? '')
   const [roleTitle, setRoleTitle] = useState(account?.roleTitle ?? '')
+  const live = account ? liveAssignments(account.assignments) : []
+  const ownerAssignment = live.find((assignment) => assignment.role === 'super_admin') ?? null
+  const ordinaryAssignments = live.filter(
+    (assignment): assignment is OrdinaryAssignment =>
+      assignment.role !== 'super_admin' && assignment.outletId !== null,
+  )
+  const [assignments, setAssignments] = useState<AssignmentDraft[]>(() =>
+    ordinaryAssignments.map((assignment) => ({
+      assignmentId: assignment.id,
+      outletId: assignment.outletId,
+      role: assignment.role,
+      startedOn: assignment.startedOn,
+    })),
+  )
+  const [expanded, setExpanded] = useState(
+    ordinaryAssignments.length !== 1 ||
+      new Set(ordinaryAssignments.map((assignment) => assignment.role)).size > 1 ||
+      ownerAssignment !== null,
+  )
+  const [ownerAccess, setOwnerAccess] = useState(ownerAssignment !== null)
+  const [ownerAccessConfirmed, setOwnerAccessConfirmed] = useState(false)
+  const [accountEmail, setAccountEmail] = useState(account?.accountEmail ?? '')
+  const editableRoles = isOwner ? ORDINARY_ROLES : STAFF_ROLES
+  const selectedOutletIds = new Set(assignments.map((assignment) => assignment.outletId))
+
+  const addableOutlets = outlets.filter((outlet) => !selectedOutletIds.has(outlet.id))
+  const ownerAccessChanged = ownerAccess !== (ownerAssignment !== null)
+  const intendedAssignments = [
+    ...assignments.map((assignment) => ({ ...assignment, outletId: assignment.outletId || null })),
+    ...(ownerAccess
+      ? [
+          {
+            assignmentId: ownerAssignment?.id ?? null,
+            outletId: null,
+            role: 'super_admin' as const,
+            startedOn: ownerAssignment?.startedOn ?? todayInIndia(),
+          },
+        ]
+      : []),
+  ]
+  const hasValidAssignments =
+    intendedAssignments.length > 0 &&
+    assignments.every((assignment) => assignment.outletId !== '') &&
+    (!ownerAccess || !ownerAccessChanged || (ownerAccessConfirmed && accountEmail.trim() !== ''))
+
+  function updateAssignment(index: number, patch: Partial<AssignmentDraft>) {
+    setAssignments((current) =>
+      current.map((assignment, currentIndex) =>
+        currentIndex === index ? { ...assignment, ...patch } : assignment,
+      ),
+    )
+  }
+
+  function addAssignment() {
+    const outlet = addableOutlets[0]
+    if (!outlet) return
+    setAssignments((current) => [
+      ...current,
+      {
+        assignmentId: null,
+        outletId: outlet.id,
+        role: 'employee',
+        startedOn: todayInIndia(),
+      },
+    ])
+    setExpanded(true)
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (!account || !fullName.trim()) return
-    // What is left of a person's editable facts once placement moved to its
-    // own relation: who they are, and what they do. Where they work is an
-    // assignment, with its own action and its own authority.
-    onSubmit({ fullName: fullName.trim(), roleTitle: roleTitle.trim() || null })
+    if (!account || !fullName.trim() || !hasValidAssignments) return
+    onSubmit({
+      profileId: account.id,
+      expectedStateFingerprint: account.stateFingerprint,
+      fullName: fullName.trim(),
+      phone: phone.trim() || null,
+      roleTitle: roleTitle.trim() || null,
+      // A private email survives owner removal. Its own credential action can
+      // correct it; ordinary placement editing never silently blanks it.
+      accountEmail: accountEmail.trim().toLowerCase() || account.accountEmail,
+      assignments: intendedAssignments,
+    })
   }
 
   return (
@@ -979,11 +1110,13 @@ function EditPersonSheet({
       open={account !== null}
       onClose={onClose}
       title={account ? `Edit ${account.fullName}` : 'Edit person'}
+      error={error}
       footer={
         <button
           type="submit"
+
           form="edit-person"
-          disabled={busy || !fullName.trim()}
+          disabled={busy || !fullName.trim() || !hasValidAssignments}
           className={`${buttonVariants({ size: 'phone' })} w-full`}
         >
           {busy ? 'Saving…' : 'Save'}
@@ -1000,6 +1133,15 @@ function EditPersonSheet({
           />
         </Field>
 
+        <Field label="Phone (optional)" id="edit-phone">
+          <Input
+            id="edit-phone"
+            type="tel"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+        </Field>
+
         <Field label="Job title (optional)" id="edit-role-title">
           <Input
             id="edit-role-title"
@@ -1008,199 +1150,16 @@ function EditPersonSheet({
             onChange={(event) => setRoleTitle(event.target.value)}
           />
         </Field>
-      </form>
-    </FormSheet>
-  )
-}
 
-/**
- * Ending one assignment.
- *
- * Which one has to be asked now, because a person may hold several and
- * "leaving" one outlet is not leaving the business — that distinction is the
- * whole of per-outlet departure. Their sign-in is only offered up when this is
- * their LAST place: cutting access for somebody who still works at the other
- * outlet would be the panic button wearing a departure's clothes, and the two
- * are independent by design.
- */
-function EndAssignmentSheet({
-  account,
-  busy,
-  outletName,
-  onClose,
-  onSubmit,
-}: {
-  account: AccountSummary | null
-  busy: boolean
-  outletName: (id: string | null) => string
-  onClose: () => void
-  onSubmit: (assignmentId: string, alsoDeactivate: boolean) => void
-}) {
-  const live = account ? liveAssignments(account.assignments) : []
-  const [assignmentId, setAssignmentId] = useState(live[0]?.id ?? '')
-  const [alsoDeactivate, setAlsoDeactivate] = useState(true)
-
-  const isLast = live.length === 1
-
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    if (assignmentId) onSubmit(assignmentId, isLast && alsoDeactivate)
-  }
-
-  return (
-    <FormSheet
-      open={account !== null}
-      onClose={onClose}
-      title={account ? `${account.fullName} is leaving` : 'End an assignment'}
-      footer={
-        <button
-          type="submit"
-          form="end-assignment"
-          disabled={busy || !assignmentId}
-          className={`${buttonVariants({ size: 'phone' })} w-full`}
-        >
-          {busy ? 'Saving…' : 'End this assignment'}
-        </button>
-      }
-    >
-      <form id="end-assignment" onSubmit={submit} className="space-y-4" noValidate>
-        <p className="text-sm text-content-muted">
-          They leave that outlet’s staff list and its new attendance days. Every day they worked
-          stays on the record — nothing is deleted, and they can be assigned there again later.
-        </p>
-
-        {account?.invite && (
-          <p data-testid="end-reissues-code" className="text-sm font-semibold text-content">
-            Their current activation link will stop working. Saving replaces it and shows you the
-            new link straight away.
-          </p>
-        )}
-
-        <Field label="Which outlet" id="end-assignment-outlet">
-          <Select
-            id="end-assignment-outlet"
-            required
-            value={assignmentId}
-            onChange={(event) => setAssignmentId(event.target.value)}
-          >
-            {live.map((assignment) => (
-              <option key={assignment.id} value={assignment.id}>
-                {outletName(assignment.outletId)} · {ROLE_LABELS[assignment.role]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-
-        {isLast && account?.isActive && (
-          <label className="flex items-center gap-2 text-sm text-content">
-            <input
-              type="checkbox"
-              checked={alsoDeactivate}
-              onChange={(event) => setAlsoDeactivate(event.target.checked)}
-            />
-            This is their last outlet — also deactivate their sign-in (recommended)
-          </label>
-        )}
-        {isLast && account?.isActive && account.invite && (
-          <p className="text-xs text-content-muted">
-            If you also deactivate the account, the new link will work only after you reactivate it.
-          </p>
-        )}
-
-        {!isLast && (
-          <p data-testid="still-works-elsewhere" className="text-sm text-content-muted">
-            They still work at {live.length - 1} other outlet
-            {live.length - 1 === 1 ? '' : 's'}, so their sign-in is left alone.
-          </p>
-        )}
-      </form>
-    </FormSheet>
-  )
-}
-
-/**
- * Placing somebody at an outlet.
- *
- * Only what the caller may actually grant is offered — a manager sees their
- * own outlets and the two roles below their own — but the offer is a
- * convenience, not the boundary: the database refuses anything else whatever
- * this form sends.
- */
-function AssignSheet({
-  account,
-  busy,
-  outlets,
-  isOwner,
-  onClose,
-  onSubmit,
-}: {
-  account: AccountSummary | null
-  busy: boolean
-  outlets: Tables<'outlets'>[]
-  isOwner: boolean
-  onClose: () => void
-  onSubmit: (role: AppRole, outletId: string | null) => void
-}) {
-  const takenOutlets = new Set(
-    (account ? liveAssignments(account.assignments) : []).map((a) => a.outletId),
-  )
-  const available = outlets.filter((outlet) => !takenOutlets.has(outlet.id))
-
-  const roles: AppRole[] = isOwner
-    ? ['franchise_admin', 'biller', 'employee']
-    : ['biller', 'employee']
-
-  const [role, setRole] = useState<AppRole>('employee')
-  const [outletId, setOutletId] = useState(available[0]?.id ?? '')
-
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    if (outletId) onSubmit(role, outletId)
-  }
-
-  return (
-    <FormSheet
-      open={account !== null}
-      onClose={onClose}
-      title={account ? `Assign ${account.fullName}` : 'Assign to an outlet'}
-      footer={
-        <button
-          type="submit"
-          form="assign-person"
-          disabled={busy || !outletId}
-          className={`${buttonVariants({ size: 'phone' })} w-full`}
-        >
-          {busy ? 'Saving…' : 'Assign'}
-        </button>
-      }
-    >
-      <form id="assign-person" onSubmit={submit} className="space-y-4" noValidate>
-        {available.length === 0 ? (
-          <p data-testid="nowhere-left" className="text-sm text-content-muted">
-            They already work at every outlet you manage. Nothing to add.
-          </p>
-        ) : (
-          <>
-            <p className="text-sm text-content-muted">
-              They keep everything they already have. One login, however many outlets — nothing to
-              switch and nothing for them to learn.
-            </p>
-
-            {account?.invite && (
-              <p data-testid="assign-reissues-code" className="text-sm font-semibold text-content">
-                Their current activation link will stop working. Saving replaces it and shows you
-                the new link straight away.
-              </p>
-            )}
-
-            <Field label="Outlet" id="assign-outlet">
+        {!expanded && assignments[0] && (
+          <section aria-label="Primary outlet assignment" className="space-y-4">
+            <Field label="Outlet" id="edit-outlet">
               <Select
-                id="assign-outlet"
-                required
-                value={outletId}
-                onChange={(event) => setOutletId(event.target.value)}
+                id="edit-outlet"
+                value={assignments[0].outletId}
+                onChange={(event) => updateAssignment(0, { outletId: event.target.value })}
               >
-                {available.map((outlet) => (
+                {outlets.map((outlet) => (
                   <option key={outlet.id} value={outlet.id}>
                     {outlet.name}
                   </option>
@@ -1208,112 +1167,233 @@ function AssignSheet({
               </Select>
             </Field>
 
-            <Field label="Role there" id="assign-role">
+            <Field label="Access role" id="edit-role">
               <Select
-                id="assign-role"
-                required
-                value={role}
-                onChange={(event) => setRole(event.target.value as AppRole)}
+                id="edit-role"
+                value={assignments[0].role}
+                onChange={(event) =>
+                  updateAssignment(0, { role: event.target.value as AssignmentDraft['role'] })
+                }
               >
-                {roles.map((option) => (
-                  <option key={option} value={option}>
-                    {ROLE_LABELS[option]}
+                {editableRoles.map((role) => (
+                  <option key={role} value={role}>
+                    {ROLE_LABELS[role]}
                   </option>
                 ))}
               </Select>
             </Field>
-          </>
+          </section>
+        )}
+
+        {!expanded && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="phone"
+            aria-expanded={false}
+            aria-controls="multiple-outlet-assignments"
+            onClick={() => setExpanded(true)}
+          >
+            Works at multiple outlets
+          </Button>
+        )}
+
+        {expanded && (
+          <section
+            id="multiple-outlet-assignments"
+            aria-label="Outlet assignments"
+            className="space-y-3"
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-content">Works at multiple outlets</h3>
+                <p className="text-xs text-content-muted">
+                  One role at each outlet. Change a row to promote, transfer, or move someone.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="phone"
+                disabled={addableOutlets.length === 0}
+                onClick={addAssignment}
+              >
+                Add outlet
+              </Button>
+            </div>
+
+            {assignments.length === 0 ? (
+              <p
+                data-testid="edit-no-assignments"
+                className="rounded-lg border border-warning bg-surface-raised p-3 text-sm text-content"
+              >
+                Add an outlet before saving. Ordinary Edit cannot remove every assignment.
+              </p>
+            ) : (
+              assignments.map((assignment, index) => {
+                const otherOutletIds = new Set(
+                  assignments
+                    .filter((_, assignmentIndex) => assignmentIndex !== index)
+                    .map((current) => current.outletId),
+                )
+                const selectableOutlets = outlets.filter(
+                  (outlet) => outlet.id === assignment.outletId || !otherOutletIds.has(outlet.id),
+                )
+                return (
+                  <fieldset
+                    key={assignment.assignmentId ?? `new-${index}`}
+                    className="grid gap-3 rounded-xl border border-border bg-surface-raised p-3 sm:grid-cols-2"
+                  >
+                    <legend className="px-1 text-sm font-semibold text-content">
+                      Outlet {index + 1}
+                    </legend>
+                    <Field label={`Outlet ${index + 1}`} id={`edit-outlet-${index}`}>
+                      <Select
+                        id={`edit-outlet-${index}`}
+                        value={assignment.outletId}
+                        onChange={(event) =>
+                          updateAssignment(index, { outletId: event.target.value })
+                        }
+                      >
+                        {selectableOutlets.map((outlet) => (
+                          <option key={outlet.id} value={outlet.id}>
+                            {outlet.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label={`Access role at outlet ${index + 1}`} id={`edit-role-${index}`}>
+                      <Select
+                        id={`edit-role-${index}`}
+                        value={assignment.role}
+                        onChange={(event) =>
+                          updateAssignment(index, {
+                            role: event.target.value as AssignmentDraft['role'],
+                          })
+                        }
+                      >
+                        {editableRoles.map((role) => (
+                          <option key={role} value={role}>
+                            {ROLE_LABELS[role]}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field
+                      label={`Started on at outlet ${index + 1}`}
+                      id={`edit-started-on-${index}`}
+                    >
+                      <Input
+                        id={`edit-started-on-${index}`}
+                        type="date"
+                        value={assignment.startedOn}
+                        onChange={(event) =>
+                          updateAssignment(index, { startedOn: event.target.value })
+                        }
+                      />
+                    </Field>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="phone"
+                        onClick={() =>
+                          setAssignments((current) =>
+                            current.filter((_, assignmentIndex) => assignmentIndex !== index),
+                          )
+                        }
+                      >
+                        Remove outlet
+                      </Button>
+                    </div>
+                  </fieldset>
+                )
+              })
+            )}
+          </section>
+        )}
+
+        {isOwner && (
+          <section
+            aria-label="Owner access"
+            className="space-y-3 rounded-xl border border-border bg-surface-raised p-3"
+          >
+            {ownerAccess ? (
+              <>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-content">Owner access</h3>
+                  <p className="text-xs text-content-muted">
+                    Owners can work across every outlet. This is separate from outlet roles.
+                  </p>
+                </div>
+                <Field label="Private sign-in email" id="edit-owner-email">
+                  <Input
+                    id="edit-owner-email"
+                    type="email"
+                    inputMode="email"
+                    autoCapitalize="none"
+
+                    value={accountEmail}
+                    onChange={(event) => setAccountEmail(event.target.value)}
+                  />
+                </Field>
+                {ownerAccessChanged && (
+                  <label className="flex items-start gap-2 text-sm text-content">
+                    <input
+                      type="checkbox"
+                      className="mt-1 size-4 accent-primary"
+                      checked={ownerAccessConfirmed}
+                      onChange={(event) => setOwnerAccessConfirmed(event.target.checked)}
+                    />
+                    I understand this grants owner access across all outlets.
+                  </label>
+                )}
+                {ownerAssignment && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="phone"
+                    onClick={() => {
+                      setOwnerAccess(false)
+                      setOwnerAccessConfirmed(false)
+                    }}
+                  >
+                    Remove owner access
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                size="phone"
+                onClick={() => setOwnerAccess(true)}
+              >
+                Grant owner access
+              </Button>
+            )}
+          </section>
+        )}
+
+        {account?.lifecycle.kind !== 'deactivated' && (
+          <section className="border-t border-border pt-4">
+            <h3 className="text-sm font-semibold text-danger">Leaving the business</h3>
+            <p className="mt-1 text-xs text-content-muted">
+              This ends every current assignment and sign-in access. It is never the result of
+              ordinary Save.
+            </p>
+            <Button
+              type="button"
+              variant="danger"
+              size="phone"
+              className="mt-3"
+              onClick={onMarkAsLeft}
+            >
+              Mark as left
+            </Button>
+          </section>
         )}
       </form>
     </FormSheet>
-  )
-}
-
-/** A copy button that says it worked, because a clipboard write is invisible. */
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <Button
-      size="phone"
-      onClick={() => {
-        void navigator.clipboard
-          ?.writeText(text)
-          .then(() => setCopied(true))
-          .catch(() => setCopied(false))
-      }}
-    >
-      {copied ? 'Copied' : label}
-    </Button>
-  )
-}
-
-/**
- * The handover, once. There is nowhere to look it up afterwards — only a hash
- * is stored, and that column is unreadable by every client.
- *
- * **The link is the only handover offered.** The raw code used to sit beside it
- * for reading out over a call, and that turned one action into a choice between
- * three: it made the panel wordy, and it invited a handover that skips the tap
- * this whole flow exists to provide. Anyone who genuinely must dictate one can
- * still read the code out of the URL, so nothing is actually lost by not
- * printing it twice.
- *
- * The username is the last cheap moment to catch a typo before the link is
- * handed over.
- */
-function IssuedCodePanel({
-  issued,
-  onDismiss,
-}: {
-  issued: IssuedCode & { name: string; inactive?: boolean }
-  onDismiss: () => void
-}) {
-  const link = activationLink(issued.code)
-
-  return (
-    <div
-      data-testid="issued-code"
-      className="mb-4 rounded-xl border border-border bg-surface-raised p-4"
-    >
-      <p className="text-sm font-semibold text-content">Activation link for {issued.name}</p>
-      <p data-testid="issued-code-username" className="break-all text-sm text-content-muted">
-        Username: <strong className="text-content">{issued.username}</strong> — check this.
-      </p>
-      {issued.inactive && (
-        <p
-          data-testid="issued-code-inactive"
-          className="mt-2 rounded-lg border border-warning bg-surface p-2 text-sm font-semibold text-content"
-        >
-          This account is deactivated. Reactivate it before this link is used.
-        </p>
-      )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-4">
-        <QrCode
-          value={link}
-          title={`Activation link for ${issued.name}`}
-          className="h-36 w-36 shrink-0 rounded-lg"
-        />
-        <div className="min-w-0 flex-1 space-y-3">
-          <p
-            data-testid="issued-code-link"
-            className="rounded-lg border border-border bg-surface p-2 font-mono text-xs break-all text-content"
-          >
-            {link}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <CopyButton text={link} label="Copy link" />
-            <Button variant="ghost" size="phone" onClick={onDismiss}>
-              Done
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <p className="mt-3 text-xs text-content-muted">
-        Shown once · works once · expires{' '}
-        {new Date(issued.expiresAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
-      </p>
-    </div>
   )
 }

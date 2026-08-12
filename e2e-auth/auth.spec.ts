@@ -175,10 +175,10 @@ async function provisionEmployee(
   }
   await page.getByRole('button', { name: 'Create and issue a code' }).click()
 
-  const panel = page.getByTestId('issued-code')
+  const panel = page.getByTestId('account-handover')
   await expect(panel).toBeVisible()
-  await expect(panel.getByTestId('issued-code-username')).toContainText(person.username)
-  const link = (await panel.getByTestId('issued-code-link').innerText()).trim()
+  await expect(panel.getByTestId('account-handover-username')).toContainText(person.username)
+  const link = (await panel.getByTestId('account-handover-link').innerText()).trim()
   expect(new URL(link).searchParams.get('code')).toMatch(
     /^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/,
   )
@@ -436,7 +436,7 @@ test.describe('provisioning and admin-issued reset', () => {
       'Shawarmania Kanchrapara',
     ])
     const row = page.getByRole('row', { name: new RegExp(person.name) })
-    await expect(row).toContainText('Awaiting activation')
+    await expect(row).toContainText('Set-up link issued')
     await expect(row).toContainText('Shawarmania Kalyani')
     await expect(row).toContainText('Shawarmania Kanchrapara')
     await expect(panel.getByRole('img', { name: new RegExp(person.name) })).toBeVisible()
@@ -495,9 +495,9 @@ test.describe('provisioning and admin-issued reset', () => {
 
     row = page.getByRole('row', { name: new RegExp(person.name) })
     await row.getByRole('button', { name: /^Actions for / }).click()
-    await row.getByRole('button', { name: 'New code' }).click()
-    const resetPanel = page.getByTestId('issued-code')
-    const resetLink = (await resetPanel.getByTestId('issued-code-link').innerText()).trim()
+    await row.getByRole('button', { name: 'Reset password' }).click()
+    const resetPanel = page.getByTestId('account-handover')
+    const resetLink = (await resetPanel.getByTestId('account-handover-link').innerText()).trim()
     const reset = await activate(browser, resetLink, renamed, RESET_PASSWORD)
     await expect(reset.page).toHaveURL(/\/staff$/)
 
@@ -511,6 +511,91 @@ test.describe('provisioning and admin-issued reset', () => {
     await renamedContext.close()
     await reset.context.close()
     await resetLoginContext.close()
+  })
+
+  test('an owner safely promotes, expands, and marks a person as left', async ({
+    page,
+    context,
+  }) => {
+    const person = freshPerson('transition')
+    await signIn(page, PERSONAS.owner.username)
+    await page.goto('owner/people')
+    const issued = await provisionEmployee(page, person)
+    await issued.panel.getByRole('button', { name: 'Done' }).click()
+
+    let row = page.getByRole('row', { name: new RegExp(person.name) })
+    await row.getByRole('button', { name: /^Actions for / }).click()
+    await row.getByRole('button', { name: 'Edit' }).click()
+    let editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
+    await editor.getByLabel('Access role').selectOption('biller')
+
+    await context.setOffline(true)
+    await editor.getByRole('button', { name: 'Save' }).click()
+    await expect(editor.getByTestId('form-sheet-error')).toBeVisible()
+    await expect(page).toHaveURL(/\/owner\/people$/)
+    await context.setOffline(false)
+
+    await editor.getByRole('button', { name: 'Save' }).click()
+    await expect(editor).toHaveCount(0)
+    row = page.getByRole('row', { name: new RegExp(person.name) })
+    await expect(row).toContainText('Biller')
+    await expect(row).toContainText('Set-up link issued')
+
+    await row.getByRole('button', { name: /^Actions for / }).click()
+    await row.getByRole('button', { name: 'Edit' }).click()
+    editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
+    await editor.getByRole('button', { name: 'Works at multiple outlets' }).click()
+    await editor.getByRole('button', { name: 'Add outlet' }).click()
+    await editor
+      .getByLabel('Outlet 2', { exact: true })
+      .selectOption({ label: 'Shawarmania Kanchrapara' })
+    await editor.getByRole('button', { name: 'Save' }).click()
+    await expect(editor).toHaveCount(0)
+    row = page.getByRole('row', { name: new RegExp(person.name) })
+    await expect(row).toContainText('Shawarmania Kalyani')
+    await expect(row).toContainText('Shawarmania Kanchrapara')
+
+    await row.getByRole('button', { name: /^Actions for / }).click()
+    await row.getByRole('button', { name: 'Edit' }).click()
+    editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
+    await editor.getByRole('button', { name: 'Mark as left' }).click()
+    const confirmation = page.getByRole('dialog', { name: 'Mark this person as left?' })
+    await expect(confirmation).toContainText('every current outlet assignment')
+    await confirmation.getByRole('button', { name: 'Mark as left' }).click()
+    await expect(page.getByRole('row', { name: new RegExp(person.name) })).toHaveCount(0)
+  })
+
+  test('owner access is granted and removed only through the guarded editor flow', async ({
+    page,
+  }) => {
+    const person = freshPerson('ownerguard')
+    await signIn(page, PERSONAS.owner.username)
+    await page.goto('owner/people')
+    const issued = await provisionEmployee(page, person)
+    await issued.panel.getByRole('button', { name: 'Done' }).click()
+
+    let row = page.getByRole('row', { name: new RegExp(person.name) })
+    await row.getByRole('button', { name: /^Actions for / }).click()
+    await row.getByRole('button', { name: 'Edit' }).click()
+    let editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
+    await editor.getByRole('button', { name: 'Grant owner access' }).click()
+    await editor.getByLabel('Private sign-in email').fill(`${person.username}@example.com`)
+    await editor.getByLabel('I understand this grants owner access across all outlets.').check()
+    await editor.getByRole('button', { name: 'Save' }).click()
+    await expect(editor).toHaveCount(0)
+    row = page.getByRole('row', { name: new RegExp(person.name) })
+    await expect(row).toContainText('All outlets')
+    await expect(row).toContainText('Owner')
+
+    await row.getByRole('button', { name: /^Actions for / }).click()
+    await row.getByRole('button', { name: 'Edit' }).click()
+    editor = page.getByRole('dialog', { name: new RegExp(`Edit ${person.name}`) })
+    await editor.getByRole('button', { name: 'Remove owner access' }).click()
+    await editor.getByRole('button', { name: 'Save' }).click()
+    await expect(editor).toHaveCount(0)
+    row = page.getByRole('row', { name: new RegExp(person.name) })
+    await expect(row).not.toContainText('All outlets')
+    await expect(row).toContainText('Shawarmania Kalyani')
   })
 })
 

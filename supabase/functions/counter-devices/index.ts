@@ -131,8 +131,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // ── Everything else belongs to a person ─────────────────────────────────
-  const caller = await callerFrom(req, service)
-  if (!caller) return json(FORBIDDEN, 403)
+  const callerResolution = await callerFrom(req, service)
+  if (callerResolution.kind === 'backend_failure') {
+    return json({ error: 'unavailable' }, 503)
+  }
+  // Counter-device administration keeps its established 403 boundary for a
+  // request that is not a verified human administrator.
+  if (callerResolution.kind === 'session_invalid') return json(FORBIDDEN, 403)
+  const caller = callerResolution.caller
 
   if (action === 'issue-setup-code') {
     const outletId = str(body['outletId'])

@@ -102,7 +102,10 @@ enabled = true
 # valid token — the anon key is one — so the function re-derives the caller's
 # role and outlet from their own session before doing anything.
 [functions.admin-accounts]
-verify_jwt = true
+# The function performs the authoritative Auth verification itself so it can
+# distinguish a rejected human credential from a received backend failure and
+# return the canonical session_invalid response.
+verify_jwt = false
 
 # Redeeming a one-time code. Deliberately open: someone who has never set a
 # password has no token to present. Its protection is the code itself (50 bits,

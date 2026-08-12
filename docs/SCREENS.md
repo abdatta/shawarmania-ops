@@ -55,8 +55,12 @@ Opening the handover link previews **“Your username is …”** and presents o
 real form: type that username, a new password, and the same password again.
 The username and both password fields carry password-manager semantics.
 Mismatch remains on the form and consumes nothing; a dead or spent link says
-so before password fields appear. Success sets the password, signs in through the
-ordinary username path, and navigates to the assigned shell.
+so before password fields appear. Success clears any superseded human state,
+sets the password, signs in through the ordinary username path, verifies that
+replacement session with Auth, and navigates only after the shared holder
+reflects it. If that final sign-in cannot be established, the page says the
+password changed and directs the person to ordinary sign-in without showing a
+stale protected shell.
 
 **The code is never typed, and there is nowhere to type one.** The handover is a
 link and a QR; the issuing panel prints no raw code, so a form asking for one
@@ -276,18 +280,31 @@ A manager can also **enter an arrival on someone's behalf** — past times only,
 
 **And the by-outlet selection does not narrow it either.** Who is offered here, and which outlets a person's month is assembled against, is everybody and everything the reader may see, whatever the chips on the other axis say. The surface used to hand this axis the list already filtered by the selection, so deselecting a shop emptied a picker that has nothing to do with shops — which is exactly the confusion separating the axes was meant to end.
 
-**People** — everyone at this outlet, in one place. **Adding somebody is one
-step**: required name, username, role and one or more managed outlets; optional
-phone, title and joining date. No ordinary-email field or placeholder-account
-state exists. The account and every selected assignment commit before the
-one-time-code panel appears. A manager with one outlet sees it preselected; a
-multi-outlet manager chooses only among outlets they manage. The list names
-every live outlet/role for the person. Assigning or ending placement preserves
-everything else and replaces a still-pending activation link transactionally.
-An activated person gets no unsolicited reset code. A person with no live
-assignment reads **Not assigned to any outlet**. Managers can correct another
-person's username and issue a fresh reset link within their authority; they
-cannot manage themselves or create privileged roles.
+**People** — everyone the caller may manage, in one place. **Adding somebody is
+one step**: required name, username, role and one or more managed outlets;
+optional phone, title and joining date. No ordinary-email field or
+placeholder-account state exists. The account and every selected assignment
+commit before the one-time handover appears. A manager with one outlet sees it
+preselected; a multi-outlet manager chooses only among outlets they manage.
+
+Editing presents the ordinary one-outlet/one-role case first and discloses
+**Works at multiple outlets** for zero, several, or mixed-role placements. One
+save changes permitted personal facts and the complete live assignment set;
+promotion, transfer and additions preserve account access and assignment
+history. It is never a departure control. **Mark as left** is separate,
+destructive, and confirmed: it ends every live assignment and deactivates the
+account together. A person with no live placement reads **Not assigned to any
+outlet**.
+
+The list derives status from active state, successful sign-in history, live
+placements, and a live unexpired handover: **Needs setup**, **Set-up link
+issued**, **Active**, **Active · password reset issued**, **Deactivated**, or
+**Not assigned**. Its actions use the same truth: a never-signed-in person gets
+**Set up account** and an established person gets **Reset password**. The
+one-time handover names its purpose, highlights the username, has QR and copy
+actions, states one use and expiry, and cannot be retrieved later. Managers can
+correct another person's username and issue a handover within their authority;
+they cannot manage themselves or create privileged roles.
 
 **Profit and loss** — outlet-level estimate for a chosen period, with the **cash-basis / consumption-basis toggle stated plainly on screen**, because the two answer different questions and mixing them is the classic error. See [Data Model](DATA_MODEL.md#two-modelling-traps-in-this-domain).
 
@@ -326,14 +343,14 @@ Admin's account email or correct it, and one's own remains read-only here. The
 same email is an alternate sign-in identifier and a foundation for future
 recovery or security features.
 
-The account, profile, role-required Super Admin account email, and every starting
-assignment exist before the single code is issued. A handover is shown once:
-username, QR/link containing only the code, and copy action. The URL carries
-neither username nor email and the code cannot be looked up again. Granting or
-ending an assignment while it is outstanding replaces the link
-transactionally; an activated account receives nothing unless an admin
-explicitly chooses **New code**. The owner alone sees the global failed-
-activation notice. One's own row offers no actions.
+The account, profile, role-required Super Admin account email, and every
+starting assignment exist before the one-time handover is issued. A handover is
+shown once: its purpose, username, QR/link containing only the code, and copy
+action. The URL carries neither username nor email and the code cannot be
+looked up again. An atomic edit replaces a live activation handover only after
+the final assignment set exists; it preserves a live reset handover and never
+issues an unsolicited reset. The owner alone sees the global failed-activation
+notice. One's own row offers no actions.
 
 **Ledger** — *temporary (#36), and the whole surface goes when #12 carries its rows across.* Where the owner writes down expenses, aggregator trade and drawer facts that do not yet have their final live records. Each outlet has an explicit future-only **Counter billing starts on** date on the Outlets screen. Before it, Cash and UPI remain typed exactly as before. From it onward those two inputs disappear and the values are labelled **from counter**, derived once from settled bill allocations; Zomato and Swiggy revenue and their daily commission rates remain typed. Two views sit behind one toggle, one outlet at a time through the same switcher every other outlet-scoped screen uses. It sits **ahead of People** in the navigation, because it is opened every night and People is opened when somebody joins or leaves.
 

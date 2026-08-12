@@ -196,13 +196,18 @@ That is all `clientsClaim` governs, and it is worth being exact because this pag
 - **Theme changes**: the contrast validator passes. AA is the floor.
 - **Schema changes**: migrations apply cleanly to a fresh database *and* to a copy with existing data. A narrowing migration needs an explicit dirty-history fixture proving it aborts rather than silently rewriting rows.
 - **Production deployment changes**: Pages depends on the `production-database` migration job; a failed or missing migration credential blocks publication, an up-to-date schema is a no-op, and manual frontend rollback leaves forward migration history untouched.
-- **Authentication/identity changes**: run username and associated-email sign-in, three-field
-  activation, admin reset, alias-rename/session-survival, hand-crafted
-  email-change refusal, uniform email-sign-in failure, no-response transport
-  classification, and all-role browser paths. Transport tests use provider
-  error types and response status rather than matching provider message text;
-  they prove a received refusal is not mislabeled as unreachable. A migration
-  release additionally runs the local
+- **Authentication/identity changes**: run username and associated-email sign-in, first
+  activation, established-account reset, verified replacement-session handoff,
+  purpose/expiry lifecycle states, atomic promotion/transfer/multi-outlet edit,
+  guarded owner change, Mark as left, alias-rename/session-survival,
+  hand-crafted email-change and authority refusals, invalid-session redirect,
+  offline-session preservation, uniform email-sign-in failure, and all-role
+  browser paths. Database and real-HTTP coverage must prove complete rollback,
+  stale-edit refusal, final-owner safety, activation replacement, reset
+  preservation, and the distinction between `session_invalid`, `forbidden`,
+  and no-response transport failure. Transport tests use provider error types
+  and response status rather than matching provider message text; they prove a
+  received refusal is not mislabeled as unreachable. A migration release additionally runs the local
   `auth:usernames:rehearse` sequence, proves the readiness invariant refuses
   legacy/misaligned identity states and missing owner email, records the
   production postflight, and requires `auth:readiness` before static upload.

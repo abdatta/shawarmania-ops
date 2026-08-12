@@ -218,6 +218,48 @@ export function assignedOutlets(assignments: readonly Assignment[]): string[] {
  * person; a login and a staff-list membership are the same thing, and working
  * at two outlets does not make a second of either.
  */
+export type AccountInvitePurpose = 'activation' | 'password_reset'
+
+export interface LiveAccountInvite {
+  purpose: AccountInvitePurpose
+  expiresAt: string
+}
+
+export type AccountLifecycle =
+  | { kind: 'needs_setup' }
+  | { kind: 'setup_link_issued'; expiresAt: string }
+  | { kind: 'active' }
+  | { kind: 'password_reset_issued'; expiresAt: string }
+  | { kind: 'deactivated' }
+
+export interface AccountLifecycleFacts {
+  isActive: boolean
+  hasSignedIn: boolean
+  invite: LiveAccountInvite | null
+}
+
+/**
+ * Derive the one product lifecycle label from authoritative facts. Expired
+ * links are inert even if a historical row remains unused in the database.
+ */
+export function deriveAccountLifecycle(
+  facts: AccountLifecycleFacts,
+  now: Date = new Date(),
+): AccountLifecycle {
+  if (!facts.isActive) return { kind: 'deactivated' }
+  const invite =
+    facts.invite && new Date(facts.invite.expiresAt).getTime() > now.getTime() ? facts.invite : null
+
+  if (!facts.hasSignedIn) {
+    return invite?.purpose === 'activation'
+      ? { kind: 'setup_link_issued', expiresAt: invite.expiresAt }
+      : { kind: 'needs_setup' }
+  }
+  return invite?.purpose === 'password_reset'
+    ? { kind: 'password_reset_issued', expiresAt: invite.expiresAt }
+    : { kind: 'active' }
+}
+
 export interface AccountSummary {
   id: string
   fullName: string
@@ -230,6 +272,8 @@ export interface AccountSummary {
   accountEmail: string | null
   phone: string | null
   isActive: boolean
+  /** True only after Auth records a successful sign-in for this account. */
+  hasSignedIn: boolean
   /** Free-text job label ("Griller"), distinct from the app-capability role. */
   roleTitle: string | null
   /**
@@ -250,7 +294,11 @@ export interface AccountSummary {
    * migration), and the code itself exists only in the response that issued
    * it. "Pending since Tuesday" is all a list can honestly show.
    */
-  invite: { expiresAt: string } | null
+  invite: LiveAccountInvite | null
+  /** Product state derived from active/sign-in/live-invite facts. */
+  lifecycle: AccountLifecycle
+  /** Opaque concurrency token covering all facts an account edit may replace. */
+  stateFingerprint: string
 }
 
 /**
@@ -273,12 +321,7 @@ export interface NewAccount {
   joinedOn?: string | null
 }
 
-/**
- * The staff facts an admin edits as their own session under Row-Level
- * Security — unlike every other account write, which is privileged. Access
- * Account access and placement are deliberately absent: each has its own
- * boundary.
- */
+/** @deprecated Account facts now change through the atomic edit command. */
 export type StaffFactsPatch = Partial<{
   fullName: string
   roleTitle: string | null
@@ -313,11 +356,40 @@ export function isStaffAt(account: Pick<AccountSummary, 'assignments'>, outletId
 }
 
 /** The one-time code, returned once and never retrievable again. */
-export interface IssuedCode {
+export interface AccountHandover {
   profileId: string
   username: string
   code: string
   expiresAt: string
+  purpose: AccountInvitePurpose
+}
+
+/** Compatibility name retained while older account call sites migrate. */
+export type IssuedCode = AccountHandover
+
+export interface IntendedAssignment {
+  assignmentId: string | null
+  outletId: string | null
+  role: AppRole
+  startedOn: string
+}
+
+export interface EditAccountCommand {
+  profileId: string
+  expectedStateFingerprint: string
+  fullName: string
+  phone: string | null
+  roleTitle: string | null
+  accountEmail: string | null
+  /** Complete intended live set; an empty set is reserved for Mark as left. */
+  assignments: IntendedAssignment[]
+}
+
+export interface AssignmentSetResult {
+  profileId: string
+  assignments: Assignment[]
+  stateFingerprint: string
+  replacementHandover: AccountHandover | null
 }
 
 /**
@@ -334,9 +406,8 @@ export class AccountActionError extends DataActionError {
 /**
  * People management as the admin surfaces need it. Identity and access writes
  * are privileged operations that run server-side with the service-role key —
- * the adapter is the seam in front of them, not the thing doing them. Staff
- * facts are the exception: they are the admin's own RLS write, exactly as
- * roster edits always were.
+ * the adapter is the seam in front of them, not the thing doing them. Facts
+ * and placement cross the same atomic privileged boundary.
  */
 export interface AccountsAdapter {
   /**
@@ -346,28 +417,23 @@ export interface AccountsAdapter {
   listAccounts(): Promise<AccountSummary[]>
   /** One step creates a working person: account, every assignment, issued code. */
   provision(account: NewAccount): Promise<IssuedCode>
+  /** Issue or replace the purpose appropriate to the account's sign-in history. */
+  issueHandover(profileId: string): Promise<AccountHandover>
+  /** Replace profile facts and the complete intended live assignment set atomically. */
+  editAccount(command: EditAccountCommand): Promise<AssignmentSetResult>
+  /** End every live assignment and deactivate in the same transaction. */
+  markAsLeft(profileId: string, expectedStateFingerprint: string): Promise<AssignmentSetResult>
+  /** @deprecated Use issueHandover. Retained during the Edge rollout. */
   reissue(profileId: string): Promise<IssuedCode>
   setActive(profileId: string, isActive: boolean): Promise<void>
-  /**
-   * Place a person at an outlet. The privileged path, because authority is
-   * re-derived from the caller's token — a manager may place somebody only at
-   * an outlet they manage, and only as a Biller or Employee.
-   *
-   * **Self-assignment is refused except for one narrow case**: a Super Admin
-   * may place themselves at an outlet, and nobody may ever grant themselves
-   * the owner role. The database enforces both; this is the seam in front.
-   */
+  /** @deprecated Use editAccount with a complete intended assignment set. */
   grantAssignment(input: {
     personId: string
     role: AppRole
     outletId: string | null
     accountEmail?: string | null
   }): Promise<IssuedCode | null>
-  /**
-   * End a placement. Never a delete — the assignment stays, with its end date,
-   * because the rows it produced have to remain explicable. Refused for the
-   * last live Super Admin assignment.
-   */
+  /** @deprecated Use editAccount or markAsLeft. */
   endAssignment(assignmentId: string): Promise<IssuedCode | null>
   /**
    * Correct the username an account signs in with. Any outstanding one-time
@@ -375,11 +441,7 @@ export interface AccountsAdapter {
    */
   changeUsername(profileId: string, username: string): Promise<void>
   setAccountEmail(profileId: string, accountEmail: string): Promise<void>
-  /**
-   * Edit the staff facts — the admin's own session under RLS, not the
-   * privileged function. The database refuses a cross-outlet edit, a
-   * non-owner changing a staff code, and the blanking of an issued one.
-   */
+  /** @deprecated Use editAccount. */
   updateStaffFacts(profileId: string, patch: StaffFactsPatch): Promise<AccountSummary>
   /**
    * Failed activation attempts across the whole endpoint in the current

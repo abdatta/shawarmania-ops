@@ -94,6 +94,13 @@ In code: interfaces in `src/data-access/adapters.ts` (one per domain area, added
 
 Two rules keep this honest. **Mocks are typed from the generated schema types**, so a fixture that drifts from what the database can actually serve fails to compile. And **a screen that imports the Supabase client directly has broken the seam** — that is a review failure, not a style preference, and lint enforces it.
 
+The account adapter is deliberately richer than a list of invite rows. It
+returns an account's derived lifecycle from active state, successful sign-in
+history, live assignments, and a live unexpired handover purpose. Its edit
+command names the complete intended assignment set and a stale-state
+fingerprint; its explicit departure and purpose-aware handover commands keep
+the mock and real implementations honest about the same business transitions.
+
 A third rule governs what a real adapter *sends*. **Every argument of a database command is stated explicitly, including the ones that are unknown — an omitted key is not a null.** A payload is JSON, so a property that evaluates to `undefined` disappears on the way out; a function whose parameter carries no default then matches nothing, and PostgREST answers that it cannot find the function at all. That failure looks like a broken app rather than a missing value, and it cannot be caught by the mock adapter, which is handed the object rather than the JSON. It shipped once, in `attendance_submit_attempt`: `p_lat: reading?.latitude as number` broke every check-in taken without a position, showing "try again in a moment" while writing nothing. The cast is what hid it — do not silence the generated `Args` type over an optional chain. Write `?? null` first, and cast only a value that is provably never `undefined`.
 
 That command boundary includes both typed browser adapters and the service-role
@@ -184,8 +191,10 @@ Because the policies read the table, **an assignment granted or ended bites at t
 Anything requiring the service-role key runs in an Edge Function. The service-role key bypasses RLS entirely and **must never reach the browser**.
 
 - **Provision or repair an account** — create one Auth user at the deterministic
-  username alias, create every assignment and the one-time invite atomically,
-  rename another person's username, and issue admin-led resets.
+  username alias, create every starting assignment and the activation handover
+  atomically; edit permitted personal facts and a complete assignment set in
+  one transaction; explicitly mark somebody as left; rename another person's
+  username; and issue purpose-aware admin-led setup or reset handovers.
 - **Sign in by associated email** — privately resolve the email to the current
   Auth alias, apply hashed abuse limits, ask Supabase Auth to verify the
   password with the public credential, and return only Supabase session tokens.

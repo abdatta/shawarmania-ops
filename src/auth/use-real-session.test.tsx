@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Assignment } from '@/data-access/adapters'
 import type { Profile } from '@/data-access/auth'
+import { signalHumanSessionInvalid } from '@/session/human-session-invalid'
 
 import { useRealSession } from './use-real-session'
 
@@ -71,6 +72,18 @@ beforeEach(() => {
   auth.loadOwnAssignments.mockResolvedValue([MANAGES_KALYANI])
   auth.loadOwnCounterDevice.mockResolvedValue(null)
   auth.loadCounterShift.mockResolvedValue(null)
+})
+
+it('ends a human session with a specific reason after a definitive protected-action rejection', async () => {
+  const { result } = renderHook(() => useRealSession())
+  await waitFor(() => expect(result.current.state.status).toBe('ready'))
+
+  act(() => signalHumanSessionInvalid())
+
+  await waitFor(() =>
+    expect(result.current.state).toEqual({ status: 'anonymous', reason: 'session_invalid' }),
+  )
+  expect(auth.signOut).toHaveBeenCalled()
 })
 
 /**

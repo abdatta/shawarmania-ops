@@ -30,6 +30,7 @@ const auth = vi.hoisted(() => {
     previewInvite: vi.fn(),
     redeemInvite: vi.fn(),
     currentUser: vi.fn(),
+    verifiedCurrentUser: vi.fn(),
     loadOwnProfile: vi.fn(),
     // Needed since design D11: sign-in waits for a resolved session before it
     // leaves, and resolving one reads assignments as well as the profile.
@@ -66,6 +67,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   auth.onAuthChange.mockReturnValue(() => {})
   auth.currentUser.mockResolvedValue(null)
+  auth.verifiedCurrentUser.mockResolvedValue({ userId: 'u-2', username: 'new.staff' })
   auth.signOut.mockResolvedValue(undefined)
   auth.loadOwnCounterDevice.mockResolvedValue(null)
   auth.loadCounterShift.mockResolvedValue(null)
@@ -267,6 +269,47 @@ describe('activation', () => {
     expect(auth.previewInvite).toHaveBeenCalledWith('ABCDE-FGHJK')
     expect(auth.redeemInvite).toHaveBeenCalledWith('ABCDE-FGHJK', 'new.staff', 'a-real-password')
     expect(auth.signIn).toHaveBeenCalledWith('new.staff', 'a-real-password')
+  })
+
+  it('clears a superseded local human session before establishing the replacement session', async () => {
+    const user = userEvent.setup()
+    auth.previewInvite.mockResolvedValue('new.staff')
+    auth.redeemInvite.mockResolvedValue(undefined)
+    auth.signIn.mockImplementation(async () => {
+      auth.currentUser.mockResolvedValue({ userId: 'u-2', username: 'new.staff' })
+      return { userId: 'u-2', username: 'new.staff' }
+    })
+
+    renderAt(LINK)
+    await screen.findByTestId('activate-username')
+    await user.type(screen.getByLabelText('Username'), 'new.staff')
+    await user.type(screen.getByLabelText('New password'), 'a-real-password')
+    await user.type(screen.getByLabelText('Re-type password'), 'a-real-password')
+    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
+
+    await waitFor(() => expect(auth.signIn).toHaveBeenCalled())
+    expect(auth.signOut).toHaveBeenCalledBefore(auth.signIn)
+  })
+
+  it('sends a redeemed reset to ordinary sign-in when replacement sign-in fails', async () => {
+    const user = userEvent.setup()
+    auth.previewInvite.mockResolvedValue('new.staff')
+    auth.redeemInvite.mockResolvedValue(undefined)
+    auth.signIn.mockRejectedValue(
+      new auth.SignInError('unavailable', 'Could not sign in right now.'),
+    )
+
+    renderAt(LINK)
+    await screen.findByTestId('activate-username')
+    await user.type(screen.getByLabelText('Username'), 'new.staff')
+    await user.type(screen.getByLabelText('New password'), 'a-real-password')
+    await user.type(screen.getByLabelText('Re-type password'), 'a-real-password')
+    await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
+
+    expect(await screen.findByRole('heading', { name: 'Your password was changed' }))
+    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in')
+    expect(screen.queryByLabelText('New password')).not.toBeInTheDocument()
+    expect(auth.signOut).toHaveBeenCalledTimes(2)
   })
 
   it('does not consume the code when the typed username differs', async () => {

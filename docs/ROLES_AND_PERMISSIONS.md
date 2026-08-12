@@ -87,12 +87,13 @@ assignment cannot be ended by anyone, including its holder.
 | Create / edit / deactivate outlet | ✓ | — | — | — |
 | Delete an outlet | ✓ closed, and only while nothing references it | — | — | — |
 | **People** |
-| Manage Franchise Admins | ✓ | — | — | — |
-| Manage Billers and Employees | ✓ | ✓ only when every live outlet they work at is one this admin manages | — | — |
-| Assign a person to an outlet | ✓ any outlet, any role | ✓ own outlets, Biller/Employee only | — | — |
-| Assign **themselves** to an outlet | ✓ outlet roles only — never the owner role | — | — | — |
-| End an assignment | ✓ | ✓ own outlets | — | — |
-| Edit staff facts (name, job title) | ✓ any outlet | ✓ own outlets | — | R own row |
+| Manage Franchise Admins | ✓ other accounts only | — | — | — |
+| Manage Billers and Employees | ✓ other accounts only | ✓ only when every current and intended outlet is managed by the caller | — | — |
+| Edit a person's facts and complete assignment set | ✓ any permitted role/outlet on another account | ✓ Employee/Biller only at every managed current and intended outlet | — | — |
+| Mark a person as left | ✓ other accounts only | ✓ Biller/Employee only at every managed current outlet | — | — |
+| Deactivate / reactivate an account | ✓ other accounts only | ✓ Biller/Employee only at every managed current outlet | — | — |
+| Issue setup or password-reset handover | ✓ other accounts only | ✓ Biller/Employee only at every managed current outlet | — | — |
+| See / correct username | ✓ managed accounts; own username read-only | ✓ managed Biller/Employee accounts; own username read-only | — | — |
 | Set up / remove counter tablet | ✓ | ✓ own outlet | — | — |
 | **Menu** |
 | View menu | R all | ✓ own outlet | R own outlet | — |
@@ -270,20 +271,28 @@ must type that username plus the same new password twice. The form uses
 password manager can associate the submitted pair. Whether Chrome actually
 shows a save prompt remains browser-controlled.
 
-**The one-time code, as built.** Ten Crockford-base32 characters shown as
-`XXXXX-XXXXX` (50 bits; I, L, O and U are absent). It is valid seven days,
-redeemable once, and superseded the instant a replacement is issued, so exactly
-one code per account is live. Only its hash is stored, in a column no client
-role can read. Preview consumes nothing. A mistyped username does not consume
-the code; unknown, expired, spent, superseded and inactive-account codes remain
-indistinguishable. Failed callers are bounded over a rolling window without
-storing raw IP addresses.
+**One-time handovers are purpose-bearing.** Ten Crockford-base32 characters
+shown as `XXXXX-XXXXX` (50 bits; I, L, O and U are absent) create either an
+**activation** or a **password-reset** handover. A link is live only while it
+is unconsumed, unsuperseded, and unexpired; a historical or expired row never
+changes what People says. Replacing a handover supersedes one of the same
+purpose. Only its hash is stored, in a column no client role can read. Preview
+consumes nothing. A mistyped username does not consume the code; unknown,
+expired, spent, superseded and inactive-account codes remain indistinguishable.
+Failed callers are bounded over a rolling window without storing raw IP
+addresses.
 
-If an assignment is granted or ended before activation, the authority change
-and replacement invite happen in one database transaction and the new link is
-shown immediately. Once the person has activated, assignment changes issue no
-code. A username correction also preserves the outstanding invite because it
-is bound to the Auth user ID rather than identifier text.
+**People edits are one complete, guarded transition.** An authorized admin
+submits permitted personal facts and the entire intended live assignment set
+together. Unchanged assignments retain their identity and start date; a
+promotion or transfer ends the prior row and adds the replacement without
+deactivating access. The transaction validates authority over both the current
+and intended sets, rejects stale views and invalid/empty ordinary edits, and
+rolls back every fact if it refuses. A live activation handover is replaced
+only after the final placement exists; a live reset handover is preserved and
+an established account is never sent an unsolicited reset. A username
+correction also preserves an outstanding handover because it is bound to the
+Auth user ID rather than identifier text.
 
 **Sessions are long-lived** — access tokens last an hour and refresh silently,
 with no inactivity timeout. An Auth-alias rename preserves the current user ID,
@@ -292,9 +301,12 @@ act: deactivate the account.
 
 **Deactivation bites immediately, and an assignment change needs no new
 session.** A deactivated account cannot read even its own profile row; the
-client uses that as its signal and ends the open session. Assignments are read
-from the database on every request, so a grant or ending applies at the next
-request without changing or reissuing a token.
+client uses that confirmed invalid-session response as its signal to end the
+open human session. Assignments are read from the database on every request, so
+an edit applies at the next request without changing or reissuing a token. A
+definitive invalid session ends the human shell; a forbidden response stays on
+the requesting screen and an unavailable backend preserves the session for a
+retry.
 
 Password recovery has one current path: every role asks an authorized
 Franchise Admin or Super Admin for a new one-time link. One Super Admin can
@@ -311,7 +323,9 @@ the caller's own session, never from the request:
 | | Super Admin | Franchise Admin |
 |---|---|---|
 | Create an account | any role; account email required only for Super Admin | Biller / Employee at one or more managed outlets |
-| Issue a new code | any account but their own | own-outlet Billers and Employees |
+| Edit facts / assignment set | another account; any permitted role and outlet | Biller / Employee only, and only when the complete current and intended sets are within managed outlets |
+| Mark as left | any account but their own; preserves history | own-outlet Billers and Employees |
+| Issue setup / reset handover | any account but their own; purpose follows successful-sign-in history | own-outlet Billers and Employees |
 | Deactivate / reactivate | any account but their own | own-outlet Billers and Employees |
 | See / correct username | any managed account, plus own read-only username | own-outlet Billers and Employees, plus own read-only username |
 | See / correct Super Admin account email | own read-only; another Super Admin editable | never |
@@ -334,10 +348,14 @@ Nobody manages their own account from People. A Super Admin can see their own
 account email but changing it belongs to the later account-settings surface;
 another Super Admin or an operator is the fallback if that value is wrong.
 
-**Editing staff facts** is a different write. Name and job title are ordinary
-column-scoped updates under RLS. Active state and username remain privileged
-account operations, placement is an assignment, and account email is private
-identity configuration.
+**People facts and placement share the privileged edit boundary.** Name, phone,
+title, account email where permitted, and the complete intended assignment set
+are changed atomically after the caller's authority is re-derived. Username,
+active state, handover issuance, and departure remain distinct guarded actions.
+**Mark as left** is the only departure transition: after confirmation it ends
+all live assignments and deactivates sign-in atomically, without deleting
+history. Ordinary editing never deactivates an account or treats an empty set
+as departure.
 
 **Deleting a person with recorded history is refused by the database itself.**
 Historical foreign keys are NO ACTION; only assignment, invite and private
@@ -433,7 +451,7 @@ Every attendance row stores the captured coordinates, the GPS accuracy, the comp
 - **No authority is carried in the access token.** `multi-outlet-people` dropped both claim helpers and emptied the custom access-token hook to a no-op; the hook function itself went once the project stopped registering it (2026-07-30), so no code path remains by which a token could be handed authority. Policies resolve scope from `public.assignments` through stable `security definer` helpers — `app_is_owner()`, `app_outlets_for(role)`, `app_has_role_at(role, outlet)` — whose definer rights are what keep a policy on `assignments` from recursing into itself (see the RLS recursion trap in [Architecture](ARCHITECTURE.md)). `app_outlets_for` is set-returning on purpose: `outlet_id in (select public.app_outlets_for('franchise_admin'))` is non-correlated, so Postgres hoists it to one lookup per query rather than the per-row profile sub-query the old claims existed to avoid.
 - **Held roles and reachable roles are two questions, and the code keeps them apart** (`owner-reaches-every-outlet`). `heldRoles(session)` answers what a person's live assignments confer, and it is what the account menu states — an owner who manages no outlet must never be told they do. `reachableRoles(session)` is held roles plus the outlet-level surfaces for the owner role, and it decides only which shells and navigation entries exist. It is not a role hierarchy: one specific reach for one specific role, and a manager assignment at Kalyani still confers nothing at Kanchrapara. Because reaching confers nothing, no policy changed for it and no migration was needed; the isolation suite gained the cases instead, so an owner-branch edited away fails a test rather than a screen.
 - Outstanding invitations belong to the account, not to one outlet. They have their own policy and isolation cases, are written only by privileged functions, and are readable only by admins who may manage the whole account.
-- Issuing and redeeming a code are each a **single database function**, so "supersede then insert" and "check then consume" happen in one transaction. Assignment grant/end use service-role-only functions that preserve the supersession trigger and conditionally issue the visible replacement in that same transaction. Doing either sequence across several round trips from an Edge Function would leave a race, and the race is the attack.
+- Issuing and redeeming a handover are each a **single database function**, so "supersede then insert" and "check then consume" happen in one transaction. The complete People edit is likewise a service-only transaction: it validates, changes the assignment set, and conditionally replaces only a live activation handover in one commit. Doing either sequence across several Edge-Function round trips would leave a race, and the race is the attack.
 - Everything needing immediate effect — an assignment change, deactivating an account, revoking a device — is a lookup inside the policy. Nothing waits for a token.
 - **Self-assignment and the last owner** are the two rules a row policy cannot state, so they live in triggers on `assignments`: `assignments_self_grant_guard` refuses a self-granted `super_admin` from anybody and any self-grant from a non-owner; `assignments_guard` refuses ending the last live `super_admin` row, and freezes an assignment's identity so moving somebody is ending one and granting another.
 - Edge Functions verify the caller's JWT for identity, then re-derive authority from that person's live assignments. Being an Edge Function is not authorisation.
