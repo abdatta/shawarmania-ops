@@ -45,6 +45,7 @@ export function BillPanel({
       end.
     */
     <aside
+      id="bill-panel"
       aria-label="Current bill"
       data-testid="bill-panel"
       data-editing={editing ? '' : undefined}

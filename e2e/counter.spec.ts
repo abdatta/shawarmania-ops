@@ -348,12 +348,14 @@ test.describe('the counter', () => {
     await expect(page.getByTestId('counter-activity-rail')).toBeVisible()
   })
 
-  test('keeps all three columns at every width, scrolling sideways instead', async ({ page }) => {
+  test('keeps all three columns while allowing the two right columns to resize', async ({
+    page,
+  }) => {
     const rail = page.getByTestId('counter-activity-rail')
     const panel = page.getByTestId('bill-panel')
     const grid = page.getByTestId('counter-workspace')
 
-    // Wide: the two right columns are the same width and the menu takes the slack.
+    // Default widths match; the menu takes the slack until a counter user changes either one.
     const wide = { panel: (await panel.boundingBox())!, rail: (await rail.boundingBox())! }
     expect(Math.round(wide.rail.width)).toBe(Math.round(wide.panel.width))
     await expect(grid).toHaveJSProperty('scrollWidth', await grid.evaluate((el) => el.clientWidth))
@@ -376,6 +378,49 @@ test.describe('the counter', () => {
     // And there is no second door to a column that never left.
     await expect(page.getByRole('link', { name: 'Open orders' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'My shift' })).toHaveCount(0)
+
+    // The bill divider drags left to make that column wider. The menu's own
+    // minimum survives rather than letting a resize hide menu tiles.
+    const billResize = page.getByTestId('resize-current-bill-column')
+    const billResizeBox = (await billResize.boundingBox())!
+    await page.mouse.move(billResizeBox.x + billResizeBox.width / 2, billResizeBox.y + 80)
+    await page.mouse.down()
+    await page.mouse.move(billResizeBox.x - 80, billResizeBox.y + 80)
+    await page.mouse.up()
+    const resizedBill = (await panel.boundingBox())!
+    expect(Math.round(resizedBill.width)).toBeGreaterThan(Math.round(narrow.panel.width))
+    const menuColumn = grid.locator(':scope > div').first()
+    const menuMinimum = await page.evaluate(
+      () => Number.parseFloat(getComputedStyle(document.documentElement).fontSize) * 22,
+    )
+    expect(Math.round((await menuColumn.boundingBox())!.width)).toBeGreaterThanOrEqual(menuMinimum)
+
+    // The other divider is independently keyboard-resizable, so the drag affordance
+    // does not strand a keyboard user and it cannot change the bill width.
+    const activityResize = page.getByTestId('resize-activity-column')
+    await activityResize.press('ArrowLeft')
+    const resizedRail = (await rail.boundingBox())!
+    expect(Math.round(resizedRail.width)).toBeGreaterThan(Math.round(narrow.rail.width))
+    expect(Math.round(resizedBill.width)).toBeGreaterThan(Math.round(narrow.panel.width))
+    const savedWidths = await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem('shawarmania.counter-column-widths')!) as {
+          bill: number
+          activity: number
+        },
+    )
+
+    // The counter is shared hardware, so its browser â€” rather than a person or
+    // session â€” remembers the working layout after a reload.
+    await page.reload()
+    await expect(page.getByTestId('counter-workspace')).toHaveCSS(
+      '--counter-bill-width',
+      `${savedWidths.bill}px`,
+    )
+    await expect(page.getByTestId('counter-workspace')).toHaveCSS(
+      '--counter-activity-width',
+      `${savedWidths.activity}px`,
+    )
   })
 
   test('requests the native numeric keypad for customer phone', async ({ page }) => {

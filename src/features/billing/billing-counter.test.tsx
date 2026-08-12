@@ -76,6 +76,33 @@ async function recordPaid(person: ReturnType<typeof user>, method = 'Cash') {
 }
 
 describe('BillingCounter', () => {
+  it('keeps independently resized counter columns in this browser and never shrinks the menu below a column', async () => {
+    const person = user()
+    renderCounter()
+
+    const workspace = await screen.findByTestId('counter-workspace')
+    const billResize = screen.getByTestId('resize-current-bill-column')
+    const activityResize = screen.getByTestId('resize-activity-column')
+
+    expect(workspace.style.getPropertyValue('--counter-bill-width')).toBe('352px')
+    expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('352px')
+
+    billResize.focus()
+    await person.keyboard('{ArrowLeft}')
+    expect(workspace.style.getPropertyValue('--counter-bill-width')).toBe('368px')
+    expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('352px')
+
+    activityResize.focus()
+    await person.keyboard('{ArrowLeft}')
+    expect(workspace.style.getPropertyValue('--counter-activity-width')).toBe('368px')
+    expect(JSON.parse(localStorage.getItem('shawarmania.counter-column-widths')!)).toEqual({
+      bill: 368,
+      activity: 368,
+    })
+    expect(billResize).toHaveAttribute('aria-valuemin', '352')
+    expect(activityResize).toHaveAttribute('aria-valuemin', '352')
+  })
+
   it('re-reads the menu on foreground without a working subscription and preserves captured prices', async () => {
     const person = user()
     const store = createDemoStore()

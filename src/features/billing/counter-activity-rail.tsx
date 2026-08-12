@@ -39,6 +39,7 @@ export function CounterActivityRail({
 
   return (
     <aside
+      id="counter-activity-rail"
       aria-label="Orders and bills"
       data-testid="counter-activity-rail"
       /*

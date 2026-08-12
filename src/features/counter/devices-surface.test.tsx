@@ -265,6 +265,7 @@ describe('the Tablets surface', () => {
     const shown = await screen.findByText(/is not shown again/i)
     expect(shown).toBeInTheDocument()
     expect(screen.getByText('DEMO0-SETUP')).toBeInTheDocument()
+    expect(shown).toHaveTextContent(/choose set up this tablet from sign in/i)
   })
 
   /**

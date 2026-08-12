@@ -1,5 +1,15 @@
 import { KeyRound, UserRoundCheck } from 'lucide-react'
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+} from 'react'
 import { Link } from 'react-router'
 
 import { EmptyState } from '@/components/layout/empty-state'
@@ -70,6 +80,46 @@ interface Confirmation {
   totalPaise: number
 }
 
+const COUNTER_COLUMN_RESIZE_STEP = 16
+const COUNTER_COLUMN_WIDTHS_KEY = 'shawarmania.counter-column-widths'
+
+type CounterColumn = 'bill' | 'activity'
+
+interface CounterColumnWidths {
+  bill: number
+  activity: number
+}
+
+function counterColumnMinWidth(): number {
+  const rootFontSize = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize)
+  return 22 * (Number.isFinite(rootFontSize) ? rootFontSize : 16)
+}
+
+function isCounterColumnWidth(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= counterColumnMinWidth()
+}
+
+function readCounterColumnWidths(): CounterColumnWidths {
+  const fallback = { bill: counterColumnMinWidth(), activity: counterColumnMinWidth() }
+  try {
+    const stored = window.localStorage.getItem(COUNTER_COLUMN_WIDTHS_KEY)
+    if (!stored) return fallback
+    const widths: unknown = JSON.parse(stored)
+    if (
+      typeof widths !== 'object' ||
+      widths === null ||
+      !isCounterColumnWidth((widths as CounterColumnWidths).bill) ||
+      !isCounterColumnWidth((widths as CounterColumnWidths).activity)
+    ) {
+      return fallback
+    }
+    const validWidths = widths as CounterColumnWidths
+    return { bill: validWidths.bill, activity: validWidths.activity }
+  } catch {
+    return fallback
+  }
+}
+
 export function BillingCounter({ outletId: counterOutletId }: { outletId?: string } = {}) {
   const session = useContext(SessionContext)
   const { billing, counter, customers, menu: menuAdapter, outlets } = useAdapters()
@@ -91,11 +141,63 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   const [declinedPhone, setDeclinedPhone] = useState<string | null>(null)
   const [activityRefresh, setActivityRefresh] = useState(0)
   const [editingOrder, setEditingOrder] = useState<BillingOrder | null>(null)
+  const [columnWidths, setColumnWidths] = useState<CounterColumnWidths>(readCounterColumnWidths)
 
   const outletId = counterOutletId ?? session?.outletId ?? null
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const suspendedDraft = useRef<Restorable | null>(null)
   const hasMenu = useRef(false)
+  const resize = useRef<{ column: CounterColumn; startX: number; startWidth: number } | null>(null)
+
+  const resizeColumn = useCallback((column: CounterColumn, requestedWidth: number) => {
+    const width = Math.max(counterColumnMinWidth(), Math.round(requestedWidth))
+    setColumnWidths((current) => {
+      const next = { ...current, [column]: width }
+      try {
+        window.localStorage.setItem(COUNTER_COLUMN_WIDTHS_KEY, JSON.stringify(next))
+      } catch {
+        // A counter must remain usable when its browser disallows local storage.
+      }
+      return next
+    })
+  }, [])
+
+  function beginColumnResize(column: CounterColumn, event: PointerEvent<HTMLDivElement>) {
+    event.preventDefault()
+    if (typeof event.currentTarget.setPointerCapture === 'function') {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    }
+    resize.current = { column, startX: event.clientX, startWidth: columnWidths[column] }
+  }
+
+  function moveColumnResize(event: PointerEvent<HTMLDivElement>) {
+    if (!resize.current || resize.current.column !== event.currentTarget.dataset.column) return
+    resizeColumn(
+      resize.current.column,
+      resize.current.startWidth - (event.clientX - resize.current.startX),
+    )
+  }
+
+  function endColumnResize(event: PointerEvent<HTMLDivElement>) {
+    if (
+      typeof event.currentTarget.hasPointerCapture === 'function' &&
+      typeof event.currentTarget.releasePointerCapture === 'function' &&
+      event.currentTarget.hasPointerCapture(event.pointerId)
+    ) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    resize.current = null
+  }
+
+  function resizeColumnWithKeyboard(column: CounterColumn, event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+    event.preventDefault()
+    resizeColumn(
+      column,
+      columnWidths[column] +
+        (event.key === 'ArrowLeft' ? COUNTER_COLUMN_RESIZE_STEP : -COUNTER_COLUMN_RESIZE_STEP),
+    )
+  }
 
   const refreshMenu = useCallback(async () => {
     if (!outletId) return
@@ -458,9 +560,9 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
 
   return (
     /*
-      Three columns, always, all the same width — the width the current bill
-      wants. Slack goes to the menu, which is the column that reads better wide;
-      the other two are exactly as wide as they need to be.
+      Three columns, always. The menu receives the slack but never falls below its
+      touch-safe minimum; the current bill and activity rail each own a resize
+      control that changes only their respective track.
 
       Below three columns' worth of viewport this **scrolls sideways** rather than
       rearranging itself. A counter that reflows is a counter whose controls move
@@ -471,7 +573,13 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     */
     <div
       data-testid="counter-workspace"
-      className="grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_22rem_22rem] gap-3 overflow-x-auto overflow-y-hidden"
+      className="grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-bill-width)_var(--counter-activity-width)] gap-3 overflow-x-auto overflow-y-hidden"
+      style={
+        {
+          '--counter-bill-width': `${columnWidths.bill}px`,
+          '--counter-activity-width': `${columnWidths.activity}px`,
+        } as CSSProperties
+      }
     >
       <div className="@container min-h-0 overflow-y-auto">
         {menuOffline && (
@@ -514,7 +622,25 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         )}
       </div>
 
-      <div className="flex min-h-0 flex-col gap-2">
+      <div className="relative flex min-h-0 flex-col gap-2">
+        <div
+          role="separator"
+          aria-label="Resize current bill column"
+          aria-orientation="vertical"
+          aria-valuemin={counterColumnMinWidth()}
+          aria-valuenow={columnWidths.bill}
+          aria-valuetext={`${columnWidths.bill}px`}
+          aria-controls="bill-panel"
+          data-column="bill"
+          data-testid="resize-current-bill-column"
+          tabIndex={0}
+          onPointerDown={(event) => beginColumnResize('bill', event)}
+          onPointerMove={moveColumnResize}
+          onPointerUp={endColumnResize}
+          onPointerCancel={endColumnResize}
+          onKeyDown={(event) => resizeColumnWithKeyboard('bill', event)}
+          className="absolute -left-2.5 top-0 z-20 h-full w-5 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
+        />
         <BillPanel
           lines={lines}
           onChangeQuantity={changeQuantity}
@@ -591,21 +717,41 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         )}
       </div>
 
-      <CounterActivityRail
-        refreshKey={activityRefresh}
-        editingOrder={editingOrder}
-        onEditOrder={beginOrderEdit}
-        pin={
-          editingOrder && (
-            <EditingOrderPin
-              order={editingOrder}
-              lines={lines}
-              customerName={customerName}
-              footer={composerFooter}
-            />
-          )
-        }
-      />
+      <div className="relative min-h-0 [&>aside]:h-full">
+        <div
+          role="separator"
+          aria-label="Resize activity column"
+          aria-orientation="vertical"
+          aria-valuemin={counterColumnMinWidth()}
+          aria-valuenow={columnWidths.activity}
+          aria-valuetext={`${columnWidths.activity}px`}
+          aria-controls="counter-activity-rail"
+          data-column="activity"
+          data-testid="resize-activity-column"
+          tabIndex={0}
+          onPointerDown={(event) => beginColumnResize('activity', event)}
+          onPointerMove={moveColumnResize}
+          onPointerUp={endColumnResize}
+          onPointerCancel={endColumnResize}
+          onKeyDown={(event) => resizeColumnWithKeyboard('activity', event)}
+          className="absolute -left-2.5 top-0 z-20 h-full w-5 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
+        />
+        <CounterActivityRail
+          refreshKey={activityRefresh}
+          editingOrder={editingOrder}
+          onEditOrder={beginOrderEdit}
+          pin={
+            editingOrder && (
+              <EditingOrderPin
+                order={editingOrder}
+                lines={lines}
+                customerName={customerName}
+                footer={composerFooter}
+              />
+            )
+          }
+        />
+      </div>
 
       <PaymentDialog
         open={paymentDialogOpen}

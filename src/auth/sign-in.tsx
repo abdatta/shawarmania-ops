@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useLocation, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
@@ -186,6 +186,13 @@ export function SignIn() {
           <p className="mt-6 text-sm text-content-muted">
             No password yet, or forgotten it? Ask a Franchise Admin or Super Admin for a one-time
             link.
+          </p>
+          <p className="mt-3 text-sm text-content-muted">
+            Setting up a counter tablet?{' '}
+            <Link to="/counter/setup" className="font-semibold text-primary underline">
+              Set up this tablet
+            </Link>
+            .
           </p>
         </CardBody>
       </Card>

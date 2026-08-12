@@ -102,6 +102,19 @@ function signInSucceeds() {
 }
 
 describe('sign in', () => {
+  it('lets an unconfigured counter tablet reach setup without a typed URL', async () => {
+    const user = userEvent.setup()
+    const { router } = renderAt('/sign-in')
+
+    const setup = screen.getByRole('link', { name: 'Set up this tablet' })
+    expect(setup).toHaveAttribute('href', '/counter/setup')
+    await user.click(setup)
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/counter/setup'))
+    expect(screen.getByRole('heading', { name: 'Set up this tablet' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument()
+  })
+
   it('signs in with the canonical username and leaves the sign-in screen', async () => {
     const user = userEvent.setup()
     signInSucceeds()

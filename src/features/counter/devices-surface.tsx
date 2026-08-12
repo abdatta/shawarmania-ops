@@ -227,8 +227,9 @@ export function DevicesSurface() {
               {issued}
             </p>
             <p>
-              Type this into the tablet at the counter, on its setup screen. It is good for fifteen
-              minutes, works once, and is not shown again — generate another if you lose it.
+              On the counter tablet, open the app and choose <strong>Set up this tablet</strong>{' '}
+              from sign in, then type this code. It is good for fifteen minutes, works once, and is
+              not shown again — generate another if you lose it.
             </p>
             <button
               type="button"
