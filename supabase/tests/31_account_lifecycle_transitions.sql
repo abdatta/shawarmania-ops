@@ -43,6 +43,53 @@ language sql as $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- The business calendar stays Kolkata even when the surrounding database
+-- session is UTC. This is the exact deployment regression: 19:00 UTC is
+-- already the following calendar date at both Shawarmania outlets.
+
+select is(
+  ('2026-08-12 19:00:00+00'::timestamptz at time zone 'Asia/Kolkata')::date,
+  '2026-08-13'::date,
+  'the UTC/Kolkata gap resolves to the business calendar date'
+);
+select ok(
+  exists (
+    select 1
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      cross join lateral unnest(coalesce(p.proconfig, array[]::text[])) setting
+     where n.nspname = 'public'
+       and p.proname = 'edit_account_assignment_set'
+       and lower(setting) = 'timezone=asia/kolkata'
+  ),
+  'atomic assignment editing pins current_date to Asia/Kolkata'
+);
+select ok(
+  exists (
+    select 1
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      cross join lateral unnest(coalesce(p.proconfig, array[]::text[])) setting
+     where n.nspname = 'public'
+       and p.proname = 'mark_account_as_left'
+       and lower(setting) = 'timezone=asia/kolkata'
+  ),
+  'Mark as left pins current_date to Asia/Kolkata'
+);
+select ok(
+  exists (
+    select 1
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      cross join lateral unnest(coalesce(p.proconfig, array[]::text[])) setting
+     where n.nspname = 'public'
+       and p.proname = 'account_state_fingerprint'
+       and lower(setting) = 'timezone=utc'
+  ),
+  'account fingerprints render invite timestamps in canonical UTC'
+);
+
+-- ---------------------------------------------------------------------------
 -- Purpose is constrained, non-null and behaviorally live only before expiry.
 
 select is(
@@ -99,7 +146,7 @@ select is(
   'promotion leaves one live Biller assignment'
 );
 select ok(
-  (select ended_on = current_date from public.assignments
+  (select ended_on = (now() at time zone 'Asia/Kolkata')::date from public.assignments
     where id = (select assignment_id from promotion_before)),
   'the former Employee assignment is historically ended'
 );

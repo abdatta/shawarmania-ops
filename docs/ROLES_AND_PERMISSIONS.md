@@ -27,7 +27,9 @@ Three consequences, and each is load-bearing:
 An assignment is **ended by a date, never deleted**, because rows written under
 it have to stay explicable. Leaving one outlet is therefore not leaving the
 business: a person has left when they hold no live assignment anywhere, which
-is derived rather than stored.
+is derived rather than stored. Start and end dates follow the Asia/Kolkata
+calendar inside the database transition itself; the server's UTC date is never
+allowed to make a just-started assignment end on the previous day.
 
 ## The roles
 

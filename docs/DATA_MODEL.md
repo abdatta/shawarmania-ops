@@ -55,6 +55,11 @@ half-provisioned account could never be cleaned up. Every table that genuinely
 is history still points at `profiles(id)` with NO ACTION, and any one of them
 aborts the delete.
 
+Assignment starts and endings use the **Asia/Kolkata calendar**. The atomic
+edit and Mark as left database commands pin their own timezone, so an action
+between midnight in Kolkata and midnight UTC cannot end a row on the previous
+day or produce `ended_on < started_on`.
+
 Every policy in the schema resolves scope from this table. Nothing about
 authority is carried in an access token, so a grant or an ending bites at the
 next request — see [Roles And Permissions](ROLES_AND_PERMISSIONS.md).
