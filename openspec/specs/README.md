@@ -52,6 +52,7 @@ This alphabetical list maps every capability required now. For planned work, rea
 - [`attention-badges`](attention-badges/spec.md) — a consistent, contextual count of work waiting for a reader, visible wherever that work can be reached.
 - [`attendance-and-location`](attendance-and-location/spec.md) — reviewable attendance evidence: capture coordinates, accuracy, distance, source, verdict, and approval beside each business-day record.
 - [`billing-command-contract`](billing-command-contract/spec.md) — an atomic, replay-safe database command boundary for billing writers, historical shift attribution, and day-close readiness.
+- [`billing-delivery`](billing-delivery/spec.md) — durable local counter acceptance, single-leader dependency-aware draining, evidence-based retry classification, and resolved online day finish.
 - [`counter-billing`](counter-billing/spec.md) — server-assigned bill numbers, append-only settlement history, snapshot line items, idempotent client UUIDs, and cutover-validated business dates.
 - [`counter-device-sessions`](counter-device-sessions/spec.md) — secure one-outlet counter-tablet enrollment and named-person shift opening from the employee's own phone.
 - [`cross-outlet-oversight`](cross-outlet-oversight/spec.md) — owner comparison of every permitted outlet from recorded rows and closed-day snapshots, without widening a switcher or exporting demo figures.
