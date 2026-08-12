@@ -326,6 +326,7 @@ export function createMockBillingAdapter(
           : null,
       paymentMethod: payments.length === 1 ? payments[0]!.method : 'mixed',
       status: row.status,
+      billerName: actorName(row.biller_profile_id) ?? 'Counter operator',
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
       lines: store.billItems
@@ -675,6 +676,7 @@ export function createMockBillingAdapter(
         paymentEditableUntil: new Date(paidAt + PAYMENT_EDIT_WINDOW_MS).toISOString(),
         paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
         status: 'settled',
+        billerName: actorName(openShiftRow()?.biller_profile_id ?? null) ?? 'Counter operator',
         customerName: draft.customerName?.trim() || null,
         customerPhone: draft.customerPhone?.trim() || null,
         lines: draft.lines,
@@ -918,6 +920,7 @@ export function createMockBillingAdapter(
             ).toISOString(),
             paymentMethod: payments.length > 1 ? ('mixed' as const) : payments[0]!.method,
             status: 'settled' as const,
+            billerName: actorName(openShiftRow()?.biller_profile_id ?? null) ?? 'Counter operator',
             customerName: entry.draft.customerName?.trim() || null,
             customerPhone: entry.draft.customerPhone?.trim() || null,
             lines: entry.draft.lines,

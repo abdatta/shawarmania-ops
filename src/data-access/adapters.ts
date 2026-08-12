@@ -1029,6 +1029,8 @@ export interface BillingBill {
   /** Convenience label for summaries; `mixed` is not itself a tender method. */
   paymentMethod: PaymentMethod | 'mixed'
   status: BillStatus
+  /** Snapshotted attribution resolved for display; never inferred from the reader's session. */
+  billerName: string
   customerName: Tables<'bills'>['customer_name']
   customerPhone: Tables<'bills'>['customer_phone']
   lines: BillLineDraft[]

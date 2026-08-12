@@ -496,32 +496,105 @@ test.describe('the counter in both themes', () => {
 })
 
 test.describe('manager billing history', () => {
-  test('filters immutable bills, voids with guidance, clears an order and keeps delivery read-only', async ({
+  test('opens structured bills in place, cancels progressively, clears an order and groups sync status', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('demo/admin/billing-history')
     await expect(page.getByRole('heading', { name: 'Billing history' })).toBeVisible()
+    const filters = page.getByTestId('billing-history-filters')
+    expect(
+      await filters.evaluate(
+        (node) => getComputedStyle(node).gridTemplateColumns.trim().split(/\s+/).length,
+      ),
+    ).toBe(2)
+    await expect(filters).toHaveJSProperty(
+      'scrollWidth',
+      await filters.evaluate((node) => node.clientWidth),
+    )
 
-    await page.getByLabel('Payment method').selectOption('upi')
-    const bill = page.getByRole('button', { name: /Bill \d+ · Sent/ }).first()
-    await bill.click()
-    await expect(page.getByRole('dialog')).toContainText('Revenue date')
-    await page.getByLabel('Void reason').fill('Wrong item rung')
-    await page.getByRole('button', { name: 'Void bill' }).click()
+    const businessDateButton = page.getByTestId('billing-history-date-open')
+    const businessDatePicker = page.getByTestId('billing-history-date-picker')
+    await expect(businessDateButton).toHaveText('Today')
+    const todayBusinessDate = await businessDatePicker.inputValue()
+    await businessDatePicker.fill('2026-08-01')
+    await expect(businessDateButton).toHaveText('01 Aug 2026')
+    await businessDatePicker.fill(todayBusinessDate)
+    await expect(businessDateButton).toHaveText('Today')
+
+    const bills = page.getByTestId('manager-bill-list').locator(':scope > li')
+    const firstSummary = bills.nth(0).getByRole('button', { name: /Bill \d+ Paid/ })
+    const secondSummary = bills.nth(1).getByRole('button', { name: /Bill \d+ Paid/ })
+    await expect(firstSummary).toContainText(/(Today|Yesterday), \d{2}:\d{2} (am|pm)/)
+    await expect(firstSummary).toContainText(/by Demo Biller/)
+    await firstSummary.click()
+    await expect(bills.nth(0)).toContainText('Order items')
+    await expect(bills.nth(0)).toContainText('Payment')
+    await expect(firstSummary).not.toHaveClass(/border-primary/)
+    await expect(
+      bills.nth(0).getByTestId('manager-bill-detail-transition').locator('article'),
+    ).not.toHaveClass(/border-primary/)
+    const customerDetails = bills.nth(0).getByText('Customer details')
+    const billTimeline = bills.nth(0).getByText('Bill timeline')
+    const customerDisclosure = customerDetails.locator('xpath=ancestor::details')
+    const timelineDisclosure = billTimeline.locator('xpath=ancestor::details')
+    await expect(customerDisclosure).not.toHaveAttribute('open')
+    await expect(timelineDisclosure).not.toHaveAttribute('open')
+    await customerDetails.click()
+    await expect(customerDisclosure).toHaveAttribute('open', '')
+    await billTimeline.click()
+    await expect(timelineDisclosure).toHaveAttribute('open', '')
+    const detailBox = await bills.nth(0).getByTestId('manager-bill-detail-transition').boundingBox()
+    expect(detailBox).not.toBeNull()
+    // Even with both optional disclosures opened, the two-column facts stay bounded.
+    expect(detailBox!.height).toBeLessThan(620)
+    await expect(bills.nth(0).getByLabel(/Cancellation reason/)).toHaveCount(0)
+
+    await secondSummary.evaluate((node) => node.scrollIntoView({ block: 'center' }))
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(200)
+    const secondSummaryBeforeSwap = await secondSummary.boundingBox()
+    expect(secondSummaryBeforeSwap).not.toBeNull()
+    await secondSummary.click()
+    await expect(firstSummary).toHaveAttribute('aria-expanded', 'false')
+    await expect(secondSummary).toHaveAttribute('aria-expanded', 'true')
+    await expect(bills.nth(0).getByTestId('manager-bill-detail-transition')).toHaveAttribute(
+      'data-open',
+      'false',
+    )
+    await page.waitForTimeout(280)
+    await expect(bills.nth(0).getByTestId('manager-bill-detail-transition')).toHaveCount(0)
+    const secondSummaryAfterSwap = await secondSummary.boundingBox()
+    expect(secondSummaryAfterSwap).not.toBeNull()
+    expect(Math.abs(secondSummaryAfterSwap!.y - secondSummaryBeforeSwap!.y)).toBeLessThan(8)
+    await bills.nth(1).getByRole('button', { name: 'Cancel this bill' }).click()
+    await bills
+      .nth(1)
+      .getByLabel(/Cancellation reason/)
+      .fill('Wrong item rung')
+    await bills.nth(1).getByRole('button', { name: 'Confirm cancellation' }).click()
     await expect(
       page.getByText(/ring the corrected sale manually on the enrolled counter tablet/i),
     ).toBeVisible()
+    await expect(bills.nth(1)).toContainText('Cancelled')
 
     await page.getByRole('tab', { name: /Open orders/ }).click()
-    await page.getByLabel(/Reason to cancel order/).fill('Tablet unavailable')
-    await page.getByRole('button', { name: 'Cancel order' }).click()
+    const openOrder = page.getByText(/Order 104/).locator('xpath=ancestor::li')
+    await expect(openOrder).toContainText('Order items')
+    await expect(openOrder).toContainText('Customer details')
+    await expect(openOrder).toContainText('created by')
+    await expect(openOrder.getByLabel(/Cancellation reason for order/)).toHaveCount(0)
+    await openOrder.getByRole('button', { name: 'Cancel this order' }).click()
+    await openOrder.getByLabel(/Cancellation reason for order/).fill('Tablet unavailable')
+    await openOrder.getByRole('button', { name: 'Confirm cancellation' }).click()
     await expect(page.getByText(/Nothing was transferred/)).toBeVisible()
 
-    await page.getByRole('tab', { name: /Delivery/ }).click()
-    await expect(
-      page.getByText(/Customer details and command contents are never shown/),
-    ).toBeVisible()
+    await page.getByRole('tab', { name: /Sync status/ }).click()
+    await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
+    await expect(page.getByText(/recent sync problem/i)).toBeVisible()
+    await expect(page.getByText(/Reference [0-9a-f]+/)).toBeHidden()
+    await page.getByText(/Show technical details/).click()
+    await expect(page.getByText(/Short references only/)).toBeVisible()
+    await expect(page.getByText(/Reference [0-9a-f]+/)).toBeVisible()
     await expect(page.getByRole('button', { name: /Correct|Discard/ })).toHaveCount(0)
   })
 })

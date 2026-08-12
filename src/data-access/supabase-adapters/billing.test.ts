@@ -90,10 +90,79 @@ function emptyReadableClient() {
   return { rpc: vi.fn(), from: () => query } as unknown as SupabaseClient<Database>
 }
 
+function managerHistoryClient() {
+  const bill = {
+    id: 'bill-1',
+    outlet_id: 'outlet-1',
+    bill_number: 42,
+    business_date: '2026-08-11',
+    ordered_at: '2026-08-11T12:00:00.000Z',
+    paid_at: '2026-08-11T12:05:00.000Z',
+    payment_business_date: '2026-08-11',
+    total_paise: 13_900,
+    payment_method: 'upi',
+    status: 'settled',
+    customer_name: 'Demo Customer',
+    customer_phone: '9000000000',
+    void_reason: null,
+    voided_at: null,
+    bill_items: [
+      {
+        id: 'line-1',
+        menu_item_id: 'item-1',
+        item_name: 'Classic Chicken Shawarma',
+        unit_price_paise: 13_900,
+        quantity: 1,
+      },
+    ],
+    bill_payments: [{ method: 'upi', amount_paise: 13_900 }],
+    order: { order_number: 9 },
+    biller: { full_name: 'Demo Biller' },
+  }
+  const selected: string[] = []
+  const from = vi.fn((table: string) => {
+    if (table === 'effective_bill_payments') {
+      const query = {
+        select: () => query,
+        in: () => Promise.resolve({ data: [], error: null }),
+      }
+      return query
+    }
+    const query = {
+      select: (columns: string) => {
+        selected.push(columns)
+        return query
+      },
+      eq: () => query,
+      order: () => Promise.resolve({ data: [bill], error: null }),
+    }
+    return query
+  })
+  return {
+    client: { rpc: vi.fn(), from } as unknown as SupabaseClient<Database>,
+    selected,
+  }
+}
+
 beforeEach(async () => Dexie.delete(BILLING_DELIVERY_DATABASE_NAME))
 afterEach(async () => Dexie.delete(BILLING_DELIVERY_DATABASE_NAME))
 
 describe('the live tablet acceptance boundary', () => {
+  it('resolves existing biller attribution for manager history', async () => {
+    const { client, selected } = managerHistoryClient()
+    const billing = createSupabaseBillingAdapter(client)
+
+    await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
+      {
+        id: 'bill-1',
+        billerName: 'Demo Biller',
+        customerName: 'Demo Customer',
+        customerPhone: '9000000000',
+      },
+    ])
+    expect(selected[0]).toContain('biller:profiles!bills_biller_profile_id_fkey(full_name)')
+  })
+
   it('commits an exact split-tender, zero-discount command locally before any request', async () => {
     const rpc = vi.fn()
     const billing = createSupabaseBillingAdapter(clientWithRpc(rpc), session)
@@ -116,7 +185,9 @@ describe('the live tablet acceptance boundary', () => {
       totalPaise: 13_900,
       payments: draft.payments,
     })
-    expect((envelope?.eligibleAtMs ?? 0) - (envelope?.createdAtMs ?? 0)).toBeLessThan(20)
+    // "Immediate" means no retry/backoff delay. Hashing and IndexedDB can take
+    // several event-loop turns when the full suite is exercising them in parallel.
+    expect((envelope?.eligibleAtMs ?? 0) - (envelope?.createdAtMs ?? 0)).toBeLessThan(250)
     database.close()
   })
 

@@ -53,6 +53,7 @@ type BillReadRow = Tables<'bills'> & {
   bill_items: Tables<'bill_items'>[]
   bill_payments: Tables<'bill_payments'>[]
   order: { order_number: number } | { order_number: number }[] | null
+  biller: { full_name: string } | { full_name: string }[] | null
 }
 
 type EffectivePaymentRow = {
@@ -141,6 +142,7 @@ function billView(
       : null,
     paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
     status: row.status,
+    billerName: joined(row.biller)?.full_name ?? 'Counter operator',
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
     lines: row.bill_items.map(lineView),
@@ -465,7 +467,9 @@ export function createSupabaseBillingAdapter(
   }): Promise<BillingBill[]> {
     let query = client
       .from('bills')
-      .select('*, bill_items(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number)')
+      .select(
+        '*, bill_items(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name)',
+      )
     if (filters.id) query = query.eq('id', filters.id)
     if (filters.outletId) query = query.eq('outlet_id', filters.outletId)
     if (filters.counterShiftId) query = query.eq('counter_shift_id', filters.counterShiftId)
@@ -587,6 +591,7 @@ export function createSupabaseBillingAdapter(
           paymentMethod:
             command.payload.payments.length > 1 ? 'mixed' : command.payload.payments[0]!.method,
           status: 'settled',
+          billerName: 'Counter operator',
           customerName: command.payload.customerName,
           customerPhone: command.payload.customerPhone,
           lines: command.payload.lines.map((line) => ({
@@ -625,6 +630,7 @@ export function createSupabaseBillingAdapter(
             paymentMethod:
               command.payload.payments.length > 1 ? 'mixed' : command.payload.payments[0]!.method,
             status: 'settled',
+            billerName: order.creatorName,
             customerName: order.customerName,
             customerPhone: order.customerPhone,
             lines: order.lines,
@@ -877,6 +883,7 @@ export function createSupabaseBillingAdapter(
         ).toISOString(),
         paymentMethod: draft.payments.length > 1 ? 'mixed' : draft.payments[0]!.method,
         status: 'settled',
+        billerName: 'Counter operator',
         customerName: draft.customerName?.trim() || null,
         customerPhone: draft.customerPhone?.trim() || null,
         lines: [...draft.lines],
@@ -1039,6 +1046,7 @@ export function createSupabaseBillingAdapter(
         ).toISOString(),
         paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
         status: 'settled',
+        billerName: existing.creatorName,
         customerName: existing.customerName,
         customerPhone: existing.customerPhone,
         lines: existing.lines,

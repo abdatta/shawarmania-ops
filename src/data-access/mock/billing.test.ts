@@ -386,6 +386,23 @@ describe('mock billing adapter', () => {
     )
   })
 
+  it('attributes manager history to the biller and keeps outlet scope intact', async () => {
+    const store = createDemoStore()
+    const managerPersona = personaFixtures.franchise_admin
+    const manager = createMockBillingAdapter(store, {
+      role: 'franchise_admin',
+      userId: managerPersona.profile.id,
+      outletIds: [DEMO_OUTLET_ID],
+    })
+
+    const history = await manager.listManagerHistory({ outletId: DEMO_OUTLET_ID })
+    expect(history.length).toBeGreaterThan(0)
+    expect(history[0]?.billerName).toMatch(/^Demo /)
+    await expect(manager.listManagerHistory({ outletId: 'another-outlet' })).rejects.toThrow(
+      /not manage/,
+    )
+  })
+
   it('keeps needs-attention resolution on the originating tablet and diagnostics read-only', async () => {
     const store = createDemoStore()
     const biller = createMockBillingAdapter(store)

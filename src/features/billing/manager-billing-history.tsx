@@ -1,5 +1,5 @@
-import { AlertTriangle, Ban, ReceiptText } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { ChevronDown, ReceiptText } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { Button } from '@/components/ui/button'
@@ -16,10 +16,114 @@ import {
   type BillStatus,
   type PaymentMethod,
 } from '@/data-access/adapters'
-import { formatDateTime } from '@/domain'
+import { formatBusinessDate, formatDayTime, resolveBusinessDate } from '@/domain'
 import { useSession } from '@/session/context'
 
-type View = 'bills' | 'orders' | 'delivery'
+import { ManagerBillDetail } from './manager-bill-detail'
+import { ManagerSyncStatus } from './manager-sync-status'
+
+type View = 'bills' | 'orders' | 'sync'
+
+const DETAIL_TRANSITION_MS = 200
+
+function BillDetailTransition({ open, children }: { open: boolean; children: ReactNode }) {
+  const [entered, setEntered] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      const frame = window.requestAnimationFrame(() => setEntered(false))
+      return () => window.cancelAnimationFrame(frame)
+    }
+
+    const frame = window.requestAnimationFrame(() => setEntered(true))
+    return () => window.cancelAnimationFrame(frame)
+  }, [open])
+
+  return (
+    <div
+      data-testid="manager-bill-detail-transition"
+      data-open={open}
+      aria-hidden={!open || undefined}
+      className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${entered && open ? 'grid-rows-[1fr] opacity-100' : 'pointer-events-none grid-rows-[0fr] opacity-0'}`}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
+  )
+}
+
+function methodLabel(method: BillingBill['paymentMethod']) {
+  return method === 'upi' ? 'UPI' : method[0]!.toUpperCase() + method.slice(1)
+}
+
+/**
+ * The native input owns the platform calendar; the button gives its selection
+ * a business-readable label. A blank browser field used to make `dd-mm-yyyy`
+ * look unanswered while silently widening history to every available day.
+ */
+function HistoryBusinessDateField({
+  businessDate,
+  today,
+  onChange,
+}: {
+  businessDate: string
+  today: string
+  onChange: (businessDate: string) => void
+}) {
+  const native = useRef<HTMLInputElement>(null)
+  const label = businessDate === today ? 'Today' : formatBusinessDate(businessDate)
+
+  return (
+    <div className="relative min-w-0">
+      <button
+        type="button"
+        aria-label={`Business date — ${formatBusinessDate(businessDate)}. Opens a calendar.`}
+        data-testid="billing-history-date-open"
+        onClick={() => {
+          if (native.current?.showPicker) native.current.showPicker()
+          else native.current?.click()
+        }}
+        className="h-[var(--size-control)] w-full truncate rounded-lg border border-border bg-surface px-3 text-left font-semibold text-content hover:bg-surface-raised focus-visible:focus-ring"
+      >
+        {label}
+      </button>
+      <input
+        ref={native}
+        type="date"
+        tabIndex={-1}
+        aria-hidden
+        data-testid="billing-history-date-picker"
+        value={businessDate}
+        max={today}
+        onChange={(event) => {
+          if (event.target.value) onChange(event.target.value)
+        }}
+        className="pointer-events-none absolute inset-0 size-full opacity-0"
+      />
+    </div>
+  )
+}
+
+function BillingHistoryShimmer() {
+  return (
+    <LoadingRegion label="billing records" className="space-y-2">
+      {[0, 1, 2].map((item) => (
+        <div
+          key={item}
+          className="grid min-h-20 grid-cols-[1fr_auto] items-center gap-4 rounded-xl border border-border bg-surface p-3"
+        >
+          <div className="space-y-2">
+            <Shimmer className="h-4 w-28" />
+            <Shimmer className="h-3 w-48 max-w-full" />
+          </div>
+          <div className="space-y-2">
+            <Shimmer className="ml-auto h-5 w-16" />
+            <Shimmer className="ml-auto h-3 w-5" />
+          </div>
+        </div>
+      ))}
+    </LoadingRegion>
+  )
+}
 
 export function ManagerBillingHistory() {
   const { billing, outlets: outletsAdapter } = useAdapters()
@@ -33,10 +137,28 @@ export function ManagerBillingHistory() {
   const [bills, setBills] = useState<BillingBill[]>([])
   const [orders, setOrders] = useState<BillingOrder[]>([])
   const [diagnostics, setDiagnostics] = useState<BillingDeliveryDiagnostic[]>([])
-  const [selected, setSelected] = useState<BillingBill | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [closingIds, setClosingIds] = useState<string[]>([])
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const closingTimers = useRef<number[]>([])
+  const anchorFrame = useRef<number | null>(null)
+  const selectedOutlet = outlets?.find((outlet) => outlet.id === outletId) ?? null
+  const today = selectedOutlet
+    ? resolveBusinessDate(new Date(), selectedOutlet.business_day_cutover)
+    : ''
+  const businessDate = date || today
+
+  useEffect(
+    () => () => {
+      closingTimers.current.forEach((timer) => window.clearTimeout(timer))
+      if (anchorFrame.current !== null) window.cancelAnimationFrame(anchorFrame.current)
+    },
+    [],
+  )
 
   useEffect(() => {
     void outletsAdapter
@@ -50,13 +172,13 @@ export function ManagerBillingHistory() {
 
   const load = useCallback(async () => {
     await Promise.resolve()
-    if (!outletId) return
+    if (!outletId || !businessDate) return
     setLoading(true)
     try {
       const [nextBills, nextOrders, nextDiagnostics] = await Promise.all([
         billing.listManagerHistory({
           outletId,
-          ...(date ? { businessDate: date } : {}),
+          businessDate,
           status,
           paymentMethod: method,
         }),
@@ -66,6 +188,9 @@ export function ManagerBillingHistory() {
       setBills(nextBills)
       setOrders(nextOrders)
       setDiagnostics(nextDiagnostics)
+      setSelectedId((current) =>
+        current && nextBills.some((bill) => bill.id === current) ? current : null,
+      )
     } catch (cause) {
       setMessage(
         cause instanceof DataActionError ? cause.message : 'Could not load billing history.',
@@ -73,24 +198,84 @@ export function ManagerBillingHistory() {
     } finally {
       setLoading(false)
     }
-  }, [billing, date, method, outletId, status])
+  }, [billing, businessDate, method, outletId, status])
 
   useEffect(() => {
     void Promise.resolve().then(load)
   }, [load])
 
-  const mutate = async (operation: () => Promise<unknown>, success: string) => {
+  const mutate = async (
+    operation: () => Promise<unknown>,
+    success: string,
+    keepBillOpen = false,
+  ) => {
     try {
       await operation()
       setReason('')
+      setCancellingId(null)
+      setCancellingOrderId(null)
       setMessage(success)
-      setSelected(null)
+      if (!keepBillOpen) setSelectedId(null)
       await load()
     } catch (cause) {
       setMessage(
         cause instanceof DataActionError ? cause.message : 'That action could not be completed.',
       )
     }
+  }
+
+  const chooseView = (next: View) => {
+    setView(next)
+    setSelectedId(null)
+    setCancellingId(null)
+    setCancellingOrderId(null)
+    setReason('')
+  }
+
+  const closeDetail = (billId: string) => {
+    setClosingIds((current) => (current.includes(billId) ? current : [...current, billId]))
+    const timer = window.setTimeout(() => {
+      setClosingIds((current) => current.filter((id) => id !== billId))
+      closingTimers.current = closingTimers.current.filter((id) => id !== timer)
+    }, DETAIL_TRANSITION_MS)
+    closingTimers.current.push(timer)
+  }
+
+  const anchorSummaryDuringSwap = (billId: string) => {
+    const summary = document.getElementById(`bill-summary-${billId}`)
+    if (!summary) return
+
+    const targetTop = summary.getBoundingClientRect().top
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const until = window.performance.now() + (reducedMotion ? 50 : DETAIL_TRANSITION_MS + 60)
+
+    const keepPosition = () => {
+      const target = document.getElementById(`bill-summary-${billId}`)
+      if (!target) return
+
+      const offset = target.getBoundingClientRect().top - targetTop
+      if (Math.abs(offset) >= 1) window.scrollBy(0, offset)
+      if (window.performance.now() < until)
+        anchorFrame.current = window.requestAnimationFrame(keepPosition)
+    }
+
+    if (anchorFrame.current !== null) window.cancelAnimationFrame(anchorFrame.current)
+    anchorFrame.current = window.requestAnimationFrame(keepPosition)
+  }
+
+  const selectBill = (billId: string) => {
+    if (selectedId === billId) {
+      closeDetail(billId)
+      setSelectedId(null)
+    } else {
+      const currentIndex = selectedId ? bills.findIndex((bill) => bill.id === selectedId) : -1
+      const nextIndex = bills.findIndex((bill) => bill.id === billId)
+      if (selectedId) closeDetail(selectedId)
+      if (currentIndex >= 0 && nextIndex > currentIndex) anchorSummaryDuringSwap(billId)
+      setSelectedId(billId)
+    }
+    setCancellingId(null)
+    setReason('')
   }
 
   if (outlets === null)
@@ -107,10 +292,15 @@ export function ManagerBillingHistory() {
           Billing history
         </h1>
         <p className="text-sm text-content-muted">
-          Outlet records are immutable. Corrections leave the original bill visible.
+          Bills stay in history. A correction cancels the original and creates a new bill at the
+          counter.
         </p>
       </div>
-      <div className="grid gap-2 rounded-xl border border-border bg-surface p-3 sm:grid-cols-2 lg:grid-cols-4">
+
+      <div
+        data-testid="billing-history-filters"
+        className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-surface p-3 lg:grid-cols-4"
+      >
         <Select
           aria-label="Outlet"
           value={outletId}
@@ -122,20 +312,17 @@ export function ManagerBillingHistory() {
             </option>
           ))}
         </Select>
-        <Input
-          aria-label="Revenue business date"
-          type="date"
-          value={date}
-          onChange={(event) => setDate(event.target.value)}
-        />
+        {businessDate && (
+          <HistoryBusinessDateField businessDate={businessDate} today={today} onChange={setDate} />
+        )}
         <Select
           aria-label="Bill status"
           value={status}
           onChange={(event) => setStatus(event.target.value as BillStatus | 'all')}
         >
           <option value="all">All statuses</option>
-          <option value="settled">Sent</option>
-          <option value="void">Void</option>
+          <option value="settled">Paid</option>
+          <option value="void">Cancelled</option>
         </Select>
         <Select
           aria-label="Payment method"
@@ -145,17 +332,21 @@ export function ManagerBillingHistory() {
           <option value="all">All payments</option>
           {(['cash', 'upi'] satisfies PaymentMethod[]).map((value) => (
             <option key={value} value={value}>
-              {value}
+              {methodLabel(value)}
             </option>
           ))}
         </Select>
       </div>
-      <div className="flex gap-2" role="tablist" aria-label="Billing history views">
+
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Billing history views">
         {(
           [
             ['bills', `Bills (${bills.length})`],
             ['orders', `Open orders (${orders.length})`],
-            ['delivery', `Delivery (${diagnostics.length})`],
+            [
+              'sync',
+              `Sync status${diagnostics.some((item) => !['accepted', 'replay', 'applied', 'corrected', 'discarded'].includes(item.resultCategory)) ? ' · Check' : ''}`,
+            ],
           ] as const
         ).map(([id, label]) => (
           <Button
@@ -164,12 +355,13 @@ export function ManagerBillingHistory() {
             size="phone"
             role="tab"
             aria-selected={view === id}
-            onClick={() => setView(id)}
+            onClick={() => chooseView(id)}
           >
             {label}
           </Button>
         ))}
       </div>
+
       {message && (
         <p
           role="status"
@@ -178,36 +370,79 @@ export function ManagerBillingHistory() {
           {message}
         </p>
       )}
+
       {loading ? (
-        <LoadingRegion label="billing records" className="space-y-2">
-          <Shimmer className="h-20" />
-          <Shimmer className="h-20" />
-        </LoadingRegion>
+        <BillingHistoryShimmer />
       ) : view === 'bills' ? (
         bills.length === 0 ? (
           <EmptyState icon={ReceiptText} title="No bills match these filters." />
         ) : (
-          <ul className="space-y-2">
-            {bills.map((bill) => (
-              <li key={bill.id}>
-                <Button
-                  variant="secondary"
-                  className="h-auto w-full justify-between p-3 text-left"
-                  onClick={() => setSelected(bill)}
-                >
-                  <span>
-                    <span className="block font-bold">
-                      Bill {bill.billNumber} · {bill.status === 'void' ? 'Void' : 'Sent'}
+          <ul className="space-y-2" data-testid="manager-bill-list">
+            {bills.map((bill) => {
+              const expanded = bill.id === selectedId
+              const showingDetail = expanded || closingIds.includes(bill.id)
+              const stateLabel = bill.status === 'void' ? 'Cancelled' : 'Paid'
+              return (
+                <li key={bill.id} data-testid={`manager-bill-${bill.id}`}>
+                  <Button
+                    id={`bill-summary-${bill.id}`}
+                    variant="secondary"
+                    className={`min-h-20 w-full justify-start gap-3 p-3 text-left transition-colors ${showingDetail ? 'rounded-b-none' : ''}`}
+                    aria-expanded={expanded}
+                    aria-controls={`bill-detail-${bill.id}`}
+                    onClick={() => selectBill(bill.id)}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="font-black text-content">Bill {bill.billNumber}</span>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-xs font-bold ${bill.status === 'void' ? 'border-danger text-danger' : 'border-success text-success'}`}
+                        >
+                          {stateLabel}
+                        </span>
+                      </span>
+                      <span className="mt-1 block text-sm font-normal text-content-muted">
+                        {methodLabel(bill.paymentMethod)} · {formatDayTime(bill.paidAt)} · by{' '}
+                        {bill.billerName}
+                      </span>
                     </span>
-                    <span className="block text-xs font-normal text-content-muted">
-                      Revenue date {bill.businessDate} · {bill.paymentMethod} · paid{' '}
-                      {formatDateTime(bill.paidAt)}
+                    <span className="flex shrink-0 items-center gap-2">
+                      <Money paise={bill.totalPaise} className="font-black text-content" />
+                      <ChevronDown
+                        aria-hidden
+                        size={18}
+                        className={`text-content-muted transition-transform ${expanded ? 'rotate-180' : ''}`}
+                      />
                     </span>
-                  </span>
-                  <Money paise={bill.totalPaise} className="font-bold" />
-                </Button>
-              </li>
-            ))}
+                  </Button>
+                  {showingDetail && (
+                    <BillDetailTransition open={expanded}>
+                      <ManagerBillDetail
+                        bill={bill}
+                        cancelling={cancellingId === bill.id}
+                        reason={reason}
+                        onReasonChange={setReason}
+                        onStartCancelling={() => {
+                          setCancellingId(bill.id)
+                          setReason('')
+                        }}
+                        onKeepBill={() => {
+                          setCancellingId(null)
+                          setReason('')
+                        }}
+                        onConfirmCancellation={() =>
+                          void mutate(
+                            () => billing.voidBill(bill.id, reason),
+                            `Bill ${bill.billNumber} was cancelled. Ring the corrected sale manually on the enrolled counter tablet.`,
+                            true,
+                          )
+                        }
+                      />
+                    </BillDetailTransition>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )
       ) : view === 'orders' ? (
@@ -215,145 +450,128 @@ export function ManagerBillingHistory() {
           <EmptyState icon={ReceiptText} title="No stranded open orders at this outlet." />
         ) : (
           <ul className="space-y-2">
-            {orders.map((order) => (
-              <li key={order.id} className="rounded-xl border border-border bg-surface p-3">
-                <div className="flex justify-between">
-                  <div>
-                    <p className="text-2xl font-black text-primary">Order {order.orderNumber}</p>
-                    <p className="text-xs text-content-muted">
-                      {formatDateTime(order.orderedAt)} · {order.creatorName}
-                    </p>
+            {orders.map((order) => {
+              const cancellingOrder = cancellingOrderId === order.id
+              return (
+                <li key={order.id} className="rounded-xl border border-border bg-surface p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xl font-black text-content">Order {order.orderNumber}</p>
+                      <p className="mt-1 text-xs text-content-muted">
+                        {formatDayTime(order.orderedAt)} · created by {order.creatorName}
+                      </p>
+                    </div>
+                    <Money paise={order.totalPaise} display className="shrink-0" />
                   </div>
-                  <Money paise={order.totalPaise} display />
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <Input
-                    aria-label={`Reason to cancel order ${order.orderNumber}`}
-                    placeholder="Why is this order being cancelled?"
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
-                  />
-                  <Button
-                    variant="danger"
-                    disabled={!reason.trim()}
-                    onClick={() =>
-                      void mutate(
-                        () => billing.managerCancelOrder(order.id, reason),
-                        `Order ${order.orderNumber} was cancelled. Nothing was transferred.`,
-                      )
-                    }
-                  >
-                    Cancel order
-                  </Button>
-                </div>
-              </li>
-            ))}
+
+                  <section className="mt-3 rounded-xl border border-border bg-surface p-3">
+                    <h3 className="text-sm font-black text-content">Order items</h3>
+                    <ul className="mt-2 divide-y divide-border">
+                      {order.lines.map((line, index) => (
+                        <li
+                          key={`${line.menuItemId}-${index}`}
+                          className="grid grid-cols-[1fr_auto] gap-x-3 py-2 first:pt-0 last:pb-0"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-semibold leading-tight text-content">
+                              {line.itemName}
+                            </p>
+                            <p className="mt-1 text-xs text-content-muted">
+                              {line.quantity} × <Money paise={line.unitPricePaise} /> each
+                            </p>
+                          </div>
+                          <Money
+                            paise={line.unitPricePaise * line.quantity}
+                            className="self-center font-bold"
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+
+                  <section className="mt-3 rounded-xl border border-border bg-surface p-3">
+                    <h3 className="text-sm font-black text-content">Customer details</h3>
+                    <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
+                      <div>
+                        <dt className="text-xs font-semibold text-content-muted">Customer name</dt>
+                        <dd className="mt-0.5 text-sm font-semibold text-content">
+                          {order.customerName || 'Not provided'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-semibold text-content-muted">Customer phone</dt>
+                        <dd className="mt-0.5 break-words text-sm font-semibold text-content">
+                          {order.customerPhone || 'Not provided'}
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  {cancellingOrder ? (
+                    <div className="mt-3 rounded-xl border border-danger bg-surface p-3">
+                      <h3 className="font-black text-content">Cancel order {order.orderNumber}?</h3>
+                      <p className="mt-1 text-sm text-content-muted">
+                        The order leaves active work. Nothing is transferred to another tablet.
+                      </p>
+                      <label
+                        htmlFor={`cancel-order-reason-${order.id}`}
+                        className="mt-3 block text-sm font-bold text-content"
+                      >
+                        Why is this order being cancelled?
+                      </label>
+                      <Input
+                        id={`cancel-order-reason-${order.id}`}
+                        aria-label={`Cancellation reason for order ${order.orderNumber}`}
+                        className="mt-1"
+                        placeholder="For example, customer changed their mind"
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                      />
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setCancellingOrderId(null)
+                            setReason('')
+                          }}
+                        >
+                          Keep order
+                        </Button>
+                        <Button
+                          variant="danger"
+                          disabled={!reason.trim()}
+                          onClick={() =>
+                            void mutate(
+                              () => billing.managerCancelOrder(order.id, reason),
+                              `Order ${order.orderNumber} was cancelled. Nothing was transferred.`,
+                            )
+                          }
+                        >
+                          Confirm cancellation
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <Button
+                        variant="secondary"
+                        className="text-danger"
+                        onClick={() => {
+                          setCancellingOrderId(order.id)
+                          setReason('')
+                        }}
+                      >
+                        Cancel this order
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )
-      ) : diagnostics.length === 0 ? (
-        <EmptyState icon={AlertTriangle} title="No delivery problems reported." />
       ) : (
-        <div className="space-y-2">
-          <p className="text-sm text-content-muted">
-            Read-only status. Customer details and command contents are never shown here.
-          </p>
-          {diagnostics.map((item) => (
-            <article
-              key={item.reference}
-              className="rounded-xl border border-border bg-surface p-3"
-            >
-              <p className="font-bold text-content">
-                {item.commandType.replaceAll('_', ' ')} · {item.resultCategory.replaceAll('_', ' ')}
-              </p>
-              <p className="text-xs text-content-muted">
-                Reference {item.reference.slice(0, 8)} · received {formatDateTime(item.receivedAt)}{' '}
-                · age {Math.max(1, Math.round(item.ageMs / 60000))} min
-              </p>
-            </article>
-          ))}
-        </div>
-      )}
-      {selected && (
-        <div
-          className="rounded-xl border-2 border-primary bg-surface p-4"
-          role="dialog"
-          aria-label={`Bill ${selected.billNumber} detail`}
-        >
-          <div className="flex justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-black text-content">Bill {selected.billNumber}</h2>
-              {selected.orderNumber && (
-                <p className="text-sm text-content-muted">From order {selected.orderNumber}</p>
-              )}
-            </div>
-            <Button variant="secondary" size="phone" onClick={() => setSelected(null)}>
-              Close
-            </Button>
-          </div>
-          <ul className="my-3 divide-y divide-border">
-            {selected.lines.map((line) => (
-              <li key={line.menuItemId} className="flex justify-between py-2">
-                <span>
-                  {line.itemName} × {line.quantity}
-                </span>
-                <Money paise={line.unitPricePaise * line.quantity} />
-              </li>
-            ))}
-          </ul>
-          <div className="mb-3 rounded-lg bg-surface-raised p-3">
-            <p className="text-xs font-bold uppercase tracking-wide text-content-muted">Payment</p>
-            {selected.payments.map((payment) => (
-              <p
-                key={payment.method}
-                className="mt-1 flex justify-between gap-3 text-sm font-semibold capitalize text-content"
-              >
-                <span>{payment.method}</span>
-                <Money paise={payment.amountPaise} />
-              </p>
-            ))}
-          </div>
-          <p className="text-sm text-content-muted">
-            Revenue date {selected.businessDate}; ordered {formatDateTime(selected.orderedAt)}.
-          </p>
-          {(selected.paymentBusinessDate !== selected.businessDate ||
-            selected.paidAt !== selected.orderedAt) && (
-            <p className="text-sm font-semibold text-content">
-              Paid {formatDateTime(selected.paidAt)} on payment business date{' '}
-              {selected.paymentBusinessDate}.
-            </p>
-          )}
-          {selected.status === 'void' ? (
-            <p className="mt-3 rounded-lg border border-danger p-3 font-semibold text-danger">
-              Void: {selected.voidReason}
-            </p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              <Input
-                aria-label="Void reason"
-                placeholder="Reason for void"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
-              <Button
-                variant="danger"
-                disabled={!reason.trim()}
-                onClick={() =>
-                  void mutate(
-                    () => billing.voidBill(selected.id, reason),
-                    `Bill ${selected.billNumber} is void. Ring the corrected sale manually on the enrolled counter tablet.`,
-                  )
-                }
-              >
-                <Ban aria-hidden size={18} />
-                Void bill
-              </Button>
-              <p className="text-sm text-content-muted">
-                After voiding, ring the corrected sale manually on the enrolled counter tablet. This
-                phone creates no bill or draft.
-              </p>
-            </div>
-          )}
-        </div>
+        <ManagerSyncStatus diagnostics={diagnostics} />
       )}
     </section>
   )
