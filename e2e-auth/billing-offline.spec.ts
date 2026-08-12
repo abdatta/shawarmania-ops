@@ -157,7 +157,9 @@ async function effectiveTender(
 async function changeLatestCashBillToUpi(page: Page, customerName: string) {
   const paidBill = page.locator('details').filter({ hasText: customerName }).first()
   await paidBill.locator('summary').click()
-  await paidBill.getByRole('button', { name: /^Edit for/ }).click()
+  // `Edit (5 min)` / `Edit (59 sec)` — the countdown label from
+  // `paymentEditLabel`, which is the button's whole accessible name.
+  await paidBill.getByRole('button', { name: /^Edit \(/ }).click()
   const dialog = page.getByRole('dialog', { name: 'Record payment' })
   await dialog.getByRole('button', { name: 'Remove Cash payment' }).click()
   await dialog.getByRole('button', { name: 'UPI', exact: true }).click()
