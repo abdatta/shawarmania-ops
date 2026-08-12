@@ -13,4 +13,4 @@
 - [x] 3.1 Run the complete non-Docker suite: lint, format check, typecheck, unit/component tests, contrast, build, and browser E2E.
 - [x] 3.2 Start and reset the local stack; run database, RLS/REST, and real-backend auth E2E suites; regenerate database types and prove no type drift.
 - [x] 3.3 Prove the regression fails without the transition-clock fix and passes with it.
-- [ ] 3.4 **PHASE GATE — account-transitions-use-business-time**: Both account transitions succeed in the Kolkata/UTC calendar gap, all assignment dates remain valid, authority and history invariants remain intact, every local CI gate is green, and production Deploy completes successfully.
+- [x] 3.4 **PHASE GATE — account-transitions-use-business-time**: Both account transitions succeed in the Kolkata/UTC calendar gap, all assignment dates remain valid, authority and history invariants remain intact, every local CI gate is green, and production Deploy completes successfully.
