@@ -419,8 +419,25 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
 
 Roll billing out at **Kalyani first**, because it has the first tablet. Trade one
 full business day and close it cleanly before repeating setup and handover at
-Kanchrapara. Do not set either `billing_live_from` date until its real menu,
-tablet shadow run and Cash/UPI reconciliation have passed.
+Kanchrapara.
+
+**The shakedown is a parallel run, not a shadow test.** Kalyani's tablet has been
+taking real customer money since 12 Aug 2026, and **every bill it rings is also
+written down by hand**. That is deliberate: the bugs worth finding are the ones a
+real queue of customers produces, and the hand-written record is the second copy
+that makes it safe to look for them. It continues until the two records agree
+over enough trading to trust the system.
+
+So **the promotion is the ledger handover, not the first bill**, and step 12 is
+the only irreversible step on this page. Do not set `billing_live_from` at either
+outlet until its real menu, its parallel run and its Cash/UPI reconciliation have
+passed. An outlet whose bills turn out to be wrong after its ledger has handed
+over has no second record left to compare against.
+
+**This handover is owed rather than done.** `billing-live` (#10) built all of it
+and closed without performing it, so no automated gate asserts it happened;
+[`openspec/todos/ledger-handover-per-outlet.md`](../openspec/todos/ledger-handover-per-outlet.md)
+tracks where each outlet stands.
 
 ## Recording a trading day by hand *(temporary — #36)*
 

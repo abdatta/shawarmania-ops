@@ -72,6 +72,15 @@ during rollout.
   Zomato and Swiggy revenue stays typed at every outlet on every date, because
   there are no aggregator bills to read it from. Aggregator commission, cash in
   and out, and the counted drawer stay manual until #12 and #13.
+- **Let the Tablets surface say what the counter is doing, not only that the
+  tablet is switched on.** Each card gains the live shift, the person holding it,
+  and — on a live outlet's current business date — that shift's bills, effective
+  Cash and UPI, open orders waiting and drawer cash, every figure taken through
+  the same effective-allocation boundary the drawer reads. It states when it was
+  read, re-reads when opened and on request, and subscribes to nothing. **Added
+  2026-08-12** from the owner's Kalyani session, where the answer to "how is the
+  counter doing" turned out to be a last-seen timestamp. Opening the biller's own
+  screen, and practising on a copy of it, is #39 and stays out of this change.
 
 ## Capabilities
 
@@ -101,6 +110,10 @@ during rollout.
 - `daily-cash-reconciliation`: Cash receipts and expected drawer figures use each
   bill's latest accepted effective allocation, never the superseded original
   tender or more than one revision.
+- `counter-device-sessions`: Tablet management reports the counter rather than
+  only the hardware — the live shift, its operator and that shift's effective
+  figures, scoped by the reader's own outlets, stated as of one reading and
+  re-read on request rather than subscribed to.
 - `demo-mode`: Promoted surfaces keep their coherent synthetic path.
 - `app-shell`: Tablet, billing, history and menu gates reach their final live
   states without exposing personal navigation on the counter.

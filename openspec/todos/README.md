@@ -37,8 +37,11 @@ Keep entries behavior-focused:
 | [Raw Materials Is Identified By A Word Nobody Types](./raw-materials-is-identified-by-a-word-nobody-types.md) | Design gap | Open | Reporting | `expenses-and-inventory-live` (#11), which puts the first real rows in front of the consumption basis |
 | [A Deploy Could Announce Itself Instead Of Being Polled](./a-deploy-could-announce-itself-instead-of-being-polled.md) | Feature | Deferred by decision | Deployment | A published fix needs to reach an idle device faster than the current interval, or the release pipeline records versions for another reason |
 | [A Near-Miss Category Should Be Caught In Expenses Too](./near-miss-category-matching-reaches-expenses.md) | Feature | Open | Expenses | `expenses-and-inventory-live` (#11), while the category list is still short and no duplicate spellings exist to merge |
+| [The Ledger Handover Still Has To Be Done, Outlet By Outlet](./ledger-handover-per-outlet.md) | Operational rollout | **Owed** | Billing / Ledger | Not a promotion trigger — this is work that must happen. Kalyani when its parallel run and the hand-written bills agree; Kanchrapara once its hardware arrives and repeats the run |
 
 The three billing items are grouped deliberately: v1 ships bills as **record-only**, and all three extensions were anticipated in the schema so none of them requires migrating historical bills. See [Limitations](../../docs/LIMITATIONS.md#bills-are-record-only) for exactly which columns exist ahead of need, and why.
+
+**One entry is not a backlog item at all.** *The Ledger Handover Still Has To Be Done* is work already owed rather than an idea awaiting a trigger: `billing-live` (#10) built every part of it and closed without performing it, by the owner's decision on 12 Aug 2026, because the act waits on days of real trading and on hardware. It sits in this table because an unlisted obligation is lost work — the rule this index exists to hold — and because no automated gate asserts it happened.
 
 Two entries carry a status worth reading before the trigger column:
 
@@ -55,7 +58,8 @@ Seven items the owner noticed while setting up billing at Kalyani on 12 Aug 2026
 - [Promoting a Staff Member Can Accidentally Lock Them Out](./promoting-staff-can-lock-them-out.md) — Staff / Roles
 - [The App Asks for a Code Before Checking If the Person Is Even Allowed](./code-request-before-eligibility-check.md) — Counter / Billing
 - [Marking a Bill "Paid" Removes It From the Kitchen List Too Soon](./paid-removes-order-from-kitchen-too-soon.md) — Billing
-- [The Owner Can't See the Real Billing Counter From Home](./owner-cant-see-real-counter-remotely.md) — Owner console / Demo
+
+The seventh, *The Owner Can't See the Real Billing Counter From Home*, graduated on 12 Aug 2026 and is in the table below.
 
 Two of them sit inside the `billing-live` (#10) rollout path rather than after it: the counter setup page cannot be reached by clicking, which matters the moment a tablet needs pairing and the outlet has no second one running, and the tablet asks a person for a code before checking whether they may bill at all.
 
@@ -63,6 +67,7 @@ Two of them sit inside the `billing-live` (#10) rollout path rather than after i
 
 | Former item | Where it went |
 | --- | --- |
+| The Owner Can't See the Real Billing Counter From Home | Split in two on 12 Aug 2026, the day it was raised. **Seeing how a counter is doing** went into the active `billing-live` (#10, §8): the Tablets card reports the live shift, who holds it and that shift's effective figures, scoped by the reader's own outlets and stated as of one reading. **Opening the biller's own screen, and practising on a copy of it**, became [`counter-seen-and-practised`](../changes/counter-seen-and-practised/proposal.md) (#39), seeded in Wave E — which also closes the demo-versus-tablet drift the owner found, by mounting the one counter workspace three ways instead of building a third. Two owner decisions carried across: the practice copy takes **real** data rather than scrubbed, because the owner and FA already read it, and it is **Super Admin only**. |
 | PWA Brand Icons | Absorbed into `project-foundations`. The real mark from the Shawarmania site is committed as `assets/brand/shawarmania-mark-512.png` and the whole icon set is derived from it, so the placeholders it was raised against no longer exist. |
 | Role Grants: One Login, Many Hats | Graduated into `multi-outlet-people` (#22) on 2026-07-29 — the trigger fired on both counts at once: a staffer splitting shifts across the outlets, and the owner day-running one. The same day the owner simplified the design: plain per-outlet **assignments** checked by membership, no session hats or switching. One login per person and no role hierarchy stay rejected exactly as recorded here. |
 | Owner Break-Glass Writes | Folded into `multi-outlet-people` (#22) by owner decision on 2026-07-29 — the two todos were one feature seen from two ends. The boundary carries over intact: non-cash only, always visibly the owner's, the drawer stays the Franchise Admin's alone. |

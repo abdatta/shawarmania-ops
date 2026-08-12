@@ -24,7 +24,7 @@ before actually building anything.
 | 4 | [Promoting a Staff Member Can Accidentally Lock Them Out](./promoting-staff-can-lock-them-out.md) | Staff / Roles | M |
 | 5 | [The App Asks for a Code Before Checking If the Person Is Even Allowed](./code-request-before-eligibility-check.md) | Counter / Billing | L |
 | 6 | [Marking a Bill "Paid" Removes It From the Kitchen List Too Soon](./paid-removes-order-from-kitchen-too-soon.md) | Billing | XL |
-| 7 | [The Owner Can't See the Real Billing Counter From Home](./owner-cant-see-real-counter-remotely.md) | Owner console / Demo | XL |
+| 7 | The Owner Can't See the Real Billing Counter From Home | Owner console / Demo | XL — **graduated** |
 
 ### 1. The "Awaiting Activation" Label Lies — `S`
 Arpita's account shows "Awaiting Activation" even though she's actively
@@ -63,9 +63,16 @@ away. There's no way to separately track "still cooking" from "paid."
 Fixing it touches the core order model and money, so it needs real design
 work first.
 
-### 7. The Owner Can't See the Real Billing Counter From Home — `XL`
-The owner wants to open the real billing counter from their own phone, using
-a one-time snapshot of real data in a safe practice mode. Today's practice
-mode only ever uses made-up data, and the real counter and the practice
-counter are actually built differently under the hood — so this is a real
-feature to design, not a small tweak.
+### 7. The Owner Can't See the Real Billing Counter From Home — graduated
+
+**Placed on the roadmap the same day it was raised**, so it no longer has a page
+of its own. Seeing how a counter is doing went into `billing-live` (#10, §8):
+the Tablets card reports the live shift, who holds it and that shift's effective
+figures. Opening the biller's own screen and practising on a copy of it is
+[#39 `counter-seen-and-practised`](../changes/counter-seen-and-practised/proposal.md),
+seeded in Wave E, which also closes the demo-versus-tablet drift the owner found
+while exploring this — the demo counter has no Finish day because the demo shell
+and the tablet shell are two compositions of the same columns.
+
+The owner's two decisions live in the proposal: the practice copy takes **real**
+data rather than scrubbed, and it is **Super Admin only**.
