@@ -45,7 +45,7 @@ during rollout.
   appear in Bills this shift as soon as they are accepted locally. For five minutes
   from the original `paid_at`, the originating tablet may reopen the existing tender
   dialog, change only the exact Cash/UPI allocation, and keep the same bill and bill
-  number. The action reads `Edit for N min` and, below one minute, `Edit for N sec`;
+  number. The action reads `Edit (N min)` and, below one minute, `Edit (N sec)`;
   it disappears at expiry. The database enforces the deadline. The bill, original
   allocation and every correction remain immutable records, while drawer, shift,
   ledger and reporting reads use the latest accepted allocation.

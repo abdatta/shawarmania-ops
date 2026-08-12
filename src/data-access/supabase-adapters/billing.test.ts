@@ -25,7 +25,7 @@ const session: CounterDeviceSession = {
     outletId: 'outlet-1',
     openedAt: '2026-08-11T05:30:00.000Z',
     businessDate: '2026-08-11',
-    expiresAt: '2026-08-12T00:00:00.000Z',
+    expiresAt: '2099-08-12T00:00:00.000Z',
   },
 }
 
@@ -76,6 +76,20 @@ function offlineClient() {
   return { rpc: vi.fn(), from: () => query } as unknown as SupabaseClient<Database>
 }
 
+function emptyReadableClient() {
+  const response = { data: [], error: null }
+  const query = {
+    select: () => query,
+    eq: () => query,
+    in: () => query,
+    limit: () => query,
+    order: () => query,
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
+    then: (resolve: (value: typeof response) => unknown) => Promise.resolve(response).then(resolve),
+  }
+  return { rpc: vi.fn(), from: () => query } as unknown as SupabaseClient<Database>
+}
+
 beforeEach(async () => Dexie.delete(BILLING_DELIVERY_DATABASE_NAME))
 afterEach(async () => Dexie.delete(BILLING_DELIVERY_DATABASE_NAME))
 
@@ -90,7 +104,7 @@ describe('the live tablet acceptance boundary', () => {
     const envelope = await database.envelopes.get(draft.clientId)
     expect(rpc).not.toHaveBeenCalled()
     expect(envelope).toMatchObject({
-      state: 'held',
+      state: 'pending',
       tabletId: session.device.deviceId,
       shiftId: session.shift?.id,
       businessDate: draft.businessDate,
@@ -102,9 +116,42 @@ describe('the live tablet acceptance boundary', () => {
       totalPaise: 13_900,
       payments: draft.payments,
     })
-    expect((envelope?.eligibleAtMs ?? 0) - (envelope?.createdAtMs ?? 0)).toBeGreaterThanOrEqual(
-      5_900,
-    )
+    expect((envelope?.eligibleAtMs ?? 0) - (envelope?.createdAtMs ?? 0)).toBeLessThan(20)
+    database.close()
+  })
+
+  it('rebuilds an offline payment and its correction from IndexedDB after restart', async () => {
+    const firstAdapter = createSupabaseBillingAdapter(emptyReadableClient(), session)
+    await firstAdapter.settleBill(draft)
+    await firstAdapter.correctBillPayment(draft.clientId, 0, [
+      { method: 'upi', amountPaise: 13_900 },
+    ])
+
+    const restartedAdapter = createSupabaseBillingAdapter(emptyReadableClient(), session)
+    await expect(restartedAdapter.listShiftHistory(session.shift!.id)).resolves.toMatchObject({
+      bills: [
+        {
+          id: draft.clientId,
+          paymentRevision: 1,
+          payments: [{ method: 'upi', amountPaise: 13_900 }],
+        },
+      ],
+      totals: [
+        { method: 'cash', totalPaise: 0 },
+        { method: 'upi', totalPaise: 13_900 },
+      ],
+    })
+
+    const database = new BillingDeliveryDatabase()
+    const corrections = await database.envelopes
+      .where('type')
+      .equals('correct_bill_payment')
+      .toArray()
+    const dependencies = await database.dependencies
+      .where('commandId')
+      .equals(corrections[0]!.commandId)
+      .toArray()
+    expect(dependencies).toMatchObject([{ dependsOnCommandId: draft.clientId }])
     database.close()
   })
 

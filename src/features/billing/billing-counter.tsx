@@ -1,4 +1,4 @@
-import { KeyRound, Undo2, UserRoundCheck } from 'lucide-react'
+import { KeyRound, UserRoundCheck } from 'lucide-react'
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 
@@ -16,7 +16,7 @@ import {
   type MenuCategoryWithItems,
   type PaymentAllocation,
 } from '@/data-access/adapters'
-import { resolveBusinessDate, UNDO_WINDOW_MS } from '@/domain'
+import { resolveBusinessDate } from '@/domain'
 import { useOnForeground } from '@/features/attention/attention'
 import { newUuid } from '@/lib/uuid'
 import { declareUnsavedWork } from '@/pwa/occupancy'
@@ -48,12 +48,9 @@ import { useCounterState } from './use-counter-state'
  *
  * **A direct payment waits only for durable local acceptance.** The panel clears
  * after IndexedDB commits, never after a network response. What appears
- * afterwards is a confirmation with the bill's short local reference and an
- * Undo, and it clears itself: the next customer never waits for delivery.
- *
- * Undo removes an unsent queue entry. It is not an edit, and there is no path
- * here to one — a settled bill is append-only, and the only correction is a
- * manager's reasoned void followed by a manual re-ring on this tablet.
+ * afterwards is a short confirmation, and it clears itself: the next customer
+ * never waits for delivery. Tender corrections remain available with the bill
+ * in Bills this shift for five minutes.
  *
  * Editing a saved order borrows this same composer: the order goes onto the
  * panel, any draft already in progress is suspended and restored afterwards, and
@@ -68,7 +65,7 @@ interface Restorable {
   payments: PaymentAllocation[]
 }
 
-interface Confirmation extends Restorable {
+interface Confirmation {
   clientId: string
   totalPaise: number
 }
@@ -377,8 +374,6 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     // timestamp when the bill is read. A bill rung at 00:20 belongs to the
     // evening that is still going on.
     const businessDate = resolveBusinessDate(new Date(), outlet.business_day_cutover)
-    const settled: Restorable = { lines, customerName, customerPhone, payments }
-
     setSettling(true)
     setError(null)
     // Customer identity is helpful, never a condition of sale.
@@ -398,35 +393,19 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         customerPhone,
       })
       setPaymentDialogOpen(false)
-      setConfirmation({ clientId, totalPaise, ...settled })
+      setConfirmation({ clientId, totalPaise })
       clearPanel()
+      setActivityRefresh((value) => value + 1)
 
-      // The confirmation clears itself. It is on screen for exactly the undo
-      // window, which is also exactly the period during which the bill cannot yet
-      // have been sent — so an Undo that is visible is always an Undo that works.
+      // The confirmation clears itself quickly; the durable five-minute edit
+      // action remains with the bill in Bills this shift.
       if (dismissTimer.current) clearTimeout(dismissTimer.current)
-      dismissTimer.current = setTimeout(() => setConfirmation(null), UNDO_WINDOW_MS)
+      dismissTimer.current = setTimeout(() => setConfirmation(null), 2_500)
     } catch (cause) {
       setError(
         cause instanceof DataActionError
           ? cause.message
           : 'That payment was not saved on this tablet. Nothing was cleared; try again.',
-      )
-    } finally {
-      setSettling(false)
-    }
-  }
-
-  async function undo(target: Confirmation) {
-    if (dismissTimer.current) clearTimeout(dismissTimer.current)
-    setSettling(true)
-    try {
-      await billing.cancelQueuedBill(target.clientId)
-      setConfirmation(null)
-      putDraftOnPanel(target)
-    } catch (cause) {
-      setError(
-        cause instanceof DataActionError ? cause.message : 'That bill could no longer be undone.',
       )
     } finally {
       setSettling(false)
@@ -605,19 +584,9 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
                 <span data-testid="local-reference">
                   Local · {confirmation.clientId.replaceAll('-', '').slice(0, 4).toUpperCase()}
                 </span>{' '}
-                — not sent yet. Its bill number appears after delivery.
+                — saved on this tablet. Edit tender from Bills this shift.
               </p>
             </div>
-            <Button
-              variant="secondary"
-              size="phone"
-              data-testid="undo-settle"
-              disabled={settling}
-              onClick={() => void undo(confirmation)}
-            >
-              <Undo2 aria-hidden size={16} />
-              Undo
-            </Button>
           </div>
         )}
       </div>

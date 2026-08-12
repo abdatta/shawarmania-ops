@@ -136,6 +136,14 @@ fallback. Exact replay, durable refusals and correction/discard traces all land
 back in the same store. Detail and failure modes are in
 [Offline And Sync](OFFLINE_AND_SYNC.md).
 
+A settled bill remains append-only. A tender correction is a new command and a
+new sequential correction revision with a complete replacement Cash/UPI
+allocation; it never updates the bill or its original payment rows. Every reader
+uses the effective-allocation view, which selects only the latest revision, so
+shift totals, drawer cash, manager history and ledger revenue agree without
+counting old allocations. PostgreSQL locks the bill and enforces the originating
+tablet, shift, expected revision and the original `paid_at + 5 minutes` deadline.
+
 The counter is also the deliberate exception to the phone badge freshness
 convention. It reads menu and activity on mount and whenever the app returns to
 the foreground, and a shared Realtime channel treats menu, order and bill events
@@ -211,8 +219,9 @@ Deliberately asymmetric, because the risk is asymmetric:
 
 - **Reads that continue offline inside an already-open shift**: that shift's last
   successfully loaded menu plus local orders, bills and delivery state.
-- **Writes that work offline**: direct payments and create, revise, cancel and
-  pay-order commands.
+- **Writes that work offline**: direct payments; create, revise, cancel and
+  pay-order commands; and tender corrections during the original five-minute
+  window.
 - **Opening a shift is online-only**, and deliberately so: the handshake is a
   conversation between the tablet, the server and somebody else's phone, and
   nothing local can stand in for the person who types the four digits. The cost is
@@ -222,9 +231,10 @@ Deliberately asymmetric, because the risk is asymmetric:
 - **Reloading or starting billing needs the backend and a fresh live shift.** Old
   queued work may still drain after cutover, but a persisted menu is not authority
   to open new work after a restart.
-- **Finish day is online-only.** It drains the local date, refuses any unresolved
-  command or open server order, ends the shift and writes the server confirmation
-  under one outlet/date lock.
+- **Finish day is online-only.** It first waits until no paid bill remains inside
+  its five-minute tender-edit window, then drains the local date, refuses any
+  unresolved command or open server order, ends the shift and writes the server
+  confirmation under one outlet/date lock.
 - **Everything else is online-only.** Inventory, expenses, cash close, P&L and admin screens are used by managers on phones who can wait for a connection. Making them offline-capable would multiply conflict-resolution complexity for no operational gain.
 
 That line is a design commitment, not an accident. Revisit it in a proposal, not in passing.

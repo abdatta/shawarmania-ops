@@ -25,6 +25,8 @@ export type BillingCommandRefusal =
   | 'arithmetic_invalid'
   | 'unresolved_operations'
   | 'identity_conflict'
+  | 'stale_revision'
+  | 'payment_edit_expired'
 
 export interface AcceptedBillingCommandResult {
   readonly status: 'accepted' | 'replay'
@@ -34,6 +36,7 @@ export interface AcceptedBillingCommandResult {
   readonly orderNumber?: number
   readonly billId?: string
   readonly billNumber?: number
+  readonly paymentRevision?: number
   readonly businessDate?: string
   readonly watermark?: number
 }
@@ -174,14 +177,9 @@ export const SYNC_ESCALATION_COUNT = 5
 export const SYNC_ESCALATION_MS = 2 * 60 * 1000
 
 /**
- * How long a settled bill is held before it is sent — the window in which the
- * biller can still undo it.
- *
- * Long enough to notice "that was the wrong payment method" while the customer
- * is still standing there; short enough that a queue is not routinely holding
- * work. Undo cancels an unsent queue entry, so nothing is ever edited.
+ * The server-authoritative tender-correction window measured from `paid_at`.
  */
-export const UNDO_WINDOW_MS = 6 * 1000
+export const PAYMENT_EDIT_WINDOW_MS = 5 * 60 * 1000
 
 export type SyncStateKind = 'synced' | 'pending' | 'stalled'
 

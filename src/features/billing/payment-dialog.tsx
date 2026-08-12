@@ -1,5 +1,5 @@
 import { Banknote, Delete, Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
@@ -25,6 +25,7 @@ type PaymentDialogProps = {
   initialPayments?: PaymentAllocation[]
   busy?: boolean
   error?: string | null
+  mode?: 'record' | 'correct'
   onClose: () => void
   onConfirm: (payments: PaymentAllocation[]) => void
 }
@@ -39,9 +40,11 @@ function OpenPaymentDialog({
   initialPayments = NO_PAYMENTS,
   busy = false,
   error = null,
+  mode = 'record',
   onClose,
   onConfirm,
 }: PaymentDialogProps) {
+  const headingRef = useRef<HTMLHeadingElement>(null)
   const [payments, setPayments] = useState<PaymentAllocation[]>(() => initialPayments)
   const [digits, setDigits] = useState('')
   const allocatedPaise = useMemo(
@@ -50,6 +53,19 @@ function OpenPaymentDialog({
   )
   const remainingPaise = totalPaise - allocatedPaise
   const keyedPaise = digits ? Number(digits) * 100 : 0
+  const unchanged = useMemo(() => {
+    const normalize = (values: PaymentAllocation[]) =>
+      [...values]
+        .sort((left, right) => left.method.localeCompare(right.method))
+        .map((payment) => `${payment.method}:${payment.amountPaise}`)
+        .join('|')
+    return normalize(payments) === normalize(initialPayments)
+  }, [initialPayments, payments])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => headingRef.current?.focus(), 0)
+    return () => window.clearTimeout(timer)
+  }, [])
 
   function allocate(method: PaymentMethod) {
     const amountPaise = digits ? keyedPaise : remainingPaise
@@ -83,7 +99,13 @@ function OpenPaymentDialog({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-black text-content">Record payment</h2>
+          <h2
+            ref={headingRef}
+            tabIndex={-1}
+            className="text-lg font-black text-content outline-none"
+          >
+            {mode === 'correct' ? 'Edit payment' : 'Record payment'}
+          </h2>
           <p className="text-sm text-content-muted">
             Tap a method for the full balance, or key an amount first to split it.
           </p>
@@ -136,7 +158,7 @@ function OpenPaymentDialog({
             {METHODS.map(({ method, label }) => (
               <Button
                 key={method}
-                variant={method === 'cash' ? 'primary' : 'secondary'}
+                variant="secondary"
                 size="phone"
                 disabled={remainingPaise === 0 || (digits !== '' && keyedPaise === 0)}
                 onClick={() => allocate(method)}
@@ -186,10 +208,12 @@ function OpenPaymentDialog({
         </Button>
         <Button
           size="control"
-          disabled={busy || totalPaise <= 0 || remainingPaise !== 0}
+          disabled={
+            busy || totalPaise <= 0 || remainingPaise !== 0 || (mode === 'correct' && unchanged)
+          }
           onClick={() => onConfirm(payments)}
         >
-          Mark Paid
+          {mode === 'correct' ? 'Save payment' : 'Mark Paid'}
         </Button>
       </div>
     </Modal>

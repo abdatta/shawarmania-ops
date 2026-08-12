@@ -273,6 +273,16 @@ offline banner, freshness after foreground and a reported change, manager void
 with manual re-ring wording, ledger **from counter** labels, and a personal
 Biller landing on staff navigation rather than a till.
 
+Payment-correction coverage must include immediate and on-handover payments;
+neutral Cash/UPI empty state and unchanged dialog geometry; exact prefilled
+splits; the `5 min`, `1 min`, `59 sec` and zero boundaries; unchanged bill
+identity; repeated revisions without a deadline reset; stale, late,
+wrong-tablet, unsupported-method and bad-arithmetic refusals; effective shift,
+drawer, manager-history and ledger totals; Finish day refusal; parent/correction
+dependency order; restart with the chain unsent; response loss after each server
+commit; and eventual exactly-once settlement. Database tests also prove original
+and correction rows reject update/delete and remain outlet-isolated.
+
 ## What only the real transport can prove
 
 `supabase/tests/rest/attendance-adapter.test.ts` runs the real adapters against the real stack, and it exists because of a class of bug no other layer can see. A command's payload is an object here and JSON on the wire, so **the mock adapter and the component suites are handed something the database never receives.** A key whose value is `undefined` survives the mock and vanishes over HTTP.

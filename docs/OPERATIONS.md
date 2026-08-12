@@ -355,7 +355,9 @@ If a tablet needs forcing onto a new build, closing and reopening the app twice 
 
 The repeatable path. **If any step here requires a code change, that is a bug** — outlet number seven must be a data operation.
 
-> ⚠ **Steps 4, 5 and 7 are not built yet** and are marked below; **step 9 is temporary** and goes when #12 lands. Everything else is done in the app — no SQL console, at any step. **Order matters**: an outlet has to exist before anybody can be assigned to it.
+> Everything here is done in the app—no SQL console. **Order matters**: the
+> complete real menu is entered before the tablet is set up, and ledger handover
+> is scheduled only after shadow billing succeeds.
 
 1. **Create the outlet** (Super Admin → Outlets → *Add outlet*): short code, name, location label, address, phone, business-day cutover. Use **Find the address** to fill the address block from a search rather than typing five fields — it fills the District from the PIN code, which is the part nobody remembers. Check what it filled before saving; OpenStreetMap data is contributed rather than surveyed, and this address is what a GST invoice will carry. If it finds nothing, type it: the search is a shortcut and never a step. **The business-day cutover is not the opening time** — it is where one trading day ends and the next begins, so it belongs in the quiet hours (04:00 is the default and the owner-confirmed value for both outlets). The form resolves a whole session against whatever you type and warns if it would split one night across two days; leave it at 04:00 unless you have a reason. On a brand-new installation this is the only thing there is to do, and the empty screen says so.
 2. **Capture the coordinates in the app, standing at the counter** (Super Admin → Outlets → *Capture position here*). Not from a map search, and not by typing them in — there is deliberately no field for that. The screen samples for a few seconds, keeps the tightest reading, and refuses to save a fix looser than ±50 m; step outside if the counter cannot produce one. Until an outlet is captured, its check-ins are recorded but not measured against any fence, and the Outlets screen shows it as unsurveyed.
@@ -364,7 +366,8 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    Send the one activation link. The outlet must exist first; if the same admin
    runs several outlets, select all now — one account and code cover every
    assignment.
-4. **The Franchise Admin sets up the menu** — copy the standard menu, adjust prices if they differ. *(Not built — demo only until #10.)*
+4. **The Franchise Admin prepares the menu**—copy the standard menu and adjust
+   prices where this outlet differs.
 5. **Enter the outlet's complete real menu through Menu.** Create every item,
    check prices, category order and availability, then retire a test item and
    confirm historical captured lines do not change. Do this before a tablet is
@@ -402,13 +405,22 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    four channel figures, the expenses as they happen, and the count at close.
 11. **Shadow billing before taking customer money.** Open a real tablet shift,
    ring direct and handover payments with test amounts, force it offline and back
-   online, verify exactly one server bill per payment, exercise Undo, cancel the
-   test orders, and have a manager void the test bills with reasons.
+   online, verify exactly one server bill per payment, and correct both an
+   immediate and an on-handover payment inside their five-minute windows. Force
+   a response loss and restart once with the payment/correction chain unsent;
+   verify one bill, one correction revision and effective Cash/UPI totals after
+   recovery. Wait for the edit window before Finish day, cancel the test orders,
+   and have a manager void the test bills with reasons.
 12. **Schedule the ledger handover** (Super Admin → Outlets → Edit → **Counter
    billing starts on**) for a business date that has not started. From that date
    the ledger removes typed Cash and UPI and labels their settled bill totals
    **from counter**. Keep typing Zomato, Swiggy, both commission rates, cash
    movements, expenses and the drawer count.
+
+Roll billing out at **Kalyani first**, because it has the first tablet. Trade one
+full business day and close it cleanly before repeating setup and handover at
+Kanchrapara. Do not set either `billing_live_from` date until its real menu,
+tablet shadow run and Cash/UPI reconciliation have passed.
 
 ## Recording a trading day by hand *(temporary — #36)*
 

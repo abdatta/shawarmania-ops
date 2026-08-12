@@ -196,7 +196,9 @@ test.describe('username sign-in and role routing', () => {
       await expect(page.getByTestId('account-menu')).toBeVisible()
       await expect(page.getByTestId('demo-banner')).toHaveCount(0)
       if (label === 'biller') {
-        await expect(page.getByRole('link', { name: 'My attendance' })).toBeVisible()
+        await expect(
+          page.getByRole('navigation').getByRole('link', { name: 'My attendance' }),
+        ).toBeVisible()
         await expect(page.getByRole('link', { name: 'Counter' })).toHaveCount(0)
       }
     })

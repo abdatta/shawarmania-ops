@@ -95,11 +95,12 @@ describe('billing command canonical identity', () => {
       'cancel_order',
       'pay_order',
       'pay_now',
+      'correct_bill_payment',
       'void_bill',
       'manager_cancel_order',
       'confirm_end_of_day',
     ]
-    expect(types.map((type) => BILLING_COMMAND_RPC[type])).toHaveLength(8)
-    expect(new Set(types.map((type) => BILLING_COMMAND_RPC[type])).size).toBe(8)
+    expect(types.map((type) => BILLING_COMMAND_RPC[type])).toHaveLength(9)
+    expect(new Set(types.map((type) => BILLING_COMMAND_RPC[type])).size).toBe(9)
   })
 })

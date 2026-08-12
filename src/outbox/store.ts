@@ -9,12 +9,7 @@ import {
 export class BillingDeliveryStoreError extends Error {
   constructor(
     readonly code:
-      | 'identity_conflict'
-      | 'not_undoable'
-      | 'not_attention'
-      | 'not_permitted'
-      | 'blank_reason'
-      | 'storage_failed',
+      'identity_conflict' | 'not_attention' | 'not_permitted' | 'blank_reason' | 'storage_failed',
     message: string,
     options?: ErrorOptions,
   ) {
@@ -63,48 +58,6 @@ export class BillingDeliveryStore {
       throw new BillingDeliveryStoreError(
         'storage_failed',
         'This action was not saved on the tablet. Nothing was cleared; make space and try again.',
-        { cause },
-      )
-    }
-  }
-
-  async undo(commandId: string, actorId: string | null, nowMs: number): Promise<void> {
-    try {
-      await this.database.transaction(
-        'rw',
-        this.database.envelopes,
-        this.database.dependencies,
-        this.database.results,
-        this.database.tombstones,
-        async () => {
-          const [envelope, result] = await Promise.all([
-            this.database.envelopes.get(commandId),
-            this.database.results.get(commandId),
-          ])
-          if (!envelope || envelope.state !== 'held' || envelope.eligibleAtMs <= nowMs || result) {
-            throw new BillingDeliveryStoreError(
-              'not_undoable',
-              'That payment has already entered delivery and can no longer be undone.',
-            )
-          }
-
-          await this.database.tombstones.put({
-            commandId,
-            resolution: 'undone',
-            actorId,
-            reason: null,
-            replacementCommandId: null,
-            recordedAtMs: nowMs,
-          })
-          await this.database.dependencies.where('commandId').equals(commandId).delete()
-          await this.database.envelopes.delete(commandId)
-        },
-      )
-    } catch (cause) {
-      if (cause instanceof BillingDeliveryStoreError) throw cause
-      throw new BillingDeliveryStoreError(
-        'storage_failed',
-        'The tablet could not save the Undo. The payment remains queued.',
         { cause },
       )
     }

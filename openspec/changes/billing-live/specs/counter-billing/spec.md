@@ -96,8 +96,9 @@ allocations that sum exactly to the unchanged bill total. Item and customer
 snapshots, quantities, prices, totals, bill number, payment time and business dates
 SHALL remain locked.
 
-The control SHALL use relative text: `Edit for N min` while at least one minute
-remains, rounding up to the next whole minute, then `Edit for N sec` below one
+The collapsed bill SHALL carry a compact pencil indicator while it remains editable.
+The expanded control SHALL use relative text: `Edit (N min)` while at least one minute
+remains, rounding up to the next whole minute, then `Edit (N sec)` below one
 minute. It SHALL disappear at expiry without leaving a persistent expiry message.
 The rendered timer SHALL NOT grant authority: the database SHALL enforce that the
 immutable correction command creation time is within five minutes of the original
@@ -125,11 +126,11 @@ behind it and SHALL remain replay-safe after reconnecting.
 
 #### Scenario: More than one minute remains
 - **WHEN** 4 minutes and 1 second remain in the window
-- **THEN** the control reads `Edit for 5 min`
+- **THEN** the collapsed bill shows its pencil indicator and the expanded control reads `Edit (5 min)`
 
 #### Scenario: Less than one minute remains
 - **WHEN** 59 seconds remain in the window
-- **THEN** the control reads `Edit for 59 sec` and counts down in seconds
+- **THEN** the control reads `Edit (59 sec)` and counts down in seconds
 
 #### Scenario: The deadline expires
 - **WHEN** five minutes have elapsed from the original payment time
@@ -297,7 +298,7 @@ failed to arrive rather than as trade recorded elsewhere.
 The list and running totals SHALL include locally accepted payments immediately
 and SHALL use each bill's latest effective allocation, including a durably accepted
 correction that is still unsent. An eligible expanded bill SHALL carry its relative
-`Edit for N min` or `Edit for N sec` action without making any other bill fact
+`Edit (N min)` or `Edit (N sec)` action without making any other bill fact
 editable.
 
 #### Scenario: Operator opens My shift

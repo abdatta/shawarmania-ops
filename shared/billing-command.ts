@@ -13,6 +13,7 @@ export type BillingCommandType =
   | 'cancel_order'
   | 'pay_order'
   | 'pay_now'
+  | 'correct_bill_payment'
   | 'void_bill'
   | 'manager_cancel_order'
   | 'confirm_end_of_day'
@@ -80,6 +81,12 @@ export interface PayNowPayload {
   readonly lines: readonly BillingLineSnapshot[]
 }
 
+export interface CorrectBillPaymentPayload {
+  readonly billId: string
+  readonly expectedRevision: number
+  readonly payments: readonly BillingPaymentAllocation[]
+}
+
 export interface VoidBillPayload {
   readonly billId: string
   readonly reason: string
@@ -98,6 +105,7 @@ export interface BillingCommandPayloads {
   readonly cancel_order: CancelOrderPayload
   readonly pay_order: PayOrderPayload
   readonly pay_now: PayNowPayload
+  readonly correct_bill_payment: CorrectBillPaymentPayload
   readonly void_bill: VoidBillPayload
   readonly manager_cancel_order: CancelOrderPayload
   readonly confirm_end_of_day: ConfirmEndOfDayPayload
@@ -178,6 +186,7 @@ export const BILLING_COMMAND_RPC: Readonly<Record<BillingCommandType, string>> =
   cancel_order: 'cancel_billing_order',
   pay_order: 'pay_billing_order',
   pay_now: 'pay_billing_now',
+  correct_bill_payment: 'correct_bill_payment',
   void_bill: 'void_billing_bill',
   manager_cancel_order: 'manager_cancel_billing_order',
   confirm_end_of_day: 'confirm_billing_end_of_day',

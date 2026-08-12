@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { SYNC_ESCALATION_COUNT, SYNC_ESCALATION_MS, UNDO_WINDOW_MS } from '@/domain'
+import { PAYMENT_EDIT_WINDOW_MS, SYNC_ESCALATION_COUNT, SYNC_ESCALATION_MS } from '@/domain'
 
 import type { BillDraft, SaveOrderInput } from '../adapters'
 import { createMockBillingAdapter } from './billing'
@@ -15,8 +15,8 @@ import { createDemoStore, DEMO_OUTLET_ID, type DemoStore } from './store'
  * below names the clause it is holding the mock to.
  */
 
-/** Comfortably past the undo window and the simulated send. */
-const AFTER_SEND_MS = UNDO_WINDOW_MS + 2000
+/** Comfortably past the mock's immediate delivery latency. */
+const AFTER_SEND_MS = 2_000
 
 function draft(store: DemoStore, clientId: string, quantity = 1): BillDraft {
   return {
@@ -142,37 +142,38 @@ describe('mock billing adapter', () => {
     expect(landed?.bill_number).toBe(highestBefore + 1)
   })
 
-  // Spec: a cancelled bill consumes no number.
-  it('leaves no gap in the sequence when a queued bill is cancelled', async () => {
+  it('applies a correction before delivery without changing the bill identity', async () => {
     const store = createDemoStore()
     const adapter = createMockBillingAdapter(store)
     const highestBefore = store.billNumbers.get(DEMO_OUTLET_ID)!
 
-    await adapter.settleBill(draft(store, 'cccccccc-0000-4000-8000-000000000001'))
-    await adapter.cancelQueuedBill('cccccccc-0000-4000-8000-000000000001')
-
-    // Nothing was written at all: an unsent bill is not in the database.
-    expect(store.bills.some((bill) => bill.id === 'cccccccc-0000-4000-8000-000000000001')).toBe(
-      false,
-    )
-
-    await adapter.settleBill(draft(store, 'dddddddd-0000-4000-8000-000000000001'))
+    const billId = 'cccccccc-0000-4000-8000-000000000001'
+    await adapter.settleBill(draft(store, billId))
+    const corrected = await adapter.correctBillPayment(billId, 0, [
+      { method: 'upi', amountPaise: 13900 },
+    ])
+    expect(corrected.id).toBe(billId)
+    expect(corrected.paymentRevision).toBe(1)
+    expect((await adapter.listShiftHistory(DEMO_OPEN_SHIFT_ID)).totals).toContainEqual({
+      method: 'upi',
+      totalPaise: expect.any(Number),
+    })
     await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
-
-    const landed = store.bills.find((bill) => bill.id === 'dddddddd-0000-4000-8000-000000000001')
+    const landed = store.bills.find((bill) => bill.id === billId)
     expect(landed?.bill_number).toBe(highestBefore + 1)
   })
 
-  it('refuses an undo once the bill has gone', async () => {
+  it('removes payment editing at the original five-minute deadline', async () => {
     const store = createDemoStore()
     const adapter = createMockBillingAdapter(store)
 
     await adapter.settleBill(draft(store, 'eeeeeeee-0000-4000-8000-000000000001'))
-    await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
-
-    await expect(adapter.cancelQueuedBill('eeeeeeee-0000-4000-8000-000000000001')).rejects.toThrow(
-      /already gone/,
-    )
+    await vi.advanceTimersByTimeAsync(PAYMENT_EDIT_WINDOW_MS)
+    await expect(
+      adapter.correctBillPayment('eeeeeeee-0000-4000-8000-000000000001', 0, [
+        { method: 'upi', amountPaise: 13900 },
+      ]),
+    ).rejects.toThrow(/no longer be edited/)
   })
 
   it('snapshots the line, so a later menu price change cannot rewrite it', async () => {
@@ -324,9 +325,24 @@ describe('mock billing adapter', () => {
     })
     const saved = await biller.saveOrder(orderDraft(store, '30000000-0000-4000-8000-000000000001'))
     const paid = await biller.payOrder(saved.id, [{ method: 'upi', amountPaise: saved.totalPaise }])
+    const shiftHistory = await biller.listShiftHistory(DEMO_OPEN_SHIFT_ID)
+    const corrected = await biller.correctBillPayment(paid.id, 0, [
+      { method: 'cash', amountPaise: saved.totalPaise },
+    ])
     const beforeLines = structuredClone(paid.lines)
     const voided = await manager.voidBill(paid.id, 'Wrong item rung')
 
+    expect(corrected).toMatchObject({
+      id: paid.id,
+      orderNumber: paid.orderNumber,
+      paymentRevision: 1,
+      payments: [{ method: 'cash', amountPaise: saved.totalPaise }],
+    })
+    expect(shiftHistory.bills[0]).toMatchObject({
+      id: paid.id,
+      orderNumber: paid.orderNumber,
+      paymentEditableUntil: expect.any(String),
+    })
     expect(voided.status).toBe('void')
     expect(voided.voidReason).toBe('Wrong item rung')
     expect(voided.lines).toEqual(beforeLines)

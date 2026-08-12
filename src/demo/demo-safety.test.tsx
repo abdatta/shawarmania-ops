@@ -136,10 +136,11 @@ describe('demo mode safety', () => {
       paymentMethod: 'cash',
     })
 
-    const openShift = adapters.billing.getCounterState().shift
+    const billerBilling = createMockAdapters('biller').billing
+    const openShift = billerBilling.getCounterState().shift
     if (!openShift) throw new Error('the demo store must start with a shift open')
-    await adapters.billing.listBillers(outletId)
-    await adapters.billing.settleBill({
+    await billerBilling.listBillers(outletId)
+    await billerBilling.settleBill({
       clientId: '0e000000-0000-4000-8000-000000000001',
       outletId,
       shiftId: openShift.id,
@@ -154,8 +155,9 @@ describe('demo mode safety', () => {
         },
       ],
     })
-    await adapters.billing.cancelQueuedBill('0e000000-0000-4000-8000-000000000001')
-    await adapters.billing.closeShift(openShift.id)
+    await billerBilling.correctBillPayment('0e000000-0000-4000-8000-000000000001', 0, [
+      { method: 'upi', amountPaise: firstItem.price_paise },
+    ])
 
     await adapters.dailyCash.getDay(outletId, today)
     await adapters.dailyCash.recordWithdrawal({

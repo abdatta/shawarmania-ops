@@ -1,5 +1,7 @@
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Pencil } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
+import { Button } from '@/components/ui/button'
 import { Money } from '@/components/ui/money'
 import type { BillingBill } from '@/data-access/adapters'
 import { formatDayTime, lineTotalPaise } from '@/domain'
@@ -13,9 +15,13 @@ function methodLabel(method: BillingBill['paymentMethod']) {
 export function ShiftBillList({
   bills,
   compact = false,
+  onEditPayment,
+  onAdvanceDemoClock,
 }: {
   bills: BillingBill[]
   compact?: boolean
+  onEditPayment?: (bill: BillingBill) => void
+  onAdvanceDemoClock?: (milliseconds: number) => void
 }) {
   return (
     <ul className={cn('divide-y divide-border', !compact && 'rounded-xl border border-border')}>
@@ -30,11 +36,16 @@ export function ShiftBillList({
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <span className="font-bold">Bill {bill.billNumber}</span>
+                  <span className="font-bold">
+                    {bill.billNumber > 0 ? `Bill ${bill.billNumber}` : 'Bill pending'}
+                  </span>
                   {bill.orderNumber !== null && (
                     <span className="text-xs font-semibold text-content-muted">
                       Order {bill.orderNumber}
                     </span>
+                  )}
+                  {onEditPayment && bill.paymentEditableUntil && (
+                    <PaymentEditIndicator editableUntil={bill.paymentEditableUntil} />
                   )}
                 </div>
                 <p className="truncate text-xs text-content-muted">
@@ -106,10 +117,107 @@ export function ShiftBillList({
                   <Money paise={bill.totalPaise} className="font-black" />
                 </dd>
               </dl>
+              {onEditPayment && bill.paymentEditableUntil && (
+                <PaymentEditAction
+                  editableUntil={bill.paymentEditableUntil}
+                  onEdit={() => onEditPayment(bill)}
+                  {...(onAdvanceDemoClock && { onAdvanceDemoClock })}
+                />
+              )}
             </div>
           </details>
         </li>
       ))}
     </ul>
+  )
+}
+
+export function paymentEditLabel(remainingMs: number): string | null {
+  if (remainingMs <= 0) return null
+  if (remainingMs >= 60_000) return `Edit (${Math.ceil(remainingMs / 60_000)} min)`
+  return `Edit (${Math.ceil(remainingMs / 1_000)} sec)`
+}
+
+function PaymentEditIndicator({ editableUntil }: { editableUntil: string }) {
+  const [active, setActive] = useState(true)
+
+  useEffect(() => {
+    const remaining = Date.parse(editableUntil) - Date.now()
+    const timer = window.setTimeout(() => setActive(false), Math.max(0, remaining))
+    return () => window.clearTimeout(timer)
+  }, [editableUntil])
+
+  if (!active) return null
+  return (
+    <span
+      aria-label="Payment editable"
+      title="Payment editable"
+      className="inline-flex size-6 items-center justify-center rounded-full border border-primary bg-surface-raised text-accent-text"
+    >
+      <Pencil aria-hidden size={12} strokeWidth={2.25} />
+    </span>
+  )
+}
+
+function PaymentEditAction({
+  editableUntil,
+  onEdit,
+  onAdvanceDemoClock,
+}: {
+  editableUntil: string
+  onEdit: () => void
+  onAdvanceDemoClock?: (milliseconds: number) => void
+}) {
+  const [now, setNow] = useState<number | null>(null)
+  const [demoOffsetMs, setDemoOffsetMs] = useState(0)
+  const deadline = Date.parse(editableUntil)
+  const label = now === null ? null : paymentEditLabel(deadline - now - demoOffsetMs)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setNow(Date.now()), 0)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    if (!label) return
+    const remaining = deadline - Date.now() - demoOffsetMs
+    const delay = remaining >= 60_000 ? remaining % 60_000 || 60_000 : remaining % 1_000 || 1_000
+    const timer = window.setTimeout(() => setNow(Date.now()), delay)
+    return () => window.clearTimeout(timer)
+  }, [deadline, demoOffsetMs, label, now])
+
+  if (!label) return null
+  return (
+    <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-border pt-3">
+      {onAdvanceDemoClock && (
+        <>
+          <Button
+            size="phone"
+            variant="ghost"
+            onClick={() => {
+              const advance = Math.max(0, deadline - Date.now() - demoOffsetMs - 59_000)
+              onAdvanceDemoClock(advance)
+              setDemoOffsetMs((value) => value + advance)
+            }}
+          >
+            Demo: 59 sec
+          </Button>
+          <Button
+            size="phone"
+            variant="ghost"
+            onClick={() => {
+              const advance = Math.max(0, deadline - Date.now() - demoOffsetMs)
+              onAdvanceDemoClock(advance)
+              setDemoOffsetMs((value) => value + advance)
+            }}
+          >
+            Demo: expire
+          </Button>
+        </>
+      )}
+      <Button size="phone" variant="secondary" onClick={onEdit}>
+        {label}
+      </Button>
+    </div>
   )
 }

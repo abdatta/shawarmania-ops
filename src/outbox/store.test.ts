@@ -4,7 +4,6 @@ import Dexie from 'dexie'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { BillingCommand } from '../../shared/billing-command'
-import { UNDO_WINDOW_MS } from '@/domain'
 import { BillingDeliveryDatabase, dependencyRecordId } from './schema'
 import { BillingDeliveryStore, BillingDeliveryStoreError } from './store'
 
@@ -37,7 +36,7 @@ function acceptedInput(serverCommand = command()) {
     outletId: 'outlet-1',
     businessDate: '2026-08-11',
     chainId: 'order-1',
-    eligibleAtMs: NOW + UNDO_WINDOW_MS,
+    eligibleAtMs: NOW,
     nowMs: NOW,
   } as const
 }
@@ -57,8 +56,8 @@ describe('BillingDeliveryStore', () => {
     await store.accept({ ...acceptedInput(serverCommand), dependsOnCommandIds: [parentId] })
 
     expect(await database.envelopes.get(serverCommand.commandId)).toMatchObject({
-      state: 'held',
-      eligibleAtMs: NOW + UNDO_WINDOW_MS,
+      state: 'pending',
+      eligibleAtMs: NOW,
       attemptCount: 0,
     })
     expect(
@@ -99,33 +98,32 @@ describe('BillingDeliveryStore', () => {
     database.close()
   })
 
-  it('removes a held payment on Undo while retaining an attributed tombstone', async () => {
+  it('keeps an accepted correction behind its immutable payment ancestor', async () => {
     const database = new BillingDeliveryDatabase(databaseName())
     const store = new BillingDeliveryStore(database)
-    const serverCommand = command()
-    await store.accept(acceptedInput(serverCommand))
-
-    await store.undo(serverCommand.commandId, 'person-1', NOW + UNDO_WINDOW_MS - 1)
-
-    expect(await database.envelopes.get(serverCommand.commandId)).toBeUndefined()
-    expect(await database.tombstones.get(serverCommand.commandId)).toMatchObject({
-      resolution: 'undone',
-      actorId: 'person-1',
-      recordedAtMs: NOW + UNDO_WINDOW_MS - 1,
+    const payment = command()
+    const correction = command(crypto.randomUUID(), 'b'.repeat(64))
+    await store.accept(acceptedInput(payment))
+    await store.accept({
+      ...acceptedInput(correction),
+      dependsOnCommandIds: [payment.commandId],
     })
-    database.close()
-  })
 
-  it('refuses Undo once the six-second hold has expired', async () => {
-    const database = new BillingDeliveryDatabase(databaseName())
-    const store = new BillingDeliveryStore(database)
-    const serverCommand = command()
-    await store.accept(acceptedInput(serverCommand))
-
-    await expect(
-      store.undo(serverCommand.commandId, 'person-1', NOW + UNDO_WINDOW_MS),
-    ).rejects.toMatchObject({ code: 'not_undoable' })
-    expect(await database.envelopes.get(serverCommand.commandId)).toBeDefined()
+    expect(await store.listReady('tablet-1', NOW)).toEqual([
+      expect.objectContaining({
+        commandId: payment.commandId,
+      }),
+    ])
+    await store.recordResult(
+      payment.commandId,
+      { status: 'accepted', commandId: payment.commandId },
+      NOW + 1,
+    )
+    expect(await store.listReady('tablet-1', NOW + 1)).toEqual([
+      expect.objectContaining({
+        commandId: correction.commandId,
+      }),
+    ])
     database.close()
   })
 

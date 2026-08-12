@@ -117,10 +117,11 @@ select is(
     where n.nspname='public'
       and p.proname in ('create_billing_order','revise_billing_order',
         'cancel_billing_order','pay_billing_order','pay_billing_now',
+        'correct_bill_payment',
         'void_billing_bill','manager_cancel_billing_order','confirm_billing_end_of_day')
       and p.pronargdefaults=6),
-  8::bigint,
-  'all eight command RPCs default every argument so omitted keys classify cleanly');
+  9::bigint,
+  'all nine command RPCs default every argument so omitted keys classify cleanly');
 
 select is(
   coalesce((select string_agg(attname, ', ' order by attname)

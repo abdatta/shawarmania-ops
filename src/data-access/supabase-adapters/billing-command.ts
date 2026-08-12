@@ -21,6 +21,8 @@ const RESULT_STATUSES = new Set<BillingCommandResult['status']>([
   'arithmetic_invalid',
   'unresolved_operations',
   'identity_conflict',
+  'stale_revision',
+  'payment_edit_expired',
 ])
 
 /** Refuse a response whose shape is not the immutable server contract. */

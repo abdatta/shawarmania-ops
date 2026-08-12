@@ -15,7 +15,6 @@ import {
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { createMockBillingAdapter } from '@/data-access/mock/billing'
 import { createMockMenuAdapter } from '@/data-access/mock/menu'
-import { UNDO_WINDOW_MS } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
@@ -248,8 +247,16 @@ describe('BillingCounter', () => {
     await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
     await person.click(screen.getByTestId('settle'))
     const dialog = screen.getByRole('dialog', { name: 'Record payment' })
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(dialog).getByRole('heading', { name: 'Record payment' }),
+      ),
+    )
     for (const method of ['Cash', 'UPI']) {
-      expect(within(dialog).getByRole('button', { name: method })).toBeInTheDocument()
+      const button = within(dialog).getByRole('button', { name: method })
+      expect(button).toBeInTheDocument()
+      expect(button).toHaveClass('bg-surface')
+      expect(button).not.toHaveClass('bg-primary')
     }
     for (const unsupported of ['Swiggy', 'Zomato', 'Card', 'Other']) {
       expect(within(dialog).queryByRole('button', { name: unsupported })).not.toBeInTheDocument()
@@ -324,7 +331,7 @@ describe('BillingCounter', () => {
 
     // No acknowledgement needed: a queue that waits for one is a queue that
     // stops.
-    await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS)
+    await vi.advanceTimersByTimeAsync(2_500)
     await waitFor(() => {
       expect(screen.queryByTestId('settled-confirmation')).not.toBeInTheDocument()
     })
@@ -378,26 +385,28 @@ describe('BillingCounter', () => {
     expect(screen.queryByTestId('settled-confirmation')).not.toBeInTheDocument()
   })
 
-  it('undoes a settle by cancelling the queued write and restoring the order', async () => {
+  it('offers tender editing beside the locally accepted paid bill instead of Undo', async () => {
     const person = user()
-    const { adapters } = renderCounter()
-    const cancel = vi.spyOn(adapters.billing, 'cancelQueuedBill')
+    renderCounter()
 
     await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
     await person.click(screen.getByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
     await person.type(screen.getByPlaceholderText('Customer name'), 'Demo Regular')
     await recordPaid(person)
 
-    await person.click(screen.getByTestId('undo-settle'))
-
-    expect(cancel).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId(`bill-quantity-${MENU_ITEM_CLASSIC_ID}`)).toHaveTextContent('2')
-    expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Demo Regular')
-    await person.click(screen.getByTestId('settle'))
-    const restored = screen.getByRole('dialog', { name: 'Record payment' })
-    expect(within(restored).getByRole('list', { name: 'Payment split' })).toHaveTextContent('Cash')
-    expect(within(restored).getByRole('button', { name: 'Mark Paid' })).toBeEnabled()
-    expect(screen.queryByTestId('settled-confirmation')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('undo-settle')).not.toBeInTheDocument()
+    const paidBill = screen
+      .getAllByText('Demo Regular')
+      .map((name) => name.closest('details'))
+      .find((details) => details?.querySelector('summary')?.textContent?.includes('₹278'))
+    if (!paidBill) throw new Error('Expected the new paid bill in shift history')
+    await person.click(await within(paidBill).findByRole('button', { name: /^Edit \(\d+ min\)$/ }))
+    const correction = screen.getByRole('dialog', { name: 'Record payment' })
+    expect(correction).toHaveTextContent('Edit payment')
+    expect(within(correction).getByRole('list', { name: 'Payment split' })).toHaveTextContent(
+      'Cash',
+    )
+    expect(within(correction).getByRole('button', { name: 'Save payment' })).toBeDisabled()
   })
 
   it('snapshots the line price, so a menu change mid-order cannot rewrite it', async () => {

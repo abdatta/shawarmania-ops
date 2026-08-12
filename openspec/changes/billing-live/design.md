@@ -191,9 +191,9 @@ it conceals action somebody must take.
 Both immediate payments and saved orders paid on handover enter Bills this shift
 as soon as the local payment envelope is durable. The expanded bill card offers
 tender editing only on the originating tablet and only until five minutes after
-the original stored `paid_at`. Its action label is relative: `Edit for 5 min`
-through `Edit for 1 min`, rounding minutes up, then `Edit for 59 sec` through
-`Edit for 1 sec`. The action disappears at expiry and leaves no permanent expired
+the original stored `paid_at`. Its action label is relative: `Edit (5 min)`
+through `Edit (1 min)`, rounding minutes up, then `Edit (59 sec)` through
+`Edit (1 sec)`. The action disappears at expiry and leaves no permanent expired
 message. The displayed countdown is guidance; the command RPC decides eligibility.
 
 The existing tender dialog opens with the bill's effective Cash/UPI allocations

@@ -186,6 +186,16 @@ read-only production audit proved there was no aggregator history to reinterpret
 the guarded forward migration aborts rather than relabel an unexpected row. A
 future payment category is added explicitly when the business adopts it.
 
+### Paid-bill editing is tender-only for five minutes
+
+The originating tablet may replace only a settled bill's Cash/UPI allocation,
+under its still-live shift, for five minutes from the original `paid_at`. Each
+change is an append-only revision under the same bill identity; editing never
+restarts the deadline. Items, quantities, customer facts, totals, dates and
+clocks cannot be edited. After expiry—or for any non-tender mistake—the V1 path
+is an attributed manager void followed by a manual re-ring on the counter. There
+is no personal-device payment command.
+
 ### Profit and loss is an estimate, not accounting
 
 This is not a filing-grade financial report and must not be used as one. Specifically it does not model depreciation, opening and closing stock valuation properly, accruals, aggregator commission, or taxes. It answers "is this shop making money this month?" — a genuinely useful question, and a different one from what an accountant needs.

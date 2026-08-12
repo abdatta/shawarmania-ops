@@ -11,12 +11,14 @@ import {
   BILLING_PAYMENT_METHODS,
   DataActionError,
   type BillingAttentionItem,
+  type BillingBill,
   type ShiftBillingHistory,
 } from '@/data-access/adapters'
 import { formatDateTime } from '@/domain'
 import { newUuid } from '@/lib/uuid'
 
 import { ShiftBillList } from './shift-bill-list'
+import { PaymentDialog } from './payment-dialog'
 import { useCounterState } from './use-counter-state'
 
 export function MyShiftSurface({
@@ -34,6 +36,8 @@ export function MyShiftSurface({
   const [attention, setAttention] = useState<BillingAttentionItem[]>([])
   const [reason, setReason] = useState('')
   const [message, setMessage] = useState<string | null>(null)
+  const [editingPayment, setEditingPayment] = useState<BillingBill | null>(null)
+  const [savingPayment, setSavingPayment] = useState(false)
 
   const load = useCallback(async () => {
     await Promise.resolve()
@@ -131,7 +135,17 @@ export function MyShiftSurface({
           <EmptyState icon={ClipboardList} title="No paid bills in this shift yet." />
         )
       ) : (
-        <ShiftBillList bills={history.bills} compact={embedded} />
+        <ShiftBillList
+          bills={history.bills}
+          compact={embedded}
+          onEditPayment={(bill) => {
+            setMessage(null)
+            setEditingPayment(bill)
+          }}
+          {...(billing.advanceDemoPaymentClock && {
+            onAdvanceDemoClock: billing.advanceDemoPaymentClock,
+          })}
+        />
       )}
       {attention
         .filter((item) => item.state === 'needs_attention')
@@ -189,6 +203,36 @@ export function MyShiftSurface({
             </div>
           </article>
         ))}
+      <PaymentDialog
+        open={editingPayment !== null}
+        mode="correct"
+        totalPaise={editingPayment?.totalPaise ?? 0}
+        initialPayments={editingPayment?.payments ?? []}
+        busy={savingPayment}
+        error={message}
+        onClose={() => setEditingPayment(null)}
+        onConfirm={(payments) => {
+          if (!editingPayment) return
+          setSavingPayment(true)
+          setMessage(null)
+          void billing
+            .correctBillPayment(editingPayment.id, editingPayment.paymentRevision, payments)
+            .then(async () => {
+              setEditingPayment(null)
+              setMessage('Payment updated.')
+              await load()
+              onActivityChanged?.()
+            })
+            .catch((cause: unknown) =>
+              setMessage(
+                cause instanceof DataActionError
+                  ? cause.message
+                  : 'That payment could not be updated.',
+              ),
+            )
+            .finally(() => setSavingPayment(false))
+        }}
+      />
     </section>
   )
 }

@@ -1,4 +1,4 @@
-import { billTotals, classifySync, lineTotalPaise, UNDO_WINDOW_MS } from '@/domain'
+import { billTotals, classifySync, lineTotalPaise, PAYMENT_EDIT_WINDOW_MS } from '@/domain'
 
 import {
   BillingActionError,
@@ -59,7 +59,7 @@ import type { DemoStore } from './store'
  * the way a real tablet reaches it.
  */
 
-/** How long a bill takes to "reach the server" once its undo window has closed. */
+/** How long a bill takes to "reach the server" after local acceptance. */
 const SEND_LATENCY_MS = 400
 
 /** How often the state is re-emitted while anything waits, for the age-based escalation. */
@@ -106,10 +106,25 @@ export function createMockBillingAdapter(
   },
 ): BillingAdapter {
   const listeners = new Set<() => void>()
+  const paymentCorrections = new Map<string, PaymentAllocation[][]>()
+  const acceptedPaymentTimes = new Map<string, number>()
   /** Queue entries by client id — the mock's stand-in for the outbox's key. */
   const queue = new Map<string, QueueEntry>()
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
   let tick: ReturnType<typeof setInterval> | null = null
+  let paymentClockOffsetMs = 0
+  const paymentNow = () => Date.now() + paymentClockOffsetMs
+
+  function compareShiftBills(left: BillingBill, right: BillingBill) {
+    const leftAcceptedAt = acceptedPaymentTimes.get(left.id)
+    const rightAcceptedAt = acceptedPaymentTimes.get(right.id)
+    if (leftAcceptedAt !== undefined || rightAcceptedAt !== undefined) {
+      if (leftAcceptedAt === undefined) return 1
+      if (rightAcceptedAt === undefined) return -1
+      if (leftAcceptedAt !== rightAcceptedAt) return rightAcceptedAt - leftAcceptedAt
+    }
+    return right.paidAt.localeCompare(left.paidAt)
+  }
 
   if (context.role === 'biller') {
     for (const draft of store.billingQueueSeeds) {
@@ -286,9 +301,11 @@ export function createMockBillingAdapter(
       ? store.orders.find((candidate) => candidate.id === row.order_id)
       : null
     const payments =
+      paymentCorrections.get(row.id)?.at(-1) ??
       store.billPayments.get(row.id) ??
       (row.payment_method ? [{ method: row.payment_method, amountPaise: row.total_paise }] : [])
     if (payments.length === 0) throw new Error(`Bill ${row.id} has no payment allocations.`)
+    const acceptedAt = acceptedPaymentTimes.get(row.id)
     return {
       id: row.id,
       outletId: row.outlet_id,
@@ -299,6 +316,14 @@ export function createMockBillingAdapter(
       paidAt: row.paid_at,
       paymentBusinessDate: row.payment_business_date,
       payments,
+      paymentRevision: paymentCorrections.get(row.id)?.length ?? 0,
+      paymentEditableUntil:
+        acceptedAt !== undefined &&
+        context.role === 'biller' &&
+        openShiftRow()?.counter_device_id === row.counter_device_id &&
+        acceptedAt + PAYMENT_EDIT_WINDOW_MS > paymentNow()
+          ? new Date(acceptedAt + PAYMENT_EDIT_WINDOW_MS).toISOString()
+          : null,
       paymentMethod: payments.length === 1 ? payments[0]!.method : 'mixed',
       status: row.status,
       customerName: row.customer_name,
@@ -448,7 +473,10 @@ export function createMockBillingAdapter(
       voided_at: null,
       voided_by: null,
     })
-    store.billPayments.set(draft.clientId, payments)
+    store.billPayments.set(
+      draft.clientId,
+      paymentCorrections.get(draft.clientId)?.at(-1) ?? payments,
+    )
 
     for (const [index, line] of draft.lines.entries()) {
       store.billItems.push({
@@ -472,18 +500,20 @@ export function createMockBillingAdapter(
   /** Try to send everything still waiting — what reconnecting does. */
   function drain() {
     if (!isOnline()) return
-    for (const [clientId, entry] of queue) {
+    for (const [clientId] of queue) {
       if (timers.has(clientId)) continue
-      const elapsed = Date.now() - entry.queued.queuedAt
-      const remaining = Math.max(0, UNDO_WINDOW_MS - elapsed)
       timers.set(
         clientId,
-        setTimeout(() => send(clientId), remaining + SEND_LATENCY_MS),
+        setTimeout(() => send(clientId), SEND_LATENCY_MS),
       )
     }
   }
 
   return {
+    advanceDemoPaymentClock(milliseconds) {
+      paymentClockOffsetMs += Math.max(0, milliseconds)
+      emit()
+    },
     getCounterState() {
       return snapshot
     },
@@ -548,6 +578,13 @@ export function createMockBillingAdapter(
       if (!row || row.closed_at !== null) {
         throw new BillingActionError('no_shift', 'That shift is not open.')
       }
+      const latestPaidAt = Math.max(0, ...acceptedPaymentTimes.values())
+      if (latestPaidAt + PAYMENT_EDIT_WINDOW_MS > paymentNow()) {
+        throw new BillingActionError(
+          'unresolved_operations',
+          'A recent payment can still be edited. Wait for its five-minute window, then finish the day.',
+        )
+      }
       row.closed_at = new Date().toISOString()
       emit()
     },
@@ -585,36 +622,66 @@ export function createMockBillingAdapter(
           clientId: draft.clientId,
           totalPaise: totals.totalPaise,
           businessDate: draft.businessDate,
-          queuedAt: Date.now(),
+          queuedAt: paymentNow(),
         },
       })
+      acceptedPaymentTimes.set(draft.clientId, paymentNow())
 
       drain()
       emit()
       syncTicker()
     },
 
-    async cancelQueuedBill(clientId: string) {
-      const entry = queue.get(clientId)
-      if (!entry) {
-        // Either it has already gone, or it never existed. Both come to the same
-        // thing from here: past delivery the only correction is a void, which
-        // is #10's — a settled bill is append-only and this adapter offers no
-        // way to change one.
+    async correctBillPayment(billId, expectedRevision, paymentsInput) {
+      requireTabletOperator()
+      const queued = queue.get(billId)
+      const row = store.bills.find((bill) => bill.id === billId)
+      const paidAt = queued ? queued.queued.queuedAt : row ? Date.parse(row.paid_at) : Number.NaN
+      const totalPaise = queued?.queued.totalPaise ?? row?.total_paise
+      if (!Number.isFinite(paidAt) || totalPaise === undefined) {
+        throw new BillingActionError('not_found', 'That bill was not found on this tablet.')
+      }
+      if (paidAt + PAYMENT_EDIT_WINDOW_MS <= paymentNow()) {
         throw new BillingActionError(
-          'not_queued',
-          'That bill has already gone, so there is nothing left to undo. It can only be voided now.',
+          'payment_edit_expired',
+          'That payment can no longer be edited.',
         )
       }
-      const timer = timers.get(clientId)
-      if (timer) clearTimeout(timer)
-      timers.delete(clientId)
-      // Nothing else to undo: the bill was never inserted, so no number was
-      // spent and no correcting row is needed.
-      queue.delete(clientId)
-
+      const revisions = paymentCorrections.get(billId) ?? []
+      if (revisions.length !== expectedRevision) {
+        throw new BillingActionError(
+          'stale_revision',
+          'That payment changed; reopen it and try again.',
+        )
+      }
+      const payments = requireExactPayments(paymentsInput, totalPaise)
+      revisions.push(payments)
+      paymentCorrections.set(billId, revisions)
+      if (row) store.billPayments.set(billId, payments)
       emit()
-      syncTicker()
+      if (row) return billView(row)
+      const draft = queued!.draft
+      return {
+        id: billId,
+        outletId: draft.outletId,
+        billNumber: 0,
+        orderNumber: null,
+        businessDate: draft.businessDate,
+        orderedAt: new Date(paidAt).toISOString(),
+        paidAt: new Date(paidAt).toISOString(),
+        paymentBusinessDate: draft.businessDate,
+        payments,
+        paymentRevision: revisions.length,
+        paymentEditableUntil: new Date(paidAt + PAYMENT_EDIT_WINDOW_MS).toISOString(),
+        paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
+        status: 'settled',
+        customerName: draft.customerName?.trim() || null,
+        customerPhone: draft.customerPhone?.trim() || null,
+        lines: draft.lines,
+        totalPaise,
+        voidReason: null,
+        voidedAt: null,
+      }
     },
 
     async saveOrder(input) {
@@ -746,7 +813,7 @@ export function createMockBillingAdapter(
       const payments = requireExactPayments(paymentsInput, row.total_paise)
       const nextNumber = (store.billNumbers.get(row.outlet_id) ?? 0) + 1
       store.billNumbers.set(row.outlet_id, nextNumber)
-      const paidAt = new Date().toISOString()
+      const paidAt = new Date(paymentNow()).toISOString()
       const billId = crypto.randomUUID()
       const bill: Tables<'bills'> = {
         id: billId,
@@ -779,6 +846,7 @@ export function createMockBillingAdapter(
       }
       store.bills.push(bill)
       store.billPayments.set(billId, payments)
+      acceptedPaymentTimes.set(billId, Date.parse(paidAt))
       store.orderItems
         .filter((line) => line.order_id === row.id)
         .forEach((line, index) =>
@@ -820,7 +888,7 @@ export function createMockBillingAdapter(
 
     async listShiftHistory(shiftId) {
       const shift = store.shifts.find((candidate) => candidate.id === shiftId)
-      const bills = store.bills
+      const serverBills = store.bills
         .filter(
           (bill) =>
             bill.shift_id === shiftId &&
@@ -829,6 +897,42 @@ export function createMockBillingAdapter(
         )
         .sort((a, b) => b.paid_at.localeCompare(a.paid_at))
         .map(billView)
+      const queuedBills: BillingBill[] = [...queue.values()]
+        .filter((entry) => entry.draft.shiftId === shiftId)
+        .map((entry) => {
+          const payments =
+            paymentCorrections.get(entry.draft.clientId)?.at(-1) ?? entry.draft.payments
+          return {
+            id: entry.draft.clientId,
+            outletId: entry.draft.outletId,
+            billNumber: 0,
+            orderNumber: null,
+            businessDate: entry.draft.businessDate,
+            orderedAt: new Date(entry.queued.queuedAt).toISOString(),
+            paidAt: new Date(entry.queued.queuedAt).toISOString(),
+            paymentBusinessDate: entry.draft.businessDate,
+            payments,
+            paymentRevision: paymentCorrections.get(entry.draft.clientId)?.length ?? 0,
+            paymentEditableUntil: new Date(
+              entry.queued.queuedAt + PAYMENT_EDIT_WINDOW_MS,
+            ).toISOString(),
+            paymentMethod: payments.length > 1 ? ('mixed' as const) : payments[0]!.method,
+            status: 'settled' as const,
+            customerName: entry.draft.customerName?.trim() || null,
+            customerPhone: entry.draft.customerPhone?.trim() || null,
+            lines: entry.draft.lines,
+            totalPaise: entry.queued.totalPaise,
+            voidReason: null,
+            voidedAt: null,
+          }
+        })
+      const billsById = new Map(serverBills.map((bill) => [bill.id, bill]))
+      for (const bill of queuedBills) billsById.set(bill.id, bill)
+      // The fabricated scenario spans a full trading day, including times later
+      // than the viewer's real clock. Keep payments accepted during this demo
+      // session first so the bill and its five-minute edit action appear where
+      // the operator just acted, then preserve normal paid-at ordering.
+      const bills = [...billsById.values()].sort(compareShiftBills)
       const totals = BILLING_PAYMENT_METHODS.map((method) => ({
         method,
         totalPaise: bills
@@ -848,17 +952,14 @@ export function createMockBillingAdapter(
         .filter(
           (bill) => !filters.status || filters.status === 'all' || bill.status === filters.status,
         )
+        .sort((a, b) => b.paid_at.localeCompare(a.paid_at))
+        .map(billView)
         .filter(
           (bill) =>
             !filters.paymentMethod ||
             filters.paymentMethod === 'all' ||
-            (store.billPayments.get(bill.id) ?? []).some(
-              (payment) => payment.method === filters.paymentMethod,
-            ) ||
-            (!store.billPayments.has(bill.id) && bill.payment_method === filters.paymentMethod),
+            bill.payments.some((payment) => payment.method === filters.paymentMethod),
         )
-        .sort((a, b) => b.paid_at.localeCompare(a.paid_at))
-        .map(billView)
     },
 
     async getBill(billId) {

@@ -27,8 +27,8 @@ import {
   billTotals,
   classifySync,
   lineTotalPaise,
+  PAYMENT_EDIT_WINDOW_MS,
   provisionalToken,
-  UNDO_WINDOW_MS,
 } from '@/domain'
 import { newUuid } from '@/lib/uuid'
 import {
@@ -53,6 +53,14 @@ type BillReadRow = Tables<'bills'> & {
   bill_items: Tables<'bill_items'>[]
   bill_payments: Tables<'bill_payments'>[]
   order: { order_number: number } | { order_number: number }[] | null
+}
+
+type EffectivePaymentRow = {
+  bill_id: string
+  outlet_id: string
+  method: PaymentAllocation['method']
+  amount_paise: number
+  revision: number
 }
 
 function joined<T>(value: T | T[] | null): T | null {
@@ -91,16 +99,26 @@ function orderView(row: OrderReadRow): BillingOrder {
   }
 }
 
-function billView(row: BillReadRow): BillingBill {
+function billView(
+  row: BillReadRow,
+  effective: readonly EffectivePaymentRow[] = [],
+  paymentEditable = false,
+): BillingBill {
+  const effectiveForBill = effective.filter((payment) => payment.bill_id === row.id)
   const payments =
-    row.bill_payments.length > 0
-      ? row.bill_payments.map((payment) => ({
+    effectiveForBill.length > 0
+      ? effectiveForBill.map((payment) => ({
           method: payment.method,
           amountPaise: payment.amount_paise,
         }))
-      : row.payment_method
-        ? [{ method: row.payment_method, amountPaise: row.total_paise }]
-        : []
+      : row.bill_payments.length > 0
+        ? row.bill_payments.map((payment) => ({
+            method: payment.method,
+            amountPaise: payment.amount_paise,
+          }))
+        : row.payment_method
+          ? [{ method: row.payment_method, amountPaise: row.total_paise }]
+          : []
   if (payments.length === 0) {
     throw new BillingActionError(
       'invalid_bill_data',
@@ -117,6 +135,10 @@ function billView(row: BillReadRow): BillingBill {
     paidAt: row.paid_at,
     paymentBusinessDate: row.payment_business_date,
     payments,
+    paymentRevision: Math.max(0, ...effectiveForBill.map((payment) => payment.revision)),
+    paymentEditableUntil: paymentEditable
+      ? new Date(Date.parse(row.paid_at) + PAYMENT_EDIT_WINDOW_MS).toISOString()
+      : null,
     paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
     status: row.status,
     customerName: row.customer_name,
@@ -214,6 +236,7 @@ export function createSupabaseBillingAdapter(
 ): BillingAdapter {
   const commands = createSupabaseBillingCommandAdapter(client)
   const orderCache = new Map<string, BillingOrder>()
+  const localBillCache = new Map<string, BillingBill>()
   const database = counterSession ? new BillingDeliveryDatabase() : null
   const store = database ? new BillingDeliveryStore(database) : null
   const listeners = new Set<() => void>()
@@ -307,7 +330,7 @@ export function createSupabaseBillingAdapter(
     outletId: string,
     businessDate: string,
     chainId: string,
-    heldForMs = 0,
+    dependsOnCommandIds: readonly string[] = [],
   ): Promise<void> {
     const tablet = requireTablet()
     const nowMs = Date.now()
@@ -317,8 +340,8 @@ export function createSupabaseBillingAdapter(
       outletId,
       businessDate,
       chainId,
-      dependsOnCommandIds: await previousInChain(chainId),
-      eligibleAtMs: nowMs + heldForMs,
+      dependsOnCommandIds: [...(await previousInChain(chainId)), ...dependsOnCommandIds],
+      eligibleAtMs: nowMs,
       nowMs,
     })
   }
@@ -436,7 +459,7 @@ export function createSupabaseBillingAdapter(
     id?: string
     outletId?: string
     counterShiftId?: string
-    paymentBusinessDate?: string
+    businessDate?: string
     status?: Tables<'bills'>['status']
     limit?: number
   }): Promise<BillingBill[]> {
@@ -446,14 +469,192 @@ export function createSupabaseBillingAdapter(
     if (filters.id) query = query.eq('id', filters.id)
     if (filters.outletId) query = query.eq('outlet_id', filters.outletId)
     if (filters.counterShiftId) query = query.eq('counter_shift_id', filters.counterShiftId)
-    if (filters.paymentBusinessDate) {
-      query = query.eq('payment_business_date', filters.paymentBusinessDate)
+    if (filters.businessDate) {
+      query = query.eq('business_date', filters.businessDate)
     }
     if (filters.status) query = query.eq('status', filters.status)
     if (filters.limit) query = query.limit(filters.limit)
     const { data, error } = await query.order('paid_at', { ascending: false })
     if (error) throw actionError(error, 'Could not load bills.')
-    return (data as unknown as BillReadRow[]).map(billView)
+    const rows = data as unknown as BillReadRow[]
+    const ids = rows.map((row) => row.id)
+    let effective: EffectivePaymentRow[] = []
+    if (ids.length > 0) {
+      const response = await client.from('effective_bill_payments').select('*').in('bill_id', ids)
+      if (response.error) throw actionError(response.error, 'Could not load bill payments.')
+      effective = response.data as EffectivePaymentRow[]
+    }
+    const serverBills = rows.map((row) =>
+      billView(
+        row,
+        effective,
+        Boolean(
+          counterSession?.shift &&
+          row.counter_device_id === counterSession.device.deviceId &&
+          row.counter_shift_id === counterSession.shift.id,
+        ),
+      ),
+    )
+    const pendingBillIds = new Set(
+      database
+        ? (await database.envelopes.toArray()).flatMap((envelope) => {
+            if (
+              envelope.command.type === 'pay_now' ||
+              envelope.command.type === 'pay_order' ||
+              envelope.command.type === 'correct_bill_payment'
+            ) {
+              return [envelope.command.payload.billId]
+            }
+            return []
+          })
+        : [],
+    )
+    for (const bill of serverBills) {
+      const local = localBillCache.get(bill.id)
+      if (local && pendingBillIds.has(bill.id)) {
+        localBillCache.set(bill.id, { ...local, billNumber: bill.billNumber })
+      } else {
+        localBillCache.delete(bill.id)
+      }
+    }
+    return serverBills
+  }
+
+  /** Rebuild locally effective bills from the durable command log after reloads. */
+  async function overlayDurableBills(
+    shiftId: string,
+    serverBills: readonly BillingBill[],
+  ): Promise<BillingBill[]> {
+    const bills = new Map(serverBills.map((bill) => [bill.id, bill]))
+    if (!database || !counterSession) return [...bills.values()]
+
+    const envelopes = (
+      await database.envelopes.where('tabletId').equals(counterSession.device.deviceId).toArray()
+    )
+      .filter((envelope) => envelope.shiftId === shiftId && envelope.state !== 'needs_attention')
+      .sort((left, right) => left.createdAtMs - right.createdAtMs)
+    const orderSnapshots = new Map<string, BillingOrder>()
+
+    for (const envelope of envelopes) {
+      const command = envelope.command
+      if (command.type === 'create_order' || command.type === 'revise_order') {
+        const previous =
+          orderSnapshots.get(command.payload.orderId) ?? orderCache.get(command.payload.orderId)
+        orderSnapshots.set(command.payload.orderId, {
+          id: command.payload.orderId,
+          outletId: envelope.outletId,
+          deviceId: counterSession.device.deviceId,
+          orderNumber: previous?.orderNumber ?? 0,
+          localReference:
+            previous?.localReference ?? `Local · ${provisionalToken(command.payload.orderId)}`,
+          businessDate: command.payload.businessDate,
+          orderedAt: previous?.orderedAt ?? command.createdAt,
+          status: 'open',
+          creatorId: counterSession.shift?.personId ?? '',
+          creatorName: previous?.creatorName ?? 'Counter operator',
+          customerName: command.payload.customerName,
+          customerPhone: command.payload.customerPhone,
+          lines: command.payload.lines.map((line) => ({
+            menuItemId: line.menuItemId ?? '',
+            itemName: line.itemName,
+            unitPricePaise: line.unitPricePaise,
+            quantity: line.quantity,
+          })),
+          totalPaise: command.payload.totalPaise,
+          cancelReason: null,
+          cancelledAt: null,
+          cancelledByName: null,
+          billId: null,
+        })
+        continue
+      }
+
+      if (command.type === 'pay_now') {
+        bills.set(command.payload.billId, {
+          id: command.payload.billId,
+          outletId: envelope.outletId,
+          billNumber: bills.get(command.payload.billId)?.billNumber ?? 0,
+          orderNumber: null,
+          businessDate: command.payload.businessDate,
+          orderedAt: command.createdAt,
+          paidAt: command.createdAt,
+          paymentBusinessDate: command.payload.paymentBusinessDate,
+          payments: [...command.payload.payments],
+          paymentRevision: 0,
+          paymentEditableUntil: new Date(
+            Date.parse(command.createdAt) + PAYMENT_EDIT_WINDOW_MS,
+          ).toISOString(),
+          paymentMethod:
+            command.payload.payments.length > 1 ? 'mixed' : command.payload.payments[0]!.method,
+          status: 'settled',
+          customerName: command.payload.customerName,
+          customerPhone: command.payload.customerPhone,
+          lines: command.payload.lines.map((line) => ({
+            menuItemId: line.menuItemId ?? '',
+            itemName: line.itemName,
+            unitPricePaise: line.unitPricePaise,
+            quantity: line.quantity,
+          })),
+          totalPaise: command.payload.totalPaise,
+          voidReason: null,
+          voidedAt: null,
+        })
+        continue
+      }
+
+      if (command.type === 'pay_order' && !bills.has(command.payload.billId)) {
+        const order =
+          orderSnapshots.get(command.payload.orderId) ??
+          orderCache.get(command.payload.orderId) ??
+          (await readOrder(command.payload.orderId))
+        if (order) {
+          bills.set(command.payload.billId, {
+            id: command.payload.billId,
+            outletId: order.outletId,
+            billNumber: 0,
+            orderNumber: order.orderNumber,
+            businessDate: order.businessDate,
+            orderedAt: order.orderedAt,
+            paidAt: command.payload.paidAt,
+            paymentBusinessDate: command.payload.paymentBusinessDate,
+            payments: [...command.payload.payments],
+            paymentRevision: 0,
+            paymentEditableUntil: new Date(
+              Date.parse(command.payload.paidAt) + PAYMENT_EDIT_WINDOW_MS,
+            ).toISOString(),
+            paymentMethod:
+              command.payload.payments.length > 1 ? 'mixed' : command.payload.payments[0]!.method,
+            status: 'settled',
+            customerName: order.customerName,
+            customerPhone: order.customerPhone,
+            lines: order.lines,
+            totalPaise: order.totalPaise,
+            voidReason: null,
+            voidedAt: null,
+          })
+        }
+        continue
+      }
+
+      if (command.type === 'correct_bill_payment') {
+        const bill = bills.get(command.payload.billId)
+        if (bill && bill.paymentRevision === command.payload.expectedRevision) {
+          bills.set(bill.id, {
+            ...bill,
+            payments: [...command.payload.payments],
+            paymentRevision: command.payload.expectedRevision + 1,
+            paymentMethod:
+              command.payload.payments.length > 1 ? 'mixed' : command.payload.payments[0]!.method,
+          })
+        }
+      }
+    }
+
+    localBillCache.clear()
+    for (const bill of bills.values()) {
+      if (bill.paymentEditableUntil) localBillCache.set(bill.id, bill)
+    }
+    return [...bills.values()]
   }
 
   async function startRuntime(): Promise<void> {
@@ -563,13 +764,36 @@ export function createSupabaseBillingAdapter(
         throw new BillingActionError('not_permitted', 'That is not this tablet’s live shift.')
       }
       await startRuntime()
-      const held = (
-        await store.database.envelopes.where('tabletId').equals(session.device.deviceId).toArray()
-      ).filter((envelope) => envelope.eligibleAtMs > Date.now())
-      if (held.length > 0) {
+      const localBills = await overlayDurableBills(shift.id, [])
+      const editable = localBills.filter(
+        (bill) => bill.paymentEditableUntil && Date.parse(bill.paymentEditableUntil) > Date.now(),
+      )
+      if (editable.length > 0) {
         throw new BillingActionError(
           'unresolved_operations',
-          'A recent payment is still in its Undo window. Wait a few seconds, then finish the day.',
+          'A recent payment can still be edited. Wait for its five-minute window, then finish the day.',
+        )
+      }
+      const locallyUnresolved = await store.countUnsent(session.device.deviceId)
+      if (locallyUnresolved > 0) {
+        throw new BillingActionError(
+          'unresolved_operations',
+          `${locallyUnresolved} billing action${locallyUnresolved === 1 ? ' is' : 's are'} still unresolved on this tablet.`,
+        )
+      }
+      const { data: recentServerBills, error: recentError } = await client
+        .from('bills')
+        .select('id')
+        .eq('counter_device_id', session.device.deviceId)
+        .eq('payment_business_date', shift.businessDate)
+        .eq('status', 'settled')
+        .gt('paid_at', new Date(Date.now() - PAYMENT_EDIT_WINDOW_MS).toISOString())
+        .limit(1)
+      if (recentError) throw actionError(recentError, 'Could not verify the payment edit window.')
+      if (recentServerBills.length > 0) {
+        throw new BillingActionError(
+          'unresolved_operations',
+          'A recent payment can still be edited. Wait for its five-minute window, then finish the day.',
         )
       }
       await drain?.runOnce()
@@ -636,16 +860,86 @@ export function createSupabaseBillingAdapter(
           })),
         },
       })
-      await accept(command, draft.outletId, draft.businessDate, draft.clientId, UNDO_WINDOW_MS)
+      await accept(command, draft.outletId, draft.businessDate, draft.clientId)
+      localBillCache.set(draft.clientId, {
+        id: draft.clientId,
+        outletId: draft.outletId,
+        billNumber: 0,
+        orderNumber: null,
+        businessDate: draft.businessDate,
+        orderedAt: command.createdAt,
+        paidAt: command.createdAt,
+        paymentBusinessDate: draft.businessDate,
+        payments: [...draft.payments],
+        paymentRevision: 0,
+        paymentEditableUntil: new Date(
+          Date.parse(command.createdAt) + PAYMENT_EDIT_WINDOW_MS,
+        ).toISOString(),
+        paymentMethod: draft.payments.length > 1 ? 'mixed' : draft.payments[0]!.method,
+        status: 'settled',
+        customerName: draft.customerName?.trim() || null,
+        customerPhone: draft.customerPhone?.trim() || null,
+        lines: [...draft.lines],
+        totalPaise: totals.totalPaise,
+        voidReason: null,
+        voidedAt: null,
+      })
     },
 
-    async cancelQueuedBill(clientId: string): Promise<void> {
-      const { shift, store } = requireTablet()
-      try {
-        await store.undo(clientId, shift.personId, Date.now())
-      } catch (cause) {
-        throw actionError(cause, 'That payment could no longer be undone.')
+    async correctBillPayment(billId, expectedRevision, paymentsInput) {
+      const { session, shift } = requireTablet()
+      const local = localBillCache.get(billId)
+      const bill =
+        local ??
+        (await overlayDurableBills(shift.id, await readBills({ id: billId, limit: 1 }))).find(
+          (candidate) => candidate.id === billId,
+        )
+      if (
+        !bill ||
+        !bill.paymentEditableUntil ||
+        Date.parse(bill.paymentEditableUntil) <= Date.now()
+      ) {
+        throw new BillingActionError(
+          'payment_edit_expired',
+          'That payment can no longer be edited.',
+        )
       }
+      if (expectedRevision !== bill.paymentRevision) {
+        throw new BillingActionError(
+          'stale_revision',
+          'That payment changed; reopen it and try again.',
+        )
+      }
+      const payments = requirePayments(paymentsInput, bill.totalPaise)
+      const createdAt = new Date().toISOString()
+      const command = await createBillingCommand({
+        commandId: newUuid(),
+        tabletId: session.device.deviceId,
+        shiftId: shift.id,
+        type: 'correct_bill_payment',
+        createdAt,
+        payload: { billId, expectedRevision, payments },
+      })
+      const ancestors = database
+        ? (await database.envelopes.toArray())
+            .filter(
+              (envelope) =>
+                (envelope.command.type === 'pay_now' ||
+                  envelope.command.type === 'pay_order' ||
+                  envelope.command.type === 'correct_bill_payment') &&
+                envelope.command.payload.billId === billId,
+            )
+            .map((envelope) => envelope.commandId)
+        : []
+      await accept(command, bill.outletId, bill.paymentBusinessDate, `payment:${billId}`, ancestors)
+      const corrected: BillingBill = {
+        ...bill,
+        payments,
+        paymentRevision: expectedRevision + 1,
+        paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
+      }
+      localBillCache.set(billId, corrected)
+      return corrected
     },
 
     async saveOrder(input: SaveOrderInput): Promise<BillingOrder> {
@@ -729,7 +1023,7 @@ export function createSupabaseBillingAdapter(
       })
       await accept(command, existing.outletId, existing.businessDate, orderId)
       orderCache.delete(orderId)
-      return {
+      const localBill: BillingBill = {
         id: command.payload.billId,
         outletId: existing.outletId,
         billNumber: 0,
@@ -739,6 +1033,10 @@ export function createSupabaseBillingAdapter(
         paidAt: command.payload.paidAt,
         paymentBusinessDate: command.payload.paymentBusinessDate,
         payments: [...payments],
+        paymentRevision: 0,
+        paymentEditableUntil: new Date(
+          Date.parse(command.payload.paidAt) + PAYMENT_EDIT_WINDOW_MS,
+        ).toISOString(),
         paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
         status: 'settled',
         customerName: existing.customerName,
@@ -748,6 +1046,8 @@ export function createSupabaseBillingAdapter(
         voidReason: null,
         voidedAt: null,
       }
+      localBillCache.set(localBill.id, localBill)
+      return localBill
     },
 
     async cancelOrder(orderId, reason): Promise<BillingOrder> {
@@ -771,7 +1071,19 @@ export function createSupabaseBillingAdapter(
     },
 
     async listShiftHistory(shiftId) {
-      const bills = await readBills({ counterShiftId: shiftId })
+      let serverBills: BillingBill[]
+      try {
+        serverBills = await readBills({ counterShiftId: shiftId })
+      } catch (cause) {
+        // The counter's durable command log is sufficient to keep a newly
+        // accepted payment editable while the backend is unreachable. Other
+        // failures still surface instead of silently presenting partial data.
+        if (typeof navigator === 'undefined' || navigator.onLine) throw cause
+        serverBills = []
+      }
+      const bills = (await overlayDurableBills(shiftId, serverBills)).sort((a, b) =>
+        b.paidAt.localeCompare(a.paidAt),
+      )
       return {
         bills,
         totals: BILLING_PAYMENT_METHODS.map((method) => ({
@@ -788,7 +1100,7 @@ export function createSupabaseBillingAdapter(
     async listManagerHistory(filters) {
       let bills = await readBills({
         outletId: filters.outletId,
-        ...(filters.businessDate && { paymentBusinessDate: filters.businessDate }),
+        ...(filters.businessDate && { businessDate: filters.businessDate }),
         ...(filters.status && filters.status !== 'all' && { status: filters.status }),
       })
       if (filters.paymentMethod && filters.paymentMethod !== 'all') {

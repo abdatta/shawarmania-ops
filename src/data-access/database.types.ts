@@ -712,6 +712,127 @@ export type Database = {
           },
         ]
       }
+      bill_payment_correction_allocations: {
+        Row: {
+          amount_paise: number
+          correction_id: string
+          created_at: string
+          method: Database["public"]["Enums"]["payment_method"]
+          outlet_id: string
+        }
+        Insert: {
+          amount_paise: number
+          correction_id: string
+          created_at?: string
+          method: Database["public"]["Enums"]["payment_method"]
+          outlet_id: string
+        }
+        Update: {
+          amount_paise?: number
+          correction_id?: string
+          created_at?: string
+          method?: Database["public"]["Enums"]["payment_method"]
+          outlet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_payment_correction_allocations_correction_id_fkey"
+            columns: ["correction_id"]
+            isOneToOne: false
+            referencedRelation: "bill_payment_corrections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_payment_correction_allocations_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bill_payment_corrections: {
+        Row: {
+          actor_id: string
+          bill_id: string
+          client_created_at: string
+          command_id: string
+          created_at: string
+          device_id: string
+          id: string
+          outlet_id: string
+          revision: number
+          shift_id: string
+        }
+        Insert: {
+          actor_id: string
+          bill_id: string
+          client_created_at: string
+          command_id: string
+          created_at?: string
+          device_id: string
+          id?: string
+          outlet_id: string
+          revision: number
+          shift_id: string
+        }
+        Update: {
+          actor_id?: string
+          bill_id?: string
+          client_created_at?: string
+          command_id?: string
+          created_at?: string
+          device_id?: string
+          id?: string
+          outlet_id?: string
+          revision?: number
+          shift_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_payment_corrections_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_payment_corrections_bill_outlet_fk"
+            columns: ["bill_id", "outlet_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id", "outlet_id"]
+          },
+          {
+            foreignKeyName: "bill_payment_corrections_command_id_fkey"
+            columns: ["command_id"]
+            isOneToOne: true
+            referencedRelation: "billing_commands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_payment_corrections_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "counter_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_payment_corrections_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_payment_corrections_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bill_payments: {
         Row: {
           amount_paise: number
@@ -2382,7 +2503,16 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      effective_bill_payments: {
+        Row: {
+          amount_paise: number | null
+          bill_id: string | null
+          method: Database["public"]["Enums"]["payment_method"] | null
+          outlet_id: string | null
+          revision: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       app_account_active: { Args: never; Returns: boolean }
@@ -2829,6 +2959,17 @@ export type Database = {
           shift_id: string
           status: string
         }[]
+      }
+      correct_bill_payment: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
       }
       create_billing_order: {
         Args: {

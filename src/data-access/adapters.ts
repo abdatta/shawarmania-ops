@@ -960,6 +960,10 @@ export interface BillingBill {
   paymentBusinessDate: Tables<'bills'>['payment_business_date']
   /** Exact tender allocations; their sum is always the bill total. */
   payments: PaymentAllocation[]
+  /** Revision zero is the immutable original allocation. */
+  paymentRevision: number
+  /** Present only when this tablet may still append a tender correction. */
+  paymentEditableUntil: string | null
   /** Convenience label for summaries; `mixed` is not itself a tender method. */
   paymentMethod: PaymentMethod | 'mixed'
   status: BillStatus
@@ -1060,11 +1064,13 @@ export interface BillingAdapter {
    */
   settleBill(draft: BillDraft): Promise<void>
   /**
-   * Cancel a queued bill that has not been sent — the undo. It removes a write
-   * that has not happened; it never edits a bill, because a settled bill is
-   * append-only. Refused once the bill has gone.
+   * Append a complete replacement tender allocation during the edit window.
    */
-  cancelQueuedBill(clientId: string): Promise<void>
+  correctBillPayment(
+    billId: string,
+    expectedRevision: number,
+    payments: PaymentAllocation[],
+  ): Promise<BillingBill>
   saveOrder(input: SaveOrderInput): Promise<BillingOrder>
   reviseOrder(
     orderId: string,
@@ -1083,6 +1089,8 @@ export interface BillingAdapter {
   correctAttention(reference: string, correctionId: string): Promise<BillingAttentionItem>
   discardAttention(reference: string, reason: string): Promise<BillingAttentionItem>
   listDeliveryDiagnostics(outletId: string): Promise<BillingDeliveryDiagnostic[]>
+  /** Demo-only clock control; live adapters deliberately omit it. */
+  advanceDemoPaymentClock?(milliseconds: number): void
 }
 
 /**

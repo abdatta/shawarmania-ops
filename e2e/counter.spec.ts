@@ -14,8 +14,8 @@ import { expect, test, type Page } from '@playwright/test'
  * baseURL carries the deployment sub-path, so every goto is relative.
  */
 
-/** Matches `UNDO_WINDOW_MS` in src/domain/billing.ts, plus the mock's send latency. */
-const AFTER_SEND_MS = 6_000 + 1_500
+/** Covers the short post-payment confirmation before editing moves to shift history. */
+const AFTER_SUCCESS_MS = 4_000
 
 async function setTheme(page: Page, theme: 'light' | 'dark') {
   await page.evaluate((value) => {
@@ -80,7 +80,7 @@ test.describe('the counter', () => {
     await expect(page.getByTestId('local-reference')).toHaveText(/^Local · [0-9A-Z]{4}$/)
 
     // It clears itself; nothing has to be acknowledged.
-    await expect(confirmation).toBeHidden({ timeout: AFTER_SEND_MS })
+    await expect(confirmation).toBeHidden({ timeout: AFTER_SUCCESS_MS })
   })
 
   test('requires either customer name or phone before Order or Mark Paid', async ({ page }) => {
@@ -105,6 +105,14 @@ test.describe('the counter', () => {
     await page.getByTestId('settle').click()
 
     const dialog = page.getByRole('dialog', { name: 'Record payment' })
+    await expect(dialog.getByRole('heading', { name: 'Record payment' })).toBeFocused()
+    const cashClass = await dialog
+      .getByRole('button', { name: 'Cash', exact: true })
+      .getAttribute('class')
+    await expect(dialog.getByRole('button', { name: 'UPI', exact: true })).toHaveAttribute(
+      'class',
+      cashClass!,
+    )
     await expect(dialog.getByRole('button', { name: 'Mark Paid', exact: true })).toBeDisabled()
     await expect(page.getByTestId('bill-total')).toHaveText('₹139')
     await expect(page.getByTestId('settled-confirmation')).toBeHidden()
@@ -118,16 +126,37 @@ test.describe('the counter', () => {
     await expect(off).toBeDisabled()
   })
 
-  test('undoes a settle and puts the order back', async ({ page }) => {
+  test('edits an immediate payment beside the paid bill', async ({ page }) => {
     await page.getByRole('button', { name: 'Mayonnaise Chicken Shawarma' }).click()
     await page.getByPlaceholder('Customer name').fill('Demo Regular')
     await recordPaid(page)
 
-    await page.getByTestId('undo-settle').click()
+    await expect(page.getByTestId('undo-settle')).toHaveCount(0)
+    const paidBill = page.locator('details').filter({
+      has: page.locator('summary').filter({ hasText: 'Cash' }).filter({ hasText: '₹159' }),
+    })
+    await paidBill.locator('summary').click()
+    await paidBill.getByRole('button', { name: /^Edit \(\d+ min\)$/ }).click()
+    const edit = page.getByRole('dialog', { name: 'Record payment' })
+    await expect(edit.getByRole('heading', { name: 'Edit payment' })).toBeVisible()
+    await edit.getByRole('button', { name: 'Remove Cash payment' }).click()
+    await edit.getByRole('button', { name: 'UPI', exact: true }).click()
+    await edit.getByRole('button', { name: 'Save payment' }).click()
+    await expect(page.getByText('Payment updated.')).toBeVisible()
 
-    await expect(page.getByTestId('bill-total')).toHaveText('₹159')
-    await expect(page.getByPlaceholder('Customer name')).toHaveValue('Demo Regular')
-    await expect(page.getByTestId('settled-confirmation')).toBeHidden()
+    const correctedBill = page.locator('details').filter({
+      has: page.locator('summary').filter({ hasText: 'UPI' }).filter({ hasText: '₹159' }),
+    })
+    if ((await correctedBill.getAttribute('open')) === null) {
+      await correctedBill.locator('summary').click()
+    }
+    await correctedBill.getByRole('button', { name: 'Demo: 59 sec' }).click()
+    await expect(correctedBill.getByRole('button', { name: /^Edit \(5\d sec\)$/ })).toBeVisible()
+    await correctedBill.getByRole('button', { name: 'Demo: expire' }).click()
+    await expect(correctedBill.getByRole('button', { name: /^Edit \(/ })).toHaveCount(0)
+
+    await expect(page.getByTestId('bill-total')).toHaveText('₹0')
+    await expect(page.getByPlaceholder('Customer name')).toHaveValue('')
   })
 
   test('saves and records a food-first order from the persistent rail', async ({ page }) => {
@@ -159,12 +188,16 @@ test.describe('the counter', () => {
     await payment.getByRole('button', { name: 'Mark Paid', exact: true }).click()
     await expect(page.getByText(/recorded as paid. Bill number assigned/)).toBeVisible()
 
-    const closed = rail
+    const shiftBills = rail.getByRole('region', { name: 'Bills this shift' })
+    const closed = shiftBills
       .locator('details')
       .filter({ hasText: 'Mayonnaise Chicken Shawarma' })
-      .first()
+      .filter({ hasText: 'Asha' })
     await expect(closed).toBeVisible()
+    await expect(shiftBills.locator('details').first()).toContainText('Asha')
+    await expect(closed.getByLabel('Payment editable')).toBeVisible()
     await closed.locator('summary').click()
+    await expect(closed.getByRole('button', { name: /^Edit \(5 min\)$/ })).toBeVisible()
     await expect(closed).toContainText('UPI')
     await expect(closed).toContainText('Classic Chicken Shawarma')
     await expect(closed).toContainText('Mayonnaise Chicken Shawarma')

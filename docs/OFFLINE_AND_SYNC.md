@@ -11,7 +11,7 @@ Deliberately asymmetric, because the risk is asymmetric.
 
 | Works offline | Online only |
 |---|---|
-| Direct payment; create, revise, cancel and pay an order | Opening a shift |
+| Direct payment; create, revise, cancel and pay an order; correct tender for five minutes | Opening a shift |
 | Continue with an already-open shift's last loaded menu | Finish day |
 | View this tablet's local orders, bills and delivery state | Inventory, expenses |
 | | Profit and loss, reports |
@@ -51,6 +51,13 @@ that IndexedDB transaction commits; a storage failure leaves every field intact.
 The queue survives page reload, app close, compatible application upgrades and
 device restart. It has to: the realistic failure is not a five-second blip, it
 is a tablet that has been offline all evening.
+
+Payments are eligible for delivery immediately; there is no delivery hold and
+no queued-write Undo. A correction is its own immutable envelope, chained behind
+the payment and every earlier correction for that bill. The local effective
+tender and shift totals change only after that correction's IndexedDB transaction
+commits. On restart the adapter rebuilds the paid bill and correction chain from
+those durable envelopes before delivery resumes.
 
 ## Rules that make this safe
 
@@ -93,6 +100,12 @@ There are fewer than you would expect, by design.
 full or returns `order_not_open`; manager cancellation racing it cannot leave a
 partial bill or consume a number.
 
+**Payment corrections use optimistic revisions.** The database locks the bill,
+accepts only the expected effective revision during the original five-minute
+window and appends a full replacement allocation. A stale correction is refused;
+exact replay appends nothing. Older revisions remain audit evidence but never
+contribute to effective totals.
+
 **Shifts can overlap** if a device was offline when another opened one. Both are recorded; the manager sees an overlap flag. The app does not silently pick a winner, because the correct resolution depends on what actually happened in the shop.
 
 **The genuine hard case is a late bill against a closed day.** A tablet offline all evening syncs after the manager has already counted the drawer and closed the business date.
@@ -127,7 +140,8 @@ Almost nothing, which is the point.
 - No spinner, no blocking dialog, no error toast on a failed sync — the queue handles it.
 - One honest exception: if the backlog grows past a threshold or an entry has failed repeatedly, the indicator escalates to a visible warning, because at that point someone genuinely does need to know.
 
-**Finish day** is the explicit online boundary. The tablet waits out any visible
-Undo, drains the date, refuses while any local envelope or server open order
-remains, then ends the shift and records one end-of-day confirmation atomically.
+**Finish day** is the explicit online boundary. The tablet waits out the last
+five-minute payment-edit window, drains the date, refuses while any local
+envelope or server open order remains, then ends the shift and records one
+end-of-day confirmation atomically.
 It never treats a browser's `online` flag as proof that the server was reached.

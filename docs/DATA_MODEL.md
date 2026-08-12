@@ -187,6 +187,18 @@ The snapshot is the point. `menu_item_id` is nullable and advisory — if an ite
 
 These append-only rows are the canonical tender truth. Each method appears at most once per bill, every amount is positive integer paise, and the deferred integrity guard requires their sum to equal the bill total. A mixed bill remains one fully paid bill, never a partially paid order. Daily cash sums only rows whose method is `cash`, so ₹100 Cash + ₹39 UPI contributes ₹100 to the drawer and ₹139 to revenue.
 
+**`bill_payment_corrections`** records one append-only revision for a settled
+bill: bill/outlet, sequential revision, originating tablet and shift, command,
+creator and creation time. **`bill_payment_correction_allocations`** carries that
+revision's complete positive integer-paise Cash/UPI replacement. Update and
+delete are refused on both tables. `effective_bill_payments` exposes the
+original `bill_payments` at revision zero or only the latest replacement; it is
+the sole allocation source for billing totals and revenue reads. The correction
+RPC accepts the same bill identity only from its originating tablet and current
+shift, under a bill lock, at the expected revision and no later than the stored
+`paid_at + 5 minutes`. Exact command replay returns its recorded revision without
+appending again.
+
 **`billing_commands`** — compact idempotency receipts containing envelope
 identity, attribution, command type/version/hash, client and server clocks,
 affected dates, result category, entity references and a server watermark. They
@@ -199,7 +211,9 @@ accepted command for that tablet/date makes it stale. The tablet can confirm
 only after participating and reporting zero unsent and zero needs-attention
 operations. The confirmation command itself refuses open orders and atomically
 ends that tablet's shift. Readiness requires no open orders, no live shifts,
-and a current confirmation from every participating tablet.
+and a current confirmation from every participating tablet. An insert or update
+is also refused while that tablet has a settled bill whose five-minute
+payment-correction window is still open.
 
 All order and bill mutations use versioned command RPCs. Authenticated clients
 have no direct insert, update or delete privilege on the money tables, so

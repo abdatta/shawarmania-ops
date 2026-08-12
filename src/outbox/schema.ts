@@ -4,7 +4,7 @@ import type { BillingCommand, BillingCommandType } from '../../shared/billing-co
 import type { BillingCommandResult } from '@/domain'
 
 export const BILLING_DELIVERY_DATABASE_NAME = 'shawarmania-billing-delivery'
-export const BILLING_DELIVERY_DATABASE_VERSION = 2
+export const BILLING_DELIVERY_DATABASE_VERSION = 3
 
 export type BillingDeliveryEnvelopeState = 'held' | 'pending' | 'retrying' | 'needs_attention'
 
