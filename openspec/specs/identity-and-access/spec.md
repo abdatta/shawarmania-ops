@@ -10,7 +10,6 @@ reset by an admin handing over a single-use one-time link with no external
 messaging service involved, and an account that is deactivated or reassigned
 stops working immediately rather than at token expiry.
 ## Requirements
-
 ### Requirement: Usernames are canonical and unique across the business
 
 Every human account SHALL have one canonical username shared by all of that
@@ -582,109 +581,95 @@ hand-crafted privileged request regardless of what the People form offers.
 - **WHEN** an admin requests deactivation of their own account
 - **THEN** the request is refused and the account stays active
 
-### Requirement: A one-time code is single-use, time-limited, and attempt-limited
+### Requirement: A one-time code is single-use, time-limited, attempt-limited, and purpose-bearing
 
-Provisioning SHALL issue a one-time code that is shown to the issuing admin
-exactly once and stored only as a hash. The code SHALL expire after a bounded
-lifetime, SHALL be redeemable at most once, and repeated failed redemptions
-SHALL be bounded at the redemption endpoint rather than per invite — because a
-code that identifies its own invite gives a wrong guess no invite to charge.
-Issuing a new code for an account SHALL supersede any outstanding code for that
-account. At most one live code SHALL exist per account, and the database SHALL
-guarantee that a live code identifies exactly one invite.
+Provisioning SHALL issue a one-time activation code that is shown to the issuing admin exactly once and stored only as a hash. An authorized admin helping an established account recover SHALL issue a password-reset code. Every invite SHALL store which of those two purposes it serves.
 
-#### Scenario: The code is returned once and never stored in plain text
+The code SHALL expire after a bounded lifetime, SHALL be redeemable at most once, and repeated failed redemptions SHALL be bounded at the redemption endpoint rather than per invite. Issuing a new code of the same purpose for an account SHALL supersede the previous live code. An invite SHALL count as live only while it is unconsumed, unsuperseded, and unexpired; an expired row SHALL NOT create an outstanding account state.
+
+#### Scenario: Provisioning issues activation
 
 - **WHEN** an account is provisioned
-- **THEN** the code is present in the response to the issuing admin, and the
-  stored record holds only a hash of it
+- **THEN** the one-time response identifies an activation handover, and the stored row contains an activation purpose and only the code hash
 
-#### Scenario: A redeemed code cannot be redeemed again
+#### Scenario: Established-account recovery issues reset
 
-- **WHEN** a valid code is redeemed successfully and then presented a second
-  time
-- **THEN** the second redemption is refused
+- **WHEN** an authorized admin helps a person who has successfully signed in before
+- **THEN** a password-reset handover is issued and no state says that first activation is pending
 
-#### Scenario: An expired code is refused
+#### Scenario: An expired row is not outstanding
 
-- **WHEN** a code is presented after its expiry
-- **THEN** redemption is refused and no password is changed
+- **WHEN** an unused invite passes its expiry
+- **THEN** redemption is refused and People no longer treats the account as having a live handover
 
-#### Scenario: Repeated wrong codes are bounded by the endpoint
+#### Scenario: Repeated wrong codes are bounded
 
 - **WHEN** wrong codes are presented repeatedly
-- **THEN** the endpoint's rate limit refuses further attempts, and no
-  legitimate outstanding code is disabled by another person's guessing
+- **THEN** the endpoint rate limit refuses further attempts without disabling a legitimate code through another person's guesses
 
-#### Scenario: A live code identifies exactly one invite
+#### Scenario: Replacement supersedes the same handover
 
-- **WHEN** any code hash is present on more than one live invite
-- **THEN** the database refuses it, so redemption by code is never ambiguous
+- **WHEN** an admin replaces a live activation or password-reset handover
+- **THEN** the former code is no longer redeemable and only the newly displayed code works
 
-#### Scenario: Re-issuing supersedes the previous code
+### Requirement: Redeeming a code sets a password and establishes a verified replacement session
 
-- **WHEN** an admin issues a new code for an account that already has an
-  outstanding one
-- **THEN** the previous code is no longer redeemable and only the new one works
+Redemption SHALL accept a code, the canonical username displayed by that code, and a new password. It SHALL derive the account from the code, require no existing session, enforce the minimum password length, and consume the code only if the supplied username matches the account's current username.
 
-### Requirement: Redeeming a code sets a password and reveals nothing beyond its username
+Unknown, expired, already-redeemed, superseded, and inactive-account codes SHALL produce an identical response. A canonical username mismatch SHALL produce a specific correction response and SHALL NOT consume the code.
 
-Redemption SHALL accept a code, the canonical username displayed by that code,
-and a new password. It SHALL derive the account from the code, require no
-existing session, enforce the minimum password length, and consume the code
-only if the supplied username matches the account's current username.
+After a successful password change, the client SHALL discard any superseded local human session, sign in through the ordinary username/password path, verify that newly returned session with the Auth server, update the shared session holder, and navigate only after the holder reflects it. Failure to establish the replacement session SHALL leave the password changed and direct the person to ordinary sign-in without rendering a protected shell from stale state.
 
-Unknown, expired, already-redeemed, superseded, and inactive-account codes
-SHALL produce an identical response. A canonical username mismatch SHALL
-produce a specific correction response and SHALL NOT consume the code.
-Ordinary redemption SHALL NOT return a session; the client signs in afterwards
-through the everyday username/password path.
+#### Scenario: First-run activation enters with the new session
 
-#### Scenario: First-run activation
+- **WHEN** a newly provisioned person redeems an activation link with the displayed username and matching valid new passwords
+- **THEN** the password is set, the code is consumed, and the app enters only after the ordinary sign-in path establishes and verifies the new session
 
-- **WHEN** a newly provisioned person types the displayed username and matching
-  valid new passwords
-- **THEN** the password is set, the code is consumed, and the client signs in
-  through the ordinary username path
+#### Scenario: Password reset replaces stale local state
+
+- **WHEN** a signed-in device redeems a password-reset link for its own account
+- **THEN** any former local human session is discarded and the app uses only the newly established verified session
+
+#### Scenario: Post-redemption sign-in fails
+
+- **WHEN** the password update succeeds but the replacement session cannot be established
+- **THEN** the app states that the password changed, offers ordinary sign-in, and renders no authenticated-looking shell
 
 #### Scenario: Dead-code failures are indistinguishable
 
-- **WHEN** redemption is attempted with an unknown code, and separately with an
-  expired one
+- **WHEN** redemption is attempted with an unknown code and separately with an expired code
 - **THEN** both attempts produce the same response
 
 #### Scenario: A username typo preserves the link
 
-- **WHEN** a live code is submitted with a canonical username other than the
-  one it currently identifies
-- **THEN** the response names the username mismatch and the same code remains
-  redeemable
+- **WHEN** a live code is submitted with a canonical username other than the one it currently identifies
+- **THEN** the response names the username mismatch and the same code remains redeemable
 
-#### Scenario: A too-short password is refused before consumption
+### Requirement: An admin-issued link is every role's activation and password-reset path
 
-- **WHEN** redemption is attempted with a password below the minimum length
-- **THEN** the password refusal is specific and the code remains redeemable
+For Franchise Admins, Billers, Employees, and Super Admins, forgotten-password recovery SHALL be admin-initiated: an authorized admin issues a one-time password-reset link and the person redeems it with the displayed username and a new password typed twice. A never-activated account SHALL instead receive a set-up/activation link. One Super Admin MAY issue the link for another Super Admin. This change SHALL NOT offer self-service forgotten-password recovery or send authentication mail.
 
-### Requirement: An admin-issued code is every role's password reset path
+A deactivated account SHALL be reactivated before either link can be issued. The handover SHALL identify its purpose without requiring the admin to interpret the word “code”.
 
-For Franchise Admins, Billers, Employees, and Super Admins, password reset SHALL
-be admin-initiated: an authorized admin issues a new one-time link and the
-person redeems it with the displayed username and a new password typed twice.
-One Super Admin MAY issue the link for another Super Admin. This change SHALL
-NOT offer self-service forgotten-password recovery or send authentication mail.
+#### Scenario: A staff member who forgot their password gets reset help
 
-#### Scenario: A staff member who forgot their password gets admin help
+- **WHEN** an authorized admin selects Reset password for an established Employee and the person redeems the link
+- **THEN** the new password works, the previous password does not, other superseded personal sessions cease to authorize, and no mail or SMS is sent
 
-- **WHEN** an authorized admin reissues a link for an existing Employee and the
-  person redeems it with their username and matching new passwords
-- **THEN** the new password works, the previous password does not, and no mail
-  or SMS is sent
+#### Scenario: A new person is offered setup
+
+- **WHEN** an authorized admin opens actions for a person who has never successfully signed in
+- **THEN** the action says Set up account rather than Reset password
+
+#### Scenario: A deactivated person gets no unusable link
+
+- **WHEN** an admin asks to issue a link for a deactivated account
+- **THEN** issuance is refused until the account is explicitly reactivated
 
 #### Scenario: Sign-in offers no email-recovery control
 
 - **WHEN** any role opens sign-in help after forgetting a password
-- **THEN** they are told to ask an authorized admin and no recovery-address
-  field is offered
+- **THEN** they are told to ask an authorized admin and no recovery-address field is offered
 
 ### Requirement: A deactivated account loses its open session immediately
 
@@ -705,70 +690,45 @@ writes nothing regardless of what the client does.
 - **THEN** they are returned to sign-in with the deactivation message rather
   than reaching a shell
 
-### Requirement: An assignment change takes effect without ending the session
+### Requirement: An assignment change takes effect atomically without ending the session
 
-An assignment granted or ended while a person's app is open SHALL take effect
-at the database immediately, and the open client SHALL reflect it within a
-bounded interval without the person signing in again. Nothing about authority
-is carried in the token, so no session token is reissued.
+An authorized edit SHALL apply the person's editable facts and complete intended live assignment set as one transaction. Unchanged assignments SHALL retain their identity and start date; a role change or transfer SHALL end the former assignment and insert the replacement without deleting or rewriting history. A failed validation or write SHALL leave profile facts, assignments, active state, account email, and invitations unchanged.
 
-A client SHALL NOT render a shell or a surface for a role it holds no live
-assignment for. A person who loses every live assignment SHALL be returned to a
-state that offers no outlet surfaces and states why.
+An assignment change while the person's app is open SHALL take effect at the database immediately and the client SHALL reflect it within a bounded interval without password entry or token reissue. Ordinary editing SHALL NOT deactivate sign-in and SHALL NOT accept an empty intended assignment set.
 
-When a permitted assignment grant or end affects a person with an unconsumed,
-unsuperseded activation code, the assignment change and replacement invite
-SHALL complete in one database transaction: the existing code SHALL be
-superseded, a new code SHALL be issued after the changed assignment set exists,
-and the admin SHALL be shown the new link in the same action. An assignment
-change for a person without an outstanding code SHALL NOT create one.
+When the target has a live activation link, the assignment transaction SHALL supersede it and return a replacement only after the final assignment set exists. An assignment change SHALL NOT replace a password-reset link and SHALL NOT create an unsolicited link.
 
-Granting a Super Admin assignment SHALL require and atomically write an account
-email. Ending a person's final live Super Admin assignment SHALL retain that
-private email as an alternate sign-in identifier, and the existing
-last-Super-Admin guard SHALL remain.
+Granting Super Admin SHALL require and atomically preserve the private-email invariant. Ending a Super Admin assignment SHALL retain the private email, and the final-Super-Admin guard SHALL remain.
+
+#### Scenario: Employee is promoted without interruption
+
+- **WHEN** an authorized admin changes an Employee assignment to Biller at the same outlet
+- **THEN** one live Biller assignment remains, the Employee assignment is historically ended, and the account, password, active state, attendance, and open session remain intact
+
+#### Scenario: A person transfers outlets atomically
+
+- **WHEN** an authorized admin changes a single assignment from one outlet to another
+- **THEN** no observable committed state contains neither or both unintended placements, and history retains the ended former assignment
 
 #### Scenario: A new assignment appears without signing out
 
-- **WHEN** a person is granted an assignment at a second outlet while their app
-  is open
-- **THEN** the second outlet becomes available within the revalidation interval
-  without sign-out or password re-entry
+- **WHEN** a person is granted an assignment at a second outlet while their app is open
+- **THEN** the second outlet becomes available within the revalidation interval without sign-out or password re-entry
 
-#### Scenario: An ended assignment stops rendering its shell
+#### Scenario: An invalid intended set changes nothing
 
-- **WHEN** the assignment behind the current shell is ended
-- **THEN** the client stops rendering that shell within the revalidation
-  interval and the database refuses its writes immediately
+- **WHEN** any role, outlet, authority, final-owner, email, stale-state, or uniqueness validation fails
+- **THEN** no profile fact, assignment, active state, account email, or invitation changes
 
-#### Scenario: Losing every assignment is stated
+#### Scenario: Activation follows the final placement
 
-- **WHEN** a person's last live assignment is ended while their app is open
-- **THEN** the app states that they are not currently assigned to any outlet
-  rather than showing an empty shell
+- **WHEN** an assignment edit affects a person with a live activation link
+- **THEN** the old link is superseded within the transaction and one replacement setup link is shown after the final assignment set exists
 
-#### Scenario: A grant replaces an outstanding link
+#### Scenario: Reset survives a placement change
 
-- **WHEN** an admin grants an assignment to a person with an outstanding code
-- **THEN** the old code is superseded, the changed assignment set exists first,
-  and one replacement activation link is shown
-
-#### Scenario: Ending an assignment replaces an outstanding link
-
-- **WHEN** an admin ends an assignment for a person with an outstanding code
-- **THEN** the old code is superseded, the changed assignment set exists first,
-  and one replacement activation link is shown
-
-#### Scenario: An activated person gets no unsolicited reset
-
-- **WHEN** an admin changes an assignment for a person with no outstanding code
-- **THEN** the assignment changes and no invite or email is issued
-
-#### Scenario: The Super Admin account-email requirement cannot be bypassed
-
-- **WHEN** a Super Admin assignment is inserted through a hand-crafted database
-  request for a person without an account-email row
-- **THEN** the transaction is refused
+- **WHEN** an assignment edit affects an established person with a live password-reset link
+- **THEN** that reset link remains redeemable and no replacement is issued
 
 ### Requirement: Sessions persist across restarts for field use
 
@@ -782,38 +742,33 @@ valid. No inactivity timeout SHALL force routine re-authentication.
 - **THEN** they are still signed in and land on their role's home without
   entering a password
 
-### Requirement: Admins manage accounts from a surface scoped to their authority
+### Requirement: Admins manage accounts from a task-based surface scoped to their authority
 
-The Super Admin SHALL have a People surface listing accounts across all
-outlets, and the Franchise Admin SHALL have one listing accounts in outlets
-within their authority only. Both SHALL support creating an account, reissuing
-a code, changing another person's username, and deactivating or reactivating an
-account within the authority limits of the caller's role.
+The Super Admin SHALL have a People surface listing accounts across all outlets, and the Franchise Admin SHALL have one listing only accounts they are permitted to manage. A person's menu SHALL offer recognizable tasks: Edit, Change username, Set up account or Reset password according to lifecycle state, Change sign-in email where permitted, and Deactivate or Reactivate.
 
-A newly issued code SHALL be presented once as the activation link, QR image,
-and copy action for the admin to pass on, and SHALL NOT be retrievable
-afterwards. Username SHALL be visible wherever the admin must identify or
-support an account. Account email SHALL appear only under the private owner
-rules.
+Edit SHALL contain personal facts and authorized placement. It SHALL show one outlet and one access role for a single ordinary assignment, and SHALL progressively reveal assignment rows through a control labelled “Works at multiple outlets”. A person already holding zero, several, or mixed-role assignments SHALL open in the expanded form. Username SHALL remain a separate credential action.
 
-#### Scenario: The Franchise Admin list is authority-scoped
+A newly issued handover SHALL be presented once through one reusable purpose-aware component with a prominent QR, primary copy action, highlighted username, one-use and expiry facts, and only warnings relevant to that state. It SHALL NOT be retrievable afterwards.
 
-- **WHEN** a Franchise Admin opens People
-- **THEN** only people wholly within their management authority are actionable,
-  and no control offers a role, outlet, username change, or account email
-  outside that authority
+#### Scenario: The common edit is simple
 
-#### Scenario: The handover is shown once
+- **WHEN** an admin edits a person with one ordinary outlet assignment
+- **THEN** the initial form shows their facts, one outlet, and one access role without separate grant/end actions or an expanded assignment list
 
-- **WHEN** an admin provisions an account or reissues a code
-- **THEN** the activation link is offered for copying and scanning, and
-  revisiting the surface does not reveal it again
+#### Scenario: Multi-outlet editing is disclosed deliberately
 
-#### Scenario: Username is available during a support call
+- **WHEN** the admin selects Works at multiple outlets or edits a person who already has several assignments
+- **THEN** one row per outlet is shown with its single role and permitted add/remove controls
 
-- **WHEN** an authorized admin opens a person's People detail
-- **THEN** the current canonical username is visible without exposing a
-  provider alias or private account email outside the owner rule
+#### Scenario: The Franchise Admin list and controls are authority-scoped
+
+- **WHEN** a Franchise Admin opens People or hand-crafts an edit
+- **THEN** they can switch Employee and Biller only at outlets they manage and cannot grant, alter, or remove Franchise Admin or Super Admin authority
+
+#### Scenario: The handover is concise and purpose-aware
+
+- **WHEN** an admin issues account setup and separately issues password reset
+- **THEN** the same visual component presents the same QR/copy/security facts with distinct setup or reset headings and no misleading “New code” label
 
 ### Requirement: Signing out is reachable from every shell
 
@@ -882,31 +837,22 @@ outlet preselected in the singular disabled control.
 
 ### Requirement: An admin can see and correct the username an account signs in with
 
-The current canonical username SHALL be visible to admins who may manage the
-account and correctable by them. A newly issued activation link SHALL be
-presented beside the username it belongs to.
-
-Correcting a username SHALL preserve the account UUID, password, sessions,
-profile, assignments, history, and outstanding one-time code. A code is bound
-to the account, and preview after the correction SHALL show the current
-username. An admin SHALL NOT use this path to change their own username.
-
-#### Scenario: Username is read back before handover
-
-- **WHEN** an admin provisions an account or reissues a code
-- **THEN** the canonical username is shown beside the activation link
+The current canonical username SHALL be visible to admins who may manage the account and correctable by them through a separate action. Correcting a username SHALL preserve the account UUID, password, open and refresh sessions, profile, assignments, history, and outstanding one-time link. A link is bound to the account, and preview after correction SHALL show the current username. An admin SHALL NOT use this path to change their own username.
 
 #### Scenario: A mistyped username is corrected in place
 
 - **WHEN** an authorized admin corrects another account's username
-- **THEN** the new username works, the old one does not, and the existing
-  outstanding code still works with the new username
+- **THEN** the new username works, the old one does not, and the existing outstanding link still works with the new username
+
+#### Scenario: An open session survives correction
+
+- **WHEN** an account with an open session has its username corrected
+- **THEN** the open session remains authorized without sign-in while future authentication accepts only the new username
 
 #### Scenario: A username already in use is refused
 
 - **WHEN** an admin requests a username held by another account
-- **THEN** the change is refused as unavailable and the old username remains
-  unchanged
+- **THEN** the change is refused as unavailable and the old username remains unchanged
 
 ### Requirement: Login identifiers and account emails stay off the counter tablet
 
@@ -938,33 +884,34 @@ handed an empty identifier response.
 - **THEN** that target's account email is available for correction without
   exposing it to any outlet-scoped role
 
-### Requirement: Every people surface answers whether a person can check in
+### Requirement: Every People surface states account readiness truthfully
 
-People SHALL show, for each person, whether they can check in and where. Where
-they cannot, the screen SHALL name the reason: the account is deactivated, the
-person has no live assignment, or an activation link is outstanding. A missing
-personal email or placeholder address SHALL never be an account state.
+People SHALL derive status from active state, successful sign-in history, live assignments, and a live unexpired handover purpose. A pending password reset SHALL NOT make an established account read as awaiting activation, and an expired invitation SHALL NOT create a pending status.
 
 #### Scenario: A deactivated person reads as such
 
 - **WHEN** People lists a person whose account is deactivated
-- **THEN** the row states that they cannot sign in or check in
+- **THEN** the row states Deactivated regardless of historical invitation rows
 
-#### Scenario: An unactivated person shows the next step
+#### Scenario: A new account is awaiting setup
 
-- **WHEN** People lists a person with an outstanding activation link
-- **THEN** the row states that activation is pending and offers the authorized
-  admin action rather than asking for an email address
+- **WHEN** a person has never successfully signed in and has a live activation link
+- **THEN** the row states that setup is pending and offers Replace setup link
+
+#### Scenario: An established account has reset pending
+
+- **WHEN** a person has successfully signed in before and has a live password-reset link
+- **THEN** the row remains active and states Password reset issued
+
+#### Scenario: Expiry removes pending status
+
+- **WHEN** the only unused link is expired
+- **THEN** People does not describe that link as pending and offers the appropriate fresh setup or reset action
 
 #### Scenario: A person with no assignment reads as unplaced
 
 - **WHEN** People lists an active person with no live assignment
-- **THEN** the row states that they cannot check in anywhere
-
-#### Scenario: A working person reads as working
-
-- **WHEN** People lists an active, activated person with live assignments
-- **THEN** no problem is suggested and every assigned outlet is named
+- **THEN** the row states that they are not assigned to an outlet
 
 ### Requirement: An activation link carries the code and asks for username plus a new password
 
@@ -1233,40 +1180,26 @@ never deletion.
   history exists
 - **THEN** the cleanup delete succeeds
 
-### Requirement: Departure and access are two independent facts
+### Requirement: Departure and access are independent and departure is explicit
 
-The people model SHALL keep whether an account may sign in (`is_active`) and
-where the person still works (their live assignments) as independent facts with
-no database coupling, because one bit cannot express "access cut but still
-employed" — the state the emergency lever produces.
+The people model SHALL keep whether an account may sign in and where the person works as independent facts. Deactivating an account SHALL end its open session immediately without ending assignments. Editing assignments SHALL leave active state untouched.
 
-Deactivating an account SHALL end its open session immediately and SHALL NOT
-end any assignment, remove the person from any staff list, or remove them from
-the day's attendance surface. Ending an assignment SHALL remove the person from
-that outlet's staff list and its new attendance days while leaving every
-recorded row in place, and SHALL leave their account and their other
-assignments untouched.
+A person leaves the business only through an explicit Mark as left action. That action SHALL require confirmation, end every live assignment without deleting history, and deactivate sign-in in one transaction. Removing the final row in ordinary Edit SHALL NOT silently invoke departure.
 
-A person has left the business when they hold no live assignment at all; that
-state SHALL be derived rather than stored as a separate column.
+#### Scenario: The panic button does not falsify placement
 
-#### Scenario: The panic button does not falsify the day
+- **WHEN** an admin deactivates the account of someone currently assigned
+- **THEN** the session ends immediately and every assignment and attendance fact remains
 
-- **WHEN** an admin deactivates the account of someone currently at work
-- **THEN** the account's session ends immediately, and the person remains on
-  every staff list they were on and on the day's attendance surface
+#### Scenario: Ordinary editing cannot mark someone as left
 
-#### Scenario: A departed person leaves the lists, not the record
+- **WHEN** an admin edits outlet or role fields
+- **THEN** no default checkbox or empty assignment set deactivates the account or ends every placement
 
-- **WHEN** an admin ends every live assignment a person holds
-- **THEN** they no longer appear on any staff list or new attendance day, and
-  every attendance row and recorded action of theirs remains readable
+#### Scenario: Mark as left is one deliberate transition
 
-#### Scenario: Departure from one outlet is not departure from the business
-
-- **WHEN** an admin ends one of a person's two assignments
-- **THEN** the person is still current staff at the other outlet and is not
-  shown as having left
+- **WHEN** an authorized admin confirms Mark as left
+- **THEN** all live assignments end, sign-in is deactivated, and every historical row remains readable
 
 ### Requirement: The people model carries no payroll data
 
@@ -1301,43 +1234,36 @@ Holding a role at one outlet SHALL confer nothing at any other outlet.
   another attempts a manager write at the outlet where they are an Employee
 - **THEN** the database refuses it
 
-### Requirement: Assignments are managed on the People surface
+### Requirement: Assignment authority covers current and intended states
 
-An admin SHALL be able to grant a person an assignment at an outlet, and to end
-one, from the People surface — a Super Admin for any outlet, a Franchise Admin
-only for outlets they manage and only for Biller and Employee assignments.
-The surface SHALL show every person's live assignments, each naming its outlet
-and role.
+A Super Admin SHALL be able to edit another person's assignments across all outlets and roles, including promoting or demoting another Super Admin or Franchise Admin, subject to private-email and final-Super-Admin invariants. No caller SHALL edit their own assignments through this administrative path.
 
-Ending a person's last live assignment SHALL offer to deactivate the account in
-the same confirmation, and SHALL state that ending an assignment removes them
-from that outlet's lists while leaving every recorded row in place.
+A Franchise Admin SHALL be able to switch Employee and Biller and add, transfer, or remove those roles only at outlets they manage. They SHALL NOT grant, alter, or remove a Franchise Admin or Super Admin assignment. Authorization SHALL inspect both the target's complete current assignment set and intended set; invisible or out-of-scope assignments SHALL NOT be treated as removable omissions.
 
-#### Scenario: A person is assigned to a second outlet
+#### Scenario: FA promotes staff at a managed outlet
 
-- **WHEN** an admin grants an existing person an assignment at a second outlet
-- **THEN** the person appears on that outlet's staff list, may check in there,
-  and keeps everything they had at the first outlet
+- **WHEN** a Franchise Admin changes an Employee to Biller at an outlet they manage
+- **THEN** the change succeeds without affecting account access
 
-#### Scenario: A manager cannot assign beyond their authority
+#### Scenario: FA cannot demote an administrator
 
-- **WHEN** a Franchise Admin opens the assignment control
-- **THEN** only outlets they manage are offered, only Biller and Employee roles
-  are offered, and the database refuses anything else regardless of the request
+- **WHEN** a Franchise Admin attempts to alter another Franchise Admin or any Super Admin through UI or a hand-crafted request
+- **THEN** the complete request is refused and nothing changes
 
-#### Scenario: Ending one assignment leaves the person working elsewhere
+#### Scenario: SA demotes another SA safely
 
-- **WHEN** an admin ends a person's assignment at one of the two outlets they
-  work at
-- **THEN** that outlet's staff list no longer shows them, the other outlet's
-  still does, their account still signs in, and every attendance row at both
-  outlets remains
+- **WHEN** a Super Admin moves another Super Admin to permitted outlet-scoped assignments while at least one Super Admin remains
+- **THEN** the transition succeeds, preserves the target's private email, and changes no historical records
 
-#### Scenario: Ending the last assignment offers the access cut
+#### Scenario: Final SA cannot be removed
 
-- **WHEN** an admin ends a person's only remaining assignment
-- **THEN** the confirmation offers to deactivate the account as well, and
-  states that recorded rows are unaffected either way
+- **WHEN** any request would leave no live Super Admin assignment
+- **THEN** the database refuses the complete transaction
+
+#### Scenario: Self-demotion is refused
+
+- **WHEN** an admin hand-crafts an assignment-set edit for their own account
+- **THEN** the privileged boundary refuses it
 
 ### Requirement: The owner records non-cash entries at any outlet, and never cash
 
@@ -1386,18 +1312,22 @@ assignment rather than from being the owner.
 
 ### Requirement: Biller is an Employee-capable assignment without becoming a second role
 
-A live `biller` assignment SHALL confer the personal attendance and Employee
-surface capabilities of an Employee at that outlet, in addition to eligibility to
-hold a shift on its counter tablet. Promotion from Employee to Biller SHALL
-replace the one assignment rather than create a second one.
+A live Biller assignment SHALL confer personal attendance and Employee surface capabilities at that outlet, plus eligibility to hold a shift on its counter tablet. One person SHALL hold at most one live role at an outlet, so Employee and Biller SHALL be offered as alternatives rather than simultaneous selections.
 
 #### Scenario: Biller signs in on a personal device
+
 - **WHEN** a person with a Biller assignment signs in outside tablet context
-- **THEN** they receive their own Employee attendance surfaces and no counter surface
+- **THEN** they receive their Employee attendance surfaces and no counter surface
 
 #### Scenario: Employee is promoted
-- **WHEN** an authorised admin promotes an Employee to Biller at the same outlet
-- **THEN** one live Biller assignment remains, and their attendance history and personal login are unchanged
+
+- **WHEN** an authorized admin promotes an Employee to Biller at the same outlet
+- **THEN** one live Biller assignment remains and attendance history, personal login, password, and active session are unchanged
+
+#### Scenario: Same-outlet roles cannot be stacked
+
+- **WHEN** a UI or hand-crafted request attempts to retain Employee and Biller simultaneously at one outlet
+- **THEN** the request is refused
 
 ### Requirement: No account credential is ever accepted on a counter tablet
 
@@ -1428,3 +1358,24 @@ approver only.
 #### Scenario: Assignment ended between request and approval
 - **WHEN** the person's assignment ends after the request is created and before it is approved
 - **THEN** approval is refused and no shift opens
+
+### Requirement: Confirmed invalid sessions end while uncertain sessions wait
+
+Every protected human-session request SHALL distinguish three outcomes: a missing, malformed, expired, revoked, or Auth-rejected credential is unauthenticated; a verified caller without permission is forbidden; and a request whose backend did not answer is indeterminate. The Edge boundary SHALL return an authentication failure distinct from an authorization refusal.
+
+A server-confirmed invalid session SHALL clear local human credentials and shared resolved state and reach sign-in with a short session-ended explanation. Deactivation SHALL retain its specific explanation. A timeout, offline state, fetch failure, or unanswered profile lookup SHALL preserve the stored session, show a retryable connection state, and SHALL NOT send the person to sign-in. Counter-device sessions retain their separate lifecycle.
+
+#### Scenario: Expired human session returns to sign-in
+
+- **WHEN** Auth definitively rejects the credential used by a protected human action
+- **THEN** the server reports an authentication failure, the client clears that session, and sign-in says the session ended
+
+#### Scenario: Verified caller lacks authority
+
+- **WHEN** Auth verifies the caller but their live assignments do not permit the action
+- **THEN** the server reports forbidden and the client does not mislabel it as an expired session
+
+#### Scenario: Offline does not destroy a session
+
+- **WHEN** a stored session cannot be confirmed because the request receives no response
+- **THEN** the client preserves it, offers retry, and does not reach sign-in
