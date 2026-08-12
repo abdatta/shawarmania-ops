@@ -50,18 +50,12 @@ Two entries carry a status worth reading before the trigger column:
 
 ## Owner Feedback — Kalyani Counter, 12 Aug 2026
 
-Seven items the owner noticed while setting up billing at Kalyani on 12 Aug 2026, kept out of the Items table above deliberately: they arrived together in one session, they are ranked smallest-to-largest against each other rather than against the roadmap, and [the feedback page](./2026-08-12-owner-feedback.md) is where each one's size sits. They are linked from here because an unlisted note is lost work — the rule this index exists to hold — and not because they have been weighed against the items above yet.
+Seven items the owner noticed while setting up billing at Kalyani on 12 Aug 2026 are kept out of the Items table above deliberately. Two remain ungraduated and are ranked smallest-to-largest against each other on [the feedback page](./2026-08-12-owner-feedback.md); the other five remain on that page with their current graduated status. They are linked from here because an unlisted note is lost work — the rule this index exists to hold — and not because they have been weighed against the items above yet.
 
-- [The "Awaiting Activation" Label Lies](./awaiting-activation-label-lies.md) — Staff / Roles
-- [You Can't Click Your Way to the Counter Setup Page](./counter-setup-page-has-no-link.md) — Navigation
-- [Let Me Drag to Resize the Last Two Counter Columns](./drag-resize-counter-columns.md) — Counter / Design
-- [Promoting a Staff Member Can Accidentally Lock Them Out](./promoting-staff-can-lock-them-out.md) — Staff / Roles
 - [The App Asks for a Code Before Checking If the Person Is Even Allowed](./code-request-before-eligibility-check.md) — Counter / Billing
 - [Marking a Bill "Paid" Removes It From the Kitchen List Too Soon](./paid-removes-order-from-kitchen-too-soon.md) — Billing
 
-The seventh, *The Owner Can't See the Real Billing Counter From Home*, graduated on 12 Aug 2026 and is in the table below.
-
-Two of them sit inside the `billing-live` (#10) rollout path rather than after it: the counter setup page cannot be reached by clicking, which matters the moment a tablet needs pairing and the outlet has no second one running, and the tablet asks a person for a code before checking whether they may bill at all.
+The five graduated owner-feedback items are recorded with their current status on the feedback page and in the table below.
 
 ## Graduated / Absorbed
 
@@ -71,6 +65,8 @@ Two of them sit inside the `billing-live` (#10) rollout path rather than after i
 | PWA Brand Icons | Absorbed into `project-foundations`. The real mark from the Shawarmania site is committed as `assets/brand/shawarmania-mark-512.png` and the whole icon set is derived from it, so the placeholders it was raised against no longer exist. |
 | Role Grants: One Login, Many Hats | Graduated into `multi-outlet-people` (#22) on 2026-07-29 — the trigger fired on both counts at once: a staffer splitting shifts across the outlets, and the owner day-running one. The same day the owner simplified the design: plain per-outlet **assignments** checked by membership, no session hats or switching. One login per person and no role hierarchy stay rejected exactly as recorded here. |
 | Owner Break-Glass Writes | Folded into `multi-outlet-people` (#22) by owner decision on 2026-07-29 — the two todos were one feature seen from two ends. The boundary carries over intact: non-cash only, always visibly the owner's, the drawer stays the Franchise Admin's alone. |
+| The "Awaiting Activation" Label Lies; Promoting a Staff Member Can Accidentally Lock Them Out | Graduated together into [`account-lifecycle-truth-and-safe-transitions`](../changes/account-lifecycle-truth-and-safe-transitions/proposal.md) (#40) on 12 Aug 2026. The change makes account state truthful, distinguishes setup from reset, and replaces separate assignment primitives with safe, atomic role and outlet transitions. |
+| You Can't Click Your Way to the Counter Setup Page; Let Me Drag to Resize the Last Two Counter Columns | Completed in [`counter-access-and-workspace-layout`](../changes/counter-access-and-workspace-layout/proposal.md) (commit `c04fd5b`). It adds a reachable tablet-setup path and independently persisted counter-panel resizing; the Shift tab remains deliberately hidden because the live counter already exposes shift activity. The change is complete and awaiting roadmap reconciliation/archive. |
 | Two Ways To Draw A Dropdown | Completed by `staff-as-accounts` (#21): the People surface adopted the `Select` primitive and the roster surface was deleted, so the primitive is now the only `<select>` in the app. |
 | Self-Service Password Reset | The admin-issued reset baseline is completed by `username-sign-in-and-owner-recovery` (#24) for every role. Automated email recovery was deliberately deferred into [Super Admin Email Recovery](./super-admin-email-recovery.md). |
 | Cross-Outlet Customer Identity | The identity half graduated into [`global-customer-identity`](../specs/global-customer-identity/spec.md) (#32) during Billing V1 design and was archived 2026-08-02. One normalized phone identifies a minimal global customer; exact full-phone lookup is non-enumerable and outlet bill/order history remains isolated. Loyalty and cross-outlet activity remain in [Customer Loyalty And Cross-Outlet Insights](./customer-loyalty-and-cross-outlet-insights.md). |
