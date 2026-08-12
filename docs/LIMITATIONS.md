@@ -366,6 +366,13 @@ fixed on one screen, and stale price, availability, void or cancellation state i
 charged to a customer. It re-reads on foreground and also listens for Realtime
 nudges, with neither path trusted as the only one and no timer polling the radio.
 
+The manager's **Tablets** view is not another exception. It reads the counter
+once on open and when **Re-read** is pressed, states that server reading time,
+and then stays still. The owner may therefore be looking at a counter that has
+moved since the displayed moment. That is deliberate: this is an occasional
+oversight screen on a phone, not the fixed mains-powered counter where staleness
+changes what a customer is charged.
+
 ### Recorded check-out history is gone
 
 Check-out was removed in #26 (owner decision, 2026-07-31) with the cost stated: the check-out times and locations already recorded in production were dropped by the migration. A full production dump was taken and verified beforehand and lives outside the repo under the snapshot procedure, so the data exists — but no screen can show it again, and there is no down migration. Nobody had used the feature, and unused monitoring data is the kind [Security And Privacy](SECURITY_AND_PRIVACY.md) says not to keep; that is the trade, not an accident.

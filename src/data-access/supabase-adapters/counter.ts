@@ -7,6 +7,7 @@ import {
 import {
   CounterActionError,
   type CounterAdapter,
+  type CounterDeviceOperationalSnapshot,
   type CounterDeviceSummary,
   type CounterShiftRequest,
   type IssuedShiftRequest,
@@ -80,6 +81,25 @@ interface ShiftRow {
   expires_at: string
   counter_devices: { label: string } | { label: string }[] | null
   outlets: { name: string } | { name: string }[] | null
+}
+
+interface OperationsRow {
+  read_at: string
+  device_id: string
+  outlet_id: string
+  label: string
+  set_up_at: string
+  last_seen_at: string | null
+  last_reported_unsent: number
+  shift_id: string | null
+  operator_name: string | null
+  opened_at: string | null
+  business_date: string | null
+  bill_count: number | null
+  cash_total_paise: number | null
+  upi_total_paise: number | null
+  open_order_count: number | null
+  drawer_cash_paise: number | null
 }
 
 interface SharedChannel {
@@ -193,6 +213,40 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
         lastSeenAt: row.last_seen_at,
         lastReportedUnsent: row.last_reported_unsent,
       }))
+    },
+
+    async readDeviceOperations(
+      outletIds: readonly string[],
+    ): Promise<CounterDeviceOperationalSnapshot[]> {
+      const { data, error } = await client.rpc('counter_operations_snapshot', {
+        p_outlet_ids: [...outletIds],
+      })
+      if (error) throw error
+      return ((data ?? []) as OperationsRow[]).map((row) => {
+        const operations = row.shift_id
+          ? {
+              shiftId: row.shift_id,
+              operatorName: row.operator_name ?? 'Unknown operator',
+              openedAt: row.opened_at!,
+              businessDate: row.business_date!,
+              billCount: row.bill_count ?? 0,
+              cashTotalPaise: row.cash_total_paise ?? 0,
+              upiTotalPaise: row.upi_total_paise ?? 0,
+              openOrderCount: row.open_order_count ?? 0,
+              drawerCashPaise: row.drawer_cash_paise ?? 0,
+            }
+          : null
+        return {
+          id: row.device_id,
+          outletId: row.outlet_id,
+          label: row.label,
+          setUpAt: row.set_up_at,
+          lastSeenAt: row.last_seen_at,
+          lastReportedUnsent: row.last_reported_unsent,
+          readAt: row.read_at,
+          operations,
+        }
+      })
     },
 
     async issueSetupCode(outletId: string, label: string) {

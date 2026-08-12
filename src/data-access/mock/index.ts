@@ -146,6 +146,8 @@ export function createMockAdapters(
     // no usernames, and a handshake with nobody to name is not a handshake.
     counter: createMockCounterAdapter(
       data.counter,
+      store,
+      accounts,
       role,
       persona.profile.id,
       persona.profile.full_name,

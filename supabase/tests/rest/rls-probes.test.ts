@@ -858,6 +858,46 @@ describe('the global customer directory', () => {
  * These probes read; the one write each attempts is a denied one, so the seeded
  * database is left as it was.
  */
+describe('the management counter snapshot over HTTP', () => {
+  it('lets a Franchise Admin read only their assigned outlet', async () => {
+    const manager = (await session(PERSONAS.faKalyani.email)).client
+
+    const own = await manager.rpc('counter_operations_snapshot', {
+      p_outlet_ids: [OUTLETS.kalyani],
+    })
+    expect(own.error).toBeNull()
+    expect(own.data).toHaveLength(1)
+    expect(own.data?.every((row) => row.outlet_id === OUTLETS.kalyani)).toBe(true)
+
+    const foreign = await manager.rpc('counter_operations_snapshot', {
+      p_outlet_ids: [OUTLETS.kanchrapara],
+    })
+    expect(foreign.data).toBeNull()
+    expect(foreign.error?.code).toBe('42501')
+
+    const mixed = await manager.rpc('counter_operations_snapshot', {
+      p_outlet_ids: [OUTLETS.kalyani, OUTLETS.kanchrapara],
+    })
+    expect(mixed.data).toBeNull()
+    expect(mixed.error?.code).toBe('42501')
+  })
+
+  it('refuses operators, employees, and counter tablets rather than trusting device-row visibility', async () => {
+    for (const persona of [
+      PERSONAS.billerKalyani,
+      PERSONAS.employeeKalyani,
+      PERSONAS.deviceKalyani,
+    ]) {
+      const client = (await session(persona.email)).client
+      const { data, error } = await client.rpc('counter_operations_snapshot', {
+        p_outlet_ids: [OUTLETS.kalyani],
+      })
+      expect(data).toBeNull()
+      expect(error?.code).toBe('42501')
+    }
+  })
+})
+
 describe('the counter handshake over HTTP', () => {
   it('the tablet sees the shift it is holding, and its own outlet', async () => {
     const tablet = (await session(PERSONAS.deviceKalyani.email)).client

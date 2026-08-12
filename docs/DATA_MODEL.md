@@ -119,6 +119,15 @@ At most one active tablet per outlet, by a partial unique index on `(outlet_id) 
 
 `last_seen_at` and `last_reported_unsent` are written by the tablet's own heartbeat and are read as **what it last said**, never as what is true now.
 
+`counter_operations_snapshot(outlet_ids[])` is the management read boundary over
+this hardware. It returns one server-timestamped snapshot of the live shift,
+operator name, bill count, effective Cash and UPI, waiting orders and drawer Cash.
+It is not stored state: Cash/UPI are derived through `effective_bill_payments`,
+so a superseded allocation never contributes again. The database refuses every
+caller except an active Super Admin or an assigned Franchise Admin of every
+requested outlet; no customer identity, bill line or operator identifier leaves
+the function.
+
 **`counter_device_setup_codes`** — `id`, `outlet_id`, `label`, `code_hash`, `issued_by`, `issued_at`, `expires_at`, `attempts`, `consumed_at`, `consumed_device_id`, `superseded_at`.
 
 Hash only, single-use, fifteen minutes, one live code per outlet. **No client role holds any privilege on this table at all** — not even select.

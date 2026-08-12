@@ -174,3 +174,60 @@ describe('the shared outlet billing channel', () => {
     expect(client.removeChannel).toHaveBeenCalledWith(channel)
   })
 })
+
+describe('the remote counter snapshot', () => {
+  it('maps one RLS-scoped database read without customer or bill contents', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        {
+          read_at: '2026-08-12T10:05:00.000Z',
+          device_id: 'device-1',
+          outlet_id: 'outlet-1',
+          label: 'Kalyani counter tablet',
+          set_up_at: '2026-08-01T10:00:00.000Z',
+          last_seen_at: '2026-08-12T10:04:00.000Z',
+          last_reported_unsent: 0,
+          shift_id: 'shift-1',
+          operator_name: 'Counter Biller',
+          opened_at: '2026-08-12T06:00:00.000Z',
+          business_date: '2026-08-12',
+          bill_count: 4,
+          cash_total_paise: 34_800,
+          upi_total_paise: 20_000,
+          open_order_count: 2,
+          drawer_cash_paise: 34_800,
+        },
+      ],
+      error: null,
+    })
+    const client = { rpc } as unknown as SupabaseClient<Database>
+
+    await expect(
+      createSupabaseCounterAdapter(client).readDeviceOperations(['outlet-1']),
+    ).resolves.toEqual([
+      {
+        id: 'device-1',
+        outletId: 'outlet-1',
+        label: 'Kalyani counter tablet',
+        setUpAt: '2026-08-01T10:00:00.000Z',
+        lastSeenAt: '2026-08-12T10:04:00.000Z',
+        lastReportedUnsent: 0,
+        readAt: '2026-08-12T10:05:00.000Z',
+        operations: {
+          shiftId: 'shift-1',
+          operatorName: 'Counter Biller',
+          openedAt: '2026-08-12T06:00:00.000Z',
+          businessDate: '2026-08-12',
+          billCount: 4,
+          cashTotalPaise: 34_800,
+          upiTotalPaise: 20_000,
+          openOrderCount: 2,
+          drawerCashPaise: 34_800,
+        },
+      },
+    ])
+    expect(rpc).toHaveBeenCalledWith('counter_operations_snapshot', {
+      p_outlet_ids: ['outlet-1'],
+    })
+  })
+})

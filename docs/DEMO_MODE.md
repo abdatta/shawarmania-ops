@@ -115,6 +115,11 @@ Worth knowing before running one:
 - **Alerts point at things you can go and look at.** The open high-priority one is about the pita bread that is genuinely below its threshold; the acknowledged one is about the drawer that genuinely came up short. An alert about a problem that exists nowhere else in the data is a sentence somebody typed.
 - **Start again** in the demo banner puts everything back. It states what it discards first, and it keeps you on the role you are looking at.
 - **The counter handshake is walkable from both ends in one demo session.** Open the Biller shell, ask for a shift naming a persona by name, then read the four digits and switch roles to type them in — the request, the code and the shift are session state, so they survive the role switch. An unrecognised name behaves exactly like a recognised one: same code, same wait, same timeout, and no card on anybody's phone. Three wrong codes destroy the request, as they do for real.
+- **Tablets agrees with that same counter.** Kalyani's card names the demo shift
+  holder and derives bills, effective Cash/UPI, waiting orders and drawer Cash
+  from the shared demo store. Kanchrapara states that nobody is at its counter.
+  The reading time and all figures move together only when the surface is opened
+  or **Re-read** is pressed, matching the live no-subscription contract.
 - **The old counter PIN surface is hidden.** The walkthrough uses the same
   tablet↔phone handshake story as production; no personal password or PIN is
   typed on the tablet.

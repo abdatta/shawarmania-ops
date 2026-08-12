@@ -2,8 +2,8 @@
 
 The tablet boundary, customer directory, transaction contract and the complete
 lifecycle UI land before this change. Billing Live is the integration and rollout
-boundary: real adapters replace demo adapters and the counter starts taking money
-at both outlets.
+boundary: real adapters replace demo adapters, and Kalyani proves the counter with
+real trade before Kanchrapara repeats the runbook when its hardware arrives.
 
 Connectivity at both shops is good with brief drops, so V1 provides durable local
 commit and retry without claiming full offline operation. An already-open counter
@@ -51,8 +51,9 @@ billing is the day its counter revenue must stop being typed in by hand.
 ### The menu becomes real here, and the owner enters it
 
 `admin-menu` is promoted from `demo` to `live` with full create, rename, reprice,
-reorder, availability and retirement, prices in integer paise. The owner then
-enters both outlets' real menus through it before either counter opens.
+reorder, availability and retirement, prices in integer paise. The owner enters
+each outlet's real menu through it before that outlet's tablet is set up. Kalyani
+proves that route in this change; Kanchrapara repeats it when its hardware arrives.
 
 Seeding the menu by migration was rejected and is worth stating plainly: the
 roadmap's standing rule is that a gate must be reachable from an empty database,
@@ -415,12 +416,36 @@ adapters. `/demo` keeps the #31 synthetic adapters and never opens the live Dexi
 queue or writes to Supabase. Gate promotion changes visibility, not the demo
 dataset or route semantics.
 
-### Rollout is one outlet, then the other
+### The management phone reads one counter snapshot, not a feed
 
-The gates promote for both outlets at once, but only one outlet's tablet is set up
-and only one outlet's ledger hands over on the first night. The second follows
-once the first has closed a full day cleanly. This is the only compensating
-control available given no hand-typed twin, and it costs nothing to honour.
+`counter_operations_snapshot(outlet_ids[])` is one security-invoker database
+read. Before touching operational rows it re-derives an active Super Admin or a
+Franchise Admin assigned to every requested outlet; the broader device policy
+that lets a person involved in a handshake see a tablet is deliberately not
+enough. The result carries the live operator's name but no stable person
+identifier, customer fact, bill contents or queued payload.
+
+The statement stamps every returned row with one server time and derives bill
+count, latest effective Cash/UPI, waiting orders and the Cash those bills
+contributed to the drawer inside that same read. Voided bills remain bills rung
+but contribute no tender. A waiting order stays with the physical tablet and
+business date across operator handover, because that counter still has to serve
+it. The mock computes the same meanings from its shared mutable store.
+
+The phone reads on open and on an explicit **Re-read**. Results are keyed by the
+outlet question that produced them, and only the latest in-flight request may
+publish, so a late response cannot put an old outlet or an older set of figures
+under the current heading. There is no subscription, poll or timer: the stated
+read time is the freshness contract.
+
+### Delivery closes before the operational handover
+
+The gates promote for both outlets at once, but an outlet trades only after its
+own menu and tablet setup are complete. Kalyani runs the delivered counter first
+while every bill is also written down by hand. Its ledger handover waits until
+those parallel records agree; Kanchrapara repeats the same runbook after its
+hardware arrives. Those dated handovers are tracked operationally rather than
+holding an otherwise delivered code change open for weeks.
 
 ## Risks / Trade-offs
 
@@ -450,7 +475,8 @@ control available given no hand-typed twin, and it costs nothing to honour.
 
 ## Migration Plan
 
-1. Promote the menu editor, and have the owner enter both outlets' real menus.
+1. Promote the menu editor, and have the owner enter Kalyani's real menu through
+   it before that outlet's tablet is set up.
 2. Ship Dexie schema, append-only payment-correction tables and RLS, effective
    allocation reads, command RPC, readers and local-first adapters while the gates
    stay demo.
@@ -459,9 +485,10 @@ control available given no hand-typed twin, and it costs nothing to honour.
    with forced transport failures and browser restarts.
 4. Set up one tablet at the first outlet, load its live menu, and run shadow smoke
    tests before any customer money.
-5. Promote the billing gates, hand the ledger over for that outlet, and trade one
-   full day, closing it cleanly.
-6. Repeat 4 and 5 for the second outlet.
+5. Promote the billing gates and run Kalyani in parallel: real tablet bills plus
+   the hand-written record, without setting `billing_live_from`.
+6. Hand the dated ledger switch to the runbook and tracking item. Repeat the
+   menu, tablet and parallel run at Kanchrapara when its hardware arrives.
 7. Observe unsent and needs-attention counts without logging payloads or phones.
 
 Rollback may demote gates while leaving compatible queue code installed so accepted
@@ -471,11 +498,11 @@ dates after the reversal, never by editing a date already sourced from bills.
 
 ## Open Questions
 
-**Which outlet goes live first: settled as Kalyani**, which is the outlet that has
-a tablet. Kanchrapara's hardware is on its way, so the one-at-a-time rollout this
-change already required is the shape the hardware was going to force anyway.
+**Which outlet proves delivery first: settled as Kalyani**, which is the outlet
+that has a tablet. Kanchrapara's hardware is on its way, so the one-at-a-time
+rollout this change required is also the shape the hardware forces.
 
-**When: not decided here, and not decidable by this change.** Go-live turns at a
-cutover, and nothing in this change is built yet, so the date is whatever the first
-cutover after task 7.7 turns out to be. Recorded in `docs/OPERATIONS.md` on the
-night rather than fixed in advance.
+**When the ledger hands over: not decided here, and not decidable by this
+change.** The date is the first eligible cutover after each outlet's parallel
+records agree. The runbook and `ledger-handover-per-outlet` tracking item carry
+that irreversible act after this change closes.

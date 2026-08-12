@@ -1,5 +1,5 @@
-import { TabletSmartphone } from 'lucide-react'
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { RefreshCw, TabletSmartphone } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
@@ -9,9 +9,10 @@ import { AddButton } from '@/components/ui/add-button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { LoadingList } from '@/components/ui/loading'
+import { LoadingFigures } from '@/components/ui/loading'
+import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
-import { DataActionError, type CounterDeviceSummary } from '@/data-access/adapters'
+import { DataActionError, type CounterDeviceOperationalSnapshot } from '@/data-access/adapters'
 import { formatDateTime } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
@@ -50,27 +51,76 @@ export function DevicesSurface() {
   // managed outlets would hide a control the database accepts.
   const mayAdminister = holdsRole(useSession(), 'super_admin') || managed
 
-  const [devices, setDevices] = useState<CounterDeviceSummary[] | null>(null)
+  const scopeKey = outletIds.join(':')
+  const [deviceReadings, setDeviceReadings] = useState<
+    Record<string, CounterDeviceOperationalSnapshot[]>
+  >({})
   const [names, setNames] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
+  const [reading, setReading] = useState(false)
+  // Reads can overlap with a scope change or with a setup/removal refresh.
+  // Only the newest request may publish figures or clear its busy state; an
+  // older response is still a coherent snapshot, but no longer the answer to
+  // the question the surface most recently asked.
+  const latestRead = useRef(0)
 
   const [adding, setAdding] = useState(false)
   const [label, setLabel] = useState('')
   const [addOutletId, setAddOutletId] = useState<string | null>(null)
   const [issued, setIssued] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [removing, setRemoving] = useState<CounterDeviceSummary | null>(null)
+  const [removing, setRemoving] = useState<CounterDeviceOperationalSnapshot | null>(null)
 
   const load = useCallback(() => {
+    const request = ++latestRead.current
+    setReading(true)
+    setError(null)
     return counter
-      .listDevices()
-      .then(setDevices)
-      .catch(() => setError('Could not load the tablets. Try again in a moment.'))
-  }, [counter])
+      .readDeviceOperations(outletIds)
+      .then((snapshot) => {
+        if (request === latestRead.current) {
+          setDeviceReadings((current) => ({ ...current, [scopeKey]: snapshot }))
+        }
+      })
+      .catch(() => {
+        if (request === latestRead.current) {
+          setError('Could not load the tablets. Try again in a moment.')
+        }
+      })
+      .finally(() => {
+        if (request === latestRead.current) setReading(false)
+      })
+  }, [counter, outletIds, scopeKey])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    // A scope change is a different question. Holding the previous result here
+    // would briefly render an unselected outlet as “No tablet”, which is a
+    // false durable state rather than a harmless stale snapshot. This opening
+    // read does not synchronously set state from the effect; its response owns
+    // the update, and the request token makes a late response ineligible.
+    const request = ++latestRead.current
+    void Promise.resolve().then(() => {
+      if (request === latestRead.current) setError(null)
+    })
+    void counter
+      .readDeviceOperations(outletIds)
+      .then((snapshot) => {
+        if (request === latestRead.current) {
+          setDeviceReadings((current) => ({ ...current, [scopeKey]: snapshot }))
+        }
+      })
+      .catch(() => {
+        if (request === latestRead.current) {
+          setError('Could not load the tablets. Try again in a moment.')
+        }
+      })
+      .finally(() => {
+        if (request === latestRead.current) setReading(false)
+      })
+    return () => {
+      latestRead.current += 1
+    }
+  }, [counter, outletIds, scopeKey])
 
   useEffect(() => {
     let active = true
@@ -86,6 +136,8 @@ export function DevicesSurface() {
     }
   }, [outlets])
 
+  const devices = Object.hasOwn(deviceReadings, scopeKey) ? deviceReadings[scopeKey]! : null
+  const isReading = reading || (devices === null && error === null)
   const inScope = (devices ?? []).filter((device) => outletIds.includes(device.outletId))
 
   async function issue(event: FormEvent) {
@@ -134,7 +186,22 @@ export function DevicesSurface() {
       <PageHeader
         scope={selector}
         title="Tablets"
-        subtitle="The hardware standing at each counter."
+        subtitle={
+          devices?.[0]?.readAt
+            ? `The hardware and counter standing there. Read ${formatDateTime(devices[0].readAt)}.`
+            : 'The hardware and counter standing there.'
+        }
+        action={
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={isReading}
+            className={`${buttonVariants({ variant: 'secondary', size: 'phone' })} whitespace-nowrap`}
+          >
+            <RefreshCw aria-hidden size={16} />
+            {isReading ? 'Reading…' : 'Re-read'}
+          </button>
+        }
       />
 
       {error && (
@@ -175,7 +242,7 @@ export function DevicesSurface() {
       )}
 
       {devices === null ? (
-        <LoadingList label="tablets" rows={2} />
+        <LoadingFigures label="tablets and their counters" rows={outletIds.map(() => 7)} />
       ) : (
         /*
           A card per outlet in scope, rather than a list of the tablets that
@@ -213,6 +280,60 @@ export function DevicesSurface() {
                           </span>
                         )}
                       </p>
+                      <section
+                        data-testid={`device-operations-${device.id}`}
+                        className="space-y-2 border-t border-border pt-3"
+                      >
+                        {device.operations ? (
+                          <>
+                            <p className="text-content">
+                              <span className="font-semibold">
+                                {device.operations.operatorName}
+                              </span>{' '}
+                              has held this counter since{' '}
+                              {formatDateTime(device.operations.openedAt)}.
+                            </p>
+                            <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+                              <div>
+                                <dt className="text-xs">Bills rung</dt>
+                                <dd data-numeric="" className="font-semibold text-content">
+                                  {device.operations.billCount}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs">Open orders waiting</dt>
+                                <dd data-numeric="" className="font-semibold text-content">
+                                  {device.operations.openOrderCount}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs">Cash</dt>
+                                <dd className="font-semibold text-content">
+                                  <Money paise={device.operations.cashTotalPaise} />
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs">UPI</dt>
+                                <dd className="font-semibold text-content">
+                                  <Money paise={device.operations.upiTotalPaise} />
+                                </dd>
+                              </div>
+                              <div className="col-span-2">
+                                <dt className="text-xs">Drawer cash from these bills</dt>
+                                <dd className="font-semibold text-content">
+                                  <Money paise={device.operations.drawerCashPaise} />
+                                </dd>
+                              </div>
+                            </dl>
+                          </>
+                        ) : (
+                          <p className="text-content">Nobody is at this counter.</p>
+                        )}
+                        <p className="text-xs">
+                          Counter figures read {formatDateTime(device.readAt)}. They stay fixed
+                          until you re-read.
+                        </p>
+                      </section>
                       {mayAdminister && (
                         <button
                           type="button"

@@ -1,7 +1,9 @@
 import {
   CounterActionError,
+  type AccountSummary,
   type AppRole,
   type CounterAdapter,
+  type CounterDeviceOperationalSnapshot,
   type CounterDeviceSummary,
   type CounterShiftRequest,
   type IssuedShiftRequest,
@@ -13,6 +15,7 @@ import {
   DEMO_KANCHRAPARA_DEVICE_ID,
 } from './fixtures/billing'
 import { outletFixtures } from './fixtures/outlets'
+import type { DemoStore } from './store'
 
 /**
  * The mock counter tablets and handshake.
@@ -123,6 +126,8 @@ function livePendingFor(counter: DemoCounter, displayName: string): MockRequest[
  */
 export function createMockCounterAdapter(
   counter: DemoCounter,
+  store: DemoStore,
+  accounts: readonly AccountSummary[],
   role: AppRole,
   personId: string,
   displayName: string,
@@ -136,6 +141,58 @@ export function createMockCounterAdapter(
       return counter.devices
         .filter((device) => mayAdminister(device.outletId))
         .sort((a, b) => a.label.localeCompare(b.label))
+    },
+
+    async readDeviceOperations(
+      outletIds: readonly string[],
+    ): Promise<CounterDeviceOperationalSnapshot[]> {
+      // One timestamp for the whole read, exactly like statement_timestamp()
+      // in the live RPC. Nothing in this snapshot moves again until re-read.
+      const readAt = new Date().toISOString()
+      return counter.devices
+        .filter((device) => mayAdminister(device.outletId) && outletIds.includes(device.outletId))
+        .sort((a, b) => a.label.localeCompare(b.label))
+        .map((device) => {
+          const shift = store.shifts.find(
+            (candidate) =>
+              candidate.counter_device_id === device.id &&
+              candidate.outlet_id === device.outletId &&
+              candidate.closed_at === null,
+          )
+          if (!shift) return { ...device, readAt, operations: null }
+
+          const bills = store.bills.filter((bill) => bill.shift_id === shift.id)
+          const totalFor = (method: 'cash' | 'upi') =>
+            bills
+              .filter((bill) => bill.status === 'settled')
+              .flatMap((bill) => store.billPayments.get(bill.id) ?? [])
+              .filter((payment) => payment.method === method)
+              .reduce((total, payment) => total + payment.amountPaise, 0)
+          const cashTotalPaise = totalFor('cash')
+          const operator = accounts.find((account) => account.id === shift.biller_profile_id)
+
+          return {
+            ...device,
+            readAt,
+            operations: {
+              shiftId: shift.id,
+              operatorName: operator?.fullName ?? 'Unknown operator',
+              openedAt: shift.opened_at,
+              businessDate: shift.business_date,
+              billCount: bills.length,
+              cashTotalPaise,
+              upiTotalPaise: totalFor('upi'),
+              openOrderCount: store.orders.filter(
+                (order) =>
+                  order.outlet_id === shift.outlet_id &&
+                  order.device_id === shift.counter_device_id &&
+                  order.business_date === shift.business_date &&
+                  order.status === 'open',
+              ).length,
+              drawerCashPaise: cashTotalPaise,
+            },
+          }
+        })
     },
 
     async issueSetupCode(outletId: string, label: string) {

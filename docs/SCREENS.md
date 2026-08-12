@@ -108,7 +108,7 @@ The tablet's own tree has **no navigation, no account menu and no sign-out** sin
 
 **Open the counter?** — the card on the *person's own phone*, on whichever home surface they land on. It names the outlet, the tablet and how long it has been waiting, takes the four digits, and offers a rejection that **needs no code at all**: saying "that was not me" is not an act anybody should have to walk to a counter to take. Three wrong codes destroy the request, so a typo loop ends in a fresh start rather than an indefinite retry. Once confirmed, the same place shows the shift they now hold and one action that ends it — from their phone, not from the tablet.
 
-**Tablets** (manager and owner) — the hardware standing at each counter, with **last reported** rather than current figures beside each one: the time and the unsent count are both written by the tablet's own heartbeat, so a tablet that is off, offline or broken simply stops moving them, and one that has gone quiet is marked as out of touch rather than shown as healthy. Setting one up is offered only where there is room for one, because one active tablet per outlet is a database invariant. Removing one is permanent, ends any live shift immediately, and the confirmation names what the tablet last reported it had not sent.
+**Tablets** (manager and owner) — the hardware and counter standing at each outlet. Heartbeat time and unsent count remain explicitly **last reported**: a tablet that is off, offline or broken stops moving them and is marked out of touch. Beneath that telemetry, one coherent read names the live operator and opening time and shows bills rung, effective Cash, effective UPI, waiting orders and drawer Cash. If no shift is open it says **Nobody is at this counter** instead of displaying misleading zeroes. The page states when the counter figures were read, reads once on open, and changes them only when **Re-read** is pressed — there is no subscription or timer on the manager's phone. Setting one up is offered only where there is room for one, because one active tablet per outlet is a database invariant. Removing one is permanent, ends any live shift immediately, and the confirmation names what the tablet last reported it had not sent.
 
 **Billing counter** — the heart of the product, and the screen most worth getting right.
 
@@ -295,7 +295,11 @@ The basis is never merely selected — it is **named in words beside the figure*
 
 **Alerts** — raise an issue to the owner (category, priority, message) and track responses. Four fields and no more: what it is about, how urgent, a subject, and what happened — the last two refused if blank, by name. An alert is always raised **open**; acknowledging it is somebody else's action, and raising something pre-acknowledged would be acknowledging it on their behalf.
 
-**Tablets** — the counter tablets set up at this outlet, what each last reported and when, a setup code where there is room for one, and removal. Described in full under [Biller](#biller--the-counter-tablet).
+**Tablets** — the counter tablets set up at this outlet, what each last reported,
+and one timestamped view of the live counter's operator and effective shift
+figures with an explicit re-read. A setup code appears where there is room for
+one, and removal remains permanent. Described in full under
+[Biller](#biller--the-counter-tablet).
 
 ## Super Admin — all outlets, on a phone
 

@@ -1,7 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { CounterActionError, type DataAdapters } from '@/data-access/adapters'
@@ -11,6 +11,7 @@ import {
   OUTLET_KALYANI_ID,
   OUTLET_KANCHRAPARA_ID,
 } from '@/data-access/mock'
+import { formatPaise } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Role } from '@/session/session'
 import { demoSessionFor } from '@/test/session'
@@ -63,6 +64,44 @@ function renderSurface(role: Role, adapters: DataAdapters) {
 }
 
 describe('the Tablets surface', () => {
+  it('derives one live-shift snapshot from the same effective tender as billing', async () => {
+    const data = createDemoData()
+    const adapters = createMockAdapters('super_admin', data)
+    const shift = data.store.shifts.find(
+      (candidate) => candidate.outlet_id === OUTLET_KALYANI_ID && candidate.closed_at === null,
+    )!
+    const corrected = data.store.bills.find(
+      (bill) =>
+        bill.shift_id === shift.id &&
+        bill.status === 'settled' &&
+        data.store.billPayments.get(bill.id)?.some((payment) => payment.method === 'cash'),
+    )!
+    const totalPaise = corrected.total_paise
+
+    // The demo store treats this map as its effective-allocation boundary. A
+    // correction replaces the old tender here rather than adding a second one.
+    data.store.billPayments.set(corrected.id, [{ method: 'upi', amountPaise: totalPaise }])
+
+    const [snapshot] = await adapters.counter.readDeviceOperations([OUTLET_KALYANI_ID])
+    const operations = snapshot!.operations!
+    const effective = data.store.bills
+      .filter((bill) => bill.shift_id === shift.id && bill.status === 'settled')
+      .flatMap((bill) => data.store.billPayments.get(bill.id) ?? [])
+    const expectedCash = effective
+      .filter((payment) => payment.method === 'cash')
+      .reduce((sum, payment) => sum + payment.amountPaise, 0)
+    const expectedUpi = effective
+      .filter((payment) => payment.method === 'upi')
+      .reduce((sum, payment) => sum + payment.amountPaise, 0)
+
+    expect(operations.cashTotalPaise).toBe(expectedCash)
+    expect(operations.upiTotalPaise).toBe(expectedUpi)
+    expect(operations.drawerCashPaise).toBe(expectedCash)
+    expect(operations.billCount).toBe(
+      data.store.bills.filter((bill) => bill.shift_id === shift.id).length,
+    )
+  })
+
   it('marks telemetry that has stopped moving rather than showing it as current', async () => {
     const adapters = createMockAdapters('super_admin', createDemoData())
     renderSurface('super_admin', adapters)
@@ -108,6 +147,102 @@ describe('the Tablets surface', () => {
     expect(
       await screen.findByText(/No tablet is set up at Shawarmania Kanchrapara yet/i),
     ).toBeInTheDocument()
+  })
+
+  it('says plainly when a tablet has nobody holding its counter', async () => {
+    const adapters = createMockAdapters('super_admin', createDemoData())
+    renderSurface('super_admin', adapters)
+    await addOutlet(OUTLET_KANCHRAPARA_ID)
+
+    expect(await screen.findByText('Nobody is at this counter.')).toBeInTheDocument()
+    const emptyCounter = screen.getByText('Nobody is at this counter.').closest('section')!
+    expect(within(emptyCounter).queryByText('Bills rung')).not.toBeInTheDocument()
+    expect(within(emptyCounter).queryByText('Cash')).not.toBeInTheDocument()
+  })
+
+  it('moves the reading time and every counter figure together only when re-read', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('super_admin', createDemoData())
+    const [base] = await adapters.counter.readDeviceOperations([OUTLET_KALYANI_ID])
+    const first = {
+      ...base!,
+      readAt: '2026-08-12T10:00:00.000Z',
+      operations: {
+        ...base!.operations!,
+        billCount: 2,
+        cashTotalPaise: 10_000,
+        upiTotalPaise: 20_000,
+        openOrderCount: 1,
+        drawerCashPaise: 10_000,
+      },
+    }
+    const second = {
+      ...first,
+      readAt: '2026-08-12T10:05:00.000Z',
+      operations: {
+        ...first.operations,
+        billCount: 3,
+        cashTotalPaise: 15_000,
+        upiTotalPaise: 25_000,
+        openOrderCount: 2,
+        drawerCashPaise: 15_000,
+      },
+    }
+    const read = vi
+      .fn<typeof adapters.counter.readDeviceOperations>()
+      .mockResolvedValueOnce([first])
+      .mockResolvedValueOnce([second])
+    adapters.counter.readDeviceOperations = read
+
+    renderSurface('super_admin', adapters)
+    const card = await screen.findByTestId(`device-operations-${base!.id}`)
+    expect(card).toHaveTextContent('2')
+    expect(card).toHaveTextContent(formatPaise(10_000))
+    expect(card).toHaveTextContent(formatPaise(20_000))
+    expect(card).toHaveTextContent(/12 Aug 2026, 03:30 pm/i)
+
+    await user.click(screen.getByRole('button', { name: 'Re-read' }))
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+    expect(card).toHaveTextContent('3')
+    expect(card).toHaveTextContent(formatPaise(15_000))
+    expect(card).toHaveTextContent(formatPaise(25_000))
+    expect(card).toHaveTextContent(/12 Aug 2026, 03:35 pm/i)
+    expect(card).not.toHaveTextContent(formatPaise(10_000))
+  })
+
+  it('keeps the newest outlet scope when an earlier read answers late', async () => {
+    const adapters = createMockAdapters('super_admin', createDemoData())
+    const firstScope = await adapters.counter.readDeviceOperations([OUTLET_KALYANI_ID])
+    const secondScope = await adapters.counter.readDeviceOperations([
+      OUTLET_KALYANI_ID,
+      OUTLET_KANCHRAPARA_ID,
+    ])
+    let resolveFirst!: (value: typeof firstScope) => void
+    const delayedFirst = new Promise<typeof firstScope>((resolve) => {
+      resolveFirst = resolve
+    })
+    const read = vi
+      .fn<typeof adapters.counter.readDeviceOperations>()
+      .mockImplementationOnce(() => delayedFirst)
+      .mockResolvedValueOnce(secondScope)
+    adapters.counter.readDeviceOperations = read
+
+    renderSurface('super_admin', adapters)
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('button', { name: 'Reading…' })).toBeDisabled()
+
+    await addOutlet(OUTLET_KANCHRAPARA_ID)
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.getAllByTestId('device-telemetry')).toHaveLength(2))
+
+    await act(async () => resolveFirst(firstScope))
+
+    // The old Kalyani-only answer cannot erase Kanchrapara or briefly claim it
+    // has no tablet after the wider question has already been answered.
+    expect(screen.getAllByTestId('device-telemetry')).toHaveLength(2)
+    expect(
+      screen.queryByText(/No tablet is set up at Shawarmania Kanchrapara/i),
+    ).not.toBeInTheDocument()
   })
 
   it('shows a setup code once, and says that it is once', async () => {

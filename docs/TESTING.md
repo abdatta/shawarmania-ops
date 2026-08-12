@@ -129,6 +129,11 @@ For **every** outlet-scoped table, with sessions for each role:
 - The same session **cannot write** outlet B's rows, including by supplying B's `outlet_id` directly.
 - A Super Admin **can** read across outlets.
 - A removed counter tablet **cannot** read or write anything, and neither can a set-up one holding no live shift.
+- The counter-operations snapshot admits only an active Super Admin or the
+  requested outlet's Franchise Admin. Biller, Employee, tablet and cross-outlet
+  hand-crafted calls are refused; corrected tender contributes once through the
+  effective-allocation boundary, and every returned row shares one server
+  reading time.
 - A deactivated account **cannot** read or write anything, without waiting for token expiry.
 - An Employee can read **only their own** attendance rows.
 

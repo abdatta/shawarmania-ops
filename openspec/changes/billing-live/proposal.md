@@ -1,6 +1,6 @@
 # Proposal: Billing Live
 
-> **Model**: Opus · **Wave**: D · **Depends on**: #7, #9, #30, #31, #32, #33, #36, #38 · **Gate**: **Billing V1.** The real menu is entered through the app by a person with no SQL; one tablet at each outlet takes real payments, immediate and on handover; the tablet can correct only a paid bill's Cash/UPI allocation for five minutes without rewriting the bill; every accepted write commits locally before the UI reports success and lands exactly once; unsent work survives logout and restart; bill numbers never collide; only a resolved online queue receives the tablet's end-of-day confirmation; and the ledger stops carrying that outlet's cash and UPI revenue on the day it goes live while keeping its typed aggregator figures.
+> **Model**: Opus · **Wave**: D · **Depends on**: #7, #9, #30, #31, #32, #33, #36, #38 · **Gate**: **Billing V1 delivered.** At the outlet that has a tablet, a real menu entered through the app takes immediate and on-handover Cash/UPI payments; the originating tablet can correct only a paid bill's allocation for five minutes without rewriting it; every accepted write commits locally before the UI reports success and lands exactly once; only a resolved online queue receives the tablet's end-of-day confirmation; and an authorised manager can read one timestamped, customer-free operational snapshot from away. The per-outlet ledger handover remains an explicit runbook act after its parallel records agree.
 
 ## Why
 
@@ -12,10 +12,11 @@ during rollout.
 ## What Changes
 
 - **Make menu management real.** The manager's menu surface becomes a live editor
-  for categories, items, prices and availability, and the owner enters both
-  outlets' real menus through it. Nothing about billing can go live until a real
-  menu exists, and the roadmap forbids it arriving by any route a franchisee could
-  not repeat.
+  for categories, items, prices and availability. The owner enters the real menu
+  through it before setting up an outlet's tablet; Kalyani proves that path now,
+  and Kanchrapara repeats it when its hardware arrives. Nothing about billing can
+  go live until a real menu exists, and the roadmap forbids it arriving by any
+  route a franchisee could not repeat.
 - Connect the counter, open orders, customer lookup, shift history, manager void,
   originating-tablet correction/discard and read-only manager-diagnostic adapters
   to the real contracts from #9, #32 and #33.
@@ -74,10 +75,10 @@ during rollout.
   and out, and the counted drawer stay manual until #12 and #13.
 - **Let the Tablets surface say what the counter is doing, not only that the
   tablet is switched on.** Each card gains the live shift, the person holding it,
-  and — on a live outlet's current business date — that shift's bills, effective
-  Cash and UPI, open orders waiting and drawer cash, every figure taken through
-  the same effective-allocation boundary the drawer reads. It states when it was
-  read, re-reads when opened and on request, and subscribes to nothing. **Added
+  and — whether or not that outlet's ledger has handed over — that shift's bills,
+  effective Cash and UPI, open orders waiting and drawer cash, every figure taken
+  through the same effective-allocation boundary the drawer reads. It states when
+  it was read, re-reads when opened and on request, and subscribes to nothing. **Added
   2026-08-12** from the owner's Kalyani session, where the answer to "how is the
   counter doing" turned out to be a last-seen timestamp. Opening the biller's own
   screen, and practising on a copy of it, is #39 and stays out of this change.

@@ -152,6 +152,15 @@ mains-powered tablet stays on this screen for a whole shift, and its stale price
 or availability is charged to the customer rather than merely shown as a late
 count.
 
+The management **Tablets** surface follows the opposite freshness contract. One
+RLS-scoped database function returns each requested tablet, its live shift and
+operator, and that counter's bill count, effective Cash/UPI totals, waiting
+orders and drawer Cash with one server reading time. The function admits only an
+active Super Admin or the outlet's assigned Franchise Admin and exposes no
+customer or bill contents. A phone reads on open and on an explicit **Re-read**;
+it has no subscription, poll or timer, so every figure stays visibly tied to the
+same stated moment rather than changing piecemeal.
+
 ## How permissions are evaluated
 
 **Nothing about authority is carried in the access token** (owner, 2026-07-29). A person's roles and outlets are rows in `public.assignments`, and RLS policies resolve scope by membership:

@@ -2971,6 +2971,27 @@ export type Database = {
         }
         Returns: Json
       }
+      counter_operations_snapshot: {
+        Args: { p_outlet_ids: string[] }
+        Returns: {
+          bill_count: number
+          business_date: string
+          cash_total_paise: number
+          device_id: string
+          drawer_cash_paise: number
+          label: string
+          last_reported_unsent: number
+          last_seen_at: string
+          open_order_count: number
+          opened_at: string
+          operator_name: string
+          outlet_id: string
+          read_at: string
+          set_up_at: string
+          shift_id: string
+          upi_total_paise: number
+        }[]
+      }
       create_billing_order: {
         Args: {
           p_command_id?: string

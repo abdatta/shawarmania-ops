@@ -1135,6 +1135,34 @@ export interface CounterDeviceSummary {
 }
 
 /**
+ * One server-coherent reading of the counter currently standing behind a
+ * tablet. This is deliberately smaller than billing history: an oversight
+ * phone needs operational totals, not customer or bill contents.
+ */
+export interface CounterDeviceOperations {
+  shiftId: string
+  operatorName: string
+  openedAt: string
+  businessDate: string
+  billCount: number
+  cashTotalPaise: number
+  upiTotalPaise: number
+  openOrderCount: number
+  /** Cash the shift's effective bill allocations contributed to the drawer. */
+  drawerCashPaise: number
+}
+
+/**
+ * Hardware telemetry and counter operations returned by one database read.
+ * `readAt` is stamped by that read, so every operational figure on a card is
+ * honestly from the same moment.
+ */
+export interface CounterDeviceOperationalSnapshot extends CounterDeviceSummary {
+  readAt: string
+  operations: CounterDeviceOperations | null
+}
+
+/**
  * A pending request for somebody to open a counter, as the person it names sees
  * it on their own phone.
  *
@@ -1204,6 +1232,11 @@ export class CounterActionError extends DataActionError {
 export interface CounterAdapter {
   /** Tablets at outlets the caller may see. Removed ones are not listed. */
   listDevices(): Promise<CounterDeviceSummary[]>
+  /**
+   * One coherent operational read for the requested outlets. RLS still decides
+   * which of those outlets the caller may actually see.
+   */
+  readDeviceOperations(outletIds: readonly string[]): Promise<CounterDeviceOperationalSnapshot[]>
   /**
    * Mint a setup code for an outlet with no live tablet. Returned once and never
    * retrievable: only its hash is kept.
