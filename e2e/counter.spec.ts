@@ -325,8 +325,8 @@ test.describe('the counter', () => {
   test('limits My shift and exposes originating-tablet correction', async ({ page }) => {
     const rail = page.getByTestId('counter-activity-rail')
     await expect(rail.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
-    await expect(rail.getByTestId('shift-total-cash')).toBeVisible()
-    await expect(rail.getByTestId('shift-total-upi')).toBeVisible()
+    await expect(rail.getByTestId('shift-total-cash')).toHaveCount(0)
+    await expect(rail.getByTestId('shift-total-upi')).toHaveCount(0)
     await expect(rail.getByTestId('shift-total-swiggy')).toHaveCount(0)
     await expect(rail.getByTestId('shift-total-zomato')).toHaveCount(0)
     await expect(rail.getByText('Payment needs attention')).toBeVisible()
