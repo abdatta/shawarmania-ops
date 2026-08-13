@@ -23,8 +23,9 @@ import { useSession } from '@/session/context'
 
 import { ManagerBillDetail } from './manager-bill-detail'
 import { ManagerSyncStatus } from './manager-sync-status'
+import { PaymentTotalCards } from './payment-total-cards'
 
-type View = 'bills' | 'orders' | 'sync' | 'totals'
+type View = 'bills' | 'orders' | 'status'
 
 const DETAIL_TRANSITION_MS = 200
 const ORDER_CANCELLATION_REASONS = ['Duplicate order', 'Mistaken entry'] as const
@@ -356,8 +357,7 @@ export function ManagerBillingHistory() {
           [
             ['bills', `Bills (${bills.length})`],
             ['orders', `Open orders (${orders.length})`],
-            ['sync', 'Sync status'],
-            ['totals', 'Totals'],
+            ['status', 'Status'],
           ] as const
         ).map(([id, label]) => (
           <Button
@@ -453,34 +453,28 @@ export function ManagerBillingHistory() {
             })}
           </ul>
         )
-      ) : view === 'totals' ? (
-        <section aria-labelledby="billing-payment-totals-title">
-          <h2 id="billing-payment-totals-title" className="text-lg font-black text-content">
-            Payment totals
-          </h2>
-          <p className="mt-1 text-sm text-content-muted">
-            Paid bills for this outlet on{' '}
-            {businessDate === today ? 'today' : formatBusinessDate(businessDate)}.
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            {BILLING_PAYMENT_METHODS.map((paymentMethod) => (
-              <div
-                key={paymentMethod}
-                data-testid={`billing-total-${paymentMethod}`}
-                className="rounded-xl border border-border bg-surface p-4"
-              >
-                <p className="text-sm font-black uppercase text-content-muted">
-                  {methodLabel(paymentMethod)}
-                </p>
-                <Money
-                  paise={paymentTotal(totalBills, paymentMethod)}
-                  display
-                  className="mt-2 block"
-                />
-              </div>
-            ))}
-          </div>
-        </section>
+      ) : view === 'status' ? (
+        <div className="space-y-6">
+          <section aria-labelledby="billing-payment-totals-title">
+            <h2 id="billing-payment-totals-title" className="text-lg font-black text-content">
+              Payment totals
+            </h2>
+            <p className="mt-1 text-sm text-content-muted">
+              Paid bills for this outlet on{' '}
+              {businessDate === today ? 'today' : formatBusinessDate(businessDate)}.
+            </p>
+            <div className="mt-3">
+              <PaymentTotalCards
+                totals={BILLING_PAYMENT_METHODS.map((paymentMethod) => ({
+                  method: paymentMethod,
+                  totalPaise: paymentTotal(totalBills, paymentMethod),
+                }))}
+                testIdPrefix="billing-total"
+              />
+            </div>
+          </section>
+          <ManagerSyncStatus diagnostics={diagnostics} />
+        </div>
       ) : view === 'orders' ? (
         orders.length === 0 ? (
           <EmptyState icon={ReceiptText} title="No stranded open orders at this outlet." />
@@ -628,9 +622,7 @@ export function ManagerBillingHistory() {
             })}
           </ul>
         )
-      ) : (
-        <ManagerSyncStatus diagnostics={diagnostics} />
-      )}
+      ) : null}
     </section>
   )
 }

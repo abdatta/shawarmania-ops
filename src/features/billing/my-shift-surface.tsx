@@ -17,6 +17,7 @@ import { newUuid } from '@/lib/uuid'
 
 import { ShiftBillList } from './shift-bill-list'
 import { PaymentDialog } from './payment-dialog'
+import { PaymentTotalCards } from './payment-total-cards'
 import { useCounterState } from './use-counter-state'
 
 export function MyShiftSurface({
@@ -95,6 +96,7 @@ export function MyShiftSurface({
           Paid bills from this tablet&rsquo;s current shift only.
         </p>
       </div>
+      <PaymentTotalCards totals={history.totals} testIdPrefix="shift-total" />
       {message && (
         <p
           role="status"

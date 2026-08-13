@@ -23,8 +23,8 @@ function managerSession(): Session {
   }
 }
 
-describe('manager billing history payment totals', () => {
-  it('moves Cash and UPI aggregates out of the tablet rail into a deliberately opened billing view', async () => {
+describe('manager billing history status', () => {
+  it('puts Cash and UPI aggregates before sync activity in one Status view', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters('franchise_admin')
 
@@ -38,16 +38,19 @@ describe('manager billing history payment totals', () => {
       </MemoryRouter>,
     )
 
-    const totalsTab = await screen.findByRole('tab', { name: 'Totals' })
-    expect(screen.getByRole('tab', { name: 'Sync status' })).toBeVisible()
+    const statusTab = await screen.findByRole('tab', { name: 'Status' })
     expect(screen.queryByRole('heading', { name: 'Payment totals' })).not.toBeInTheDocument()
 
-    await user.click(totalsTab)
+    await user.click(statusTab)
 
-    expect(screen.getByRole('heading', { name: 'Payment totals' })).toBeVisible()
+    const paymentTotals = screen.getByRole('heading', { name: 'Payment totals' })
+    expect(paymentTotals).toBeVisible()
     expect(within(screen.getByTestId('billing-total-cash')).getByText('Cash')).toBeVisible()
     expect(within(screen.getByTestId('billing-total-cash')).getByText('₹3,711')).toBeVisible()
     expect(within(screen.getByTestId('billing-total-upi')).getByText('UPI')).toBeVisible()
+    const syncStatus = screen.getByRole('heading', { name: 'Tablet sync status' })
+    expect(syncStatus).toBeVisible()
+    expect(paymentTotals.compareDocumentPosition(syncStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(screen.getByTestId('billing-total-upi')).getByText('₹1,772')).toBeVisible()
     expect(screen.queryByText('Bills rung')).not.toBeInTheDocument()
     expect(screen.queryByText('Drawer cash')).not.toBeInTheDocument()

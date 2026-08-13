@@ -50,13 +50,6 @@ export function CounterActivityRail({
       */
       className="flex min-h-0 flex-col rounded-xl border border-border bg-surface"
     >
-      <header className="border-b border-border px-3 py-2">
-        <h2 className="text-sm font-black text-content">Orders &amp; bills</h2>
-        <p className="text-xs text-content-muted">
-          Open work first, then this shift&rsquo;s bills.
-        </p>
-      </header>
-
       {/*
         Pulled `--dock-overhang` past the rail's left border and given it straight
         back as padding, so the content sits exactly where it always did while the
