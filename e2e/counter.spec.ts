@@ -575,6 +575,11 @@ test.describe('manager billing history', () => {
     await expect(bills.nth(1)).toContainText('Cancelled')
     await expect(page.getByText(/Bill \d+ was cancelled/)).toHaveCount(0)
 
+    await page.getByRole('tab', { name: 'Totals' }).click()
+    await expect(page.getByRole('heading', { name: 'Payment totals' })).toBeVisible()
+    await expect(page.getByTestId('billing-total-cash')).toBeVisible()
+    await expect(page.getByTestId('billing-total-upi')).toBeVisible()
+
     await page.getByRole('tab', { name: /Open orders/ }).click()
     const openOrder = page.getByText(/Order 104/).locator('xpath=ancestor::li')
     await expect(openOrder).toContainText('Order items')

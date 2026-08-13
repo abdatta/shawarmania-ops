@@ -10,7 +10,6 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { LoadingFigures } from '@/components/ui/loading'
-import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
 import { DataActionError, type CounterDeviceOperationalSnapshot } from '@/data-access/adapters'
 import { formatDateTime } from '@/domain'
@@ -263,7 +262,7 @@ export function DevicesSurface() {
                     <CardBody className="space-y-2">
                       <p>{names[outletId] ?? 'This outlet'}</p>
                       {/*
-                        "Last reported", never "current". Both figures are written
+                        "Last reported", never "current". This status is written
                         by the tablet's own heartbeat, so a tablet that is off,
                         offline or broken simply stops moving them — and a number
                         presented as live when nothing is reporting it is the one
@@ -294,46 +293,10 @@ export function DevicesSurface() {
                               has held this counter since{' '}
                               {formatDateTime(device.operations.openedAt)}.
                             </p>
-                            <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
-                              <div>
-                                <dt className="text-xs">Bills rung</dt>
-                                <dd data-numeric="" className="font-semibold text-content">
-                                  {device.operations.billCount}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="text-xs">Open orders waiting</dt>
-                                <dd data-numeric="" className="font-semibold text-content">
-                                  {device.operations.openOrderCount}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="text-xs">Cash</dt>
-                                <dd className="font-semibold text-content">
-                                  <Money paise={device.operations.cashTotalPaise} />
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="text-xs">UPI</dt>
-                                <dd className="font-semibold text-content">
-                                  <Money paise={device.operations.upiTotalPaise} />
-                                </dd>
-                              </div>
-                              <div className="col-span-2">
-                                <dt className="text-xs">Drawer cash from these bills</dt>
-                                <dd className="font-semibold text-content">
-                                  <Money paise={device.operations.drawerCashPaise} />
-                                </dd>
-                              </div>
-                            </dl>
                           </>
                         ) : (
                           <p className="text-content">Nobody is at this counter.</p>
                         )}
-                        <p className="text-xs">
-                          Counter figures read {formatDateTime(device.readAt)}. They stay fixed
-                          until you re-read.
-                        </p>
                       </section>
                       {mayAdminister && (
                         <button

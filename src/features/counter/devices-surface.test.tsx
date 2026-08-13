@@ -11,7 +11,6 @@ import {
   OUTLET_KALYANI_ID,
   OUTLET_KANCHRAPARA_ID,
 } from '@/data-access/mock'
-import { formatPaise } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Role } from '@/session/session'
 import { demoSessionFor } from '@/test/session'
@@ -160,54 +159,17 @@ describe('the Tablets surface', () => {
     expect(within(emptyCounter).queryByText('Cash')).not.toBeInTheDocument()
   })
 
-  it('moves the reading time and every counter figure together only when re-read', async () => {
-    const user = userEvent.setup()
+  it('keeps billing totals out of Tablets', async () => {
     const adapters = createMockAdapters('super_admin', createDemoData())
-    const [base] = await adapters.counter.readDeviceOperations([OUTLET_KALYANI_ID])
-    const first = {
-      ...base!,
-      readAt: '2026-08-12T10:00:00.000Z',
-      operations: {
-        ...base!.operations!,
-        billCount: 2,
-        cashTotalPaise: 10_000,
-        upiTotalPaise: 20_000,
-        openOrderCount: 1,
-        drawerCashPaise: 10_000,
-      },
-    }
-    const second = {
-      ...first,
-      readAt: '2026-08-12T10:05:00.000Z',
-      operations: {
-        ...first.operations,
-        billCount: 3,
-        cashTotalPaise: 15_000,
-        upiTotalPaise: 25_000,
-        openOrderCount: 2,
-        drawerCashPaise: 15_000,
-      },
-    }
-    const read = vi
-      .fn<typeof adapters.counter.readDeviceOperations>()
-      .mockResolvedValueOnce([first])
-      .mockResolvedValueOnce([second])
-    adapters.counter.readDeviceOperations = read
-
     renderSurface('super_admin', adapters)
-    const card = await screen.findByTestId(`device-operations-${base!.id}`)
-    expect(card).toHaveTextContent('2')
-    expect(card).toHaveTextContent(formatPaise(10_000))
-    expect(card).toHaveTextContent(formatPaise(20_000))
-    expect(card).toHaveTextContent(/12 Aug 2026, 03:30 pm/i)
+    const card = await screen.findByTestId(/device-operations-/)
 
-    await user.click(screen.getByRole('button', { name: 'Re-read' }))
-    await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
-    expect(card).toHaveTextContent('3')
-    expect(card).toHaveTextContent(formatPaise(15_000))
-    expect(card).toHaveTextContent(formatPaise(25_000))
-    expect(card).toHaveTextContent(/12 Aug 2026, 03:35 pm/i)
-    expect(card).not.toHaveTextContent(formatPaise(10_000))
+    expect(card).toHaveTextContent(/has held this counter since/i)
+    expect(within(card).queryByText('Bills rung')).not.toBeInTheDocument()
+    expect(within(card).queryByText('Open orders waiting')).not.toBeInTheDocument()
+    expect(within(card).queryByText('Cash')).not.toBeInTheDocument()
+    expect(within(card).queryByText('UPI')).not.toBeInTheDocument()
+    expect(within(card).queryByText('Drawer cash from these bills')).not.toBeInTheDocument()
   })
 
   it('keeps the newest outlet scope when an earlier read answers late', async () => {

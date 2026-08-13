@@ -5,10 +5,8 @@ import { EmptyState } from '@/components/layout/empty-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
-import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
 import {
-  BILLING_PAYMENT_METHODS,
   DataActionError,
   type BillingAttentionItem,
   type BillingBill,
@@ -105,27 +103,6 @@ export function MyShiftSurface({
           {message}
         </p>
       )}
-      <div
-        className={embedded ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-2 gap-2 sm:grid-cols-3'}
-      >
-        {BILLING_PAYMENT_METHODS.map((method) => {
-          const total = history.totals.find((candidate) => candidate.method === method)
-          return (
-            <div
-              key={method}
-              data-testid={`shift-total-${method}`}
-              className={
-                embedded
-                  ? 'rounded-lg bg-surface-raised p-2'
-                  : 'rounded-xl border border-border bg-surface p-3'
-              }
-            >
-              <p className="text-xs font-bold uppercase text-content-muted">{method}</p>
-              <Money paise={total?.totalPaise ?? 0} display />
-            </div>
-          )
-        })}
-      </div>
       {history.bills.length === 0 ? (
         embedded ? (
           <p className="rounded-lg bg-surface-raised p-3 text-sm text-content-muted">

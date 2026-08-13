@@ -322,10 +322,8 @@ describe('BillingCounter', () => {
     expect(
       openHeading.compareDocumentPosition(billsHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
-    expect(within(rail).getByTestId('shift-total-cash')).toBeInTheDocument()
-    expect(within(rail).getByTestId('shift-total-upi')).toBeInTheDocument()
-    expect(within(rail).queryByTestId('shift-total-swiggy')).not.toBeInTheDocument()
-    expect(within(rail).queryByTestId('shift-total-zomato')).not.toBeInTheDocument()
+    expect(within(rail).queryByTestId('shift-total-cash')).not.toBeInTheDocument()
+    expect(within(rail).queryByTestId('shift-total-upi')).not.toBeInTheDocument()
 
     const disclosure = rail.querySelector('details')
     expect(disclosure).not.toBeNull()

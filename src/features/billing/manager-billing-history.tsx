@@ -10,6 +10,7 @@ import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
 import {
+  BILLING_PAYMENT_METHODS,
   DataActionError,
   type BillingBill,
   type BillingDeliveryDiagnostic,
@@ -23,7 +24,7 @@ import { useSession } from '@/session/context'
 import { ManagerBillDetail } from './manager-bill-detail'
 import { ManagerSyncStatus } from './manager-sync-status'
 
-type View = 'bills' | 'orders' | 'sync'
+type View = 'bills' | 'orders' | 'sync' | 'totals'
 
 const DETAIL_TRANSITION_MS = 200
 const ORDER_CANCELLATION_REASONS = ['Duplicate order', 'Mistaken entry'] as const
@@ -55,6 +56,13 @@ function BillDetailTransition({ open, children }: { open: boolean; children: Rea
 
 function methodLabel(method: BillingBill['paymentMethod']) {
   return method === 'upi' ? 'UPI' : method[0]!.toUpperCase() + method.slice(1)
+}
+
+function paymentTotal(bills: readonly BillingBill[], method: PaymentMethod): number {
+  return bills
+    .flatMap((bill) => bill.payments)
+    .filter((payment) => payment.method === method)
+    .reduce((total, payment) => total + payment.amountPaise, 0)
 }
 
 /**
@@ -137,6 +145,7 @@ export function ManagerBillingHistory() {
   const [method, setMethod] = useState<PaymentMethod | 'all'>('all')
   const [view, setView] = useState<View>('bills')
   const [bills, setBills] = useState<BillingBill[]>([])
+  const [totalBills, setTotalBills] = useState<BillingBill[]>([])
   const [orders, setOrders] = useState<BillingOrder[]>([])
   const [diagnostics, setDiagnostics] = useState<BillingDeliveryDiagnostic[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -177,17 +186,24 @@ export function ManagerBillingHistory() {
     if (!outletId || !businessDate) return
     setLoading(true)
     try {
-      const [nextBills, nextOrders, nextDiagnostics] = await Promise.all([
+      const [nextBills, nextTotalBills, nextOrders, nextDiagnostics] = await Promise.all([
         billing.listManagerHistory({
           outletId,
           businessDate,
           status,
           paymentMethod: method,
         }),
+        billing.listManagerHistory({
+          outletId,
+          businessDate,
+          status: 'settled',
+          paymentMethod: 'all',
+        }),
         billing.listManagerOpenOrders(outletId),
         billing.listDeliveryDiagnostics(outletId),
       ])
       setBills(nextBills)
+      setTotalBills(nextTotalBills)
       setOrders(nextOrders)
       setDiagnostics(nextDiagnostics)
       setSelectedId((current) =>
@@ -340,10 +356,8 @@ export function ManagerBillingHistory() {
           [
             ['bills', `Bills (${bills.length})`],
             ['orders', `Open orders (${orders.length})`],
-            [
-              'sync',
-              `Sync status${diagnostics.some((item) => !['accepted', 'replay', 'applied', 'corrected', 'discarded'].includes(item.resultCategory)) ? ' · Check' : ''}`,
-            ],
+            ['sync', 'Sync status'],
+            ['totals', 'Totals'],
           ] as const
         ).map(([id, label]) => (
           <Button
@@ -439,6 +453,34 @@ export function ManagerBillingHistory() {
             })}
           </ul>
         )
+      ) : view === 'totals' ? (
+        <section aria-labelledby="billing-payment-totals-title">
+          <h2 id="billing-payment-totals-title" className="text-lg font-black text-content">
+            Payment totals
+          </h2>
+          <p className="mt-1 text-sm text-content-muted">
+            Paid bills for this outlet on{' '}
+            {businessDate === today ? 'today' : formatBusinessDate(businessDate)}.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            {BILLING_PAYMENT_METHODS.map((paymentMethod) => (
+              <div
+                key={paymentMethod}
+                data-testid={`billing-total-${paymentMethod}`}
+                className="rounded-xl border border-border bg-surface p-4"
+              >
+                <p className="text-sm font-black uppercase text-content-muted">
+                  {methodLabel(paymentMethod)}
+                </p>
+                <Money
+                  paise={paymentTotal(totalBills, paymentMethod)}
+                  display
+                  className="mt-2 block"
+                />
+              </div>
+            ))}
+          </div>
+        </section>
       ) : view === 'orders' ? (
         orders.length === 0 ? (
           <EmptyState icon={ReceiptText} title="No stranded open orders at this outlet." />
