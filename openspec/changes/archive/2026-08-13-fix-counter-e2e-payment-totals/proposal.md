@@ -20,8 +20,10 @@ None.
 
 ### Modified Capabilities
 
-None. This restores existing test coverage for the intentionally removed
-counter totals; no product requirement changes.
+- `counter-billing`: Shift activity exposes the current tablet's bills but no
+  aggregate payment totals; totals belong to the manager billing view.
+- `counter-device-sessions`: Tablets show device and active-shift status without
+  billing or drawer aggregates.
 
 ## Non-goals
 
@@ -31,7 +33,6 @@ counter totals; no product requirement changes.
 
 ## Impact
 
-Affected code: `e2e/counter.spec.ts` and this change record. No application
-API, schema, gate, adapter, or documentation contract changes. No durable docs
-page requires an update before archive because the user-visible behaviour and
-its documentation remain unchanged.
+Affected code: `e2e/counter.spec.ts` and the corresponding living OpenSpec
+requirements. No application API, schema, gate, adapter, or durable docs page
+changes: `docs/SCREENS.md` already describes the manager-only totals view.

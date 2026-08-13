@@ -666,35 +666,28 @@ order or paid bill is accepted.
 
 ### Requirement: Counter history is limited to the current shift
 
-My shift SHALL show paid bills belonging to this tablet's current shift and
-running totals by payment method. Each bill SHALL be collapsed by default and
-expand to immutable item names, quantities, captured unit prices, line totals,
-payment facts, total and optional customer snapshot. It SHALL NOT show other
-shifts, outlet-wide totals, or another outlet.
+My shift SHALL show paid bills belonging to this tablet's current shift. Each
+bill SHALL be collapsed by default and expand to immutable item names,
+quantities, captured unit prices, line totals, payment facts, total and
+optional customer snapshot. It SHALL NOT show other shifts, outlet-wide totals,
+or another outlet.
 
-Every supported method SHALL remain present in the summary when its total is
-zero, so a missing category cannot be confused with zero takings. The supported
-methods are Cash and UPI. A shift summary SHALL NOT carry an always-empty Swiggy
-or Zomato line, because a method the counter cannot accept reads as takings that
-failed to arrive rather than as trade recorded elsewhere.
+The shared counter SHALL NOT show aggregate Cash or UPI payment totals. Those
+outlet-day aggregates belong in the manager's deliberately opened Billing
+History Totals view; the counter remains a bill activity surface.
 
-The list and running totals SHALL include locally accepted payments immediately
-and SHALL use each bill's latest effective allocation, including a durably accepted
-correction that is still unsent. An eligible expanded bill SHALL carry its relative
-`Edit (N min)` or `Edit (N sec)` action without making any other bill fact
-editable.
+The list SHALL include locally accepted payments immediately and SHALL use each
+bill's latest effective allocation, including a durably accepted correction that
+is still unsent. An eligible expanded bill SHALL carry its relative `Edit (N
+min)` or `Edit (N sec)` action without making any other bill fact editable.
 
 #### Scenario: Operator opens My shift
 - **WHEN** this tablet has bills from its shift and older outlet bills exist
-- **THEN** only the current shift's bills and their method totals appear
+- **THEN** only the current shift's bills appear, with no aggregate Cash or UPI totals
 
-#### Scenario: A supported method has no bills
-- **WHEN** this shift has no allocation for Cash or for UPI
-- **THEN** both still appear and the unused method shows ₹0
-
-#### Scenario: A withdrawn method is not shown as empty takings
-- **WHEN** a shift summary renders
-- **THEN** no Swiggy or Zomato line appears at all, rather than appearing at ₹0
+#### Scenario: Manager opens payment totals
+- **WHEN** a manager opens the Billing History Totals view for an outlet day
+- **THEN** the Cash and UPI payment aggregates appear there rather than on the shared counter
 
 #### Scenario: Operator inspects a closed bill
 - **WHEN** the operator expands a bill in My shift or the combined tablet rail
@@ -702,7 +695,7 @@ editable.
 
 #### Scenario: A tender correction changes shift cash
 - **WHEN** an eligible bill is corrected from Cash to UPI
-- **THEN** the same bill remains listed, its effective tender reads UPI, and the shift's Cash and UPI totals move by the exact corrected amount
+- **THEN** the same bill remains listed with its effective tender updated, without introducing aggregate payment totals to the shift rail
 
 ### Requirement: The counter is one three-column workspace at every width
 
@@ -859,8 +852,6 @@ lines with line amounts, use relative age for today's order, and omit the creato
 when the current shift holder created it. Its payment action SHALL read Mark Paid.
 On the combined tablet workspace, edit SHALL hand the order to the full composer
 and restore any suspended new-order draft after Save changes or Cancel edit.
-
-Shift summaries SHALL show Cash and UPI even when a method's total is zero.
 
 #### Scenario: Another operator uses the same tablet
 - **WHEN** a different operator's shift begins on the order's tablet
