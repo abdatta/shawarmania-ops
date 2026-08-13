@@ -345,6 +345,7 @@ describe('mock billing adapter', () => {
     })
     expect(voided.status).toBe('void')
     expect(voided.voidReason).toBe('Wrong item rung')
+    expect(voided.voidedBy).toEqual({ id: managerPersona.profile.id, name: 'Demo Manager' })
     expect(voided.lines).toEqual(beforeLines)
     expect(store.orders.find((order) => order.id === saved.id)?.discount_paise).toBe(0)
     expect(store.bills.find((bill) => bill.id === paid.id)?.discount_paise).toBe(0)

@@ -106,6 +106,7 @@ function managerHistoryClient() {
     customer_phone: '9000000000',
     void_reason: null,
     voided_at: null,
+    voider: null,
     bill_items: [
       {
         id: 'line-1',
@@ -161,6 +162,7 @@ describe('the live tablet acceptance boundary', () => {
       },
     ])
     expect(selected[0]).toContain('biller:profiles!bills_biller_profile_id_fkey(full_name)')
+    expect(selected[0]).toContain('voider:profiles!bills_voided_by_fkey(id, full_name)')
   })
 
   it('commits an exact split-tender, zero-discount command locally before any request', async () => {

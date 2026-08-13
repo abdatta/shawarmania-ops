@@ -340,6 +340,7 @@ export function createMockBillingAdapter(
       totalPaise: row.total_paise,
       voidReason: row.void_reason,
       voidedAt: row.voided_at,
+      voidedBy: row.voided_by ? { id: row.voided_by, name: actorName(row.voided_by) } : null,
     }
   }
 
@@ -683,6 +684,7 @@ export function createMockBillingAdapter(
         totalPaise,
         voidReason: null,
         voidedAt: null,
+        voidedBy: null,
       }
     },
 
@@ -927,6 +929,7 @@ export function createMockBillingAdapter(
             totalPaise: entry.queued.totalPaise,
             voidReason: null,
             voidedAt: null,
+            voidedBy: null,
           }
         })
       const billsById = new Map(serverBills.map((bill) => [bill.id, bill]))

@@ -1037,6 +1037,8 @@ export interface BillingBill {
   totalPaise: Tables<'bills'>['total_paise']
   voidReason: Tables<'bills'>['void_reason']
   voidedAt: Tables<'bills'>['voided_at']
+  /** The actor stamped by the database when the immutable bill was cancelled. */
+  voidedBy: LedgerActor | null
 }
 
 export interface BillingHistoryFilters {

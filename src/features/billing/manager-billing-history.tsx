@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/layout/empty-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
+import { Modal } from '@/components/ui/modal'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
@@ -25,6 +26,7 @@ import { ManagerSyncStatus } from './manager-sync-status'
 type View = 'bills' | 'orders' | 'sync'
 
 const DETAIL_TRANSITION_MS = 200
+const ORDER_CANCELLATION_REASONS = ['Duplicate order', 'Mistaken entry'] as const
 
 function BillDetailTransition({ open, children }: { open: boolean; children: ReactNode }) {
   const [entered, setEntered] = useState(false)
@@ -204,17 +206,13 @@ export function ManagerBillingHistory() {
     void Promise.resolve().then(load)
   }, [load])
 
-  const mutate = async (
-    operation: () => Promise<unknown>,
-    success: string,
-    keepBillOpen = false,
-  ) => {
+  const mutate = async (operation: () => Promise<unknown>, keepBillOpen = false) => {
     try {
+      setMessage(null)
       await operation()
       setReason('')
       setCancellingId(null)
       setCancellingOrderId(null)
-      setMessage(success)
       if (!keepBillOpen) setSelectedId(null)
       await load()
     } catch (cause) {
@@ -292,8 +290,7 @@ export function ManagerBillingHistory() {
           Billing history
         </h1>
         <p className="text-sm text-content-muted">
-          Bills stay in history. A correction cancels the original and creates a new bill at the
-          counter.
+          Bills stay in history after they are cancelled.
         </p>
       </div>
 
@@ -419,6 +416,7 @@ export function ManagerBillingHistory() {
                     <BillDetailTransition open={expanded}>
                       <ManagerBillDetail
                         bill={bill}
+                        currentUserId={session.userId}
                         cancelling={cancellingId === bill.id}
                         reason={reason}
                         onReasonChange={setReason}
@@ -431,11 +429,7 @@ export function ManagerBillingHistory() {
                           setReason('')
                         }}
                         onConfirmCancellation={() =>
-                          void mutate(
-                            () => billing.voidBill(bill.id, reason),
-                            `Bill ${bill.billNumber} was cancelled. Ring the corrected sale manually on the enrolled counter tablet.`,
-                            true,
-                          )
+                          void mutate(() => billing.voidBill(bill.id, reason), true)
                         }
                       />
                     </BillDetailTransition>
@@ -507,51 +501,7 @@ export function ManagerBillingHistory() {
                     </dl>
                   </section>
 
-                  {cancellingOrder ? (
-                    <div className="mt-3 rounded-xl border border-danger bg-surface p-3">
-                      <h3 className="font-black text-content">Cancel order {order.orderNumber}?</h3>
-                      <p className="mt-1 text-sm text-content-muted">
-                        The order leaves active work. Nothing is transferred to another tablet.
-                      </p>
-                      <label
-                        htmlFor={`cancel-order-reason-${order.id}`}
-                        className="mt-3 block text-sm font-bold text-content"
-                      >
-                        Why is this order being cancelled?
-                      </label>
-                      <Input
-                        id={`cancel-order-reason-${order.id}`}
-                        aria-label={`Cancellation reason for order ${order.orderNumber}`}
-                        className="mt-1"
-                        placeholder="For example, customer changed their mind"
-                        value={reason}
-                        onChange={(event) => setReason(event.target.value)}
-                      />
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button
-                          variant="secondary"
-                          onClick={() => {
-                            setCancellingOrderId(null)
-                            setReason('')
-                          }}
-                        >
-                          Keep order
-                        </Button>
-                        <Button
-                          variant="danger"
-                          disabled={!reason.trim()}
-                          onClick={() =>
-                            void mutate(
-                              () => billing.managerCancelOrder(order.id, reason),
-                              `Order ${order.orderNumber} was cancelled. Nothing was transferred.`,
-                            )
-                          }
-                        >
-                          Confirm cancellation
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
+                  {!cancellingOrder && (
                     <div className="mt-3 border-t border-border pt-3">
                       <Button
                         variant="secondary"
@@ -565,6 +515,72 @@ export function ManagerBillingHistory() {
                       </Button>
                     </div>
                   )}
+                  <Modal
+                    open={cancellingOrder}
+                    onClose={() => {
+                      setCancellingOrderId(null)
+                      setReason('')
+                    }}
+                    aria-label={`Cancel order ${order.orderNumber}`}
+                    className="m-auto w-[min(92vw,26rem)] rounded-2xl p-4"
+                  >
+                    <h2 className="text-lg font-black text-content">
+                      Cancel order {order.orderNumber}?
+                    </h2>
+                    <label
+                      htmlFor={`cancel-order-reason-${order.id}`}
+                      className="mt-4 block text-sm font-bold text-content"
+                    >
+                      Cancellation reason
+                    </label>
+                    <div
+                      className="mt-3 grid grid-cols-2 gap-2"
+                      role="group"
+                      aria-label="Common cancellation reasons"
+                    >
+                      {ORDER_CANCELLATION_REASONS.map((candidate) => (
+                        <Button
+                          key={candidate}
+                          variant={reason === candidate ? 'primary' : 'secondary'}
+                          size="phone"
+                          aria-pressed={reason === candidate}
+                          onClick={() => setReason(candidate)}
+                        >
+                          {candidate}
+                        </Button>
+                      ))}
+                    </div>
+                    <Input
+                      id={`cancel-order-reason-${order.id}`}
+                      aria-label={`Cancellation reason for order ${order.orderNumber}`}
+                      className="mt-1"
+                      placeholder="Or type a reason"
+                      value={reason}
+                      onChange={(event) => setReason(event.target.value)}
+                    />
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <Button
+                        variant="secondary"
+                        size="control"
+                        onClick={() => {
+                          setCancellingOrderId(null)
+                          setReason('')
+                        }}
+                      >
+                        Keep order
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="control"
+                        disabled={!reason.trim()}
+                        onClick={() =>
+                          void mutate(() => billing.managerCancelOrder(order.id, reason))
+                        }
+                      >
+                        Cancel order
+                      </Button>
+                    </div>
+                  </Modal>
                 </li>
               )
             })}

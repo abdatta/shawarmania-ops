@@ -1,11 +1,14 @@
-import { Ban, ChevronDown, Clock3, CreditCard, ReceiptText, UserRound } from 'lucide-react'
+import { Ban, ChevronDown, Clock3, ReceiptText, UserRound } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Modal } from '@/components/ui/modal'
 import { Money } from '@/components/ui/money'
 import type { BillingBill } from '@/data-access/adapters'
 import { formatBusinessDate, formatDayTime, lineTotalPaise } from '@/domain'
+
+const CANCELLATION_REASONS = ['Duplicate bill', 'Mistaken entry'] as const
 
 function methodLabel(method: BillingBill['paymentMethod']) {
   return method === 'upi' ? 'UPI' : method[0]!.toUpperCase() + method.slice(1)
@@ -69,8 +72,35 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+function BillStatusNotice({
+  testId,
+  tone,
+  muted = false,
+  children,
+  trailing,
+}: {
+  testId: string
+  tone: 'success' | 'danger'
+  muted?: boolean
+  children: ReactNode
+  trailing: ReactNode
+}) {
+  const border =
+    tone === 'success' ? (muted ? 'border-success/60' : 'border-success') : 'border-danger'
+
+  return (
+    <div data-testid={testId} className={`mb-3 rounded-xl border ${border} bg-surface p-3`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="min-w-0 truncate text-sm font-semibold text-content">{children}</p>
+        <span className="shrink-0 text-xs text-content-muted">{trailing}</span>
+      </div>
+    </div>
+  )
+}
+
 export function ManagerBillDetail({
   bill,
+  currentUserId,
   cancelling,
   reason,
   onReasonChange,
@@ -79,6 +109,7 @@ export function ManagerBillDetail({
   onConfirmCancellation,
 }: {
   bill: BillingBill
+  currentUserId?: string
   cancelling: boolean
   reason: string
   onReasonChange: (reason: string) => void
@@ -87,6 +118,8 @@ export function ManagerBillDetail({
   onConfirmCancellation: () => void
 }) {
   const detailId = `bill-detail-${bill.id}`
+  const cancellationActor =
+    bill.voidedBy?.id === currentUserId ? 'You' : (bill.voidedBy?.name ?? 'someone')
 
   return (
     <article
@@ -95,6 +128,23 @@ export function ManagerBillDetail({
       data-testid={detailId}
       className="rounded-b-xl border border-t-0 border-border bg-surface-raised p-3 sm:p-4"
     >
+      {bill.status === 'void' && (
+        <BillStatusNotice
+          testId="cancelled-bill-notice"
+          tone="danger"
+          trailing={
+            bill.voidedAt && <time dateTime={bill.voidedAt}>{formatDayTime(bill.voidedAt)}</time>
+          }
+        >
+          <span className="font-black text-danger">Cancelled</span>
+          <span>{` by ${cancellationActor}`}</span>
+          <span aria-hidden className="text-content-muted">
+            {' · '}
+          </span>
+          {bill.voidReason}
+        </BillStatusNotice>
+      )}
+
       <div className="grid gap-3 lg:grid-cols-2">
         <Section icon={ReceiptText} title="Order items">
           <ul className="divide-y divide-border">
@@ -119,26 +169,26 @@ export function ManagerBillDetail({
         </Section>
 
         <div className="space-y-3">
-          <Section icon={CreditCard} title="Payment">
-            <dl className="space-y-2">
-              {bill.payments.map((payment) => (
-                <div key={payment.method} className="flex items-center justify-between gap-3">
-                  <dt className="text-sm font-semibold text-content">
-                    {methodLabel(payment.method)}
-                  </dt>
-                  <dd>
-                    <Money paise={payment.amountPaise} className="font-bold" />
-                  </dd>
-                </div>
-              ))}
-              <div className="flex items-center justify-between gap-3 border-t border-border pt-2">
-                <dt className="font-black text-content">Total</dt>
-                <dd>
-                  <Money paise={bill.totalPaise} className="text-lg font-black" />
-                </dd>
-              </div>
-            </dl>
-          </Section>
+          <BillStatusNotice
+            testId="paid-bill-notice"
+            tone="success"
+            muted={bill.status === 'void'}
+            trailing={<Money paise={bill.totalPaise} className="text-sm font-black text-content" />}
+          >
+            <span className="font-black text-success">Paid</span> by{' '}
+            {bill.payments.map((payment, index) => (
+              <span key={payment.method}>
+                {index > 0 && <span aria-hidden> + </span>}
+                {methodLabel(payment.method)}
+                {bill.payments.length > 1 && (
+                  <>
+                    {' ('}
+                    <Money paise={payment.amountPaise} />)
+                  </>
+                )}
+              </span>
+            ))}
+          </BillStatusNotice>
 
           <CollapsibleSection icon={UserRound} title="Customer details">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -164,48 +214,7 @@ export function ManagerBillDetail({
         </div>
       </div>
 
-      {bill.status === 'void' ? (
-        <div className="mt-3 rounded-xl border border-danger bg-surface p-3">
-          <p className="font-black text-danger">Cancelled</p>
-          <p className="mt-1 text-sm text-content">{bill.voidReason}</p>
-          {bill.voidedAt && (
-            <p className="mt-1 text-xs text-content-muted">
-              Cancelled {formatDayTime(bill.voidedAt)}
-            </p>
-          )}
-        </div>
-      ) : cancelling ? (
-        <div className="mt-3 rounded-xl border border-danger bg-surface p-3">
-          <h3 className="font-black text-content">Cancel bill {bill.billNumber}?</h3>
-          <p className="mt-1 text-sm text-content-muted">
-            The original bill will stay in history as Cancelled. Ring the corrected sale manually on
-            the enrolled counter tablet.
-          </p>
-          <label
-            htmlFor={`cancel-reason-${bill.id}`}
-            className="mt-3 block text-sm font-bold text-content"
-          >
-            Why is this bill being cancelled?
-          </label>
-          <Input
-            id={`cancel-reason-${bill.id}`}
-            aria-label={`Cancellation reason for bill ${bill.billNumber}`}
-            className="mt-1"
-            placeholder="For example, wrong item was billed"
-            value={reason}
-            onChange={(event) => onReasonChange(event.target.value)}
-          />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={onKeepBill}>
-              Keep bill
-            </Button>
-            <Button variant="danger" disabled={!reason.trim()} onClick={onConfirmCancellation}>
-              <Ban aria-hidden size={18} />
-              Confirm cancellation
-            </Button>
-          </div>
-        </div>
-      ) : (
+      {bill.status !== 'void' && (
         <div className="mt-3 border-t border-border pt-3">
           <Button variant="secondary" className="text-danger" onClick={onStartCancelling}>
             <Ban aria-hidden size={18} />
@@ -213,6 +222,60 @@ export function ManagerBillDetail({
           </Button>
         </div>
       )}
+
+      <Modal
+        open={cancelling}
+        onClose={onKeepBill}
+        aria-label={`Cancel bill ${bill.billNumber}`}
+        className="m-auto w-[min(92vw,26rem)] rounded-2xl p-4"
+      >
+        <h2 className="text-lg font-black text-content">Cancel bill {bill.billNumber}?</h2>
+        <label
+          htmlFor={`cancel-reason-${bill.id}`}
+          className="mt-4 block text-sm font-bold text-content"
+        >
+          Cancellation reason
+        </label>
+        <div
+          className="mt-3 grid grid-cols-2 gap-2"
+          role="group"
+          aria-label="Common cancellation reasons"
+        >
+          {CANCELLATION_REASONS.map((candidate) => (
+            <Button
+              key={candidate}
+              variant={reason === candidate ? 'primary' : 'secondary'}
+              size="phone"
+              aria-pressed={reason === candidate}
+              onClick={() => onReasonChange(candidate)}
+            >
+              {candidate}
+            </Button>
+          ))}
+        </div>
+        <Input
+          id={`cancel-reason-${bill.id}`}
+          aria-label={`Cancellation reason for bill ${bill.billNumber}`}
+          className="mt-1"
+          placeholder="Or type a reason"
+          value={reason}
+          onChange={(event) => onReasonChange(event.target.value)}
+        />
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Button variant="secondary" size="control" onClick={onKeepBill}>
+            Keep bill
+          </Button>
+          <Button
+            variant="danger"
+            size="control"
+            disabled={!reason.trim()}
+            onClick={onConfirmCancellation}
+          >
+            <Ban aria-hidden size={18} />
+            Cancel bill
+          </Button>
+        </div>
+      </Modal>
     </article>
   )
 }

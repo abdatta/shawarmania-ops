@@ -529,7 +529,7 @@ test.describe('manager billing history', () => {
     await expect(firstSummary).toContainText(/by Demo Biller/)
     await firstSummary.click()
     await expect(bills.nth(0)).toContainText('Order items')
-    await expect(bills.nth(0)).toContainText('Payment')
+    await expect(bills.nth(0)).toContainText('Paid by')
     await expect(firstSummary).not.toHaveClass(/border-primary/)
     await expect(
       bills.nth(0).getByTestId('manager-bill-detail-transition').locator('article'),
@@ -571,11 +571,9 @@ test.describe('manager billing history', () => {
       .nth(1)
       .getByLabel(/Cancellation reason/)
       .fill('Wrong item rung')
-    await bills.nth(1).getByRole('button', { name: 'Confirm cancellation' }).click()
-    await expect(
-      page.getByText(/ring the corrected sale manually on the enrolled counter tablet/i),
-    ).toBeVisible()
+    await bills.nth(1).getByRole('button', { name: 'Cancel bill' }).click()
     await expect(bills.nth(1)).toContainText('Cancelled')
+    await expect(page.getByText(/Bill \d+ was cancelled/)).toHaveCount(0)
 
     await page.getByRole('tab', { name: /Open orders/ }).click()
     const openOrder = page.getByText(/Order 104/).locator('xpath=ancestor::li')
@@ -584,9 +582,12 @@ test.describe('manager billing history', () => {
     await expect(openOrder).toContainText('created by')
     await expect(openOrder.getByLabel(/Cancellation reason for order/)).toHaveCount(0)
     await openOrder.getByRole('button', { name: 'Cancel this order' }).click()
-    await openOrder.getByLabel(/Cancellation reason for order/).fill('Tablet unavailable')
-    await openOrder.getByRole('button', { name: 'Confirm cancellation' }).click()
-    await expect(page.getByText(/Nothing was transferred/)).toBeVisible()
+    const orderCancellation = page.getByRole('dialog', { name: 'Cancel order 104' })
+    await expect(orderCancellation).toBeVisible()
+    await orderCancellation.getByLabel(/Cancellation reason for order/).fill('Tablet unavailable')
+    await orderCancellation.getByRole('button', { name: 'Cancel order' }).click()
+    await expect(openOrder).toHaveCount(0)
+    await expect(page.getByText(/Nothing was transferred/)).toHaveCount(0)
 
     await page.getByRole('tab', { name: /Sync status/ }).click()
     await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()

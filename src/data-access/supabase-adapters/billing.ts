@@ -54,6 +54,7 @@ type BillReadRow = Tables<'bills'> & {
   bill_payments: Tables<'bill_payments'>[]
   order: { order_number: number } | { order_number: number }[] | null
   biller: { full_name: string } | { full_name: string }[] | null
+  voider: { id: string; full_name: string } | { id: string; full_name: string }[] | null
 }
 
 type EffectivePaymentRow = {
@@ -105,6 +106,7 @@ function billView(
   effective: readonly EffectivePaymentRow[] = [],
   paymentEditable = false,
 ): BillingBill {
+  const voider = joined(row.voider)
   const effectiveForBill = effective.filter((payment) => payment.bill_id === row.id)
   const payments =
     effectiveForBill.length > 0
@@ -149,6 +151,7 @@ function billView(
     totalPaise: row.total_paise,
     voidReason: row.void_reason,
     voidedAt: row.voided_at,
+    voidedBy: voider ? { id: voider.id, name: voider.full_name } : null,
   }
 }
 
@@ -468,7 +471,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('bills')
       .select(
-        '*, bill_items(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name)',
+        '*, bill_items(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name)',
       )
     if (filters.id) query = query.eq('id', filters.id)
     if (filters.outletId) query = query.eq('outlet_id', filters.outletId)
@@ -603,6 +606,7 @@ export function createSupabaseBillingAdapter(
           totalPaise: command.payload.totalPaise,
           voidReason: null,
           voidedAt: null,
+          voidedBy: null,
         })
         continue
       }
@@ -637,6 +641,7 @@ export function createSupabaseBillingAdapter(
             totalPaise: order.totalPaise,
             voidReason: null,
             voidedAt: null,
+            voidedBy: null,
           })
         }
         continue
@@ -890,6 +895,7 @@ export function createSupabaseBillingAdapter(
         totalPaise: totals.totalPaise,
         voidReason: null,
         voidedAt: null,
+        voidedBy: null,
       })
     },
 
@@ -1053,6 +1059,7 @@ export function createSupabaseBillingAdapter(
         totalPaise: existing.totalPaise,
         voidReason: null,
         voidedAt: null,
+        voidedBy: null,
       }
       localBillCache.set(localBill.id, localBill)
       return localBill
