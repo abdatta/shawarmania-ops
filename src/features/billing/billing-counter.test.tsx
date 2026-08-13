@@ -319,11 +319,17 @@ describe('BillingCounter', () => {
     const rail = await screen.findByTestId('counter-activity-rail')
     const openHeading = await within(rail).findByRole('heading', { name: 'Open orders' })
     const billsHeading = within(rail).getByRole('heading', { name: 'Bills this shift' })
+    expect(openHeading.parentElement?.nextElementSibling).toHaveClass('mt-2')
     expect(
       openHeading.compareDocumentPosition(billsHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
     expect(within(rail).getByTestId('shift-total-cash')).toHaveTextContent('Cash')
+    expect(within(rail).getByTestId('shift-total-cash')).toHaveClass('p-3')
     expect(within(rail).getByTestId('shift-total-upi')).toHaveTextContent('UPI')
+    expect(within(rail).queryByText("This tablet's unpaid orders.")).not.toBeInTheDocument()
+    expect(
+      within(rail).queryByText("Paid bills from this tablet's current shift only."),
+    ).not.toBeInTheDocument()
 
     const disclosure = rail.querySelector('details')
     expect(disclosure).not.toBeNull()

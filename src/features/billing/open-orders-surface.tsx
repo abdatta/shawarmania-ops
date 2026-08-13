@@ -31,13 +31,13 @@ export function OpenOrdersHeading({ embedded }: { embedded: boolean }) {
           Open orders
         </h3>
       ) : (
-        <h1 id="open-orders-title" className="text-2xl font-black text-content">
-          Open orders
-        </h1>
+        <>
+          <h1 id="open-orders-title" className="text-2xl font-black text-content">
+            Open orders
+          </h1>
+          <p className="text-sm text-content-muted">This tablet&rsquo;s unpaid orders.</p>
+        </>
       )}
-      <p className={embedded ? 'text-xs text-content-muted' : 'text-sm text-content-muted'}>
-        This tablet&rsquo;s unpaid orders.
-      </p>
     </div>
   )
 }

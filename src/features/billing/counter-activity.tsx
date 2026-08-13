@@ -32,14 +32,16 @@ export function CounterActivity({
     <>
       <OpenOrdersHeading embedded />
       {pin}
-      <OpenOrdersSurface
-        embedded
-        hideHeading
-        refreshKey={refreshKey}
-        editingOrderId={editingOrderId}
-        {...(onEditOrder ? { onEditOrder } : {})}
-        {...(onActivityChanged ? { onActivityChanged } : {})}
-      />
+      <div className="mt-2">
+        <OpenOrdersSurface
+          embedded
+          hideHeading
+          refreshKey={refreshKey}
+          editingOrderId={editingOrderId}
+          {...(onEditOrder ? { onEditOrder } : {})}
+          {...(onActivityChanged ? { onActivityChanged } : {})}
+        />
+      </div>
       <div className="my-4 border-t border-border" role="separator" />
       <MyShiftSurface
         embedded

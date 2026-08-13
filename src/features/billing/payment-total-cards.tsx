@@ -18,12 +18,12 @@ export function PaymentTotalCards({
   testIdPrefix: string
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-2 gap-2">
       {BILLING_PAYMENT_METHODS.map((paymentMethod) => (
         <div
           key={paymentMethod}
           data-testid={`${testIdPrefix}-${paymentMethod}`}
-          className="rounded-xl border border-border bg-surface p-4"
+          className="rounded-xl border border-border bg-surface p-3"
         >
           <p className="text-sm font-black uppercase text-content-muted">
             {methodLabel(paymentMethod)}
@@ -31,7 +31,7 @@ export function PaymentTotalCards({
           <Money
             paise={totals.find((total) => total.method === paymentMethod)?.totalPaise ?? 0}
             display
-            className="mt-2 block"
+            className="mt-1 block"
           />
         </div>
       ))}

@@ -50,7 +50,9 @@ describe('manager billing history status', () => {
     expect(within(screen.getByTestId('billing-total-upi')).getByText('UPI')).toBeVisible()
     const syncStatus = screen.getByRole('heading', { name: 'Tablet sync status' })
     expect(syncStatus).toBeVisible()
-    expect(paymentTotals.compareDocumentPosition(syncStatus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(
+      paymentTotals.compareDocumentPosition(syncStatus) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
     expect(within(screen.getByTestId('billing-total-upi')).getByText('₹1,772')).toBeVisible()
     expect(screen.queryByText('Bills rung')).not.toBeInTheDocument()
     expect(screen.queryByText('Drawer cash')).not.toBeInTheDocument()

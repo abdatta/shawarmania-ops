@@ -81,20 +81,22 @@ export function MyShiftSurface({
     )
 
   return (
-    <section className={embedded ? 'space-y-3' : 'space-y-5'} aria-labelledby="my-shift-title">
+    <section className={embedded ? 'space-y-2' : 'space-y-5'} aria-labelledby="my-shift-title">
       <div>
         {embedded ? (
           <h3 id="my-shift-title" className="text-sm font-black text-content">
             Bills this shift
           </h3>
         ) : (
-          <h1 id="my-shift-title" className="text-2xl font-black text-content">
-            My shift
-          </h1>
+          <>
+            <h1 id="my-shift-title" className="text-2xl font-black text-content">
+              My shift
+            </h1>
+            <p className="text-sm text-content-muted">
+              Paid bills from this tablet&rsquo;s current shift only.
+            </p>
+          </>
         )}
-        <p className={embedded ? 'text-xs text-content-muted' : 'text-sm text-content-muted'}>
-          Paid bills from this tablet&rsquo;s current shift only.
-        </p>
       </div>
       <PaymentTotalCards totals={history.totals} testIdPrefix="shift-total" />
       {message && (
