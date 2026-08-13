@@ -322,11 +322,11 @@ test.describe('the counter', () => {
     await expect(rail.getByText('Order 104', { exact: true })).toHaveCount(0)
   })
 
-  test('limits My shift and exposes originating-tablet correction', async ({ page }) => {
+  test('shows current-shift totals and exposes originating-tablet correction', async ({ page }) => {
     const rail = page.getByTestId('counter-activity-rail')
     await expect(rail.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
-    await expect(rail.getByTestId('shift-total-cash')).toHaveCount(0)
-    await expect(rail.getByTestId('shift-total-upi')).toHaveCount(0)
+    await expect(rail.getByTestId('shift-total-cash')).toBeVisible()
+    await expect(rail.getByTestId('shift-total-upi')).toBeVisible()
     await expect(rail.getByTestId('shift-total-swiggy')).toHaveCount(0)
     await expect(rail.getByTestId('shift-total-zomato')).toHaveCount(0)
     await expect(rail.getByText('Payment needs attention')).toBeVisible()
@@ -575,10 +575,11 @@ test.describe('manager billing history', () => {
     await expect(bills.nth(1)).toContainText('Cancelled')
     await expect(page.getByText(/Bill \d+ was cancelled/)).toHaveCount(0)
 
-    await page.getByRole('tab', { name: 'Totals' }).click()
+    await page.getByRole('tab', { name: 'Status' }).click()
     await expect(page.getByRole('heading', { name: 'Payment totals' })).toBeVisible()
     await expect(page.getByTestId('billing-total-cash')).toBeVisible()
     await expect(page.getByTestId('billing-total-upi')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
 
     await page.getByRole('tab', { name: /Open orders/ }).click()
     const openOrder = page.getByText(/Order 104/).locator('xpath=ancestor::li')
@@ -594,7 +595,7 @@ test.describe('manager billing history', () => {
     await expect(openOrder).toHaveCount(0)
     await expect(page.getByText(/Nothing was transferred/)).toHaveCount(0)
 
-    await page.getByRole('tab', { name: /Sync status/ }).click()
+    await page.getByRole('tab', { name: 'Status' }).click()
     await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
     await expect(page.getByText(/recent sync problem/i)).toBeVisible()
     await expect(page.getByText(/Reference [0-9a-f]+/)).toBeHidden()
