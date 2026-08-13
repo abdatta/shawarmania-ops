@@ -669,12 +669,12 @@ order or paid bill is accepted.
 My shift SHALL show paid bills belonging to this tablet's current shift. Each
 bill SHALL be collapsed by default and expand to immutable item names,
 quantities, captured unit prices, line totals, payment facts, total and
-optional customer snapshot. It SHALL NOT show other shifts, outlet-wide totals,
-or another outlet.
+optional customer snapshot. It SHALL NOT show other shifts or another outlet.
 
-The shared counter SHALL NOT show aggregate Cash or UPI payment totals. Those
-outlet-day aggregates belong in the manager's deliberately opened Billing
-History Totals view; the counter remains a bill activity surface.
+The shared counter SHALL show aggregate Cash and UPI payment totals for its
+current shift. The manager's Billing History Status view SHALL show the selected
+outlet-day Cash and UPI totals before its sync activity. Both scopes SHALL use
+the same total-card presentation.
 
 The list SHALL include locally accepted payments immediately and SHALL use each
 bill's latest effective allocation, including a durably accepted correction that
@@ -683,11 +683,13 @@ min)` or `Edit (N sec)` action without making any other bill fact editable.
 
 #### Scenario: Operator opens My shift
 - **WHEN** this tablet has bills from its shift and older outlet bills exist
-- **THEN** only the current shift's bills appear, with no aggregate Cash or UPI totals
+- **THEN** only the current shift's bills appear and its Cash and UPI aggregates
+  reflect only that shift
 
-#### Scenario: Manager opens payment totals
-- **WHEN** a manager opens the Billing History Totals view for an outlet day
-- **THEN** the Cash and UPI payment aggregates appear there rather than on the shared counter
+#### Scenario: Manager opens Status
+- **WHEN** a manager opens the Billing History Status view for an outlet day
+- **THEN** the outlet-day Cash and UPI payment aggregates appear before sync
+  activity and do not alter the counter's current-shift scope
 
 #### Scenario: Operator inspects a closed bill
 - **WHEN** the operator expands a bill in My shift or the combined tablet rail
@@ -695,7 +697,8 @@ min)` or `Edit (N sec)` action without making any other bill fact editable.
 
 #### Scenario: A tender correction changes shift cash
 - **WHEN** an eligible bill is corrected from Cash to UPI
-- **THEN** the same bill remains listed with its effective tender updated, without introducing aggregate payment totals to the shift rail
+- **THEN** the same bill remains listed and both current-shift and outlet-day
+  totals use its latest effective allocation
 
 ### Requirement: The counter is one three-column workspace at every width
 
