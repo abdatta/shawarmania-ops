@@ -9,6 +9,62 @@ recorded approval makes a day present, and an approval given away from the outle
 closed carries the approver's position and their written reason. These requirements bind what the
 schema records, what the geofence may and may not decide, and what every surface must show about it.
 ## Requirements
+### Requirement: A staff assignment, for attendance, is Employee or Biller
+
+Every requirement in this capability that turns on a **staff assignment** SHALL
+read that term as a live `employee` **or** `biller` assignment at the outlet in
+question. Attendance is recorded for the people whose arrival an outlet tracks,
+and somebody who works a shift on its counter tablet is one of them.
+
+This restates for attendance what `identity-and-access` already requires of the
+assignment itself: a live Biller assignment confers personal attendance and
+Employee surface capabilities at that outlet, and promoting an Employee to
+Biller leaves their attendance history unchanged. The term SHALL be stated as
+the roles it admits rather than as the roles it excludes, so that a role added
+to the enum later joins no outlet's attendance list until somebody decides that
+it should.
+
+A Franchise Admin or Super Admin assignment SHALL NOT by itself make its holder
+staff anywhere, and holding one alongside a staff assignment SHALL NOT take that
+staff assignment away.
+
+#### Scenario: A Biller is on the outlet's attendance day
+
+- **WHEN** a person holding a live Biller assignment and no Employee assignment
+  at an outlet is read on that outlet's attendance day, on a date they carry no
+  record
+- **THEN** they are listed as staff whose arrival is expected, on the same terms
+  as an Employee, and not as somebody off the staff list
+
+#### Scenario: A Biller is offered by the by-staff axis
+
+- **WHEN** a reader selects an outlet where a person holds a live Biller
+  assignment and reads by staff
+- **THEN** that person is offered, and their range reads on the same terms as an
+  Employee's
+
+#### Scenario: Promotion from Employee to Biller keeps the person on the list
+
+- **WHEN** an Employee is changed to Biller at the same outlet, ending the
+  Employee assignment on the day of the change
+- **THEN** they remain on that outlet's attendance day and in its by-staff axis
+  without interruption, and every day they worked under either assignment stays
+  listed and readable
+
+#### Scenario: A manager is still not staff
+
+- **WHEN** a person holding only a live Franchise Admin assignment at an outlet
+  is read on that outlet's attendance day
+- **THEN** they are not listed, and holding the manager assignment alongside a
+  Biller assignment at that outlet SHALL list them
+
+#### Scenario: A Biller accounted for elsewhere is not read as absent
+
+- **WHEN** a person holding a live Biller assignment at the reader's outlet
+  holds that day's attendance row at an outlet outside the reader's scope
+- **THEN** they read as working at another outlet, without the outlet being
+  named, and SHALL NOT read as absent or as not yet arrived
+
 ### Requirement: Attendance stores the evidence beside the verdict
 
 Every attendance row SHALL be able to record, for the check-in and for the
@@ -877,11 +933,12 @@ belongs to, and a person appearing at one of the selected outlets SHALL be liste
 once rather than once per outlet.
 
 **Who is listed is a question about staff.** The view SHALL list every person
-holding a live **staff** assignment at an outlet in scope, and SHALL NOT list a person
-merely because they hold a manager or counter assignment there: attendance is
-recorded for the people whose arrival the outlet tracks, and a manager or an
-owner is not one of them. A person holding a staff assignment alongside any other
-SHALL be listed, because their attendance is a real thing.
+holding a live **staff** assignment at an outlet in scope — an Employee or a
+Biller — and SHALL NOT list a person merely because they hold a manager
+assignment there: attendance is recorded for the people whose arrival the outlet
+tracks, and a manager or an owner is not one of them. A person holding a staff
+assignment alongside any other SHALL be listed, because their attendance is a
+real thing.
 
 The view SHALL additionally list any person carrying a recorded row on the day
 shown, whatever assignment they hold, so that every recorded day is visible and
@@ -962,6 +1019,13 @@ action SHALL offer nothing to open.
 - **WHEN** a person holds both a Franchise Admin and a staff assignment at the
   same outlet and that outlet's attendance day is opened
 - **THEN** they appear on the day like any other staff member
+
+#### Scenario: A Biller with no Employee assignment is on the roll-call
+
+- **WHEN** a person holds a live Biller assignment and no Employee assignment at
+  the outlet, and that outlet's attendance day is opened
+- **THEN** they are listed as staff, whether or not they carry a record on the
+  day, and are not marked as off the staff list
 
 #### Scenario: A recorded row is listed even for somebody off the staff list
 
