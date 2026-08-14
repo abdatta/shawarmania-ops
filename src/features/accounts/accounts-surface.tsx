@@ -18,6 +18,7 @@ import {
   DataActionError,
   FAILED_ACTIVATION_NOTICE,
   liveAssignments,
+  STAFF_ROLES,
   type AccountHandover,
   type AccountSummary,
   type AppRole,
@@ -71,8 +72,6 @@ type OrdinaryAssignment = Exclude<
 > & { outletId: string; role: Exclude<AppRole, 'super_admin'> }
 
 const ORDINARY_ROLES: Exclude<AppRole, 'super_admin'>[] = ['franchise_admin', 'biller', 'employee']
-
-const STAFF_ROLES: Exclude<AppRole, 'super_admin' | 'franchise_admin'>[] = ['biller', 'employee']
 
 function todayInIndia() {
   const parts = new Intl.DateTimeFormat('en-GB', {

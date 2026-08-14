@@ -1,4 +1,5 @@
 import {
+  isStaffRole,
   ManualLedgerActionError,
   type AppRole,
   type LedgerActor,
@@ -169,7 +170,7 @@ export function createMockManualLedgerAdapter(
 
   const isOwner = role === 'super_admin'
   const isManager = role === 'franchise_admin'
-  const isStaff = role === 'biller' || role === 'employee'
+  const isStaff = isStaffRole(role)
 
   function assignedAt(outletId: string): boolean {
     return assignedOutletIds.includes(outletId)

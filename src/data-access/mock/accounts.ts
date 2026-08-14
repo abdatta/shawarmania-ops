@@ -11,7 +11,12 @@ import type {
   NewAccount,
   StaffFactsPatch,
 } from '../adapters'
-import { AccountActionError, deriveAccountLifecycle, liveAssignments } from '../adapters'
+import {
+  AccountActionError,
+  deriveAccountLifecycle,
+  isStaffRole,
+  liveAssignments,
+} from '../adapters'
 import { canonicalUsername } from '../../../shared/username'
 import {
   accountFixtures,
@@ -198,7 +203,7 @@ export function createMockAccountsAdapter(
     if (
       complete.some(
         (assignment) =>
-          !['employee', 'biller'].includes(assignment.role) ||
+          !isStaffRole(assignment.role) ||
           assignment.outletId === null ||
           !managed.has(assignment.outletId),
       )

@@ -50,7 +50,18 @@ None.
 ## Impact
 
 - `src/data-access/adapters.ts` — `isStaffAt`, which the roll-call, the by-staff
-  picker, the lateness clock and the manual-entry outlet list all consult.
+  picker, the lateness clock and the manual-entry outlet list all consult, plus
+  the new `STAFF_ROLES` constant and `isStaffRole` predicate it now reads from.
+- Three further call sites collapse onto that constant, having each spelled the
+  same rule out separately: `src/features/accounts/accounts-surface.tsx` (the
+  roles a manager may hand out), `src/data-access/mock/accounts.ts` (the
+  assignments a manager may edit) and `src/data-access/mock/manual-ledger.ts`
+  (who may record against the ledger). All three already read Employee **and**
+  Biller, so no behaviour changes; what changes is that a fifth reader cannot
+  spell it a fifth way.
+- `src/data-access/staff-roles.test.ts` — new. The rule still lives in two
+  languages, so this is the one test that reads both and fails when they
+  disagree, which is the coverage neither side's own test could provide.
 - `supabase/migrations/` — one forward migration replacing
   `public.attendance_elsewhere`, whose staff-list check filters on
   `s.role = 'employee'`. Function body only: no policy, grant, column or data

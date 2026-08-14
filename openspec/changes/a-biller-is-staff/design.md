@@ -38,8 +38,8 @@ list" — which is a screen contradicting the assignment it is reading.
   blank.
 - The rule survives a fifth role being added to the enum without anybody
   revisiting it.
-- One statement of the rule, so the two implementations cannot drift apart
-  again.
+- One statement of the rule in the app, so the places that ask "which roles are
+  staff" cannot drift apart again.
 
 **Non-Goals:**
 
@@ -110,7 +110,70 @@ roll-call, because after this change the roll-call includes exactly that set.
 **No money arithmetic and no offline semantics** are involved. Attendance
 reads are online reads; nothing here enters the outbox.
 
-### D5. Fix the test that was green for the wrong reason
+### D5. One constant in the app, named `STAFF_ROLES`
+
+The sweep that found the two defects also found that the app asks "which roles
+are staff" in **four** places, in four spellings:
+
+| Where | How it read |
+| --- | --- |
+| `isStaffAt` in `data-access/adapters.ts` | `role === 'employee'` |
+| `STAFF_ROLES` in `features/accounts/accounts-surface.tsx` | `['biller', 'employee']` |
+| `assertWithinManagedOutlets` in `data-access/mock/accounts.ts` | `['employee', 'biller'].includes(...)` |
+| `isStaff` in `data-access/mock/manual-ledger.ts` | `role === 'biller' \|\| role === 'employee'` |
+
+Three of them were already right. The one that was a role short is the one this
+change exists to correct, and nothing would have made the others follow it.
+
+`STAFF_ROLES` and `isStaffRole` move to `data-access/adapters.ts`, which already
+owns `AppRole` and `ROLE_SENIORITY` and which all three other call sites already
+import from, so this adds no dependency edge. The order is seniority order, to
+match `ROLE_SENIORITY`, because the accounts surface renders the list directly
+as the roles a manager may hand out.
+
+**Rejected: leave the four as they are and rely on the spec definition (D3).**
+The spec is what settles *what the rule is*; it does nothing to stop the fourth
+reader spelling it out again from memory. This change is the evidence: the rule
+was already written in `identity-and-access` and one call site still got it
+wrong.
+
+### D6. A test that can see both sides
+
+D5 leaves the rule stated twice: `STAFF_ROLES` and the migration. D2 declined to
+collapse those into one, so something has to hold them together, and until now
+nothing did. **Two tests each proving their own side is not coverage of the
+agreement between them.** Both were green throughout the production bug, because
+neither could see the other.
+
+`src/data-access/staff-roles.test.ts` is the one test that reads both:
+
+- The **enum partition.** `Constants` in `database.types.ts` is generated from
+  the live schema by `npm run db:types`, so it is the database's own list of
+  roles, not a copy of one. The test asserts `STAFF_ROLES` plus the two
+  management roles is exactly that list. D1 chose to name the roles admitted
+  rather than those excluded, which is right, and which means a fifth role joins
+  nothing **silently**. This is what makes it speak: adding a role to the enum
+  fails this test until somebody decides which side it belongs on.
+- The **SQL predicate.** It reads the last migration to define
+  `attendance_elsewhere` and asserts its `s.role in (...)` names exactly
+  `STAFF_ROLES`.
+
+**Rejected: querying the live function definition instead of reading the file.**
+Truer, and it needs a raw Postgres client, which the repo does not have as a
+dependency and which would confine the check to the Docker-backed CI job. The
+file is what CI applies, so reading it answers the same question in the suite
+that runs everywhere.
+
+A textual read of SQL is blunt, so it is pointed at one clause and **fails when
+it cannot find that clause**. A predicate rewritten in another shape stops the
+test rather than quietly passing it. A guard that goes silent when the thing it
+guards moves is worse than no guard, because it reads as coverage.
+
+Both halves were proved by drift rather than assumed: narrowing the migration to
+`('employee')` fails the SQL half, and adding `franchise_admin` to `STAFF_ROLES`
+fails all three assertions.
+
+### D7. Fix the test that was green for the wrong reason
 
 `offers only staff in the by-person picker` asserts a manager and an owner are
 absent and an Employee present. It never mentions a Biller, so it passed
@@ -124,9 +187,11 @@ Kalyani, so the case costs one assertion.
   The alternative is the current screen, which lists them as "not on this
   outlet's staff list" on the days they *did* attend, which is worse: it
   contradicts their live assignment to the manager's face.
-- **The rule is now written in three places** (helper, migration, spec) → D3 is
-  the mitigation: the spec is the single statement, and both call sites are
-  pinned by tests that name a Biller explicitly.
+- **The rule is still written in two places** (the `STAFF_ROLES` constant and
+  the migration) → two is the floor while one of them is SQL, so D6 adds the
+  test that reads both and fails when they disagree. D5 collapses the app's four
+  spellings into one, D3 makes the spec the statement both sides answer to, and
+  each side is separately pinned by a test that names a Biller explicitly.
 - **The elsewhere answer mentions more people than before** → Bounded by the
   same staff-list scope it always had; that scope simply now matches the
   roll-call it exists to explain. Disclosure is unchanged: person ids only.
@@ -136,7 +201,8 @@ Kalyani, so the case costs one assertion.
 
 ## Migration Plan
 
-1. App change and its tests; the picker test tightened.
+1. App change and its tests; the picker test tightened; the four spellings
+   collapsed onto `STAFF_ROLES`.
 2. Forward migration replacing `attendance_elsewhere`, plus a Biller case in the
    pgTAP elsewhere coverage.
 3. CI gates the migration and the publish as usual.

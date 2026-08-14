@@ -16,6 +16,7 @@ import {
   OUTLET_KALYANI_ID,
   OUTLET_KANCHRAPARA_ID,
 } from '@/data-access/mock'
+import { DEMO_MORNING_BILLER_ID } from '@/data-access/mock/fixtures/billing'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
@@ -1104,10 +1105,25 @@ describe('the roll-call is the outlet’s staff', () => {
       .getAllByRole('option')
       .map((option) => option.textContent)
     expect(names).toContain('Demo Griller')
+    // A biller works a shift at the shop and therefore turns up to it, so their
+    // range reads on the same terms as any other staff member's. Asserting only
+    // the exclusions left this green throughout the bug that hid them.
+    expect(names).toContain('Demo Morning Biller')
     // A range of days for somebody whose days are not tracked is a pattern of
     // nothing (design D5).
     expect(names).not.toContain('Demo Manager')
     expect(names).not.toContain('Demo Owner')
+  })
+
+  it('lists a biller who holds no staff assignment besides the counter', async () => {
+    renderDay()
+
+    // Demo Morning Biller works Kalyani's counter and holds no employee
+    // assignment anywhere. Their arrival is tracked like anybody else's.
+    const card = await screen.findByTestId(`day-${DEMO_MORNING_BILLER_ID}`)
+    expect(within(card).getByRole('heading')).toHaveTextContent('Demo Morning Biller')
+    // On the list, so nothing calls them a stranger to it.
+    expect(within(card).queryByText(/not on this outlet’s staff list/)).not.toBeInTheDocument()
   })
 })
 

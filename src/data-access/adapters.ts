@@ -328,6 +328,36 @@ export type StaffFactsPatch = Partial<{
 }>
 
 /**
+ * The roles that make somebody **staff**: a person who works a shift at a shop,
+ * as against a person who manages or owns one (a-biller-is-staff, design D5).
+ *
+ * A Biller is on this list because a Biller works a shift at the shop and
+ * therefore turns up to it. `identity-and-access` requires their assignment to
+ * confer personal attendance, and `attendance_submit_attempt` has always
+ * accepted either role.
+ *
+ * One list, because the same question is asked in four places: who is on an
+ * outlet's attendance roll-call, which roles a manager may hand out, which
+ * assignments a manager may edit, and who may record against the manual ledger.
+ * They were four separate spellings of it and one of them was a role short,
+ * which is the bug this change exists to correct. A rule worth stating once is
+ * worth storing once.
+ *
+ * Ordered by seniority to match `ROLE_SENIORITY`, since the accounts surface
+ * renders it directly as the roles on offer.
+ *
+ * Stated as the roles it admits rather than as the roles it excludes, so a role
+ * added to the enum joins nothing until somebody decides that it should
+ * (design D1).
+ */
+export const STAFF_ROLES = ['biller', 'employee'] as const satisfies readonly AppRole[]
+
+/** Does this role make its holder staff at the outlet it is held at? */
+export function isStaffRole(role: AppRole): boolean {
+  return (STAFF_ROLES as readonly AppRole[]).includes(role)
+}
+
+/**
  * Is this person **staff** at this outlet — somebody whose arrival the outlet
  * tracks (owner-reaches-every-outlet, design D3)?
  *
@@ -342,8 +372,10 @@ export type StaffFactsPatch = Partial<{
  * through that assignment, which is exactly the case where their attendance is a
  * real thing.
  *
- * Stated as a rule rather than as a list of roles that are not staff, so a role
- * added to the enum does not silently join the roll-call.
+ * A **staff assignment is an Employee or a Biller one**, which is `STAFF_ROLES`
+ * above. This read of it named Employee alone, so a person promoted from
+ * Employee to Biller left the roll-call and the by-staff picker on the day of
+ * the promotion (a-biller-is-staff).
  *
  * The people surfaces ask no such question: what they may see is decided by the
  * policies, and a manager belongs on their outlet's people list whether or not
@@ -351,7 +383,7 @@ export type StaffFactsPatch = Partial<{
  */
 export function isStaffAt(account: Pick<AccountSummary, 'assignments'>, outletId: string): boolean {
   return liveAssignments(account.assignments).some(
-    (a) => a.outletId === outletId && a.role === 'employee',
+    (a) => a.outletId === outletId && isStaffRole(a.role),
   )
 }
 

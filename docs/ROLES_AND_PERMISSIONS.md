@@ -169,7 +169,12 @@ today, deliberately — see [Limitations](LIMITATIONS.md).
 **Deleting an outlet is the only delete anybody has.** Every other record in the system is voided, deactivated or corrected — the database grants `DELETE` to no client role on any other table. The exception is bounded by a precondition Postgres enforces rather than the screen: an outlet goes only while nothing anywhere references it, so one that ever traded cannot be deleted at all. It is for a shop created by mistake, and the app offers it only after the outlet is marked closed, so the reversible action always comes first.
 
 **Attendance is recorded for staff, and a manager is not staff.** An outlet's
-attendance day lists the people holding a live Employee assignment there, so a
+attendance day lists the people holding a live **Employee or Biller** assignment
+there. A Biller counts because a Biller works a shift at the shop and therefore
+turns up to it: their assignment already confers personal attendance, and
+`attendance_submit_attempt` has always accepted either role, so listing Employees
+alone made a person promoted from Employee to Biller vanish from the day they
+were promoted. A
 Franchise Admin or Super Admin appears only when they hold one too — which is
 exactly the case where their attendance is a real thing. Nobody records a
 manager's arrival, and a roll-call that listed them was a list to read past. The
@@ -430,7 +435,7 @@ There is no Super Admin fallback and no session-scoped "acting as" anything. The
 
 **Reading one person's days spans every outlet the reader may see, and the database decides which those are** (`attendance-one-day-per-person`, #29). The by-staff read names no outlet at all: a Franchise Admin holding one assignment reads that outlet, one holding two reads exactly those two, and the Super Admin reads all of them — resolved by policy from live assignments, never from anything the request states. A hand-crafted request naming a third outlet returns nothing, which is asserted in `supabase/tests/18_attendance_elsewhere.sql` rather than assumed. This reverses #22's decision to pin an explicit outlet on that read: that was right while the intended meaning was one outlet, and the intended meaning is now exactly the set the policy already computes.
 
-**One bit crosses the outlet boundary, and it is the only one.** Because a person holds one attendance row per business date wherever it was worked, a Franchise Admin whose staff member went to the other shop sees no row at all — and, left alone, would derive *absent* for a day that person was paid for. `attendance_elsewhere(outlets, date)` answers which people **on their own outlets' staff lists** are accounted for somewhere outside their scope. Person ids and nothing else: not which outlet, not the time, not the status, not the evidence, not the approver, not whether it was approved. The surface renders it as *working at another outlet* with no outlet named, and the underlying row stays refused. See [Security And Privacy](SECURITY_AND_PRIVACY.md).
+**One bit crosses the outlet boundary, and it is the only one.** Because a person holds one attendance row per business date wherever it was worked, a Franchise Admin whose staff member went to the other shop sees no row at all — and, left alone, would derive *absent* for a day that person was paid for. `attendance_elsewhere(outlets, date)` answers which people **on their own outlets' staff lists** — a live Employee or Biller assignment there, the same list the roll-call is drawn from — are accounted for somewhere outside their scope. Person ids and nothing else: not which outlet, not the time, not the status, not the evidence, not the approver, not whether it was approved. The surface renders it as *working at another outlet* with no outlet named, and the underlying row stays refused. See [Security And Privacy](SECURITY_AND_PRIVACY.md).
 
 Retry history preserves the same boundary. A manager who denied the earlier
 Kalyani attempt may continue to read that local attempt and their own decision,

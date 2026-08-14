@@ -56,6 +56,7 @@ $$;
 \set FA_KAL '10000000-0000-4000-a000-000000000002'
 \set FA_KPA '10000000-0000-4000-a000-000000000003'
 \set STAFF_KAL '10000000-0000-4000-a000-000000000006'
+\set BILLER_KPA '10000000-0000-4000-a000-00000000000b'
 \set BOTH '10000000-0000-4000-a000-00000000000e'
 \set KAL '00000000-0000-4000-a000-000000000001'
 \set KPA '00000000-0000-4000-a000-000000000002'
@@ -84,6 +85,17 @@ values (:'THIRD', :'BOTH', current_date - 3, 'present',
         ((current_date - 3) + time '10:00') at time zone 'Asia/Kolkata',
         22.76005, 88.37004, 14, 'phone');
 
+-- Kanchrapara's Biller, who holds no Employee assignment anywhere, working a day
+-- at that same third outlet. A Biller is staff at the outlet they bill for, so
+-- their manager is owed the same fact about them as about anybody else on the
+-- list; the function read `employee` alone and told them nothing.
+insert into public.attendance
+  (outlet_id, person_id, business_date, status,
+   check_in_at, check_in_lat, check_in_lng, check_in_accuracy_m, check_in_source)
+values (:'THIRD', :'BILLER_KPA', current_date - 3, 'present',
+        ((current_date - 3) + time '09:30') at time zone 'Asia/Kolkata',
+        22.76006, 88.37003, 12, 'phone');
+
 -- The premise, asserted rather than assumed. The seed gives this person one day
 -- at Kalyani and one at Kanchrapara, on different dates.
 select is(
@@ -98,6 +110,19 @@ select is(
       and outlet_id = :'KPA'),
   0::bigint,
   'setup: and hold no row at Kanchrapara that day');
+
+select is(
+  (select string_agg(role::text, ', ' order by role::text)
+     from public.assignments
+    where person_id = :'BILLER_KPA' and ended_on is null),
+  'biller',
+  'setup: Kanchrapara''s Biller is staff there by that assignment alone');
+select is(
+  (select count(*) from public.attendance
+    where person_id = :'BILLER_KPA' and business_date = current_date - 3
+      and outlet_id = :'KPA'),
+  0::bigint,
+  'setup: and hold no Kanchrapara row on the day they worked elsewhere');
 
 -- ---------------------------------------------------------------------------
 -- 1. The manager who cannot see the row learns that there is one.
@@ -119,6 +144,12 @@ select is(
   (select count(*) from public.attendance where outlet_id = :'KAL'),
   0::bigint,
   'and no Kalyani row is readable by any shape of request');
+
+-- A Biller on that list is on it on the same terms. Without this the manager
+-- reads an unexplained blank for somebody who was at work, which is the false
+-- statement the whole function exists to prevent.
+select ok(pg_temp.names(array[:'KPA']::uuid[], current_date - 3, :'BILLER_KPA'::uuid),
+  'a Biller on their staff list is accounted for elsewhere like any other staff');
 
 -- Somebody who is not on their staff list is not somebody this says anything
 -- about, however many rows that person holds at the other outlet.
