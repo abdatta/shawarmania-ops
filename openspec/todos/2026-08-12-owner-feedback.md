@@ -9,7 +9,8 @@ planned.
 
 Items remain ranked roughly smallest-to-largest by original scope, not by
 priority. **Graduated** means the standalone todo was removed only after its
-work was captured in a change or completed; it remains listed here for history.
+work was captured in a change, completed, or deliberately dropped; it remains
+listed here for history either way.
 
 | # | Item | Area | Size | Status |
 | --- | --- | --- | --- | --- |
@@ -19,7 +20,7 @@ work was captured in a change or completed; it remains listed here for history.
 | 4 | Promoting a Staff Member Can Accidentally Lock Them Out | Staff / Roles | M | **Implemented — [#40](../changes/account-lifecycle-truth-and-safe-transitions/proposal.md), awaiting archive** |
 | 5 | [The App Asks for a Code Before Checking If the Person Is Even Allowed](./code-request-before-eligibility-check.md) | Counter / Billing | L | Open |
 | 6 | [Marking a Bill "Paid" Removes It From the Kitchen List Too Soon](./paid-removes-order-from-kitchen-too-soon.md) | Billing | XL | Open |
-| 7 | The Owner Can't See the Real Billing Counter From Home | Owner console / Demo | XL | **Seeded — [#39](../changes/counter-seen-and-practised/proposal.md); reporting delivered in #10** |
+| 7 | The Owner Can't See the Real Billing Counter From Home | Owner console / Demo | XL | **Reporting delivered in #10; the rest dropped on 14 Aug 2026** |
 
 ## Graduated
 
@@ -54,11 +55,21 @@ implementation is complete and awaiting archive.
 
 ### 7. The Owner Can't See the Real Billing Counter From Home
 
-The live-shift visibility portion shipped in `billing-live` (#10). Opening and
-practising on a copy of the biller workspace is
-[#39 `counter-seen-and-practised`](../changes/counter-seen-and-practised/proposal.md),
-seeded in Wave E. That proposal records the owner's decisions that practice is
-Super Admin only and uses real data already visible to that role.
+The live-shift visibility portion shipped in `billing-live` (#10): the Tablets
+card reports the shift, who holds it and that shift's figures, scoped by the
+reader's own outlets. That is the half the owner actually asked for, and it is
+done.
+
+The other half — mounting the biller's own workspace somewhere else to look at,
+and a Super Admin practice copy of it — was seeded as `counter-seen-and-practised`
+and **dropped on 14 Aug 2026 by owner decision**. Its change folder and roadmap
+row are deleted. Nothing about it is planned, and it should not be reseeded
+without a fresh reason: it was a refactor of the counter under a counter that is
+now taking real money, for a want the shift figures largely answer.
+
+One thing it noticed stays true and stays unfixed: the demo's billing shell and
+the tablet's are two compositions of the same columns, which is why one has
+Finish day and the other never did.
 
 ## Remaining items
 
