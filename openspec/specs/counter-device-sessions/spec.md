@@ -23,9 +23,16 @@ softened.
 An authorised admin SHALL generate a single-use setup code for one outlet: a
 Franchise Admin only for an outlet they manage, a Super Admin for any active
 outlet. The code SHALL be stored only as a hash, be readable by no client role,
-expire, and be consumed by its first successful use. Entering it on the tablet
-SHALL create the device session. No account password SHALL be accepted on a
-tablet at setup or at any time afterwards.
+expire, and be consumed by its first successful use. An unconfigured tablet
+SHALL offer a clearly labelled in-app route from the signed-out front door to
+the setup form. Entering the code on that tablet SHALL create the device
+session. No account password SHALL be accepted on a tablet at setup or at any
+time afterwards.
+
+#### Scenario: An unconfigured installed tablet reaches setup
+- **WHEN** the signed-out app opens on an unconfigured counter tablet
+- **THEN** its sign-in screen offers a clearly labelled link to the setup form,
+  without asking the tablet for a personal account password
 
 #### Scenario: Manager sets up their outlet tablet
 - **WHEN** an FA generates a setup code on their own phone and it is entered on the counter tablet, and no active tablet exists for that outlet
