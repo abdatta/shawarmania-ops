@@ -111,14 +111,30 @@ explicit finite set the manager constructed person by person.
 ### Rows that are not on the outlet's staff list are selectable too
 
 The roll-call shows waiting rows for people who are not on the outlet's current
-staff list, because the list is built from live employee assignments while the
-rows are permanent. It happens when an assignment ends after a check-in, and it
-happens for anyone holding only a biller assignment, since the database permits
-a biller to check in while the roll-call counts employee assignments only.
+staff list, because the list is built from live staff assignments while the rows
+are permanent. It happens when an assignment ends after a check-in, and whenever
+somebody carries a recorded row at an outlet they hold no staff assignment at.
+
+`a-biller-is-staff` settled who is on that list and requires the view to list
+anybody carrying a recorded row on the day whatever assignment they hold, so
+that every count computed from rows can be settled. Its scenario states that
+such a waiting row can be approved from the view.
 
 Those rows count towards the waiting badge, so excluding them from selection
 would leave work a manager could only clear one row at a time. They are
 selectable on exactly the same terms as any other waiting row.
+
+### Selecting a row and opening it are different acts
+
+The roll-call now opens each row onto its detail, keeps waiting rows open when
+the view opens, treats openness as the reader's own state, and does not close a
+row when it settles. Selection mode must not fight that.
+
+Selection is therefore its own control on the row rather than a meaning loaded
+onto tapping the row body. Tapping the body opens and closes the row as it does
+today, in selection mode and out of it, so a manager can still read the evidence
+for somebody they are deciding about without losing or accidentally changing the
+set they have built.
 
 ### One reading, judged independently for every selected row
 
@@ -341,11 +357,13 @@ None.
   replacing today's per-row loop; matching Supabase and mock semantics; stable
   client-generated identities that survive a retry; typed stale/conflict errors;
   and one post-success attention invalidation.
-- **UI:** roll-call selection mode, row selection state, sticky batch action bar,
-  retained per-row actions, multi-outlet approval partition summary, shared
-  reason sheet, the confirmation naming selected people, batch denial retry
-  wording that names the date, selection-preserving refusal handling, and a
-  reshaped attendance shimmer if selection changes the reserved row geometry.
+- **UI:** roll-call selection mode carried on its own row control rather than on
+  the row body, so opening a row and selecting it stay separate acts; row
+  selection state, sticky batch action bar, retained per-row actions, multi-outlet
+  approval partition summary, shared reason sheet, the confirmation naming
+  selected people, batch denial retry wording that names the date,
+  selection-preserving refusal handling, and a reshaped attendance shimmer if
+  selection changes the reserved row geometry.
 - **Location and privacy:** one fresh approval reading fanned out as evidence to
   the explicit selected decisions, no location on denial, no background read, no
   cached reading, and no additional categories of monitoring data.
@@ -358,6 +376,13 @@ None.
   the four-role demo walkthrough, real auth role landings, phone/tablet
   viewports, light and dark themes, contrast, and the complete CI suite because
   this changes a live attendance command and role-index surface.
+- **Every position-dependent rule is proved by emulated position, not by hand.**
+  On site, away from every outlet, inside one fence and outside another, and no
+  position at all are all driven through Playwright's own geolocation emulation,
+  which exercises the same `navigator.geolocation` path a phone takes. One
+  reading per action, and none at all for a denial, are proved by counting reads
+  at the single module that touches that API. This change leaves no checkpoint
+  that can only be closed on real hardware.
 
 ## Docs to update before archive
 
