@@ -182,31 +182,49 @@ describe('hand-crafted attendance commands', () => {
     expect(local?.current_attempt_id).toBeTruthy()
     expect(other?.current_attempt_id).toBeTruthy()
 
-    const blank = await manager.rpc('attendance_deny_attempt', {
-      p_attendance_id: local!.id,
-      p_decision_id: crypto.randomUUID(),
-      p_expected_attempt_id: local!.current_attempt_id!,
-      p_expected_version: local!.state_version,
+    const blank = await manager.rpc('attendance_decide_set', {
+      p_command_id: crypto.randomUUID(),
+      p_action: 'deny',
+      p_items: [
+        {
+          attendance_id: local!.id,
+          attempt_id: local!.current_attempt_id!,
+          expected_version: local!.state_version,
+          decision_id: crypto.randomUUID(),
+        },
+      ],
       p_reason: '   ',
       p_prevent_retry: false,
     })
     expect(blank.error?.message).toMatch(/reason/i)
 
-    const stale = await manager.rpc('attendance_deny_attempt', {
-      p_attendance_id: local!.id,
-      p_decision_id: crypto.randomUUID(),
-      p_expected_attempt_id: local!.current_attempt_id!,
-      p_expected_version: local!.state_version + 99,
+    const stale = await manager.rpc('attendance_decide_set', {
+      p_command_id: crypto.randomUUID(),
+      p_action: 'deny',
+      p_items: [
+        {
+          attendance_id: local!.id,
+          attempt_id: local!.current_attempt_id!,
+          expected_version: local!.state_version + 99,
+          decision_id: crypto.randomUUID(),
+        },
+      ],
       p_reason: 'Hand-crafted stale request',
       p_prevent_retry: false,
     })
     expect(stale.error?.message).toMatch(/stale|changed/i)
 
-    const crossOutlet = await manager.rpc('attendance_deny_attempt', {
-      p_attendance_id: other!.id,
-      p_decision_id: crypto.randomUUID(),
-      p_expected_attempt_id: other!.current_attempt_id!,
-      p_expected_version: other!.state_version,
+    const crossOutlet = await manager.rpc('attendance_decide_set', {
+      p_command_id: crypto.randomUUID(),
+      p_action: 'deny',
+      p_items: [
+        {
+          attendance_id: other!.id,
+          attempt_id: other!.current_attempt_id!,
+          expected_version: other!.state_version,
+          decision_id: crypto.randomUUID(),
+        },
+      ],
       p_reason: 'Trying to decide another outlet',
       p_prevent_retry: false,
     })
@@ -242,15 +260,22 @@ describe('hand-crafted attendance commands', () => {
     })
     expect(forged.error).not.toBeNull()
 
-    const selfApproval = await employee.rpc('attendance_approve_attempt', {
-      p_attendance_id: current!.id,
-      p_decision_id: crypto.randomUUID(),
-      p_expected_attempt_id: current!.current_attempt_id!,
-      p_expected_version: current!.state_version,
+    const selfApproval = await employee.rpc('attendance_decide_set', {
+      p_command_id: crypto.randomUUID(),
+      p_action: 'approve',
+      p_items: [
+        {
+          attendance_id: current!.id,
+          attempt_id: current!.current_attempt_id!,
+          expected_version: current!.state_version,
+          decision_id: crypto.randomUUID(),
+        },
+      ],
+      p_reason: 'Forged self approval',
+      p_prevent_retry: false,
       p_manager_lat: 22.97505,
       p_manager_lng: 88.4346,
       p_manager_accuracy_m: 12,
-      p_reason: 'Forged self approval',
     })
     expect(selfApproval.error?.message).toMatch(/not permitted|manager|authority/i)
   })

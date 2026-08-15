@@ -331,16 +331,27 @@ describe('the check-in the whole chain existed for', () => {
     // or closing a shop would silently cost somebody a day's pay. The outlet was
     // never surveyed here, so the approver's position can vouch for nobody and
     // the rule wants a reason.
-    const [settled] = await attendance.approve([day!.id], {
-      reason: 'Worked the shift before we closed the shop (setup suite)',
-      reading: {
-        latitude: 22.975,
-        longitude: 88.4345,
-        accuracyMetres: 15,
-        at: new Date().toISOString(),
+    const [settled] = await attendance.approve(
+      [
+        {
+          attendanceId: day!.id,
+          expectedAttemptId: day!.currentAttemptId as string,
+          expectedVersion: day!.stateVersion,
+          decisionId: crypto.randomUUID(),
+        },
+      ],
+      {
+        commandId: crypto.randomUUID(),
+        reason: 'Worked the shift before we closed the shop (setup suite)',
+        reading: {
+          latitude: 22.975,
+          longitude: 88.4345,
+          accuracyMetres: 15,
+          at: new Date().toISOString(),
+        },
+        approverId: managerProfileId,
       },
-      approverId: managerProfileId,
-    })
+    )
 
     expect(settled?.approval).not.toBeNull()
     expect(settled?.status).toBe('present')

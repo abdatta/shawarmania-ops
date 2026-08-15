@@ -38,20 +38,24 @@ $q$, 'P0001', 'attempt id was reused with a changed payload', 'changed-payload U
 -- Denial records absence and no manager GPS; retry remains open by default.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
 select throws_ok($q$
-  select public.attendance_deny_attempt(
-    '88000000-0000-4000-a000-000000000001',
-    (select id from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000001'),
-    '87000000-0000-4000-a000-000000000001',
-    (select state_version from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000001'),
-    '   ', false)
+  select * from public.attendance_decide_set(
+    '88000000-0000-4000-a000-0000000000c1', 'deny',
+    jsonb_build_array(jsonb_build_object(
+      'attendance_id', (select id from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000001'),
+      'attempt_id', '87000000-0000-4000-a000-000000000001',
+      'expected_version', (select state_version from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000001'),
+      'decision_id', '88000000-0000-4000-a000-000000000001')),
+    '   ', false, null, null, null)
 $q$, 'P0001', 'a denial requires a reason', 'blank denial is refused');
 select lives_ok($q$
-  select public.attendance_deny_attempt(
-    '88000000-0000-4000-a000-000000000001',
-    (select id from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000001'),
-    '87000000-0000-4000-a000-000000000001',
-    (select state_version from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000001'),
-    'Not at outlet', false)
+  select * from public.attendance_decide_set(
+    '88000000-0000-4000-a000-0000000000c2', 'deny',
+    jsonb_build_array(jsonb_build_object(
+      'attendance_id', (select id from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000001'),
+      'attempt_id', '87000000-0000-4000-a000-000000000001',
+      'expected_version', (select state_version from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000001'),
+      'decision_id', '88000000-0000-4000-a000-000000000001')),
+    'Not at outlet', false, null, null, null)
 $q$, 'the Kalyani manager denies without preventing retry');
 select is((select status from public.attendance where outcome_attempt_id = '87000000-0000-4000-a000-000000000001'),
   'absent'::public.attendance_status, 'denial conclusively marks the day absent');
@@ -82,21 +86,27 @@ select is((select count(*) from public.attendance_attempts where person_id = '10
 select is((select count(*) from public.attendance_decisions where person_id = '10000000-0000-4000-a000-00000000000e' and business_date = public.app_business_date(now(), time '04:00')),
   1::bigint, 'the former manager sees only their local decision');
 select throws_ok($q$
-  select public.attendance_deny_attempt(
-    '88000000-0000-4000-a000-000000000002',
-    (select attendance_id from public.attendance_attempts where id = '87000000-0000-4000-a000-000000000001'),
-    '87000000-0000-4000-a000-000000000002', 3, 'Wrong shop', false)
+  select * from public.attendance_decide_set(
+    '88000000-0000-4000-a000-0000000000c3', 'deny',
+    jsonb_build_array(jsonb_build_object(
+      'attendance_id', (select attendance_id from public.attendance_attempts where id = '87000000-0000-4000-a000-000000000001'),
+      'attempt_id', '87000000-0000-4000-a000-000000000002',
+      'expected_version', 3,
+      'decision_id', '88000000-0000-4000-a000-000000000002')),
+    'Wrong shop', false, null, null, null)
 $q$, '42501', null, 'the former manager cannot decide the new outlet attempt');
 
 -- Current manager prevents retry, then explicitly reopens it with an audited correction.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000003');
 select lives_ok($q$
-  select public.attendance_deny_attempt(
-    '88000000-0000-4000-a000-000000000003',
-    (select id from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000002'),
-    '87000000-0000-4000-a000-000000000002',
-    (select state_version from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000002'),
-    'Could not verify arrival', true)
+  select * from public.attendance_decide_set(
+    '88000000-0000-4000-a000-0000000000c4', 'deny',
+    jsonb_build_array(jsonb_build_object(
+      'attendance_id', (select id from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000002'),
+      'attempt_id', '87000000-0000-4000-a000-000000000002',
+      'expected_version', (select state_version from public.attendance where current_attempt_id = '87000000-0000-4000-a000-000000000002'),
+      'decision_id', '88000000-0000-4000-a000-000000000003')),
+    'Could not verify arrival', true, null, null, null)
 $q$, 'the current manager denies and prevents retry');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000e');

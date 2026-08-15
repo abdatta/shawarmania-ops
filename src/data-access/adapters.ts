@@ -678,12 +678,36 @@ export interface ManualEntryInput {
 }
 
 /**
+ * One person in a selected set, named with everything the database needs to
+ * decide them without re-reading the day.
+ *
+ * The attempt and the version are the whole of the staleness contract: a retry,
+ * another manager's decision or an assignment change moves one of them, and the
+ * command then refuses the set rather than settling a row nobody looked at.
+ *
+ * **The decision id is generated once by the caller and reused unchanged on
+ * retry.** That is what makes a lost response harmless: the same identity with
+ * the same payload settles the rows once and returns them, and the same identity
+ * with anything changed is refused. The adapter used to mint one inside its own
+ * loop, so a retry created new identities and a partial failure left a morning
+ * half settled with nothing saying which half.
+ */
+export interface AttendanceDecisionItem {
+  attendanceId: string
+  expectedAttemptId: string
+  expectedVersion: number
+  decisionId: string
+}
+
+/**
  * What one approval action carries, whether it settles one day or a morning's
- * worth. One position reading and one reason cover the batch: the manager is
+ * worth. One position reading and one reason cover the set: the manager is
  * standing in one place making one decision, and the database computes each
- * row's distance from that reading independently.
+ * row's distance to its own outlet from that one reading independently.
  */
 export interface ApprovalInput {
+  /** The action's own identity, shared by every decision it writes. */
+  commandId: string
   /**
    * Null unless the rule requires one. Callers should send what the manager
    * typed and let the database refuse a missing one — the rule is enforced
@@ -699,13 +723,15 @@ export interface ApprovalInput {
   approverId: string
 }
 
+/**
+ * Denial takes the same set shape as approval, and deliberately carries no
+ * position: it says the attempts should not count, not that the manager stood
+ * anywhere.
+ */
 export interface DenialInput {
-  attendanceId: string
-  expectedAttemptId: string
-  expectedVersion: number
+  commandId: string
   reason: string
   preventRetry: boolean
-  decisionId?: string
 }
 
 export type AttendanceCorrectionAction =
@@ -745,6 +771,21 @@ export class AttendanceActionError extends DataActionError {
     super(code, message)
     this.name = 'AttendanceActionError'
   }
+}
+
+/**
+ * A refused set settled nothing, so the manager's selection is still worth
+ * something — the surface re-reads the day, keeps every row that has not moved,
+ * and names the ones that have.
+ *
+ * A code rather than a message, because a surface that decided this by matching
+ * on prose would break the first time the prose was reworded, and the codes are
+ * what the adapter already promises.
+ */
+const RECOVERABLE_REFUSALS = new Set(['stale_state', 'changed_request', 'not_permitted'])
+
+export function isRecoverableSetRefusal(cause: unknown): cause is AttendanceActionError {
+  return cause instanceof AttendanceActionError && RECOVERABLE_REFUSALS.has(cause.code)
 }
 
 export interface AttendanceAdapter {
@@ -813,16 +854,27 @@ export interface AttendanceAdapter {
    */
   recordManualEntry(input: ManualEntryInput): Promise<AttendanceRecord>
   /**
-   * Settle one waiting day, or every one of them, in a single statement — so a
-   * partial failure cannot leave half a morning approved with nothing on screen
-   * saying which half (design D8).
+   * Settle an explicitly selected set of waiting days in **one** database
+   * command, so a partial failure cannot leave half a morning approved with
+   * nothing on screen saying which half (attendance-batch-decisions, design D1).
    *
-   * Returns the settled rows. The database decides whether the reason was
-   * needed and refuses the batch if it was and none was given.
+   * A set of one is the ordinary case and takes the same path, which is what
+   * keeps the reason rule, the evidence rule, the authority rule and the device
+   * rule to one implementation rather than two.
+   *
+   * Returns every settled row. The database decides per row whether the reason
+   * was required, stores it only there, and refuses the whole set if a row
+   * required one and none was given.
    */
-  approve(attendanceIds: readonly string[], input: ApprovalInput): Promise<AttendanceRecord[]>
-  /** Denial is always reasoned and never captures manager location. */
-  deny(input: DenialInput): Promise<AttendanceRecord>
+  approve(
+    items: readonly AttendanceDecisionItem[],
+    input: ApprovalInput,
+  ): Promise<AttendanceRecord[]>
+  /**
+   * The same set shape, always reasoned, never capturing manager location, with
+   * one retry choice applying to every selected person's own business date.
+   */
+  deny(items: readonly AttendanceDecisionItem[], input: DenialInput): Promise<AttendanceRecord[]>
   /** Append a reasoned correction without replacing employee evidence. */
   correct(input: AttendanceCorrectionInput): Promise<AttendanceRecord>
 }

@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DataAdapters, WaitingCount } from '@/data-access/adapters'
+import { AttendanceActionError } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { resolveBusinessDate } from '@/domain'
 import {
@@ -427,16 +428,256 @@ describe('the outlet attendance day', () => {
     expect(approve).not.toHaveBeenCalled()
   })
 
-  it('offers no way to settle more than one day at once', async () => {
+  it('offers no control that adds more than one person to a set, by any name', async () => {
+    const user = userEvent.setup()
     renderDay()
+    await screen.findByTestId('attendance-day')
 
     // The count still tells a manager there is work waiting. What is deliberately
-    // gone is the single button that would clear it without looking at it: an
-    // approval is meant to be the moment somebody remembers this person turning
-    // up for this shift (design D8).
-    expect(await screen.findByTestId('day-waiting')).toBeInTheDocument()
+    // absent is anything that would clear it without looking at it: an approval
+    // is meant to be the moment somebody remembers this person turning up for
+    // this shift. Ten people means ten taps to select and one tap to act.
+    expect(screen.getByTestId('day-waiting')).toBeInTheDocument()
+    await user.click(screen.getByTestId('toggle-selecting'))
+
+    for (const name of [
+      /approve all/i,
+      /deny all/i,
+      /select all/i,
+      /select everyone/i,
+      /select the rest/i,
+      /select remaining/i,
+      /all waiting/i,
+      /select late/i,
+      /select on time/i,
+    ]) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+      expect(screen.queryByRole('checkbox', { name })).not.toBeInTheDocument()
+    }
     expect(screen.queryByTestId('approve-all')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /approve all/i })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('select-all')).not.toBeInTheDocument()
+  })
+
+  it('starts a selection empty, at a stated count of zero', async () => {
+    const user = userEvent.setup()
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId('toggle-selecting'))
+    expect(screen.getByTestId('selection-count')).toHaveTextContent('0 selected')
+    for (const box of screen.getAllByTestId(/^select-[0-9a-f-]{36}$/)) {
+      expect(box).not.toBeChecked()
+    }
+    expect(screen.getByTestId('approve-selected')).toBeDisabled()
+    expect(screen.getByTestId('deny-selected')).toBeDisabled()
+  })
+
+  it('offers selection only on rows still waiting for a decision', async () => {
+    const user = userEvent.setup()
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId('toggle-selecting'))
+    // The runner is waiting; the griller's day was approved in the fixtures and
+    // there is nothing left to decide about it.
+    expect(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`)).toBeInTheDocument()
+    expect(screen.queryByTestId(`select-${DEMO_GRILLER_ACCOUNT_ID}`)).not.toBeInTheDocument()
+  })
+
+  it('opens a row without selecting it, and selects a row without opening it', async () => {
+    const user = userEvent.setup()
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId('toggle-selecting'))
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    expect(screen.getByTestId('selection-count')).toHaveTextContent('1 selected')
+
+    // Reading somebody's evidence is a different act from deciding about them,
+    // so the row body opens and closes exactly as it does out of selection mode
+    // and the set already built is untouched (design D9).
+    const toggle = screen.getByTestId(`expand-${DEMO_PREP_COOK_ACCOUNT_ID}`)
+    const before = toggle.getAttribute('aria-expanded')
+    await user.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).not.toBe(before)
+    expect(screen.getByTestId('selection-count')).toHaveTextContent('1 selected')
+    expect(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`)).not.toBeChecked()
+  })
+
+  it('clears the whole selection on request, and after a successful action', async () => {
+    const user = userEvent.setup()
+    atPosition(AT_COUNTER)
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId('toggle-selecting'))
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
+    expect(screen.getByTestId('selection-count')).toHaveTextContent('2 selected')
+
+    // Clear only ever takes people OUT of an action, which is why it is the one
+    // control allowed to touch several at once.
+    await user.click(screen.getByTestId('clear-selection'))
+    expect(screen.getByTestId('selection-count')).toHaveTextContent('0 selected')
+
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId('approve-selected'))
+    await user.click(await screen.findByTestId('confirm-set'))
+
+    // A successful action empties it, so the next one begins from nothing.
+    await waitFor(() => expect(screen.queryByTestId('selection-bar')).not.toBeInTheDocument())
+  })
+
+  it('names every selected person before anything is written, and writes nothing on cancel', async () => {
+    const user = userEvent.setup()
+    atPosition(AT_COUNTER)
+    const adapters = createMockAdapters()
+    const approve = vi.spyOn(adapters.attendance, 'approve')
+    renderDay(adapters)
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId('toggle-selecting'))
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId('approve-selected'))
+
+    const people = await screen.findByTestId('confirm-people')
+    expect(within(people).getAllByRole('listitem')).toHaveLength(2)
+    expect(within(people).getByText('Demo Runner')).toBeInTheDocument()
+    expect(within(people).getByText('Demo Prep Cook')).toBeInTheDocument()
+    expect(approve).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: /close/i }))
+    await waitFor(() => expect(screen.queryByTestId('confirm-people')).not.toBeInTheDocument())
+    expect(approve).not.toHaveBeenCalled()
+    // The selection survives a cancel: it cost the action, not the work.
+    expect(screen.getByTestId('selection-count')).toHaveTextContent('2 selected')
+  })
+
+  it('does not confirm a single person twice', async () => {
+    const user = userEvent.setup()
+    atPosition(AT_COUNTER)
+    const adapters = createMockAdapters()
+    const approve = vi.spyOn(adapters.attendance, 'approve')
+    renderDay(adapters)
+
+    // The per-row button is a set of one, and its own row is already the thing
+    // being looked at, so there is nothing left to confirm.
+    await user.click(await screen.findByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await waitFor(() => expect(approve).toHaveBeenCalled())
+    expect(screen.queryByTestId('confirm-people')).not.toBeInTheDocument()
+  })
+
+  it('collects the reason first and confirms the people after it', async () => {
+    const user = userEvent.setup()
+    atPosition(DOWN_THE_ROAD)
+    const adapters = createMockAdapters()
+    const approve = vi.spyOn(adapters.attendance, 'approve')
+    renderDay(adapters)
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId('toggle-selecting'))
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId('approve-selected'))
+
+    expect(await screen.findByTestId('reason-required')).toHaveTextContent(
+      'You are not at the outlet',
+    )
+    await user.type(
+      screen.getByLabelText('Why are you approving these?'),
+      'Both were at the counter when I left',
+    )
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    // The confirmation is always the last step, so the names are read in the
+    // light of the explanation that was just written.
+    const people = await screen.findByTestId('confirm-people')
+    expect(within(people).getAllByRole('listitem')).toHaveLength(2)
+    expect(approve).not.toHaveBeenCalled()
+
+    await user.click(screen.getByTestId('confirm-set'))
+    await waitFor(() => expect(approve).toHaveBeenCalled())
+    expect(approve.mock.calls[0]?.[1].reason).toContain('Both were at the counter')
+  })
+
+  it('states the shared consequence of a denied set and applies it to everybody', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters()
+    const deny = vi.spyOn(adapters.attendance, 'deny')
+    renderDay(adapters)
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId('toggle-selecting'))
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId('deny-selected'))
+
+    expect(screen.getByTestId('denial-shared')).toHaveTextContent('apply to all 2 of them')
+    // The retry control names a business date rather than saying `today`,
+    // because a set can reach back over days that have already closed.
+    expect(screen.getByTestId('prevent-retry')).not.toBeChecked()
+    expect(screen.getByText(/Prevent another check-in on/)).toBeInTheDocument()
+    // Mixed evidence starts the shared reason blank rather than prefilling a
+    // sentence that would be false about half the set.
+    expect(screen.getByLabelText('Reason')).toHaveValue('')
+
+    await user.type(screen.getByLabelText('Reason'), 'Neither was on the rota')
+    await user.click(screen.getByTestId('prevent-retry'))
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(await screen.findByTestId('confirm-note')).toHaveTextContent(
+      'None of them will be able to check in again',
+    )
+    await user.click(screen.getByTestId('confirm-set'))
+
+    await waitFor(() => expect(deny).toHaveBeenCalled())
+    expect(deny.mock.calls[0]?.[0]).toHaveLength(2)
+    expect(deny.mock.calls[0]?.[1]).toMatchObject({
+      reason: 'Neither was on the rota',
+      preventRetry: true,
+    })
+  })
+
+  it('keeps the surviving selection when a set is refused, and names who moved', async () => {
+    const user = userEvent.setup()
+    atPosition(AT_COUNTER)
+    const adapters = createMockAdapters()
+    const today = await todayAt(adapters, OUTLET_KALYANI_ID)
+    const approve = vi.spyOn(adapters.attendance, 'approve')
+    renderDay(adapters)
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId('toggle-selecting'))
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
+
+    // The prep cook's day is decided by somebody else while the set is open, so
+    // the whole command is refused and nothing at all is settled.
+    const cook = await adapters.attendance.getDay(DEMO_PREP_COOK_ACCOUNT_ID, today)
+    const fresh = (await adapters.attendance.listOutletDay([OUTLET_KALYANI_ID], today)).map(
+      (record) =>
+        record.id === cook?.id
+          ? { ...record, currentAttemptId: null, stateVersion: record.stateVersion + 1 }
+          : record,
+    )
+    approve.mockRejectedValueOnce(
+      new AttendanceActionError(
+        'stale_state',
+        'Attendance changed while this action was open. The latest state has been reloaded.',
+      ),
+    )
+    vi.spyOn(adapters.attendance, 'listOutletDay').mockResolvedValueOnce(fresh)
+
+    await user.click(screen.getByTestId('approve-selected'))
+    await user.click(await screen.findByTestId('confirm-set'))
+
+    // Nothing was written, the person who moved is named and dropped, and the
+    // rest of the set is still there to be settled in one further action.
+    await waitFor(() =>
+      expect(screen.getByTestId('selection-dropped')).toHaveTextContent('Demo Prep Cook'),
+    )
+    expect(screen.getByTestId('selection-count')).toHaveTextContent('1 selected')
   })
 
   it('lists arrivals waiting for approval above the rest of the roll-call', async () => {
@@ -472,7 +713,7 @@ describe('the outlet attendance day', () => {
     expect(dayCards().map((card) => card.dataset.testid)).toEqual(before)
   })
 
-  it('reads the position once for approvals given in quick succession', async () => {
+  it('reads the position once per action, and again for the next one', async () => {
     const user = userEvent.setup()
     atPosition(AT_COUNTER)
     renderDay()
@@ -483,14 +724,60 @@ describe('the outlet attendance day', () => {
       .map((button) => button.dataset.testid as string)
     expect(buttons.length).toBeGreaterThan(1)
 
-    for (const testid of buttons) {
+    for (const [index, testid] of buttons.entries()) {
       await user.click(screen.getByTestId(testid))
       await waitFor(() => expect(screen.queryByTestId(testid)).not.toBeInTheDocument())
+      // Every action reads for itself. The 60-second reuse window is retired:
+      // it existed only so that approving one at a time did not cost a GPS read
+      // each, which a selected set solves properly, and while it stood a stored
+      // approval position could be a minute old (design D5).
+      expect(getCurrentPosition).toHaveBeenCalledTimes(index + 1)
     }
+  })
 
-    // One reading for the run rather than one per person, so approving one at a
-    // time does not mean a GPS read each (design D11).
+  it('reads the position exactly once however many rows one action settles', async () => {
+    const user = userEvent.setup()
+    atPosition(AT_COUNTER)
+    const adapters = createMockAdapters()
+    const approve = vi.spyOn(adapters.attendance, 'approve')
+    renderDay(adapters)
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId('toggle-selecting'))
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId('approve-selected'))
+    await user.click(await screen.findByTestId('confirm-set'))
+
+    await waitFor(() => expect(approve).toHaveBeenCalled())
+    // One act, one statement about where the manager was. Two rows do not mean
+    // two readings, and the database measures the one reading against each
+    // row's own outlet for itself.
     expect(getCurrentPosition).toHaveBeenCalledTimes(1)
+    expect(approve.mock.calls[0]?.[0]).toHaveLength(2)
+  })
+
+  it('requests no position at all for a denied set, whatever its size', async () => {
+    const user = userEvent.setup()
+    atPosition(AT_COUNTER)
+    const adapters = createMockAdapters()
+    const deny = vi.spyOn(adapters.attendance, 'deny')
+    renderDay(adapters)
+    await screen.findByTestId('attendance-day')
+
+    await user.click(screen.getByTestId('toggle-selecting'))
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId('deny-selected'))
+    await user.clear(screen.getByLabelText('Reason'))
+    await user.type(screen.getByLabelText('Reason'), 'Neither of them was on the shift')
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(await screen.findByTestId('confirm-set'))
+
+    await waitFor(() => expect(deny).toHaveBeenCalled())
+    // Denial says the attempts should not count. It does not vouch that the
+    // manager stood anywhere, so it never asks the device where that is.
+    expect(getCurrentPosition).not.toHaveBeenCalled()
   })
 
   it('marks the earlier-days control when this outlet has an older unsettled day', async () => {
@@ -1233,9 +1520,10 @@ describe('a person who works at two outlets', () => {
     )
   })
 
-  it('does not reuse one position reading across two outlets', async () => {
+  it('judges one reading against each selected row\u2019s own outlet, and says which is which', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters()
+    const approve = vi.spyOn(adapters.attendance, 'approve')
     atPosition(AT_COUNTER)
     renderAsOwner(adapters)
     await screen.findByTestId('attendance-day')
@@ -1243,27 +1531,31 @@ describe('a person who works at two outlets', () => {
     await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
     await screen.findByTestId('attendance-day')
 
-    // Kalyani's waiting rows first: standing at that counter, each is one tap
-    // and they share a single reading (design D11).
-    await user.click(await screen.findByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId('toggle-selecting'))
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId(`select-${DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId('approve-selected'))
+
+    // One reading, taken once, measured against two fixed points. That is
+    // arithmetic rather than a claim to have stood at both, which is why the
+    // ban on reusing a reading across outlets is retired along with the window
+    // that made it necessary (design D4).
     await waitFor(() => expect(getCurrentPosition).toHaveBeenCalledTimes(1))
-    await user.click(await screen.findByTestId(`approve-${DEMO_PREP_COOK_ACCOUNT_ID}`))
-    await waitFor(() =>
-      expect(screen.queryByTestId(`approve-${DEMO_PREP_COOK_ACCOUNT_ID}`)).not.toBeInTheDocument(),
+    const partition = await screen.findByTestId('approval-partition')
+    expect(partition).toHaveTextContent(/Approved normally: .*Kalyani/)
+    expect(partition).toHaveTextContent(/Need your reason: .*Kanchrapara/)
+    expect(partition).toHaveTextContent('recorded only against the 1 that need it')
+
+    await user.type(
+      screen.getByLabelText('Why are you approving these?'),
+      'Kanchrapara confirmed by phone',
     )
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.click(await screen.findByTestId('confirm-set'))
+
+    await waitFor(() => expect(approve).toHaveBeenCalled())
     expect(getCurrentPosition).toHaveBeenCalledTimes(1)
-
-    // The Kanchrapara row, in the same minute. One reading cannot vouch for
-    // standing in two places, so the window is keyed per outlet and this one
-    // costs a read of its own (design D6).
-    await user.click(await screen.findByTestId(`approve-${DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID}`))
-    await waitFor(() => expect(getCurrentPosition).toHaveBeenCalledTimes(2))
-
-    // And it is judged against its own outlet's fence: the manager is standing
-    // at Kalyani, so approving Kanchrapara's row asks for a reason.
-    expect(await screen.findByTestId('reason-required')).toHaveTextContent(
-      'You are not at the outlet',
-    )
+    expect(approve.mock.calls[0]?.[0]).toHaveLength(2)
   })
 
   it('refuses to clear the last selected outlet', async () => {

@@ -71,22 +71,39 @@ describe('attendance command races', () => {
     if (!submitted.data) throw new Error('attempt command returned no attendance day')
     const row = submitted.data
 
+    // A set carrying this row, and a single decision on the same row, at the
+    // same moment. Both go through the one command now, so this is also the
+    // deadlock probe: the set locks in `attendance.id` order and the single
+    // decision is a set of one, so they can only ever contend, never wedge.
     const [approval, denial] = await Promise.all([
-      kalyaniManager.rpc('attendance_approve_attempt', {
-        p_attendance_id: row.id,
-        p_decision_id: 'f2000000-0000-4000-a000-000000000001',
-        p_expected_attempt_id: attemptId,
-        p_expected_version: row.state_version,
+      kalyaniManager.rpc('attendance_decide_set', {
+        p_command_id: 'f3000000-0000-4000-a000-000000000001',
+        p_action: 'approve',
+        p_items: [
+          {
+            attendance_id: row.id,
+            attempt_id: attemptId,
+            expected_version: row.state_version,
+            decision_id: 'f2000000-0000-4000-a000-000000000001',
+          },
+        ],
+        p_reason: 'Concurrent approval probe',
+        p_prevent_retry: false,
         p_manager_lat: 22.97505,
         p_manager_lng: 88.4346,
         p_manager_accuracy_m: 12,
-        p_reason: 'Concurrent approval probe',
       }),
-      kalyaniManager.rpc('attendance_deny_attempt', {
-        p_attendance_id: row.id,
-        p_decision_id: 'f2000000-0000-4000-a000-000000000002',
-        p_expected_attempt_id: attemptId,
-        p_expected_version: row.state_version,
+      kalyaniManager.rpc('attendance_decide_set', {
+        p_command_id: 'f3000000-0000-4000-a000-000000000002',
+        p_action: 'deny',
+        p_items: [
+          {
+            attendance_id: row.id,
+            attempt_id: attemptId,
+            expected_version: row.state_version,
+            decision_id: 'f2000000-0000-4000-a000-000000000002',
+          },
+        ],
         p_reason: 'Concurrent denial probe',
         p_prevent_retry: false,
       }),
@@ -135,11 +152,17 @@ describe('attendance command races', () => {
         p_accuracy_m: 35,
         p_expected_version: row.state_version,
       }),
-      kanchraparaManager.rpc('attendance_deny_attempt', {
-        p_attendance_id: row.id,
-        p_decision_id: 'f2000000-0000-4000-a000-000000000011',
-        p_expected_attempt_id: firstAttemptId,
-        p_expected_version: row.state_version,
+      kanchraparaManager.rpc('attendance_decide_set', {
+        p_command_id: 'f3000000-0000-4000-a000-000000000011',
+        p_action: 'deny',
+        p_items: [
+          {
+            attendance_id: row.id,
+            attempt_id: firstAttemptId,
+            expected_version: row.state_version,
+            decision_id: 'f2000000-0000-4000-a000-000000000011',
+          },
+        ],
         p_reason: 'Concurrent retry decision probe',
         p_prevent_retry: false,
       }),

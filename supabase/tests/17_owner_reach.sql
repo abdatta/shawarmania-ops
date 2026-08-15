@@ -79,12 +79,14 @@ select isnt_empty(
 -- rule the outlet's own manager answers to.
 select throws_ok(
   format($q$
-    select public.attendance_approve_attempt(
-      '86000000-0000-4000-a000-000000000001',
-      (select id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
-      (select current_attempt_id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
-      (select state_version from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
-      null, null, null, null) $q$,
+    select * from public.attendance_decide_set(
+      '86000000-0000-4000-a000-0000000000c1', 'approve',
+      jsonb_build_array(jsonb_build_object(
+        'attendance_id', (select id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+        'attempt_id', (select current_attempt_id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+        'expected_version', (select state_version from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+        'decision_id', '86000000-0000-4000-a000-000000000001')),
+      null, false, null, null, null) $q$,
     :'KPA', :'GRILLER_KPA', :'KPA', :'GRILLER_KPA', :'KPA', :'GRILLER_KPA'),
   null,
   'an approval from away from the outlet, or after the row''s own business day, requires a reason',
@@ -93,12 +95,14 @@ select throws_ok(
 -- With the reason it records, and the owner needed no assignment to give it.
 select lives_ok(
   format($q$
-    select public.attendance_approve_attempt(
-      '86000000-0000-4000-a000-000000000002',
-      (select id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
-      (select current_attempt_id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
-      (select state_version from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
-      'Owner settled it from elsewhere (synthetic)', null, null, null) $q$,
+    select * from public.attendance_decide_set(
+      '86000000-0000-4000-a000-0000000000c2', 'approve',
+      jsonb_build_array(jsonb_build_object(
+        'attendance_id', (select id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+        'attempt_id', (select current_attempt_id from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+        'expected_version', (select state_version from public.attendance where outlet_id = %L and person_id = %L and current_attempt_id is not null),
+        'decision_id', '86000000-0000-4000-a000-000000000002')),
+      'Owner settled it from elsewhere (synthetic)', false, null, null, null) $q$,
     :'KPA', :'GRILLER_KPA', :'KPA', :'GRILLER_KPA', :'KPA', :'GRILLER_KPA'),
   'the owner approves a waiting arrival at an outlet they are not assigned to');
 

@@ -19,6 +19,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { AttendanceActionError } from '../../../src/data-access/adapters'
+import type { AttendanceRecord } from '../../../src/data-access/adapters'
 import type { Database } from '../../../src/data-access/database.types'
 import { createSupabaseAttendanceAdapter } from '../../../src/data-access/supabase-adapters/attendance'
 import { createSupabaseOutletsAdapter } from '../../../src/data-access/supabase-adapters/outlets'
@@ -32,6 +33,20 @@ const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
 const SUPABASE_ANON_KEY =
   process.env['SUPABASE_ANON_KEY'] ??
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'
+
+/**
+ * The selected set, in the shape one command takes. Identities are generated
+ * here, once, exactly as the surface generates them once per action — so a
+ * retry replays the same command rather than minting a second one.
+ */
+function items(records: readonly AttendanceRecord[]) {
+  return records.map((record) => ({
+    attendanceId: record.id,
+    expectedAttemptId: record.currentAttemptId as string,
+    expectedVersion: record.stateVersion,
+    decisionId: crypto.randomUUID(),
+  }))
+}
 
 const PASSWORD = 'shawarmania-local'
 const OUTLET_KALYANI = '00000000-0000-4000-a000-000000000001'
@@ -330,20 +345,18 @@ describe('the attendance adapter', () => {
     // is nothing to settle, and the earlier assertions already covered the map.
     if (waiting.length === 0) return
 
-    const settled = await attendance.approve(
-      waiting.map((record) => record.id),
-      {
-        // Away from the outlet, so the rule requires this.
-        reason: 'Confirmed by phone with the counter (adapter suite)',
-        reading: {
-          latitude: 28.6139,
-          longitude: 77.209,
-          accuracyMetres: 25,
-          at: new Date().toISOString(),
-        },
-        approverId: FA_KALYANI_SUB,
+    const settled = await attendance.approve(items(waiting), {
+      commandId: crypto.randomUUID(),
+      // Away from the outlet, so the rule requires this.
+      reason: 'Confirmed by phone with the counter (adapter suite)',
+      reading: {
+        latitude: 28.6139,
+        longitude: 77.209,
+        accuracyMetres: 25,
+        at: new Date().toISOString(),
       },
-    )
+      approverId: FA_KALYANI_SUB,
+    })
 
     expect(settled).toHaveLength(waiting.length)
     for (const record of settled) {
@@ -363,7 +376,8 @@ describe('the attendance adapter', () => {
 
     // Yesterday is a closed business day, so the rule wants a reason whatever
     // the reading says. The adapter must turn the guard's raise into a sentence.
-    const refusal = attendance.approve([target.id], {
+    const refusal = attendance.approve(items([target]), {
+      commandId: crypto.randomUUID(),
       reason: null,
       reading: {
         latitude: 22.97505,
@@ -389,7 +403,8 @@ describe('the attendance adapter', () => {
     const attendance = createSupabaseAttendanceAdapter(employeeClient)
     const day = await attendance.getDay(STAFF_KAL, yesterday())
 
-    const refusal = attendance.approve([day!.id], {
+    const refusal = attendance.approve(items([day!]), {
+      commandId: crypto.randomUUID(),
       reason: 'self approved',
       reading: null,
       approverId: STAFF_KAL,
@@ -451,7 +466,8 @@ describe('the attendance adapter', () => {
     // is also the proof that the payload arrives: a request the backend could
     // not resolve would read as `unsendable`, not as a refusal.
     await expect(
-      asEmployee.approve([recorded.id], {
+      asEmployee.approve(items([recorded]), {
+        commandId: crypto.randomUUID(),
         reason: 'Approving my own day',
         reading: null,
         approverId: GRILLER_KAL,
@@ -461,7 +477,8 @@ describe('the attendance adapter', () => {
     // And the manager settles it from a phone that cannot find a position
     // either — the other half of the same bug. With no reading the rule treats
     // this exactly as an off-site approval, so it costs a reason.
-    const [settled] = await asManager.approve([recorded.id], {
+    const [settled] = await asManager.approve(items([recorded]), {
+      commandId: crypto.randomUUID(),
       reason: 'Griller was on the grill; neither phone could find a position',
       reading: null,
       approverId: FA_KALYANI_SUB,

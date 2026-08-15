@@ -6,6 +6,7 @@ import type {
   AttendanceAdapter,
   AttendanceAttempt,
   AttendanceDecision,
+  AttendanceDecisionItem,
   AttendanceEvent,
   AttendanceRecord,
   WaitingCount,
@@ -269,6 +270,19 @@ function managerPosition(reading: PositionReading | null) {
 }
 
 /**
+ * One selected row, in the shape the command reads it in. The names are the
+ * database's rather than the app's, because this is a payload and not a model.
+ */
+function toItem(item: AttendanceDecisionItem) {
+  return {
+    attendance_id: item.attendanceId,
+    attempt_id: item.expectedAttemptId,
+    expected_version: item.expectedVersion,
+    decision_id: item.decisionId,
+  }
+}
+
+/**
  * Turn a Postgres refusal into something worth reading at a counter. The
  * constraint and trigger names are the contract here — they are what the
  * schema chose to call these rules, and matching on them beats matching on
@@ -305,6 +319,12 @@ function toActionError(error: PostgrestError): AttendanceActionError {
     return new AttendanceActionError(
       'day_closed',
       'That outlet has moved to a new business day, so this check-in can no longer be retried.',
+    )
+  }
+  if (detail.includes('a decision set carries at most')) {
+    return new AttendanceActionError(
+      'set_too_large',
+      'That is more people than one action can settle. Decide them in smaller sets.',
     )
   }
   if (detail.includes('requires a reason')) {
@@ -588,57 +608,59 @@ export function createSupabaseAttendanceAdapter(
     },
 
     /**
-     * One statement over the selected ids, so a morning is settled together or
-     * not at all. The trigger stamps each row's approver name, computes each
-     * row's own approver distance from the one reading sent, and applies the
-     * reason rule per row — which matters, because a batch can span a day that
-     * has closed and a day that has not.
+     * **One call, whatever the size of the set.** This used to be a loop —
+     * `attendance_approve_attempt` once per row, with a fresh decision id minted
+     * inside the loop — so a network failure part way through left some of a
+     * morning settled and some not, and a retry generated new identities rather
+     * than replaying the same command. Neither is a thing a client can fix; both
+     * are gone because the command takes the whole set.
+     *
+     * Every identity comes from the caller and is sent unchanged on a retry, so
+     * a lost response costs nothing. The database computes each row's own
+     * distance to its own outlet from the one reading, decides per row whether
+     * the reason was required, and stores it only there.
      *
      * `approved_at` is deliberately not sent: when the approval was made is the
      * database's fact, and it stamps it.
      */
-    async approve(attendanceIds, { reason, reading, approverId: _approverId }) {
-      if (attendanceIds.length === 0) return []
-      const trimmed = reason?.trim() ?? ''
-      const current = await readMany(attendanceIds)
-      for (const record of current) {
-        if (!record.currentAttemptId) {
-          throw new AttendanceActionError(
-            'nothing_to_approve',
-            'There is no current check-in to approve.',
-          )
-        }
-        const { error } = await client.rpc('attendance_approve_attempt', {
-          p_decision_id: crypto.randomUUID(),
-          p_attendance_id: record.id,
-          p_expected_attempt_id: record.currentAttemptId,
-          p_expected_version: record.stateVersion,
-          p_reason: (trimmed || null) as string,
-          ...managerPosition(reading),
-        })
-        if (error) throw toActionError(error)
+    async approve(items, { commandId, reason, reading, approverId: _approverId }) {
+      if (items.length === 0) return []
+      // A row with nothing waiting on it is a request the app should never make,
+      // and the honest answer is that there is nothing here to settle rather
+      // than the database's stale-state refusal for a null attempt.
+      if (items.some((item) => !item.expectedAttemptId)) {
+        throw new AttendanceActionError(
+          'nothing_to_approve',
+          'There is no current check-in to approve.',
+        )
       }
-      return readMany(attendanceIds)
+      const { error } = await client.rpc('attendance_decide_set', {
+        p_command_id: commandId,
+        p_action: 'approve',
+        p_items: items.map(toItem),
+        p_reason: (reason?.trim() || null) as string,
+        ...managerPosition(reading),
+      })
+      if (error) throw toActionError(error)
+      return readMany(items.map((item) => item.attendanceId))
     },
 
-    async deny({
-      attendanceId,
-      expectedAttemptId,
-      expectedVersion,
-      reason,
-      preventRetry,
-      decisionId = crypto.randomUUID(),
-    }) {
-      const { data, error } = await client.rpc('attendance_deny_attempt', {
-        p_decision_id: decisionId,
-        p_attendance_id: attendanceId,
-        p_expected_attempt_id: expectedAttemptId,
-        p_expected_version: expectedVersion,
+    /**
+     * The same command with the same set shape. No position is read or sent:
+     * denial does not vouch that the manager was anywhere, and the database
+     * discards coordinates it is handed rather than recording them.
+     */
+    async deny(items, { commandId, reason, preventRetry }) {
+      if (items.length === 0) return []
+      const { error } = await client.rpc('attendance_decide_set', {
+        p_command_id: commandId,
+        p_action: 'deny',
+        p_items: items.map(toItem),
         p_reason: reason,
         p_prevent_retry: preventRetry,
       })
       if (error) throw toActionError(error)
-      return readOne(data.id)
+      return readMany(items.map((item) => item.attendanceId))
     },
 
     async correct({

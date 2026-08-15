@@ -526,6 +526,7 @@ export type Database = {
           attempt_id: string | null
           attendance_id: string
           business_date: string
+          command_id: string | null
           created_at: string
           decided_at: string
           id: string
@@ -550,6 +551,7 @@ export type Database = {
           attempt_id?: string | null
           attendance_id: string
           business_date: string
+          command_id?: string | null
           created_at?: string
           decided_at?: string
           id: string
@@ -574,6 +576,7 @@ export type Database = {
           attempt_id?: string | null
           attendance_id?: string
           business_date?: string
+          command_id?: string | null
           created_at?: string
           decided_at?: string
           id?: string
@@ -2589,54 +2592,6 @@ export type Database = {
         Args: { p_has_aggregator_history: boolean }
         Returns: undefined
       }
-      attendance_approve_attempt: {
-        Args: {
-          p_attendance_id: string
-          p_decision_id: string
-          p_expected_attempt_id: string
-          p_expected_version: number
-          p_manager_accuracy_m: number
-          p_manager_lat: number
-          p_manager_lng: number
-          p_reason: string
-        }
-        Returns: {
-          approval_reason: string | null
-          approved_at: string | null
-          approved_by: string | null
-          approved_by_name: string | null
-          approver_accuracy_m: number | null
-          approver_distance_m: number | null
-          approver_lat: number | null
-          approver_lng: number | null
-          arrival_deadline: string | null
-          business_date: string
-          check_in_accuracy_m: number | null
-          check_in_at: string | null
-          check_in_distance_m: number | null
-          check_in_entered_by: string | null
-          check_in_entered_by_name: string | null
-          check_in_lat: number | null
-          check_in_lng: number | null
-          check_in_source: Database["public"]["Enums"]["check_in_source"] | null
-          created_at: string
-          current_attempt_id: string | null
-          id: string
-          latest_decision_id: string | null
-          outcome_attempt_id: string | null
-          outlet_id: string
-          person_id: string
-          retry_blocked: boolean
-          state_version: number
-          status: Database["public"]["Enums"]["attendance_status"]
-        }
-        SetofOptions: {
-          from: "*"
-          to: "attendance"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       attendance_correct: {
         Args: {
           p_action: string
@@ -2686,14 +2641,16 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      attendance_deny_attempt: {
+      attendance_decide_set: {
         Args: {
-          p_attendance_id: string
-          p_decision_id: string
-          p_expected_attempt_id: string
-          p_expected_version: number
+          p_action: string
+          p_command_id: string
+          p_items: Json
+          p_manager_accuracy_m?: number
+          p_manager_lat?: number
+          p_manager_lng?: number
           p_prevent_retry?: boolean
-          p_reason: string
+          p_reason?: string
         }
         Returns: {
           approval_reason: string | null
@@ -2724,12 +2681,12 @@ export type Database = {
           retry_blocked: boolean
           state_version: number
           status: Database["public"]["Enums"]["attendance_status"]
-        }
+        }[]
         SetofOptions: {
           from: "*"
           to: "attendance"
-          isOneToOne: true
-          isSetofReturn: false
+          isOneToOne: false
+          isSetofReturn: true
         }
       }
       attendance_elsewhere: {

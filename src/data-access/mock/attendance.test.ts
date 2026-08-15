@@ -25,29 +25,33 @@ describe('mock attendance denial and retries', () => {
     const [waiting] = await adapter.listPersonRange(DEMO_RUNNER_ACCOUNT_ID, today(), today())
     expect(waiting?.currentAttemptId).not.toBeNull()
 
-    await expect(
-      adapter.deny({
+    const items = [
+      {
         attendanceId: waiting!.id,
         expectedAttemptId: waiting!.currentAttemptId!,
         expectedVersion: waiting!.stateVersion,
+        decisionId: 'e2000000-0000-4000-a000-000000000001',
+      },
+    ]
+
+    await expect(
+      adapter.deny(items, {
+        commandId: 'e4000000-0000-4000-a000-000000000001',
         reason: '   ',
         preventRetry: false,
       }),
     ).rejects.toMatchObject({ code: 'reason_required' } satisfies Partial<AttendanceActionError>)
 
-    const denied = await adapter.deny({
-      attendanceId: waiting!.id,
-      expectedAttemptId: waiting!.currentAttemptId!,
-      expectedVersion: waiting!.stateVersion,
+    const [denied] = await adapter.deny(items, {
+      commandId: 'e4000000-0000-4000-a000-000000000002',
       reason: 'Not at outlet',
       preventRetry: false,
-      decisionId: 'e2000000-0000-4000-a000-000000000001',
     })
 
-    expect(denied.status).toBe('absent')
-    expect(denied.currentAttemptId).toBeNull()
-    expect(denied.retry).toEqual({ allowed: true, reason: 'open-denial' })
-    expect(denied.decisions.at(-1)).toMatchObject({
+    expect(denied!.status).toBe('absent')
+    expect(denied!.currentAttemptId).toBeNull()
+    expect(denied!.retry).toEqual({ allowed: true, reason: 'open-denial' })
+    expect(denied!.decisions.at(-1)).toMatchObject({
       kind: 'deny',
       reason: 'Not at outlet',
       preventsRetry: false,
@@ -62,7 +66,7 @@ describe('mock attendance denial and retries', () => {
       businessDate: today(),
       reading: { ...managerReading, latitude: 22.9894, longitude: 88.4481 },
       attemptId,
-      expectedVersion: denied.stateVersion,
+      expectedVersion: denied!.stateVersion,
     })
 
     expect(retry.status).toBe('absent')
@@ -76,7 +80,7 @@ describe('mock attendance denial and retries', () => {
       businessDate: today(),
       reading: { ...managerReading, latitude: 22.9894, longitude: 88.4481 },
       attemptId,
-      expectedVersion: denied.stateVersion,
+      expectedVersion: denied!.stateVersion,
     })
     expect(exactReplay.attempts).toHaveLength(2)
 
@@ -98,7 +102,7 @@ describe('mock attendance denial and retries', () => {
         businessDate: today(),
         reading: null,
         attemptId: 'e1000000-0000-4000-a000-000000000002',
-        expectedVersion: denied.stateVersion,
+        expectedVersion: denied!.stateVersion,
       }),
     ).rejects.toMatchObject({ code: 'stale_state' } satisfies Partial<AttendanceActionError>)
   })

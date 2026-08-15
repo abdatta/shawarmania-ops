@@ -254,7 +254,15 @@ the reset migration and prove each of these layers:
 - command tests cover default-open and prevented denial, blank reasons,
   outside/unverifiable repeated retry, inside and approved-day locks,
   wrong-outlet recovery, cutover disagreement, stale versions, exact UUID replay
-  and changed-payload reuse. Time-correction cases additionally cover historical
+  and changed-payload reuse. `supabase/tests/21_attendance_batch_decisions.sql`
+  covers what only a whole set can prove: atomic refusal when one row is stale,
+  the hundred-row bound, one row named twice, the enrolled-device condition
+  against an otherwise authorised manager, one reading partitioned across two
+  outlets, a set spanning two business dates, a closed day inside the fence, an
+  unsurveyed outlet, a shared denial reason and retry choice applied per row, a
+  denial discarding coordinates it was handed, one command identity across
+  several decisions, exact replay settling once, and a spent decision identity
+  carried into a new command. Time-correction cases additionally cover historical
   settled rows, repeated old-to-new audit entries, future and cross-cutover
   refusal, immutable attempts, preserved approval/retry state and both directions
   across the stamped late deadline;
@@ -263,7 +271,20 @@ the reset migration and prove each of these layers:
 - RLS and authenticated REST probes include forged actor, unassigned/cross-outlet
   requests, former-manager bounded history, unrelated employee refusal, subject
   full history and owner reach;
-- component tests cover the exactly-two-input denial sheet, unchecked default,
+- component tests cover selection — nothing selected on entry, only waiting rows
+  selectable, opening a row changing no selection, no control that adds more than
+  one person by any name, `Clear`, the confirmation naming everybody before the
+  write, cancelling writing nothing, the partition summary across two outlets,
+  and a refusal keeping the surviving selection while naming who moved. Two of
+  them count calls to the mocked `readPosition`: one action reads exactly once
+  however many rows it settles, a second action reads again, and a denial of any
+  size reads not at all;
+- `e2e/attendance.spec.ts` drives the same rules through Playwright's own
+  geolocation emulation rather than any hook in the app — on site, away from
+  every outlet, inside one fence and outside another, and with no position at
+  all — asserting both what the sheet said beforehand and what each row stored
+  afterwards;
+- component tests cover the two-input denial sheet, unchecked default,
   editable prefills, no-location denial/absent/retry correction, present
   correction location, the conditional mandatory check-in-time input, employee
   visibility of attributed old-to-new history, compact discoverability, every material-change

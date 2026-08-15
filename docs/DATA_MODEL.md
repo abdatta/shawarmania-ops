@@ -319,7 +319,12 @@ accuracy, server-computed distance, stamped arrival deadline, superseded/settled
 times and a server request fingerprint. **`attendance_decisions`** stores every
 approval, denial, correction and retry-policy change with its client UUID,
 actor snapshot, affected attempt, previous/new outcome, reason, retry policy
-and manager evidence when the action is one that reads it. A `correct_time`
+and manager evidence when the action is one that reads it. It also carries
+`command_id`: the one manager action that wrote it, shared by every decision in a
+selected set and null for a decision made on its own or recorded before sets
+existed. It correlates decisions so history states that these people were settled
+by one act rather than leaving it to be inferred from adjacent timestamps; it
+never replaces them, and each person keeps their own complete decision. A `correct_time`
 decision additionally holds `previous_check_in_at` and `new_check_in_at`: it
 updates only the canonical effective `attendance.check_in_at`, while the
 attempt's captured timestamp and GPS/manual evidence remain immutable. Both tables are
@@ -332,7 +337,7 @@ only through the guarded attendance commands. The migration materialises every
 recognised legacy check-in, approval, manual entry and row-only outcome without
 recomputing historical GPS, and aborts on an unrecognised or lossy shape.
 
-**The command boundary owns attendance state.** Submit-attempt, approve, deny,
+**The command boundary owns attendance state.** Submit-attempt, decide-set,
 correct and manual-entry commands derive the caller and authority from the
 session, validate live assignments, active outlets, the target outlet's current
 explicit `business_date`, deadlines, evidence and reasons, lock the canonical

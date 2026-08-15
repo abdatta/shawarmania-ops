@@ -6,6 +6,7 @@ import type {
   AttendanceApproval,
   AttendanceAttempt,
   AttendanceDecision,
+  AttendanceDecisionItem,
   AttendanceEvent,
   AttendanceRecord,
   AttendanceStatus,
@@ -368,6 +369,55 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
 
   const clone = (record: AttendanceRecord) => structuredClone(record)
 
+  /**
+   * What each command settled, so an exact replay answers with the same rows
+   * instead of settling them twice. The database keys this on the decisions it
+   * wrote; the mock keeps the same promise with a map, which is enough for the
+   * only thing a surface can observe.
+   */
+  const commands = new Map<string, readonly string[]>()
+
+  const replay = (commandId: string): AttendanceRecord[] | null => {
+    const settled = commands.get(commandId)
+    return settled ? settled.map((id) => clone(find(id))) : null
+  }
+
+  /**
+   * The bound and the shape, refused here for the same reason the database
+   * refuses them: a request nobody meant to send should fail identically in
+   * demo mode and in production.
+   */
+  const guardSet = (items: readonly AttendanceDecisionItem[]) => {
+    if (items.length > 100) {
+      throw new AttendanceActionError(
+        'set_too_large',
+        'That is more people than one action can settle. Decide them in smaller sets.',
+      )
+    }
+    const named = new Set(items.map((item) => item.attendanceId))
+    if (named.size !== items.length) {
+      throw new AttendanceActionError('changed_request', 'That set names one person twice.')
+    }
+    const spent = new Set(items.map((item) => item.decisionId))
+    if (spent.size !== items.length) {
+      throw new AttendanceActionError('changed_request', 'That set names one decision twice.')
+    }
+  }
+
+  /**
+   * The approval partition, per row: the reason is owed unless this one reading
+   * is inside **this row's** outlet fence and **this row's** business date is
+   * still current there.
+   */
+  const needsReason = (record: AttendanceRecord, reading: PositionReading | null) => {
+    const outlet = outletFor(record.outletId)
+    const distance = reading ? metresFromOutlet(outlet, reading.latitude, reading.longitude) : null
+    const onSite = distance !== null && distance <= outlet.geofence_radius_m
+    const sameDay =
+      record.businessDate === resolveBusinessDate(new Date(), outlet.business_day_cutover)
+    return !(onSite && sameDay)
+  }
+
   const inRange = (record: AttendanceRecord, from: string, to: string) =>
     record.businessDate >= from && record.businessDate <= to
 
@@ -692,34 +742,40 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       return clone(record)
     },
 
-    async approve(attendanceIds, { reason, reading, approverId }) {
+    async approve(items, { commandId, reason, reading, approverId }) {
+      if (items.length === 0) return []
       const trimmed = reason?.trim() ?? ''
       const approver = Object.values(personaFixtures).find(
         (persona) => persona.profile.id === approverId,
       )
-      const targets = attendanceIds.map(find)
 
-      for (const record of targets) {
+      const replayed = replay(commandId)
+      if (replayed) return replayed
+      guardSet(items)
+
+      // Every rule is checked across the whole set before a single row moves, so
+      // a refusal settles nothing — the mock's stand-in for one statement in one
+      // transaction. A permissive imitation here would mean demo mode and the
+      // component tests exercising a contract the database does not have.
+      const targets = items.map((item) => find(item.attendanceId))
+      for (const [index, record] of targets.entries()) {
+        const item = items[index]!
         if (!record.checkIn) {
           throw new AttendanceActionError(
             'nothing_to_approve',
             'There is no check-in on this day to approve.',
           )
         }
-        if (record.approval) {
+        if (
+          record.stateVersion !== item.expectedVersion ||
+          record.currentAttemptId !== item.expectedAttemptId
+        ) {
           throw new AttendanceActionError(
-            'already_approved',
-            'This day has already been approved. Reload to see who settled it.',
+            'stale_state',
+            'Attendance changed while this action was open. The latest state has been reloaded.',
           )
         }
-        const outlet = outletFor(record.outletId)
-        const distance = reading
-          ? metresFromOutlet(outlet, reading.latitude, reading.longitude)
-          : null
-        const onSite = distance !== null && distance <= outlet.geofence_radius_m
-        const sameDay =
-          record.businessDate === resolveBusinessDate(new Date(), outlet.business_day_cutover)
-        if (!(onSite && sameDay) && trimmed === '') {
+        if (needsReason(record, reading) && trimmed === '') {
           throw new AttendanceActionError(
             'reason_required',
             'You are not at the outlet, or this day has already closed, so this approval needs a reason.',
@@ -727,28 +783,34 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         }
       }
 
-      // Written only once every row has passed, so a batch settles together or
-      // not at all — the mock's stand-in for one statement in one transaction.
       const now = new Date().toISOString()
-      return targets.map((record) => {
+      commands.set(
+        commandId,
+        items.map((each) => each.attendanceId),
+      )
+      return targets.map((record, index) => {
+        const item = items[index]!
         const outlet = outletFor(record.outletId)
+        // The reason reaches only the rows the rule asked it of. A row approved
+        // on the plain terms keeps none, whatever the rest of the set needed.
+        const stored = needsReason(record, reading) && trimmed !== '' ? trimmed : null
+        const distance = reading
+          ? metresFromOutlet(outlet, reading.latitude, reading.longitude)
+          : null
         record.approval = {
           by: approverId,
           byName: approver?.profile.full_name ?? null,
           at: now,
-          reason: trimmed === '' ? null : trimmed,
+          reason: stored,
           latitude: reading?.latitude ?? null,
           longitude: reading?.longitude ?? null,
           accuracyMetres: reading?.accuracyMetres ?? null,
-          distanceMetres: reading
-            ? metresFromOutlet(outlet, reading.latitude, reading.longitude)
-            : null,
+          distanceMetres: distance,
         }
         record.status = 'present'
-        const decisionId = crypto.randomUUID()
         const currentAttemptId = record.currentAttemptId
         record.decisions.push({
-          id: decisionId,
+          id: item.decisionId,
           attemptId: currentAttemptId,
           outletId: record.outletId,
           outletName: record.outletName,
@@ -756,7 +818,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
           by: approverId,
           byName: approver?.profile.full_name ?? null,
           at: now,
-          reason: trimmed === '' ? null : trimmed,
+          reason: stored,
           preventsRetry: true,
           previousStatus: 'absent',
           newStatus: 'present',
@@ -765,83 +827,91 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
           latitude: reading?.latitude ?? null,
           longitude: reading?.longitude ?? null,
           accuracyMetres: reading?.accuracyMetres ?? null,
-          distanceMetres: record.approval.distanceMetres,
+          distanceMetres: distance,
         })
         const attempt = record.attempts.find((candidate) => candidate.id === currentAttemptId)
         if (attempt) attempt.settledAt = now
         record.stateVersion += 1
         record.currentAttemptId = null
         record.outcomeAttemptId = currentAttemptId
-        record.latestDecisionId = decisionId
+        record.latestDecisionId = item.decisionId
         record.retryBlocked = true
         record.retry = { allowed: false, reason: 'prevented' }
         return clone(record)
       })
     },
 
-    async deny({
-      attendanceId,
-      expectedAttemptId,
-      expectedVersion,
-      reason,
-      preventRetry,
-      decisionId,
-    }) {
-      const record = find(attendanceId)
-      if (
-        record.stateVersion !== expectedVersion ||
-        record.currentAttemptId !== expectedAttemptId
-      ) {
-        throw new AttendanceActionError(
-          'stale_state',
-          'Attendance changed while this action was open.',
-        )
-      }
+    async deny(items, { commandId, reason, preventRetry }) {
+      if (items.length === 0) return []
+      const replayed = replay(commandId)
+      if (replayed) return replayed
+      guardSet(items)
+
       const trimmed = reason.trim()
       if (!trimmed)
         throw new AttendanceActionError('reason_required', 'Enter a reason before denying.')
-      const attempt = record.attempts.find((candidate) => candidate.id === expectedAttemptId)
-      if (!attempt)
-        throw new AttendanceActionError(
-          'stale_state',
-          'Attendance changed while this action was open.',
-        )
+
+      const targets = items.map((item) => find(item.attendanceId))
+      for (const [index, record] of targets.entries()) {
+        const item = items[index]!
+        if (
+          record.stateVersion !== item.expectedVersion ||
+          record.currentAttemptId !== item.expectedAttemptId ||
+          !record.attempts.some((candidate) => candidate.id === item.expectedAttemptId)
+        ) {
+          throw new AttendanceActionError(
+            'stale_state',
+            'Attendance changed while this action was open. The latest state has been reloaded.',
+          )
+        }
+      }
+
       const now = new Date().toISOString()
-      const id = decisionId ?? crypto.randomUUID()
-      record.decisions.push({
-        id,
-        attemptId: attempt.id,
-        outletId: attempt.outletId,
-        outletName: attempt.outletName,
-        kind: 'deny',
-        by: DEMO_MANAGER_ID,
-        byName: personaFixtures.franchise_admin.profile.full_name,
-        at: now,
-        reason: trimmed,
-        preventsRetry: preventRetry,
-        previousStatus: record.status,
-        newStatus: 'absent',
-        previousCheckInAt: null,
-        newCheckInAt: null,
-        latitude: null,
-        longitude: null,
-        accuracyMetres: null,
-        distanceMetres: null,
+      commands.set(
+        commandId,
+        items.map((each) => each.attendanceId),
+      )
+      return targets.map((record, index) => {
+        const item = items[index]!
+        const attempt = record.attempts.find(
+          (candidate) => candidate.id === item.expectedAttemptId,
+        )!
+        record.decisions.push({
+          id: item.decisionId,
+          attemptId: attempt.id,
+          outletId: attempt.outletId,
+          outletName: attempt.outletName,
+          kind: 'deny',
+          by: DEMO_MANAGER_ID,
+          byName: personaFixtures.franchise_admin.profile.full_name,
+          at: now,
+          reason: trimmed,
+          preventsRetry: preventRetry,
+          previousStatus: record.status,
+          newStatus: 'absent',
+          previousCheckInAt: null,
+          newCheckInAt: null,
+          // Denial vouches for nobody's position, at any size of set.
+          latitude: null,
+          longitude: null,
+          accuracyMetres: null,
+          distanceMetres: null,
+        })
+        attempt.settledAt = now
+        record.outletId = attempt.outletId
+        record.outletName = attempt.outletName
+        record.status = 'absent'
+        record.currentAttemptId = null
+        record.outcomeAttemptId = attempt.id
+        record.latestDecisionId = item.decisionId
+        record.retryBlocked = preventRetry
+        record.stateVersion += 1
+        record.approval = null
+        record.retry = preventRetry
+          ? { allowed: false, reason: 'prevented' }
+          : { allowed: true, reason: 'open-denial' }
+        return clone(record)
       })
-      attempt.settledAt = now
-      record.outletId = attempt.outletId
-      record.outletName = attempt.outletName
-      record.status = 'absent'
-      record.currentAttemptId = null
-      record.outcomeAttemptId = attempt.id
-      record.latestDecisionId = id
-      record.retryBlocked = preventRetry
-      record.stateVersion += 1
-      record.approval = null
-      record.retry = preventRetry
-        ? { allowed: false, reason: 'prevented' }
-        : { allowed: true, reason: 'open-denial' }
-      return clone(record)
     },
 
     async correct({

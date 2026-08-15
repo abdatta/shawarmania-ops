@@ -49,6 +49,7 @@ export function AttendanceCard({
   details,
   waiting,
   defaultOpen = false,
+  aside = null,
 }: {
   testId: string
   /** The chevron's own id, so a test can open a row without guessing its name. */
@@ -63,6 +64,13 @@ export function AttendanceCard({
   /** Waiting for a manager — the warning border, and the reason to open. */
   waiting: boolean
   defaultOpen?: boolean
+  /**
+   * A control that belongs to the row but not to opening it — today, the
+   * checkbox that adds this person to a set. It sits **outside** the header
+   * button on purpose: a checkbox nested inside a button is neither reachable
+   * nor announced as one, and tapping it would open the row as a side effect.
+   */
+  aside?: ReactNode | null
 }) {
   const panelId = useId()
   const [open, setOpen] = useState(defaultOpen)
@@ -105,6 +113,8 @@ export function AttendanceCard({
           </button>
         )}
       </Heading>
+
+      {aside}
 
       {details !== null && open && (
         <div id={panelId} className="space-y-1.5">

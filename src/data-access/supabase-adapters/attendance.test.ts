@@ -134,10 +134,19 @@ describe('submitting a check-in', () => {
   })
 })
 
-describe('approving a day', () => {
+/** One selected row, in the shape the command reads it in. */
+const ITEM = {
+  attendanceId: 'a-1',
+  expectedAttemptId: 'at-1',
+  expectedVersion: 3,
+  decisionId: 'd-1',
+}
+
+describe('approving a set of days', () => {
   it('states the approver’s missing position, rather than omitting it', async () => {
     const rpc = succeeds()
-    await adapterWith(rpc).approve(['a-1'], {
+    await adapterWith(rpc).approve([ITEM], {
+      commandId: 'c-1',
       reason: null,
       reading: null,
       approverId: 'm-1',
@@ -156,6 +165,77 @@ describe('approving a day', () => {
       p_manager_lng: null,
       p_manager_accuracy_m: null,
     })
+  })
+
+  it('sends one call for the whole set, never one per row', async () => {
+    const rpc = succeeds()
+    await adapterWith(rpc).approve(
+      [ITEM, { ...ITEM, attendanceId: 'a-2', expectedAttemptId: 'at-2', decisionId: 'd-2' }],
+      { commandId: 'c-2', reason: 'Away from the counter', reading: null, approverId: 'm-1' },
+    )
+
+    // The defect this change exists to fix: the adapter used to loop, so a
+    // failure part way through settled half a morning and a retry minted new
+    // identities. One call over the whole set is what makes it atomic and
+    // replayable at all.
+    const decisions = rpc.mock.calls.filter(([name]) => name === 'attendance_decide_set')
+    expect(decisions).toHaveLength(1)
+    const [, args] = decisions[0] as [string, Record<string, unknown>]
+    expect(args['p_action']).toBe('approve')
+    expect(args['p_command_id']).toBe('c-2')
+    expect(args['p_items']).toEqual([
+      { attendance_id: 'a-1', attempt_id: 'at-1', expected_version: 3, decision_id: 'd-1' },
+      { attendance_id: 'a-2', attempt_id: 'at-2', expected_version: 3, decision_id: 'd-2' },
+    ])
+  })
+
+  it('sends the caller’s identities unchanged, so a retry replays rather than repeats', async () => {
+    const rpc = succeeds()
+    const adapter = adapterWith(rpc)
+    const input = {
+      commandId: 'c-3',
+      reason: null,
+      reading: null,
+      approverId: 'm-1',
+    } as const
+    await adapter.approve([ITEM], input)
+    await adapter.approve([ITEM], input)
+
+    const decisions = rpc.mock.calls.filter(([name]) => name === 'attendance_decide_set')
+    expect(decisions).toHaveLength(2)
+    expect(decisions[0]?.[1]).toEqual(decisions[1]?.[1])
+  })
+
+  it('refuses to send an approval for a row with nothing waiting on it', async () => {
+    const rpc = succeeds()
+    await expect(
+      adapterWith(rpc).approve([{ ...ITEM, expectedAttemptId: '' }], {
+        commandId: 'c-4',
+        reason: null,
+        reading: null,
+        approverId: 'm-1',
+      }),
+    ).rejects.toMatchObject({ code: 'nothing_to_approve' })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+})
+
+describe('denying a set of days', () => {
+  it('takes the same set shape and sends no position of any kind', async () => {
+    const rpc = succeeds()
+    await adapterWith(rpc).deny([ITEM], {
+      commandId: 'c-5',
+      reason: 'Not on the rota',
+      preventRetry: true,
+    })
+
+    const [, args] = rpc.mock.calls[0] as [string, Record<string, unknown>]
+    expect(args['p_action']).toBe('deny')
+    expect(args['p_prevent_retry']).toBe(true)
+    // Denial vouches for nobody's whereabouts, so it never carries any.
+    expect(Object.keys(args)).not.toContain('p_manager_lat')
+    expect(Object.keys(args)).not.toContain('p_manager_lng')
+    expect(Object.keys(args)).not.toContain('p_manager_accuracy_m')
   })
 })
 
@@ -177,7 +257,8 @@ describe('a refusal on the way back', () => {
 
   it('reports Postgres saying the same thing under its own code', async () => {
     await expect(
-      adapterWith(fails('42883')).approve(['a-1'], {
+      adapterWith(fails('42883')).approve([ITEM], {
+        commandId: 'c-9',
         reason: 'probe',
         reading: null,
         approverId: 'm-1',

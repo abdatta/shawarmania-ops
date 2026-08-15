@@ -43,13 +43,17 @@ select ok((select distance_m < 100 from public.attendance_attempts where id = '8
   'the database derives distance from coordinates');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
+-- A set of one, because the per-row Approve button is a set of one: there is a
+-- single write path, so this rule cannot be enforced two ways.
 select lives_ok($q$
-  select public.attendance_approve_attempt(
-    '82000000-0000-4000-a000-000000000001',
-    (select id from public.attendance where current_attempt_id = '81000000-0000-4000-a000-000000000001'),
-    '81000000-0000-4000-a000-000000000001',
-    (select state_version from public.attendance where current_attempt_id = '81000000-0000-4000-a000-000000000001'),
-    null, 22.97502, 88.43455, 15)
+  select * from public.attendance_decide_set(
+    '82000000-0000-4000-a000-0000000000c1', 'approve',
+    jsonb_build_array(jsonb_build_object(
+      'attendance_id', (select id from public.attendance where current_attempt_id = '81000000-0000-4000-a000-000000000001'),
+      'attempt_id', '81000000-0000-4000-a000-000000000001',
+      'expected_version', (select state_version from public.attendance where current_attempt_id = '81000000-0000-4000-a000-000000000001'),
+      'decision_id', '82000000-0000-4000-a000-000000000001')),
+    null, false, 22.97502, 88.43455, 15)
 $q$, 'the outlet manager approves the current attempt');
 select is((select status from public.attendance where outcome_attempt_id = '81000000-0000-4000-a000-000000000001'),
   'present'::public.attendance_status, 'approval settles the canonical day present');

@@ -144,22 +144,26 @@ $q$, 'P0001', 'outlet is not trading',
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select throws_ok($q$
-  select public.attendance_approve_attempt(
-    '85000000-0000-4000-a000-000000000002',
-    (select id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
-    (select current_attempt_id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
-    (select state_version from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
-    null, 22.97502, 88.43455, 20)
+  select * from public.attendance_decide_set(
+    '85000000-0000-4000-a000-0000000000c2', 'approve',
+    jsonb_build_array(jsonb_build_object(
+      'attendance_id', (select id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+      'attempt_id', (select current_attempt_id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+      'expected_version', (select state_version from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+      'decision_id', '85000000-0000-4000-a000-000000000002')),
+    null, false, 22.97502, 88.43455, 20)
 $q$, 'P0001', 'an approval from away from the outlet, or after the row''s own business day, requires a reason',
   'settling a day that has already closed needs a reason, even from inside the fence');
 
 select lives_ok($q$
-  select public.attendance_approve_attempt(
-    '85000000-0000-4000-a000-000000000003',
-    (select id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
-    (select current_attempt_id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
-    (select state_version from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
-    'Worked the shift before we closed the shop (synthetic)', 22.97502, 88.43455, 20)
+  select * from public.attendance_decide_set(
+    '85000000-0000-4000-a000-0000000000c3', 'approve',
+    jsonb_build_array(jsonb_build_object(
+      'attendance_id', (select id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+      'attempt_id', (select current_attempt_id from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+      'expected_version', (select state_version from public.attendance where person_id = '20000000-0000-4000-a000-000000000002' and business_date = current_date - 1),
+      'decision_id', '85000000-0000-4000-a000-000000000003')),
+    'Worked the shift before we closed the shop (synthetic)', false, 22.97502, 88.43455, 20)
 $q$, 'an approval at a deactivated outlet is recorded, never refused');
 
 select is((select status from public.attendance

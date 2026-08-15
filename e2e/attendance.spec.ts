@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
   DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
+  DEMO_PREP_COOK_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
   DEMO_TWO_OUTLETS_ACCOUNT_ID,
 } from '../src/data-access/mock/fixtures/accounts'
@@ -162,6 +163,183 @@ test('approving from away from the outlet costs a reason, and records it', async
   await expect(card.getByTestId('approver-place')).toContainText('Approver:')
 })
 
+/**
+ * Selecting a set, and everything about it that depends on where the manager is
+ * standing.
+ *
+ * The position comes from Playwright's own emulation and nothing in the app, so
+ * these walks drive the same `navigator.geolocation` path a phone drives. Every
+ * one of them asserts both what the sheet said beforehand and what each row
+ * recorded afterwards — a summary that reads correctly over rows that stored
+ * something else would be the worst outcome available, and only the second half
+ * of each assertion rules it out.
+ */
+
+/** Add each waiting person to the set, one manual action at a time. */
+async function selectEachWaiting(page: Page) {
+  await page.getByTestId('toggle-selecting').click()
+  await expect(page.getByTestId('selection-count')).toContainText('0 selected')
+  const boxes = page.getByTestId(/^select-[0-9a-f-]{36}$/)
+  const count = await boxes.count()
+  for (let index = 0; index < count; index += 1) await boxes.nth(index).click()
+  await expect(page.getByTestId('selection-count')).toContainText(`${count} selected`)
+  return count
+}
+
+test('a manager at the counter settles a whole selected morning in one action', async ({
+  page,
+}) => {
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+  await expect(page.getByTestId('day-waiting')).toContainText('2 arrivals waiting for approval')
+
+  const chosen = await selectEachWaiting(page)
+  expect(chosen).toBe(2)
+  await page.getByTestId('approve-selected').click()
+
+  // Standing inside the fence on the day, so nothing is asked except who this
+  // is about — and that question is the point of the confirmation.
+  await expect(page.getByLabel(/Why are you approving/)).toHaveCount(0)
+  await expect(page.getByTestId('confirm-people').getByRole('listitem')).toHaveCount(2)
+  await page.getByTestId('confirm-set').click()
+
+  await expect(page.getByTestId('day-waiting')).toHaveCount(0)
+  // A successful action empties the set, so the next one starts from nothing.
+  await expect(page.getByTestId('selection-bar')).toHaveCount(0)
+  await openEveryDay(page)
+  const notes = page.getByTestId('approver-place')
+  await expect(notes.first()).toContainText('on site')
+})
+
+test('a selected set approved from away costs exactly one reason', async ({ page, context }) => {
+  await context.setGeolocation(DOWN_THE_ROAD)
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  await selectEachWaiting(page)
+  await page.getByTestId('approve-selected').click()
+
+  // One sentence for the set rather than one per person, which is the whole
+  // saving this capability offers.
+  await expect(page.getByTestId('reason-required')).toContainText('You are not at the outlet')
+  await page.getByLabel(/Why are you approving/).fill('Both were at the counter before I left')
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await expect(page.getByTestId('confirm-people').getByRole('listitem')).toHaveCount(2)
+  await page.getByTestId('confirm-set').click()
+
+  await expect(page.getByTestId('day-waiting')).toHaveCount(0)
+  await openEveryDay(page)
+  // Recorded on both rows the action settled, and both say the approver was not
+  // there. Asserted on those two rows by name: the day also carries arrivals
+  // settled long before this action, and a sweep over every approval chip on
+  // screen would be asserting about those instead.
+  for (const person of [DEMO_RUNNER_ACCOUNT_ID, DEMO_PREP_COOK_ACCOUNT_ID]) {
+    const card = page.getByTestId(`day-${person}`)
+    await expect(card.getByTestId('approval-note')).toContainText(
+      'Both were at the counter before I left',
+    )
+    await expect(card.getByTestId('approver-place')).not.toContainText('on site')
+  }
+})
+
+test('one reading inside one fence partitions a set spanning two outlets', async ({ page }) => {
+  // The owner is the caller because only they reach both shops, and the
+  // emulated position is Kalyani's counter throughout.
+  await page.goto('demo/owner/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+  await page.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`).click()
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  await selectEachWaiting(page)
+  await page.getByTestId('approve-selected').click()
+
+  // Judged per row against that row's own outlet. One reading measured against
+  // two fixed points is arithmetic, not a claim to have stood at both.
+  const partition = page.getByTestId('approval-partition')
+  await expect(partition).toContainText(/Approved normally: .*Kalyani/)
+  await expect(partition).toContainText(/Need your reason: .*Kanchrapara/)
+  await expect(partition).toContainText('recorded only against the')
+
+  await page.getByLabel(/Why are you approving/).fill('Kanchrapara confirmed on the shift photo')
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByTestId('confirm-set').click()
+  await expect(page.getByTestId('day-waiting')).toHaveCount(0)
+
+  await openEveryDay(page)
+  // The reason reached the far outlet's row and no other, and each row carries
+  // its own computed distance rather than a shared verdict.
+  const kanchrapara = page.getByTestId(`day-${DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID}`)
+  await expect(kanchrapara.getByTestId('approval-note')).toContainText(
+    'Kanchrapara confirmed on the shift photo',
+  )
+  const runner = page.getByTestId(`day-${DEMO_RUNNER_ACCOUNT_ID}`)
+  await expect(runner.getByTestId('approval-note')).not.toContainText('shift photo')
+  await expect(runner.getByTestId('approver-place')).toContainText('on site')
+  await expect(kanchrapara.getByTestId('approver-place')).not.toContainText('on site')
+})
+
+test('a set approved with no position at all costs a reason and records nothing it cannot', async ({
+  page,
+  context,
+}) => {
+  // No emulated position: the device is asked and answers nothing, which is the
+  // same code path a phone indoors takes.
+  await context.setGeolocation(null)
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  await selectEachWaiting(page)
+  await page.getByTestId('approve-selected').click()
+
+  await expect(page.getByTestId('reason-required')).toContainText('Your position could not be read')
+  await page.getByLabel(/Why are you approving/).fill('Phone could not find a position')
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByTestId('confirm-set').click()
+  await expect(page.getByTestId('day-waiting')).toHaveCount(0)
+
+  await openEveryDay(page)
+  // Unknown, and said so. A row claiming a distance here would be claiming a
+  // place nobody read.
+  for (const person of [DEMO_RUNNER_ACCOUNT_ID, DEMO_PREP_COOK_ACCOUNT_ID]) {
+    await expect(page.getByTestId(`day-${person}`).getByTestId('approver-place')).toContainText(
+      'position not recorded',
+    )
+  }
+})
+
+test('a denied set shares one reason and one retry choice, and reads no position', async ({
+  page,
+}) => {
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  await selectEachWaiting(page)
+  await page.getByTestId('deny-selected').click()
+
+  await expect(page.getByTestId('denial-shared')).toContainText('apply to all 2 of them')
+  // The control names a business date rather than saying `today`, because a set
+  // can reach back over days that have already closed.
+  await expect(page.getByText(/Prevent another check-in on/)).toBeVisible()
+  await page.getByLabel('Reason').fill('Neither was on the rota')
+  await page.getByTestId('prevent-retry').check()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await expect(page.getByTestId('confirm-note')).toContainText(
+    'None of them will be able to check in again',
+  )
+  await page.getByTestId('confirm-set').click()
+
+  await expect(page.getByTestId('day-waiting')).toHaveCount(0)
+  await openEveryDay(page)
+  // Denial vouches for nobody's whereabouts, so neither denied row carries an
+  // approval or a position at all.
+  for (const person of [DEMO_RUNNER_ACCOUNT_ID, DEMO_PREP_COOK_ACCOUNT_ID]) {
+    const card = page.getByTestId(`day-${person}`)
+    await expect(card.getByTestId('approver-place')).toHaveCount(0)
+    await expect(card.getByTestId('approval-note')).toHaveCount(0)
+    await expect(card).toContainText('Neither was on the rota')
+  }
+})
+
 test('the navigation carries the count, and doing the work takes it away', async ({ page }) => {
   await page.goto('demo/admin')
 
@@ -221,9 +399,15 @@ test('a manager settles a waiting morning one day at a time, and the list holds 
   await expect(page.getByTestId('attendance-day')).toBeVisible()
   await expect(page.getByTestId('day-waiting')).toContainText('2 arrivals waiting for approval')
 
-  // No bulk control: one button settling the lot is how an arrival nobody saw
-  // gets counted (design D8).
+  // No control that adds more than one person to a set, by any name: a single
+  // button settling the lot is how an arrival nobody saw gets counted.
   await expect(page.getByTestId('approve-all')).toHaveCount(0)
+  await expect(page.getByTestId('select-all')).toHaveCount(0)
+  await page.getByTestId('toggle-selecting').click()
+  for (const name of [/approve all/i, /select all/i, /select the rest/i, /select everyone/i]) {
+    await expect(page.getByRole('button', { name })).toHaveCount(0)
+  }
+  await page.getByTestId('toggle-selecting').click()
 
   const cards = page.getByTestId(/^day-[0-9a-f-]{36}$/)
   const orderBefore = await cards.evaluateAll((nodes) =>

@@ -56,12 +56,14 @@ $q$, 'P0001', 'the current in-fence attempt must be decided before another check
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
 select lives_ok($q$
-  select public.attendance_approve_attempt(
-    '84000000-0000-4000-a000-000000000001',
-    (select id from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000003'),
-    '83000000-0000-4000-a000-000000000003',
-    (select state_version from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000003'),
-    null, 22.97505, 88.43460, 12)
+  select * from public.attendance_decide_set(
+    '84000000-0000-4000-a000-0000000000c1', 'approve',
+    jsonb_build_array(jsonb_build_object(
+      'attendance_id', (select id from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000003'),
+      'attempt_id', '83000000-0000-4000-a000-000000000003',
+      'expected_version', (select state_version from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000003'),
+      'decision_id', '84000000-0000-4000-a000-000000000001')),
+    null, false, 22.97505, 88.43460, 12)
 $q$, 'an on-site same-day approval needs no reason');
 select ok((select manager_distance_m < 100 from public.attendance_decisions where id = '84000000-0000-4000-a000-000000000001'),
   'manager distance is computed from manager coordinates');
@@ -86,20 +88,24 @@ select is((select distance_m from public.attendance_attempts where id = '8300000
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000003');
 select throws_ok($q$
-  select public.attendance_approve_attempt(
-    '84000000-0000-4000-a000-000000000002',
-    (select id from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000005'),
-    '83000000-0000-4000-a000-000000000005',
-    (select state_version from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000005'),
-    null, null, null, null)
+  select * from public.attendance_decide_set(
+    '84000000-0000-4000-a000-0000000000c2', 'approve',
+    jsonb_build_array(jsonb_build_object(
+      'attendance_id', (select id from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000005'),
+      'attempt_id', '83000000-0000-4000-a000-000000000005',
+      'expected_version', (select state_version from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000005'),
+      'decision_id', '84000000-0000-4000-a000-000000000002')),
+    null, false, null, null, null)
 $q$, 'P0001', null, 'an unverifiable approval needs a reason');
 select lives_ok($q$
-  select public.attendance_approve_attempt(
-    '84000000-0000-4000-a000-000000000003',
-    (select id from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000005'),
-    '83000000-0000-4000-a000-000000000005',
-    (select state_version from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000005'),
-    'Seen at the counter (synthetic)', null, null, null)
+  select * from public.attendance_decide_set(
+    '84000000-0000-4000-a000-0000000000c3', 'approve',
+    jsonb_build_array(jsonb_build_object(
+      'attendance_id', (select id from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000005'),
+      'attempt_id', '83000000-0000-4000-a000-000000000005',
+      'expected_version', (select state_version from public.attendance where current_attempt_id = '83000000-0000-4000-a000-000000000005'),
+      'decision_id', '84000000-0000-4000-a000-000000000003')),
+    'Seen at the counter (synthetic)', false, null, null, null)
 $q$, 'a reason permits an unverifiable approval');
 
 reset role;

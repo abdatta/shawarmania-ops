@@ -277,6 +277,8 @@ invented GPS evidence.
 
 GPS accuracy indoors also drifts 20–100m routinely, which is why the geofence refuses nothing at all: it is evidence a manager reads, and the manager's approval is what counts a day. That approval carries the manager's own position for the same reason it carries the employee's, and it is subject to the same limitation — an approval recorded as on-site raises the bar that the manager was there, and does not prove it.
 
+**Accuracy is recorded and displayed, and gates nothing.** A reading accurate to kilometres that happens to land inside a fence reads as on site, for a check-in and for an approval alike. Since a manager can settle a selected set in one action, one such reading now carries several approvals rather than one, which is a real amplification of an existing weakness and is accepted rather than hidden: the accuracy is stored on every decision the action wrote, so a reviewer can see it. A threshold would also change employee check-in — refusing arrivals from people standing at their own counter with a poor fix — so it belongs in its own change rather than arriving as a side effect of batching.
+
 ### One arrival deadline cannot describe two shifts
 
 An outlet carries **one** arrival deadline, and lateness is judged against it for

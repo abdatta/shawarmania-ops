@@ -2,20 +2,13 @@ import {
   CalendarCheck,
   ChevronLeft,
   ChevronRight,
+  ListChecks,
   PencilLine,
   RotateCcw,
   ShieldCheck,
   XCircle,
 } from 'lucide-react'
-import {
-  Fragment,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from 'react'
+import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
@@ -33,7 +26,7 @@ import type {
   AttendanceRecord,
   WaitingCount,
 } from '@/data-access/adapters'
-import { AttendanceActionError, isStaffAt } from '@/data-access/adapters'
+import { AttendanceActionError, isRecoverableSetRefusal, isStaffAt } from '@/data-access/adapters'
 import { attentionChanged } from '@/features/attention/attention'
 import {
   evaluateFence,
@@ -367,19 +360,16 @@ function WaitingChipBadge({
 }
 
 /**
- * How long a position reading may be reused across approvals (design D11).
+ * The 60-second position reuse window is gone (attendance-batch-decisions,
+ * design D5).
  *
- * The approver's position is evidence written to each row, so this window is
- * exactly how stale that evidence is allowed to be. It is also the abuse bound:
- * longer would let a manager take one reading inside the fence, walk away, and
- * keep collecting one-tap no-reason approvals against it.
- *
- * **Keyed per outlet** since the view stopped being about one
- * (attendance-one-day-per-person, design D6). One reading cannot vouch for
- * standing in two places, so reusing it across outlets would be writing evidence
- * that says somebody was somewhere they were not.
+ * It existed only so that approving one person at a time did not mean one GPS
+ * read per person, which is the problem a selected set solves properly. Every
+ * action now reads the position for that action, so every stored approval
+ * position is a reading taken in direct response to it rather than one that may
+ * be up to a minute old — and the capability carries one freshness rule instead
+ * of two.
  */
-const POSITION_CACHE_MS = 60_000
 
 /** Rank a day by how much it wants somebody's attention (design D12). */
 const READING_RANK: Record<DayReading['kind'], number> = {
@@ -390,17 +380,63 @@ const READING_RANK: Record<DayReading['kind'], number> = {
   recorded: 4,
 }
 
+/**
+ * One person in the set being decided, with everything the sheets need to name
+ * them and the command needs to settle them.
+ *
+ * The decision id travels with the row from the moment the set is fixed, so a
+ * retry after a lost response replays the same command rather than minting a
+ * second identity for the same act.
+ */
+interface Chosen {
+  record: AttendanceRecord
+  personName: string
+  outlet: Tables<'outlets'> | null
+  decisionId: string
+}
+
+/**
+ * How one reading falls across the selected rows, judged per row against that
+ * row's own outlet fence and that row's own business day.
+ *
+ * Explanatory only. The database decides this again for itself and stores the
+ * reason only where it was owed; a client that treated this as enforcement
+ * would drift the moment the two disagreed.
+ */
+interface Partition {
+  plain: Chosen[]
+  reasoned: Chosen[]
+  why: 'away' | 'no-position' | 'closed-day'
+}
+
 /** What an approval is waiting on, once the manager's position is known. */
 type ApprovalFlow =
   | { kind: 'idle' }
-  | { kind: 'locating'; ids: string[] }
+  | { kind: 'locating' }
   /** The rule wants a reason. `why` is what the sheet explains. */
   | {
       kind: 'reason'
-      ids: string[]
+      commandId: string
+      rows: Chosen[]
       reading: PositionReading | null
-      why: 'away' | 'no-position' | 'closed-day'
+      partition: Partition
     }
+  /** The last gate: the people, by name, before anything is written. */
+  | {
+      kind: 'confirm'
+      commandId: string
+      rows: Chosen[]
+      reading: PositionReading | null
+      reason: string | null
+      partition: Partition
+    }
+  | { kind: 'saving' }
+
+/** Denial reads no position, so it has one fewer step than approval. */
+type DenialFlow =
+  | { kind: 'idle' }
+  | { kind: 'reason'; commandId: string; rows: Chosen[] }
+  | { kind: 'confirm'; commandId: string; rows: Chosen[]; reason: string; preventRetry: boolean }
   | { kind: 'saving' }
 
 /** One person on the roll-call, and everything the row needs about them. */
@@ -437,12 +473,64 @@ function OutletAxis({
 
   const [businessDate, setBusinessDate] = useState(today)
   const [flow, setFlow] = useState<ApprovalFlow>({ kind: 'idle' })
+  const [denialFlow, setDenialFlow] = useState<DenialFlow>({ kind: 'idle' })
   const [manualFor, setManualFor] = useState<AccountSummary | null>(null)
-  const [denyFor, setDenyFor] = useState<AttendanceRecord | null>(null)
   const [correctFor, setCorrectFor] = useState<AttendanceRecord | null>(null)
+
+  /**
+   * The set the manager is building, by attendance id.
+   *
+   * **Every person joins it by an action of its own.** There is no Select all
+   * and no subset shortcut of any kind — not by outlet, not by lateness, not
+   * select-the-rest, no range drag and no press-and-hold sweep. The saving this
+   * surface offers is in acting on a set, never in building one, which is what
+   * keeps an approval a statement about a person somebody remembers arriving.
+   *
+   * `Clear` is the one control that touches several at once, and it is safe for
+   * the reason the others are not: it only ever removes people from an action.
+   *
+   * **Carried with the scope that produced it**, the same way the day itself is,
+   * so leaving the day or changing the outlets empties it by arithmetic rather
+   * than by an effect racing the render that reads it. A selection is about rows
+   * that are on screen; one surviving a scope change would leave people selected
+   * that nobody can see.
+   */
+  const [selectionState, setSelectionState] = useState<{
+    key: string
+    selecting: boolean
+    ids: readonly string[]
+    /** Named on screen after a refusal dropped them: their day moved under the set. */
+    dropped: readonly string[]
+  } | null>(null)
 
   const outletIds = useMemo(() => outlets.map((outlet) => outlet.id), [outlets])
   const scopeKey = `${[...outletIds].sort().join(',')}|${businessDate}`
+
+  const selection =
+    selectionState?.key === scopeKey
+      ? selectionState
+      : {
+          key: scopeKey,
+          selecting: false,
+          ids: [] as readonly string[],
+          dropped: [] as readonly string[],
+        }
+  const selecting = selection.selecting
+  const selected = selection.ids
+  const dropped = selection.dropped
+
+  function reviseSelection(next: {
+    selecting?: boolean
+    ids?: readonly string[]
+    dropped?: readonly string[]
+  }) {
+    setSelectionState({
+      key: scopeKey,
+      selecting: next.selecting ?? selection.selecting,
+      ids: next.ids ?? selection.ids,
+      dropped: next.dropped ?? selection.dropped,
+    })
+  }
 
   /**
    * The day, and who the database says is accounted for out of sight, keyed by
@@ -463,13 +551,6 @@ function OutletAxis({
     seed: readonly AttendanceRecord[]
     at: Date
   } | null>(null)
-
-  // Position readings, one per outlet. A reading taken at one says nothing about
-  // standing at another, so they never share a slot (design D6).
-  const cachedPositions = useRef(new Map<string, { reading: PositionReading; at: number }>())
-  useEffect(() => {
-    cachedPositions.current.clear()
-  }, [scopeKey])
 
   useEffect(() => {
     let active = true
@@ -510,91 +591,196 @@ function OutletAxis({
     outlets.find((outlet) => outlet.id === outletId) ?? null
 
   /**
-   * Read the manager's position once **per outlet**, then decide whether the
-   * rule wants a reason. Inside that outlet's fence on the row's own business
-   * day is one tap; anywhere or any day else costs a sentence, and the database
-   * refuses the write without one whatever this decides.
+   * Turn a set of chosen attendance ids into the rows the sheets name and the
+   * command settles. Each one takes its decision identity here, once, so every
+   * later step — including a retry after a lost response — carries the same one.
    */
-  async function beginApprove(ids: string[], outlet: Tables<'outlets'>) {
-    if (ids.length === 0) return
+  function chooseRows(ids: readonly string[]): Chosen[] {
+    return ids
+      .map((id) => records.find((record) => record.id === id))
+      .filter((record): record is AttendanceRecord => record?.currentAttemptId != null)
+      .map((record) => ({
+        record,
+        personName: record.personName,
+        outlet: outletOf(record.outletId),
+        decisionId: crypto.randomUUID(),
+      }))
+  }
 
-    // A reading from the last minute stands in for a fresh one; anything older is
-    // no longer a claim about where this manager is now.
-    const cached = cachedPositions.current.get(outlet.id)
-    if (cached && Date.now() - cached.at < POSITION_CACHE_MS) {
-      return decideApproval(ids, outlet, cached.reading)
-    }
-
-    setFlow({ kind: 'locating', ids })
-    const result = await readPosition()
-    const reading = result.ok ? result.reading : null
-    // Only a real reading is worth keeping. A failure is not cached, so the next
-    // approval asks again rather than inheriting a silence.
-    if (reading === null) cachedPositions.current.delete(outlet.id)
-    else cachedPositions.current.set(outlet.id, { reading, at: Date.now() })
-    return decideApproval(ids, outlet, reading)
+  function toItems(rows: readonly Chosen[]) {
+    return rows.map((row) => ({
+      attendanceId: row.record.id,
+      expectedAttemptId: row.record.currentAttemptId as string,
+      expectedVersion: row.record.stateVersion,
+      decisionId: row.decisionId,
+    }))
   }
 
   /**
-   * Decide what an approval costs, given a position reading that may have just
-   * been taken or may be up to a minute old, judged against **the row's own**
-   * outlet's fence and clock (design D6, D7).
+   * Where one reading leaves each selected row, judged against **that row's**
+   * own outlet fence and **that row's** own business day (design D4).
+   *
+   * One reading across several outlets is one statement about where the manager
+   * was, not a claim to have been at each of them: the same instant is simply
+   * measured against several fixed points, which is what the database does.
    */
-  async function decideApproval(
-    ids: string[],
-    outlet: Tables<'outlets'>,
-    reading: PositionReading | null,
-  ) {
-    const inside =
-      reading !== null &&
-      evaluateFence(
-        {
-          latitude: outlet.latitude,
-          longitude: outlet.longitude,
-          radiusMetres: outlet.geofence_radius_m,
-        },
-        reading,
-      ).kind === 'inside'
-    const sameDay = businessDate === resolveBusinessDate(new Date(), outlet.business_day_cutover)
+  function partitionOf(rows: readonly Chosen[], reading: PositionReading | null): Partition {
+    const plain: Chosen[] = []
+    const reasoned: Chosen[] = []
+    let anyClosed = false
+    for (const row of rows) {
+      const outlet = row.outlet
+      const inside =
+        outlet !== null &&
+        reading !== null &&
+        evaluateFence(
+          {
+            latitude: outlet.latitude,
+            longitude: outlet.longitude,
+            radiusMetres: outlet.geofence_radius_m,
+          },
+          reading,
+        ).kind === 'inside'
+      const sameDay =
+        outlet !== null &&
+        row.record.businessDate === resolveBusinessDate(new Date(), outlet.business_day_cutover)
+      if (inside && sameDay) plain.push(row)
+      else {
+        reasoned.push(row)
+        if (inside && !sameDay) anyClosed = true
+      }
+    }
+    return {
+      plain,
+      reasoned,
+      why: anyClosed ? 'closed-day' : reading === null ? 'no-position' : 'away',
+    }
+  }
 
-    if (inside && sameDay) {
-      await submitApproval(ids, null, reading)
+  /**
+   * One reading, taken in direct response to this action and never carried over
+   * to a later one. Inside every selected row's fence on its own business day is
+   * one tap; anything else costs one sentence covering the rows that need it,
+   * and the database refuses the write without one whatever this decides.
+   */
+  async function beginApprove(rows: Chosen[]) {
+    if (rows.length === 0) return
+    const commandId = crypto.randomUUID()
+    setFlow({ kind: 'locating' })
+    const result = await readPosition()
+    const reading = result.ok ? result.reading : null
+    const partition = partitionOf(rows, reading)
+
+    if (partition.reasoned.length > 0) {
+      setFlow({ kind: 'reason', commandId, rows, reading, partition })
       return
     }
-    setFlow({
-      kind: 'reason',
-      ids,
-      reading,
-      why: !sameDay ? 'closed-day' : reading === null ? 'no-position' : 'away',
-    })
+    if (rows.length > 1) {
+      setFlow({ kind: 'confirm', commandId, rows, reading, reason: null, partition })
+      return
+    }
+    await submitApproval(commandId, rows, null, reading)
   }
 
   async function submitApproval(
-    ids: readonly string[],
+    commandId: string,
+    rows: readonly Chosen[],
     reason: string | null,
     reading: PositionReading | null,
   ) {
     setFlow({ kind: 'saving' })
     try {
       upsert(
-        await attendance.approve(ids, {
+        await attendance.approve(toItems(rows), {
+          commandId,
           reason,
           reading,
           approverId: session.userId,
         }),
       )
       setFlow({ kind: 'idle' })
-      onError(null)
-      // The badge that pointed here has to go when the work is done, and it is
-      // usually somewhere else on screen from the button that did it.
-      attentionChanged()
+      finishAction()
     } catch (cause) {
       setFlow({ kind: 'idle' })
-      onError(
-        cause instanceof AttendanceActionError
-          ? cause.message
-          : 'That did not work. Try again in a moment.',
-      )
+      await recover(cause, rows)
+    }
+  }
+
+  function beginDeny(rows: Chosen[]) {
+    if (rows.length === 0) return
+    // Denial reads no position at all, at any size of set: it says the attempts
+    // should not count, not that the manager stood anywhere.
+    setDenialFlow({ kind: 'reason', commandId: crypto.randomUUID(), rows })
+  }
+
+  async function submitDenial(
+    commandId: string,
+    rows: readonly Chosen[],
+    reason: string,
+    preventRetry: boolean,
+  ) {
+    setDenialFlow({ kind: 'saving' })
+    try {
+      upsert(await attendance.deny(toItems(rows), { commandId, reason, preventRetry }))
+      setDenialFlow({ kind: 'idle' })
+      finishAction()
+    } catch (cause) {
+      setDenialFlow({ kind: 'idle' })
+      await recover(cause, rows)
+    }
+  }
+
+  /** A successful action leaves nothing selected, so the next one starts fresh. */
+  function finishAction() {
+    setSelectionState({ key: scopeKey, selecting: false, ids: [], dropped: [] })
+    onError(null)
+    // The badge that pointed here has to go when the work is done, and it is
+    // usually somewhere else on screen from the button that did it.
+    attentionChanged()
+  }
+
+  /**
+   * A refusal costs the action, never the selection (design D7).
+   *
+   * The command settled nothing and deliberately does not say which rows moved,
+   * because describing them would mean the database narrating rows the caller
+   * may not be entitled to read. So the day is read again here and the surface
+   * diffs its own selection: whatever is still waiting on the same attempt and
+   * version stays selected, and whatever moved is dropped and named.
+   */
+  async function recover(cause: unknown, rows: readonly Chosen[]) {
+    const message =
+      cause instanceof AttendanceActionError
+        ? cause.message
+        : 'That did not work. Try again in a moment.'
+    if (!isRecoverableSetRefusal(cause)) {
+      onError(message)
+      return
+    }
+    try {
+      const [fresh, away] = await Promise.all([
+        attendance.listOutletDay(outletIds, businessDate),
+        attendance.listElsewhere(outletIds, businessDate),
+      ])
+      setLoaded({ key: scopeKey, records: fresh, elsewhere: away, seed: fresh, at: new Date() })
+      const moved = rows.filter((row) => {
+        const now = fresh.find((candidate) => candidate.id === row.record.id)
+        return (
+          now == null ||
+          now.currentAttemptId !== row.record.currentAttemptId ||
+          now.stateVersion !== row.record.stateVersion
+        )
+      })
+      const survivors = rows.filter((row) => !moved.includes(row)).map((row) => row.record.id)
+      setSelectionState({
+        key: scopeKey,
+        selecting: survivors.length > 0,
+        ids: survivors,
+        dropped: moved.map((row) => row.personName),
+      })
+      onError(message)
+    } catch {
+      onError(message)
     }
   }
 
@@ -614,31 +800,6 @@ function OutletAxis({
       // A manual entry settles the day too, so it can only shrink a backlog.
       attentionChanged()
     } catch (cause) {
-      onError(
-        cause instanceof AttendanceActionError
-          ? cause.message
-          : 'That did not work. Try again in a moment.',
-      )
-    }
-  }
-
-  async function deny(record: AttendanceRecord, reason: string, preventRetry: boolean) {
-    if (!record.currentAttemptId) return
-    try {
-      upsert([
-        await attendance.deny({
-          attendanceId: record.id,
-          expectedAttemptId: record.currentAttemptId,
-          expectedVersion: record.stateVersion,
-          reason,
-          preventRetry,
-        }),
-      ])
-      setDenyFor(null)
-      onError(null)
-      attentionChanged()
-    } catch (cause) {
-      setDenyFor(null)
       onError(
         cause instanceof AttendanceActionError
           ? cause.message
@@ -755,7 +916,12 @@ function OutletAxis({
     .filter((row) => row.reading.kind === 'waiting')
     .map((row) => row.record?.id)
     .filter((id): id is string => id !== undefined)
-  const busy = flow.kind === 'locating' || flow.kind === 'saving'
+  const busy = flow.kind === 'locating' || flow.kind === 'saving' || denialFlow.kind === 'saving'
+
+  // A row that settled, was retried, or was decided by somebody else while the
+  // set was open cannot stay silently selected. Derived rather than pruned in an
+  // effect, so the count on the action bar can never disagree with the rows.
+  const chosen = selected.filter((id) => waitingIds.includes(id))
 
   // Whether the outlets IN SCOPE hold unsettled arrivals on days other than the
   // one on screen — the two extremes of their waiting dates, against the day
@@ -777,7 +943,28 @@ function OutletAxis({
         waiting={waitingIds.length}
         earlier={scoped !== null && scoped.oldest < businessDate}
         later={scoped !== null && scoped.newest > businessDate}
+        selecting={selecting}
+        // Rendered whatever the day holds, and disabled when it holds nothing to
+        // decide, so the list below starts in the same place before and after the
+        // day arrives and the placeholder above it stays honest.
+        canSelect={waitingIds.length > 0}
+        onToggleSelecting={() => {
+          // Leaving selection is cancelling it, and cancelling empties the set.
+          reviseSelection({ selecting: !selecting, ids: [], dropped: [] })
+        }}
       />
+
+      {dropped.length > 0 && (
+        <p
+          role="status"
+          data-testid="selection-dropped"
+          className="mb-3 rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted"
+        >
+          {dropped.join(', ')} {dropped.length === 1 ? 'was' : 'were'} decided or checked in again
+          while this action was open, so {dropped.length === 1 ? 'that row was' : 'those rows were'}{' '}
+          taken out of the set. Nothing was recorded. Everybody else is still selected.
+        </p>
+      )}
 
       {day === null ? (
         <LoadingList label="this day’s roll-call" data-testid="day-loading" />
@@ -798,6 +985,22 @@ function OutletAxis({
               radiusMetres={row.outlet?.geofence_radius_m ?? 0}
               outletName={named ? (row.outlet?.name ?? null) : null}
               busy={busy}
+              // Selection is offered on every waiting row, including a row
+              // belonging to somebody who holds no staff assignment here: it
+              // counts towards the waiting badge, so leaving it out would strand
+              // work a manager could only clear one row at a time.
+              selecting={selecting}
+              selectable={row.reading.kind === 'waiting' && row.record !== null}
+              selected={row.record !== null && chosen.includes(row.record.id)}
+              onToggleSelect={() => {
+                const id = row.record?.id
+                if (!id) return
+                reviseSelection({
+                  ids: selected.includes(id)
+                    ? selected.filter((candidate) => candidate !== id)
+                    : [...selected, id],
+                })
+              }}
               // Never for somebody listed only because a row exists: they have
               // the one thing this action would create. Nor for somebody
               // accounted for elsewhere: their day is taken, and the database
@@ -809,11 +1012,10 @@ function OutletAxis({
                 row.reading.kind !== 'elsewhere'
               }
               onApprove={() => {
-                const outlet = outletOf(row.record?.outletId ?? null)
-                if (row.record && outlet) void beginApprove([row.record.id], outlet)
+                if (row.record) void beginApprove(chooseRows([row.record.id]))
               }}
               onDeny={() => {
-                if (row.record) setDenyFor(row.record)
+                if (row.record) beginDeny(chooseRows([row.record.id]))
               }}
               onCorrect={() => {
                 if (row.record) setCorrectFor(row.record)
@@ -827,13 +1029,103 @@ function OutletAxis({
         </div>
       )}
 
+      {selecting && (
+        <SelectionBar
+          count={chosen.length}
+          busy={busy}
+          onApprove={() => void beginApprove(chooseRows(chosen))}
+          onDeny={() => beginDeny(chooseRows(chosen))}
+          onClear={() => {
+            reviseSelection({ ids: [], dropped: [] })
+          }}
+        />
+      )}
+
       <ReasonSheet
-        key={flow.kind === 'reason' ? flow.ids.join(',') : 'no-reason'}
+        key={flow.kind === 'reason' ? flow.commandId : 'no-reason'}
         flow={flow}
-        count={flow.kind === 'reason' ? flow.ids.length : 0}
+        namedOutlets={named}
         onClose={() => setFlow({ kind: 'idle' })}
         onApprove={(reason) => {
-          if (flow.kind === 'reason') void submitApproval(flow.ids, reason, flow.reading)
+          if (flow.kind !== 'reason') return
+          // The confirmation is always the last step, so where a reason was
+          // required the manager reads the names in the light of what they have
+          // just written rather than before it.
+          if (flow.rows.length > 1) {
+            setFlow({
+              kind: 'confirm',
+              commandId: flow.commandId,
+              rows: flow.rows,
+              reading: flow.reading,
+              reason,
+              partition: flow.partition,
+            })
+            return
+          }
+          void submitApproval(flow.commandId, flow.rows, reason, flow.reading)
+        }}
+      />
+
+      <ConfirmSheet
+        open={flow.kind === 'confirm'}
+        title={flow.kind === 'confirm' ? `Approve ${flow.rows.length} arrivals` : ''}
+        action="Approve them"
+        rows={flow.kind === 'confirm' ? flow.rows : []}
+        namedOutlets={named}
+        note={
+          flow.kind === 'confirm' && flow.reason !== null && flow.partition.plain.length > 0
+            ? `Your reason will be recorded only against the ${flow.partition.reasoned.length} that need it.`
+            : null
+        }
+        onClose={() => setFlow({ kind: 'idle' })}
+        onConfirm={() => {
+          if (flow.kind === 'confirm')
+            void submitApproval(flow.commandId, flow.rows, flow.reason, flow.reading)
+        }}
+      />
+
+      <DenialSheet
+        key={denialFlow.kind === 'reason' ? denialFlow.commandId : 'no-denial'}
+        flow={denialFlow}
+        radiusFor={(outletId) => outletOf(outletId)?.geofence_radius_m ?? 0}
+        onClose={() => setDenialFlow({ kind: 'idle' })}
+        onDeny={(reason, preventRetry) => {
+          if (denialFlow.kind !== 'reason') return
+          if (denialFlow.rows.length > 1) {
+            setDenialFlow({
+              kind: 'confirm',
+              commandId: denialFlow.commandId,
+              rows: denialFlow.rows,
+              reason,
+              preventRetry,
+            })
+            return
+          }
+          void submitDenial(denialFlow.commandId, denialFlow.rows, reason, preventRetry)
+        }}
+      />
+
+      <ConfirmSheet
+        open={denialFlow.kind === 'confirm'}
+        title={denialFlow.kind === 'confirm' ? `Deny ${denialFlow.rows.length} check-ins` : ''}
+        action="Deny them"
+        danger
+        rows={denialFlow.kind === 'confirm' ? denialFlow.rows : []}
+        namedOutlets={named}
+        note={
+          denialFlow.kind === 'confirm' && denialFlow.preventRetry
+            ? 'None of them will be able to check in again on their own business date.'
+            : null
+        }
+        onClose={() => setDenialFlow({ kind: 'idle' })}
+        onConfirm={() => {
+          if (denialFlow.kind === 'confirm')
+            void submitDenial(
+              denialFlow.commandId,
+              denialFlow.rows,
+              denialFlow.reason,
+              denialFlow.preventRetry,
+            )
         }}
       />
 
@@ -847,16 +1139,6 @@ function OutletAxis({
         onClose={() => setManualFor(null)}
         onRecord={(outletId, at) => {
           if (manualFor) void recordManual(manualFor, outletId, at)
-        }}
-      />
-
-      <DenialSheet
-        key={denyFor?.id ?? 'no-denial'}
-        record={denyFor}
-        radiusMetres={denyFor ? (outletOf(denyFor.outletId)?.geofence_radius_m ?? 0) : 0}
-        onClose={() => setDenyFor(null)}
-        onDeny={(reason, preventRetry) => {
-          if (denyFor) void deny(denyFor, reason, preventRetry)
         }}
       />
 
@@ -889,6 +1171,9 @@ function DayPicker({
   waiting,
   earlier,
   later,
+  selecting,
+  canSelect,
+  onToggleSelecting,
 }: {
   businessDate: string
   /** Today as the selection reckons it — the latest, where cutovers disagree. */
@@ -900,57 +1185,160 @@ function DayPicker({
   earlier: boolean
   /** …and on some later one. */
   later: boolean
+  /** Is a set being built? */
+  selecting: boolean
+  /** Is there anything on this day that could be added to one? */
+  canSelect: boolean
+  onToggleSelecting: () => void
 }) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-border bg-surface p-2">
-      <span className="relative inline-flex">
-        <Button
-          variant="ghost"
-          size="phone"
-          aria-label="Previous day"
-          onClick={() => onChange(shiftBusinessDate(businessDate, -1))}
-        >
-          <ChevronLeft aria-hidden size={18} />
-        </Button>
-        {earlier && (
-          <span className="pointer-events-none absolute right-1 top-1">
-            <BadgeDot
-              data-testid="earlier-days-waiting"
-              label="Earlier days hold arrivals waiting for approval"
-            />
-          </span>
-        )}
-      </span>
-
-      <span className="inline-flex items-center gap-2">
-        <span data-testid="day-label" className="text-sm font-semibold text-content">
-          {businessDate === today ? 'Today' : formatBusinessDate(businessDate)}
+    <div className="mb-3 rounded-xl border border-border bg-surface p-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="relative inline-flex">
+          <Button
+            variant="ghost"
+            size="phone"
+            aria-label="Previous day"
+            onClick={() => onChange(shiftBusinessDate(businessDate, -1))}
+          >
+            <ChevronLeft aria-hidden size={18} />
+          </Button>
+          {earlier && (
+            <span className="pointer-events-none absolute right-1 top-1">
+              <BadgeDot
+                data-testid="earlier-days-waiting"
+                label="Earlier days hold arrivals waiting for approval"
+              />
+            </span>
+          )}
         </span>
-        <Badge
-          data-testid="day-waiting"
-          count={waiting}
-          label={`${waitingLabel(waiting)} on this day`}
-        />
-      </span>
 
-      <span className="relative inline-flex">
+        <span className="inline-flex items-center gap-2">
+          <span data-testid="day-label" className="text-sm font-semibold text-content">
+            {businessDate === today ? 'Today' : formatBusinessDate(businessDate)}
+          </span>
+          <Badge
+            data-testid="day-waiting"
+            count={waiting}
+            label={`${waitingLabel(waiting)} on this day`}
+          />
+        </span>
+
+        <span className="relative inline-flex">
+          <Button
+            variant="ghost"
+            size="phone"
+            aria-label="Next day"
+            disabled={businessDate >= today}
+            onClick={() => onChange(shiftBusinessDate(businessDate, 1))}
+          >
+            <ChevronRight aria-hidden size={18} />
+          </Button>
+          {later && (
+            <span className="pointer-events-none absolute right-1 top-1">
+              <BadgeDot
+                data-testid="later-days-waiting"
+                label="Later days hold arrivals waiting for approval"
+              />
+            </span>
+          )}
+        </span>
+      </div>
+
+      {/*
+      Entering selection, and nothing else. There is deliberately no control
+      here or anywhere else that adds more than one person to a set: not Select
+      all, not by outlet, not by lateness, not select-the-rest. Ten people means
+      ten taps to select and one tap to act, and the saving is in the acting.
+
+      Rendered on every day, disabled where there is nothing waiting, so the
+      roll-call underneath begins in the same place whether the day has arrived
+      or its placeholder is still showing.
+    */}
+      <div className="mt-2 border-t border-border pt-2">
+        <Button
+          variant={selecting ? 'secondary' : 'ghost'}
+          size="phone"
+          className="w-full"
+          disabled={!canSelect}
+          aria-pressed={selecting}
+          data-testid="toggle-selecting"
+          onClick={onToggleSelecting}
+        >
+          <ListChecks aria-hidden size={14} />
+          {selecting ? 'Stop selecting' : 'Select people to decide together'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The set, and the two things that can be done with it.
+ *
+ * Sticky, because the manager is scrolling a roll-call on a phone while they
+ * build it, and an action bar that scrolls away is a bar they have to hunt for.
+ * It states the exact count rather than a word for it: `Approve` over an
+ * unstated number is the rubber stamp this capability exists to avoid.
+ *
+ * `Clear` is here and no other multi-row control is, for one reason: it only
+ * ever takes people OUT of an action. Without it a mis-tapped selection has to
+ * be undone one row at a time.
+ */
+function SelectionBar({
+  count,
+  busy,
+  onApprove,
+  onDeny,
+  onClear,
+}: {
+  count: number
+  busy: boolean
+  onApprove: () => void
+  onDeny: () => void
+  onClear: () => void
+}) {
+  return (
+    <div
+      data-testid="selection-bar"
+      className="sticky bottom-2 z-10 mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-raised p-2 shadow-lg"
+    >
+      <span
+        role="status"
+        data-testid="selection-count"
+        className="text-sm font-semibold text-content"
+      >
+        {count} selected
+      </span>
+      <span className="ml-auto flex flex-wrap gap-2">
+        <Button
+          size="phone"
+          disabled={busy || count === 0}
+          onClick={onApprove}
+          data-testid="approve-selected"
+        >
+          <ShieldCheck aria-hidden size={14} />
+          Approve
+        </Button>
+        <Button
+          variant="secondary"
+          size="phone"
+          disabled={busy || count === 0}
+          onClick={onDeny}
+          data-testid="deny-selected"
+        >
+          <XCircle aria-hidden size={14} />
+          Deny
+        </Button>
         <Button
           variant="ghost"
           size="phone"
-          aria-label="Next day"
-          disabled={businessDate >= today}
-          onClick={() => onChange(shiftBusinessDate(businessDate, 1))}
+          disabled={busy || count === 0}
+          onClick={onClear}
+          data-testid="clear-selection"
         >
-          <ChevronRight aria-hidden size={18} />
+          Clear
         </Button>
-        {later && (
-          <span className="pointer-events-none absolute right-1 top-1">
-            <BadgeDot
-              data-testid="later-days-waiting"
-              label="Later days hold arrivals waiting for approval"
-            />
-          </span>
-        )}
       </span>
     </div>
   )
@@ -979,6 +1367,10 @@ function PersonDay({
   radiusMetres,
   outletName,
   busy,
+  selecting,
+  selectable,
+  selected,
+  onToggleSelect,
   offerManual,
   onApprove,
   onDeny,
@@ -993,6 +1385,12 @@ function PersonDay({
   /** Which shop this row belongs to. Null while only one is in scope. */
   outletName: string | null
   busy: boolean
+  /** Is a set being built on this day? */
+  selecting: boolean
+  /** Only a row currently waiting for a decision can join one. */
+  selectable: boolean
+  selected: boolean
+  onToggleSelect: () => void
   /** Can an arrival still be typed in for this person on this day? */
   offerManual: boolean
   onApprove: () => void
@@ -1062,12 +1460,39 @@ function PersonDay({
     )
   if (person.deactivated) notes.push('deactivated')
 
+  /*
+    Selection lives on its own control, never on the row body. The row opens
+    onto its evidence and stays open when it settles, and that openness belongs
+    to the reader — so tapping the body must go on meaning "show me this" in
+    selection mode exactly as it does out of it. A manager can read somebody's
+    check-in before deciding about them without adding or losing anybody
+    (design D9).
+  */
+  const select =
+    selecting && selectable ? (
+      <label
+        className="flex items-center gap-2 text-xs font-semibold text-content-muted"
+        data-testid={`select-row-${person.id}`}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          disabled={busy}
+          onChange={onToggleSelect}
+          data-testid={`select-${person.id}`}
+          className="size-4 accent-primary"
+        />
+        <span>{selected ? 'In this action' : 'Add to this action'}</span>
+      </label>
+    ) : null
+
   return (
     <AttendanceCard
       testId={`day-${person.id}`}
       toggleTestId={`expand-${person.id}`}
       waiting={waiting}
       defaultOpen={waiting}
+      aside={select}
       title={
         <span>
           {person.fullName}
@@ -1141,27 +1566,83 @@ const WHY_COPY = {
 } as const
 
 /**
+ * How one reading fell across the selected rows, grouped by treatment and named
+ * by outlet, so a manager sees which of the people they picked their sentence
+ * is actually going to be recorded against.
+ *
+ * Three or more outlets read the same way as two; there is no two-outlet special
+ * case to get wrong. It is explanation, never enforcement — the database decides
+ * this again for itself.
+ */
+function PartitionSummary({
+  partition,
+  namedOutlets,
+}: {
+  partition: Partition
+  namedOutlets: boolean
+}) {
+  const group = (rows: readonly Chosen[]) => {
+    const byOutlet = new Map<string, number>()
+    for (const row of rows) {
+      const name = row.outlet?.name ?? 'this outlet'
+      byOutlet.set(name, (byOutlet.get(name) ?? 0) + 1)
+    }
+    return [...byOutlet.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  }
+  const line = (count: number, name: string) => (namedOutlets ? `${name}: ${count}` : `${count}`)
+
+  return (
+    <div data-testid="approval-partition" className="space-y-1 text-sm">
+      {partition.plain.length > 0 && (
+        <p className="text-content-muted">
+          Approved normally:{' '}
+          {group(partition.plain)
+            .map(([name, count]) => line(count, name))
+            .join(' · ')}
+        </p>
+      )}
+      <p className="text-content">
+        Need your reason:{' '}
+        {group(partition.reasoned)
+          .map(([name, count]) => line(count, name))
+          .join(' · ')}
+      </p>
+      {partition.plain.length > 0 && (
+        <p className="text-xs text-content-muted">
+          Your reason is recorded only against the {partition.reasoned.length} that need it.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
  * The reason, asked for only when the rule wants one.
  *
  * Not pre-filled and not defaulted: the point of recording one is that a person
  * decided something, and a placeholder answer would make it a formality. A
  * manager standing at the counter on the day never sees this sheet at all, which
  * is the difference the rule is built around.
+ *
+ * One reason covers the whole set. Where the set spans outlets it is stored only
+ * on the rows that were away, which the summary above says plainly rather than
+ * leaving the manager to infer from where they happen to be standing.
  */
 function ReasonSheet({
   flow,
-  count,
+  namedOutlets,
   onClose,
   onApprove,
 }: {
   flow: ApprovalFlow
-  count: number
+  namedOutlets: boolean
   onClose: () => void
   onApprove: (reason: string) => void
 }) {
   const [reason, setReason] = useState('')
   const open = flow.kind === 'reason'
-  const copy = flow.kind === 'reason' ? WHY_COPY[flow.why] : null
+  const copy = flow.kind === 'reason' ? WHY_COPY[flow.partition.why] : null
+  const count = flow.kind === 'reason' ? flow.rows.length : 0
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -1180,7 +1661,7 @@ function ReasonSheet({
           disabled={!reason.trim()}
           className={`${buttonVariants({ size: 'phone' })} w-full`}
         >
-          Approve and record my reason
+          {count > 1 ? 'Continue' : 'Approve and record my reason'}
         </button>
       }
     >
@@ -1191,9 +1672,12 @@ function ReasonSheet({
             <p className="mt-1 text-sm text-content-muted">{copy.detail}</p>
           </div>
         )}
+        {flow.kind === 'reason' && count > 1 && (
+          <PartitionSummary partition={flow.partition} namedOutlets={namedOutlets} />
+        )}
         <div className="space-y-1">
           <label htmlFor="approval-reason" className="block text-sm font-semibold">
-            Why are you approving this?
+            Why are you approving {count > 1 ? 'these' : 'this'}?
           </label>
           <Input
             id="approval-reason"
@@ -1203,7 +1687,7 @@ function ReasonSheet({
             onChange={(event) => setReason(event.target.value)}
           />
           <p className="text-xs text-content-muted">
-            This is stored on the record and is visible to the person it is about.
+            This is stored on the record and is visible to the people it is about.
           </p>
         </div>
       </form>
@@ -1211,26 +1695,128 @@ function ReasonSheet({
   )
 }
 
-/** Denial has exactly two manager inputs. The retry lock is always opt-in. */
+/**
+ * The last gate before anything is written: every selected person by name, the
+ * outlet they belong to, and their business date where the set spans dates.
+ *
+ * Shown only where more than one person is being decided. A single row is
+ * already the thing being looked at, and confirming it would be asking somebody
+ * to agree with the tap they just made.
+ */
+function ConfirmSheet({
+  open,
+  title,
+  action,
+  rows,
+  namedOutlets,
+  note,
+  danger = false,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean
+  title: string
+  action: string
+  rows: readonly Chosen[]
+  namedOutlets: boolean
+  /** One extra sentence about the shared consequence, where there is one. */
+  note: string | null
+  danger?: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  // A set may span business dates, so a person appearing on two of them has to
+  // read as two rows rather than as a duplicate somebody distrusts.
+  const spansDates = new Set(rows.map((row) => row.record.businessDate)).size > 1
+
+  return (
+    <FormSheet
+      open={open}
+      onClose={onClose}
+      title={title}
+      footer={
+        <button
+          type="button"
+          data-testid="confirm-set"
+          onClick={onConfirm}
+          className={`${buttonVariants({ variant: danger ? 'danger' : 'primary', size: 'phone' })} w-full`}
+        >
+          {action}
+        </button>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-content-muted">
+          Nothing is recorded until you confirm. These are the people this applies to.
+        </p>
+        <ul data-testid="confirm-people" className="space-y-1">
+          {rows.map((row) => (
+            <li
+              key={`${row.record.id}`}
+              className="flex flex-wrap items-baseline justify-between gap-x-2 rounded-lg bg-surface-raised px-2 py-1.5 text-sm"
+            >
+              <span className="font-semibold text-content">{row.personName}</span>
+              <span className="text-xs text-content-muted">
+                {[
+                  namedOutlets ? (row.outlet?.name ?? null) : null,
+                  spansDates ? formatBusinessDate(row.record.businessDate) : null,
+                ]
+                  .filter((part): part is string => part !== null)
+                  .join(' · ')}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {note && (
+          <p data-testid="confirm-note" className="text-sm text-content">
+            {note}
+          </p>
+        )}
+      </div>
+    </FormSheet>
+  )
+}
+
+/**
+ * Denial has exactly two manager inputs, and both apply to everybody selected.
+ * The retry lock is always opt-in, and its consequence is stated before it is
+ * used — naming the count and each row's own business date rather than saying
+ * `today`, because a set may reach back over days that have closed.
+ */
 function DenialSheet({
-  record,
-  radiusMetres,
+  flow,
+  radiusFor,
   onClose,
   onDeny,
 }: {
-  record: AttendanceRecord | null
-  radiusMetres: number
+  flow: DenialFlow
+  radiusFor: (outletId: string) => number
   onClose: () => void
   onDeny: (reason: string, preventRetry: boolean) => void
 }) {
-  const current = record?.attempts.find((attempt) => attempt.id === record.currentAttemptId) ?? null
-  const initialReason = isOutOfFence(current, radiusMetres)
-    ? 'Not at outlet'
-    : isUnverifiable(current)
-      ? 'Location could not be verified'
-      : ''
-  const [reason, setReason] = useState(initialReason)
+  const rows = flow.kind === 'reason' ? flow.rows : []
+  /*
+    An evidence-derived prefill is reused only where it is true of EVERY
+    selected attempt. Where the set mixes measured-outside attempts with
+    unverifiable ones the reason starts blank instead, because a sentence that
+    is false about half a set is worse than no sentence: it would be recorded
+    against people it does not describe, and they can read it.
+  */
+  const evidence = rows.map((row) => {
+    const current =
+      row.record.attempts.find((attempt) => attempt.id === row.record.currentAttemptId) ?? null
+    const radius = radiusFor(row.record.outletId)
+    if (isOutOfFence(current, radius)) return 'Not at outlet'
+    if (isUnverifiable(current)) return 'Location could not be verified'
+    return ''
+  })
+  const shared = evidence.every((candidate) => candidate === evidence[0]) ? (evidence[0] ?? '') : ''
+
+  const [reason, setReason] = useState(shared)
   const [preventRetry, setPreventRetry] = useState(false)
+
+  const dates = [...new Set(rows.map((row) => row.record.businessDate))].sort()
+  const spansDates = dates.length > 1
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -1239,9 +1825,9 @@ function DenialSheet({
 
   return (
     <FormSheet
-      open={record !== null}
+      open={flow.kind === 'reason'}
       onClose={onClose}
-      title="Deny this check-in"
+      title={rows.length > 1 ? `Deny ${rows.length} check-ins` : 'Deny this check-in'}
       footer={
         <button
           type="submit"
@@ -1249,11 +1835,16 @@ function DenialSheet({
           disabled={!reason.trim()}
           className={`${buttonVariants({ variant: 'danger', size: 'phone' })} w-full`}
         >
-          Deny check-in
+          {rows.length > 1 ? 'Continue' : 'Deny check-in'}
         </button>
       }
     >
       <form id="deny-attendance" onSubmit={submit} className="space-y-4" noValidate>
+        {rows.length > 1 && (
+          <p data-testid="denial-shared" className="text-sm text-content-muted">
+            This reason and this choice apply to all {rows.length} of them.
+          </p>
+        )}
         <div className="space-y-1">
           <label htmlFor="denial-reason" className="block text-sm font-semibold">
             Reason
@@ -1266,7 +1857,8 @@ function DenialSheet({
             data-testid="denial-reason"
           />
           <p className="text-xs text-content-muted">
-            Denial marks this day absent. The reason is saved in the attendance history.
+            Denial marks {rows.length > 1 ? 'these days' : 'this day'} absent. The reason is saved
+            in the attendance history.
           </p>
         </div>
         <label className="flex items-start gap-2 text-sm text-content">
@@ -1278,9 +1870,15 @@ function DenialSheet({
             className="mt-0.5 size-4 accent-primary"
           />
           <span>
-            <span className="font-semibold">Prevent another check-in today</span>
+            <span className="font-semibold">
+              {spansDates
+                ? 'Prevent another check-in on each of these business dates'
+                : `Prevent another check-in on ${dates[0] ? formatBusinessDate(dates[0]) : 'this business date'}`}
+            </span>
             <span className="block text-xs text-content-muted">
-              Leave unchecked to let the employee correct an outside or wrong-outlet check-in.
+              {rows.length > 1
+                ? `Applies to all ${rows.length}, each on their own business date. Leave unchecked to let them correct an outside or wrong-outlet check-in.`
+                : 'Leave unchecked to let the employee correct an outside or wrong-outlet check-in.'}
             </span>
           </span>
         </label>
