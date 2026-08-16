@@ -162,23 +162,39 @@ there SHALL be no Select all, no select-by-outlet, no select-by-lateness, no
 select-the-rest, no range selection and no press-and-hold sweep. The saving that
 this capability offers is in acting on a set, never in building one.
 
-Nothing SHALL be selected when selection begins. Only rows currently waiting for
-a decision SHALL be selectable, including a waiting row belonging to somebody who
-holds no staff assignment at the outlet. No count, badge or outlet chip SHALL
-double as a selection control.
+A person SHALL be added to a set from a control on that person's own row. Only
+rows currently waiting for a decision SHALL be selectable, including a waiting
+row belonging to somebody who holds no staff assignment at the outlet. No count,
+badge or outlet chip SHALL double as a selection control.
+
+**A set SHALL be the whole of the selection state.** A surface SHALL NOT carry a
+separate selecting mode that can exist while the set holds nobody, so selection
+begins with the first person added and ends when the last one is removed. While
+a set exists, the per-row decision actions SHALL stand down, so one row never
+offers two ways to decide it.
 
 Selecting a row and opening it SHALL be different acts, so that reading somebody's
-evidence neither selects them nor disturbs the set already built.
+evidence neither selects them nor disturbs the set already built. A row waiting
+for a decision SHALL NOT be closable, because every control that decides it lives
+behind that toggle and a closed one could be neither acted on nor told apart from
+one already in the set.
 
 A selection SHALL be cleared by a successful action, by leaving the day, by
 changing the outlets in scope, and by cancelling. A control that clears the whole
 selection at once SHALL be permitted, because it only ever removes people from
 an action.
 
-#### Scenario: Nothing is selected when selection begins
+#### Scenario: A set begins and ends with the people in it
 
-- **WHEN** a manager enters selection mode on a day holding several waiting rows
-- **THEN** no row is selected and the action bar states a count of zero
+- **WHEN** a manager adds the first person to a set, and later removes the last
+- **THEN** the set's actions appear on the first and are gone after the last, and
+  at no point does the surface offer a set holding nobody
+
+#### Scenario: Two selections arriving together keep both people
+
+- **WHEN** two presses on two different rows reach the surface in one batch
+- **THEN** both people are in the set, because neither press is computed from a
+  view of the set that the other has already changed
 
 #### Scenario: There is no way to select a morning at once
 
@@ -201,10 +217,15 @@ an action.
 
 #### Scenario: Opening a row does not select it
 
-- **WHEN** a manager opens a row to read its evidence while a selection is being
-  built
-- **THEN** the row opens, its selected state does not change, and the rest of the
-  selection is untouched
+- **WHEN** a manager opens a settled row to read its evidence while a selection is
+  being built
+- **THEN** the row opens, no row's selected state changes, and the set is untouched
+
+#### Scenario: A row waiting for a decision cannot be closed
+
+- **WHEN** a manager looks at a row waiting for a decision
+- **THEN** its actions are on screen and its toggle is inert, so the row cannot be
+  reduced to a headline that offers no way to decide it
 
 #### Scenario: A successful action clears the selection
 
@@ -213,16 +234,27 @@ an action.
 
 ### Requirement: A set of people is confirmed by name before anything is written
 
-Where more than one person is being decided, one confirmation SHALL name every
-selected person, the outlet each belongs to, and their business date where the
-set spans dates, and SHALL state what is about to happen to them. Nothing SHALL
-be written until that confirmation is accepted.
+**Whatever is decided through a set's own action SHALL be confirmed, whatever the
+size of the set.** One confirmation SHALL name every selected person, the outlet
+each belongs to, and their business date where the set spans dates. Nothing SHALL
+be written until that confirmation is accepted. A set of one is no exception:
+building a set is a deliberate act, and the gate exists so that the manager reads
+who they picked.
+
+**The confirmation SHALL state the whole of what the decision will say**, not only
+who it is about: the reason in the manager's own words where one was given, the
+position reading an approval will record, and the retry choice a denial will
+apply, stated whichever way it was left. Naming the people while hiding the
+sentence being recorded against them would confirm half an act. Each of those
+SHALL be stated once, since the step that collects a choice is where that choice
+is explained.
 
 The confirmation SHALL be the final step. Where the rule requires a reason, the
 reason SHALL be collected first and the confirmation SHALL follow it, so the
-people are named in the light of the explanation just written. A decision about a
-single person SHALL NOT be confirmed this way, because its own row is the thing
-being looked at.
+people are named in the light of the explanation just written.
+
+A decision made from a single row's own decision action SHALL NOT be confirmed
+this way, because that row is the thing already being looked at.
 
 #### Scenario: The people are named before the write
 
@@ -241,10 +273,25 @@ being looked at.
 - **WHEN** a manager cancels at the confirmation
 - **THEN** no decision is recorded, and the selection is still there to act on
 
-#### Scenario: One person is not confirmed twice
+#### Scenario: The confirmation states what will be recorded
 
-- **WHEN** a manager approves a single waiting row from its own row action
-- **THEN** it behaves exactly as it does today, with no extra confirmation step
+- **WHEN** a manager reaches the confirmation having given a reason, or having
+  chosen whether a denied person may check in again
+- **THEN** that reason is quoted back, an approval states the position it will
+  record, and a denial states the retry choice either way
+
+#### Scenario: A set of one is confirmed like any other
+
+- **WHEN** a manager builds a set holding one person and acts on it
+- **THEN** that person is named back before anything is written, and the wording
+  counts in the singular
+
+#### Scenario: A row decided from its own action is not confirmed
+
+- **WHEN** a manager approves or denies a single waiting row from that row's own
+  decision action rather than through a set
+- **THEN** no confirmation step is added, because the row is already the thing
+  being looked at
 
 ### Requirement: A denied set shares one reason and one retry choice
 
