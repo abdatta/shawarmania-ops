@@ -1,4 +1,8 @@
-import type { ManualLedgerDayInput, ManualLedgerExpense } from '@/data-access/adapters'
+import type {
+  ManualLedgerDayFigures,
+  ManualLedgerExpense,
+  ZomatoSettlement,
+} from '@/data-access/adapters'
 import {
   describeDifference,
   differencePaise,
@@ -69,6 +73,68 @@ export function netAggregatorPaise(statedPaise: number, bp: number): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Zomato, which a day answers for in one of two ways.
+
+/** Gross, commission and net for one day's Zomato revenue, however it was got. */
+export interface ZomatoReading {
+  grossPaise: number
+  commissionPaise: number
+  netPaise: number
+  /** `null` on a day nobody synced, which is every day before the sync existed. */
+  settlement: ZomatoSettlement | null
+}
+
+/**
+ * A day's Zomato figures, chosen by **what that day itself stores** rather than
+ * by today's configuration.
+ *
+ * This is the whole of the migration story. A day the sync covers answers from
+ * its measured triple; a day recorded before it answers from its stated figure
+ * and its own stored rate, exactly as it always did. Switching on the day's own
+ * values rather than on the outlet's current sync date is what makes a
+ * historical month unmovable: turning the sync on, or off again, cannot reach
+ * backwards and change a figure that was already recorded.
+ *
+ * No stored percentage participates in a synced day's net. The rate such a day
+ * implies is available for display through `effectiveRateBp`, and is a reading
+ * of the two measured figures rather than an input to either.
+ */
+export function readZomato(day: ManualLedgerDayFigures): ZomatoReading {
+  const settlement = day.zomatoSettlement ?? null
+
+  if (settlement) {
+    return {
+      grossPaise: assertPaise(settlement.grossPaise, 'Zomato gross'),
+      commissionPaise: assertPaise(settlement.commissionPaise, 'Zomato commission'),
+      netPaise: assertPaise(settlement.netPaise, 'Zomato net'),
+      settlement,
+    }
+  }
+
+  const grossPaise = assertPaise(day.zomatoRevenuePaise, 'Zomato revenue')
+  const commission = commissionPaise(grossPaise, day.zomatoCommissionBp)
+  return {
+    grossPaise,
+    commissionPaise: commission,
+    netPaise: grossPaise - commission,
+    settlement: null,
+  }
+}
+
+/**
+ * The rate a measured day implies, in basis points, for display only.
+ *
+ * Returns null on a day that earned nothing, because a rate on nil revenue is a
+ * division by zero dressed up as a percentage. Never fed back into any figure:
+ * rounding this to basis points and recomputing the net is precisely the nine
+ * paise that made a stored rate unusable.
+ */
+export function effectiveRateBp(reading: ZomatoReading): number | null {
+  if (reading.grossPaise === 0) return null
+  return Math.round((reading.commissionPaise * COMMISSION_BP_SCALE) / reading.grossPaise)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // One day.
 
 export interface DayReading {
@@ -85,6 +151,8 @@ export interface DayReading {
   grossRevenuePaise: number
   netZomatoPaise: number
   netSwiggyPaise: number
+  /** How this day answered for Zomato, and whether it was measured or derived. */
+  zomato: ZomatoReading
 }
 
 /**
@@ -96,9 +164,10 @@ export interface DayReading {
  * wrongly.
  */
 export function readDay(
-  day: ManualLedgerDayInput,
+  day: ManualLedgerDayFigures,
   expenses: readonly ManualLedgerExpense[],
 ): DayReading {
+  const zomato = readZomato(day)
   const counting = expenses.filter(isCounted)
   const cashExpensesPaise = sumExpenses(counting.filter((expense) => expense.isCash))
   const nonCashExpensesPaise = sumExpenses(counting.filter((expense) => !expense.isCash))
@@ -125,10 +194,11 @@ export function readDay(
     grossRevenuePaise:
       day.cashRevenuePaise +
       assertPaise(day.upiRevenuePaise, 'UPI revenue') +
-      assertPaise(day.zomatoRevenuePaise, 'Zomato revenue') +
+      zomato.grossPaise +
       assertPaise(day.swiggyRevenuePaise, 'Swiggy revenue'),
-    netZomatoPaise: netAggregatorPaise(day.zomatoRevenuePaise, day.zomatoCommissionBp),
+    netZomatoPaise: zomato.netPaise,
     netSwiggyPaise: netAggregatorPaise(day.swiggyRevenuePaise, day.swiggyCommissionBp),
+    zomato,
   }
 }
 
@@ -179,8 +249,8 @@ export type ChainSignal =
  * is the compounding error this ledger exists to catch (design D2).
  */
 export function checkOpeningChain(
-  day: ManualLedgerDayInput,
-  previousDay: ManualLedgerDayInput | null,
+  day: ManualLedgerDayFigures,
+  previousDay: ManualLedgerDayFigures | null,
 ): ChainSignal {
   if (!previousDay) return { kind: 'first-day' }
 
@@ -263,7 +333,7 @@ export interface MonthReading {
  * words; nothing here can enforce that, which is why the spec requires it.
  */
 export function readMonth(
-  days: readonly ManualLedgerDayInput[],
+  days: readonly ManualLedgerDayFigures[],
   allExpenses: readonly ManualLedgerExpense[],
 ): MonthReading {
   // Withdrawn rows are dropped once, here, so every figure below is computed
@@ -282,11 +352,14 @@ export function readMonth(
   for (const day of days) {
     grossCashPaise += assertPaise(day.cashRevenuePaise, 'cash revenue')
     grossUpiPaise += assertPaise(day.upiRevenuePaise, 'UPI revenue')
-    grossZomatoPaise += assertPaise(day.zomatoRevenuePaise, 'Zomato revenue')
     grossSwiggyPaise += assertPaise(day.swiggyRevenuePaise, 'Swiggy revenue')
-    // Per day, from that day's own rate. Moving this out of the loop is the bug
-    // this whole per-day-rate design exists to make impossible.
-    netZomatoPaise += netAggregatorPaise(day.zomatoRevenuePaise, day.zomatoCommissionBp)
+    // Per day, from that day's own figures — measured where the sync covers the
+    // day, derived from that day's own rate where it does not. Moving either out
+    // of the loop is the bug this whole per-day design exists to make
+    // impossible.
+    const zomato = readZomato(day)
+    grossZomatoPaise += zomato.grossPaise
+    netZomatoPaise += zomato.netPaise
     netSwiggyPaise += netAggregatorPaise(day.swiggyRevenuePaise, day.swiggyCommissionBp)
   }
 

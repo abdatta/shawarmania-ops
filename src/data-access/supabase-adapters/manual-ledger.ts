@@ -13,6 +13,7 @@ import {
   type NewManualLedgerExpense,
 } from '../adapters'
 import type { Database, Tables } from '../database.types'
+import { toZomatoSettlement } from '../zomato-settlement'
 
 /**
  * The real manual-ledger adapter (#36) — **temporary, and the whole file goes
@@ -99,6 +100,7 @@ function toDay(
     swiggyCommissionBp: row.swiggy_commission_bp,
     note: row.note,
     recordedBy: actor(row.recorded_by, people),
+    zomatoSettlement: toZomatoSettlement(row),
     updatedBy: optionalActor(row.updated_by, people),
   }
 }
@@ -166,7 +168,11 @@ function toExpense(row: Tables<'manual_ledger_expenses'>, people: People): Manua
     note: row.description,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    recordedBy: actor(row.recorded_by, people),
+    recordedBy: optionalActor(row.recorded_by, people),
+    source:
+      row.source_system === null || row.source_ref === null
+        ? null
+        : { system: row.source_system, ref: row.source_ref },
     updatedBy: optionalActor(row.updated_by, people),
     recordedAway: row.recorded_away,
     voidedAt: row.voided_at,

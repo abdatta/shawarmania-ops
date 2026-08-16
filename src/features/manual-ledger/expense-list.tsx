@@ -127,6 +127,9 @@ export function ExpenseList({
   function mayChange(expense: ManualLedgerExpense): boolean {
     if (expense.voidedAt !== null) return false
     if (viewer.mayTouchAnyRow) return true
+    // A row no person recorded is nobody's own row, so nobody may change it here.
+    // Correcting a synced figure means correcting it at the aggregator.
+    if (expense.recordedBy === null) return false
     return expense.recordedBy.id === viewer.id && expense.businessDate === currentBusinessDate
   }
 

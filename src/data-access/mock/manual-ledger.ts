@@ -11,6 +11,7 @@ import {
   type NewManualLedgerExpense,
 } from '../adapters'
 import type { Tables } from '../database.types'
+import { toZomatoSettlement } from '../zomato-settlement'
 import { personaFixtures } from './fixtures/personas'
 import type { DemoStore } from './store'
 import { captureMockCategory } from './expense-categories'
@@ -75,6 +76,7 @@ function toDay(row: Tables<'manual_ledger_days'>): ManualLedgerDay {
     note: row.note,
     recordedBy: actor(row.recorded_by),
     updatedBy: optionalActor(row.updated_by),
+    zomatoSettlement: toZomatoSettlement(row),
   }
 }
 
@@ -89,7 +91,11 @@ function toExpense(row: Tables<'manual_ledger_expenses'>): ManualLedgerExpense {
     note: row.description,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    recordedBy: actor(row.recorded_by),
+    recordedBy: optionalActor(row.recorded_by),
+    source:
+      row.source_system === null || row.source_ref === null
+        ? null
+        : { system: row.source_system, ref: row.source_ref },
     updatedBy: optionalActor(row.updated_by),
     recordedAway: row.recorded_away,
     voidedAt: row.voided_at,
@@ -214,7 +220,7 @@ export function createMockManualLedgerAdapter(
    * routing rule rather than a dead end — the row stays fixable, by somebody
    * else.
    */
-  function refuseStaffWrite(row: { businessDate: string; recordedBy?: string }): void {
+  function refuseStaffWrite(row: { businessDate: string; recordedBy?: string | undefined }): void {
     if (!isStaff) return
     if (row.businessDate !== store.businessDate(0)) {
       throw new ManualLedgerActionError(
@@ -292,6 +298,20 @@ export function createMockManualLedgerAdapter(
         counted_cash_paise: day.countedCashPaise,
         zomato_commission_bp: day.zomatoCommissionBp,
         swiggy_commission_bp: day.swiggyCommissionBp,
+        // The sync writes these, and no signed-in session may. A day written
+        // through this form carries whatever it already had, never a figure the
+        // form invented.
+        zomato_gross_paise: existing?.zomato_gross_paise ?? null,
+        zomato_commission_paise: existing?.zomato_commission_paise ?? null,
+        zomato_net_paise: existing?.zomato_net_paise ?? null,
+        zomato_settlement_state: existing?.zomato_settlement_state ?? null,
+        zomato_typed_revenue_paise: existing?.zomato_typed_revenue_paise ?? null,
+        zomato_typed_commission_bp: existing?.zomato_typed_commission_bp ?? null,
+        zomato_superseded_at: existing?.zomato_superseded_at ?? null,
+        zomato_provisional_gross_paise: existing?.zomato_provisional_gross_paise ?? null,
+        zomato_provisional_commission_paise: existing?.zomato_provisional_commission_paise ?? null,
+        zomato_provisional_net_paise: existing?.zomato_provisional_net_paise ?? null,
+        zomato_revised_at: existing?.zomato_revised_at ?? null,
         note: trimmed(day.note),
         // Frozen on a correction, as the guard freezes it: a second owner — or
         // now a manager — may fix a figure without becoming the day's author.
@@ -361,6 +381,10 @@ export function createMockManualLedgerAdapter(
         amount_paise: expense.amountPaise,
         description: trimmed(expense.note),
         recorded_by: userId,
+        // A row a person entered has no external source, which is exactly what
+        // the possible-duplicate signal compares against.
+        source_system: null,
+        source_ref: null,
         // What the guard stamps: did the recorder hold an assignment here? The
         // owner holds none anywhere, which is the case the marker exists for.
         recorded_away: !assignedAt(expense.outletId),
@@ -381,7 +405,7 @@ export function createMockManualLedgerAdapter(
       refuseVoided(existing)
       refuseStaffWrite({
         businessDate: existing.business_date,
-        recordedBy: existing.recorded_by,
+        recordedBy: existing.recorded_by ?? undefined,
       })
 
       const amountPaise = patch.amountPaise ?? existing.amount_paise
@@ -408,7 +432,7 @@ export function createMockManualLedgerAdapter(
       refuseVoided(existing)
       refuseStaffWrite({
         businessDate: existing.business_date,
-        recordedBy: existing.recorded_by,
+        recordedBy: existing.recorded_by ?? undefined,
       })
 
       const voided: Tables<'manual_ledger_expenses'> = {

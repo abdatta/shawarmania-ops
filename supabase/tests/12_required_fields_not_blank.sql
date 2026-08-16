@@ -301,7 +301,20 @@ $$, $$ values
   -- account already answer what the trace is for. What is refused is a reason
   -- that occupies the field and says nothing.
   ('manual_ledger_expenses_void_reason_not_blank'),
-  ('counter_device_setup_codes_label_not_blank')
+  ('counter_device_setup_codes_label_not_blank'),
+  -- A sync run's detail is OPTIONAL: a run that succeeded has nothing to explain,
+  -- and the outcome column already says which of the four things happened. What
+  -- is refused is a detail that occupies the field and says nothing, which is
+  -- worse than none because the surface would show an empty explanation beside a
+  -- failure.
+  ('aggregator_sync_runs_detail_not_blank'),
+  -- These two constrain a PAIR of columns rather than one: an external source
+  -- system with no reference identifies nothing, and a reference with no system
+  -- does not say who issued it. A blank either side would make a synced row
+  -- indistinguishable from a hand-entered one, which is the distinction the
+  -- duplicate signal rests on.
+  ('manual_ledger_expenses_source_not_blank'),
+  ('aggregator_cycle_deductions_source_not_blank')
 $$, 'every not-blank constraint in the schema is accounted for, and no others exist');
 
 -- The manual ledger's two cash-movement reasons are blank-checked too, under

@@ -1970,6 +1970,41 @@ export interface ManualLedgerDay {
    */
   recordedBy: LedgerActor
   updatedBy: LedgerActor | null
+  /**
+   * What Zomato itself says this day earned, where the sync covers it. Null on
+   * every day recorded before the sync, and on every day at an outlet it does
+   * not cover, which is what keeps a historical month computing exactly as it
+   * was recorded.
+   */
+  zomatoSettlement: ZomatoSettlement | null
+}
+
+/**
+ * A day's Zomato figures as measured rather than derived.
+ *
+ * Three separate figures and no rate. The effective rate moves between roughly
+ * 24% and 35% across days, and rounding a measured rate back to basis points
+ * loses the paise on which reconciliation depends — nine of them on one measured
+ * day, which is nothing as money and fatal as a check.
+ */
+export interface ZomatoSettlement {
+  grossPaise: number
+  commissionPaise: number
+  netPaise: number
+  /**
+   * `provisional` the week is not paid yet; `settled` it is paid and reconciles;
+   * `disputed` it is paid and does not. The third is not a kind of provisional:
+   * a disputed week will never settle on its own.
+   */
+  state: 'provisional' | 'settled' | 'disputed'
+  /** What the owner had typed before the sync took the day over, if anything. */
+  supersededTyped: { revenuePaise: number; commissionBp: number; at: string } | null
+  /**
+   * What the day read before its week settled, kept only where settling moved
+   * it. Present is precisely what "revised" means.
+   */
+  revisedFrom: { grossPaise: number; commissionPaise: number; netPaise: number } | null
+  revisedAt: string | null
 }
 
 /** Settled counter allocations that replace typed Cash/UPI after go-live. */
@@ -2005,8 +2040,20 @@ export interface ManualLedgerExpense {
   note: string | null
   createdAt: string
   updatedAt: string
-  /** Frozen at insert. Naming it is what makes "your own rows" legible. */
-  recordedBy: LedgerActor
+  /**
+   * Frozen at insert. Naming it is what makes "your own rows" legible.
+   *
+   * **Null on a row no person recorded**, which is a row the sync wrote from an
+   * aggregator's own deduction record. Naming an account there would put
+   * somebody's name on a purchase they never entered; `source` says where it
+   * came from instead.
+   */
+  recordedBy: LedgerActor | null
+  /**
+   * Where this row came from, when it came from a machine. Null on every row a
+   * person entered, which is what the possible-duplicate signal compares.
+   */
+  source: { system: string; ref: string } | null
   /** Null until somebody corrects the row, so an untouched row names one party. */
   updatedBy: LedgerActor | null
   /**
@@ -2032,7 +2079,20 @@ export interface ManualLedgerExpense {
  * A form that could name either would be asserting something the database is
  * about to overrule.
  */
-export type ManualLedgerDayInput = Omit<ManualLedgerDay, 'recordedBy' | 'updatedBy'>
+export type ManualLedgerDayInput = Omit<
+  ManualLedgerDay,
+  'recordedBy' | 'updatedBy' | 'zomatoSettlement'
+>
+
+/**
+ * A day as the reading functions want it: the figures, plus the settlement where
+ * one exists. Optional so that a caller holding only what a form can write still
+ * type-checks — a form cannot write a settlement, and the database refuses one
+ * from any signed-in session whatever the types allow.
+ */
+export type ManualLedgerDayFigures = ManualLedgerDayInput & {
+  zomatoSettlement?: ZomatoSettlement | null
+}
 
 export interface NewManualLedgerExpense {
   outletId: string

@@ -117,6 +117,110 @@ export type Database = {
           },
         ]
       }
+      aggregator_cycle_deductions: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          amount_paise: number
+          channel: string
+          created_at: string
+          id: string
+          kind: string
+          outlet_id: string
+          period_end: string
+          period_start: string
+          source_ref: string
+          source_system: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          amount_paise: number
+          channel: string
+          created_at?: string
+          id?: string
+          kind: string
+          outlet_id: string
+          period_end: string
+          period_start: string
+          source_ref: string
+          source_system: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          amount_paise?: number
+          channel?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          outlet_id?: string
+          period_end?: string
+          period_start?: string
+          source_ref?: string
+          source_system?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aggregator_cycle_deductions_accepted_by_fkey"
+            columns: ["accepted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aggregator_cycle_deductions_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      aggregator_sync_runs: {
+        Row: {
+          channel: string
+          created_at: string
+          detail: string | null
+          finished_at: string | null
+          id: string
+          outcome: string
+          outlet_id: string
+          started_at: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          detail?: string | null
+          finished_at?: string | null
+          id?: string
+          outcome: string
+          outlet_id: string
+          started_at: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          detail?: string | null
+          finished_at?: string | null
+          id?: string
+          outcome?: string
+          outlet_id?: string
+          started_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aggregator_sync_runs_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alert_responses: {
         Row: {
           alert_id: string
@@ -1852,7 +1956,18 @@ export type Database = {
           updated_by: string | null
           upi_revenue_paise: number
           zomato_commission_bp: number
+          zomato_commission_paise: number | null
+          zomato_gross_paise: number | null
+          zomato_net_paise: number | null
+          zomato_provisional_commission_paise: number | null
+          zomato_provisional_gross_paise: number | null
+          zomato_provisional_net_paise: number | null
           zomato_revenue_paise: number
+          zomato_revised_at: string | null
+          zomato_settlement_state: string | null
+          zomato_superseded_at: string | null
+          zomato_typed_commission_bp: number | null
+          zomato_typed_revenue_paise: number | null
         }
         Insert: {
           business_date: string
@@ -1874,7 +1989,18 @@ export type Database = {
           updated_by?: string | null
           upi_revenue_paise?: number
           zomato_commission_bp: number
+          zomato_commission_paise?: number | null
+          zomato_gross_paise?: number | null
+          zomato_net_paise?: number | null
+          zomato_provisional_commission_paise?: number | null
+          zomato_provisional_gross_paise?: number | null
+          zomato_provisional_net_paise?: number | null
           zomato_revenue_paise?: number
+          zomato_revised_at?: string | null
+          zomato_settlement_state?: string | null
+          zomato_superseded_at?: string | null
+          zomato_typed_commission_bp?: number | null
+          zomato_typed_revenue_paise?: number | null
         }
         Update: {
           business_date?: string
@@ -1896,7 +2022,18 @@ export type Database = {
           updated_by?: string | null
           upi_revenue_paise?: number
           zomato_commission_bp?: number
+          zomato_commission_paise?: number | null
+          zomato_gross_paise?: number | null
+          zomato_net_paise?: number | null
+          zomato_provisional_commission_paise?: number | null
+          zomato_provisional_gross_paise?: number | null
+          zomato_provisional_net_paise?: number | null
           zomato_revenue_paise?: number
+          zomato_revised_at?: string | null
+          zomato_settlement_state?: string | null
+          zomato_superseded_at?: string | null
+          zomato_typed_commission_bp?: number | null
+          zomato_typed_revenue_paise?: number | null
         }
         Relationships: [
           {
@@ -1933,7 +2070,9 @@ export type Database = {
           is_cash: boolean
           outlet_id: string
           recorded_away: boolean
-          recorded_by: string
+          recorded_by: string | null
+          source_ref: string | null
+          source_system: string | null
           updated_at: string
           updated_by: string | null
           voided_at: string | null
@@ -1950,7 +2089,9 @@ export type Database = {
           is_cash: boolean
           outlet_id: string
           recorded_away?: boolean
-          recorded_by?: string
+          recorded_by?: string | null
+          source_ref?: string | null
+          source_system?: string | null
           updated_at?: string
           updated_by?: string | null
           voided_at?: string | null
@@ -1967,7 +2108,9 @@ export type Database = {
           is_cash?: boolean
           outlet_id?: string
           recorded_away?: boolean
-          recorded_by?: string
+          recorded_by?: string | null
+          source_ref?: string | null
+          source_system?: string | null
           updated_at?: string
           updated_by?: string | null
           voided_at?: string | null
@@ -2355,6 +2498,41 @@ export type Database = {
             columns: ["paid_shift_id"]
             isOneToOne: false
             referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outlet_channel_sync: {
+        Row: {
+          channel: string
+          created_at: string
+          id: string
+          outlet_id: string
+          synced_from: string
+          updated_at: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          id?: string
+          outlet_id: string
+          synced_from: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          id?: string
+          outlet_id?: string
+          synced_from?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outlet_channel_sync_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
             referencedColumns: ["id"]
           },
         ]
@@ -3074,6 +3252,10 @@ export type Database = {
           invite_id: string
         }[]
       }
+      ingest_aggregator_cycle: {
+        Args: { p_payload: Json; p_permitted_outlets: string[] }
+        Returns: Json
+      }
       invite_attempts_exceeded: {
         Args: {
           p_global?: number
@@ -3219,6 +3401,16 @@ export type Database = {
           invite_id: string
           profile_id: string
         }[]
+      }
+      record_aggregator_sync_run: {
+        Args: {
+          p_channel: string
+          p_detail: string
+          p_outcome: string
+          p_outlet_id: string
+          p_started_at: string
+        }
+        Returns: string
       }
       record_customer_lookup: {
         Args: { p_caller: string; p_window?: string }

@@ -396,10 +396,10 @@ describe('mock manual ledger adapter', () => {
         // Every row at the outlet, whoever recorded it — which is the point of
         // the surface, not an oversight.
         expect(listed.length).toBeGreaterThan(0)
-        expect(listed.some((expense) => expense.recordedBy.id !== userId)).toBe(true)
+        expect(listed.some((expense) => expense.recordedBy?.id !== userId)).toBe(true)
 
         const created = await adapter.createExpense(expenseInput())
-        expect(created.recordedBy.id).toBe(userId)
+        expect(created.recordedBy?.id).toBe(userId)
         // Standing in the shop, so never marked from away.
         expect(created.recordedAway).toBe(false)
       })

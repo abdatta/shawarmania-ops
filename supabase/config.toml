@@ -133,3 +133,12 @@ verify_jwt = true
 # the same however the code fails.
 [functions.counter-setup]
 verify_jwt = false
+
+# Settlement read from Zomato. Open at the gateway because the caller is a
+# scheduled job, not a person: it holds AGGREGATOR_SYNC_SECRET rather than a
+# Supabase session, and a token-free caller would be refused before the function
+# ever ran. Its protection is that secret, compared in constant time, plus the
+# outlet allow-list in AGGREGATOR_SYNC_OUTLETS, which is what stops a leaked
+# credential writing anywhere but the two outlets it was issued for.
+[functions.ingest-aggregator-cycle]
+verify_jwt = false

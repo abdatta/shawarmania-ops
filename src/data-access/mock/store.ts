@@ -661,6 +661,11 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
         : null,
       voided_by: seed.voidedAtTime ? LEDGER_RECORDERS[seed.recordedBy ?? 'owner'] : null,
       voided_reason: seed.voidedReason ?? null,
+      // Seeded rows are all hand-entered, so none carries an external source.
+      // The synced ones the demo needs are added after this list, where the
+      // contrast between a typed row and a sourced one is the point.
+      source_system: null,
+      source_ref: null,
     }),
   )
 
@@ -688,6 +693,20 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       // One day carries a manager's correction, so the "recorded by X, last
       // corrected by Y" reading appears in the walkthrough rather than only in a
       // test (design D6).
+      // Settlement is absent on every seeded day: these are the typed months the
+      // sync did not cover, which is what makes them the control the synced
+      // fixtures are read against.
+      zomato_gross_paise: null,
+      zomato_commission_paise: null,
+      zomato_net_paise: null,
+      zomato_settlement_state: null,
+      zomato_typed_revenue_paise: null,
+      zomato_typed_commission_bp: null,
+      zomato_superseded_at: null,
+      zomato_provisional_gross_paise: null,
+      zomato_provisional_commission_paise: null,
+      zomato_provisional_net_paise: null,
+      zomato_revised_at: null,
       updated_by: seed.correctedByManager ? MANAGER_ID : null,
     }),
   )
