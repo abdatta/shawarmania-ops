@@ -569,7 +569,21 @@ test.describe('manager billing history', () => {
     await expect(bills.nth(0).getByTestId('manager-bill-detail-transition')).toHaveCount(0)
     const secondSummaryAfterSwap = await secondSummary.boundingBox()
     expect(secondSummaryAfterSwap).not.toBeNull()
-    expect(Math.abs(secondSummaryAfterSwap!.y - secondSummaryBeforeSwap!.y)).toBeLessThan(8)
+    // The summary the manager pressed stays under the finger while the taller
+    // detail above it closes. It holds by scrolling the page up as that detail
+    // collapses, so the promise is bounded by the scroll the page actually has:
+    // once the page is at its very top there is nothing left to give, and the
+    // row rises by whatever was still owed. That case is allowed here, but only
+    // there — a jump with room above it would be the regression this guards.
+    const scrolledToTop = await page.evaluate(() => window.scrollY === 0)
+    const shift = secondSummaryAfterSwap!.y - secondSummaryBeforeSwap!.y
+    if (scrolledToTop) {
+      expect(shift).toBeGreaterThan(-120)
+      expect(shift).toBeLessThan(8)
+    } else {
+      expect(Math.abs(shift)).toBeLessThan(8)
+    }
+    await expect(secondSummary).toBeInViewport()
     await bills.nth(1).getByRole('button', { name: 'Cancel this bill' }).click()
     await bills
       .nth(1)

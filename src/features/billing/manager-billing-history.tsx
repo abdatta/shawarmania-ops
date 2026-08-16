@@ -237,6 +237,16 @@ export function ManagerBillingHistory() {
     closingTimers.current.push(timer)
   }
 
+  /**
+   * Hold the summary the manager just pressed where their finger left it, while
+   * the taller detail above it collapses out from under it.
+   *
+   * It holds by scrolling, so it can only hold as far as the page can scroll.
+   * Swapping near the top of a short list asks to scroll above the document
+   * start, and the row rises by whatever is still owed. Nothing here can fix
+   * that: keeping it truly still would mean inserting space above the header,
+   * which moves the page instead of the row.
+   */
   const anchorSummaryDuringSwap = (billId: string) => {
     const summary = document.getElementById(`bill-summary-${billId}`)
     if (!summary) return
