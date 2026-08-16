@@ -30,7 +30,10 @@ expanded summary and detail SHALL use ordinary structural borders rather than an
 accent-coloured expanded-state outline. Opening and closing detail SHALL use a
 brief reduced-motion-aware height/opacity transition. When selection moves from
 an earlier expanded bill to a lower bill, the surface SHALL keep the tapped lower
-summary visually anchored during that transition.
+summary visually anchored during that transition, as far as the page has scroll
+to give: anchoring is done by scrolling, so a swap near the top of a short list
+SHALL let the summary rise by what is still owed rather than insert space above
+the page, and SHALL leave it in view.
 
 Expanded detail SHALL structurally separate every immutable item snapshot with quantity,
 unit price and line total; effective payment allocations and total; customer name and
@@ -59,7 +62,11 @@ confirmation SHALL remain hidden until the manager chooses `Cancel this order`.
 
 #### Scenario: A manager changes the selected bill
 - **WHEN** a manager selects a lower bill while an earlier bill is expanded
-- **THEN** the earlier detail visibly closes as the selected detail opens, no accent border is used merely because a bill is expanded, and the tapped summary does not abruptly jump away from its viewport position
+- **THEN** the earlier detail visibly closes as the selected detail opens, no accent border is used merely because a bill is expanded, and the tapped summary does not abruptly jump away from its viewport position wherever the page has scroll left to hold it there
+
+#### Scenario: A swap at the top of the page runs out of scroll
+- **WHEN** the tapped summary sits above what the collapsing detail was tall, so holding it still would mean scrolling past the top of the page
+- **THEN** it rises only by what could not be given back and stays in view, rather than the page inserting space above its header
 
 #### Scenario: A bill has complete attribution
 - **WHEN** an expanded bill carries customer name, customer phone, biller, item, tender and timing snapshots

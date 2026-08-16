@@ -239,6 +239,14 @@ the selection rather than shown, left blank, or refused, and a selection left
 empty by that check SHALL fall back to the default. It SHALL be discarded
 when the session ends, so a shared device hands no choice to the next person.
 
+Choosing one outlet on a surface that reads a single outlet SHALL NOT narrow a
+wider remembered selection when the chosen outlet is already part of it. The
+selection SHALL be kept whole and the chosen outlet SHALL become the one a
+single-outlet surface opens on, so that a surface reading several outlets is
+still about all of them on return. Choosing an outlet that is not part of the
+selection SHALL replace the selection with it, because that is a move to another
+outlet rather than a narrower reading of the same ones.
+
 That selection SHALL NOT survive as session state, SHALL NOT constitute an
 "acting as", active role, or session-level outlet mode, and SHALL NOT change
 what any write is permitted to do — the database decides that from the
@@ -275,6 +283,21 @@ outlet's name while a read is in flight.
   supports it
 - **THEN** one combined list is shown, each entry naming the outlet it belongs
   to, and the selection is remembered like any other
+
+#### Scenario: A single-outlet surface reads one of several selected outlets
+
+- **WHEN** a person with two outlets selected chooses one of those two on a
+  surface that reads a single outlet, and then returns to the surface that
+  reads several
+- **THEN** the surface reading several is still about both outlets, and the
+  single-outlet surface reopens on the one they chose
+
+#### Scenario: A single-outlet surface moves to an unselected outlet
+
+- **WHEN** a person with two outlets selected chooses a third outlet on a
+  surface that reads a single outlet
+- **THEN** the selection becomes that outlet alone, and every outlet-scoped
+  surface follows them to it
 
 #### Scenario: The last outlet cannot be deselected
 

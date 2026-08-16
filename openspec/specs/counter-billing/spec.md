@@ -365,21 +365,35 @@ drain, and SHALL never interrupt billing with a dialog about it.
 ### Requirement: A manager reviews outlet history, voids, and clears stranded orders
 
 A Franchise Admin SHALL review their outlets' paid bills and a Super Admin any
-outlet, with revenue-business-date, status and payment filters. Each bill SHALL
-have a scannable collapsed summary naming its bill number, plain-language Paid or
-Cancelled state, total, tender, outlet-local time and biller; a timestamp from today or
-yesterday SHALL use that relative calendar-day label while retaining its absolute
-time. Selecting a summary SHALL expand that bill directly beneath the summary,
-with at most one bill expanded at a time. At an ordinary phone width, the four filters
-SHALL use two columns without horizontal overflow; at wide widths they SHALL use one row
-of four controls. The date filter SHALL default to the selected outlet's current business
-date and render `Today`; a past selected date SHALL render as a formatted business date.
-The visible date control SHALL open the platform calendar and SHALL NOT present an empty
-browser date placeholder. The expanded summary and detail SHALL use ordinary structural
-borders rather than an accent-coloured expanded-state outline. Opening and closing detail
-SHALL use a brief reduced-motion-aware height/opacity transition. When selection moves
-from an earlier expanded bill to a lower bill, the surface SHALL keep the tapped lower
-summary visually anchored during that transition.
+outlet. The surface SHALL ask two questions and no more — which outlet, and
+which revenue business date — and SHALL NOT offer a bill-status or payment-method
+filter. Every bill of the selected outlet-day SHALL be listed whatever its status
+or tender, because each summary already names its own state and tender.
+
+The outlet SHALL be chosen with the same shared, remembered outlet selector every
+other outlet-scoped surface uses, in the page header. The date SHALL be chosen
+with the same day control the manual ledger uses: a step to the previous day, a
+step to the next, and the day itself opening the platform calendar. Forward
+stepping SHALL stop at the selected outlet's current business date. The date
+SHALL default to that outlet's current business date and render `Today`; a past
+selected date SHALL render as a formatted business date. The visible date control
+SHALL open the platform calendar and SHALL NOT present an empty browser date
+placeholder. Neither control SHALL overflow horizontally at an ordinary phone
+width.
+
+Each bill SHALL have a scannable collapsed summary naming its bill number,
+plain-language Paid or Cancelled state, total, tender, outlet-local time and
+biller; a timestamp from today or yesterday SHALL use that relative calendar-day
+label while retaining its absolute time. Selecting a summary SHALL expand that
+bill directly beneath the summary, with at most one bill expanded at a time. The
+expanded summary and detail SHALL use ordinary structural borders rather than an
+accent-coloured expanded-state outline. Opening and closing detail SHALL use a
+brief reduced-motion-aware height/opacity transition. When selection moves from
+an earlier expanded bill to a lower bill, the surface SHALL keep the tapped lower
+summary visually anchored during that transition, as far as the page has scroll
+to give: anchoring is done by scrolling, so a swap near the top of a short list
+SHALL let the summary rise by what is still owed rather than insert space above
+the page, and SHALL leave it in view.
 
 Expanded detail SHALL structurally separate every immutable item snapshot with quantity,
 unit price and line total; effective payment allocations and total; customer name and
@@ -408,7 +422,11 @@ confirmation SHALL remain hidden until the manager chooses `Cancel this order`.
 
 #### Scenario: A manager changes the selected bill
 - **WHEN** a manager selects a lower bill while an earlier bill is expanded
-- **THEN** the earlier detail visibly closes as the selected detail opens, no accent border is used merely because a bill is expanded, and the tapped summary does not abruptly jump away from its viewport position
+- **THEN** the earlier detail visibly closes as the selected detail opens, no accent border is used merely because a bill is expanded, and the tapped summary does not abruptly jump away from its viewport position wherever the page has scroll left to hold it there
+
+#### Scenario: A swap at the top of the page runs out of scroll
+- **WHEN** the tapped summary sits above what the collapsing detail was tall, so holding it still would mean scrolling past the top of the page
+- **THEN** it rises only by what could not be given back and stays in view, rather than the page inserting space above its header
 
 #### Scenario: A bill has complete attribution
 - **WHEN** an expanded bill carries customer name, customer phone, biller, item, tender and timing snapshots
@@ -438,13 +456,17 @@ confirmation SHALL remain hidden until the manager chooses `Cancel this order`.
 - **WHEN** an order and its payment fall on different business dates
 - **THEN** the bill is found under its order business date and detail separately names the later payment time and payment business date
 
-#### Scenario: Filters remain compact on a phone
+#### Scenario: Cancelled bills are read alongside paid ones
+- **WHEN** a manager opens an outlet-day on which bills were both paid and cancelled
+- **THEN** every one of them is listed, each naming its own state, with no filter to operate and none needed to see either kind
+
+#### Scenario: The surface asks the same two questions as its neighbours
 - **WHEN** a manager opens Billing history at an ordinary phone width
-- **THEN** the outlet, date, status and payment filters occupy two rows without horizontal scrolling
+- **THEN** the outlet is chosen from the shared header selector and the day from a bar with a step either side, both matching the surfaces that ask the same questions, and neither scrolls horizontally
 
 #### Scenario: Billing history opens on the current business day
 - **WHEN** a manager opens Billing history
-- **THEN** the date filter reads Today, the results are scoped to that outlet's current business date, and choosing a past day makes the control read that formatted date
+- **THEN** the day control reads Today, the results are scoped to that outlet's current business date, stepping forward is refused, and choosing a past day makes the control read that formatted date
 
 #### Scenario: An order is stranded on a tablet
 - **WHEN** an order remains open at an outlet whose tablet is unavailable and the manager cancels it with a reason
@@ -673,8 +695,15 @@ optional customer snapshot. It SHALL NOT show other shifts or another outlet.
 
 The shared counter SHALL show aggregate Cash and UPI payment totals for its
 current shift. The manager's Billing History Status view SHALL show the selected
-outlet-day Cash and UPI totals before its sync activity. Both scopes SHALL use
-the same total-card presentation.
+outlet-day Cash and UPI totals before its sync activity, and beside them the
+day's combined takings and its average bill. Every scope SHALL use the same
+total-card presentation.
+
+Combined takings SHALL be the sum of the Cash and UPI figures shown beside it,
+never a separately derived number, so that the cards always reconcile. The
+average bill SHALL be those combined takings over the number of paid bills in
+the same scope, in integer paise, and SHALL read as zero when that scope holds no
+paid bill. Cancelled bills SHALL contribute to neither figure.
 
 The list SHALL include locally accepted payments immediately and SHALL use each
 bill's latest effective allocation, including a durably accepted correction that
@@ -689,7 +718,12 @@ min)` or `Edit (N sec)` action without making any other bill fact editable.
 #### Scenario: Manager opens Status
 - **WHEN** a manager opens the Billing History Status view for an outlet day
 - **THEN** the outlet-day Cash and UPI payment aggregates appear before sync
-  activity and do not alter the counter's current-shift scope
+  activity, with the day's combined takings and average bill beside them, and do
+  not alter the counter's current-shift scope
+
+#### Scenario: A day with no paid bills has no average
+- **WHEN** a manager opens Status for an outlet day on which nothing was paid
+- **THEN** the average bill reads zero rather than an undefined or infinite figure
 
 #### Scenario: Operator inspects a closed bill
 - **WHEN** the operator expands a bill in My shift or the combined tablet rail
