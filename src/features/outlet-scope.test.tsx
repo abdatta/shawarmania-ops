@@ -165,6 +165,42 @@ describe('the outlet in scope, remembered', () => {
     expect(readRememberedOutlets(managerSession)).toEqual([])
   })
 
+  it('reads one of several selected outlets without narrowing the selection', async () => {
+    // What a multi-select surface leaves behind: both outlets, in scope
+    // together. Seeded rather than clicked, because the claim under test is
+    // about what a *single*-outlet surface does to it.
+    localStorage.setItem(
+      `shawarmania.outlet-scope.demo.${ownerSession.userId}`,
+      `${OUTLET_KALYANI_ID},${OUTLET_KANCHRAPARA_ID}`,
+    )
+
+    renderSurface(ExpensesSurface)
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
+
+    // Choosing one of the two says which one this surface is about, not that the
+    // other has been abandoned. Kanchrapara leads, so this surface reopens on
+    // what was actually chosen; both survive, so attendance still has both.
+    await waitFor(() =>
+      expect(readRememberedOutlets(ownerSession)).toEqual([
+        OUTLET_KANCHRAPARA_ID,
+        OUTLET_KALYANI_ID,
+      ]),
+    )
+  })
+
+  it('follows a move to an outlet that was not selected', async () => {
+    localStorage.setItem(`shawarmania.outlet-scope.demo.${ownerSession.userId}`, OUTLET_KALYANI_ID)
+
+    renderSurface(ExpensesSurface)
+    await chooseOutlet(OUTLET_KANCHRAPARA_ID)
+
+    // Nothing to keep whole here: an outlet outside the selection is somewhere
+    // else, and every surface goes there.
+    await waitFor(() =>
+      expect(readRememberedOutlets(ownerSession)).toEqual([OUTLET_KANCHRAPARA_ID]),
+    )
+  })
+
   it('offers the owner every outlet to remember, and no more', async () => {
     renderSurface(ExpensesSurface)
 

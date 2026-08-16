@@ -97,10 +97,14 @@ export function useOutletScope(
   /** Render this in the surface's header. Null when there is nothing to choose. */
   selector: ReactNode
   /**
-   * Move the surface to another outlet, replacing whatever was selected, for a
-   * surface that has its own reason to offer the move — the owner's
-   * stranded-days list, which exists precisely to say "the unsettled days are
-   * over there".
+   * Move the surface to another outlet, for a surface that has its own reason
+   * to offer the move — the owner's stranded-days list, which exists precisely
+   * to say "the unsettled days are over there".
+   *
+   * Replaces the selection when the outlet is not in it, and merely brings it
+   * to the front when it is, so that reading one of several selected outlets
+   * does not silently narrow the selection for every other surface. See the
+   * implementation for why that distinction is the whole of it.
    *
    * Ignored for somebody with a single outlet, who has nowhere to go. Confers
    * nothing that the selector does not: this is the same filter, set from a
@@ -121,10 +125,16 @@ export function useOutletScope(
   // Where they left off, if anywhere. Believed only once the outlet list has
   // arrived to check it against — an outlet can close, be deleted, or stop being
   // theirs between one visit and the next.
+  //
+  // The whole remembered selection is held even here, on a surface that reads
+  // one outlet. It used to be truncated on arrival, which quietly cost the
+  // person their wider selection the moment they touched this control — see
+  // `choose` for the rest of that story. What this surface *reads* is narrowed
+  // instead, at `scope` below, which is the only place it needs to be.
   const [chosen, setChosen] = useState<string[]>(() => {
     if (!needsList) return mine[0] ? [mine[0]] : []
     const remembered = readRememberedOutlets(session)
-    if (remembered.length > 0) return multiple ? remembered : remembered.slice(0, 1)
+    if (remembered.length > 0) return remembered
     const fallback = manages[0] ?? mine[0]
     return fallback ? [fallback] : []
   })
@@ -139,7 +149,34 @@ export function useOutletScope(
     [session],
   )
 
-  const choose = useCallback((outletId: string) => settle([outletId]), [settle])
+  /**
+   * Read one outlet, which is not the same act as abandoning the others.
+   *
+   * A single-outlet surface used to write its choice over the whole selection,
+   * so somebody who had both outlets in scope on attendance, opened the ledger,
+   * and picked one of those two there, came back to attendance narrowed to one
+   * without having asked for it. The narrowing was never a decision; it was
+   * this control having no way to say "this one, for now".
+   *
+   * So a pick already in the selection **reorders** rather than replaces: the
+   * set survives whole for the surfaces that read all of it, and the chosen
+   * outlet leads, which is what a single-outlet surface reads and reopens on.
+   * Order carries nothing else — the chips render in outlet order — so leading
+   * is free to mean exactly this.
+   *
+   * A pick outside the selection still replaces it, because that is a move to
+   * another outlet rather than a narrower reading of the same ones, and every
+   * surface should follow it.
+   */
+  const choose = useCallback(
+    (outletId: string) =>
+      settle(
+        chosen.includes(outletId)
+          ? [outletId, ...chosen.filter((id) => id !== outletId)]
+          : [outletId],
+      ),
+    [chosen, settle],
+  )
 
   /**
    * Add or remove one outlet. The last one cannot be removed: an empty
@@ -196,6 +233,17 @@ export function useOutletScope(
     }
   }, [needsList, isOwner, mine, manages, outletsAdapter, session])
 
+  /**
+   * What this surface is actually about, which is the selection itself only
+   * where the surface can read several outlets at once.
+   *
+   * The selection is kept whole so that the surfaces which read all of it still
+   * can; a single-outlet surface reads its leading entry and shows that one chip
+   * as chosen. Memoised on the selection's identity rather than rebuilt, because
+   * a caller that fetches from this list would otherwise re-read forever.
+   */
+  const scope = useMemo(() => (multiple ? chosen : chosen.slice(0, 1)), [multiple, chosen])
+
   if (!needsList) {
     const only = mine[0] ?? null
     return {
@@ -210,11 +258,14 @@ export function useOutletScope(
     }
   }
 
-  const managed = chosen.length > 0 && chosen.every((id) => manages.includes(id))
+  // Over what is read, never over what is merely remembered: an outlet still in
+  // the selection but not in this surface's scope has no say in whether this
+  // surface may act.
+  const managed = scope.length > 0 && scope.every((id) => manages.includes(id))
 
   return {
-    outletId: chosen[0] ?? null,
-    outletIds: chosen,
+    outletId: scope[0] ?? null,
+    outletIds: scope,
     managed,
     choose,
     selector:
@@ -226,7 +277,7 @@ export function useOutletScope(
         // every surface an owner walks through.
         <OutletChips
           outlets={outlets}
-          chosen={multiple ? chosen : chosen.slice(0, 1)}
+          chosen={scope}
           onToggle={multiple ? toggle : choose}
           label={multiple ? 'Outlets' : 'Outlet'}
           testId={multiple ? 'surface-outlets' : 'surface-outlet'}
