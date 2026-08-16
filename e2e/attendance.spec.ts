@@ -177,8 +177,9 @@ test('approving from away from the outlet costs a reason, and records it', async
 
 /** Add each waiting person to the set, one manual action at a time. */
 async function selectEachWaiting(page: Page) {
-  await page.getByTestId('toggle-selecting').click()
-  await expect(page.getByTestId('selection-count')).toContainText('0 selected')
+  // No mode to enter first: the box on each waiting row is the entrance, and the
+  // set itself is the mode (design D10).
+  await expect(page.getByTestId('selection-bar')).toHaveCount(0)
   const boxes = page.getByTestId(/^select-[0-9a-f-]{36}$/)
   const count = await boxes.count()
   for (let index = 0; index < count; index += 1) await boxes.nth(index).click()
@@ -225,6 +226,11 @@ test('a selected set approved from away costs exactly one reason', async ({ page
   await page.getByLabel(/Why are you approving/).fill('Both were at the counter before I left')
   await page.getByRole('button', { name: 'Continue' }).click()
   await expect(page.getByTestId('confirm-people').getByRole('listitem')).toHaveCount(2)
+  // The whole of what is about to be written, not only who it is about: the
+  // sentence quoted back, and where this action's position reading left it.
+  const details = page.getByTestId('confirm-details')
+  await expect(details).toContainText('Both were at the counter before I left')
+  await expect(details).toContainText('away from the outlet')
   await page.getByTestId('confirm-set').click()
 
   await expect(page.getByTestId('day-waiting')).toHaveCount(0)
@@ -323,9 +329,11 @@ test('a denied set shares one reason and one retry choice, and reads no position
   await page.getByLabel('Reason').fill('Neither was on the rota')
   await page.getByTestId('prevent-retry').check()
   await page.getByRole('button', { name: 'Continue' }).click()
-  await expect(page.getByTestId('confirm-note')).toContainText(
-    'None of them will be able to check in again',
-  )
+  // Both inputs read back before the write, so the last screen is the whole of
+  // what the decision will say — said once, in two words.
+  await expect(page.getByTestId('confirm-details')).toContainText('Neither was on the rota')
+  await expect(page.getByTestId('confirm-details')).toContainText('not allowed')
+  await expect(page.getByTestId('confirm-note')).toHaveCount(0)
   await page.getByTestId('confirm-set').click()
 
   await expect(page.getByTestId('day-waiting')).toHaveCount(0)
@@ -403,11 +411,18 @@ test('a manager settles a waiting morning one day at a time, and the list holds 
   // button settling the lot is how an arrival nobody saw gets counted.
   await expect(page.getByTestId('approve-all')).toHaveCount(0)
   await expect(page.getByTestId('select-all')).toHaveCount(0)
-  await page.getByTestId('toggle-selecting').click()
+  await expect(page.getByTestId('toggle-selecting')).toHaveCount(0)
+  await page
+    .getByTestId(/^select-[0-9a-f-]{36}$/)
+    .first()
+    .click()
   for (const name of [/approve all/i, /select all/i, /select the rest/i, /select everyone/i]) {
     await expect(page.getByRole('button', { name })).toHaveCount(0)
   }
-  await page.getByTestId('toggle-selecting').click()
+  // Clear only ever takes people out of an action, and emptying the set leaves
+  // selection, which puts the per-row buttons back.
+  await page.getByTestId('clear-selection').click()
+  await expect(page.getByTestId('selection-bar')).toHaveCount(0)
 
   const cards = page.getByTestId(/^day-[0-9a-f-]{36}$/)
   const orderBefore = await cards.evaluateAll((nodes) =>
@@ -583,6 +598,41 @@ test('a day is a headline until it is opened, and a waiting one is already open'
 
   await page.getByTestId(`expand-${grillerId}`).click()
   await expect(griller.getByTestId('approval-note')).toBeVisible()
+})
+
+test('a waiting row cannot be closed, and the set takes the day picker\u2019s place', async ({
+  page,
+}) => {
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+
+  // Every control that decides this row lives in its panel, so a closed waiting
+  // row is one a manager can neither act on nor tell apart from one already in
+  // the set. The chevron stays rendered and goes inert, so nothing shifts
+  // sideways when the row settles and it becomes live again (design D10).
+  const chevron = page.getByTestId(`expand-${DEMO_RUNNER_ACCOUNT_ID}`)
+  await expect(chevron).toBeDisabled()
+  await expect(chevron).toHaveAttribute('aria-expanded', 'true')
+
+  // The set's bar replaces the day picker rather than appearing under the list,
+  // so pressing the first box moves no row out from under the thumb that
+  // pressed it, and the day cannot be changed while a set is open.
+  await expect(page.getByTestId('day-label')).toBeVisible()
+  await page.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`).click()
+  await expect(page.getByTestId('selection-count')).toContainText('1 selected')
+  await expect(page.getByTestId('day-label')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Previous day' })).toHaveCount(0)
+  // And the row's own Approve and Deny stand down while the set's own actions
+  // are the ones on offer.
+  await expect(page.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`)).toHaveCount(0)
+  await expect(page.getByTestId(`deny-${DEMO_RUNNER_ACCOUNT_ID}`)).toHaveCount(0)
+
+  // Taking the last person out leaves selection by itself, and everything the
+  // bar displaced comes back.
+  await page.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`).click()
+  await expect(page.getByTestId('selection-bar')).toHaveCount(0)
+  await expect(page.getByTestId('day-label')).toBeVisible()
+  await expect(page.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`)).toBeVisible()
 })
 
 test('the outlet chips carry their own unsettled days, in one row', async ({ page }) => {

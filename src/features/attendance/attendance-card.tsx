@@ -2,6 +2,7 @@ import { ChevronDown } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
 
 import { Card } from '@/components/ui/card'
+import { cn } from '@/lib/cn'
 
 /**
  * One day, as a headline you can open.
@@ -28,6 +29,13 @@ import { Card } from '@/components/ui/card'
  * yet arrived` and `Working at another outlet` render as headlines and stop
  * there.
  *
+ * **A pinned row cannot be closed, and still shows its chevron.** Every control
+ * that decides a roll-call row lives in the panel, so a closed one is a row a
+ * manager can neither act on nor tell apart from one they have already put in a
+ * set. The chevron stays rendered and goes inert rather than disappearing, so
+ * the headline does not shift sideways at the moment the row settles and the
+ * chevron becomes live again — the same stillness the sort order keeps.
+ *
  * **A derived absence is not one of those rows.** It has no evidence, no
  * approval and no action, but it does have a cause, and an absence that cannot
  * account for itself is the verdict somebody is most likely to argue with. So it
@@ -49,7 +57,7 @@ export function AttendanceCard({
   details,
   waiting,
   defaultOpen = false,
-  aside = null,
+  pinnedOpen = false,
 }: {
   testId: string
   /** The chevron's own id, so a test can open a row without guessing its name. */
@@ -65,15 +73,17 @@ export function AttendanceCard({
   waiting: boolean
   defaultOpen?: boolean
   /**
-   * A control that belongs to the row but not to opening it — today, the
-   * checkbox that adds this person to a set. It sits **outside** the header
-   * button on purpose: a checkbox nested inside a button is neither reachable
-   * nor announced as one, and tapping it would open the row as a side effect.
+   * Held open, with the toggle inert. Passed by the roll-call for a row waiting
+   * on a manager, never derived here from `waiting`: the by-staff month list
+   * shares this card and an employee reads their own month through it, where a
+   * waiting day carries no action at all and pinning it would only lengthen a
+   * thirty-day list.
    */
-  aside?: ReactNode | null
+  pinnedOpen?: boolean
 }) {
   const panelId = useId()
-  const [open, setOpen] = useState(defaultOpen)
+  const [openState, setOpen] = useState(defaultOpen)
+  const open = pinnedOpen || openState
 
   const row = 'flex w-full flex-wrap items-baseline justify-between gap-x-2 gap-y-1 text-left'
 
@@ -94,8 +104,9 @@ export function AttendanceCard({
             data-testid={toggleTestId}
             aria-expanded={open}
             aria-controls={panelId}
+            disabled={pinnedOpen}
             onClick={() => setOpen((current) => !current)}
-            className={`${row} rounded focus-visible:focus-ring`}
+            className={`${row} rounded focus-visible:focus-ring disabled:cursor-default`}
           >
             {title}
             <span className="inline-flex items-center gap-1.5 text-sm font-normal">
@@ -103,18 +114,18 @@ export function AttendanceCard({
               <ChevronDown
                 aria-hidden
                 size={14}
-                className={
-                  open
-                    ? 'shrink-0 rotate-180 text-content-muted transition-transform'
-                    : 'shrink-0 text-content-muted transition-transform'
-                }
+                className={cn(
+                  'shrink-0 text-content-muted transition-transform',
+                  open && 'rotate-180',
+                  // Occupies the same space either way, so settling a row moves
+                  // nothing; it only stops looking like something to press.
+                  pinnedOpen && 'opacity-40',
+                )}
               />
             </span>
           </button>
         )}
       </Heading>
-
-      {aside}
 
       {details !== null && open && (
         <div id={panelId} className="space-y-1.5">

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -438,7 +438,7 @@ describe('the outlet attendance day', () => {
     // is meant to be the moment somebody remembers this person turning up for
     // this shift. Ten people means ten taps to select and one tap to act.
     expect(screen.getByTestId('day-waiting')).toBeInTheDocument()
-    await user.click(screen.getByTestId('toggle-selecting'))
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
 
     for (const name of [
       /approve all/i,
@@ -458,50 +458,99 @@ describe('the outlet attendance day', () => {
     expect(screen.queryByTestId('select-all')).not.toBeInTheDocument()
   })
 
-  it('starts a selection empty, at a stated count of zero', async () => {
+  it('offers no selection bar until somebody is put in a set', async () => {
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    // The mode is the set (design D10). Nothing stands above the roll-call
+    // announcing selection before anybody has chosen anybody, and there is no
+    // bar counting zero.
+    expect(screen.queryByTestId('selection-bar')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('toggle-selecting')).not.toBeInTheDocument()
+    expect(screen.getByTestId('day-label')).toBeInTheDocument()
+  })
+
+  it('enters and leaves selection with the set itself', async () => {
     const user = userEvent.setup()
     renderDay()
     await screen.findByTestId('attendance-day')
 
-    await user.click(screen.getByTestId('toggle-selecting'))
-    expect(screen.getByTestId('selection-count')).toHaveTextContent('0 selected')
-    for (const box of screen.getAllByTestId(/^select-[0-9a-f-]{36}$/)) {
-      expect(box).not.toBeChecked()
-    }
-    expect(screen.getByTestId('approve-selected')).toBeDisabled()
-    expect(screen.getByTestId('deny-selected')).toBeDisabled()
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    expect(screen.getByTestId('selection-count')).toHaveTextContent('1 selected')
+    // The bar takes the day picker's slot rather than appearing under the list,
+    // so the first press moves no row out from under the thumb that made it.
+    expect(screen.queryByTestId('day-label')).not.toBeInTheDocument()
+    // Two ways to act on one row is the ambiguity this least needs, so while a
+    // set exists the set's own actions are the only ones.
+    expect(screen.queryByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`)).not.toBeInTheDocument()
+    expect(screen.queryByTestId(`deny-${DEMO_PREP_COOK_ACCOUNT_ID}`)).not.toBeInTheDocument()
+
+    // Taking the last person out leaves the mode by itself: there is no second
+    // piece of state that could disagree with the count.
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    expect(screen.queryByTestId('selection-bar')).not.toBeInTheDocument()
+    expect(screen.getByTestId('day-label')).toBeInTheDocument()
+    expect(screen.getByTestId(`approve-${DEMO_RUNNER_ACCOUNT_ID}`)).toBeInTheDocument()
+  })
+
+  it('keeps both people when two selections reach React in one batch', async () => {
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    // A stylus, an assistive device replaying a pair of taps, or a browser
+    // dispatching a queued pair can put two presses in one batch. Building the
+    // new set from the render's closure rather than from the previous state
+    // would let the second overwrite the first, and one of the two would be
+    // silently absent from an action the manager believes covers both. A set
+    // that quietly loses somebody is the failure this capability exists to
+    // prevent, so it is worth asserting rather than assuming a thumb is slow.
+    act(() => {
+      fireEvent.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+      fireEvent.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
+    })
+
+    expect(screen.getByTestId('selection-count')).toHaveTextContent('2 selected')
   })
 
   it('offers selection only on rows still waiting for a decision', async () => {
-    const user = userEvent.setup()
     renderDay()
     await screen.findByTestId('attendance-day')
 
-    await user.click(screen.getByTestId('toggle-selecting'))
     // The runner is waiting; the griller's day was approved in the fixtures and
     // there is nothing left to decide about it.
     expect(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`)).toBeInTheDocument()
     expect(screen.queryByTestId(`select-${DEMO_GRILLER_ACCOUNT_ID}`)).not.toBeInTheDocument()
   })
 
-  it('opens a row without selecting it, and selects a row without opening it', async () => {
+  it('will not let a row waiting for a decision be closed', async () => {
+    renderDay()
+    await screen.findByTestId('attendance-day')
+
+    // Every control that decides this row lives in the panel, so a closed
+    // waiting row is one a manager can neither act on nor tell apart from one
+    // already in the set. The chevron stays rendered and goes inert, so nothing
+    // shifts sideways when the row settles and it becomes live again.
+    const toggle = screen.getByTestId(`expand-${DEMO_RUNNER_ACCOUNT_ID}`)
+    expect(toggle).toBeDisabled()
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('opens a settled row without disturbing the set', async () => {
     const user = userEvent.setup()
     renderDay()
     await screen.findByTestId('attendance-day')
 
-    await user.click(screen.getByTestId('toggle-selecting'))
     await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
     expect(screen.getByTestId('selection-count')).toHaveTextContent('1 selected')
 
     // Reading somebody's evidence is a different act from deciding about them,
-    // so the row body opens and closes exactly as it does out of selection mode
-    // and the set already built is untouched (design D9).
-    const toggle = screen.getByTestId(`expand-${DEMO_PREP_COOK_ACCOUNT_ID}`)
-    const before = toggle.getAttribute('aria-expanded')
+    // so the row body opens and closes in selection mode exactly as it does out
+    // of it, and the set already built is untouched (design D9).
+    const toggle = screen.getByTestId(`expand-${DEMO_GRILLER_ACCOUNT_ID}`)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
     await user.click(toggle)
-    expect(toggle.getAttribute('aria-expanded')).not.toBe(before)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByTestId('selection-count')).toHaveTextContent('1 selected')
-    expect(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`)).not.toBeChecked()
   })
 
   it('clears the whole selection on request, and after a successful action', async () => {
@@ -510,7 +559,6 @@ describe('the outlet attendance day', () => {
     renderDay()
     await screen.findByTestId('attendance-day')
 
-    await user.click(screen.getByTestId('toggle-selecting'))
     await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
     await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
     expect(screen.getByTestId('selection-count')).toHaveTextContent('2 selected')
@@ -518,7 +566,7 @@ describe('the outlet attendance day', () => {
     // Clear only ever takes people OUT of an action, which is why it is the one
     // control allowed to touch several at once.
     await user.click(screen.getByTestId('clear-selection'))
-    expect(screen.getByTestId('selection-count')).toHaveTextContent('0 selected')
+    expect(screen.queryByTestId('selection-bar')).not.toBeInTheDocument()
 
     await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
     await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
@@ -537,7 +585,6 @@ describe('the outlet attendance day', () => {
     renderDay(adapters)
     await screen.findByTestId('attendance-day')
 
-    await user.click(screen.getByTestId('toggle-selecting'))
     await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
     await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
     await user.click(screen.getByTestId('approve-selected'))
@@ -553,6 +600,32 @@ describe('the outlet attendance day', () => {
     expect(approve).not.toHaveBeenCalled()
     // The selection survives a cancel: it cost the action, not the work.
     expect(screen.getByTestId('selection-count')).toHaveTextContent('2 selected')
+  })
+
+  it('names back a set of one built from the bar', async () => {
+    const user = userEvent.setup()
+    atPosition(AT_COUNTER)
+    const adapters = createMockAdapters()
+    const approve = vi.spyOn(adapters.attendance, 'approve')
+    renderDay(adapters)
+    await screen.findByTestId('attendance-day')
+
+    // Building a set is a deliberate act, and the whole point of the gate is
+    // that the manager reads who they picked. One person is no exception
+    // (design D10).
+    await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
+    await user.click(screen.getByTestId('approve-selected'))
+
+    const people = await screen.findByTestId('confirm-people')
+    expect(within(people).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(people).getByText('Demo Runner')).toBeInTheDocument()
+    // And the title counts in the singular rather than reading `1 arrivals`.
+    expect(screen.getByText('Approve 1 arrival')).toBeInTheDocument()
+    expect(approve).not.toHaveBeenCalled()
+
+    await user.click(screen.getByTestId('confirm-set'))
+    await waitFor(() => expect(approve).toHaveBeenCalled())
+    expect(approve.mock.calls[0]?.[0]).toHaveLength(1)
   })
 
   it('does not confirm a single person twice', async () => {
@@ -577,7 +650,6 @@ describe('the outlet attendance day', () => {
     renderDay(adapters)
     await screen.findByTestId('attendance-day')
 
-    await user.click(screen.getByTestId('toggle-selecting'))
     await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
     await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
     await user.click(screen.getByTestId('approve-selected'))
@@ -595,6 +667,13 @@ describe('the outlet attendance day', () => {
     // light of the explanation that was just written.
     const people = await screen.findByTestId('confirm-people')
     expect(within(people).getAllByRole('listitem')).toHaveLength(2)
+    // And the whole of what the decision will say, not only who it is about:
+    // the sentence being recorded against them, quoted back, and where the
+    // position this action read actually left them.
+    const details = screen.getByTestId('confirm-details')
+    expect(details).toHaveTextContent('Both were at the counter when I left')
+    expect(details).toHaveTextContent('Your position:')
+    expect(details).toHaveTextContent('away from the outlet')
     expect(approve).not.toHaveBeenCalled()
 
     await user.click(screen.getByTestId('confirm-set'))
@@ -609,7 +688,6 @@ describe('the outlet attendance day', () => {
     renderDay(adapters)
     await screen.findByTestId('attendance-day')
 
-    await user.click(screen.getByTestId('toggle-selecting'))
     await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
     await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
     await user.click(screen.getByTestId('deny-selected'))
@@ -626,9 +704,15 @@ describe('the outlet attendance day', () => {
     await user.type(screen.getByLabelText('Reason'), 'Neither was on the rota')
     await user.click(screen.getByTestId('prevent-retry'))
     await user.click(screen.getByRole('button', { name: 'Continue' }))
-    expect(await screen.findByTestId('confirm-note')).toHaveTextContent(
-      'None of them will be able to check in again',
-    )
+    // Both inputs read back before the write: the sentence, and the choice that
+    // decides whether these two can put the day right themselves. Said once, in
+    // two words. The sheet behind this one explained what the choice means, and
+    // repeating it here in different words made the last screen unreadable.
+    const details = await screen.findByTestId('confirm-details')
+    expect(details).toHaveTextContent('Neither was on the rota')
+    expect(details).toHaveTextContent('Another check-in:')
+    expect(details).toHaveTextContent('not allowed')
+    expect(screen.queryByTestId('confirm-note')).not.toBeInTheDocument()
     await user.click(screen.getByTestId('confirm-set'))
 
     await waitFor(() => expect(deny).toHaveBeenCalled())
@@ -648,7 +732,6 @@ describe('the outlet attendance day', () => {
     renderDay(adapters)
     await screen.findByTestId('attendance-day')
 
-    await user.click(screen.getByTestId('toggle-selecting'))
     await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
     await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
 
@@ -743,7 +826,6 @@ describe('the outlet attendance day', () => {
     renderDay(adapters)
     await screen.findByTestId('attendance-day')
 
-    await user.click(screen.getByTestId('toggle-selecting'))
     await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
     await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
     await user.click(screen.getByTestId('approve-selected'))
@@ -765,14 +847,17 @@ describe('the outlet attendance day', () => {
     renderDay(adapters)
     await screen.findByTestId('attendance-day')
 
-    await user.click(screen.getByTestId('toggle-selecting'))
     await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
     await user.click(screen.getByTestId(`select-${DEMO_PREP_COOK_ACCOUNT_ID}`))
     await user.click(screen.getByTestId('deny-selected'))
     await user.clear(screen.getByLabelText('Reason'))
     await user.type(screen.getByLabelText('Reason'), 'Neither of them was on the shift')
     await user.click(screen.getByRole('button', { name: 'Continue' }))
-    await user.click(await screen.findByTestId('confirm-set'))
+    // Left unticked, and the confirmation says so rather than falling silent:
+    // letting somebody put their own day right is a decision about it too.
+    expect(await screen.findByTestId('confirm-details')).toHaveTextContent('allowed')
+    expect(screen.queryByTestId('confirm-note')).not.toBeInTheDocument()
+    await user.click(screen.getByTestId('confirm-set'))
 
     await waitFor(() => expect(deny).toHaveBeenCalled())
     // Denial says the attempts should not count. It does not vouch that the
@@ -1531,7 +1616,6 @@ describe('a person who works at two outlets', () => {
     await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
     await screen.findByTestId('attendance-day')
 
-    await user.click(screen.getByTestId('toggle-selecting'))
     await user.click(screen.getByTestId(`select-${DEMO_RUNNER_ACCOUNT_ID}`))
     await user.click(screen.getByTestId(`select-${DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID}`))
     await user.click(screen.getByTestId('approve-selected'))

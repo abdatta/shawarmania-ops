@@ -271,14 +271,17 @@ the reset migration and prove each of these layers:
 - RLS and authenticated REST probes include forged actor, unassigned/cross-outlet
   requests, former-manager bounded history, unrelated employee refusal, subject
   full history and owner reach;
-- component tests cover selection — nothing selected on entry, only waiting rows
-  selectable, opening a row changing no selection, no control that adds more than
-  one person by any name, `Clear`, the confirmation naming everybody before the
-  write, cancelling writing nothing, the partition summary across two outlets,
-  and a refusal keeping the surviving selection while naming who moved. Two of
-  them count calls to the mocked `readPosition`: one action reads exactly once
-  however many rows it settles, a second action reads again, and a denial of any
-  size reads not at all;
+- component tests cover selection — no bar until somebody is in a set, the mode
+  entered and left by the set itself, only waiting rows selectable, a waiting row
+  that cannot be closed, opening a settled row changing no selection, no control
+  that adds more than one person by any name, `Clear`, the confirmation naming
+  everybody before the write including a set of one from the bar and nobody from
+  a per-row button, the confirmation quoting the reason back and stating the
+  position reading and the retry choice both ways, cancelling writing nothing,
+  the partition summary across two outlets, and a refusal keeping the surviving selection while naming who moved.
+  Two of them count calls to the mocked `readPosition`: one action reads exactly
+  once however many rows it settles, a second action reads again, and a denial of
+  any size reads not at all;
 - `e2e/attendance.spec.ts` drives the same rules through Playwright's own
   geolocation emulation rather than any hook in the app — on site, away from
   every outlet, inside one fence and outside another, and with no position at

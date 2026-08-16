@@ -221,6 +221,71 @@ Where a set spans dates, every summary names the date beside the person, and the
 retry-prevention control names each row's own business date instead of saying
 `today`.
 
+### D10 — Selection is entered from the row, and the mode is the set
+
+D9's arrangement was first built as a labelled toggle above the roll-call, always
+rendered and disabled where nothing was waiting, with a sticky bar at the foot of
+the list. Walking it showed three faults, and this decision replaces the
+arrangement while keeping every rule D9 states.
+
+**Selection is entered on the row it is about.** Each waiting row carries a
+checkbox-glyph button, leftmost in its own action group, ahead of `Approve` and
+`Deny`. Pressing it adds that person; pressing it again takes them out. There is
+still no control anywhere that adds more than one person, and `Clear` is still
+the one control that touches several, because it only ever removes them. What is
+gone is a standing control that announced a mode before anybody had chosen
+anybody.
+
+The button carries no word. An empty box and a checked box say add and added, and
+a word beside them on every waiting row costs the width the two real actions
+need. Its accessible name states the person: `Add Demo Runner to this action`, so
+eight rows are eight distinct controls rather than eight buttons called Select.
+
+**The mode is the set.** There is no separate selecting flag. Selection is on
+exactly when at least one person is in the set, so the first press enters it and
+taking the last person out leaves it, as does `Clear`, as does a refusal that
+drops every row, as does the day reloading with every selected row settled by
+somebody else. One piece of state, and a count that cannot disagree with a mode.
+
+**While a set exists the per-row `Approve` and `Deny` are hidden**, on every
+waiting row, and the set's own actions take over. Two ways to act on one row is
+the ambiguity this capability least needs. `Record arrival` and `Correct
+attendance` stay live throughout: they appear only on rows that are not waiting,
+which can never be in a set.
+
+**The set's action bar replaces the day picker in place** rather than appearing
+beneath the list, and the slot is sticky at the top of the scroll. Two faults
+close together here. A bar that appears pushes every row down at the exact moment
+of the first press, sliding the row just pressed out from under the thumb, which
+is the movement the ranking rule in D12 of `attendance-one-day-per-person` exists
+to prevent; and a bar at the foot of a phone roll-call is a bar that scrolls away.
+Occupying the picker's slot means nothing moves at all, and leaving the day is
+not offered while a set is open, which is honest, because changing the day
+empties it. The bar carries no icons on its buttons: the count and three labels
+have to hold one line at 375px, and wrapping would reintroduce the movement.
+
+The day and the outlet are not lost by this. The reason sheet already says a
+business day has closed, the denial sheet already names each row's own business
+date, and the confirmation already names the outlet where more than one is in
+scope.
+
+**A waiting row cannot be collapsed.** It exists to be acted on and every one of
+its controls lives in its detail panel, so a collapsed waiting row is a row with
+no way to decide it and no sign of being in the set. Its chevron is rendered and
+disabled rather than removed, so nothing shifts when the row settles and the
+chevron becomes live. This is a property the roll-call passes to the card, not
+one the card derives from `waiting`: the by-staff month list shares the card, an
+employee reads their own month through it, and a waiting day there carries no
+action at all, so pinning it open would only lengthen a thirty-day list.
+
+**Confirmation follows the route, not the count.** Anything decided through the
+set's action bar is named back before it is written, including a set of one:
+building a set is a deliberate act and the whole point of the gate is that the
+manager reads who they picked. The per-row `Approve` and `Deny` confirm nothing,
+exactly as before, because the row is the thing already being looked at. This
+supersedes D9's `more than one person` rule, which was a proxy for the same
+intention and got the set of one wrong.
+
 ## Risks / Trade-offs
 
 - **Deadlock between a batch and a concurrent single decision** → D3's fixed
@@ -250,6 +315,21 @@ retry-prevention control names each row's own business date instead of saying
   What it cannot reproduce is a real device's drift and accuracy behaviour, which
   gates nothing today by design → accepted, and it is the same basis on which the
   existing check-in and approval specs are already proved.
+- **An unlabelled button is less discoverable than a labelled row** (D10). A
+  manager meeting the roll-call for the first time sees a box beside `Approve`
+  rather than a sentence offering to select people → accepted. It sits on every
+  waiting row, its accessible name and its hover title both state what it does,
+  and one press reveals the whole mode. The labelled row it replaces cost the
+  width the two real actions need, on every day, including the ones where nobody
+  ever selects anybody.
+- **A sticky slot costs the roll-call one row of height on a phone** (D10) →
+  accepted, and it is the cheap option. The alternative walked was a fixed-height
+  self-scrolling list, which would have made the shell header, the outlet chips
+  and the axis switch permanent furniture, leaving roughly three cards visible
+  however far the reader scrolled, chaining two scroll containers on a phone,
+  losing pull-to-refresh in the installed PWA, and needing `dvh` maths that
+  reflows while the address bar collapses. Sticky costs one slot and gives the
+  rows the whole screen once the header has scrolled away.
 - **RLS is not the enforcement here.** The command is `security definer` and
   therefore bypasses the row policies by construction. Its own per-row authority
   and device checks are the boundary, and the isolation tests target the command
