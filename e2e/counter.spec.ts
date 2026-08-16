@@ -502,25 +502,29 @@ test.describe('manager billing history', () => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('demo/admin/billing-history')
     await expect(page.getByRole('heading', { name: 'Billing history' })).toBeVisible()
-    const filters = page.getByTestId('billing-history-filters')
-    expect(
-      await filters.evaluate(
-        (node) => getComputedStyle(node).gridTemplateColumns.trim().split(/\s+/).length,
-      ),
-    ).toBe(2)
-    await expect(filters).toHaveJSProperty(
+    // Two questions and no more: the status and payment pickers are gone, and
+    // the day is asked in the same bar the ledger uses.
+    await expect(page.getByLabel('Bill status')).toHaveCount(0)
+    await expect(page.getByLabel('Payment method')).toHaveCount(0)
+    const period = page.getByTestId('billing-history-period')
+    await expect(period).toHaveJSProperty(
       'scrollWidth',
-      await filters.evaluate((node) => node.clientWidth),
+      await period.evaluate((node) => node.clientWidth),
     )
 
-    const businessDateButton = page.getByTestId('billing-history-date-open')
-    const businessDatePicker = page.getByTestId('billing-history-date-picker')
+    const businessDateButton = page.getByTestId('billing-history-day-open')
+    const businessDatePicker = page.getByTestId('billing-history-day-picker')
     await expect(businessDateButton).toHaveText('Today')
     const todayBusinessDate = await businessDatePicker.inputValue()
     await businessDatePicker.fill('2026-08-01')
     await expect(businessDateButton).toHaveText('01 Aug 2026')
+    // A step back reaches the day before without opening the calendar, and
+    // there is no stepping past the outlet's own today.
+    await page.getByTestId('billing-history-step-back').click()
+    await expect(businessDateButton).toHaveText('31 Jul 2026')
     await businessDatePicker.fill(todayBusinessDate)
     await expect(businessDateButton).toHaveText('Today')
+    await expect(page.getByTestId('billing-history-step-forward')).toBeDisabled()
 
     const bills = page.getByTestId('manager-bill-list').locator(':scope > li')
     const firstSummary = bills.nth(0).getByRole('button', { name: /Bill \d+ Paid/ })
@@ -579,6 +583,8 @@ test.describe('manager billing history', () => {
     await expect(page.getByRole('heading', { name: 'Payment totals' })).toBeVisible()
     await expect(page.getByTestId('billing-total-cash')).toBeVisible()
     await expect(page.getByTestId('billing-total-upi')).toBeVisible()
+    await expect(page.getByTestId('billing-total-combined')).toBeVisible()
+    await expect(page.getByTestId('billing-total-average')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
 
     await page.getByRole('tab', { name: /Open orders/ }).click()

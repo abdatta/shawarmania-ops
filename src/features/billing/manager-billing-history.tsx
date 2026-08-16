@@ -2,25 +2,26 @@ import { ChevronDown, ReceiptText } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
+import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { Modal } from '@/components/ui/modal'
 import { Money } from '@/components/ui/money'
-import { Select } from '@/components/ui/select'
-import { useAdapters, type Tables } from '@/data-access'
+import { DayField, PeriodBar } from '@/components/ui/period-bar'
+import { useAdapters } from '@/data-access'
 import {
   BILLING_PAYMENT_METHODS,
   DataActionError,
   type BillingBill,
   type BillingDeliveryDiagnostic,
   type BillingOrder,
-  type BillStatus,
-  type PaymentMethod,
 } from '@/data-access/adapters'
-import { formatBusinessDate, formatDayTime, resolveBusinessDate } from '@/domain'
+import { formatBusinessDate, formatDayTime, resolveBusinessDate, shiftBusinessDate } from '@/domain'
+import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
 
+import { averageBillPaise, combinedTakingsPaise, paymentTotalPaise } from './day-totals'
 import { ManagerBillDetail } from './manager-bill-detail'
 import { ManagerSyncStatus } from './manager-sync-status'
 import { PaymentTotalCards } from './payment-total-cards'
@@ -59,59 +60,14 @@ function methodLabel(method: BillingBill['paymentMethod']) {
   return method === 'upi' ? 'UPI' : method[0]!.toUpperCase() + method.slice(1)
 }
 
-function paymentTotal(bills: readonly BillingBill[], method: PaymentMethod): number {
-  return bills
-    .flatMap((bill) => bill.payments)
-    .filter((payment) => payment.method === method)
-    .reduce((total, payment) => total + payment.amountPaise, 0)
-}
-
 /**
- * The native input owns the platform calendar; the button gives its selection
- * a business-readable label. A blank browser field used to make `dd-mm-yyyy`
- * look unanswered while silently widening history to every available day.
+ * How far back the platform calendar reaches: a year before the outlet's today,
+ * to the first of that month. The steps still reach further one day at a time —
+ * this is a floor on the picker, which needs one, not on the history.
  */
-function HistoryBusinessDateField({
-  businessDate,
-  today,
-  onChange,
-}: {
-  businessDate: string
-  today: string
-  onChange: (businessDate: string) => void
-}) {
-  const native = useRef<HTMLInputElement>(null)
-  const label = businessDate === today ? 'Today' : formatBusinessDate(businessDate)
-
-  return (
-    <div className="relative min-w-0">
-      <button
-        type="button"
-        aria-label={`Business date — ${formatBusinessDate(businessDate)}. Opens a calendar.`}
-        data-testid="billing-history-date-open"
-        onClick={() => {
-          if (native.current?.showPicker) native.current.showPicker()
-          else native.current?.click()
-        }}
-        className="h-[var(--size-control)] w-full truncate rounded-lg border border-border bg-surface px-3 text-left font-semibold text-content hover:bg-surface-raised focus-visible:focus-ring"
-      >
-        {label}
-      </button>
-      <input
-        ref={native}
-        type="date"
-        tabIndex={-1}
-        aria-hidden
-        data-testid="billing-history-date-picker"
-        value={businessDate}
-        max={today}
-        onChange={(event) => {
-          if (event.target.value) onChange(event.target.value)
-        }}
-        className="pointer-events-none absolute inset-0 size-full opacity-0"
-      />
-    </div>
-  )
+function earliestOffered(today: string): string {
+  const [year, month] = today.split('-')
+  return `${Number(year) - 1}-${month}-01`
 }
 
 function BillingHistoryShimmer() {
@@ -139,14 +95,23 @@ function BillingHistoryShimmer() {
 export function ManagerBillingHistory() {
   const { billing, outlets: outletsAdapter } = useAdapters()
   const session = useSession()
-  const [outlets, setOutlets] = useState<Tables<'outlets'>[] | null>(null)
-  const [outletId, setOutletId] = useState(session.outletId ?? '')
-  const [date, setDate] = useState('')
-  const [status, setStatus] = useState<BillStatus | 'all'>('all')
-  const [method, setMethod] = useState<PaymentMethod | 'all'>('all')
+  // Which outlet, asked the way every other outlet-scoped surface asks it: chips
+  // in the header, remembered between surfaces, conferring nothing.
+  const { outletId, selector: outletSelector } = useOutletScope()
+  /**
+   * The day, and the outlet it is a day of.
+   *
+   * Both of these are answers about one outlet — its current business date
+   * through its own cutover, and a day chosen against that. Carrying the outlet
+   * alongside each of them means moving to another outlet makes both stale in
+   * the same instant, rather than leaving one frame in which the new outlet is
+   * read under the old outlet's day. It is why neither is reset by an effect:
+   * there is nothing to reset, only something that stops applying.
+   */
+  const [resolvedToday, setResolvedToday] = useState<{ outletId: string; day: string } | null>(null)
+  const [chosenDay, setChosenDay] = useState<{ outletId: string; day: string } | null>(null)
   const [view, setView] = useState<View>('bills')
   const [bills, setBills] = useState<BillingBill[]>([])
-  const [totalBills, setTotalBills] = useState<BillingBill[]>([])
   const [orders, setOrders] = useState<BillingOrder[]>([])
   const [diagnostics, setDiagnostics] = useState<BillingDeliveryDiagnostic[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -158,11 +123,23 @@ export function ManagerBillingHistory() {
   const [loading, setLoading] = useState(true)
   const closingTimers = useRef<number[]>([])
   const anchorFrame = useRef<number | null>(null)
-  const selectedOutlet = outlets?.find((outlet) => outlet.id === outletId) ?? null
-  const today = selectedOutlet
-    ? resolveBusinessDate(new Date(), selectedOutlet.business_day_cutover)
-    : ''
-  const businessDate = date || today
+  // Empty until this outlet's own today has landed, which is what holds the day
+  // bar behind its silhouette and the reads behind their guard.
+  const today = resolvedToday?.outletId === outletId ? resolvedToday.day : ''
+  const businessDate = (chosenDay?.outletId === outletId ? chosenDay.day : '') || today
+  // No outlet, no day to be a day of. The control that calls this is only
+  // rendered once the outlet's today has landed, so this guard never fires in
+  // practice; it is here because the type says it can.
+  const setDate = (day: string) => outletId && setChosenDay({ outletId, day })
+  // Paid bills only, and derived rather than read again: the list is every bill
+  // of this outlet-day, so the settled ones are already in hand. Cancelled bills
+  // are listed but take part in no figure.
+  const paidBills = bills.filter((bill) => bill.status !== 'void')
+  const methodTotals = BILLING_PAYMENT_METHODS.map((paymentMethod) => ({
+    method: paymentMethod,
+    totalPaise: paymentTotalPaise(paidBills, paymentMethod),
+  }))
+  const takingsPaise = combinedTakingsPaise(methodTotals)
 
   useEffect(
     () => () => {
@@ -173,13 +150,25 @@ export function ManagerBillingHistory() {
   )
 
   useEffect(() => {
+    if (!outletId) return
+    let active = true
     void outletsAdapter
-      .listOutlets()
-      .then((rows) => {
-        setOutlets(rows)
-        if (!outletId && rows[0]) setOutletId(rows[0].id)
+      .getOutlet(outletId)
+      .then((outlet) => {
+        // Through the outlet's own cutover, never off the device clock: a bill
+        // rung at 00:30 belongs to the trading day that is still running.
+        if (active && outlet)
+          setResolvedToday({
+            outletId,
+            day: resolveBusinessDate(new Date(), outlet.business_day_cutover),
+          })
       })
-      .catch(() => setOutlets([]))
+      .catch(() => {
+        if (active) setMessage('Could not work out which day this is. Try again in a moment.')
+      })
+    return () => {
+      active = false
+    }
   }, [outletId, outletsAdapter])
 
   const load = useCallback(async () => {
@@ -187,24 +176,16 @@ export function ManagerBillingHistory() {
     if (!outletId || !businessDate) return
     setLoading(true)
     try {
-      const [nextBills, nextTotalBills, nextOrders, nextDiagnostics] = await Promise.all([
-        billing.listManagerHistory({
-          outletId,
-          businessDate,
-          status,
-          paymentMethod: method,
-        }),
-        billing.listManagerHistory({
-          outletId,
-          businessDate,
-          status: 'settled',
-          paymentMethod: 'all',
-        }),
+      // One read of the whole outlet-day. The status and payment-method
+      // parameters stay on the adapter for the counter, and this surface passes
+      // neither: every bill of the day is listed, and each says for itself
+      // whether it was paid or cancelled and what it was paid with.
+      const [nextBills, nextOrders, nextDiagnostics] = await Promise.all([
+        billing.listManagerHistory({ outletId, businessDate, status: 'all', paymentMethod: 'all' }),
         billing.listManagerOpenOrders(outletId),
         billing.listDeliveryDiagnostics(outletId),
       ])
       setBills(nextBills)
-      setTotalBills(nextTotalBills)
       setOrders(nextOrders)
       setDiagnostics(nextDiagnostics)
       setSelectedId((current) =>
@@ -217,7 +198,7 @@ export function ManagerBillingHistory() {
     } finally {
       setLoading(false)
     }
-  }, [billing, businessDate, method, outletId, status])
+  }, [billing, businessDate, outletId])
 
   useEffect(() => {
     void Promise.resolve().then(load)
@@ -293,64 +274,44 @@ export function ManagerBillingHistory() {
     setReason('')
   }
 
-  if (outlets === null)
-    return (
-      <LoadingRegion label="billing history">
-        <Shimmer className="h-48" />
-      </LoadingRegion>
-    )
-
   return (
     <section className="space-y-4" aria-labelledby="billing-history-title">
-      <div>
-        <h1 id="billing-history-title" className="text-2xl font-black text-content">
-          Billing history
-        </h1>
-        <p className="text-sm text-content-muted">
-          Bills stay in history after they are cancelled.
-        </p>
-      </div>
+      <PageHeader
+        scope={outletSelector}
+        title="Billing history"
+        subtitle="Bills stay in history after they are cancelled."
+      />
 
-      <div
-        data-testid="billing-history-filters"
-        className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-surface p-3 lg:grid-cols-4"
-      >
-        <Select
-          aria-label="Outlet"
-          value={outletId}
-          onChange={(event) => setOutletId(event.target.value)}
+      {/*
+        Two questions, and the surface asks no others. Which outlet is answered
+        in the header, where every outlet-scoped surface asks it; which day is
+        answered here, in the same bar the Ledger uses. The bill-status and
+        payment-method pickers that used to sit beside them narrowed a list that
+        is already one outlet's one day, and each row names its own state and
+        tender, so they were re-stating what was on screen.
+      */}
+      {today === '' ? (
+        // The bar's own silhouette, so the list below does not move when the
+        // outlet's today lands.
+        <LoadingRegion label="which day this is">
+          <Shimmer className="h-[calc(var(--size-control-phone)+0.5rem+2px)] w-full" />
+        </LoadingRegion>
+      ) : (
+        <PeriodBar
+          label="Day"
+          testIdPrefix="billing-history"
+          onStep={(by) => setDate(shiftBusinessDate(businessDate, by))}
+          canStepForward={businessDate < today}
         >
-          {outlets.map((outlet) => (
-            <option key={outlet.id} value={outlet.id}>
-              {outlet.name}
-            </option>
-          ))}
-        </Select>
-        {businessDate && (
-          <HistoryBusinessDateField businessDate={businessDate} today={today} onChange={setDate} />
-        )}
-        <Select
-          aria-label="Bill status"
-          value={status}
-          onChange={(event) => setStatus(event.target.value as BillStatus | 'all')}
-        >
-          <option value="all">All statuses</option>
-          <option value="settled">Paid</option>
-          <option value="void">Cancelled</option>
-        </Select>
-        <Select
-          aria-label="Payment method"
-          value={method}
-          onChange={(event) => setMethod(event.target.value as PaymentMethod | 'all')}
-        >
-          <option value="all">All payments</option>
-          {(['cash', 'upi'] satisfies PaymentMethod[]).map((value) => (
-            <option key={value} value={value}>
-              {methodLabel(value)}
-            </option>
-          ))}
-        </Select>
-      </div>
+          <DayField
+            businessDate={businessDate}
+            today={today}
+            earliest={earliestOffered(today)}
+            testIdPrefix="billing-history"
+            onChange={setDate}
+          />
+        </PeriodBar>
+      )}
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Billing history views">
         {(
@@ -460,16 +421,23 @@ export function ManagerBillingHistory() {
               Payment totals
             </h2>
             <p className="mt-1 text-sm text-content-muted">
-              Paid bills for this outlet on{' '}
-              {businessDate === today ? 'today' : formatBusinessDate(businessDate)}.
+              Paid bills for this outlet{' '}
+              {businessDate === today ? 'today' : `on ${formatBusinessDate(businessDate)}`}.
             </p>
             <div className="mt-3">
               <PaymentTotalCards
-                totals={BILLING_PAYMENT_METHODS.map((paymentMethod) => ({
-                  method: paymentMethod,
-                  totalPaise: paymentTotal(totalBills, paymentMethod),
-                }))}
+                totals={methodTotals}
                 testIdPrefix="billing-total"
+                // The two questions the tender split stops one short of: what
+                // the day took altogether, and what an average bill came to.
+                further={[
+                  { label: 'Total', paise: takingsPaise, testId: 'billing-total-combined' },
+                  {
+                    label: 'Average bill',
+                    paise: averageBillPaise(takingsPaise, paidBills.length),
+                    testId: 'billing-total-average',
+                  },
+                ]}
               />
             </div>
           </section>

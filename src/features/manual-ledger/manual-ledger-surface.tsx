@@ -1,12 +1,11 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 
 import { PageHeader } from '@/components/layout/page-header'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { LoadingBlock } from '@/components/ui/loading'
+import { DayField, PeriodBar } from '@/components/ui/period-bar'
 import { useAdapters } from '@/data-access'
-import { formatBusinessDate, resolveBusinessDate, shiftBusinessDate } from '@/domain'
+import { resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
 import { cn } from '@/lib/cn'
 
@@ -146,6 +145,7 @@ export function ManualLedgerSurface() {
         ) : view === 'day' ? (
           <PeriodBar
             label="Day"
+            testIdPrefix="ledger"
             onStep={(by) => setBusinessDate(shiftBusinessDate(businessDate ?? today, by))}
             canStepForward={(businessDate ?? today) < today}
           >
@@ -153,12 +153,14 @@ export function ManualLedgerSurface() {
               businessDate={businessDate ?? today}
               today={today}
               earliest={`${monthsBack(today, MONTHS_OFFERED).at(-1) ?? monthOf(today)}-01`}
+              testIdPrefix="ledger"
               onChange={setBusinessDate}
             />
           </PeriodBar>
         ) : (
           <PeriodBar
             label="Month"
+            testIdPrefix="ledger"
             onStep={(by) => setMonth(shiftMonth(month ?? monthOf(today), by))}
             canStepForward={(month ?? monthOf(today)) < monthOf(today)}
           >
@@ -204,121 +206,6 @@ export function ManualLedgerSurface() {
       ) : (
         <LedgerMonth key={`${outletId}-${month}`} outletId={outletId} month={month} />
       )}
-    </div>
-  )
-}
-
-/**
- * One step either side of the period, around whatever names it.
- *
- * The same shape as the attendance range picker, deliberately: a bordered strip,
- * a step at each end, and the period itself in the middle. Forward stops at the
- * outlet's own today, because a business date in the future is refused by the
- * database and a control that offers one is offering a failure.
- */
-function PeriodBar({
-  label,
-  onStep,
-  canStepForward,
-  children,
-}: {
-  label: string
-  onStep: (by: number) => void
-  canStepForward: boolean
-  children: ReactNode
-}) {
-  const what = label.toLowerCase()
-  return (
-    <div
-      data-testid="ledger-period"
-      className="flex items-center justify-between gap-1 rounded-xl border border-border bg-surface p-1"
-    >
-      <Button
-        variant="ghost"
-        size="phone"
-        aria-label={`Previous ${what}`}
-        data-testid="ledger-step-back"
-        onClick={() => onStep(-1)}
-      >
-        <ChevronLeft aria-hidden size={18} />
-      </Button>
-      {children}
-      <Button
-        variant="ghost"
-        size="phone"
-        aria-label={`Next ${what}`}
-        disabled={!canStepForward}
-        data-testid="ledger-step-forward"
-        onClick={() => onStep(1)}
-      >
-        <ChevronRight aria-hidden size={18} />
-      </Button>
-    </div>
-  )
-}
-
-/**
- * The day, written the way every other surface writes a day, and changed only by
- * the calendar or by the steps either side of it.
- *
- * A bare `input type="date"` was wrong on three counts: it prints the browser's
- * locale format (`03-08-2026`) where the rest of the app writes `03 Aug 2026`, it
- * carries its own calendar glyph beside two step buttons that already say what this
- * control does, and it invites typing — and a date half-typed into a control that
- * reloads a day on every change is a reload per keystroke.
- *
- * So the visible control is a button and the native input sits behind it,
- * unfocusable and hidden from the accessibility tree, purely to own the platform
- * calendar. `showPicker()` needs the click that called it, which is exactly what it
- * gets. Where it does not exist — jsdom, an old browser — the steps and the
- * keyboard still reach every day the control admits.
- */
-function DayField({
-  businessDate,
-  today,
-  earliest,
-  onChange,
-}: {
-  businessDate: string
-  today: string
-  earliest: string
-  onChange: (businessDate: string) => void
-}) {
-  const native = useRef<HTMLInputElement>(null)
-  // "Today" rather than the date, as the attendance day heading does it. The card
-  // below always carries the full date, so nothing is hidden by the shorthand.
-  const label = businessDate === today ? 'Today' : formatBusinessDate(businessDate)
-
-  return (
-    <div className="relative min-w-0 flex-1">
-      <button
-        type="button"
-        aria-label={`Day — ${formatBusinessDate(businessDate)}. Opens a calendar.`}
-        data-testid="ledger-day-open"
-        onClick={() => native.current?.showPicker?.()}
-        className="h-[var(--size-control-phone)] w-full truncate rounded-lg px-2 font-semibold text-content hover:bg-surface-raised focus-visible:focus-ring"
-      >
-        {label}
-      </button>
-      <input
-        ref={native}
-        type="date"
-        tabIndex={-1}
-        aria-hidden
-        data-testid="ledger-day-picker"
-        value={businessDate}
-        min={earliest}
-        // The outlet's own today, through its cutover: the database refuses a
-        // future business date, so the calendar must not offer one.
-        max={today}
-        onChange={(event) => {
-          if (event.target.value) onChange(event.target.value)
-        }}
-        // Rendered rather than `display: none`, because `showPicker()` on an
-        // unrendered input throws — and invisible and untappable, because the
-        // button above it is the control.
-        className="pointer-events-none absolute inset-0 size-full opacity-0"
-      />
     </div>
   )
 }
