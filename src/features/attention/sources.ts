@@ -1,5 +1,6 @@
 import { useWaitingAttention } from '@/features/attendance/waiting-counts'
 import { useCounterRequestAttention } from '@/features/counter/use-counter-handshake'
+import { useZomatoAttention } from '@/features/zomato-sync/needs-you-count'
 import type { AttentionSourceId } from '@/gates/registry'
 
 import type { AttentionSource } from './attention'
@@ -15,4 +16,5 @@ import type { AttentionSource } from './attention'
 export const ATTENTION_SOURCES: Record<AttentionSourceId, AttentionSource> = {
   'attendance-waiting': useWaitingAttention,
   'counter-request-waiting': useCounterRequestAttention,
+  'zomato-needs-you': useZomatoAttention,
 }

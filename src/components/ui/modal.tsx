@@ -17,6 +17,17 @@ interface ModalProps {
  * containment and Escape handling come from the platform instead of a
  * dependency. FormSheet and ConfirmDialog compose it; feature code should
  * reach for those, not this.
+ *
+ * **Escape cannot be tested through an automated in-app browser, and looking
+ * broken there means nothing.** Measured 2026-08-17: a synthetic Escape reaches
+ * the page — a document listener counts it — and the open dialog stays open. So
+ * does a bare `<dialog>` injected into the same page with no React near it,
+ * which receives no `cancel` event at all. Closing on Escape is a user-agent
+ * action rather than a page one, and a synthetic key event does not trigger it.
+ *
+ * It works. `e2e/dialog-escape.spec.ts` proves it in a real browser, on both the
+ * shared ConfirmDialog and a bare dialog, and exists so that nobody spends an
+ * afternoon on this twice.
  */
 export function Modal({ open, onClose, children, className, ...props }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null)

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router'
 
 import { PageHeader } from '@/components/layout/page-header'
 import { Card } from '@/components/ui/card'
@@ -53,6 +54,13 @@ export function ManualLedgerSurface() {
   // nothing — the database decides every write from the assignment.
   const { outletId, selector: outletSelector } = useOutletScope()
 
+  // Read once, not watched. It is where the day OPENS, not what it is: the
+  // reader can step to another day from here, and a watched parameter would drag
+  // them back to the linked one every time they did.
+  const [searchParams] = useSearchParams()
+  const requested = searchParams.get('date')
+  const requestedDate = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : null
+
   const [today, setToday] = useState<string | null>(null)
   const [businessDate, setBusinessDate] = useState<string | null>(null)
   const [month, setMonth] = useState<string | null>(null)
@@ -71,8 +79,14 @@ export function ManualLedgerSurface() {
         // at 00:30 belongs to the trading day that is still running.
         const resolved = resolveBusinessDate(new Date(), outlet.business_day_cutover)
         setToday(resolved)
-        setBusinessDate(resolved)
-        setMonth(monthOf(resolved))
+        // `?date=` opens a particular trading day, so one can be linked to.
+        // Clamped to today rather than trusted: this ledger refuses a future
+        // date at the database, and a link that opened a day nothing can be
+        // saved on would be a dead end rather than a shortcut.
+        const asked = requestedDate
+        const opening = asked && asked <= resolved ? asked : resolved
+        setBusinessDate(opening)
+        setMonth(monthOf(opening))
       })
       .catch(() => {
         if (active) setError('Could not work out which day this is. Try again in a moment.')

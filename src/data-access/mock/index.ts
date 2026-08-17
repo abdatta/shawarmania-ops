@@ -1,6 +1,8 @@
 import type { AppRole, AttendanceAdapter, DataAdapters } from '../adapters'
 import { assignedOutlets } from '../adapters'
 import { createMockAddressLookupAdapter } from './address-lookup'
+import { createMockAggregatorSyncAdapter } from './aggregator-sync'
+import { DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID } from './store'
 import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
 import { createMockAlertsAdapter } from './alerts'
 import { createMockAttendanceAdapter } from './attendance'
@@ -175,6 +177,12 @@ export function createMockAdapters(
       persona.profile.id,
       assignedOutlets(persona.assignments),
     ),
+    // Both outlets, because the sync is a cross-outlet surface and the owner is
+    // its only reader: the same reach the policies grant.
+    aggregatorSync: createMockAggregatorSyncAdapter(store, role, [
+      DEMO_OUTLET_ID,
+      DEMO_SECOND_OUTLET_ID,
+    ]),
     addressLookup: createMockAddressLookupAdapter(),
   }
 }

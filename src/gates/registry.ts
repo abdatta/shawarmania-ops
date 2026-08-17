@@ -3,6 +3,7 @@ import {
   BarChart3,
   Bell,
   Banknote,
+  Bike,
   CalendarCheck,
   Home,
   KeyRound,
@@ -45,7 +46,8 @@ export type GateState = 'hidden' | 'demo' | 'live'
  * `src/features/attention/sources.ts` supplies exactly one implementation per
  * id, so an id added here without one fails to compile.
  */
-export type AttentionSourceId = 'attendance-waiting' | 'counter-request-waiting'
+export type AttentionSourceId =
+  'attendance-waiting' | 'counter-request-waiting' | 'zomato-needs-you'
 
 interface SurfaceDefInput {
   /** Which role's shell mounts this surface. */
@@ -101,25 +103,25 @@ const defs = {
   'owner-people': {
     role: 'super_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 4 },
+    nav: { label: 'People', icon: Users, order: 5 },
     state: 'live',
   },
   'owner-comparison': {
     role: 'super_admin',
     path: 'comparison',
-    nav: { label: 'Compare', icon: BarChart3, order: 5 },
+    nav: { label: 'Compare', icon: BarChart3, order: 6 },
     state: 'demo',
   },
   'owner-alerts': {
     role: 'super_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 6 },
+    nav: { label: 'Alerts', icon: Bell, order: 7 },
     state: 'demo',
   },
   'owner-billing-history': {
     role: 'super_admin',
     path: 'billing-history',
-    nav: { label: 'Billing', icon: ReceiptText, order: 7 },
+    nav: { label: 'Billing', icon: ReceiptText, order: 8 },
     state: 'live',
   },
   /**
@@ -166,6 +168,24 @@ const defs = {
     role: 'super_admin',
     path: 'ledger/categories',
     state: 'live',
+  },
+  /**
+   * What the Zomato sync did, and the two things the owner can do about it (#42).
+   *
+   * `demo` while the screens are argued with. The owner asked to approve the
+   * experience before a live merchant credential is handed to anything, which is
+   * this repo's ordinary delivery model and matters more than usual here: the
+   * states worth designing for are the ones the live account will not produce on
+   * cue. A week that would not reconcile happened once in eight.
+   *
+   * It carries navigation because a surface that only reports failures still has
+   * to be findable before one happens. It sits after the Ledger it explains.
+   */
+  'owner-zomato-sync': {
+    role: 'super_admin',
+    path: 'ledger/zomato',
+    nav: { label: 'Zomato', icon: Bike, order: 4, attention: 'zomato-needs-you' },
+    state: 'demo',
   },
   /**
    * The owner's counterpart to `admin-devices`, across every outlet.

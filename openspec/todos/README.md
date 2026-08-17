@@ -28,6 +28,7 @@ Keep entries behavior-focused:
 | [Emergency Billing Continuity](./emergency-billing-continuity.md) | Feature | Deferred by decision | Billing | A registered device is actually lost/unusable, or the owner explicitly accepts a personal-device break-glass authority path |
 | [Rostering And Weekly Offs](./rostering-and-weekly-offs.md) | Feature | Anticipated | Attendance | Somebody asks why the figures show absences on days off, manual leave-marking stops being kept up, or an outlet genuinely runs two shifts |
 | [Pending Approval Notification](./pending-approval-notification.md) | Feature | Anticipated | Attendance | The first waiting day that survives its own business date and is noticed by somebody other than the manager |
+| [Navigation Outgrows A Flat List](./navigation-outgrows-a-flat-list.md) | Design gap | Open | Shell | The next surface promoted into navigation, or the first time somebody cannot find a tab they know exists |
 | [Attendance Gate: Two Clauses Never Walked](./attendance-gate-unwalked-clauses.md) | Verification gap | Accepted at archive | Attendance | The first real staff member checks in at a live outlet |
 | [Outlet Deletion: The Populated Refusal Never Walked](./outlet-deletion-refusal-unwalked-in-production.md) | Verification gap | Accepted at archive | Outlets | The first real staff member is added to a live outlet |
 | [On The First Of A Month, The Demo's Ranges Open Empty](./month-boundary-empties-fixture-ranges.md) | Demo-data weakness | Open | Demo data | A demo walked on the 1st or 2nd, or the next range-based surface |

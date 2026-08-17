@@ -127,6 +127,8 @@ Deductions the aggregator takes from a payout, such as supply purchases and adve
 
 Each such expense SHALL carry the identity of the record it came from, so that repeated runs update the same row rather than creating another, and so that a hand-entered row for the same purchase is recognisable as a duplicate rather than silently doubling the month's costs.
 
+A hand-entered row and a sourced row for the same purchase SHALL be recognised as a possible duplicate **without requiring their amounts or dates to be equal**, because a typed figure is rounded and typed dates record when a bill was noticed rather than when it was paid. The surface SHALL present both rows with their own amount, date and note, and SHALL offer settling the flag without changing either row, since the same purchase genuinely occurring twice in a day is ordinary.
+
 An expense sourced this way SHALL be marked non-cash, because it never passed through the drawer.
 
 #### Scenario: A supply bill lands on its purchase date
@@ -138,6 +140,16 @@ An expense sourced this way SHALL be marked non-cash, because it never passed th
 
 - **WHEN** the sync runs again over a window that already produced a deduction expense
 - **THEN** the existing row is updated in place and no second row is created for the same source record
+
+#### Scenario: A rounded figure on a nearby day is still a possible duplicate
+
+- **WHEN** a supply deduction of ₹3,747.77 dated the 16th arrives at an outlet where the owner has already entered ₹3,750 on the 15th
+- **THEN** the two are presented together as a possible duplicate, each showing its own amount, date and note, and neither is altered
+
+#### Scenario: Both are real
+
+- **WHEN** the owner settles a possible duplicate by saying both purchases happened
+- **THEN** the flag stops asking, both expenses continue to count, and neither row is changed
 
 #### Scenario: A deduction never touches the drawer
 

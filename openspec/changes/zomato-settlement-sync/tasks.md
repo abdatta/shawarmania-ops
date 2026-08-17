@@ -60,6 +60,17 @@
 
 ## 6. Owner-facing surfaces
 
+> **Built on the mock adapter first, behind a gate, and approved before anything
+> is wired up** [owner, 2026-08-17]. This is the delivery model `AGENTS.md`
+> already sets out: screens depend on the typed adapter interface, never on the
+> Supabase client, and a later change swaps one adapter and promotes one gate
+> without redesigning the screen. The mock is typed from the generated schema, so
+> a fixture the database could not serve fails to compile — which is what stops a
+> mock-first pass agreeing with itself and nothing else.
+>
+> Sections 6, 6b.8 and 7 are that pass. Everything in 6b that touches a real
+> credential waits for approval.
+
 - [ ] 6.1 Day form: where a channel is synced for that business date, present gross, commission, net and the settlement state as a reading, with no revenue field and no rate field for that channel.
 - [ ] 6.2 Day form: a day with one channel synced and one not shows a reading beside an entry group, each labelled for what it is, and stores correctly.
 - [ ] 6.3 Day form: show a superseded typed figure beside the synced one, marked as superseded and visibly not part of the total.
@@ -70,9 +81,35 @@
 - [ ] 6.8 A disputed week's row shows the outlet, the cycle, both totals and the difference, and offers exactly Re-check and Accept the difference. No action writes the cycle without reconciling it or recording the difference.
 - [ ] 6.9 Accepting asks for confirmation naming the amount that will be recorded as unexplained, then calls the accept path from 3.4b.
 - [ ] 6.10 A lapsed session reads as an action the owner can take rather than a generic failure, and offers reconnecting from this surface.
-- [ ] 6.11 Possible-duplicate signal on this surface: a hand-entered expense sitting near a synced one at the same outlet, similar date and similar amount is shown as a possible duplicate for the owner to void. Never delete either row automatically.
+- [ ] 6.11 Possible-duplicate signal on this surface: a hand-entered expense sitting near a synced one is shown as a possible duplicate. Never delete either row automatically. Match on the same outlet exactly, an amount within the larger of 2% or ₹50, and a date within four days either way; do not match on category or description, which name the same purchase differently by construction. Neither row already voided or already settled.
+- [ ] 6.11a The row shows **both** rows in full, each with its own amount, date and note. A typed figure is rounded and dated to when the bill was noticed; reporting one amount and one date would describe one row and call it both.
+- [ ] 6.11b Test the tolerances against the case that actually happens: ₹3,750 typed on the 15th against ₹3,747.77 dated the 16th is one flag. A test on two identical rows would pass while catching nothing real.
+- [ ] 6.11c "Not a duplicate" settles the flag without touching either row, because buying the same thing twice in a day is ordinary and the flag must be answerable rather than only obeyable.
 - [ ] 6.12 The surface is reachable by a Super Admin only, and no other role can open it or read its rows.
 - [ ] 6.13 Accessible names on any field or control this change adds or relabels identify the channel, the unit and the action unambiguously; no added field's font size crosses the mobile-zoom threshold; every action on this surface is reachable and operable from the keyboard.
+
+## 6b. Running it, and reconnecting it, from the app
+
+Added 2026-08-17 at the owner's request. Both were non-goals in the proposal:
+the run was to be scheduled only, and the one-time password was to be handled
+out of band. Neither survives contact with actually using the thing — a sync you
+cannot start is a sync you cannot try, and a session you must repair from a
+terminal is a session that stays broken while the owner is away from one.
+
+**These wait for the UI to be approved**, because each one hands a real
+credential to something, and building them against a screen that is still moving
+means building them twice.
+
+- [ ] 6b.1 Edge Function `request-aggregator-sync`, JWT-verified and owner-only, re-deriving the caller's authority from their own token. It dispatches the reader's GitHub workflow with a token held as a server-side secret; no GitHub credential reaches the browser.
+- [ ] 6b.2 Rate-limit it, and refuse a second dispatch while a run for that outlet is still open, so a repeatedly tapped button cannot start six overlapping readers.
+- [ ] 6b.3 "Sync now" on the sync surface: starts a run, shows it as running, and resolves to the run's own outcome row rather than to whatever the dispatch call returned.
+- [ ] 6b.4 New run outcome `awaiting_one_time_password`, distinct from `session_lapsed`: the session is being repaired and the job is waiting on a person, which is a different sentence from the session having died.
+- [ ] 6b.5 Migration: `aggregator_auth_requests` — outlet, channel, requested_at, expires_at, fulfilled_at, and the code, held only as long as it takes the job to collect it and never in a column any client role can read. RLS and isolation tests with the table, as every other table here has.
+- [ ] 6b.6 Edge Function `answer-aggregator-otp`, owner-only, accepting the code the owner reads off their phone and storing it against the open request. Never logged, never echoed back, never in a URL.
+- [ ] 6b.7 The reader polls for the code through its own scoped endpoint, uses it once, and the request is consumed whether or not the login succeeded.
+- [ ] 6b.8 On the sync surface: a lapsed session expands to Reconnect; tapping it dispatches a login run; when the job asks, the row becomes a single code field with the outlet named and a countdown to expiry.
+- [ ] 6b.9 A code that arrives late, twice, or for an already-fulfilled request is refused identically, and a wrong code does not consume the request's remaining life in a way that tells an attacker anything.
+- [ ] 6b.10 End-to-end against local Supabase: trigger a run, watch a day's Zomato figures change on the ledger, force a lapsed session, reconnect through the app, and see the next run write.
 
 ## 7. Demo mode and fixtures
 
@@ -84,7 +121,7 @@
 - [ ] 8.1 In `abdatta/shawarmania-zomato-sync`, build the cycle payload from the dashboard JSON for the live cycle and from the settlement workbook's `Order Level` sheet for settled cycles, converting workbook doubles to paise once at parse time.
 - [ ] 8.2 Join Order History on `order_id` to obtain placement timestamps; report orders that cannot be timestamped rather than guessing.
 - [ ] 8.3 Post cycles to the Edge Function; re-read two cycles for orders and four for deductions on every run.
-- [ ] 8.4 Schedule twice daily at roughly 23:00 and 10:00 IST, with the timezone pinned; open a GitHub issue on failure and reuse the open one rather than filing a new one per run.
+- [ ] 8.4 Schedule at **23:00 and 11:00 IST** [owner, 2026-08-17], with the timezone pinned rather than left to the runner's UTC clock. The pair is chosen, not arbitrary: 23:00 gives a figure for the evening while the counter still remembers it, and 11:00 is safely past the outlets' 04:00 cutover, so the previous trading day is closed and complete by the time it is read. Open a GitHub issue on failure and reuse the open one rather than filing a new one per run.
 - [ ] 8.5 Restrict the job to the two trading outlets, 21917311 Kalyani and 22675834 Kanchrapara. The account's third restaurant id is a discontinued outlet and is not read.
 
 ## 9. Rollout

@@ -67,6 +67,38 @@ export function PhoneShell({
     return surface.path === '' ? base : `${base}/${surface.path}`
   }
 
+  /**
+   * Whether an entry stops claiming its own sub-paths: **the most specific
+   * navigation entry wins, and only it.**
+   *
+   * `NavLink` matches by prefix unless told otherwise, which is right for a
+   * surface whose sub-paths belong to it — Stock stays lit on one item's
+   * movement ledger, because `inventory/:itemId` is Stock. It is wrong the
+   * moment a sub-path has a navigation entry of its own: `ledger/zomato` is not
+   * the Ledger, and lighting both told the reader they were in two places.
+   *
+   * Derived from the entries themselves rather than declared per surface, so the
+   * next nested entry cannot forget to do it.
+   */
+  const claimedByAChild = (path: string) =>
+    path !== '' && items.some((other) => other.path.startsWith(`${path}/`))
+
+  /** The navigation entry this one lives under, if any. */
+  const parentOf = (surface: Surface) =>
+    items.find((other) => other.path !== '' && surface.path.startsWith(`${other.path}/`))
+
+  /**
+   * Entries with each nested one directly beneath its parent.
+   *
+   * Sorted here rather than left to the registry's `order` numbers lining up by
+   * luck. A child that drifted three entries away from its parent would still be
+   * indented, and an indent pointing at the wrong thing above it is worse than
+   * no indent at all.
+   */
+  const railItems = items
+    .filter((surface) => !parentOf(surface))
+    .flatMap((parent) => [parent, ...items.filter((child) => parentOf(child)?.id === parent.id)])
+
   return (
     <div className="flex min-h-dvh flex-col bg-canvas text-content">
       {banner}
@@ -89,17 +121,22 @@ export function PhoneShell({
           aria-label="Primary"
           className="hidden border-r border-border p-3 md:flex md:w-48 md:flex-col md:gap-1"
         >
-          {items.map((surface) => {
+          {railItems.map((surface) => {
             const Icon = surface.nav?.icon
+            // Indented, and hung off a rule that runs down beside it. Two
+            // signals rather than one, because an indent alone reads as a
+            // rendering accident at this scale.
+            const nested = parentOf(surface) !== undefined
             return (
               <NavLink
                 key={surface.id}
                 to={linkFor(surface)}
-                end={surface.path === ''}
+                end={surface.path === '' || claimedByAChild(surface.path)}
                 className={({ isActive }) =>
                   cn(
                     'flex h-[var(--size-control-phone)] items-center gap-2 rounded-lg px-3 text-sm font-semibold',
                     'focus-visible:focus-ring',
+                    nested && 'ml-3 border-l border-border pl-4',
                     isActive
                       ? 'bg-surface-raised text-accent-text'
                       : 'text-content-muted hover:bg-surface-raised hover:text-content',
@@ -137,7 +174,9 @@ export function PhoneShell({
             <NavLink
               key={surface.id}
               to={linkFor(surface)}
-              end={surface.path === ''}
+              // No indenting is possible in a row of tabs, so the single
+              // highlight carries the whole answer here.
+              end={surface.path === '' || claimedByAChild(surface.path)}
               className={({ isActive }) =>
                 cn(
                   'flex h-16 min-w-[4.5rem] flex-1 shrink-0 flex-col items-center justify-center gap-1 px-1 text-center text-xs font-semibold',

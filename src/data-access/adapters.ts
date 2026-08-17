@@ -2191,6 +2191,152 @@ export interface DataAdapters {
   addressLookup: AddressLookupAdapter
   /** Temporary (#36). Removed with the capability once #12 carries its rows. */
   manualLedger: ManualLedgerAdapter
+  /** What the Zomato sync has done, and the two things the owner can do about it (#42). */
+  aggregatorSync: AggregatorSyncAdapter
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The aggregator sync, as the owner sees it.
+
+/**
+ * One thing that happened, rather than one time the job ran.
+ *
+ * The sync runs twice a day against every outlet, so a row per run would be
+ * roughly a hundred and twenty rows a month of which nearly all say nothing
+ * changed — and a log nobody reads is the same as no log. The health line above
+ * the list carries "it ran, it was fine"; this list carries only what moved.
+ */
+export type AggregatorSyncEvent =
+  | { kind: 'days-written'; days: number; from: string; to: string }
+  | { kind: 'week-settled'; from: string; to: string; netPaise: number }
+  | {
+      kind: 'day-revised'
+      businessDate: string
+      /** Both figures, because "it changed" without "from what" is not a record. */
+      fromNetPaise: number
+      toNetPaise: number
+    }
+  | {
+      kind: 'week-disputed'
+      from: string
+      to: string
+      computedPaise: number
+      statedPayoutPaise: number
+      differencePaise: number
+    }
+  | { kind: 'session-lapsed'; detail: string | null }
+  | { kind: 'shape-changed'; detail: string | null }
+  /**
+   * Two expenses that may be the same purchase entered twice.
+   *
+   * **Both sides are carried, because they will not agree.** A hand-entered row
+   * is typed from a paper bill or from memory: the amount may be rounded, the
+   * date may be when it was noticed rather than when it was spent, and the note
+   * is whatever the owner writes. Reporting one amount and one date would be
+   * describing one of the two rows and calling it both.
+   *
+   * The matching itself is deliberately loose. A flag the owner dismisses costs
+   * one tap; a duplicate nobody flags overstates costs and understates profit
+   * quietly and permanently. The asymmetry decides the tolerance.
+   */
+  | {
+      kind: 'possible-duplicate-expense'
+      typed: { businessDate: string; amountPaise: number; note: string | null; expenseId: string }
+      synced: { businessDate: string; amountPaise: number; note: string | null; expenseId: string }
+    }
+
+export interface AggregatorSyncEventRow {
+  id: string
+  outletId: string
+  at: string
+  event: AggregatorSyncEvent
+  /**
+   * When this stopped needing anybody, if it ever did.
+   *
+   * Resolved rather than removed. The page's job is answering "why did this
+   * change", so deleting the week that would not reconcile once it was settled
+   * would delete the only record that it ever did not. A row that is still
+   * listed as needing you after you have dealt with it is the opposite failure,
+   * and this is what tells the two apart.
+   */
+  resolvedAt: string | null
+  /**
+   * What was decided, where the row was one that offered a choice. Kept so the
+   * settled row can say which way it went rather than only that it went.
+   */
+  resolution?: 'not-a-duplicate'
+}
+
+/**
+ * Whether the sync is running, quiet, or waiting on somebody.
+ *
+ * `awaitingOneTimePassword` is deliberately not a kind of `sessionLapsed`. One
+ * says the login died and nobody has started fixing it; the other says a repair
+ * is under way and the job is waiting for a person to read a code off a phone.
+ * They ask different things of the reader, so they are different words.
+ */
+export interface AggregatorSyncHealth {
+  outletId: string
+  lastRunAt: string | null
+  lastOutcome: 'ok' | 'session_lapsed' | 'shape_changed' | 'reconciliation_failed' | null
+  running: boolean
+  /** Present while the job is blocked on a one-time password for this outlet. */
+  awaitingOneTimePassword: { requestedAt: string; expiresAt: string } | null
+  /** Null until an outlet is switched on; the surface says so rather than showing nil. */
+  syncedFrom: string | null
+}
+
+export interface AggregatorSyncAdapter {
+  getHealth(outletId: string): Promise<AggregatorSyncHealth>
+  listEvents(outletId: string): Promise<AggregatorSyncEventRow[]>
+  /**
+   * How many things want the owner, per outlet they can reach.
+   *
+   * Per outlet rather than one total, because two questions are asked of the
+   * same read and answering only the first leaves the second unanswerable. The
+   * navigation badge wants the sum: a discrepancy at Kanchrapara that only
+   * appeared once Kanchrapara was selected would hide exactly when it is
+   * needed. The outlet chips want the split, so a reader looking at one outlet
+   * can see where the rest of that sum is instead of hunting for it.
+   *
+   * Tenancy comes from the policies, as it does for every other count.
+   */
+  countNeedsOwner(): Promise<readonly { outletId: string; needing: number }[]>
+  /**
+   * Start a run now.
+   *
+   * Resolves when the run has been *asked for*, not when it has finished — the
+   * surface then follows `getHealth`. A call that resolved on dispatch would let
+   * a button say "synced" about a job that had not started reading anything.
+   */
+  requestRun(outletId: string): Promise<void>
+  /** Begin repairing a lapsed session; the job then asks for a code. */
+  requestReconnect(outletId: string): Promise<void>
+  /**
+   * The code the owner read off their own phone.
+   *
+   * It is a credential in transit: never logged, never echoed back, never put in
+   * a URL. The adapter hands it over and keeps nothing.
+   */
+  answerOneTimePassword(outletId: string, code: string): Promise<void>
+  /** Re-read a disputed week from the aggregator and reconcile it again. */
+  recheckWeek(outletId: string, from: string, to: string): Promise<void>
+  /** Accept a disputed week, recording the gap rather than absorbing it. */
+  acceptDifference(outletId: string, from: string, to: string): Promise<void>
+  /**
+   * Say that two expenses which look alike are both real.
+   *
+   * The flag's other ending is the owner withdrawing one of them, which happens
+   * in the ledger where the row sits among that day's other costs rather than
+   * here, where it is two lines of text out of context. Withdrawing is
+   * append-only and cannot be undone, and it should be done looking at the day
+   * it changes.
+   *
+   * This is the answer the ledger cannot give: buying the same thing twice on
+   * one day is ordinary, and without a way to say so the flag would sit there
+   * forever asking a question that has already been answered.
+   */
+  markNotDuplicate(outletId: string, eventId: string): Promise<void>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

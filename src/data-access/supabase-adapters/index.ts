@@ -1,6 +1,7 @@
 import { getSupabaseClient } from '../supabase'
 import type { DataAdapters } from '../adapters'
 import { createAddressLookupAdapter } from './address-lookup'
+import { createSupabaseAggregatorSyncAdapter } from './aggregator-sync'
 import { createSupabaseAccountsAdapter } from './accounts'
 import { createSupabaseAttendanceAdapter } from './attendance'
 import { createSupabaseBillingAdapter } from './billing'
@@ -29,6 +30,8 @@ export function createSupabaseAdapters(
   const client = getSupabaseClient()
   return {
     outlets: createSupabaseOutletsAdapter(client),
+    // Gated to demo, and throws rather than answering emptily if that ever slips.
+    aggregatorSync: createSupabaseAggregatorSyncAdapter(),
     accounts: createSupabaseAccountsAdapter(client),
     attendance: createSupabaseAttendanceAdapter(client),
     menu: createSupabaseMenuAdapter(client),

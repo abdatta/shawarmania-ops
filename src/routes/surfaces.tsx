@@ -24,6 +24,7 @@ import { MovementLedger } from '@/features/inventory/movement-ledger'
 import { MenuSurface } from '@/features/menu/menu-surface'
 import { OutletsSurface } from '@/features/outlets/outlets-surface'
 import { RoleHome } from '@/features/overview/role-home'
+import { ZomatoSyncSurface } from '@/features/zomato-sync/zomato-sync-surface'
 
 import { GatedSurface } from './gated-surface'
 import { NotFound } from './not-found'
@@ -193,6 +194,14 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="ledger/categories">
         <ExpenseCategoriesSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    path: 'ledger/zomato',
+    element: (
+      <GatedSurface path="ledger/zomato">
+        <ZomatoSyncSurface />
       </GatedSurface>
     ),
   },

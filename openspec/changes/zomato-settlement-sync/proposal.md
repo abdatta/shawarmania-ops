@@ -49,7 +49,7 @@ Volume now justifies the work. Roughly ₹1 lakh a month flows through the two o
 
 - **Swiggy.** The same shape would work, against a different site with its own defences. Nothing here presumes it.
 - **Ringing aggregator orders at the counter.** Item-level sales for Zomato orders stay unavailable. Recovering them is a billing change, not a settlement one, and `aggregator-settlement.md` keeps it separate deliberately.
-- **Removing the one-time password from authentication.** The Zomato session renews itself as long as the job keeps running, so the owner should expect to authenticate roughly once. The login flow does issue a refresh token, which would remove even that, and it is left as later work rather than folded in here.
+- **Removing the one-time password from authentication.** The Zomato session renews itself as long as the job keeps running, so the owner should expect to authenticate roughly once. The login flow does issue a refresh token, which would remove even that, and it is left as later work rather than folded in here. What *is* in scope, added 2026-08-17, is entering that password in the app instead of a terminal, and starting a run from the app instead of waiting for the schedule; both were non-goals until the owner pointed out that a sync you cannot start and a session you cannot repair from your phone is not one you can use.
 - **Touching cash, UPI, drawer arithmetic, or day-close readiness.**
 - **Making commission an expense.** It is a reduction of revenue, as `openspec/specs/manual-ledger/spec.md` already requires, and this change does not disturb that.
 - **Backfilling history beyond what Zomato serves.** The record reaches back one year; nothing older is recoverable.

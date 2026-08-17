@@ -111,6 +111,33 @@ This takes the shape attendance already uses, rows collapsed by default and only
 
 It absorbs the health readout and the reconnect prompt rather than adding a surface beside them, and it is where the possible-duplicate expense signal lives, since that is the other thing that needs the owner and had nowhere to appear.
 
+### The owner can start a run, and repair a session, without leaving the app
+
+Added 2026-08-17. The proposal made both of these non-goals: runs were scheduled
+only, and the one-time password was to be dealt with out of band on the reasoning
+that the sliding session would make it close to a one-off. That reasoning holds
+for how *often* it happens and misses what happens *when* it does. A sync nobody
+can start is a sync nobody can try, and a session that can only be repaired from
+a terminal stays broken for as long as the owner is away from one, which for a
+person running two counters is most of the day.
+
+- **Starting a run** goes through an Edge Function that dispatches the reader's
+  workflow with a token held server-side. *Putting a GitHub token in the browser*
+  was rejected on sight: it would be readable by anyone with the page open, and
+  it grants far more than starting one workflow.
+- **The button reports the run, not the dispatch.** Dispatching succeeds long
+  before the reader has done anything, so a button that went green on dispatch
+  would say "synced" about a job that had not started. It resolves against the
+  run's own outcome row.
+- **The one-time password** is entered by the owner into a field on the sync
+  surface and collected by the job. It is stored only until the job takes it,
+  never logged, never echoed, never in a URL. It is a credential moving through
+  the app, so it gets the same treatment the account invite codes already get.
+- *Removing the password entirely* is still the better answer, and still later
+  work: the login already requests `scope=offline`, so a refresh token exists.
+  This relay is what makes the sync usable before that lands, not a reason to
+  stop wanting it.
+
 ### Idempotency is keyed on Zomato's identifiers
 
 Every row carries the Zomato `order_id` or expense id it came from, unique per outlet. Re-running an overlapping window updates in place. This is what makes the re-read windows safe: two cycles for orders, four for deductions, on every run.
@@ -121,6 +148,19 @@ Change #37 shipped free-text expense categories and the production rows already 
 
 - *Auto-deleting the owner's row* was rejected. `manual_ledger_expenses` is append-only on delete by existing requirement, the owner's row may carry a note the synced one lacks, and silently removing somebody's record to resolve a guess is the wrong default for money.
 - The synced row is marked with its source. Where a hand-entered row sits on the same outlet, near the same date, for a similar amount, the surface **shows both and marks them as a possible duplicate**, and the owner voids one. Voiding already leaves a trace by existing requirement.
+
+**The two rows will not agree exactly, and the rule must not expect them to** [owner, 2026-08-17]. A hand-entered expense is typed off a paper bill or out of memory: the amount is often rounded to the rupee or to the nearest ten, and the date is frequently when the owner noticed the bill rather than when the money was spent. Zomato reports the invoice to the paisa, dated to the purchase. An exact match on amount and date would catch almost none of the duplicates that actually occur.
+
+The tolerance is decided by an asymmetry rather than by taste. **A flag the owner dismisses costs one tap. A duplicate nobody flags overstates costs and understates profit, quietly, permanently, and in the one direction that makes the business look worse than it is.** So the rule is deliberately loose, and the surface carries the cost of that by showing both rows in full so the owner can judge:
+
+- **Same outlet**, exactly. Not a tolerance; a Kalyani bill is not a Kanchrapara bill.
+- **Amount within the larger of 2% or ₹50.** Proportional because rounding scales: ₹5 off ₹3,747 is a typo, ₹5 off ₹50 is a different purchase.
+- **Date within four days either way**, which covers noticing a bill over a long weekend without reaching into the next week's shopping.
+- **Neither row already voided**, and neither already settled as not-a-duplicate.
+
+Category and description are deliberately **not** matched on. Categories are free text and the two sides name the same purchase differently by construction — "Hyperpure, paid online" against "Hyperpure invoice HP-88213" — so requiring them to agree would narrow the rule using the least reliable field on the row.
+
+*Matching only on an exact amount* was rejected as the case that does not happen. *Matching on description similarity* was rejected as a second thing to tune with no evidence behind it. If the flag proves noisy in practice the tolerances tighten; being noisy is the recoverable failure and being silent is not.
 
 ### A per-outlet, per-channel "synced from" date
 
