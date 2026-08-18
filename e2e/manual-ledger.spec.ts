@@ -30,10 +30,14 @@ test('the owner records a full trading day on a phone and reads its difference',
   await expect(page.getByRole('heading', { name: 'Ledger' })).toBeVisible()
   await expect(page.getByTestId('ledger-day-form')).toBeVisible()
 
-  // Opening cash and both rates arrive inherited from the previous recorded day,
-  // so a nightly entry is four channels and a count rather than seven fields.
+  // Opening cash arrives inherited from the previous recorded day, because the
+  // drawer really does open with what it closed on.
   await expect(page.getByTestId('opening-cash')).not.toHaveValue('')
-  await expect(page.getByTestId('zomato-commission')).not.toHaveValue('')
+
+  // Commission deliberately does NOT [owner, 2026-08-17]. It is an amount now, so
+  // yesterday's is a function of yesterday's revenue: carrying it forward would
+  // offer a figure wrong by construction that looks deliberate.
+  await expect(page.getByTestId('zomato-commission')).toHaveValue('')
 
   const opening = Number(await page.getByTestId('opening-cash').inputValue())
 
@@ -42,8 +46,12 @@ test('the owner records a full trading day on a phone and reads its difference',
   await page.getByTestId('zomato-revenue').fill('3000')
   await page.getByTestId('swiggy-revenue').fill('2500')
 
-  // Each aggregator's block says what actually arrives, beside the rate that
-  // decided it, before anything is saved.
+  // With revenue typed and the commission still blank, the block says there is
+  // nothing to compute rather than showing the gross as though it all arrived.
+  await expect(page.getByTestId('zomato-revenue-net')).toHaveText('—')
+
+  // Given the commission, it says what actually arrives, before anything is saved.
+  await page.getByTestId('zomato-commission').fill('900')
   await expect(page.getByTestId('zomato-revenue-net')).not.toHaveText('—')
   await expect(page.getByTestId('aggregator-swiggy')).toContainText('Actually received')
 
@@ -89,9 +97,10 @@ test('the owner records a full trading day on a phone and reads its difference',
   await expect(page.getByTestId('ledger-day-recorded')).toBeVisible()
   await expect(page.getByTestId('ledger-day-form')).toHaveCount(0)
   await expect(page.getByTestId('counted-cash')).toHaveCount(0)
-  // The revenue side, with the rate each aggregator was netted at.
+  // The revenue side, with the commission each aggregator was actually charged. The
+  // label no longer names a percentage, because there is no longer a stored one.
   await expect(page.getByTestId('recorded-revenue-net')).toBeVisible()
-  await expect(page.getByTestId('ledger-day-recorded')).toContainText('Less commission at')
+  await expect(page.getByTestId('ledger-day-recorded')).toContainText('Less commission')
   // The drawer still reads below it, and the reason for the cash that left is
   // beside the figure it explains.
   await expect(page.getByTestId('day-difference')).toContainText('missing from the drawer')
