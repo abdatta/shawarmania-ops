@@ -273,6 +273,56 @@ export type Database = {
           },
         ]
       }
+      aggregator_cycle_reconciliations: {
+        Row: {
+          accepted_at: string | null
+          channel: string
+          computed_paise: number
+          created_at: string
+          cycle_end: string
+          cycle_start: string
+          id: string
+          outcome: string
+          outlet_id: string
+          stated_payout_paise: number
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          channel: string
+          computed_paise: number
+          created_at?: string
+          cycle_end: string
+          cycle_start: string
+          id?: string
+          outcome: string
+          outlet_id: string
+          stated_payout_paise: number
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          channel?: string
+          computed_paise?: number
+          created_at?: string
+          cycle_end?: string
+          cycle_start?: string
+          id?: string
+          outcome?: string
+          outlet_id?: string
+          stated_payout_paise?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aggregator_cycle_reconciliations_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       aggregator_sync_runs: {
         Row: {
           channel: string

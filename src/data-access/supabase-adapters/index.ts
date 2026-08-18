@@ -30,8 +30,7 @@ export function createSupabaseAdapters(
   const client = getSupabaseClient()
   return {
     outlets: createSupabaseOutletsAdapter(client),
-    // Gated to demo, and throws rather than answering emptily if that ever slips.
-    aggregatorSync: createSupabaseAggregatorSyncAdapter(),
+    aggregatorSync: createSupabaseAggregatorSyncAdapter(client),
     accounts: createSupabaseAccountsAdapter(client),
     attendance: createSupabaseAttendanceAdapter(client),
     menu: createSupabaseMenuAdapter(client),

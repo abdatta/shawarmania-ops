@@ -185,7 +185,11 @@ const defs = {
     role: 'super_admin',
     path: 'ledger/zomato',
     nav: { label: 'Zomato', icon: Bike, order: 4, attention: 'zomato-needs-you' },
-    state: 'demo',
+    // Live [owner, 2026-08-18]. The ledger already fills itself from Zomato; this is
+    // the page that says when it last ran, what moved, and what wants a decision —
+    // including the Reconnect the owner needs when a session lapses, which is the one
+    // repair they cannot make anywhere else.
+    state: 'live',
   },
   /**
    * The owner's counterpart to `admin-devices`, across every outlet.

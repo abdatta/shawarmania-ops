@@ -1,46 +1,369 @@
-import type { AggregatorSyncAdapter } from '../adapters'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+import type {
+  AggregatorSyncAdapter,
+  AggregatorSyncEvent,
+  AggregatorSyncEventRow,
+  AggregatorSyncHealth,
+} from '../adapters'
+import type { Database } from '../database.types'
 
 /**
- * The real Zomato sync adapter, deliberately unbuilt.
+ * The Zomato sync, read from what actually happened.
  *
- * The surface is gated to `demo` (`owner-zomato-sync` in `src/gates/registry.ts`),
- * so nothing in the real tree can reach any of these. The gate is the guarantee;
- * this file is the proof that the guarantee is being relied on rather than
- * assumed, which is why every method throws instead of returning something
- * plausible and empty.
+ * **Nothing here is a table.** There is no `sync_events` row anywhere: every line the
+ * surface shows is derived from the records the sync already keeps — the runs, the day
+ * figures, the reconciliation conclusions, the sourced expenses. An event table would
+ * be a second account of the same facts, free to drift from them, and the first
+ * disagreement would be unresolvable because both would look authoritative.
  *
- * An empty health reading would be the more comfortable stub and the wrong one:
- * "the sync has never run" and "the sync is not wired up" are the same screen,
- * and a surface promoted by accident would report a healthy silence about a job
- * that does not exist. Throwing makes the mistake loud at the first read.
- *
- * The change that promotes the gate replaces this file wholesale. It reads
- * `aggregator_sync_runs`, `manual_ledger_days` and `aggregator_cycle_deductions`
- * for the events, and calls the Edge Functions for the four actions.
+ * Tenancy comes from the policies, as it does for every other adapter here. Each of
+ * these tables refuses every outlet role at every outlet including their own, so a
+ * query that returns rows has already proved the caller is the owner.
  */
 
-function unbuilt(): never {
-  throw new Error(
-    'The Zomato sync is not wired to real data yet. This surface is gated to demo mode.',
-  )
-}
+/** How wide a net the duplicate signal casts. Deliberately loose; see below. */
+const DUPLICATE_DAYS = 4
+const DUPLICATE_FLOOR_PAISE = 5_000
+const DUPLICATE_FRACTION = 0.02
 
-export function createSupabaseAggregatorSyncAdapter(): AggregatorSyncAdapter {
+export function createSupabaseAggregatorSyncAdapter(
+  client: SupabaseClient<Database>,
+): AggregatorSyncAdapter {
+  async function call(body: Record<string, unknown>, fn: string): Promise<void> {
+    const { error } = await client.functions.invoke(fn, { body })
+    if (error) {
+      // Deliberately plain. These four actions are all owner-initiated on a screen
+      // that already reports the sync's own state, so the surface says "that did not
+      // go through" and the next read shows what is actually true. A code-per-failure
+      // vocabulary would be inventing distinctions the screen cannot act on.
+      throw new Error(`${fn} did not go through`)
+    }
+  }
+
+  async function health(outletId: string): Promise<AggregatorSyncHealth> {
+    const [run, configured, credential] = await Promise.all([
+      client
+        .from('aggregator_sync_runs')
+        .select('started_at, finished_at, outcome, rehearsal')
+        .eq('outlet_id', outletId)
+        .eq('channel', 'zomato')
+        // A rehearsal wrote nothing, so it is not what "last ran" means to somebody
+        // asking whether their figures are current.
+        .eq('rehearsal', false)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      client
+        .from('outlet_channel_sync')
+        .select('synced_from')
+        .eq('outlet_id', outletId)
+        .eq('channel', 'zomato')
+        .maybeSingle(),
+      // Owner-only, and it answers with dates and booleans: whether a session exists,
+      // when it dies, and whether a code is being waited for. Never the session.
+      client.rpc('aggregator_credential_health', { p_channel: 'zomato' }).maybeSingle(),
+    ])
+
+    const waiting = credential.data?.awaiting_code_since
+      ? {
+          requestedAt: credential.data.awaiting_code_since,
+          expiresAt:
+            credential.data.awaiting_code_expires_at ?? credential.data.awaiting_code_since,
+        }
+      : null
+
+    return {
+      outletId,
+      lastRunAt: run.data?.started_at ?? null,
+      lastOutcome: (run.data?.outcome ?? null) as AggregatorSyncHealth['lastOutcome'],
+      // A run with no finish is one still going. There is no separate flag, so the
+      // two cannot disagree about whether something is happening.
+      running: run.data !== null && run.data.finished_at === null,
+      awaitingOneTimePassword: waiting,
+      syncedFrom: configured.data?.synced_from ?? null,
+    }
+  }
+
+  /**
+   * Every line the page shows, newest first.
+   *
+   * Five queries rather than one view, because each answers a different question and a
+   * view joining them would multiply rows and then need distinct-ing back down — which
+   * is where a total quietly doubles.
+   */
+  async function events(outletId: string): Promise<AggregatorSyncEventRow[]> {
+    const [runs, cycles, days, typed, sourced] = await Promise.all([
+      client
+        .from('aggregator_sync_runs')
+        .select('id, started_at, outcome, detail, rehearsal')
+        .eq('outlet_id', outletId)
+        .eq('channel', 'zomato')
+        .in('outcome', ['session_lapsed', 'shape_changed'])
+        .order('started_at', { ascending: false })
+        .limit(20),
+      client
+        .from('aggregator_cycle_reconciliations')
+        .select(
+          'id, cycle_start, cycle_end, computed_paise, stated_payout_paise, outcome, accepted_at, updated_at',
+        )
+        .eq('outlet_id', outletId)
+        .eq('channel', 'zomato')
+        .order('cycle_start', { ascending: false })
+        .limit(8),
+      client
+        .from('manual_ledger_days')
+        .select(
+          'business_date, zomato_revenue_paise, zomato_commission_paise, zomato_provisional_revenue_paise, zomato_provisional_commission_paise, zomato_revised_at',
+        )
+        .eq('outlet_id', outletId)
+        .not('zomato_revised_at', 'is', null)
+        .order('business_date', { ascending: false })
+        .limit(20),
+      client
+        .from('manual_ledger_expenses')
+        .select('id, business_date, amount_paise, description')
+        .eq('outlet_id', outletId)
+        .is('source_system', null)
+        .is('voided_at', null),
+      client
+        .from('manual_ledger_expenses')
+        .select('id, business_date, amount_paise, description, created_at')
+        .eq('outlet_id', outletId)
+        .eq('source_system', 'zomato')
+        .is('voided_at', null),
+    ])
+
+    const rows: AggregatorSyncEventRow[] = []
+    const push = (id: string, at: string, event: AggregatorSyncEvent, resolvedAt: string | null) =>
+      rows.push({ id, outletId, at, event, resolvedAt })
+
+    for (const run of runs.data ?? []) {
+      push(
+        `run-${run.id}`,
+        run.started_at,
+        run.outcome === 'session_lapsed'
+          ? { kind: 'session-lapsed', detail: run.detail }
+          : { kind: 'shape-changed', detail: run.detail },
+        // A lapse is over once a session exists again, which the next successful run
+        // proves. Resolved rather than removed: "Zomato signed us out on Tuesday" is
+        // worth being able to find.
+        null,
+      )
+    }
+
+    for (const cycle of cycles.data ?? []) {
+      const difference = cycle.computed_paise - cycle.stated_payout_paise
+      if (cycle.outcome === 'disputed') {
+        push(
+          `cycle-${cycle.id}`,
+          cycle.updated_at,
+          {
+            kind: 'week-disputed',
+            from: cycle.cycle_start,
+            to: cycle.cycle_end,
+            computedPaise: cycle.computed_paise,
+            statedPayoutPaise: cycle.stated_payout_paise,
+            differencePaise: difference,
+          },
+          cycle.accepted_at,
+        )
+      } else {
+        push(
+          `cycle-${cycle.id}`,
+          cycle.updated_at,
+          {
+            kind: 'week-settled',
+            from: cycle.cycle_start,
+            to: cycle.cycle_end,
+            netPaise: cycle.stated_payout_paise,
+          },
+          null,
+        )
+      }
+    }
+
+    for (const day of days.data ?? []) {
+      // Present is what "revised" means, and the constraint guarantees both sides are
+      // there when it is, so neither coalesce below can hide a missing figure.
+      const was =
+        (day.zomato_provisional_revenue_paise ?? 0) - (day.zomato_provisional_commission_paise ?? 0)
+      const now = (day.zomato_revenue_paise ?? 0) - (day.zomato_commission_paise ?? 0)
+      push(
+        `revised-${day.business_date}`,
+        day.zomato_revised_at as string,
+        {
+          kind: 'day-revised',
+          businessDate: day.business_date,
+          fromNetPaise: was,
+          toNetPaise: now,
+        },
+        null,
+      )
+    }
+
+    /*
+     * Two expenses that may be one purchase entered twice.
+     *
+     * Matched on the same outlet exactly, an amount within the larger of 2% or ₹50, and
+     * a date within four days either way. Never on category or description, which name
+     * the same purchase differently by construction: a hand-entered row says what the
+     * owner calls it and a sourced row says what Zomato calls it.
+     *
+     * The looseness is chosen from an asymmetry rather than from taste. A flag the
+     * owner dismisses costs one tap. A duplicate nobody flags overstates costs and
+     * understates profit, quietly and permanently.
+     */
+    for (const mine of typed.data ?? []) {
+      const twin = (sourced.data ?? []).find((theirs) => {
+        const tolerance = Math.max(DUPLICATE_FLOOR_PAISE, mine.amount_paise * DUPLICATE_FRACTION)
+        if (Math.abs(theirs.amount_paise - mine.amount_paise) > tolerance) return false
+        const apart =
+          Math.abs(Date.parse(theirs.business_date) - Date.parse(mine.business_date)) / 86_400_000
+        return apart <= DUPLICATE_DAYS
+      })
+      if (!twin) continue
+
+      push(
+        `duplicate-${mine.id}-${twin.id}`,
+        twin.created_at,
+        {
+          kind: 'possible-duplicate-expense',
+          typed: {
+            businessDate: mine.business_date,
+            amountPaise: mine.amount_paise,
+            note: mine.description,
+            expenseId: mine.id,
+          },
+          synced: {
+            businessDate: twin.business_date,
+            amountPaise: twin.amount_paise,
+            note: twin.description,
+            expenseId: twin.id,
+          },
+        },
+        null,
+      )
+    }
+
+    return rows.sort((a, b) => b.at.localeCompare(a.at))
+  }
+
   return {
-    getHealth: unbuilt,
-    listEvents: unbuilt,
-    // Read by the shell's badge rather than by the page, so this is the one a
-    // premature promotion would reach first, from every screen at once. It
-    // throws for the same reason as the rest: a badge that reported nil would
-    // say the work is done, which is the one wrong thing a badge can say.
-    // `visibleSurfaces` drops a demo-gated surface in real mode, so the entry
-    // does not render and the hook is never called until the gate moves.
-    countNeedsOwner: unbuilt,
-    requestRun: unbuilt,
-    requestReconnect: unbuilt,
-    answerOneTimePassword: unbuilt,
-    recheckWeek: unbuilt,
-    acceptDifference: unbuilt,
-    markNotDuplicate: unbuilt,
+    getHealth: health,
+    listEvents: events,
+
+    async countNeedsOwner() {
+      /*
+       * Counted across every outlet the caller reaches, not the one in view.
+       *
+       * The badge sits on a navigation tab: a week that would not reconcile at the
+       * other outlet, appearing only once that outlet was selected, would be a badge
+       * that hides at exactly the moment it is worth having.
+       */
+      const [outlets, disputed, lapsed] = await Promise.all([
+        client.from('outlet_channel_sync').select('outlet_id').eq('channel', 'zomato'),
+        client
+          .from('aggregator_cycle_reconciliations')
+          .select('outlet_id')
+          .eq('channel', 'zomato')
+          .eq('outcome', 'disputed')
+          .is('accepted_at', null),
+        client
+          .from('aggregator_sync_runs')
+          .select('outlet_id, started_at, outcome')
+          .eq('channel', 'zomato')
+          .eq('rehearsal', false)
+          .order('started_at', { ascending: false })
+          .limit(50),
+      ])
+
+      // The most recent run per outlet decides whether a session is still lapsed. An
+      // older lapse followed by a success has been dealt with.
+      const latest = new Map<string, string>()
+      for (const run of lapsed.data ?? []) {
+        if (!latest.has(run.outlet_id)) latest.set(run.outlet_id, run.outcome)
+      }
+
+      const counts = new Map<string, number>()
+      for (const outlet of outlets.data ?? []) counts.set(outlet.outlet_id, 0)
+      const bump = (outletId: string) => counts.set(outletId, (counts.get(outletId) ?? 0) + 1)
+
+      for (const row of disputed.data ?? []) bump(row.outlet_id)
+      for (const [outletId, outcome] of latest) {
+        if (outcome === 'session_lapsed') bump(outletId)
+      }
+
+      // Duplicates are per outlet and need the same pairing the page does, so they are
+      // asked for through it rather than reimplemented — one rule, one answer.
+      await Promise.all(
+        [...counts.keys()].map(async (outletId) => {
+          const rows = await events(outletId)
+          const duplicates = rows.filter(
+            (row) => row.event.kind === 'possible-duplicate-expense' && row.resolvedAt === null,
+          ).length
+          if (duplicates > 0) counts.set(outletId, (counts.get(outletId) ?? 0) + duplicates)
+        }),
+      )
+
+      return [...counts].map(([outletId, needing]) => ({ outletId, needing }))
+    },
+
+    async requestRun(outletId) {
+      await call(
+        { outlet_id: outletId, channel: 'zomato', mode: 'sync' },
+        'request-aggregator-sync',
+      )
+    },
+
+    async requestReconnect(outletId) {
+      await call(
+        { outlet_id: outletId, channel: 'zomato', mode: 'reconnect' },
+        'request-aggregator-sync',
+      )
+    },
+
+    async answerOneTimePassword(_outletId, code) {
+      // The code goes nowhere else. Not logged, not held, not put in a URL: it is
+      // handed over and this adapter keeps nothing.
+      await call({ channel: 'zomato', code }, 'answer-aggregator-otp')
+    },
+
+    async recheckWeek(outletId, _from, _to) {
+      // A re-check is an ordinary run. The reader re-reads whole cycles every time, so
+      // there is nothing to narrow and nothing gained by pretending otherwise.
+      await call(
+        { outlet_id: outletId, channel: 'zomato', mode: 'sync' },
+        'request-aggregator-sync',
+      )
+    },
+
+    async acceptDifference(outletId, from, to) {
+      await call(
+        {
+          outlet_id: outletId,
+          channel: 'zomato',
+          mode: 'accept',
+          cycle_start: from,
+          cycle_end: to,
+        },
+        'request-aggregator-sync',
+      )
+    },
+
+    async markNotDuplicate(_outletId, eventId) {
+      /*
+       * Deliberately unbuilt, and it fails loudly rather than quietly.
+       *
+       * Saying "these two are both real" has to be REMEMBERED, or the flag returns on
+       * the next read and the owner answers the same question forever. There is
+       * nowhere to remember it yet: the row is derived from two expenses and carries no
+       * state of its own. Returning silently would make the button appear to work and
+       * the flag reappear tomorrow, which is worse than a button that says it cannot.
+       */
+      throw new Error(
+        `Dismissing a duplicate is not built yet (${eventId}). Withdraw one of the two in the ledger instead.`,
+      )
+    },
   }
 }
