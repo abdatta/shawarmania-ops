@@ -369,7 +369,11 @@ describe('the manual ledger surface', () => {
     // net and therefore nothing here, which is what makes the net a ceiling.
     const charged = determined.reduce((running, day) => running + day.zomatoCommissionPaise!, 0)
     expect(screen.getByTestId('month-zomato-commission')).toHaveTextContent(formatPaise(-charged))
-    expect(screen.queryByTestId('month-undetermined')).not.toBeInTheDocument()
+
+    // The demo deliberately seeds a day read today, whose commission Zomato has not
+    // stated yet, so the month says so. Asserting its ABSENCE here would be
+    // asserting that the fixtures never cover the undetermined case.
+    expect(screen.getByTestId('month-undetermined')).toBeInTheDocument()
   })
 
   it('saves a day whose commission is not known yet, and says so rather than guessing', async () => {
@@ -419,11 +423,48 @@ describe('the manual ledger surface', () => {
     // The month says the same thing, from the same count, so the two screens
     // cannot disagree about how confident they are.
     await userEvent.click(screen.getByTestId('ledger-view-month'))
+    // Count-agnostic: the demo seeds one undetermined day of its own, so the total
+    // here is that plus the one just saved. What matters is that the month says it is
+    // waiting, not how many it is waiting for.
     expect(await screen.findByTestId('month-undetermined')).toHaveTextContent(
-      /1 day is still waiting for its commission/i,
+      /days? (is|are) still waiting for (its|their) commission/i,
     )
     expect(screen.getByText(/Revenue received, at most/i)).toBeInTheDocument()
     expect(screen.getByText(/Estimated profit, at most/i)).toBeInTheDocument()
+  })
+
+  it('names where each channel’s figures came from, in one word', async () => {
+    /*
+     * Four sources, not the three asked for [owner, 2026-08-18]. A disputed day is
+     * one Zomato has PAID for and whose figures do not add up to that payment, and
+     * it must not wear the same chip as a settled one: it is the only state here
+     * that wants somebody to look at it.
+     *
+     * The demo seeds one of each by age, so this walks them rather than asserting
+     * against a single contrived day.
+     */
+    const { adapters } = renderLedger()
+    const month = await adapters.manualLedger.getMonth(OUTLET_KALYANI_ID, await currentMonth())
+    const dayFor = (state: string | null) =>
+      month.days.find((day) => (day.zomatoSettlement?.state ?? null) === state)
+
+    for (const [state, chip] of [
+      [null, 'typed'],
+      ['provisional', 'daily'],
+      ['settled', 'settled'],
+      ['disputed', 'disputed'],
+    ] as const) {
+      const day = dayFor(state)
+      if (!day) throw new Error(`The demo no longer seeds a ${state ?? 'typed'} day.`)
+
+      await openDay(day.businessDate)
+      const card = await screen.findByTestId('ledger-day-recorded')
+      expect(within(card).getByTestId(`source-tag-zomato-${chip}`)).toBeInTheDocument()
+
+      // Swiggy is never synced, and says so rather than leaving it to be inferred
+      // from an absence.
+      expect(within(card).getByTestId('source-tag-swiggy-typed')).toBeInTheDocument()
+    }
   })
 
   it('tells an unrecorded month apart from a recorded zero', async () => {

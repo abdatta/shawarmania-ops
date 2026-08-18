@@ -210,7 +210,12 @@ describe('mock manual ledger adapter', () => {
       // deliberately NOT offered: it is an amount now, so yesterday's would be a
       // function of yesterday's revenue and wrong by construction.
       expect(previous?.countedCashPaise).toBe(795_000)
-      expect(previous?.zomatoCommissionPaise).toBe(72_360)
+
+      // And on this fixture it could not be offered even if the form wanted to: the
+      // most recent earlier day was read today, so Zomato has not yet stated what it
+      // kept. Undetermined is a value here, not a gap in the demo.
+      expect(previous?.zomatoCommissionPaise).toBeNull()
+      expect(previous?.zomatoSettlement?.state).toBe('provisional')
     })
 
     it('has nothing to offer on an outlet’s first tracked day', async () => {

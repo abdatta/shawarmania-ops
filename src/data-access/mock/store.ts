@@ -669,6 +669,62 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     }),
   )
 
+  /**
+   * The settlement columns for one seeded day, chosen by how old it is.
+   *
+   * Deliberately covers every state the surface can show:
+   *
+   *   yesterday      **Daily** — read today, commission not stated until the week ends
+   *   two days ago   **Settled** — the weekly payout statement, and it adds up
+   *   three days ago **Disputed** — paid, and the figures do not add up to the payment
+   *   older          **Typed** — the owner's own entry, which is the control
+   *
+   * The revised pair is set on the settled day only, so "this figure moved when the
+   * week paid" is demonstrable rather than merely described. The superseded pair goes
+   * with it: a synced day archives what the owner had typed before it was taken over.
+   */
+  function settlementFor(daysAgo: number, revenuePaise: number, commissionPaise: number | null) {
+    const blank = {
+      zomato_settlement_state: null as string | null,
+      zomato_superseded_revenue_paise: null as number | null,
+      zomato_superseded_commission_paise: null as number | null,
+      zomato_superseded_at: null as string | null,
+      zomato_provisional_revenue_paise: null as number | null,
+      zomato_provisional_commission_paise: null as number | null,
+      zomato_revised_at: null as string | null,
+    }
+
+    if (daysAgo === 1) {
+      // Read today: the revenue is exact and the commission is not stated yet.
+      return { ...blank, zomato_settlement_state: 'provisional', zomato_commission_paise: null }
+    }
+    if (daysAgo === 2) {
+      return {
+        ...blank,
+        zomato_settlement_state: 'settled',
+        // It grew when the week paid, which is the cancellation-refund case: an order
+        // rejected after the kitchen cooked it is refunded a share and paid, and the
+        // live figure never showed it.
+        zomato_provisional_revenue_paise: revenuePaise - 7_915,
+        zomato_provisional_commission_paise: commissionPaise,
+        zomato_revised_at: new Date().toISOString(),
+        zomato_superseded_revenue_paise: revenuePaise - 21_500,
+        zomato_superseded_commission_paise: commissionPaise,
+        zomato_superseded_at: new Date().toISOString(),
+      }
+    }
+    if (daysAgo === 3) {
+      return {
+        ...blank,
+        zomato_settlement_state: 'disputed',
+        zomato_superseded_revenue_paise: revenuePaise - 15_000,
+        zomato_superseded_commission_paise: commissionPaise,
+        zomato_superseded_at: new Date().toISOString(),
+      }
+    }
+    return blank
+  }
+
   const manualLedgerDays: Tables<'manual_ledger_days'>[] = manualLedgerDaySeeds.map(
     (seed, index) => ({
       id: `dd000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
@@ -693,17 +749,16 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       // One day carries a manager's correction, so the "recorded by X, last
       // corrected by Y" reading appears in the walkthrough rather than only in a
       // test (design D6).
-      // Settlement is absent on every seeded day: these are the typed months the
-      // sync did not cover, which is what makes them the control the synced
-      // fixtures are read against. The figures above are therefore the owner's own,
-      // since a null state is what says a day was typed.
-      zomato_settlement_state: null,
-      zomato_superseded_revenue_paise: null,
-      zomato_superseded_commission_paise: null,
-      zomato_superseded_at: null,
-      zomato_provisional_revenue_paise: null,
-      zomato_provisional_commission_paise: null,
-      zomato_revised_at: null,
+      /*
+       * Where each seeded day's Zomato figures came from.
+       *
+       * All four states are present on purpose, because the chip that names them is
+       * the thing being demonstrated and three of the four would otherwise never
+       * appear on screen. `settlementFor` below assigns them by age, so the
+       * walkthrough shows a typed day, a day read today, a settled week and a week
+       * that would not add up, in one scroll.
+       */
+      ...settlementFor(seed.daysAgo, seed.zomatoRevenuePaise, seed.zomatoCommissionPaise),
       updated_by: seed.correctedByManager ? MANAGER_ID : null,
     }),
   )

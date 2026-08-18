@@ -125,7 +125,10 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
     cashRemovedPaise: 1_000_000,
     cashRemovedReason: 'Banked on the way home',
     countedCashPaise: 1_475_000,
-    zomatoCommissionPaise: 64_800,
+    // 18% where the neighbouring days sit near 22.5%. The take really does move with
+    // the mix of distances and discounts, and the month's arithmetic is only worth
+    // asserting against fixtures where it visibly does.
+    zomatoCommissionPaise: 51_840,
     swiggyCommissionPaise: 40_740,
     note: 'Counted twice. Two ₹100 notes and some change unaccounted for.',
     expectedDifferencePaise: -25_000,

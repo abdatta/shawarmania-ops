@@ -13,8 +13,10 @@ import {
   type ManualLedgerDay,
   type ManualLedgerDayInput,
   type ManualLedgerExpense,
+  type ZomatoSettlement,
 } from '@/data-access/adapters'
 import { formatBusinessDate, rupeesToPaise } from '@/domain'
+import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
 
 import { ExpenseList } from './expense-list'
@@ -755,6 +757,7 @@ function RecordedDay({
           label="Zomato, as stated"
           paise={day.zomatoRevenuePaise}
           testId="recorded-zomato-gross"
+          tag={<SourceTag channel="zomato" settlement={reading.zomato.settlement} />}
         />
         <Row
           label="Less commission"
@@ -773,6 +776,9 @@ function RecordedDay({
           label="Swiggy, as stated"
           paise={day.swiggyRevenuePaise}
           testId="recorded-swiggy-gross"
+          // Always typed: Swiggy is not synced, and the chip says so rather than
+          // leaving the reader to infer it from an absence.
+          tag={<SourceTag channel="swiggy" settlement={null} />}
         />
         <Row
           label="Less commission"
@@ -1215,11 +1221,73 @@ function TextField({
   )
 }
 
+/**
+ * Where a channel's figures came from, as a chip.
+ *
+ * Four sources, not three. A **disputed** day is one Zomato has paid for and whose
+ * figures do not add up to that payment, and it must not wear the same chip as a
+ * settled one: it is the single state on this screen that wants somebody to look at
+ * it. The other three are the ones asked for [owner, 2026-08-18].
+ *
+ * The words are the ones the rest of the app already uses — the sync surface, the
+ * specs and the database all say provisional, settled and disputed — because one
+ * vocabulary across two screens is worth more than a better word on one of them.
+ * `Daily` is the exception: `provisional` is what the row stores, but what the owner
+ * needs to know is that it came from today's read and will firm up on Sunday.
+ */
+function SourceTag({
+  channel,
+  settlement,
+}: {
+  /** Named in the test id, because on a typed day both channels wear this chip. */
+  channel: 'zomato' | 'swiggy'
+  settlement: ZomatoSettlement | null
+}) {
+  const [label, tone, why] =
+    settlement === null
+      ? ([
+          'Typed',
+          'border-border text-content-muted',
+          'Entered by hand. Nothing was read from the aggregator for this day.',
+        ] as const)
+      : settlement.state === 'settled'
+        ? ([
+            'Settled',
+            'border-success text-success',
+            "Read from Zomato's weekly payout statement, and it adds up to what they paid.",
+          ] as const)
+        : settlement.state === 'disputed'
+          ? ([
+              'Disputed',
+              'border-danger text-danger',
+              'Zomato has paid this week and the figures do not add up to the payment. Nothing was overwritten.',
+            ] as const)
+          : ([
+              'Daily',
+              'border-primary text-primary',
+              'Read from Zomato today. The commission is not stated until the week closes, so this figure firms up on Sunday.',
+            ] as const)
+
+  return (
+    <span
+      data-testid={`source-tag-${channel}-${label.toLowerCase()}`}
+      className={cn(
+        'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[11px] font-semibold',
+        tone,
+      )}
+      title={why}
+    >
+      {label}
+    </span>
+  )
+}
+
 function Row({
   label,
   paise: amount,
   testId,
   hint,
+  tag,
 }: {
   label: string
   /** `null` where the figure is undetermined, which is not the same as nought. */
@@ -1227,11 +1295,16 @@ function Row({
   testId: string
   /** Nullable, so a stored reason that was never given passes straight through. */
   hint?: string | null
+  /** A small chip beside the label, for where a figure came from. */
+  tag?: ReactNode
 }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between">
-        <span className="text-sm text-content-muted">{label}</span>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="inline-flex flex-wrap items-baseline gap-1.5 text-sm text-content-muted">
+          {label}
+          {tag}
+        </span>
         {amount === null ? (
           /*
            * Words, not a dash and not a nought.
