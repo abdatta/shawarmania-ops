@@ -48,6 +48,7 @@ Write behaviour, not implementation. A spec that names a React component or a fi
 This alphabetical list maps every capability required now. For planned work, read the
 [reconciled roadmap](../changes/ROADMAP.md).
 
+- [`aggregator-settlement-sync`](aggregator-settlement-sync/spec.md) — measured per-order aggregator revenue reconciled against the payout that actually arrives, with provisional, settled, revised and disputed cycles, deductions dated to the purchase, and a run record a person can act on.
 - [`app-shell`](app-shell/spec.md) — four role-appropriate shells, gate-derived navigation, uniform real and demo sessions, reachable theme controls, stable role paths, and shared layout primitives.
 - [`attention-badges`](attention-badges/spec.md) — a consistent, contextual count of work waiting for a reader, visible wherever that work can be reached.
 - [`attendance-and-location`](attendance-and-location/spec.md) — reviewable attendance evidence: capture coordinates, accuracy, distance, source, verdict, and approval beside each business-day record.

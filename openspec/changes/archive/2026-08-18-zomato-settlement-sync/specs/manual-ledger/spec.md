@@ -151,16 +151,11 @@ actually received, computed as the figures are typed through the same rounding
 rule the month uses. Where no rate has been given, the group SHALL show that
 there is nothing to compute rather than showing nil.
 
-Where a channel is sourced by `aggregator-settlement-sync`, its group SHALL be
-presented as a **reading rather than an entry**: gross, commission and net shown
-as recorded, with no revenue field and no rate field inviting the same money to
-be entered again, and with its settlement state named on screen. Where the
-owner's earlier typed figure was superseded, that figure SHALL be shown beside
-the synced one and marked as superseded, so the two are never mistaken for each
-other. Where settling revised the day's figures, the group SHALL say so and
-SHALL state what they were revised from. Where the day belongs to a disputed
-week, the group SHALL say that the week has been paid but does not reconcile,
-rather than presenting the figure as merely awaiting settlement.
+How a sourced channel's group is presented is **not settled by this change**. It
+is specified by `freeze-aggregator-and-supply-entry`, which withdraws the entry
+fields for every aggregator rather than only for a sourced one, and moves the
+figures out of the day row. Stating the sourced-reading behaviour here would
+describe a form that this change did not build and that the next change replaces.
 
 The explanations of how the ledger treats a figure — a rate held per day, a
 capital purchase recorded as cash out, a refund recorded as negative revenue,
@@ -194,32 +189,7 @@ threshold at which a mobile browser zooms the viewport on focus.
 - **WHEN** two aggregator groups present fields with identical visible labels
 - **THEN** each field's accessible name names its aggregator and its unit, so the groups are distinguishable without seeing them
 
-#### Scenario: A synced group offers nothing to type
-
-- **WHEN** the owner opens a day whose Zomato figures are synced
-- **THEN** the Zomato group shows gross, commission, net and its settlement state as a reading, with no revenue field and no rate field
-
-#### Scenario: A provisional figure says so
-
-- **WHEN** a synced day belongs to a week that has not been paid
-- **THEN** its group names the figure as provisional, and the explanation available from that section says it will be replaced when the week settles
-
-#### Scenario: A revised figure says what it was
-
-- **WHEN** the owner opens a day whose figures changed when its week settled
-- **THEN** the group states that the figures were revised and what they were revised from
-
-#### Scenario: A disputed week is not read as pending
-
-- **WHEN** the owner opens a day belonging to a week that was paid but did not reconcile
-- **THEN** the group says the week does not reconcile, rather than describing the figure as one that will be replaced when the week settles
-
-#### Scenario: A superseded guess stays visible
-
-- **WHEN** the owner opens a day whose typed Zomato figure the sync replaced
-- **THEN** both figures are shown, the retained one marked as superseded, and only the synced one is used in the day's and the month's totals
-
-### Requirement: A live outlet's cash and UPI revenue comes from bills, while its aggregator revenue is sourced or typed per channel
+### Requirement: A live outlet's cash and UPI revenue comes from bills, while its aggregator revenue stays typed
 
 Each outlet SHALL carry an explicit **billing go-live date**, null until that
 outlet is promoted and set by a Super Admin. It SHALL NOT be derived from billing
