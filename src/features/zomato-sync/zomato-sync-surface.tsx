@@ -35,6 +35,33 @@ import { SyncEventRow } from './sync-event-row'
  * is no button that writes the figures and says nothing, because that is the one
  * outcome the whole capability exists to prevent.
  */
+/**
+ * Whether reading again could tell the owner anything new, in hours.
+ *
+ * Two conditions withhold the button and they are different in kind [owner,
+ * 2026-08-18]. A run in progress is about correctness, and is handled at the
+ * button: two readers would race for one Zomato session, and the sliding idle
+ * window means the loser can invalidate the winner's token. A SUCCESSFUL run in the
+ * last six hours is this one, and it is about not offering a control whose only
+ * effect is to make somebody wait for figures they already have.
+ *
+ * A FAILED run does not count. Pressing this after a failure is exactly the point,
+ * and a six-hour lockout on a lapsed session would leave the owner staring at a
+ * disabled button on the one screen built to fix it.
+ *
+ * The schedule is untouched by any of this. A job that skipped itself because
+ * somebody had pressed a button would leave the gap invisible until a figure was
+ * missing.
+ */
+const READ_AGAIN_AFTER_HOURS = 6
+
+export function readAgainInHours(health: AggregatorSyncHealth, now = Date.now()): number | null {
+  if (health.lastOutcome !== 'ok' || !health.lastRunAt) return null
+  const since = (now - new Date(health.lastRunAt).getTime()) / 3_600_000
+  if (!Number.isFinite(since) || since >= READ_AGAIN_AFTER_HOURS) return null
+  return Math.max(1, Math.ceil(READ_AGAIN_AFTER_HOURS - since))
+}
+
 export function ZomatoSyncSurface() {
   const { aggregatorSync } = useAdapters()
   const { pathname } = useLocation()
@@ -68,6 +95,16 @@ export function ZomatoSyncSurface() {
   const [error, setError] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
+  /*
+   * Hours until reading again could say anything new, or null if it could now.
+   *
+   * Held in state rather than derived at render, because deciding it needs the
+   * current time and reading a clock during render is impure: two renders of the
+   * same data would disagree, and React is entitled to render whenever it likes.
+   * It is recomputed wherever the health is, which is on mount, while a run is
+   * going, and when one finishes — every moment it could actually change.
+   */
+  const [readAgainIn, setReadAgainIn] = useState<number | null>(null)
 
   // Written as a promise chain rather than an awaited async call, matching the
   // ledger surface beside it: state set inside a `then` is set after the render
@@ -79,6 +116,7 @@ export function ZomatoSyncSurface() {
       .then(([nextHealth, nextEvents]) => {
         setHealth(nextHealth)
         setEvents(nextEvents)
+        setReadAgainIn(readAgainInHours(nextHealth))
       })
       .catch(() => {
         setError('Could not read the sync. Try again in a moment.')
@@ -191,6 +229,7 @@ export function ZomatoSyncSurface() {
           <HealthLine
             health={health}
             busy={acting}
+            readAgainIn={readAgainIn}
             onRun={() => act(() => aggregatorSync.requestRun(outletId!))}
           />
 
@@ -295,10 +334,13 @@ export function ZomatoSyncSurface() {
 function HealthLine({
   health,
   busy,
+  readAgainIn,
   onRun,
 }: {
   health: AggregatorSyncHealth
   busy: boolean
+  /** Hours until reading again could say anything new, or `null` if it could now. */
+  readAgainIn: number | null
   onRun: () => void
 }) {
   const when = health.lastRunAt
@@ -339,9 +381,23 @@ function HealthLine({
           </p>
         </div>
       </div>
-      <Button variant="secondary" onClick={onRun} disabled={busy || health.running}>
-        {health.running ? 'Reading…' : 'Read now'}
-      </Button>
+      <div className="text-right">
+        <Button
+          variant="secondary"
+          onClick={onRun}
+          disabled={busy || health.running || readAgainIn !== null}
+          data-testid="read-now"
+        >
+          {health.running ? 'Reading…' : 'Read now'}
+        </Button>
+        {readAgainIn !== null && !health.running && (
+          // The reason, beside the button rather than inside it. A disabled control
+          // with no explanation reads as broken, and this one is deliberate.
+          <p className="mt-1 text-xs text-content-muted" data-testid="read-now-why">
+            Just read. Again in {readAgainIn}h.
+          </p>
+        )}
+      </div>
     </Card>
   )
 }

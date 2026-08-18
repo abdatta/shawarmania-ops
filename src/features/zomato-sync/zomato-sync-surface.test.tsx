@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { MemoryRouter } from 'react-router'
 
+import type { AggregatorSyncHealth } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock/fixtures/outlets'
@@ -12,7 +13,7 @@ import { chooseOutlet } from '@/test/outlet-scope'
 import { demoSessionFor } from '@/test/session'
 
 import { needsOwner } from './needs-you-count'
-import { ZomatoSyncSurface } from './zomato-sync-surface'
+import { readAgainInHours, ZomatoSyncSurface } from './zomato-sync-surface'
 
 /**
  * The two claims this surface makes that are easy to break and hard to notice.
@@ -154,6 +155,71 @@ describe('the Zomato sync surface', () => {
     expect(chosen.className).toContain('bg-on-primary')
     expect(chosen.className).toContain('text-primary')
     expect(other.className).not.toContain('bg-on-primary')
+  })
+
+  it('offers Read now only when reading again could say something new', async () => {
+    /*
+     * Two reasons to withhold it, and they are different in kind [owner,
+     * 2026-08-18]. A run in progress is about correctness: two readers would race
+     * for one Zomato session. A successful run in the last six hours is about not
+     * offering a button whose only effect is to make the owner wait for figures
+     * they already have.
+     *
+     * Kalyani is the healthy outlet, and the demo seeds its last run 36 minutes
+     * ago — inside the window, so the button is withheld and says why.
+     */
+    await renderSurface(OUTLET_KALYANI_ID)
+
+    const button = await screen.findByTestId('read-now')
+    expect(button).toBeDisabled()
+    expect(screen.getByTestId('read-now-why')).toHaveTextContent(/again in \d+h/i)
+  })
+
+  it('offers Read now after a failure, which is exactly when it is wanted', async () => {
+    /*
+     * The lockout counts SUCCESSFUL runs only. Kanchrapara's session has lapsed, so
+     * its last run failed 15 minutes ago — well inside six hours. A rule that
+     * counted failures would leave the owner staring at a disabled button on the
+     * one screen built to fix the thing that failed.
+     */
+    await renderSurface(OUTLET_KANCHRAPARA_ID)
+
+    const button = await screen.findByTestId('read-now')
+    expect(button).toBeEnabled()
+    expect(screen.queryByTestId('read-now-why')).not.toBeInTheDocument()
+  })
+
+  it('decides the six-hour lockout from the run outcome, not from the clock alone', () => {
+    /*
+     * Tested as a function rather than through the screen, because the interesting
+     * cases are times of day and the surface can only be rendered at one of them.
+     * `now` is a parameter for the same reason it is not read during render: a
+     * component that consults a clock while rendering can disagree with itself.
+     */
+    const at = (iso: string, outcome: AggregatorSyncHealth['lastOutcome']) =>
+      ({
+        outletId: OUTLET_KALYANI_ID,
+        lastRunAt: iso,
+        lastOutcome: outcome,
+        running: false,
+        awaitingOneTimePassword: null,
+        syncedFrom: '2026-08-01',
+      }) satisfies AggregatorSyncHealth
+
+    const now = Date.parse('2026-08-18T12:00:00Z')
+    const hoursAgo = (h: number) => new Date(now - h * 3_600_000).toISOString()
+
+    // Inside the window, and the remainder is rounded up so it never reads "0h".
+    expect(readAgainInHours(at(hoursAgo(0.1), 'ok'), now)).toBe(6)
+    expect(readAgainInHours(at(hoursAgo(5.2), 'ok'), now)).toBe(1)
+    // On the boundary and past it, the button comes back.
+    expect(readAgainInHours(at(hoursAgo(6), 'ok'), now)).toBeNull()
+    expect(readAgainInHours(at(hoursAgo(30), 'ok'), now)).toBeNull()
+    // A failure never locks it out, whatever the clock says.
+    expect(readAgainInHours(at(hoursAgo(0.2), 'session_lapsed'), now)).toBeNull()
+    expect(readAgainInHours(at(hoursAgo(0.2), 'reconciliation_failed'), now)).toBeNull()
+    // And neither does a sync that has never run.
+    expect(readAgainInHours(at(hoursAgo(0.2), null), now)).toBeNull()
   })
 
   it('sends a possible duplicate to the exact day it is about', async () => {
