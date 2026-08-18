@@ -5,8 +5,6 @@ import { NotPaiseError } from '@/domain'
 
 import {
   checkOpeningChain,
-  commissionPaise,
-  COMMISSION_BP_SCALE,
   monthOf,
   monthRange,
   netAggregatorPaise,
@@ -30,8 +28,8 @@ function day(overrides: Partial<ManualLedgerDayInput> = {}): ManualLedgerDayInpu
     cashRemovedPaise: 0,
     cashRemovedReason: null,
     countedCashPaise: 500_000,
-    zomatoCommissionBp: 2250,
-    swiggyCommissionBp: 2100,
+    zomatoCommissionPaise: 0,
+    swiggyCommissionPaise: 0,
     note: null,
     ...overrides,
   }
@@ -63,39 +61,30 @@ function expense(overrides: Partial<ManualLedgerExpense> = {}): ManualLedgerExpe
   }
 }
 
-describe('commission', () => {
-  it('takes the stated share of an aggregator day', () => {
-    // ₹3,000 at 22.5% is ₹675.
-    expect(commissionPaise(300_000, 2250)).toBe(67_500)
-    expect(netAggregatorPaise(300_000, 2250)).toBe(232_500)
+describe('commission, as an amount rather than a rate', () => {
+  it('subtracts what the aggregator actually charged', () => {
+    expect(netAggregatorPaise(300_000, 67_500)).toBe(232_500)
   })
 
-  it('rounds half up, so a half-paisa share is never quietly dropped', () => {
-    // 1 paisa at 50% is exactly half a paisa.
-    expect(commissionPaise(1, 5000)).toBe(1)
-    // A hair under half still rounds down, which is what makes the above a rule
-    // rather than a coincidence.
-    expect(commissionPaise(1, 4999)).toBe(0)
+  /*
+   * The retired version multiplied by basis points, which needed a rounding rule
+   * that rounded half up and did so symmetrically about zero so a refunded day
+   * still reconciled. Four tests existed to hold that rule in place. An exact
+   * commission has nothing to round, so they are gone rather than rewritten.
+   *
+   * The figures below are one real order: ₹208.00 gross, ₹78.58 charged, ₹129.42
+   * paid. Zomato publishes a 14% base service fee for it; the actual take was
+   * 37.8%, because the charge is a service fee plus a per-kilometre delivery fee
+   * less a capping discount plus a payment fee plus tax on all of it. No single
+   * stored percentage could have produced ₹129.42.
+   */
+  it('reproduces a real order exactly, which no stored rate could', () => {
+    expect(netAggregatorPaise(20_800, 7_858)).toBe(12_942)
   })
 
-  it('rounds symmetrically about zero, so a refunded day still reconciles', () => {
-    // Truncation toward zero would give 0 here and the month would be a paisa out.
-    expect(commissionPaise(-1, 5000)).toBe(-1)
-    expect(commissionPaise(-300_000, 2250)).toBe(-67_500)
-  })
-
-  it('takes nothing at nought and everything at ten thousand', () => {
-    expect(commissionPaise(123_456, 0)).toBe(0)
-    expect(commissionPaise(123_456, COMMISSION_BP_SCALE)).toBe(123_456)
-  })
-
-  it('refuses a rate outside the basis-point range', () => {
-    expect(() => commissionPaise(100, -1)).toThrow(RangeError)
-    expect(() => commissionPaise(100, 10_001)).toThrow(RangeError)
-  })
-
-  it('refuses a float in the money path', () => {
-    expect(() => commissionPaise(100.5, 2250)).toThrow(NotPaiseError)
+  it('refuses a float on either side of the subtraction', () => {
+    expect(() => netAggregatorPaise(100.5, 2_250)).toThrow(NotPaiseError)
+    expect(() => netAggregatorPaise(100, 22.5)).toThrow(NotPaiseError)
   })
 })
 
@@ -260,7 +249,7 @@ describe('the opening-cash chain', () => {
 })
 
 describe('a month read for one outlet', () => {
-  /** Three days at two different Zomato rates, which is the case that matters. */
+  /** Three days at visibly different Zomato takes, which is the case that matters. */
   const days: ManualLedgerDayInput[] = [
     day({
       businessDate: '2026-08-01',
@@ -268,8 +257,8 @@ describe('a month read for one outlet', () => {
       upiRevenuePaise: 400_000,
       zomatoRevenuePaise: 300_000,
       swiggyRevenuePaise: 250_000,
-      zomatoCommissionBp: 2250,
-      swiggyCommissionBp: 2100,
+      zomatoCommissionPaise: 67_500,
+      swiggyCommissionPaise: 52_500,
       countedCashPaise: 1_650_000,
     }),
     day({
@@ -278,9 +267,9 @@ describe('a month read for one outlet', () => {
       upiRevenuePaise: 350_000,
       zomatoRevenuePaise: 400_000,
       swiggyRevenuePaise: 200_000,
-      // The renegotiated rate, from this day onward.
-      zomatoCommissionBp: 1800,
-      swiggyCommissionBp: 2100,
+      // A visibly lighter take on this day: 18% where the day before was 22.5%.
+      zomatoCommissionPaise: 72_000,
+      swiggyCommissionPaise: 42_000,
       countedCashPaise: 1_400_000,
     }),
     day({

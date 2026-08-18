@@ -106,16 +106,18 @@ begin
    * owner typed, those columns are null, the fallback returned the new value, and
    * the report cheerfully said the day changed from 2160.00 to 2160.00.
    *
-   * The typed figures are captured too, because on that first sync they are the
-   * "from" that matters: the owner wants to see their own number beside Zomato's.
+   * One pair of figures per day, whatever wrote them, plus the state that says
+   * which source did. On a first sync the "from" side is the owner's own typed
+   * revenue and commission, which is exactly the comparison they want: their
+   * number beside Zomato's. Net is reported as the difference rather than read
+   * from a column, because there is no column — with commission exact, a stored
+   * net would be a third figure able to disagree with the two it came from.
    */
   select jsonb_object_agg(d.business_date::text, jsonb_build_object(
-           'gross_paise', d.zomato_gross_paise,
+           'revenue_paise', d.zomato_revenue_paise,
            'commission_paise', d.zomato_commission_paise,
-           'net_paise', d.zomato_net_paise,
-           'state', d.zomato_settlement_state,
-           'typed_revenue_paise', d.zomato_revenue_paise,
-           'typed_commission_bp', d.zomato_commission_bp))
+           'net_paise', d.zomato_revenue_paise - d.zomato_commission_paise,
+           'state', d.zomato_settlement_state))
     into v_before
     from public.manual_ledger_days d
    where d.outlet_id = v_outlet
@@ -133,12 +135,10 @@ begin
     v_verdict := public.ingest_aggregator_cycle(p_payload, p_permitted_outlets);
 
     select jsonb_object_agg(d.business_date::text, jsonb_build_object(
-             'gross_paise', d.zomato_gross_paise,
+             'revenue_paise', d.zomato_revenue_paise,
              'commission_paise', d.zomato_commission_paise,
-             'net_paise', d.zomato_net_paise,
-             'state', d.zomato_settlement_state,
-             'typed_revenue_paise', d.zomato_revenue_paise,
-             'typed_commission_bp', d.zomato_commission_bp))
+             'net_paise', d.zomato_revenue_paise - d.zomato_commission_paise,
+             'state', d.zomato_settlement_state))
       into v_after
       from public.manual_ledger_days d
      where d.outlet_id = v_outlet

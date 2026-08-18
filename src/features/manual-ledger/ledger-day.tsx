@@ -15,7 +15,6 @@ import {
   type ManualLedgerExpense,
 } from '@/data-access/adapters'
 import { formatBusinessDate, rupeesToPaise } from '@/domain'
-import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
 
 import { ExpenseList } from './expense-list'
@@ -45,7 +44,7 @@ import {
  * away, and every field comes back exactly as it was stored.
  *
  * Two defaults and no more. Opening cash is offered as the previous recorded
- * day's count, and the commission rates as that day's rates — both editable,
+ * day's count, and the commission as the amount that day was charged — all editable,
  * because they are **stored per day** and correcting one day must not disturb
  * another (design D2). On an outlet's first tracked day there is nothing to
  * inherit, and all three are required with no default rather than quietly zero.
@@ -116,30 +115,52 @@ function requiredPaise(text: string): number | null {
   return paise(text)
 }
 
-function basisPoints(text: string): number | null {
-  if (text.trim() === '') return null
-  const percent = Number(text.trim())
-  if (!Number.isFinite(percent)) return null
-  const bp = Math.round(percent * 100)
-  return bp >= 0 && bp <= 10_000 ? bp : null
-}
-
-function percentOf(bp: number): string {
-  return String(bp / 100)
+/**
+ * What an aggregator's block shows as actually received, from the two fields above
+ * it, or null while either is unanswered.
+ *
+ * Through the shared derivation, never a second rounding rule: a net figure that
+ * disagreed with the month's by a paisa would be impossible to explain. Since
+ * commission became an amount [owner, 2026-08-17] there is no rounding left to
+ * disagree about, and this is one subtraction.
+ */
+function netOf(stated: string, commission: string): number | null {
+  const statedPaise = paise(stated)
+  if (statedPaise === null) return null
+  // A blank commission beside real revenue is an unanswered question, not nought.
+  // Showing the stated figure as though all of it arrived would overstate the
+  // takings, which is the one direction this screen must never be wrong in.
+  if (statedPaise !== 0 && commission.trim() === '') return null
+  const commissionPaise = paise(commission)
+  if (commissionPaise === null) return null
+  return netAggregatorPaise(statedPaise, commissionPaise)
 }
 
 /**
- * What an aggregator's block shows as actually received, from the two fields
- * above it, or null while the rate has not been given.
+ * A channel's commission: an amount, nought, or undetermined.
  *
- * Through the shared derivation, never a second rounding rule: a net figure that
- * disagreed with the month's by a paisa would be impossible to explain.
+ * Three states, and the two kinds of "empty" are the whole subtlety:
+ *
+ *  - A channel that sold nothing was charged nothing. Blank means nought there,
+ *    which is KNOWN, and most Swiggy days at these outlets are exactly that.
+ *  - A channel that sold something and has a blank commission is **undetermined**
+ *    [owner, 2026-08-17]. That is a legitimate saved state, not an unfinished
+ *    form: Zomato does not say what it kept until the week closes, so a day
+ *    recorded tonight genuinely cannot answer. It is filled in by the weekly
+ *    settlement, or by hand later.
+ *  - Anything typed that is not a number blocks the save, which is what
+ *    `undefined` means below.
+ *
+ * Returning `null` for the middle case is why this cannot simply use
+ * `requiredPaise`: that treats blank as unanswered and would make an ordinary
+ * day unsaveable until somebody invented a figure for it.
  */
-function netOf(stated: string, rate: string): number | null {
-  const statedPaise = paise(stated)
-  const bp = basisPoints(rate)
-  if (statedPaise === null || bp === null) return null
-  return netAggregatorPaise(statedPaise, bp)
+function commissionFor(revenue: string, commission: string): number | null | undefined {
+  const revenuePaise = paise(revenue)
+  if (revenuePaise === null) return undefined
+  if (revenuePaise === 0) return paise(commission) === 0 ? 0 : paise(commission)
+  if (commission.trim() === '') return null
+  return paise(commission) ?? undefined
 }
 
 function draftFrom(day: ManualLedgerDay): DayDraft {
@@ -155,21 +176,27 @@ function draftFrom(day: ManualLedgerDay): DayDraft {
     cashRemoved: rupees(day.cashRemovedPaise),
     cashRemovedReason: day.cashRemovedReason ?? '',
     countedCash: rupees(day.countedCashPaise),
-    zomatoCommission: percentOf(day.zomatoCommissionBp),
-    swiggyCommission: percentOf(day.swiggyCommissionBp),
+    // An undetermined commission opens as an empty field, which is how it was
+    // stored and how it saves again unless somebody types a figure into it.
+    zomatoCommission: day.zomatoCommissionPaise === null ? '' : rupees(day.zomatoCommissionPaise),
+    swiggyCommission: day.swiggyCommissionPaise === null ? '' : rupees(day.swiggyCommissionPaise),
     note: day.note ?? '',
   }
 }
 
-/** What a new day is offered: the previous row's close, and its rates. */
+/**
+ * What a new day is offered: the previous row's close, and nothing else.
+ *
+ * The commission fields used to be seeded from yesterday's rates, which made sense
+ * while a rate was a slow-moving property of a contract. It is an amount now
+ * [owner, 2026-08-17], and yesterday's amount is a function of yesterday's
+ * revenue: carrying it forward would offer a figure that is wrong by construction
+ * and looks deliberate. Opening cash still carries, because the drawer really does
+ * open with what it closed on.
+ */
 function draftInheriting(previous: ManualLedgerDay | null): DayDraft {
   if (!previous) return BLANK_DRAFT
-  return {
-    ...BLANK_DRAFT,
-    openingCash: String(previous.countedCashPaise / 100),
-    zomatoCommission: percentOf(previous.zomatoCommissionBp),
-    swiggyCommission: percentOf(previous.swiggyCommissionBp),
-  }
+  return { ...BLANK_DRAFT, openingCash: String(previous.countedCashPaise / 100) }
 }
 
 /**
@@ -186,8 +213,8 @@ function draftToDay(
 ): ManualLedgerDayInput | null {
   const openingCashPaise = requiredPaise(draft.openingCash)
   const countedCashPaise = requiredPaise(draft.countedCash)
-  const zomatoCommissionBp = basisPoints(draft.zomatoCommission)
-  const swiggyCommissionBp = basisPoints(draft.swiggyCommission)
+  const zomatoCommissionPaise = commissionFor(draft.zomatoRevenue, draft.zomatoCommission)
+  const swiggyCommissionPaise = commissionFor(draft.swiggyRevenue, draft.swiggyCommission)
   const cashRevenuePaise = counterRevenue?.cashRevenuePaise ?? paise(draft.cashRevenue)
   const upiRevenuePaise = counterRevenue?.upiRevenuePaise ?? paise(draft.upiRevenue)
   const zomatoRevenuePaise = paise(draft.zomatoRevenue)
@@ -198,8 +225,10 @@ function draftToDay(
   if (
     openingCashPaise === null ||
     countedCashPaise === null ||
-    zomatoCommissionBp === null ||
-    swiggyCommissionBp === null ||
+    // `undefined` is an unparseable entry and blocks the save; `null` is a
+    // deliberate "not known yet" and does not.
+    zomatoCommissionPaise === undefined ||
+    swiggyCommissionPaise === undefined ||
     cashRevenuePaise === null ||
     upiRevenuePaise === null ||
     zomatoRevenuePaise === null ||
@@ -227,8 +256,8 @@ function draftToDay(
     cashRemovedPaise,
     cashRemovedReason: draft.cashRemovedReason.trim() || null,
     countedCashPaise,
-    zomatoCommissionBp,
-    swiggyCommissionBp,
+    zomatoCommissionPaise,
+    swiggyCommissionPaise,
     note: draft.note.trim() || null,
   }
 }
@@ -278,7 +307,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
         setRecorded(day)
         setPrevious(earlier)
         // A recorded day is shown as it was stored. A new one inherits the
-        // previous close and rates, and inherits nothing on the first day.
+        // previous close, and inherits nothing on the first day.
         const nextDraft = day ? draftFrom(day) : draftInheriting(earlier)
         if (fromCounter) {
           nextDraft.cashRevenue = String(fromCounter.cashRevenuePaise / 100)
@@ -338,7 +367,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
     if (!draft) return
     if (!day) {
       setError(
-        'Opening cash, the counted amount and both commission rates are needed before this day can be saved.',
+        'Opening cash, the counted amount, and the commission on any channel that earned something, are needed before this day can be saved.',
       )
       return
     }
@@ -416,8 +445,9 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
               <SectionHeading title="Sales breakdown" hintTestId="hint-revenue">
                 <p>
                   Zomato and Swiggy as <strong>they</strong> state it; commission comes off inside
-                  each block. Each rate is stored against this day, so editing it moves this day
-                  only, and never the drawer.
+                  each block, as the amount they actually charged rather than a percentage. Both are
+                  stored against this day, so editing either moves this day only, and never the
+                  drawer.
                 </p>
                 <p>A refund is recorded by lowering Cash, so a negative figure is allowed there.</p>
               </SectionHeading>
@@ -458,20 +488,21 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
               )}
 
               {/*
-                Each aggregator is one outlined block: the stated figure, the rate
-                that applies to it, and what those two produce. Splitting them
-                across a revenue group and a commission group put the rate three
-                fields away from the figure it reduces, and left the net — the only
-                one of the three that is actually money received — nowhere at all.
+                Each aggregator is one outlined block: the stated figure, the
+                commission charged on it, and what those two produce. Splitting them
+                across a revenue group and a commission group put the commission
+                three fields away from the figure it reduces, and left the net — the
+                only one of the three that is actually money received — nowhere at
+                all.
               */}
               <Aggregator
                 name="Zomato"
                 statedId="zomato-revenue"
                 stated={draft.zomatoRevenue}
                 onStated={(value) => change('zomatoRevenue', value)}
-                rateId="zomato-commission"
-                rate={draft.zomatoCommission}
-                onRate={(value) => change('zomatoCommission', value)}
+                commissionId="zomato-commission"
+                commission={draft.zomatoCommission}
+                onCommission={(value) => change('zomatoCommission', value)}
                 netPaise={netOf(draft.zomatoRevenue, draft.zomatoCommission)}
               />
               <Aggregator
@@ -479,9 +510,9 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
                 statedId="swiggy-revenue"
                 stated={draft.swiggyRevenue}
                 onStated={(value) => change('swiggyRevenue', value)}
-                rateId="swiggy-commission"
-                rate={draft.swiggyCommission}
-                onRate={(value) => change('swiggyCommission', value)}
+                commissionId="swiggy-commission"
+                commission={draft.swiggyCommission}
+                onCommission={(value) => change('swiggyCommission', value)}
                 netPaise={netOf(draft.swiggyRevenue, draft.swiggyCommission)}
               />
             </section>
@@ -612,7 +643,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
             <Card data-testid="reading-incomplete">
               <p className="text-sm text-content-muted">
                 The drawer&rsquo;s difference appears here as you type, once the opening, the count
-                and both rates are in.
+                and any commission charged is in.
               </p>
             </Card>
           )}
@@ -649,9 +680,9 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
  * Deliberately the revenue side and nothing else: every drawer figure is on the
  * card below this one, and a card that repeated them would put two answers to the
  * same question a thumb's width apart. What only this card can show is what the
- * drawer never sees — UPI, and each aggregator reduced by **that day's own stored
- * rate**, which is named in the label so the figure can be checked without
- * opening the form.
+ * drawer never sees — UPI, and each aggregator reduced by **the commission that
+ * day was actually charged**, shown as its own line so the figure can be checked
+ * without opening the form.
  */
 function RecordedDay({
   businessDate,
@@ -668,10 +699,22 @@ function RecordedDay({
   fromCounter: boolean
   onEdit: () => void
 }) {
-  const zomatoCommissionPaise = day.zomatoRevenuePaise - reading.netZomatoPaise
-  const swiggyCommissionPaise = day.swiggyRevenuePaise - reading.netSwiggyPaise
+  /*
+   * An undetermined commission leaves three figures unknown, and each says so
+   * rather than showing a number.
+   *
+   * Nought would be the convenient substitute and the wrong one: it would claim
+   * the whole of the day's Zomato revenue arrived, which is the one direction an
+   * error here flatters the shop.
+   */
+  const zomatoCommissionPaise =
+    reading.netZomatoPaise === null ? null : day.zomatoRevenuePaise - reading.netZomatoPaise
+  const swiggyCommissionPaise =
+    reading.netSwiggyPaise === null ? null : day.swiggyRevenuePaise - reading.netSwiggyPaise
   const netRevenuePaise =
-    day.cashRevenuePaise + day.upiRevenuePaise + reading.netZomatoPaise + reading.netSwiggyPaise
+    reading.netZomatoPaise === null || reading.netSwiggyPaise === null
+      ? null
+      : day.cashRevenuePaise + day.upiRevenuePaise + reading.netZomatoPaise + reading.netSwiggyPaise
 
   return (
     <Card className="space-y-2" data-testid="ledger-day-recorded">
@@ -714,8 +757,8 @@ function RecordedDay({
           testId="recorded-zomato-gross"
         />
         <Row
-          label={`Less commission at ${percentOf(day.zomatoCommissionBp)}%`}
-          paise={-zomatoCommissionPaise}
+          label="Less commission"
+          paise={zomatoCommissionPaise === null ? null : -zomatoCommissionPaise}
           testId="recorded-zomato-commission"
         />
         <Row
@@ -732,8 +775,8 @@ function RecordedDay({
           testId="recorded-swiggy-gross"
         />
         <Row
-          label={`Less commission at ${percentOf(day.swiggyCommissionBp)}%`}
-          paise={-swiggyCommissionPaise}
+          label="Less commission"
+          paise={swiggyCommissionPaise === null ? null : -swiggyCommissionPaise}
           testId="recorded-swiggy-commission"
         />
         <Row
@@ -744,11 +787,36 @@ function RecordedDay({
       </div>
 
       <div className="flex items-baseline justify-between border-t border-border pt-2">
-        <span className="text-sm font-bold text-content">Revenue actually received</span>
-        <Money paise={netRevenuePaise} className="font-bold" data-testid="recorded-revenue-net" />
+        <span className="text-sm font-bold text-content">
+          {netRevenuePaise === null ? 'Revenue received, at most' : 'Revenue actually received'}
+        </span>
+        {netRevenuePaise === null ? (
+          /*
+           * A ceiling, and the label says so.
+           *
+           * Commission can only reduce this, so the gross is the most that can have
+           * arrived. Showing it under the ordinary heading would state an
+           * approximation as a fact; changing the heading is what makes the same
+           * number honest.
+           */
+          <Money
+            paise={
+              day.cashRevenuePaise +
+              day.upiRevenuePaise +
+              day.zomatoRevenuePaise +
+              day.swiggyRevenuePaise
+            }
+            className="font-bold"
+            data-testid="recorded-revenue-net"
+          />
+        ) : (
+          <Money paise={netRevenuePaise} className="font-bold" data-testid="recorded-revenue-net" />
+        )}
       </div>
       <p className="text-xs text-content-muted">
-        Each rate is the one stored against this day. Of all this, only the cash reached the drawer.
+        {netRevenuePaise === null
+          ? 'One channel’s commission is not known yet, so this is the most that can have arrived. It settles when the week does. Of all this, only the cash reached the drawer.'
+          : 'Commission is the amount charged on this day. Of all this, only the cash reached the drawer.'}
       </p>
     </Card>
   )
@@ -874,7 +942,7 @@ function DayReadingCard({
 /**
  * A section's title, with everything that used to be a paragraph under it.
  *
- * The rules this ledger runs on are load-bearing — a rate stored per day, a
+ * The rules this ledger runs on are load-bearing — commission stored per day, a
  * fridge that is cash out and not an expense — but they are read once and then
  * known, while the form is opened nightly. Left on screen they cost more vertical
  * space than the fields, and a form nobody can see the end of is a form that gets
@@ -970,30 +1038,34 @@ function InfoHint({
 }
 
 /**
- * One aggregator: what it says it sold, the rate it keeps, and what arrives.
+ * One aggregator: what it says it sold, what it kept, and what arrives.
  *
  * The net figure is the point of the block. It is the only one of the three that
  * is money the business actually received, and it is computed here as the figures
  * are typed — through the same `netAggregatorPaise` the month uses, so the day and
- * the month can never round differently.
+ * the month cannot disagree.
+ *
+ * Both fields are money [owner, 2026-08-17]. The second used to be a percentage,
+ * which meant this block mixed two units and needed a `%` suffix to tell them
+ * apart; two money fields side by side need no such hint.
  */
 function Aggregator({
   name,
   statedId,
   stated,
   onStated,
-  rateId,
-  rate,
-  onRate,
+  commissionId,
+  commission,
+  onCommission,
   netPaise,
 }: {
   name: string
   statedId: string
   stated: string
   onStated: (value: string) => void
-  rateId: string
-  rate: string
-  onRate: (value: string) => void
+  commissionId: string
+  commission: string
+  onCommission: (value: string) => void
   netPaise: number | null
 }) {
   return (
@@ -1012,20 +1084,19 @@ function Aggregator({
           testId={statedId}
         />
         <NumberField
-          id={rateId}
+          id={commissionId}
           label="Commission"
           srContext={name}
-          unit="percent"
-          value={rate}
-          onChange={onRate}
-          testId={rateId}
+          value={commission}
+          onChange={onCommission}
+          testId={commissionId}
         />
       </div>
       <p className="flex items-baseline justify-between gap-2">
         <span className="text-xs text-content-muted">Actually received</span>
         {netPaise === null ? (
-          // Not zero: with no rate typed there is nothing to compute, and ₹0 would
-          // be a figure where there is only an unanswered question.
+          // Not zero: with the commission unanswered there is nothing to compute,
+          // and ₹0 would be a figure where there is only an open question.
           <span className="text-sm text-content-muted" data-testid={`${statedId}-net`}>
             &mdash;
           </span>
@@ -1060,7 +1131,6 @@ function NumberField({
   value,
   onChange,
   testId,
-  unit = 'rupees',
   srContext,
 }: {
   id: string
@@ -1068,33 +1138,27 @@ function NumberField({
   value: string
   onChange: (value: string) => void
   testId: string
-  unit?: 'rupees' | 'percent'
   srContext?: string
 }) {
-  const rupees = unit === 'rupees'
   return (
     <div className="min-w-0 space-y-1">
       <label htmlFor={id} className="block truncate text-xs font-semibold text-content">
         {label}
-        <span className="sr-only">
-          {srContext ? ` for ${srContext}` : ''}
-          {rupees ? ', in rupees' : ', as a percentage'}
-        </span>
+        <span className="sr-only">{srContext ? ` for ${srContext}` : ''}, in rupees</span>
       </label>
       <div className="relative">
         {/*
-          The unit is subordinate to the digits, so it is set a step smaller — and
-          never smaller than that, because it is the only thing distinguishing a
-          rate field from a money field once the labels are this short.
+          Every field on this form is money now that commission is an amount [owner,
+          2026-08-17], so the `percent` variant is gone rather than left unused. A
+          unit nothing passes is a unit somebody re-reaches for, and the reason it
+          was removed — that a rate is an estimate dressed as a figure — would not
+          travel with it.
         */}
         <span
           aria-hidden
-          className={cn(
-            'pointer-events-none absolute top-1/2 -translate-y-1/2 text-base text-content-muted',
-            rupees ? 'left-2.5' : 'right-2.5',
-          )}
+          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-base text-content-muted"
         >
-          {rupees ? '₹' : '%'}
+          ₹
         </span>
         {/*
           The height is the phone control token; the font size is deliberately NOT
@@ -1108,12 +1172,7 @@ function NumberField({
           value={value}
           data-testid={testId}
           onChange={(event) => onChange(event.target.value)}
-          className={cn(
-            'h-[var(--size-control-phone)]',
-            // A rate is read against its unit, so the digits sit beside the `%`
-            // rather than a thumb's width away from it across an empty box.
-            rupees ? 'pl-7 pr-2' : 'pl-3 pr-7 text-right',
-          )}
+          className="h-[var(--size-control-phone)] pl-7 pr-2"
         />
       </div>
     </div>
@@ -1163,7 +1222,8 @@ function Row({
   hint,
 }: {
   label: string
-  paise: number
+  /** `null` where the figure is undetermined, which is not the same as nought. */
+  paise: number | null
   testId: string
   /** Nullable, so a stored reason that was never given passes straight through. */
   hint?: string | null
@@ -1172,7 +1232,21 @@ function Row({
     <div>
       <div className="flex items-baseline justify-between">
         <span className="text-sm text-content-muted">{label}</span>
-        <Money paise={amount} data-testid={testId} />
+        {amount === null ? (
+          /*
+           * Words, not a dash and not a nought.
+           *
+           * A dash reads as "nothing here" and nought reads as "nothing was
+           * charged"; both are claims. "Not known yet" is the only rendering that
+           * says what is actually true, and it says the same thing to a screen
+           * reader, which a typographic mark would not.
+           */
+          <span className="text-sm text-content-muted" data-testid={testId}>
+            Not known yet
+          </span>
+        ) : (
+          <Money paise={amount} data-testid={testId} />
+        )}
       </div>
       {hint && <p className="text-xs text-content-muted">{hint}</p>}
     </div>

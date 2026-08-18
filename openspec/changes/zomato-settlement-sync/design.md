@@ -47,7 +47,9 @@ The cost is two parsers and a swap. The swap is not incidental complexity, it is
 
 ### Store gross, commission and net as measured paise, not a rate
 
-The existing `zomato_commission_bp` stores an integer basis-point rate and derives net. Reproducing one measured day, 15 Aug at Kalyani, gross ₹2,970.03 and net ₹2,131.11 implies 2824.89 bp; rounded to 2825 bp the ledger recomputes ₹2,131.02, nine paise adrift.
+The existing `zomato_commission_bp` stored an integer basis-point rate and derived net. Reproducing one measured day, 15 Aug at Kalyani, gross ₹2,970.03 and net ₹2,131.11 implies 2824.89 bp; rounded to 2825 bp the ledger recomputed ₹2,131.02, nine paise adrift.
+
+The first version of this change kept that column for Swiggy and for pre-sync days, which left two representations of one idea. The owner cut it instead [2026-08-17]: commission is an amount everywhere, typed days included, existing production rows are converted, and there is no carry-forward. What made a rate defensible was that a typed day had nothing better; what makes it indefensible is that a rate is not one number. Zomato publishes a 14% base service fee, and the actual take on one sampled order was 37.8%, because the charge is that fee plus a per-kilometre fulfilment fee less a capping discount plus a payment fee plus tax on all of it.
 
 Nine paise is nothing as money and fatal as a check: the entire value of this change is being able to say a week matched to the paisa, and a derived net can never be exactly zero against Zomato.
 

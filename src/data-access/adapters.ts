@@ -1957,9 +1957,19 @@ export interface ManualLedgerDay {
   cashRemovedPaise: number
   cashRemovedReason: string | null
   countedCashPaise: number
-  /** Basis points that applied to THIS day. 2250 is 22.5%. */
-  zomatoCommissionBp: number
-  swiggyCommissionBp: number
+  /**
+   * The commission actually charged on this day, in paise. Never a rate [owner,
+   * 2026-08-17]: the take swings between roughly 24% and 35% day to day, so a
+   * percentage was an estimate wearing the clothes of an exact figure. Typed off
+   * the statement, or read from Zomato where the day is synced.
+   *
+   * **`null` means undetermined**, not nought. Zomato's Order History shows today's
+   * orders but carries no commission and no payout, so a day read tonight knows
+   * what came in and cannot know what was kept until its week closes. A channel
+   * that sold nothing is charged nought, which is known and therefore not null.
+   */
+  zomatoCommissionPaise: number | null
+  swiggyCommissionPaise: number | null
   /** Optional, unlike an expense description: it explains a cash difference. */
   note: string | null
   /**
@@ -1971,26 +1981,21 @@ export interface ManualLedgerDay {
   recordedBy: LedgerActor
   updatedBy: LedgerActor | null
   /**
-   * What Zomato itself says this day earned, where the sync covers it. Null on
+   * Where this day's Zomato figures came from, where the sync covers it. Null on
    * every day recorded before the sync, and on every day at an outlet it does
    * not cover, which is what keeps a historical month computing exactly as it
    * was recorded.
+   *
+   * It carries no figures of its own. Since commission became an amount, a synced
+   * day and a typed day store the same two numbers in the same two columns, and
+   * duplicating them here would be inviting the copy to disagree with the
+   * original.
    */
   zomatoSettlement: ZomatoSettlement | null
 }
 
-/**
- * A day's Zomato figures as measured rather than derived.
- *
- * Three separate figures and no rate. The effective rate moves between roughly
- * 24% and 35% across days, and rounding a measured rate back to basis points
- * loses the paise on which reconciliation depends — nine of them on one measured
- * day, which is nothing as money and fatal as a check.
- */
+/** Where a day's Zomato figures came from, and what they moved from. */
 export interface ZomatoSettlement {
-  grossPaise: number
-  commissionPaise: number
-  netPaise: number
   /**
    * `provisional` the week is not paid yet; `settled` it is paid and reconciles;
    * `disputed` it is paid and does not. The third is not a kind of provisional:
@@ -1998,12 +2003,12 @@ export interface ZomatoSettlement {
    */
   state: 'provisional' | 'settled' | 'disputed'
   /** What the owner had typed before the sync took the day over, if anything. */
-  supersededTyped: { revenuePaise: number; commissionBp: number; at: string } | null
+  supersededTyped: { revenuePaise: number; commissionPaise: number; at: string } | null
   /**
    * What the day read before its week settled, kept only where settling moved
    * it. Present is precisely what "revised" means.
    */
-  revisedFrom: { grossPaise: number; commissionPaise: number; netPaise: number } | null
+  revisedFrom: { revenuePaise: number; commissionPaise: number } | null
   revisedAt: string | null
 }
 

@@ -103,14 +103,13 @@ values (:'KAL', 'zomato', pg_temp.ledger_day(-3)),
 -- real to be refused.
 insert into public.manual_ledger_days
   (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   zomato_revenue_paise, zomato_commission_bp, swiggy_commission_bp,
-   zomato_gross_paise, zomato_commission_paise, zomato_net_paise,
+   zomato_revenue_paise, zomato_commission_paise, swiggy_commission_paise,
    zomato_settlement_state, recorded_by)
 values
-  (:'KAL', pg_temp.ledger_day(2), 0, 0, 0, 0, 2100,
-   297003, 83892, 213111, 'settled', :'OWNER'),
-  (:'KPA', pg_temp.ledger_day(2), 0, 0, 0, 0, 2100,
-   412200, 128000, 284200, 'provisional', :'OWNER');
+  (:'KAL', pg_temp.ledger_day(2), 0, 0,
+   297003, 83892, 0, 'settled', :'OWNER'),
+  (:'KPA', pg_temp.ledger_day(2), 0, 0,
+   412200, 128000, 0, 'provisional', :'OWNER');
 
 -- ---------------------------------------------------------------------------
 -- 1. The owner reads all of it, across both outlets.
@@ -132,11 +131,14 @@ select is(
   2::bigint,
   'and the sync date for each outlet');
 
+-- Net is a subtraction rather than a column [owner, 2026-08-17]. With commission
+-- exact, a stored third figure would be a copy able to disagree with the two it
+-- came from, so the reading computes it and there is nothing to store.
 select is(
-  (select zomato_net_paise from public.manual_ledger_days
+  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(2)),
   213111::bigint,
-  'and a synced day''s measured net');
+  'and a synced day''s measured net, as the difference of the two figures stored');
 
 reset role;
 
@@ -279,19 +281,20 @@ begin
 end;
 $$;
 
-select * from pg_temp.day_column_unreadable('biller_kalyani', :'BILLER_KAL', 'zomato_net_paise');
+select * from pg_temp.day_column_unreadable('biller_kalyani', :'BILLER_KAL',
+  'zomato_settlement_state');
 select * from pg_temp.day_column_unreadable('employee_kalyani', :'EMPLOYEE_KAL',
-  'zomato_net_paise');
+  'zomato_commission_paise');
 select * from pg_temp.day_column_unreadable('employee_kalyani', :'EMPLOYEE_KAL',
-  'zomato_typed_revenue_paise');
+  'zomato_superseded_revenue_paise');
 
 -- A plain typed day with no settlement figures at all, so the refusals below
 -- exercise the guard rather than the state machine or a CHECK.
 select pg_temp.unimpersonate();
 insert into public.manual_ledger_days
   (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   zomato_revenue_paise, zomato_commission_bp, swiggy_commission_bp, recorded_by)
-values (:'KAL', pg_temp.ledger_day(3), 0, 0, 295000, 2825, 2100, :'OWNER');
+   zomato_revenue_paise, zomato_commission_paise, swiggy_commission_paise, recorded_by)
+values (:'KAL', pg_temp.ledger_day(3), 0, 0, 295000, 83338, 0, :'OWNER');
 
 create function pg_temp.day_column_unwritable(persona text, p_sub uuid, col text, val text)
 returns setof text language plpgsql as $$
@@ -315,7 +318,7 @@ $$;
 select * from pg_temp.day_column_unwritable('fa_kalyani', :'FA_KAL',
   'zomato_settlement_state', '''settled''');
 select * from pg_temp.day_column_unwritable('fa_kalyani', :'FA_KAL',
-  'zomato_typed_revenue_paise', '95000');
+  'zomato_superseded_revenue_paise', '95000');
 select * from pg_temp.day_column_unwritable('the owner', :'OWNER',
   'zomato_settlement_state', '''settled''');
 
@@ -334,10 +337,9 @@ select throws_ok(
   format($q$
     insert into public.manual_ledger_days
       (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       zomato_commission_bp, swiggy_commission_bp,
-       zomato_gross_paise, zomato_commission_paise, zomato_net_paise,
+       zomato_revenue_paise, zomato_commission_paise, swiggy_commission_paise,
        zomato_settlement_state)
-    values (%L, %L, 0, 0, 0, 0, 100000, 30000, 70000, 'settled') $q$,
+    values (%L, %L, 0, 0, 100000, 30000, 0, 'settled') $q$,
     :'KAL', pg_temp.ledger_day(15)),
   'P0001', null,
   'and a day cannot be recorded as though it had been synced');
@@ -353,94 +355,99 @@ returns text language sql as $$
   select format(
     'insert into public.manual_ledger_days '
     '(outlet_id, business_date, opening_cash_paise, counted_cash_paise, '
-    ' zomato_commission_bp, swiggy_commission_bp, recorded_by, %s) '
+    ' recorded_by, %s) '
+    -- The commission columns are omitted rather than defaulted to nought here, so
+    -- a case below can name them without colliding with this list. Both are NOT
+    -- NULL with a nought default, which is the honest value for a day that sold
+    -- nothing on a channel.
     'values (''00000000-0000-4000-a000-000000000001'', '
-    'public.app_business_date(now(), time ''04:00'') - 9, 0, 0, 0, 0, '
+    'public.app_business_date(now(), time ''04:00'') - 9, 0, 0, '
     '''10000000-0000-4000-a000-000000000001'', %s)',
     cols, vals)
 $$;
 
-select throws_ok(
-  pg_temp.bad_day('zomato_gross_paise, zomato_settlement_state', '100000, ''settled'''),
-  '23514', null,
-  'a partial triple is refused: gross alone would let a total read from one figure');
+/*
+ * Four constraints that used to be tested here are gone, and their absence is the
+ * point of the 2026-08-17 change rather than a gap in this file.
+ *
+ * A synced day used to carry its own gross, commission and net beside a typed
+ * revenue and rate, which needed a constraint holding the triple together, one
+ * making it add up, one pairing it with a state, and one zeroing the typed pair so
+ * nothing could sum a measured figure with an estimated one. Commission is an
+ * amount now, so both sources write the same two columns and net is a subtraction:
+ * there is no triple to hold together, nothing to add up, and no second pair to
+ * zero. A failure that cannot be represented needs no constraint, and one written
+ * against it would describe a schema that no longer exists.
+ *
+ * What remains is everything about the ARCHIVE: what a figure moved from, and
+ * when. Those are still separate columns, so they can still contradict the row
+ * they sit on.
+ */
 
 select throws_ok(
-  pg_temp.bad_day(
-    'zomato_gross_paise, zomato_commission_paise, zomato_net_paise, zomato_settlement_state',
-    '100000, 30000, 60000, ''settled'''),
-  '23514', null,
-  'a triple that does not add up is refused');
-
-select throws_ok(
-  pg_temp.bad_day(
-    'zomato_gross_paise, zomato_commission_paise, zomato_net_paise',
-    '100000, 30000, 70000'),
-  '23514', null,
-  'figures with no settlement state are refused, because nothing could say '
-  'whether they are provisional or final');
-
-select throws_ok(
-  pg_temp.bad_day('zomato_settlement_state', '''provisional'''),
-  '23514', null,
-  'and a settlement state with no figures describes nothing, so it is refused too');
-
-select throws_ok(
-  pg_temp.bad_day(
-    'zomato_gross_paise, zomato_commission_paise, zomato_net_paise, zomato_settlement_state',
-    '100000, 30000, 70000, ''guessed'''),
+  pg_temp.bad_day('zomato_settlement_state', '''guessed'''),
   '23514', null,
   'an unknown settlement state is refused');
 
 select throws_ok(
   pg_temp.bad_day(
-    'zomato_gross_paise, zomato_commission_paise, zomato_net_paise, '
-    'zomato_settlement_state, zomato_revenue_paise',
-    '100000, 30000, 70000, ''settled'', 95000'),
+    'zomato_settlement_state, zomato_superseded_revenue_paise',
+    '''settled'', 95000'),
   '23514', null,
-  'a synced day carrying a typed figure as well is refused, so no path can add '
-  'a measured figure to a typed one');
+  'a retained figure without the moment it was superseded is refused');
+
+-- Half an archive is now LEGAL, and deliberately so: a typed day whose commission
+-- was undetermined when the sync took it over archives the revenue the owner
+-- recorded and a null beside it. Refusing that would throw away the half that was
+-- known in order to avoid storing the half that never existed.
+select lives_ok(
+  pg_temp.bad_day(
+    'zomato_revenue_paise, zomato_settlement_state, zomato_superseded_revenue_paise, '
+    'zomato_superseded_at',
+    '100000, ''settled'', 95000, now()'),
+  'an archive may keep the revenue with the commission undetermined');
+
+-- Removed again, because `bad_day` writes a fixed business date and every other
+-- case on it expects to be the one inserting. The two `lives_ok` cases in this
+-- section would otherwise collide on the uniqueness constraint rather than on the
+-- claim being tested.
+delete from public.manual_ledger_days
+ where outlet_id = '00000000-0000-4000-a000-000000000001'
+   and business_date = public.app_business_date(now(), time '04:00') - 9;
 
 select throws_ok(
   pg_temp.bad_day(
-    'zomato_gross_paise, zomato_commission_paise, zomato_net_paise, '
-    'zomato_settlement_state, zomato_typed_revenue_paise',
-    '100000, 30000, 70000, ''settled'', 95000'),
-  '23514', null,
-  'a retained typed figure without the moment it was superseded is refused');
-
-select throws_ok(
-  pg_temp.bad_day(
-    'zomato_typed_revenue_paise, zomato_typed_commission_bp, zomato_superseded_at',
-    '95000, 2500, now()'),
+    'zomato_superseded_revenue_paise, zomato_superseded_commission_paise, '
+    'zomato_superseded_at',
+    '95000, 25000, now()'),
   '23514', null,
   'nothing can be superseded without something superseding it');
 
 select throws_ok(
   pg_temp.bad_day(
-    'zomato_gross_paise, zomato_commission_paise, zomato_net_paise, '
-    'zomato_settlement_state, zomato_provisional_gross_paise, '
-    'zomato_provisional_commission_paise, zomato_provisional_net_paise, zomato_revised_at',
-    '100000, 30000, 70000, ''provisional'', 99000, 29000, 70000, now()'),
+    'zomato_revenue_paise, zomato_commission_paise, zomato_settlement_state, '
+    'zomato_provisional_revenue_paise, zomato_provisional_commission_paise, '
+    'zomato_revised_at',
+    '100000, 30000, ''provisional'', 99000, 29000, now()'),
   '23514', null,
   'only a settled day can have been revised');
 
 select throws_ok(
   pg_temp.bad_day(
-    'zomato_gross_paise, zomato_commission_paise, zomato_net_paise, '
-    'zomato_settlement_state, zomato_provisional_gross_paise, '
-    'zomato_provisional_commission_paise, zomato_provisional_net_paise, zomato_revised_at',
-    '100000, 30000, 70000, ''settled'', 100000, 30000, 70000, now()'),
+    'zomato_revenue_paise, zomato_commission_paise, zomato_settlement_state, '
+    'zomato_provisional_revenue_paise, zomato_provisional_commission_paise, '
+    'zomato_revised_at',
+    '100000, 30000, ''settled'', 100000, 30000, now()'),
   '23514', null,
   'and a day whose settled figures match the provisional ones cannot be marked '
   'revised, because nothing about it changed');
 
 select lives_ok(
   pg_temp.bad_day(
-    'zomato_gross_paise, zomato_commission_paise, zomato_net_paise, '
-    'zomato_settlement_state, zomato_provisional_gross_paise, '
-    'zomato_provisional_commission_paise, zomato_provisional_net_paise, zomato_revised_at',
-    '100000, 30000, 70000, ''settled'', 92085, 30000, 62085, now()'),
+    'zomato_revenue_paise, zomato_commission_paise, zomato_settlement_state, '
+    'zomato_provisional_revenue_paise, zomato_provisional_commission_paise, '
+    'zomato_revised_at',
+    '100000, 30000, ''settled'', 92085, 30000, now()'),
   'a settled day that grew when its week paid is stored with what it grew from');
 
 -- ---------------------------------------------------------------------------
@@ -473,12 +480,11 @@ select throws_ok(
 -- A paid week that does not add up, and its way back out.
 insert into public.manual_ledger_days
   (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   zomato_revenue_paise, zomato_commission_bp, swiggy_commission_bp,
-   zomato_gross_paise, zomato_commission_paise, zomato_net_paise,
+   zomato_revenue_paise, zomato_commission_paise, swiggy_commission_paise,
    zomato_settlement_state, recorded_by)
 values
-  (:'KAL', pg_temp.ledger_day(11), 0, 0, 0, 0, 2100,
-   250000, 70000, 180000, 'provisional', :'OWNER');
+  (:'KAL', pg_temp.ledger_day(11), 0, 0,
+   250000, 70000, 0, 'provisional', :'OWNER');
 
 select is(
   pg_temp.rows_changed(format(

@@ -17,24 +17,19 @@ import {
  * Everything the manual ledger derives, in one place, in integer paise.
  *
  * **The database stores facts; this file computes figures.** There is no view, no
- * SQL function and no generated column behind this surface (design D3), for two
- * reasons: a migration that drops two tables is trivially reviewable where one
- * that also drops views invites leaving something behind, and the commission
- * rounding rule has to be identical wherever it runs, which it is if there is
- * exactly one implementation of it.
+ * SQL function and no generated column behind this surface (design D3): a
+ * migration that drops two tables is trivially reviewable where one that also
+ * drops views invites leaving something behind.
  *
- * The one rule worth reading before the code: **commission is applied per day,
- * from that day's own stored rate, and never to a month's total.** Days in a
- * month may carry different rates — that is the whole point of storing the rate
- * on the row — so a month total reduced by one rate would be a different, wrong
- * number that happens to look plausible.
+ * **Commission is an amount, never a rate** [owner, 2026-08-17]. It used to be
+ * stored as basis points and multiplied out here, which needed a rounding rule
+ * that had to mean the same thing on both sides of zero and a warning that a
+ * month's total must never be reduced by one day's rate. All of that is gone. The
+ * measured take rate swings between 24% and 35% day to day — 14% is the only
+ * percentage Zomato publishes and the real figure on one sampled order was 37.8% —
+ * so a stored rate was an estimate presented as exact. Both channels now carry the
+ * commission Zomato or Swiggy actually charged, and net is one subtraction.
  */
-
-/** 10000 basis points is 100%. */
-export const COMMISSION_BP_SCALE = 10_000
-
-/** Half of one basis-point scale, which is what makes the division round half up. */
-const COMMISSION_HALF = COMMISSION_BP_SCALE / 2
 
 function assertPaise(value: number, what: string): number {
   if (!Number.isInteger(value)) {
@@ -46,30 +41,22 @@ function assertPaise(value: number, what: string): number {
 }
 
 /**
- * What the aggregator keeps: `(stated × bp + 5000) / 10000`, integer division.
+ * What actually arrives: the stated figure less the commission charged on it, or
+ * `null` where that commission is **undetermined**.
  *
- * Rounds half up, and rounds **symmetrically about zero**. A refund can push a
- * day's stated aggregator revenue negative, and `Math.trunc` on a negative
- * numerator rounds toward zero instead of up, so a month containing one refunded
- * day would fail to reconcile by a paisa. Rounding the magnitude and reapplying
- * the sign makes the rule mean the same thing on both sides of zero.
+ * Null is a real state [owner, 2026-08-17], not a missing value to be defaulted.
+ * Zomato's Order History shows today's orders but carries no commission and no
+ * payout, so a day read tonight knows what came in and cannot know what was kept
+ * until its week closes. Returning nought instead would claim the whole of the
+ * revenue arrived, which is wrong in the one direction that flatters the shop.
  */
-export function commissionPaise(statedPaise: number, bp: number): number {
+export function netAggregatorPaise(
+  statedPaise: number,
+  commissionPaise: number | null,
+): number | null {
   assertPaise(statedPaise, 'stated aggregator revenue')
-  if (!Number.isInteger(bp) || bp < 0 || bp > COMMISSION_BP_SCALE) {
-    throw new RangeError(
-      `Expected a commission rate in basis points between 0 and ${COMMISSION_BP_SCALE}, received ${String(bp)}.`,
-    )
-  }
-
-  const sign = statedPaise < 0 ? -1 : 1
-  const magnitude = Math.abs(statedPaise)
-  return sign * Math.trunc((magnitude * bp + COMMISSION_HALF) / COMMISSION_BP_SCALE)
-}
-
-/** What actually arrives: the stated figure less the commission on it. */
-export function netAggregatorPaise(statedPaise: number, bp: number): number {
-  return statedPaise - commissionPaise(statedPaise, bp)
+  if (commissionPaise === null) return null
+  return statedPaise - assertPaise(commissionPaise, 'aggregator commission')
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,60 +65,36 @@ export function netAggregatorPaise(statedPaise: number, bp: number): number {
 /** Gross, commission and net for one day's Zomato revenue, however it was got. */
 export interface ZomatoReading {
   grossPaise: number
-  commissionPaise: number
-  netPaise: number
+  /** `null` where nobody has established what Zomato kept for this day yet. */
+  commissionPaise: number | null
+  /** `null` for the same reason: an unknown deduction leaves an unknown net. */
+  netPaise: number | null
   /** `null` on a day nobody synced, which is every day before the sync existed. */
   settlement: ZomatoSettlement | null
 }
 
 /**
- * A day's Zomato figures, chosen by **what that day itself stores** rather than
- * by today's configuration.
+ * A day's Zomato figures, and where they came from.
  *
- * This is the whole of the migration story. A day the sync covers answers from
- * its measured triple; a day recorded before it answers from its stated figure
- * and its own stored rate, exactly as it always did. Switching on the day's own
- * values rather than on the outlet's current sync date is what makes a
- * historical month unmovable: turning the sync on, or off again, cannot reach
- * backwards and change a figure that was already recorded.
+ * One pair of stored columns whatever the source, since commission became an
+ * amount: a synced day and a typed day hold the same kind of number in the same
+ * place, and `zomatoSettlement` is the only thing that says which wrote them.
  *
- * No stored percentage participates in a synced day's net. The rate such a day
- * implies is available for display through `effectiveRateBp`, and is a reading
- * of the two measured figures rather than an input to either.
+ * That is also what keeps a historical month unmovable. The reading depends on
+ * what the row itself stores and on nothing about today's configuration, so
+ * turning the sync on, or off again, cannot reach backwards and change a figure
+ * that was already recorded.
  */
 export function readZomato(day: ManualLedgerDayFigures): ZomatoReading {
-  const settlement = day.zomatoSettlement ?? null
-
-  if (settlement) {
-    return {
-      grossPaise: assertPaise(settlement.grossPaise, 'Zomato gross'),
-      commissionPaise: assertPaise(settlement.commissionPaise, 'Zomato commission'),
-      netPaise: assertPaise(settlement.netPaise, 'Zomato net'),
-      settlement,
-    }
-  }
-
   const grossPaise = assertPaise(day.zomatoRevenuePaise, 'Zomato revenue')
-  const commission = commissionPaise(grossPaise, day.zomatoCommissionBp)
+  const commissionPaise = day.zomatoCommissionPaise
   return {
     grossPaise,
-    commissionPaise: commission,
-    netPaise: grossPaise - commission,
-    settlement: null,
+    commissionPaise:
+      commissionPaise === null ? null : assertPaise(commissionPaise, 'Zomato commission'),
+    netPaise: netAggregatorPaise(grossPaise, commissionPaise),
+    settlement: day.zomatoSettlement ?? null,
   }
-}
-
-/**
- * The rate a measured day implies, in basis points, for display only.
- *
- * Returns null on a day that earned nothing, because a rate on nil revenue is a
- * division by zero dressed up as a percentage. Never fed back into any figure:
- * rounding this to basis points and recomputing the net is precisely the nine
- * paise that made a stored rate unusable.
- */
-export function effectiveRateBp(reading: ZomatoReading): number | null {
-  if (reading.grossPaise === 0) return null
-  return Math.round((reading.commissionPaise * COMMISSION_BP_SCALE) / reading.grossPaise)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -149,8 +112,9 @@ export interface DayReading {
   nonCashExpensesPaise: number
   /** Gross, by channel, for the day's own reading. */
   grossRevenuePaise: number
-  netZomatoPaise: number
-  netSwiggyPaise: number
+  /** `null` where that channel's commission is undetermined. */
+  netZomatoPaise: number | null
+  netSwiggyPaise: number | null
   /** How this day answered for Zomato, and whether it was measured or derived. */
   zomato: ZomatoReading
 }
@@ -197,7 +161,7 @@ export function readDay(
       zomato.grossPaise +
       assertPaise(day.swiggyRevenuePaise, 'Swiggy revenue'),
     netZomatoPaise: zomato.netPaise,
-    netSwiggyPaise: netAggregatorPaise(day.swiggyRevenuePaise, day.swiggyCommissionBp),
+    netSwiggyPaise: netAggregatorPaise(day.swiggyRevenuePaise, day.swiggyCommissionPaise),
     zomato,
   }
 }
@@ -299,11 +263,28 @@ export interface MonthReading {
   grossUpiPaise: number
   grossZomatoPaise: number
   grossSwiggyPaise: number
-  /** Per day, from each day's own stored rate, then summed. Never the reverse. */
+  /**
+   * Per day, from each day's own stored commission, then summed. Never the reverse.
+   *
+   * **A CEILING where any day in the month is undetermined** [owner, 2026-08-17].
+   * Commission can only reduce a net, so a month totalling the determined days and
+   * leaving the rest at their gross states the most the shop can have received. It
+   * cannot mislead upward, and it never stops being a usable number — which matters,
+   * because until a week closes on Sunday most weeks contain undetermined days.
+   */
   netZomatoPaise: number
   netSwiggyPaise: number
+  /** Commission KNOWN so far. A floor, for the same reason the net is a ceiling. */
   zomatoCommissionPaise: number
   swiggyCommissionPaise: number
+  /**
+   * How many days in the month have an undetermined commission on either channel.
+   *
+   * Nought means every figure above is exact. Anything else means the nets are
+   * ceilings and the surface must say so: an approximate number presented as final
+   * is the failure this whole capability was built to remove.
+   */
+  undeterminedDays: number
   /** Cash + UPI + both aggregators net of their own commission. */
   netRevenuePaise: number
   expensesByCategory: MonthCategoryTotal[]
@@ -348,6 +329,7 @@ export function readMonth(
   let grossSwiggyPaise = 0
   let netZomatoPaise = 0
   let netSwiggyPaise = 0
+  let undeterminedDays = 0
 
   for (const day of days) {
     grossCashPaise += assertPaise(day.cashRevenuePaise, 'cash revenue')
@@ -358,9 +340,22 @@ export function readMonth(
     // of the loop is the bug this whole per-day design exists to make
     // impossible.
     const zomato = readZomato(day)
+    const swiggyNet = netAggregatorPaise(day.swiggyRevenuePaise, day.swiggyCommissionPaise)
     grossZomatoPaise += zomato.grossPaise
-    netZomatoPaise += zomato.netPaise
-    netSwiggyPaise += netAggregatorPaise(day.swiggyRevenuePaise, day.swiggyCommissionBp)
+
+    /*
+     * An undetermined day contributes its GROSS, which is what makes the total a
+     * ceiling rather than an understatement.
+     *
+     * The alternative — skipping the day — would report a month smaller than the
+     * shop actually earned, and understating profit is its own kind of wrong: it is
+     * the number the owner would make decisions against. Contributing the gross
+     * says "at most this much arrived", which is true, and the count below is what
+     * stops it being read as final.
+     */
+    netZomatoPaise += zomato.netPaise ?? zomato.grossPaise
+    netSwiggyPaise += swiggyNet ?? day.swiggyRevenuePaise
+    if (zomato.netPaise === null || swiggyNet === null) undeterminedDays += 1
   }
 
   const netRevenuePaise = grossCashPaise + grossUpiPaise + netZomatoPaise + netSwiggyPaise
@@ -375,8 +370,12 @@ export function readMonth(
     grossSwiggyPaise,
     netZomatoPaise,
     netSwiggyPaise,
+    // Derived from the same two running totals, so a determined-only commission
+    // and a ceiling net cannot drift apart: an undetermined day adds its gross to
+    // the net and therefore nothing to the commission, which is exactly right.
     zomatoCommissionPaise: grossZomatoPaise - netZomatoPaise,
     swiggyCommissionPaise: grossSwiggyPaise - netSwiggyPaise,
+    undeterminedDays,
     netRevenuePaise,
     expensesByCategory,
     totalExpensesPaise: sumExpenses(expenses),

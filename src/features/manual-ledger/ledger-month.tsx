@@ -92,6 +92,16 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
     )
   }
 
+  /*
+   * Whether any day in this month is still waiting for its commission.
+   *
+   * Read once and used for every label below, so the heading, the two channel rows,
+   * the revenue total and the profit figure cannot disagree about whether they are
+   * showing a ceiling. Three screens quietly stating different confidences about
+   * the same month is exactly the drift this is written once to prevent.
+   */
+  const pending = reading.undeterminedDays > 0
+
   return (
     <div className="space-y-3">
       <Card className="space-y-2" data-testid="month-revenue">
@@ -119,12 +129,12 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
             testId="month-zomato-gross"
           />
           <Row
-            label="Less Zomato commission"
+            label={pending ? 'Less Zomato commission, so far' : 'Less Zomato commission'}
             paise={-reading.zomatoCommissionPaise}
             testId="month-zomato-commission"
           />
           <Row
-            label="Zomato, actually received"
+            label={pending ? 'Zomato, received at most' : 'Zomato, actually received'}
             paise={reading.netZomatoPaise}
             testId="month-zomato-net"
             bold
@@ -138,12 +148,12 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
             testId="month-swiggy-gross"
           />
           <Row
-            label="Less Swiggy commission"
+            label={pending ? 'Less Swiggy commission, so far' : 'Less Swiggy commission'}
             paise={-reading.swiggyCommissionPaise}
             testId="month-swiggy-commission"
           />
           <Row
-            label="Swiggy, actually received"
+            label={pending ? 'Swiggy, received at most' : 'Swiggy, actually received'}
             paise={reading.netSwiggyPaise}
             testId="month-swiggy-net"
             bold
@@ -151,7 +161,9 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
         </div>
 
         <div className="flex items-baseline justify-between border-t border-border pt-2">
-          <span className="text-sm font-bold text-content">Revenue actually received</span>
+          <span className="text-sm font-bold text-content">
+            {pending ? 'Revenue received, at most' : 'Revenue actually received'}
+          </span>
           <Money
             paise={reading.netRevenuePaise}
             className="font-bold"
@@ -159,9 +171,29 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
           />
         </div>
         <p className="text-xs text-content-muted">
-          Each aggregator day is reduced by the rate stored against that day, and the results added
-          up. A rate that changed mid-month therefore applies only from the day it changed.
+          Each aggregator day is reduced by the commission charged on that day, and the results
+          added up. A day charged differently therefore affects only itself.
         </p>
+        {pending && (
+          /*
+           * The sentence that makes every figure above honest.
+           *
+           * A ceiling shown without it is an approximation presented as a fact,
+           * which is the failure this whole capability exists to remove. It names
+           * the count and the reason the wait ends, so the reader knows both how
+           * much is still moving and that it will stop.
+           */
+          <p className="text-xs text-content" data-testid="month-undetermined">
+            <strong>
+              {reading.undeterminedDays === 1
+                ? '1 day is still waiting for its commission'
+                : `${reading.undeterminedDays} days are still waiting for their commission`}
+              .
+            </strong>{' '}
+            Zomato only states what it kept once a week closes, so these figures are the most that
+            can have arrived. They settle by themselves.
+          </p>
+        )}
       </Card>
 
       <Card className="space-y-2" data-testid="month-expenses">
@@ -230,7 +262,9 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
 
       <Card className="space-y-2" data-testid="month-profit">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <span className="text-sm font-bold text-content">Estimated profit</span>
+          <span className="text-sm font-bold text-content">
+            {pending ? 'Estimated profit, at most' : 'Estimated profit'}
+          </span>
           <Money paise={reading.profit.profitPaise} display data-testid="month-profit-figure" />
         </div>
         {/*

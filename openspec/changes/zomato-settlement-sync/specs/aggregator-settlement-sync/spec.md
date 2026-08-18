@@ -4,7 +4,7 @@
 
 For every outlet and business date the sync covers, the ledger SHALL store the aggregator's gross order value, the commission and fees deducted from it, and the net actually receivable, each as its own integer-paise value read from the aggregator rather than derived from a stored rate.
 
-The net SHALL NOT be recomputed from gross and a percentage at read time. The effective rate moves between roughly 24% and 35% across days, so a single stored rate misstates every day it was not measured on, and rounding a measured rate back to basis points loses the paise on which reconciliation depends.
+The net SHALL NOT be recomputed from gross and a percentage at read time, and no percentage SHALL be stored anywhere [owner, 2026-08-17]. The effective rate moves between roughly 24% and 35% across days, so a single stored rate misstates every day it was not measured on. The net SHALL be revenue less the commission actually charged, which is exact and therefore needs no rounding rule.
 
 A day's effective rate MAY be presented, computed from the stored gross and net for display only.
 
@@ -21,7 +21,7 @@ A day's effective rate MAY be presented, computed from the stored gross and net 
 #### Scenario: A day recorded before the sync is untouched
 
 - **WHEN** a business date recorded by hand before this capability existed is read
-- **THEN** its net is still computed from its stored figure and its stored commission rate, and its stored values are byte-for-byte unchanged
+- **THEN** its net is still its stored revenue less its stored commission, and its stored values are byte-for-byte unchanged
 
 ### Requirement: An order belongs to the trading day its placement time falls in
 

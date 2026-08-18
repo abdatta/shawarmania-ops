@@ -7,28 +7,39 @@ enforced by a uniqueness constraint in the database. Each row SHALL hold, in
 integer paise: revenue received as cash, as UPI, through Zomato and through
 Swiggy; cash brought into the drawer; cash taken out of the drawer; opening
 cash; and the drawer count at close. It SHALL also hold a reason for any
-non-zero cash movement, an optional free-text note, and the Zomato and Swiggy
-commission rates that applied to that day.
+non-zero cash movement, an optional free-text note, and the **commission charged
+on each aggregator channel that day, as an integer-paise amount**.
+
+Commission SHALL NOT be stored as a rate [owner, 2026-08-17]. The measured take
+moves between roughly 24% and 35% day to day, and is the sum of a base service
+fee, a per-kilometre fulfilment fee, a capping discount, a payment fee and tax on
+all of it; on one sampled order the published 14% base fee produced an actual take
+of 37.8%. A single stored percentage therefore expressed an estimate in the shape
+of an exact figure. Typed days SHALL take the amount off the statement, as synced
+days take it from the aggregator.
+
+Each channel SHALL hold exactly one revenue figure and one commission figure,
+whether they were typed or read. A channel's **net** SHALL be computed as revenue
+less commission and SHALL NOT be stored, because a stored third figure can
+disagree with the two it is derived from.
 
 Where a channel is sourced by `aggregator-settlement-sync`, the row SHALL
-additionally hold that channel's **gross**, **commission** and **net** as three
-separate integer-paise values, a **settlement state** of provisional, settled or
-disputed, the figure the owner had typed before the sync superseded it together
-with the moment it did so, and, where settling changed the figures, the
-provisional figures they replaced. The stored net SHALL be that channel's revenue for every
-computation on this surface, and the stored commission rate SHALL NOT
-participate in computing it. The retained typed figure SHALL participate in no
-computation at all.
+additionally hold a **settlement state** of provisional, settled or disputed,
+which is the only thing that says whether that channel's figures were typed or
+read; the revenue and commission the owner had typed before the sync superseded
+them, together with the moment it did so; and, where settling changed the
+figures, the provisional figures they replaced. The retained typed figures SHALL
+participate in no computation at all.
 
-Money SHALL be integer paise throughout, and commission SHALL be an integer
-basis-point value, so that no figure on this surface is ever a float. The
-business date SHALL be an explicit `date` column and SHALL NOT be derived from
-a timestamp when read.
+Money SHALL be integer paise throughout, so that no figure on this surface is
+ever a float. The business date SHALL be an explicit `date` column and SHALL NOT
+be derived from a timestamp when read.
 
 A negative revenue figure SHALL be permitted, because a cash refund is recorded
-by reducing that day's cash revenue. A negative opening cash, drawer count,
-cash-in or cash-out figure SHALL be refused, as SHALL a future business date
-and a commission rate outside nought to ten thousand basis points.
+by reducing that day's cash revenue. A negative opening cash, drawer count or
+cash movement figure SHALL be refused, as SHALL a future business date, and a
+commission outside the range bounded by nought and that channel's own revenue for
+the day.
 
 #### Scenario: A day is recorded for one outlet
 
@@ -57,38 +68,40 @@ and a commission rate outside nought to ten thousand basis points.
 
 #### Scenario: An impossible figure is refused
 
-- **WHEN** a negative drawer count, negative opening cash, negative cash movement, future business date or out-of-range commission rate is submitted by a hand-crafted request
+- **WHEN** a negative drawer count, negative opening cash, negative cash movement, future business date, or a commission larger than that channel's own revenue for the day, is submitted by a hand-crafted request
 - **THEN** the database refuses the write
 
-#### Scenario: A synced channel carries its own three figures
+#### Scenario: A synced channel writes the same two figures a typed one does
 
 - **WHEN** a day row's Zomato revenue is sourced by the sync
-- **THEN** that row holds gross, commission and net as integer paise alongside a settlement state, and the day's Zomato revenue for every computation is the stored net
+- **THEN** that row's Zomato revenue and commission hold the figures read from Zomato, its settlement state says they were read rather than typed, and the day's Zomato net is revenue less commission
 
 #### Scenario: A day the sync does not cover is unchanged in shape
 
 - **WHEN** a day row carries an aggregator channel with no synced figures
-- **THEN** that channel's revenue is the typed figure and its net is computed from the stored commission rate exactly as before
+- **THEN** its settlement state is absent, that channel's revenue and commission are the typed figures, and its net is revenue less commission exactly as for a synced day
 
 ### Requirement: Commission and opening cash are snapshotted per day, so editing an old day never rewrites a later one
 
-Each day row SHALL store its own Zomato commission rate, Swiggy commission rate
-and opening cash as stored values rather than deriving them when read. When the
-entry form opens for a new day, it SHALL offer as defaults the commission rates
-from that outlet's most recent earlier day row and the counted cash from that
-outlet's immediately preceding day row, and each default SHALL remain editable.
+Each day row SHALL store its own commission per channel and its own opening cash
+as stored values rather than deriving them when read.
 
-For a channel sourced by `aggregator-settlement-sync`, the stored commission is
-a **measured amount rather than a rate**, read from the aggregator for that day.
-No rate SHALL be offered, inherited or required for such a channel, and no
-stored rate SHALL be used to compute its net. The measured commission is already
-a per-day snapshot, so the protection this requirement exists to give is
-unchanged.
+When the entry form opens for a new day it SHALL offer the counted cash from that
+outlet's immediately preceding day row as the opening cash, editable. It SHALL
+NOT offer, inherit or default a commission figure for any channel [owner,
+2026-08-17]: commission is an amount, so the previous day's is a function of the
+previous day's revenue and would be wrong by construction while looking
+deliberate. A blank field is the honest offer.
 
-Editing an existing day's commission rate, counted cash or any other figure
-SHALL change only that day. It SHALL NOT alter any other day's stored opening
-cash, commission rate, expected cash or difference. A synced figure arriving for
-one business date SHALL likewise change only that date.
+A commission SHALL be required for any channel whose revenue for that day is
+non-zero, and SHALL default to nought for a channel that earned nothing, because
+a channel with no orders was charged nothing and that is a fact rather than an
+unanswered question.
+
+Editing an existing day's commission, counted cash or any other figure SHALL
+change only that day. It SHALL NOT alter any other day's stored opening cash,
+commission, expected cash or difference. A synced figure arriving for one
+business date SHALL likewise change only that date.
 
 Where a day's stored opening cash disagrees with the immediately preceding day
 row's counted cash, the surface SHALL show that disagreement as a read-only
@@ -98,17 +111,17 @@ the owner entered is evidence and a recomputed one is not.
 #### Scenario: A new day inherits the previous day's close
 
 - **WHEN** the owner opens the form for a business date following an existing day row at that outlet
-- **THEN** opening cash is offered as that preceding row's counted cash and both commission rates are offered from the most recent earlier row, all editable
+- **THEN** opening cash is offered as that preceding row's counted cash, editable, and both commission fields are empty
 
 #### Scenario: The first tracked day is seeded by hand
 
 - **WHEN** the owner records the first day row for an outlet, with no earlier row to inherit from
-- **THEN** opening cash and both commission rates are required entries with no inherited default
+- **THEN** opening cash is a required entry with no inherited default, as is the commission on any channel that earned something
 
 #### Scenario: Correcting an old day leaves later days alone
 
-- **WHEN** the owner edits the counted cash or commission rate on a day that has later day rows at the same outlet
-- **THEN** only that day's stored figures, expected cash and difference change, and every later day's stored opening cash, commission rate, expected cash and difference are byte-for-byte unchanged
+- **WHEN** the owner edits the counted cash or commission on a day that has later day rows at the same outlet
+- **THEN** only that day's stored figures, expected cash and difference change, and every later day's stored opening cash, commission, expected cash and difference are byte-for-byte unchanged
 
 #### Scenario: A broken chain is visible
 
@@ -117,13 +130,13 @@ the owner entered is evidence and a recomputed one is not.
 
 #### Scenario: A retrospective commission edit moves no cash figure
 
-- **WHEN** the owner changes a past day's Zomato or Swiggy commission rate
+- **WHEN** the owner changes a past day's Zomato or Swiggy commission
 - **THEN** that day's net aggregator revenue and the month's profit change, while its expected cash, counted cash and difference are unchanged
 
-#### Scenario: No rate is asked for on a synced channel
+#### Scenario: Nothing is asked for on a synced channel
 
 - **WHEN** the owner opens the form for a business date whose Zomato figures are synced
-- **THEN** no Zomato commission rate is offered, inherited or required, and the day's net is the stored measured net
+- **THEN** neither a Zomato revenue nor a Zomato commission field is offered, and the day's net is its read revenue less its read commission
 
 #### Scenario: A settled figure moves only its own day
 
@@ -166,10 +179,10 @@ threshold at which a mobile browser zooms the viewport on focus.
 - **WHEN** a stated aggregator figure is typed and a rate is present for that day
 - **THEN** the amount actually received is shown in that aggregator's group, matching what the month would compute for the same figures
 
-#### Scenario: No rate means no figure
+#### Scenario: No commission means no net
 
-- **WHEN** a stated aggregator figure is typed on a day carrying no commission rate
-- **THEN** the group shows that there is nothing to compute, and does not show nil as though it were a result
+- **WHEN** a stated aggregator figure is typed on a day whose commission for that channel is still blank
+- **THEN** the group shows that there is nothing to compute, and does not show the stated figure as though all of it had arrived
 
 #### Scenario: An explanation is asked for
 
@@ -229,7 +242,7 @@ go-live date and independently of the other aggregator. V1 billing accepts Cash 
 UPI only, so an aggregator order is never rung at the counter and no bill can ever
 be its source; sourcing therefore comes from the settlement record and from nowhere
 else. A channel with no sourced figure for a business date SHALL keep its stated
-revenue field, its per-day commission rate and its computed net exactly as the
+revenue field, its per-day commission amount and its computed net exactly as the
 capability already defines them. A day MAY therefore read as two figures from the
 counter, one from settlement and one entered by hand, each labelled for what it is.
 
@@ -255,7 +268,7 @@ SHALL continue to govern.
 
 #### Scenario: The night an outlet goes live
 - **WHEN** the owner opens the ledger for a live outlet's business date
-- **THEN** cash and UPI revenue are shown as coming from the counter and are not editable there, while any unsourced aggregator revenue, its commission rate, the cash movements, the expenses and the drawer count are entered as before
+- **THEN** cash and UPI revenue are shown as coming from the counter and are not editable there, while any unsourced aggregator revenue, its commission, the cash movements, the expenses and the drawer count are entered as before
 
 #### Scenario: Aggregator revenue survives the handover
 - **WHEN** the owner records a live outlet's day on which no aggregator channel is sourced

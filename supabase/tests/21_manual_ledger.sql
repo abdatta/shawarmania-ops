@@ -93,11 +93,11 @@ select lives_ok(
       (outlet_id, business_date, opening_cash_paise,
        cash_revenue_paise, upi_revenue_paise, zomato_revenue_paise, swiggy_revenue_paise,
        cash_added_paise, cash_added_reason, cash_removed_paise, cash_removed_reason,
-       counted_cash_paise, zomato_commission_bp, swiggy_commission_bp, note, recorded_by)
+       counted_cash_paise, zomato_commission_paise, swiggy_commission_paise, note, recorded_by)
     values (%L, %L, 500000,
             1200000, 400000, 300000, 250000,
             100000, 'Float topped up', 400000, 'Banked on the way home',
-            1350000, 2250, 2100, 'Counted twice', %L) $q$,
+            1350000, 67500, 52500, 'Counted twice', %L) $q$,
     :'KAL', pg_temp.ledger_day(1), :'OWNER'),
   'the owner records a trading day at Kalyani');
 
@@ -105,8 +105,8 @@ select lives_ok(
   format($q$
     insert into public.manual_ledger_days
       (outlet_id, business_date, opening_cash_paise, cash_revenue_paise,
-       counted_cash_paise, zomato_commission_bp, swiggy_commission_bp, recorded_by)
-    values (%L, %L, 200000, 700000, 900000, 2400, 2200, %L) $q$,
+       counted_cash_paise, zomato_commission_paise, swiggy_commission_paise, recorded_by)
+    values (%L, %L, 200000, 700000, 900000, 0, 0, %L) $q$,
     :'KPA', pg_temp.ledger_day(1), :'OWNER'),
   'the owner records a trading day at Kanchrapara too, on the same date');
 
@@ -133,14 +133,29 @@ select lives_ok(
     :'KAL', pg_temp.ledger_day(1), :'OWNER'),
   'and a non-cash one, which the drawer never sees');
 
--- A day with no earlier row still needs a stored opening and stored rates. Both
--- columns are `not null`, so the first tracked day cannot inherit silently.
+-- A day with no earlier row still needs a stored opening and a stored commission
+-- for each channel. All three are `not null`, so the first tracked day cannot
+-- inherit silently. The commission columns hold an amount rather than a rate
+-- [owner, 2026-08-17]; they default to nought, because a day that sold nothing on
+-- a channel was charged nothing, and that is a fact rather than a blank.
 select col_not_null('public', 'manual_ledger_days', 'opening_cash_paise',
   'opening cash is stored on the row, never derived on read');
-select col_not_null('public', 'manual_ledger_days', 'zomato_commission_bp',
-  'the Zomato rate is stored per day, so editing one day moves no other');
-select col_not_null('public', 'manual_ledger_days', 'swiggy_commission_bp',
-  'the Swiggy rate is stored per day for the same reason');
+/*
+ * The commission columns are NULLABLE, and that is the point [owner, 2026-08-17].
+ *
+ * Null means **undetermined**: the channel took money and what it kept has not been
+ * established yet. Zomato's Order History shows today's orders but carries no
+ * commission and no payout, so a day read tonight can say what came in and cannot
+ * say what was kept. The figure arrives when the week settles, or by hand.
+ *
+ * Asserted as nullability rather than left implicit, because a later migration
+ * making these NOT NULL would force a nought into every undetermined day and turn
+ * "not known" into "nothing was charged" across the whole ledger, silently.
+ */
+select col_is_null('public', 'manual_ledger_days', 'zomato_commission_paise',
+  'a Zomato commission may be undetermined, which is not the same as nought');
+select col_is_null('public', 'manual_ledger_days', 'swiggy_commission_paise',
+  'and so may a Swiggy one');
 
 -- No capital marker exists on the expense table, by owner decision. Asserted as
 -- a catalog fact so a later migration cannot quietly reintroduce a field that
@@ -179,7 +194,7 @@ select throws_ok(
   format($q$
     insert into public.manual_ledger_days
       (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       zomato_commission_bp, swiggy_commission_bp, recorded_by)
+       zomato_commission_paise, swiggy_commission_paise, recorded_by)
     values (%L, %L, 0, 0, 0, 0, %L) $q$,
     :'KAL', pg_temp.ledger_day(1), :'OWNER'),
   '23505',
@@ -201,68 +216,80 @@ $$;
 
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, zomato_commission_bp, swiggy_commission_bp',
+    'opening_cash_paise, counted_cash_paise, zomato_commission_paise, swiggy_commission_paise',
     '-1, 0, 0, 0'),
   '23514', null, 'a negative opening cash is refused');
 
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, zomato_commission_bp, swiggy_commission_bp',
+    'opening_cash_paise, counted_cash_paise, zomato_commission_paise, swiggy_commission_paise',
     '0, -1, 0, 0'),
   '23514', null, 'a negative drawer count is refused');
 
 select throws_ok(
   pg_temp.bad_day(
     'opening_cash_paise, counted_cash_paise, cash_added_paise, cash_added_reason, '
-    'zomato_commission_bp, swiggy_commission_bp',
+    'zomato_commission_paise, swiggy_commission_paise',
     '0, 0, -1, ''x'', 0, 0'),
   '23514', null, 'a negative cash-in is refused');
 
 select throws_ok(
   pg_temp.bad_day(
     'opening_cash_paise, counted_cash_paise, cash_removed_paise, cash_removed_reason, '
-    'zomato_commission_bp, swiggy_commission_bp',
+    'zomato_commission_paise, swiggy_commission_paise',
     '0, 0, -1, ''x'', 0, 0'),
   '23514', null, 'a negative cash-out is refused');
 
 select throws_ok(
   pg_temp.bad_day(
     'opening_cash_paise, counted_cash_paise, cash_added_paise, '
-    'zomato_commission_bp, swiggy_commission_bp',
+    'zomato_commission_paise, swiggy_commission_paise',
     '0, 0, 50000, 0, 0'),
   '23514', null, 'cash brought in without a reason is refused');
 
 select throws_ok(
   pg_temp.bad_day(
     'opening_cash_paise, counted_cash_paise, cash_removed_paise, cash_removed_reason, '
-    'zomato_commission_bp, swiggy_commission_bp',
+    'zomato_commission_paise, swiggy_commission_paise',
     '0, 0, 50000, ''   '', 0, 0'),
   '23514', null, 'cash taken out with a whitespace-only reason is refused');
 
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, note, zomato_commission_bp, swiggy_commission_bp',
+    'opening_cash_paise, counted_cash_paise, note, zomato_commission_paise, swiggy_commission_paise',
     '0, 0, ''  '', 0, 0'),
   '23514', null, 'a whitespace-only note is refused, where a note is given at all');
 
+-- The bound on a commission is the revenue it comes off, not a percentage
+-- ceiling. A charge larger than the takings is not a steep rate; it is a figure in
+-- the wrong box, and it would make the day's net negative while the day looked
+-- ordinary.
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, zomato_commission_bp, swiggy_commission_bp',
-    '0, 0, 10001, 0'),
-  '23514', null, 'a commission rate above 100% is refused');
+    'opening_cash_paise, counted_cash_paise, zomato_revenue_paise, zomato_commission_paise',
+    '0, 0, 100000, 100001'),
+  '23514', null, 'a commission larger than that channel''s revenue is refused');
 
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, zomato_commission_bp, swiggy_commission_bp',
+    'opening_cash_paise, counted_cash_paise, zomato_commission_paise, swiggy_commission_paise',
     '0, 0, 0, -1'),
-  '23514', null, 'a negative commission rate is refused');
+  '23514', null, 'a negative commission is refused on a channel that earned nothing');
+
+-- And a channel that earned nothing must be charged nothing, which the same
+-- constraint gives: least(0, 0) and greatest(0, 0) are both nought.
+select throws_ok(
+  pg_temp.bad_day(
+    'opening_cash_paise, counted_cash_paise, zomato_commission_paise, swiggy_commission_paise',
+    '0, 0, 1, 0'),
+  '23514', null, 'a commission on a channel with no revenue is refused');
 
 -- Negative revenue is the one figure that must be ACCEPTED: a cash refund is
 -- recorded by lowering that day's cash revenue.
 select lives_ok(
   pg_temp.bad_day(
     'opening_cash_paise, counted_cash_paise, cash_revenue_paise, '
-    'zomato_commission_bp, swiggy_commission_bp',
+    'zomato_commission_paise, swiggy_commission_paise',
     '0, 0, -25000, 0, 0'),
   'negative cash revenue is accepted, because that is how a refund is recorded');
 
@@ -271,7 +298,7 @@ select throws_ok(
   format($q$
     insert into public.manual_ledger_days
       (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       zomato_commission_bp, swiggy_commission_bp, recorded_by)
+       zomato_commission_paise, swiggy_commission_paise, recorded_by)
     values (%L, public.app_business_date(now(), time '04:00') + 1,
             0, 0, 0, 0, %L) $q$,
     :'KAL', :'OWNER'),
@@ -403,7 +430,7 @@ select throws_ok(
   format($q$
     insert into public.manual_ledger_days
       (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       zomato_commission_bp, swiggy_commission_bp, recorded_by)
+       zomato_commission_paise, swiggy_commission_paise, recorded_by)
     values (%L, public.app_business_date(now(), time '04:00') - 3,
             0, 0, 0, 0, %L) $q$,
     :'KAL', :'FA_KAL'),
@@ -433,7 +460,7 @@ select throws_ok(
   format($q$
     insert into public.manual_ledger_days
       (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       zomato_commission_bp, swiggy_commission_bp, recorded_by, updated_by)
+       zomato_commission_paise, swiggy_commission_paise, recorded_by, updated_by)
     values (%L, public.app_business_date(now(), time '04:00') - 6,
             0, 0, 0, 0, %L, %L) $q$,
     :'KAL', :'OWNER', :'OWNER'),
@@ -491,7 +518,7 @@ begin
     format($q$
       insert into public.manual_ledger_days
         (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-         zomato_commission_bp, swiggy_commission_bp, recorded_by)
+         zomato_commission_paise, swiggy_commission_paise, recorded_by)
       values (%L, public.app_business_date(now(), time '04:00') - 4,
               0, 0, 0, 0, %L) $q$, p_outlet, p_sub),
     '42501', null,
@@ -896,7 +923,7 @@ select lives_ok(
   format($q$
     insert into public.manual_ledger_days
       (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       zomato_commission_bp, swiggy_commission_bp)
+       zomato_commission_paise, swiggy_commission_paise)
     values (%L, %L, 0, 0, 0, 0) $q$,
     :'KPA', pg_temp.ledger_day(7)),
   'the owner records a day at the other outlet, typed against the wrong date');
@@ -1021,7 +1048,7 @@ select throws_ok(
   format($q$
     insert into public.manual_ledger_days
       (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       zomato_commission_bp, swiggy_commission_bp, recorded_by)
+       zomato_commission_paise, swiggy_commission_paise, recorded_by)
     values (%L, public.app_business_date(now(), time '04:00') - 5, 0, 0, 0, 0, %L) $q$,
     :'KAL', :'OWNER'),
   '42501', null,

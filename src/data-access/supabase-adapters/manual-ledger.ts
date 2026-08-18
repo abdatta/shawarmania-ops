@@ -96,8 +96,8 @@ function toDay(
     cashRemovedPaise: row.cash_removed_paise,
     cashRemovedReason: row.cash_removed_reason,
     countedCashPaise: row.counted_cash_paise,
-    zomatoCommissionBp: row.zomato_commission_bp,
-    swiggyCommissionBp: row.swiggy_commission_bp,
+    zomatoCommissionPaise: row.zomato_commission_paise,
+    swiggyCommissionPaise: row.swiggy_commission_paise,
     note: row.note,
     recordedBy: actor(row.recorded_by, people),
     zomatoSettlement: toZomatoSettlement(row),
@@ -259,6 +259,30 @@ export function createSupabaseManualLedgerAdapter(
 
     async upsertDay(day: ManualLedgerDayInput) {
       const counterRevenue = await this.getCounterRevenue(day.outletId, day.businessDate)
+
+      /*
+       * Whether Zomato has taken this day over.
+       *
+       * Read first, because the guard refuses ANY change to a synced day's Zomato
+       * figures — and this upsert would otherwise send them on every save. A
+       * manager correcting the drawer count on a day the sync had filled in would
+       * have their save refused with a message about settlement figures they never
+       * touched, which is the worst kind of error: correct, and about something
+       * else.
+       *
+       * Sending the stored values back unchanged would satisfy the guard equally,
+       * and is worse: the form would be echoing figures it does not own, and a
+       * stale read would overwrite a run that landed in between.
+       */
+      const { data: existing, error: readError } = await client
+        .from('manual_ledger_days')
+        .select('zomato_settlement_state')
+        .eq('outlet_id', day.outletId)
+        .eq('business_date', day.businessDate)
+        .maybeSingle()
+      if (readError) throw toLedgerError(readError)
+      const synced = (existing?.zomato_settlement_state ?? null) !== null
+
       const { data, error } = await client
         .from('manual_ledger_days')
         // The upsert is the edit: one row per outlet per date, corrected in
@@ -270,16 +294,22 @@ export function createSupabaseManualLedgerAdapter(
             opening_cash_paise: day.openingCashPaise,
             cash_revenue_paise: counterRevenue ? 0 : day.cashRevenuePaise,
             upi_revenue_paise: counterRevenue ? 0 : day.upiRevenuePaise,
-            zomato_revenue_paise: day.zomatoRevenuePaise,
             swiggy_revenue_paise: day.swiggyRevenuePaise,
             cash_added_paise: day.cashAddedPaise,
             cash_added_reason: trimmed(day.cashAddedReason),
             cash_removed_paise: day.cashRemovedPaise,
             cash_removed_reason: trimmed(day.cashRemovedReason),
             counted_cash_paise: day.countedCashPaise,
-            zomato_commission_bp: day.zomatoCommissionBp,
-            swiggy_commission_bp: day.swiggyCommissionBp,
+            swiggy_commission_paise: day.swiggyCommissionPaise,
             note: trimmed(day.note),
+            // Omitted entirely on a synced day, so the stored figures are left
+            // exactly as the sync wrote them.
+            ...(synced
+              ? {}
+              : {
+                  zomato_revenue_paise: day.zomatoRevenuePaise,
+                  zomato_commission_paise: day.zomatoCommissionPaise,
+                }),
           },
           { onConflict: 'outlet_id,business_date' },
         )

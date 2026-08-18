@@ -37,28 +37,31 @@
 -- 1. manual_ledger_days — the measured triple, its state, and what it replaced.
 
 alter table public.manual_ledger_days
-  add column zomato_gross_paise bigint,
-  add column zomato_commission_paise bigint,
-  add column zomato_net_paise bigint,
-
   -- provisional: the week is not paid yet.
   -- settled:     the week is paid and its figures reconcile against the payout.
   -- disputed:    the week is paid and its figures do NOT reconcile.
+  --
+  -- Null means nobody synced this day, which is every day before the sync existed.
+  -- This is the ONLY thing that says where a day's figures came from, and the read
+  -- path switches on it.
   add column zomato_settlement_state text,
 
   -- What the owner had typed before the sync took the day over. Retained so the
   -- manual estimates can be compared against settled truth, and excluded from
   -- every computation by the read path.
-  add column zomato_typed_revenue_paise bigint,
-  add column zomato_typed_commission_bp integer,
+  --
+  -- `superseded_`, not `typed_`. The live figures on a synced day were also read
+  -- rather than typed, so "typed" as a prefix for the archive would describe the
+  -- wrong pair of columns half the time.
+  add column zomato_superseded_revenue_paise bigint,
+  add column zomato_superseded_commission_paise bigint,
   add column zomato_superseded_at timestamptz,
 
   -- What the day read before its week settled, kept only where settling actually
   -- moved it. Present is precisely what "revised" means; there is no separate
   -- boolean, so the marker cannot disagree with the figures behind it.
-  add column zomato_provisional_gross_paise bigint,
+  add column zomato_provisional_revenue_paise bigint,
   add column zomato_provisional_commission_paise bigint,
-  add column zomato_provisional_net_paise bigint,
   add column zomato_revised_at timestamptz;
 
 alter table public.manual_ledger_days
@@ -67,64 +70,28 @@ alter table public.manual_ledger_days
     or zomato_settlement_state in ('provisional', 'settled', 'disputed')
   ),
 
-  -- All three or none. A partial triple would let a total read from two figures
-  -- and silently omit the third.
-  add constraint manual_ledger_days_zomato_triple_together check (
-    (zomato_gross_paise is null
-      and zomato_commission_paise is null
-      and zomato_net_paise is null)
-    or (zomato_gross_paise is not null
-      and zomato_commission_paise is not null
-      and zomato_net_paise is not null)
-  ),
-
-  add constraint manual_ledger_days_zomato_triple_adds_up check (
-    zomato_gross_paise is null
-    or zomato_gross_paise = zomato_commission_paise + zomato_net_paise
-  ),
-
-  -- The state and the figures arrive together: a state with no figures describes
-  -- nothing, and figures with no state cannot be read as provisional or final.
-  add constraint manual_ledger_days_zomato_state_with_figures check (
-    (zomato_settlement_state is null) = (zomato_gross_paise is null)
-  ),
-
-  -- A synced day's typed inputs are zeroed, so no path can add a typed figure to
-  -- a measured one.
-  add constraint manual_ledger_days_zomato_synced_supersedes_typed check (
-    zomato_gross_paise is null
-    or (zomato_revenue_paise = 0 and zomato_commission_bp = 0)
-  ),
-
-  -- The retained typed figure travels with the moment it was retained.
-  add constraint manual_ledger_days_zomato_typed_retained_together check (
-    (zomato_typed_revenue_paise is null
-      and zomato_typed_commission_bp is null
-      and zomato_superseded_at is null)
-    or (zomato_typed_revenue_paise is not null
-      and zomato_typed_commission_bp is not null
-      and zomato_superseded_at is not null)
-  ),
-
-  add constraint manual_ledger_days_zomato_typed_rate_ranged check (
-    zomato_typed_commission_bp is null
-    or zomato_typed_commission_bp between 0 and 10000
+  /*
+   * The retained figure travels with the moment it was retained.
+   *
+   * The revenue and the moment are paired; the commission is deliberately NOT, and
+   * may be null inside a present archive. A typed day whose commission was
+   * undetermined when the sync took it over is exactly that shape, and it is worth
+   * keeping: "the owner had recorded 2,500.00 and had not established what Zomato
+   * kept" is a truer archive than refusing to store the half that was known.
+   */
+  add constraint manual_ledger_days_zomato_superseded_together check (
+    (zomato_superseded_revenue_paise is null and zomato_superseded_at is null)
+    or (zomato_superseded_revenue_paise is not null and zomato_superseded_at is not null)
   ),
 
   -- Nothing can be superseded without something superseding it.
-  add constraint manual_ledger_days_zomato_typed_needs_synced check (
-    zomato_superseded_at is null or zomato_gross_paise is not null
+  add constraint manual_ledger_days_zomato_superseded_needs_synced check (
+    zomato_superseded_at is null or zomato_settlement_state is not null
   ),
 
   add constraint manual_ledger_days_zomato_revised_together check (
-    (zomato_provisional_gross_paise is null
-      and zomato_provisional_commission_paise is null
-      and zomato_provisional_net_paise is null
-      and zomato_revised_at is null)
-    or (zomato_provisional_gross_paise is not null
-      and zomato_provisional_commission_paise is not null
-      and zomato_provisional_net_paise is not null
-      and zomato_revised_at is not null)
+    (zomato_provisional_revenue_paise is null and zomato_revised_at is null)
+    or (zomato_provisional_revenue_paise is not null and zomato_revised_at is not null)
   ),
 
   -- Only a settled day can have been revised, and a revision must have moved
@@ -133,10 +100,9 @@ alter table public.manual_ledger_days
   add constraint manual_ledger_days_zomato_revised_only_when_settled check (
     zomato_revised_at is null
     or (zomato_settlement_state = 'settled'
-      and (zomato_provisional_gross_paise, zomato_provisional_commission_paise,
-           zomato_provisional_net_paise)
+      and (zomato_provisional_revenue_paise, zomato_provisional_commission_paise)
           is distinct from
-          (zomato_gross_paise, zomato_commission_paise, zomato_net_paise))
+          (zomato_revenue_paise, zomato_commission_paise))
   );
 
 -- The state machine, as a trigger rather than a CHECK, because a CHECK cannot see
@@ -207,9 +173,11 @@ begin
     return new;
   end if;
 
+  -- The markers are never a person's to write, on any day, in either operation.
+  -- These are the columns that say a figure was read and reconciled, so a person
+  -- who could set them could dress a typed number up as a measured one.
   if tg_op = 'INSERT' then
-    if new.zomato_gross_paise is not null
-       or new.zomato_settlement_state is not null
+    if new.zomato_settlement_state is not null
        or new.zomato_superseded_at is not null
        or new.zomato_revised_at is not null then
       raise exception
@@ -218,19 +186,37 @@ begin
     return new;
   end if;
 
-  if (new.zomato_gross_paise, new.zomato_commission_paise, new.zomato_net_paise,
-      new.zomato_settlement_state, new.zomato_typed_revenue_paise,
-      new.zomato_typed_commission_bp, new.zomato_superseded_at,
-      new.zomato_provisional_gross_paise, new.zomato_provisional_commission_paise,
-      new.zomato_provisional_net_paise, new.zomato_revised_at)
+  if (new.zomato_settlement_state,
+      new.zomato_superseded_revenue_paise, new.zomato_superseded_commission_paise,
+      new.zomato_superseded_at,
+      new.zomato_provisional_revenue_paise, new.zomato_provisional_commission_paise,
+      new.zomato_revised_at)
      is distinct from
-     (old.zomato_gross_paise, old.zomato_commission_paise, old.zomato_net_paise,
-      old.zomato_settlement_state, old.zomato_typed_revenue_paise,
-      old.zomato_typed_commission_bp, old.zomato_superseded_at,
-      old.zomato_provisional_gross_paise, old.zomato_provisional_commission_paise,
-      old.zomato_provisional_net_paise, old.zomato_revised_at) then
+     (old.zomato_settlement_state,
+      old.zomato_superseded_revenue_paise, old.zomato_superseded_commission_paise,
+      old.zomato_superseded_at,
+      old.zomato_provisional_revenue_paise, old.zomato_provisional_commission_paise,
+      old.zomato_revised_at) then
     raise exception
       'Zomato settlement figures are read from Zomato, not entered';
+  end if;
+
+  /*
+   * And on a day Zomato covers, the figures themselves are out of reach too.
+   *
+   * This clause is the one that changed when commission became an amount. The
+   * revenue and commission columns are now the same pair whether a day was typed
+   * or read, so the guard can no longer refuse a *column* — it has to refuse a
+   * *day*. Which is the truer statement of the rule anyway: on a day the sync
+   * covers, nobody types the figures; on a day it does not, a manager correcting
+   * their own outlet's ledger is exactly what the ledger is for.
+   */
+  if old.zomato_settlement_state is not null
+     and (new.zomato_revenue_paise, new.zomato_commission_paise)
+         is distinct from
+         (old.zomato_revenue_paise, old.zomato_commission_paise) then
+    raise exception
+      'this day''s Zomato figures are read from Zomato, not entered';
   end if;
 
   return new;
@@ -575,6 +561,7 @@ declare
   v_day record;
   v_existing record;
   v_tolerance constant bigint := 100;
+  v_synced_from date;
 begin
   if coalesce((p_payload ->> 'contract_version')::int, 0) <> 1 then
     raise exception 'unsupported contract version %',
@@ -607,6 +594,27 @@ begin
   select business_day_cutover into v_cutover from public.outlets where id = v_outlet;
   if v_cutover is null then
     raise exception 'unknown outlet %', v_outlet using errcode = '22023';
+  end if;
+
+  /*
+   * The boundary this outlet was switched on at.
+   *
+   * Everything before it stays exactly as the owner typed it. Without this the
+   * reader would happily rewrite months of history the first time it ran — the
+   * cycle window is thirty-one days wide, so it reaches back past any plausible
+   * go-live — and "turning it on" would silently mean "restating the past".
+   *
+   * Read here rather than trusted from the payload for the reason the outlet is:
+   * this function writes past Row-Level Security, so anything that decides what it
+   * may touch has to come from the database.
+   */
+  select synced_from into v_synced_from
+    from public.outlet_channel_sync
+   where outlet_id = v_outlet and channel = v_channel;
+
+  if v_synced_from is null then
+    raise exception 'the % sync is not switched on for outlet %', v_channel, v_outlet
+      using errcode = '22023';
   end if;
 
   -- An order with no placement time cannot be dated. Falling back to the
@@ -681,8 +689,7 @@ begin
   create temporary table if not exists ingest_days (
     business_date date primary key,
     gross_paise bigint,
-    commission_paise bigint,
-    net_paise bigint
+    commission_paise bigint
   ) on commit drop;
   -- `truncate`, not a bare `delete`. Supabase preloads `safeupdate` for the
   -- `authenticator` role, which refuses an UPDATE or DELETE with no WHERE clause
@@ -691,11 +698,28 @@ begin
   -- on the first real call through the Edge Function.
   truncate table ingest_days;
 
-  insert into ingest_days (business_date, gross_paise, commission_paise, net_paise)
+  -- Net is not stored and not grouped. With commission an exact amount, net is
+  -- `gross - commission` and always was; a stored third figure would be a copy
+  -- that can disagree with the two it came from. The payload still carries a net
+  -- per order because the reconciliation gate above sums Zomato's own figure
+  -- rather than one derived here.
+  insert into ingest_days (business_date, gross_paise, commission_paise)
   select public.app_business_date((o ->> 'placed_at')::timestamptz, v_cutover),
          sum((o ->> 'gross_paise')::bigint),
-         sum((o ->> 'commission_paise')::bigint),
-         sum((o ->> 'net_paise')::bigint)
+         /*
+          * One unknown makes the DAY unknown.
+          *
+          * `sum` ignores nulls, so the obvious version would quietly add up
+          * whichever orders happened to carry a commission and present that partial
+          * figure as the day's charge — understating it, and understating it in the
+          * direction that flatters the shop's profit. A day is either fully
+          * determined or undetermined, and the week that settles it is what resolves
+          * the difference.
+          */
+         case
+           when count(*) filter (where (o ->> 'commission_paise') is null) > 0 then null
+           else sum((o ->> 'commission_paise')::bigint)
+         end
     from jsonb_array_elements(coalesce(p_payload -> 'orders', '[]'::jsonb)) o
    group by 1;
 
@@ -709,71 +733,77 @@ begin
       continue;
     end if;
 
+    if v_day.business_date < v_synced_from then
+      -- Before this outlet was switched on. The owner's own figure stands, and the
+      -- day is not reported as pending either: nothing is waiting for it.
+      continue;
+    end if;
+
     if v_existing.zomato_settlement_state = 'settled' then
       -- Terminal. A later run reading the live dashboard must not overwrite a
       -- settled figure with one that omits cancellation refunds.
       continue;
     end if;
 
+    /*
+     * One pair of figures, whatever their source.
+     *
+     * Shorter than it was, and shorter for a reason worth recording: the previous
+     * version had to zero a typed rate and a typed revenue while writing a
+     * separate measured triple, because a percentage and an amount cannot share a
+     * column. With commission an exact amount both sources write the same two
+     * columns, and `zomato_settlement_state` is the only thing that says which
+     * source wrote them.
+     *
+     * `is null` on the state rather than a comparison against zero decides whether
+     * anything is being superseded. The old test was `revenue <> 0 or bp <> 0`,
+     * which read a genuinely nil day — a day with no Zomato orders, which happens —
+     * as having nothing to supersede. It was right by accident: superseding a zero
+     * loses nothing. Asking the state is right on purpose.
+     */
     update public.manual_ledger_days d
-       set zomato_gross_paise = v_day.gross_paise,
+       set zomato_revenue_paise = v_day.gross_paise,
            zomato_commission_paise = v_day.commission_paise,
-           zomato_net_paise = v_day.net_paise,
            zomato_settlement_state = v_state,
 
-           -- The typed inputs are zeroed so no path can add a typed figure to a
-           -- measured one, and what was typed moves aside once, the first time.
-           zomato_revenue_paise = 0,
-           zomato_commission_bp = 0,
-           zomato_typed_revenue_paise = case
-             when d.zomato_superseded_at is not null then d.zomato_typed_revenue_paise
-             when d.zomato_revenue_paise <> 0 or d.zomato_commission_bp <> 0
-               then d.zomato_revenue_paise
+           -- What the owner typed moves aside once, the first time the sync takes
+           -- the day, and never again: a second run must not supersede the figure
+           -- the first run wrote.
+           zomato_superseded_revenue_paise = case
+             when d.zomato_superseded_at is not null then d.zomato_superseded_revenue_paise
+             when d.zomato_settlement_state is null then d.zomato_revenue_paise
              else null end,
-           zomato_typed_commission_bp = case
-             when d.zomato_superseded_at is not null then d.zomato_typed_commission_bp
-             when d.zomato_revenue_paise <> 0 or d.zomato_commission_bp <> 0
-               then d.zomato_commission_bp
+           zomato_superseded_commission_paise = case
+             when d.zomato_superseded_at is not null then d.zomato_superseded_commission_paise
+             when d.zomato_settlement_state is null then d.zomato_commission_paise
              else null end,
            zomato_superseded_at = case
              when d.zomato_superseded_at is not null then d.zomato_superseded_at
-             when d.zomato_revenue_paise <> 0 or d.zomato_commission_bp <> 0
-               then now()
+             when d.zomato_settlement_state is null then now()
              else null end,
 
            -- Revised: settling moved a figure the owner had already seen. Kept
            -- only where it actually moved, so the marker cannot claim a change
            -- that did not happen.
-           zomato_provisional_gross_paise = case
+           zomato_provisional_revenue_paise = case
              when v_state = 'settled'
                and d.zomato_settlement_state = 'provisional'
-               and (d.zomato_gross_paise, d.zomato_commission_paise, d.zomato_net_paise)
-                   is distinct from
-                   (v_day.gross_paise, v_day.commission_paise, v_day.net_paise)
-               then d.zomato_gross_paise
-             else d.zomato_provisional_gross_paise end,
+               and (d.zomato_revenue_paise, d.zomato_commission_paise)
+                   is distinct from (v_day.gross_paise, v_day.commission_paise)
+               then d.zomato_revenue_paise
+             else d.zomato_provisional_revenue_paise end,
            zomato_provisional_commission_paise = case
              when v_state = 'settled'
                and d.zomato_settlement_state = 'provisional'
-               and (d.zomato_gross_paise, d.zomato_commission_paise, d.zomato_net_paise)
-                   is distinct from
-                   (v_day.gross_paise, v_day.commission_paise, v_day.net_paise)
+               and (d.zomato_revenue_paise, d.zomato_commission_paise)
+                   is distinct from (v_day.gross_paise, v_day.commission_paise)
                then d.zomato_commission_paise
              else d.zomato_provisional_commission_paise end,
-           zomato_provisional_net_paise = case
-             when v_state = 'settled'
-               and d.zomato_settlement_state = 'provisional'
-               and (d.zomato_gross_paise, d.zomato_commission_paise, d.zomato_net_paise)
-                   is distinct from
-                   (v_day.gross_paise, v_day.commission_paise, v_day.net_paise)
-               then d.zomato_net_paise
-             else d.zomato_provisional_net_paise end,
            zomato_revised_at = case
              when v_state = 'settled'
                and d.zomato_settlement_state = 'provisional'
-               and (d.zomato_gross_paise, d.zomato_commission_paise, d.zomato_net_paise)
-                   is distinct from
-                   (v_day.gross_paise, v_day.commission_paise, v_day.net_paise)
+               and (d.zomato_revenue_paise, d.zomato_commission_paise)
+                   is distinct from (v_day.gross_paise, v_day.commission_paise)
                then now()
              else d.zomato_revised_at end
      where d.outlet_id = v_outlet and d.business_date = v_day.business_date;
@@ -784,9 +814,10 @@ begin
   select string_agg(i.business_date::text, ', ' order by i.business_date)
     into v_pending
     from ingest_days i
-   where not exists (
-     select 1 from public.manual_ledger_days d
-      where d.outlet_id = v_outlet and d.business_date = i.business_date);
+   where i.business_date >= v_synced_from
+     and not exists (
+       select 1 from public.manual_ledger_days d
+        where d.outlet_id = v_outlet and d.business_date = i.business_date);
 
   -- ---------------------------------------------------------------------
   -- Deductions, dated to the spend rather than to the payout that collected it.

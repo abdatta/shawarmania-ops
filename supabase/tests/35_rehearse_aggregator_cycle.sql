@@ -23,6 +23,25 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
+/*
+ * The sync boundary, planted in the past.
+ *
+ * `ingest_aggregator_cycle` refuses to touch a day before the date its outlet was
+ * switched on, so every case below needs a boundary earlier than the days it writes.
+ * The trigger is disabled to plant it, because it deliberately refuses a date that
+ * has already started: switching a sync on is a scheduled act, and applying one
+ * retrospectively over days somebody already typed is the thing it exists to stop.
+ */
+alter table public.outlet_channel_sync disable trigger outlet_channel_sync_guarded;
+insert into public.outlet_channel_sync (outlet_id, channel, synced_from)
+values ('00000000-0000-4000-a000-000000000001', 'zomato',
+        public.app_business_date(now(), time '04:00') - 60),
+       ('00000000-0000-4000-a000-000000000002', 'zomato',
+        public.app_business_date(now(), time '04:00') - 60)
+on conflict (outlet_id, channel) do update set synced_from = excluded.synced_from;
+alter table public.outlet_channel_sync enable trigger outlet_channel_sync_guarded;
+
+
 \set OWNER '10000000-0000-4000-a000-000000000001'
 \set KAL '00000000-0000-4000-a000-000000000001'
 
@@ -33,10 +52,10 @@ $$;
 
 -- A plain typed day, of the kind the sync supersedes. Deliberately carrying a
 -- typed figure, because the interesting rollback is of the supersede: that path
--- writes five columns and moves the owner's own number aside.
+-- moves the owner's own two numbers aside and stamps the moment it did.
 insert into public.manual_ledger_days
   (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   zomato_revenue_paise, zomato_commission_bp, swiggy_commission_bp, recorded_by)
+   zomato_revenue_paise, zomato_commission_paise, swiggy_commission_paise, recorded_by)
 values (:'KAL'::uuid, pg_temp.ledger_day(3), 500000, 500000, 250000, 2800, 0, :'OWNER'::uuid);
 
 -- Reconciles exactly: 216000 of orders, less 40000 of deductions, is 176000.
@@ -127,19 +146,20 @@ select is(
 -- provisional columns gave a report whose "from" was the value it had just been
 -- changed to, and a report that says a day changed from a number to the same
 -- number is worse than no report: it looks like a rehearsal that found nothing.
+--
+-- On a typed day the "from" side is the owner's own pair, which is exactly the
+-- comparison they want: their number beside Zomato's. ₹2,500.00 typed less ₹28.00
+-- charged is ₹2,472.00, against Zomato's ₹2,160.00.
 select is(
-  (select verdict -> 'days_that_would_change' -> 0 -> 'from' ->> 'net_paise' from rehearsed),
-  null,
-  'and what it would move FROM, which on a typed day is no synced net at all'
+  (select verdict -> 'days_that_would_change' -> 0 -> 'from' ->> 'revenue_paise' from rehearsed),
+  '250000',
+  'and what it would move FROM, which on a typed day is what the owner typed'
 );
 
--- On this day the "from" that matters is the owner's own typed figure, because
--- what they want to see is their number beside Zomato's.
 select is(
-  (select verdict -> 'days_that_would_change' -> 0 -> 'from' ->> 'typed_revenue_paise'
-     from rehearsed),
-  '250000',
-  'the typed revenue is reported as the figure being superseded'
+  (select verdict -> 'days_that_would_change' -> 0 -> 'from' ->> 'net_paise' from rehearsed),
+  '247200',
+  'reported as a net too, so the two sides can be compared without arithmetic'
 );
 
 select isnt(
@@ -160,11 +180,14 @@ select is(
 -- Every column the real path touches, checked as it stands after the rehearsal.
 -- The day was typed and stays typed.
 
+-- Still the owner's own net, not Zomato's ₹2,160.00. There is no stored net column
+-- to be null any more, so the honest claim is that the subtraction still answers
+-- with what they typed.
 select is(
-  (select zomato_net_paise from public.manual_ledger_days
+  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(3)),
-  null,
-  'the day carries no synced net'
+  247200::bigint,
+  'the day still nets to what the owner typed, not to what Zomato reported'
 );
 
 select is(
@@ -185,10 +208,10 @@ select is(
 );
 
 select is(
-  (select zomato_commission_bp from public.manual_ledger_days
+  (select zomato_commission_paise from public.manual_ledger_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(3)),
-  2800,
-  'and so is the typed rate'
+  2800::bigint,
+  'and so is the commission they typed against it'
 );
 
 select is(

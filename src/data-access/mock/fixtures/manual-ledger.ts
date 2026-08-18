@@ -43,8 +43,8 @@ export interface ManualLedgerDaySeed {
   cashRemovedPaise?: number
   cashRemovedReason?: string
   countedCashPaise: number
-  zomatoCommissionBp: number
-  swiggyCommissionBp: number
+  zomatoCommissionPaise: number
+  swiggyCommissionPaise: number
   note?: string
   /**
    * What this day's drawer is *meant* to be out by, in paise. Zero unless the
@@ -110,8 +110,8 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
     zomatoRevenuePaise: 312_000,
     swiggyRevenuePaise: 248_000,
     countedCashPaise: 1_500_000,
-    zomatoCommissionBp: 2250,
-    swiggyCommissionBp: 2100,
+    zomatoCommissionPaise: 70_200,
+    swiggyCommissionPaise: 52_080,
   },
   // Three days ago. Banked ₹10,000, and the drawer came up ₹250 short.
   //   15,000 + 11,800 − 1,800 − 10,000 = 15,000, counted 14,750
@@ -125,8 +125,8 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
     cashRemovedPaise: 1_000_000,
     cashRemovedReason: 'Banked on the way home',
     countedCashPaise: 1_475_000,
-    zomatoCommissionBp: 2250,
-    swiggyCommissionBp: 2100,
+    zomatoCommissionPaise: 64_800,
+    swiggyCommissionPaise: 40_740,
     note: 'Counted twice. Two ₹100 notes and some change unaccounted for.',
     expectedDifferencePaise: -25_000,
     // The short day is the one a manager went back into, which is exactly when a
@@ -147,11 +147,13 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
     cashAddedPaise: 200_000,
     cashAddedReason: 'Owner topped up the float',
     countedCashPaise: 2_570_000,
-    zomatoCommissionBp: 2250,
-    swiggyCommissionBp: 2100,
+    zomatoCommissionPaise: 74_475,
+    swiggyCommissionPaise: 47_460,
   },
-  // Yesterday. **The renegotiated Zomato rate**, from this day onward — which is
-  // the case the whole per-day-rate design exists for.
+  // Yesterday. **A visibly different Zomato take** — 18% where the other days sit
+  // near 22.5%. It is a fixture rather than a special case: the take moves with
+  // the mix of order distances and discounts, which is why a stored rate was
+  // retired in favour of the amount Zomato actually charged.
   //
   // A fridge was also bought with drawer cash, recorded as cash taken out with
   // its reason and never as an expense. That is what keeps this day reconciling
@@ -169,8 +171,8 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
     cashRemovedPaise: 1_200_000,
     cashRemovedReason: 'Second fridge, bought from Kalyani Electronics',
     countedCashPaise: 795_000,
-    zomatoCommissionBp: 1800,
-    swiggyCommissionBp: 2100,
+    zomatoCommissionPaise: 72_360,
+    swiggyCommissionPaise: 48_930,
   },
 ]
 

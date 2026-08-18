@@ -52,8 +52,8 @@ describe('mock manual ledger adapter', () => {
       cashRemovedPaise: 0,
       cashRemovedReason: null,
       countedCashPaise: 1_700_000,
-      zomatoCommissionBp: 2250,
-      swiggyCommissionBp: 2100,
+      zomatoCommissionPaise: 70_200,
+      swiggyCommissionPaise: 52_080,
       note: null,
       ...overrides,
     })
@@ -86,7 +86,7 @@ describe('mock manual ledger adapter', () => {
 
       const read = await adapter.getDay(DEMO_OUTLET_ID, store.today)
       expect(read?.cashRevenuePaise).toBe(1_200_000)
-      expect(read?.zomatoCommissionBp).toBe(2250)
+      expect(read?.zomatoCommissionPaise).toBe(70_200)
     })
 
     it('corrects a day in place rather than adding a second one', async () => {
@@ -174,13 +174,18 @@ describe('mock manual ledger adapter', () => {
       expect(saved.cashRevenuePaise).toBe(-25_000)
     })
 
-    it('refuses a commission rate outside nought to a hundred per cent', async () => {
+    it('refuses a commission larger than the revenue it comes off', async () => {
       const { adapter, dayInput } = over()
-      await expect(adapter.upsertDay(dayInput({ zomatoCommissionBp: 10_001 }))).rejects.toThrow(
-        /between 0% and 100%/,
-      )
-      await expect(adapter.upsertDay(dayInput({ swiggyCommissionBp: -1 }))).rejects.toThrow(
-        /between 0% and 100%/,
+      // The bound is the day's own revenue now that commission is an amount, not a
+      // percentage ceiling. A commission above the takings is not a steep rate, it
+      // is a figure in the wrong box.
+      await expect(
+        adapter.upsertDay(
+          dayInput({ zomatoRevenuePaise: 312_000, zomatoCommissionPaise: 312_001 }),
+        ),
+      ).rejects.toThrow(/between zero and that day/)
+      await expect(adapter.upsertDay(dayInput({ swiggyCommissionPaise: -1 }))).rejects.toThrow(
+        /between zero and that day/,
       )
     })
 
@@ -201,9 +206,11 @@ describe('mock manual ledger adapter', () => {
       const previous = await adapter.getPreviousDay(DEMO_OUTLET_ID, store.today)
 
       expect(previous?.businessDate).toBe(store.businessDate(1))
-      // Which is what the form offers as this day's opening cash and rates.
+      // Which is what the form offers as this day's opening cash. The commission is
+      // deliberately NOT offered: it is an amount now, so yesterday's would be a
+      // function of yesterday's revenue and wrong by construction.
       expect(previous?.countedCashPaise).toBe(795_000)
-      expect(previous?.zomatoCommissionBp).toBe(1800)
+      expect(previous?.zomatoCommissionPaise).toBe(72_360)
     })
 
     it('has nothing to offer on an outlet’s first tracked day', async () => {

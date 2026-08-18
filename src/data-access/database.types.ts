@@ -2046,24 +2046,20 @@ export type Database = {
           opening_cash_paise: number
           outlet_id: string
           recorded_by: string
-          swiggy_commission_bp: number
+          swiggy_commission_paise: number | null
           swiggy_revenue_paise: number
           updated_at: string
           updated_by: string | null
           upi_revenue_paise: number
-          zomato_commission_bp: number
           zomato_commission_paise: number | null
-          zomato_gross_paise: number | null
-          zomato_net_paise: number | null
           zomato_provisional_commission_paise: number | null
-          zomato_provisional_gross_paise: number | null
-          zomato_provisional_net_paise: number | null
+          zomato_provisional_revenue_paise: number | null
           zomato_revenue_paise: number
           zomato_revised_at: string | null
           zomato_settlement_state: string | null
           zomato_superseded_at: string | null
-          zomato_typed_commission_bp: number | null
-          zomato_typed_revenue_paise: number | null
+          zomato_superseded_commission_paise: number | null
+          zomato_superseded_revenue_paise: number | null
         }
         Insert: {
           business_date: string
@@ -2079,24 +2075,20 @@ export type Database = {
           opening_cash_paise: number
           outlet_id: string
           recorded_by?: string
-          swiggy_commission_bp: number
+          swiggy_commission_paise?: number | null
           swiggy_revenue_paise?: number
           updated_at?: string
           updated_by?: string | null
           upi_revenue_paise?: number
-          zomato_commission_bp: number
           zomato_commission_paise?: number | null
-          zomato_gross_paise?: number | null
-          zomato_net_paise?: number | null
           zomato_provisional_commission_paise?: number | null
-          zomato_provisional_gross_paise?: number | null
-          zomato_provisional_net_paise?: number | null
+          zomato_provisional_revenue_paise?: number | null
           zomato_revenue_paise?: number
           zomato_revised_at?: string | null
           zomato_settlement_state?: string | null
           zomato_superseded_at?: string | null
-          zomato_typed_commission_bp?: number | null
-          zomato_typed_revenue_paise?: number | null
+          zomato_superseded_commission_paise?: number | null
+          zomato_superseded_revenue_paise?: number | null
         }
         Update: {
           business_date?: string
@@ -2112,24 +2104,20 @@ export type Database = {
           opening_cash_paise?: number
           outlet_id?: string
           recorded_by?: string
-          swiggy_commission_bp?: number
+          swiggy_commission_paise?: number | null
           swiggy_revenue_paise?: number
           updated_at?: string
           updated_by?: string | null
           upi_revenue_paise?: number
-          zomato_commission_bp?: number
           zomato_commission_paise?: number | null
-          zomato_gross_paise?: number | null
-          zomato_net_paise?: number | null
           zomato_provisional_commission_paise?: number | null
-          zomato_provisional_gross_paise?: number | null
-          zomato_provisional_net_paise?: number | null
+          zomato_provisional_revenue_paise?: number | null
           zomato_revenue_paise?: number
           zomato_revised_at?: string | null
           zomato_settlement_state?: string | null
           zomato_superseded_at?: string | null
-          zomato_typed_commission_bp?: number | null
-          zomato_typed_revenue_paise?: number | null
+          zomato_superseded_commission_paise?: number | null
+          zomato_superseded_revenue_paise?: number | null
         }
         Relationships: [
           {
@@ -3159,6 +3147,13 @@ export type Database = {
       cancel_counter_shift_request: {
         Args: { p_device_id: string }
         Returns: string
+      }
+      claim_aggregator_code: {
+        Args: { p_channel: string }
+        Returns: {
+          code: string
+          request_id: string
+        }[]
       }
       close_business_day: {
         Args: {

@@ -684,8 +684,8 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       cash_removed_paise: seed.cashRemovedPaise ?? 0,
       cash_removed_reason: seed.cashRemovedReason ?? null,
       counted_cash_paise: seed.countedCashPaise,
-      zomato_commission_bp: seed.zomatoCommissionBp,
-      swiggy_commission_bp: seed.swiggyCommissionBp,
+      zomato_commission_paise: seed.zomatoCommissionPaise,
+      swiggy_commission_paise: seed.swiggyCommissionPaise,
       note: seed.note ?? null,
       recorded_by: OWNER_ID,
       created_at: instantAt(businessDate(seed.daysAgo), '23:00'),
@@ -695,17 +695,14 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       // test (design D6).
       // Settlement is absent on every seeded day: these are the typed months the
       // sync did not cover, which is what makes them the control the synced
-      // fixtures are read against.
-      zomato_gross_paise: null,
-      zomato_commission_paise: null,
-      zomato_net_paise: null,
+      // fixtures are read against. The figures above are therefore the owner's own,
+      // since a null state is what says a day was typed.
       zomato_settlement_state: null,
-      zomato_typed_revenue_paise: null,
-      zomato_typed_commission_bp: null,
+      zomato_superseded_revenue_paise: null,
+      zomato_superseded_commission_paise: null,
       zomato_superseded_at: null,
-      zomato_provisional_gross_paise: null,
+      zomato_provisional_revenue_paise: null,
       zomato_provisional_commission_paise: null,
-      zomato_provisional_net_paise: null,
       zomato_revised_at: null,
       updated_by: seed.correctedByManager ? MANAGER_ID : null,
     }),

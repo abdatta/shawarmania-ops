@@ -71,8 +71,8 @@ function toDay(row: Tables<'manual_ledger_days'>): ManualLedgerDay {
     cashRemovedPaise: row.cash_removed_paise,
     cashRemovedReason: row.cash_removed_reason,
     countedCashPaise: row.counted_cash_paise,
-    zomatoCommissionBp: row.zomato_commission_bp,
-    swiggyCommissionBp: row.swiggy_commission_bp,
+    zomatoCommissionPaise: row.zomato_commission_paise,
+    swiggyCommissionPaise: row.swiggy_commission_paise,
     note: row.note,
     recordedBy: actor(row.recorded_by),
     updatedBy: optionalActor(row.updated_by),
@@ -138,14 +138,33 @@ function refuseImpossibleDay(day: ManualLedgerDayInput): void {
     )
   }
 
-  for (const [bp, label] of [
-    [day.zomatoCommissionBp, 'Zomato'],
-    [day.swiggyCommissionBp, 'Swiggy'],
+  /*
+   * Commission is an amount, bounded by the revenue it comes off rather than by a
+   * percentage ceiling, and it may be **undetermined** on a channel that earned
+   * something. The bound is stated as min/max of nought and the revenue so a
+   * refunded day, whose revenue is negative, is bounded the same way in the other
+   * direction. Mirrors the database constraint of the same name.
+   */
+  for (const [commission, revenue, label] of [
+    [day.zomatoCommissionPaise, day.zomatoRevenuePaise, 'Zomato'],
+    [day.swiggyCommissionPaise, day.swiggyRevenuePaise, 'Swiggy'],
   ] as const) {
-    if (!Number.isInteger(bp) || bp < 0 || bp > 10_000) {
+    // Nothing sold means nothing charged, and that is known rather than pending.
+    if (revenue === 0 && commission !== 0) {
       throw new ManualLedgerActionError(
         'impossible_figure',
-        `The ${label} commission has to be between 0% and 100%.`,
+        `${label} sold nothing that day, so its commission is nought rather than undetermined.`,
+      )
+    }
+    if (commission === null) continue
+    if (
+      !Number.isInteger(commission) ||
+      commission < Math.min(0, revenue) ||
+      commission > Math.max(0, revenue)
+    ) {
+      throw new ManualLedgerActionError(
+        'impossible_figure',
+        `The ${label} commission has to be an amount between zero and that day's ${label} revenue.`,
       )
     }
   }
@@ -281,6 +300,9 @@ export function createMockManualLedgerAdapter(
       const existing = store.manualLedgerDays.find(
         (row) => row.outlet_id === day.outletId && row.business_date === day.businessDate,
       )
+      // Whether Zomato has taken this day over. The state column is the only thing
+      // that says so, now that typed and synced figures share their columns.
+      const isSynced = (existing?.zomato_settlement_state ?? null) !== null
 
       const written: Tables<'manual_ledger_days'> = {
         id: existing?.id ?? `dd000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`,
@@ -289,28 +311,40 @@ export function createMockManualLedgerAdapter(
         opening_cash_paise: day.openingCashPaise,
         cash_revenue_paise: day.cashRevenuePaise,
         upi_revenue_paise: day.upiRevenuePaise,
-        zomato_revenue_paise: day.zomatoRevenuePaise,
         swiggy_revenue_paise: day.swiggyRevenuePaise,
         cash_added_paise: day.cashAddedPaise,
         cash_added_reason: trimmed(day.cashAddedReason),
         cash_removed_paise: day.cashRemovedPaise,
         cash_removed_reason: trimmed(day.cashRemovedReason),
         counted_cash_paise: day.countedCashPaise,
-        zomato_commission_bp: day.zomatoCommissionBp,
-        swiggy_commission_bp: day.swiggyCommissionBp,
-        // The sync writes these, and no signed-in session may. A day written
-        // through this form carries whatever it already had, never a figure the
-        // form invented.
-        zomato_gross_paise: existing?.zomato_gross_paise ?? null,
-        zomato_commission_paise: existing?.zomato_commission_paise ?? null,
-        zomato_net_paise: existing?.zomato_net_paise ?? null,
+        swiggy_commission_paise: day.swiggyCommissionPaise,
+
+        /*
+         * Zomato's two figures are the form's on a day nobody synced, and
+         * untouchable on a day the sync covers.
+         *
+         * This mirrors `guard_manual_ledger_settlement_is_read`, which stopped
+         * being a rule about *columns* when commission became an amount: typed and
+         * synced figures now share the same pair, so the guard refuses a day rather
+         * than a field. The mock has to refuse the same day or the demo would let
+         * somebody overwrite a settled figure that production would reject.
+         */
+        zomato_revenue_paise: isSynced
+          ? (existing?.zomato_revenue_paise ?? day.zomatoRevenuePaise)
+          : day.zomatoRevenuePaise,
+        zomato_commission_paise: isSynced
+          ? (existing?.zomato_commission_paise ?? day.zomatoCommissionPaise)
+          : day.zomatoCommissionPaise,
+
+        // The markers say a figure was read and reconciled. The sync writes them
+        // and no signed-in session may, so a day written through this form carries
+        // whatever it already had.
         zomato_settlement_state: existing?.zomato_settlement_state ?? null,
-        zomato_typed_revenue_paise: existing?.zomato_typed_revenue_paise ?? null,
-        zomato_typed_commission_bp: existing?.zomato_typed_commission_bp ?? null,
+        zomato_superseded_revenue_paise: existing?.zomato_superseded_revenue_paise ?? null,
+        zomato_superseded_commission_paise: existing?.zomato_superseded_commission_paise ?? null,
         zomato_superseded_at: existing?.zomato_superseded_at ?? null,
-        zomato_provisional_gross_paise: existing?.zomato_provisional_gross_paise ?? null,
+        zomato_provisional_revenue_paise: existing?.zomato_provisional_revenue_paise ?? null,
         zomato_provisional_commission_paise: existing?.zomato_provisional_commission_paise ?? null,
-        zomato_provisional_net_paise: existing?.zomato_provisional_net_paise ?? null,
         zomato_revised_at: existing?.zomato_revised_at ?? null,
         note: trimmed(day.note),
         // Frozen on a correction, as the guard freezes it: a second owner — or

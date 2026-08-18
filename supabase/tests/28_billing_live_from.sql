@@ -61,24 +61,24 @@ select throws_ok(
   format($q$insert into public.manual_ledger_days
     (outlet_id,business_date,opening_cash_paise,cash_revenue_paise,upi_revenue_paise,
      zomato_revenue_paise,swiggy_revenue_paise,cash_added_paise,cash_removed_paise,
-     counted_cash_paise,zomato_commission_bp,swiggy_commission_bp)
-    values (%L,current_date,10000,100,200,300,400,0,0,10000,2200,2100)$q$, :'KAL'),
+     counted_cash_paise,zomato_commission_paise,swiggy_commission_paise)
+    values (%L,current_date,10000,100,200,300,400,0,0,10000,60,80)$q$, :'KAL'),
   'P0001', null, 'typed Cash/UPI is refused from the live date onward');
 
 insert into public.manual_ledger_days
   (outlet_id,business_date,opening_cash_paise,cash_revenue_paise,upi_revenue_paise,
    zomato_revenue_paise,swiggy_revenue_paise,cash_added_paise,cash_removed_paise,
-   counted_cash_paise,zomato_commission_bp,swiggy_commission_bp)
-values (:'KAL',current_date,10000,0,0,300,400,0,0,10000,2200,2100);
+   counted_cash_paise,zomato_commission_paise,swiggy_commission_paise)
+values (:'KAL',current_date,10000,0,0,300,400,0,0,10000,60,80);
 update public.manual_ledger_days set zomato_revenue_paise = 500,
-  swiggy_commission_bp = 2000
+  swiggy_commission_paise = 0
 where outlet_id = :'KAL' and business_date = current_date;
 select results_eq(
-  $$select zomato_revenue_paise,swiggy_revenue_paise,zomato_commission_bp,swiggy_commission_bp
+  $$select zomato_revenue_paise,swiggy_revenue_paise,zomato_commission_paise,swiggy_commission_paise
       from public.manual_ledger_days where outlet_id='00000000-0000-4000-a000-000000000001'
       and business_date=current_date$$,
-  $$values (500::bigint,400::bigint,2200,2000)$$,
-  'aggregator revenue and daily rates remain typed after counter go-live');
+  $$values (500::bigint,400::bigint,60::bigint,0::bigint)$$,
+  'aggregator revenue and its commission remain typed after counter go-live');
 
 select pg_temp.impersonate(:'FA_KAL');
 select is((select count(*) from public.manual_ledger_counter_revenue(

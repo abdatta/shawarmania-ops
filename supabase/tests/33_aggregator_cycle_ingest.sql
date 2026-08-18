@@ -13,6 +13,25 @@ set local search_path = public, extensions;
 
 select * from no_plan();
 
+/*
+ * The sync boundary, planted in the past.
+ *
+ * `ingest_aggregator_cycle` refuses to touch a day before the date its outlet was
+ * switched on, so every case below needs a boundary earlier than the days it writes.
+ * The trigger is disabled to plant it, because it deliberately refuses a date that
+ * has already started: switching a sync on is a scheduled act, and applying one
+ * retrospectively over days somebody already typed is the thing it exists to stop.
+ */
+alter table public.outlet_channel_sync disable trigger outlet_channel_sync_guarded;
+insert into public.outlet_channel_sync (outlet_id, channel, synced_from)
+values ('00000000-0000-4000-a000-000000000001', 'zomato',
+        public.app_business_date(now(), time '04:00') - 60),
+       ('00000000-0000-4000-a000-000000000002', 'zomato',
+        public.app_business_date(now(), time '04:00') - 60)
+on conflict (outlet_id, channel) do update set synced_from = excluded.synced_from;
+alter table public.outlet_channel_sync enable trigger outlet_channel_sync_guarded;
+
+
 \set OWNER '10000000-0000-4000-a000-000000000001'
 \set KAL '00000000-0000-4000-a000-000000000001'
 \set KPA '00000000-0000-4000-a000-000000000002'
@@ -42,14 +61,17 @@ $$;
 -- A typed day, as the owner records one. Every cycle below lands on days that
 -- already exist, which is the contract: the sync attaches figures, it does not
 -- invent trading days.
-create function pg_temp.typed_day(p_outlet uuid, d date, revenue bigint, bp int)
+-- Swiggy is charged nought here because these days sell nothing on Swiggy, which
+-- the commission-within-revenue constraint now insists on: a charge against
+-- revenue that does not exist is a figure in the wrong box.
+create function pg_temp.typed_day(p_outlet uuid, d date, revenue bigint, commission bigint)
 returns void language plpgsql as $$
 begin
   insert into public.manual_ledger_days
     (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-     cash_revenue_paise, zomato_revenue_paise, zomato_commission_bp,
-     swiggy_commission_bp, recorded_by)
-  values (p_outlet, d, 500000, 500000, 0, revenue, bp, 2100,
+     cash_revenue_paise, zomato_revenue_paise, zomato_commission_paise,
+     swiggy_commission_paise, recorded_by)
+  values (p_outlet, d, 500000, 500000, 0, revenue, commission, 0,
           '10000000-0000-4000-a000-000000000001')
   on conflict (outlet_id, business_date) do nothing;
 end;
@@ -80,9 +102,12 @@ select is(
   'ok',
   'a provisional cycle is accepted');
 
+-- Net is selected as the subtraction it is, not read from a column. There is no
+-- stored net any more: with commission exact it would be a third figure able to
+-- disagree with the two it came from.
 select results_eq(
-  format($$select business_date, zomato_gross_paise, zomato_commission_paise,
-                  zomato_net_paise, zomato_settlement_state
+  format($$select business_date, zomato_revenue_paise, zomato_commission_paise,
+                  zomato_revenue_paise - zomato_commission_paise, zomato_settlement_state
              from public.manual_ledger_days
             where outlet_id = %L and business_date in (%L, %L)
             order by business_date$$,
@@ -91,20 +116,23 @@ select results_eq(
             297003::bigint, 83892::bigint, 213111::bigint, 'provisional'),
            (public.app_business_date(now(), time '04:00') - 8,
             180000::bigint, 50000::bigint, 130000::bigint, 'provisional')$$,
-  'each trading day carries its own measured triple, summed from its own orders');
+  'each trading day carries its own measured figures, summed from its own orders');
 
-select is(
-  (select zomato_revenue_paise + zomato_commission_bp from public.manual_ledger_days
+-- The old version of this asserted that the typed pair had been zeroed, because a
+-- synced day used to hold a second pair of columns and summing both would have
+-- double-counted. There is one pair now, so the claim worth making is that it holds
+-- Zomato's figures rather than the owner's: 297003 measured where 295000 was typed.
+select isnt(
+  (select zomato_revenue_paise from public.manual_ledger_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(9)),
-  0::bigint,
-  'and the typed inputs are zeroed, so no path can add a typed figure to a '
-  'measured one');
+  295000::bigint,
+  'and the day now reads Zomato''s figure rather than the one the owner typed');
 
 select results_eq(
-  format($$select zomato_typed_revenue_paise, zomato_typed_commission_bp
+  format($$select zomato_superseded_revenue_paise, zomato_superseded_commission_paise
              from public.manual_ledger_days
             where outlet_id = %L and business_date = %L$$, :'KAL', pg_temp.day(9)),
-  $$values (295000::bigint, 2825)$$,
+  $$values (295000::bigint, 2825::bigint)$$,
   'what the owner had typed is retained beside it, so the estimate can be '
   'compared against the settled truth');
 
@@ -120,8 +148,8 @@ select isnt(
 create function pg_temp.day_fingerprint(p_outlet uuid)
 returns text language sql as $$
   select coalesce(string_agg(
-    format('%s|%s|%s|%s|%s|%s', business_date, zomato_gross_paise, zomato_commission_paise,
-           zomato_net_paise, zomato_settlement_state, zomato_superseded_at),
+    format('%s|%s|%s|%s|%s', business_date, zomato_revenue_paise, zomato_commission_paise,
+           zomato_settlement_state, zomato_superseded_at),
     ' ' order by business_date), '')
     from public.manual_ledger_days where outlet_id = p_outlet
 $$;
@@ -150,7 +178,7 @@ select is(
   'and creates no second row for a day it already wrote');
 
 select is(
-  (select zomato_typed_revenue_paise from public.manual_ledger_days
+  (select zomato_superseded_revenue_paise from public.manual_ledger_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(9)),
   295000::bigint,
   'nor supersedes the typed figure a second time with the zero it wrote itself, '
@@ -183,14 +211,14 @@ select is(
   'a cycle spanning the cutover is accepted');
 
 select is(
-  (select zomato_net_paise from public.manual_ledger_days
+  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(7)),
   35000::bigint,
   'an order placed at 00:30 lands on the trading day that cooked it, not on the '
   'calendar day the clock had already moved to');
 
 select is(
-  (select zomato_net_paise from public.manual_ledger_days
+  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(6)),
   50000::bigint,
   'and an order at exactly 04:00 opens the new one, the cutover being an '
@@ -233,7 +261,8 @@ select is(
   'in place, staying one row per outlet per business date');
 
 select results_eq(
-  format($$select zomato_net_paise, zomato_settlement_state, zomato_provisional_net_paise
+  format($$select zomato_revenue_paise - zomato_commission_paise, zomato_settlement_state,
+                  zomato_provisional_revenue_paise - zomato_provisional_commission_paise
              from public.manual_ledger_days
             where outlet_id = %L and business_date = %L$$, :'KPA', pg_temp.day(12)),
   $$values (217915::bigint, 'settled', 210000::bigint)$$,
@@ -259,7 +288,7 @@ select is(
   'ok', 'a later live read of an already settled week is accepted');
 
 select is(
-  (select zomato_net_paise from public.manual_ledger_days
+  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
     where outlet_id = :'KPA'::uuid and business_date = pg_temp.day(12)),
   217915::bigint,
   'but changes nothing, because a settled figure has already reconciled and the '
@@ -316,7 +345,7 @@ select is(
   'nightly on displayed figures');
 
 select is(
-  (select zomato_net_paise from public.manual_ledger_days
+  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(14)),
   140000::bigint,
   'and the stored figure is the aggregator''s own, not adjusted to close the gap');
@@ -384,7 +413,8 @@ select is(
   'mistaken for the current week awaiting payment');
 
 select is(
-  (select sum(zomato_net_paise)::bigint from public.manual_ledger_days
+  (select sum(zomato_revenue_paise - zomato_commission_paise)::bigint
+     from public.manual_ledger_days
     where outlet_id = :'KAL'::uuid
       and business_date in (pg_temp.day(20), pg_temp.day(19))),
   630000::bigint,
@@ -434,7 +464,8 @@ select results_eq(
   'it, rather than spread across the days until the total looked right');
 
 select is(
-  (select sum(zomato_net_paise)::bigint from public.manual_ledger_days
+  (select sum(zomato_revenue_paise - zomato_commission_paise)::bigint
+     from public.manual_ledger_days
     where outlet_id = :'KAL'::uuid
       and business_date in (pg_temp.day(20), pg_temp.day(19))),
   630000::bigint,
@@ -637,6 +668,98 @@ select is(
   0::bigint,
   'and no day row is invented for it, because a fabricated opening balance and '
   'a drawer count of zero would reconcile and mean nothing');
+
+-- ---------------------------------------------------------------------------
+-- The sync boundary: everything before it is the owner's, forever.
+--
+-- The cycle window this reader asks for is thirty-one days wide, so without this
+-- the first real run would reach back past any plausible go-live and restate
+-- months of typed history. "Switching it on" would have quietly meant "rewriting
+-- the past", which is the one thing a ledger must never do to a figure somebody
+-- entered and has already acted on.
+
+select pg_temp.typed_day(:'KAL', pg_temp.day(50), 111100, 33300);
+
+-- Move the boundary forward so day 20 sits behind it, and day 9 in front.
+alter table public.outlet_channel_sync disable trigger outlet_channel_sync_guarded;
+update public.outlet_channel_sync
+   set synced_from = public.app_business_date(now(), time '04:00') - 45
+ where outlet_id = :'KAL'::uuid and channel = 'zomato';
+alter table public.outlet_channel_sync enable trigger outlet_channel_sync_guarded;
+
+select is(
+  pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', :'KAL',
+    'channel', 'zomato',
+    'cycle_start', pg_temp.day(51),
+    'cycle_end', pg_temp.day(49),
+    'cycle_state', 'provisional',
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'behind-the-boundary',
+                         'placed_at', (pg_temp.day(50) + time '13:00')::timestamptz,
+                         'gross_paise', 999999, 'commission_paise', 111111,
+                         'net_paise', 888888))
+  )) ->> 'outcome',
+  'ok',
+  'a cycle reaching behind the boundary is accepted rather than refused');
+
+select results_eq(
+  format($$select zomato_revenue_paise, zomato_commission_paise, zomato_settlement_state
+             from public.manual_ledger_days
+            where outlet_id = %L and business_date = %L$$, :'KAL', pg_temp.day(50)),
+  $$values (111100::bigint, 33300::bigint, null::text)$$,
+  'but the day behind it keeps the owner''s own figures and stays untouched');
+
+select is(
+  (select (pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', :'KAL',
+    'channel', 'zomato',
+    'cycle_start', pg_temp.day(51),
+    'cycle_end', pg_temp.day(49),
+    'cycle_state', 'provisional',
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'behind-the-boundary-2',
+                         'placed_at', (pg_temp.day(50) + time '13:00')::timestamptz,
+                         'gross_paise', 999999, 'commission_paise', 111111,
+                         'net_paise', 888888))
+  )) ->> 'days_written')::int),
+  0,
+  'and nothing is counted as written, so a run says plainly that it did nothing');
+
+-- Nor is it reported as pending. A day behind the boundary is not waiting for a
+-- ledger row; it already has one, and it is not this reader's to fill.
+select is(
+  pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', :'KAL',
+    'channel', 'zomato',
+    'cycle_start', pg_temp.day(56),
+    'cycle_end', pg_temp.day(55),
+    'cycle_state', 'provisional',
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'far-behind',
+                         'placed_at', (pg_temp.day(55) + time '13:00')::timestamptz,
+                         'gross_paise', 5000, 'commission_paise', 1000,
+                         'net_paise', 4000))
+  )) ->> 'days_pending',
+  '',
+  'a day behind the boundary is not reported as pending either');
+
+-- An outlet nobody switched on is refused outright rather than silently ignored.
+alter table public.outlet_channel_sync disable trigger outlet_channel_sync_guarded;
+delete from public.outlet_channel_sync where outlet_id = :'KPA'::uuid and channel = 'zomato';
+alter table public.outlet_channel_sync enable trigger outlet_channel_sync_guarded;
+
+select throws_ok(
+  format($$select public.ingest_aggregator_cycle(jsonb_build_object(
+    'contract_version', 1, 'outlet_id', %L, 'channel', 'zomato',
+    'cycle_start', %L, 'cycle_end', %L, 'cycle_state', 'provisional',
+    'orders', '[]'::jsonb), array[%L::uuid, %L::uuid])$$,
+    :'KPA', pg_temp.day(9), pg_temp.day(8), :'KAL', :'KPA'),
+  '22023', null,
+  'and an outlet with no sync date at all is refused, not quietly skipped');
 
 select * from finish();
 rollback;

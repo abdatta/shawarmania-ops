@@ -467,9 +467,26 @@ reference from a live surface, greppable.
 `opening_cash_paise`, `cash_revenue_paise`, `upi_revenue_paise`,
 `zomato_revenue_paise`, `swiggy_revenue_paise`, `cash_added_paise`,
 `cash_added_reason`, `cash_removed_paise`, `cash_removed_reason`,
-`counted_cash_paise`, `zomato_commission_bp`, `swiggy_commission_bp`, `note`,
-`recorded_by`, `updated_by`, `created_at`, `updated_at`.
+`counted_cash_paise`, `zomato_commission_paise`, `swiggy_commission_paise`,
+`note`, `recorded_by`, `updated_by`, `created_at`, `updated_at`.
 `unique (outlet_id, business_date)`.
+
+Commission is an **exact amount in paise, never a rate** [owner, 2026-08-17]. The
+measured take moves between roughly 24% and 35% day to day, because the charge is
+a base service fee plus a per-kilometre fulfilment fee less a capping discount
+plus a payment fee plus tax on all of it: Zomato publishes 14% for an order whose
+real take was 37.8%. A stored percentage was therefore an estimate in the shape of
+an exact figure. A channel's **net is revenue less commission and is not stored**,
+because a third column could disagree with the two it is derived from.
+
+Where the Zomato sync covers a day, the same two columns hold the figures read
+from Zomato, and `zomato_settlement_state` is the only thing that says so. The
+row then also carries `zomato_superseded_revenue_paise`,
+`zomato_superseded_commission_paise` and `zomato_superseded_at` — what the owner
+had typed before the sync took the day over, kept for comparison and excluded
+from every computation — and `zomato_provisional_revenue_paise`,
+`zomato_provisional_commission_paise` and `zomato_revised_at`, present only where
+settling actually moved the figures.
 
 **`manual_ledger_expenses`** — `id`, `outlet_id`, `business_date`, `category`
 (the same normalised free-text snapshot used by `expenses`), `is_cash`,
