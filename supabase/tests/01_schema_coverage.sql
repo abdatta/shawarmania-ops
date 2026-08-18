@@ -67,6 +67,14 @@ classified as (
       when tbl in ('invite_redemption_attempts', 'email_sign_in_attempts',
                    'customer_lookup_attempts')
         then 'tenant-less'
+      -- Service-only: belongs to no outlet, and to no signed-in account either.
+      -- A stronger claim than 'global', which is reachable and merely not
+      -- outlet-scoped. These two hold a live merchant session and a one-time
+      -- password, so every client role is refused them outright — by having no
+      -- grant AND no policy, proved in 34_aggregator_credentials_and_auth.sql
+      -- the way section 6 below proves what the global exception costs.
+      when tbl in ('aggregator_channel_credentials', 'aggregator_auth_requests')
+        then 'service-only'
     end as class
   from tables
 )
@@ -75,7 +83,7 @@ select is(
     (select string_agg(tbl, ', ' order by tbl) from classified where class is null),
     ''),
   '',
-  'every public table is classified outlet-scoped, child-scoped, person-scoped, global, tenancy-root, or tenant-less'
+  'every public table is classified outlet-scoped, child-scoped, person-scoped, global, tenancy-root, tenant-less, or service-only'
 );
 
 -- ---------------------------------------------------------------------------

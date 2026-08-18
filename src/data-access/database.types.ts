@@ -117,6 +117,99 @@ export type Database = {
           },
         ]
       }
+      aggregator_auth_requests: {
+        Row: {
+          answered_at: string | null
+          attempts: number
+          channel: string
+          closed_at: string | null
+          code: string | null
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          outcome: string | null
+          requested_at: string
+          requested_by: string | null
+          requested_from_outlet_id: string | null
+        }
+        Insert: {
+          answered_at?: string | null
+          attempts?: number
+          channel: string
+          closed_at?: string | null
+          code?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          outcome?: string | null
+          requested_at?: string
+          requested_by?: string | null
+          requested_from_outlet_id?: string | null
+        }
+        Update: {
+          answered_at?: string | null
+          attempts?: number
+          channel?: string
+          closed_at?: string | null
+          code?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          outcome?: string | null
+          requested_at?: string
+          requested_by?: string | null
+          requested_from_outlet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aggregator_auth_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aggregator_auth_requests_requested_from_outlet_id_fkey"
+            columns: ["requested_from_outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      aggregator_channel_credentials: {
+        Row: {
+          channel: string
+          created_at: string
+          login_identifier_secret_id: string | null
+          session_expires_at: string | null
+          session_saved_at: string | null
+          session_secret_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          login_identifier_secret_id?: string | null
+          session_expires_at?: string | null
+          session_saved_at?: string | null
+          session_secret_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          login_identifier_secret_id?: string | null
+          session_expires_at?: string | null
+          session_saved_at?: string | null
+          session_secret_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       aggregator_cycle_deductions: {
         Row: {
           accepted_at: string | null
@@ -189,6 +282,7 @@ export type Database = {
           id: string
           outcome: string
           outlet_id: string
+          rehearsal: boolean
           started_at: string
         }
         Insert: {
@@ -199,6 +293,7 @@ export type Database = {
           id?: string
           outcome: string
           outlet_id: string
+          rehearsal?: boolean
           started_at: string
         }
         Update: {
@@ -209,6 +304,7 @@ export type Database = {
           id?: string
           outcome?: string
           outlet_id?: string
+          rehearsal?: boolean
           started_at?: string
         }
         Relationships: [
@@ -2707,6 +2803,17 @@ export type Database = {
         Args: { p_profile_id: string }
         Returns: string
       }
+      aggregator_credential_health: {
+        Args: { p_channel: string }
+        Returns: {
+          awaiting_code_attempts: number
+          awaiting_code_expires_at: string
+          awaiting_code_since: string
+          has_login_identifier: boolean
+          has_session: boolean
+          session_expires_at: string
+        }[]
+      }
       app_account_active: { Args: never; Returns: boolean }
       app_account_email_valid: { Args: { input: string }; Returns: boolean }
       app_business_date: {
@@ -3236,6 +3343,10 @@ export type Database = {
         Args: { p_person_id: string; p_shift_id: string }
         Returns: string
       }
+      forget_aggregator_session: {
+        Args: { p_channel: string }
+        Returns: undefined
+      }
       grant_assignment_with_invite: {
         Args: {
           p_account_email: string
@@ -3402,12 +3513,18 @@ export type Database = {
           profile_id: string
         }[]
       }
+      read_aggregator_login_identifier: {
+        Args: { p_channel: string }
+        Returns: string
+      }
+      read_aggregator_session: { Args: { p_channel: string }; Returns: string }
       record_aggregator_sync_run: {
         Args: {
           p_channel: string
           p_detail: string
           p_outcome: string
           p_outlet_id: string
+          p_rehearsal?: boolean
           p_started_at: string
         }
         Returns: string
@@ -3438,6 +3555,10 @@ export type Database = {
           outlet_id: string
           status: string
         }[]
+      }
+      rehearse_aggregator_cycle: {
+        Args: { p_payload: Json; p_permitted_outlets: string[] }
+        Returns: Json
       }
       reject_counter_shift_request: {
         Args: { p_person_id: string; p_request_id: string }
@@ -3494,6 +3615,14 @@ export type Database = {
           p_shift_id?: string
         }
         Returns: Json
+      }
+      save_aggregator_session: {
+        Args: { p_channel: string; p_expires_at: string; p_session: string }
+        Returns: undefined
+      }
+      set_aggregator_login_identifier: {
+        Args: { p_channel: string; p_identifier: string }
+        Returns: undefined
       }
       set_super_admin_account_email: {
         Args: { p_email: string; p_profile_id: string }

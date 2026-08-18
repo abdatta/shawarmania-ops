@@ -28,17 +28,25 @@ import { json, preflight, readJson, str } from '../_shared/http.ts'
  *     that quietly stops is the failure mode being designed out, so silence has
  *     to be visible as silence.
  *
+ *  5. **A rehearsal is a different function, not a flag on this one.** Sending
+ *     `rehearse: true` routes the cycle to `rehearse_aggregator_cycle`, which runs
+ *     every check the real path runs and rolls the writes back. The run is
+ *     recorded as a rehearsal so the surface cannot report seven days written by a
+ *     run that wrote none.
+ *
  * Registered with verify_jwt = false in supabase/config.toml: the caller is a
  * scheduled job holding its own secret, not a person holding a session.
  */
 
 const CONTRACT_VERSION = 1
 
-type Outcome = 'ok' | 'session_lapsed' | 'shape_changed' | 'reconciliation_failed'
+type Outcome =
+  'ok' | 'session_lapsed' | 'awaiting_one_time_password' | 'shape_changed' | 'reconciliation_failed'
 
 const OUTCOMES: readonly Outcome[] = [
   'ok',
   'session_lapsed',
+  'awaiting_one_time_password',
   'shape_changed',
   'reconciliation_failed',
 ]
@@ -104,6 +112,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const cycles = Array.isArray(body['cycles']) ? (body['cycles'] as unknown[]) : []
   const service = serviceClient()
 
+  /**
+   * A rehearsal reconciles a real cycle and throws the writes away.
+   *
+   * `=== true` rather than a truthy check, and defaulting to the writing path
+   * rather than to the safe one. A caller that omits the flag, or sends a string,
+   * or sends something a proxy mangled, gets the ordinary behaviour — which is
+   * the behaviour that runs twice a day for years, and the one whose meaning must
+   * never depend on how a field was parsed. Rehearsing is the deliberate, typed,
+   * once-in-a-lifetime request, so it is the one that has to be exact.
+   */
+  const rehearsing = body['rehearse'] === true
+
   const finish = async (outcome: Outcome, detail: string | null, status: number, extra = {}) => {
     const { error } = await service.rpc('record_aggregator_sync_run', {
       p_outlet_id: outletId,
@@ -111,13 +131,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       p_started_at: startedAt,
       p_outcome: outcome,
       p_detail: detail,
+      p_rehearsal: rehearsing,
     })
     if (error) {
       // The run's own record failing is not a reason to lose the answer, but it
       // does mean the owner's surface will under-report, so it is loud.
       console.error('could not record the sync run', error)
     }
-    return json({ outcome, ...extra }, status)
+    return json({ outcome, rehearsal: rehearsing, ...extra }, status)
   }
 
   // A run that reached no data at all still reports itself. It writes nothing
@@ -131,10 +152,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   let unreconciled = 0
 
   for (const cycle of cycles) {
-    const { data, error } = await service.rpc('ingest_aggregator_cycle', {
-      p_payload: cycle,
-      p_permitted_outlets: outlets,
-    })
+    const { data, error } = await service.rpc(
+      rehearsing ? 'rehearse_aggregator_cycle' : 'ingest_aggregator_cycle',
+      {
+        p_payload: cycle,
+        p_permitted_outlets: outlets,
+      },
+    )
 
     if (error) {
       console.error('a cycle was refused by the write contract', error)

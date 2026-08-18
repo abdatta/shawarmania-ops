@@ -684,7 +684,12 @@ begin
     commission_paise bigint,
     net_paise bigint
   ) on commit drop;
-  delete from ingest_days;
+  -- `truncate`, not a bare `delete`. Supabase preloads `safeupdate` for the
+  -- `authenticator` role, which refuses an UPDATE or DELETE with no WHERE clause
+  -- with "DELETE requires a WHERE clause". pgTAP runs as `postgres` and never
+  -- sees it, so a bare delete here passes every test in this repo and then fails
+  -- on the first real call through the Edge Function.
+  truncate table ingest_days;
 
   insert into ingest_days (business_date, gross_paise, commission_paise, net_paise)
   select public.app_business_date((o ->> 'placed_at')::timestamptz, v_cutover),

@@ -142,3 +142,30 @@ verify_jwt = false
 # credential writing anywhere but the two outlets it was issued for.
 [functions.ingest-aggregator-cycle]
 verify_jwt = false
+
+# Starting a run, and starting a login, from the owner's phone. Verified at the
+# gateway because the caller IS a person holding a session, and an anonymous
+# request should be refused before it reaches code that holds a GitHub token
+# capable of dispatching workflows in a private repository. The function then
+# re-derives the owner role from the caller's own token, because being an Edge
+# Function is not authorisation.
+[functions.request-aggregator-sync]
+verify_jwt = true
+
+# The one-time password, on its way from the owner's phone to a browser in a
+# datacentre. Verified at the gateway for the same reason, and the shortest
+# function in this repo on purpose: it does not log the code, echo it, or say
+# which of the four ways a request could be unanswerable applied.
+[functions.answer-aggregator-otp]
+verify_jwt = true
+
+# The reader's own door: load and save its session, collect the code it is
+# waiting for. Open at the gateway because the caller is the same scheduled job
+# that posts settlement, holding the same secret rather than a session.
+#
+# This exists so the reader never holds the service-role key. That key opens
+# staff records, attendance, billing and every customer; scoped to this endpoint,
+# a leaked GitHub secret buys the Zomato session alone, which one owner tap
+# revokes.
+[functions.aggregator-reader]
+verify_jwt = false

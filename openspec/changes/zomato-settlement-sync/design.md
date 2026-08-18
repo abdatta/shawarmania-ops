@@ -14,7 +14,7 @@ Investigation against the live account on 2026-08-16 established the facts this 
 - The account lists a third restaurant id, `21881022`, which the owner confirmed on 2026-08-17 is a discontinued outlet. It is ignored, and the outlet list is the two trading outlets.
 - Zomato does not email settlement statements, confirmed by the owner on 2026-08-17. Driving the session is the only ingestion path available.
 
-The reader itself is built and proven in the private repository `abdatta/shawarmania-zomato-sync`, kept out of this public repo because it holds a live merchant credential and the shop's revenue. Its session survives across GitHub runner IPs and renews on a sliding 24-hour idle timeout, so a twice-daily job keeps itself authenticated.
+The reader itself is built and proven in the private repository `abdatta/shawarmania-sync`, kept out of this public repo because it holds a live merchant credential and the shop's revenue. Its session survives across GitHub runner IPs and renews on a sliding 24-hour idle timeout, so a twice-daily job keeps itself authenticated.
 
 Constraints from `AGENTS.md` that bind this design: money is integer paise, outlet isolation is enforced in Postgres, business dates are explicit columns with a per-outlet cutover and never derived at read time, and the service-role key never reaches the browser.
 

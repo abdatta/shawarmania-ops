@@ -314,7 +314,14 @@ $$, $$ values
   -- indistinguishable from a hand-entered one, which is the distinction the
   -- duplicate signal rests on.
   ('manual_ledger_expenses_source_not_blank'),
-  ('aggregator_cycle_deductions_source_not_blank')
+  ('aggregator_cycle_deductions_source_not_blank'),
+  -- A one-time password is OPTIONAL on its own request: the row is created when
+  -- the owner asks to reconnect, minutes before there is a code to put in it,
+  -- and emptied again the moment the runner collects it. Null is therefore two
+  -- ordinary states, not-yet and already-used. What is refused is whitespace,
+  -- which would have the runner submitting blanks to Zomato and spending the
+  -- request's attempts on nothing.
+  ('aggregator_auth_requests_code_not_blank')
 $$, 'every not-blank constraint in the schema is accounted for, and no others exist');
 
 -- The manual ledger's two cash-movement reasons are blank-checked too, under

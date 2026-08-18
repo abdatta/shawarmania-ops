@@ -39,7 +39,7 @@ Volume now justifies the work. Roughly ₹1 lakh a month flows through the two o
 
 **Read paths.** The month's aggregator revenue and the cash-basis profit are computed from the stored net rather than from gross times a stored rate. Days recorded before this change keep computing the old way, so no historical month moves.
 
-**Ingestion.** The reader itself already exists and is proven, in the private repository `abdatta/shawarmania-zomato-sync`, kept out of this public one because it holds a live merchant credential and the shop's revenue. This change owns the contract it writes through, not the scraping.
+**Ingestion.** The reader itself already exists and is proven, in the private repository `abdatta/shawarmania-sync`, kept out of this public one because it holds a live merchant credential and the shop's revenue. This change owns the contract it writes through, not the scraping.
 
 **Not affected.** Cash, UPI and the drawer. Aggregator money is non-cash by nature, and day-close arithmetic counts only cash, so this capability is drawer-safe by construction.
 

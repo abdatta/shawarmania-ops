@@ -118,7 +118,7 @@ means building them twice.
 
 ## 8. Reader job contract (private repo)
 
-- [ ] 8.1 In `abdatta/shawarmania-zomato-sync`, build the cycle payload from the dashboard JSON for the live cycle and from the settlement workbook's `Order Level` sheet for settled cycles, converting workbook doubles to paise once at parse time.
+- [ ] 8.1 In `abdatta/shawarmania-sync`, build the cycle payload from the dashboard JSON for the live cycle and from the settlement workbook's `Order Level` sheet for settled cycles, converting workbook doubles to paise once at parse time.
 - [ ] 8.2 Join Order History on `order_id` to obtain placement timestamps; report orders that cannot be timestamped rather than guessing.
 - [ ] 8.3 Post cycles to the Edge Function; re-read two cycles for orders and four for deductions on every run.
 - [ ] 8.4 Schedule at **23:00 and 11:00 IST** [owner, 2026-08-17], with the timezone pinned rather than left to the runner's UTC clock. The pair is chosen, not arbitrary: 23:00 gives a figure for the evening while the counter still remembers it, and 11:00 is safely past the outlets' 04:00 cutover, so the previous trading day is closed and complete by the time it is read. Open a GitHub issue on failure and reuse the open one rather than filing a new one per run.
