@@ -56,9 +56,17 @@ interface DispatchTarget {
   ref: string
 }
 
-function dispatchTarget(): DispatchTarget | null {
+function dispatchTarget(mode: Mode): DispatchTarget | null {
   const repository = Deno.env.get('AGGREGATOR_SYNC_REPOSITORY')
-  const workflow = Deno.env.get('AGGREGATOR_SYNC_WORKFLOW') ?? 'sync.yml'
+  // A reconnect and a read are DIFFERENT jobs: reconnect signs in with a browser
+  // and waits for the owner's code (login.yml); a read is a browser-free fetch
+  // (sync.yml). Dispatching one workflow for both — passing `mode` and trusting it
+  // to branch — is exactly the bug that ran the figures-reader on a reconnect and
+  // never asked for a code. So the workflow is chosen by mode here.
+  const workflow =
+    mode === 'reconnect'
+      ? (Deno.env.get('AGGREGATOR_RECONNECT_WORKFLOW') ?? 'login.yml')
+      : (Deno.env.get('AGGREGATOR_SYNC_WORKFLOW') ?? 'sync.yml')
   const ref = Deno.env.get('AGGREGATOR_SYNC_REF') ?? 'main'
   if (!repository || !repository.includes('/')) return null
   const [owner, repo] = repository.split('/', 2)
@@ -71,11 +79,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
   const token = Deno.env.get('GITHUB_DISPATCH_TOKEN')
-  const target = dispatchTarget()
-  if (!token || !target) {
+  if (!token) {
     // Distinguished from a refusal on purpose. "Not configured" is a message for
     // whoever deploys this; "not permitted" is a message about the caller, and
-    // conflating them would send the owner looking for the wrong problem.
+    // conflating them would send the owner looking for the wrong problem. The
+    // workflow target is resolved once the mode is known, since the two modes go
+    // to different workflows.
     console.error('the reader dispatch is not configured; refusing every caller')
     return json({ error: 'not_configured' }, 503)
   }
@@ -96,6 +105,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const channel = str(body['channel']) ?? 'zomato'
   const mode: Mode = body['mode'] === 'reconnect' ? 'reconnect' : 'sync'
   const rehearse = body['rehearse'] === true
+
+  // Resolved now that the mode is known: a reconnect and a read go to different
+  // workflows.
+  const target = dispatchTarget(mode)
+  if (!target) {
+    console.error('the reader dispatch is not configured; refusing every caller')
+    return json({ error: 'not_configured' }, 503)
+  }
 
   if (!outletId) return json({ error: 'outlet_required' }, 400)
   if (channel !== 'zomato') return json({ error: 'unknown_channel' }, 400)
@@ -151,6 +168,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
    * refused by the database rather than by a check that raced.
    */
   if (mode === 'reconnect') {
+    // Close any request that expired without being answered before opening a new
+    // one. The one-open-per-channel index counts by closed_at, not expiry, so a
+    // request left open when its code ran out would deadlock the channel against
+    // every future reconnect — "already awaiting a code" for a code nobody will
+    // ever send. A still-live request is not touched, so a genuine reconnect in
+    // flight still yields already_awaiting_code below.
+    const { error: sweepError } = await service
+      .from('aggregator_auth_requests')
+      .update({ closed_at: new Date().toISOString(), outcome: 'expired' })
+      .eq('channel', channel)
+      .is('closed_at', null)
+      .lt('expires_at', new Date().toISOString())
+    if (sweepError) {
+      console.error('could not clear an expired auth request', sweepError)
+      return json({ error: 'backend_failure' }, 503)
+    }
+
     const { error: openError } = await service.from('aggregator_auth_requests').insert({
       channel,
       requested_from_outlet_id: outletId,

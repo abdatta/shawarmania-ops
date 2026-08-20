@@ -285,7 +285,14 @@ export function ZomatoSyncSurface() {
           {hyperpure && (
             <HyperpureHealthLine
               health={hyperpure}
-              busy={acting || waiting !== null}
+              // Disabled only while a tap is in flight — deliberately NOT while a
+              // code is pending. A reconnect that opened a request which then
+              // expired unanswered would otherwise leave this the only control that
+              // could reopen one, disabled behind the very request it needs to
+              // replace. Tapping it again sweeps the expired request and dispatches
+              // a fresh login; a still-live request is left alone (the server
+              // answers already-awaiting and does not double-dispatch).
+              busy={acting}
               onReconnect={() => act(() => aggregatorSync.requestReconnect(outletId!))}
             />
           )}
