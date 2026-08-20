@@ -133,15 +133,16 @@ export function createMockAggregatorSyncAdapter(
 
   const states = new Map<string, OutletSyncState>()
 
-  // Hyperpure is account-level and healthy in the demo: read a few hours ago, on a
-  // session with most of its day left. It has no reconnect of its own here, because
-  // in life it has none either — it rides the Zomato login.
+  // Hyperpure is account-level, and the demo starts it with a lapsed session — the
+  // state the owner is actually in until the first reconnect captures it. It shows
+  // the reconnect this line now carries; answering the code heals it, because one
+  // Zomato login restores both channels (Model A).
   const hyperpure: HyperpureHealth = {
     lastRunAt: at(3 * 60),
-    lastOutcome: 'ok',
+    lastOutcome: 'session_lapsed',
     running: false,
-    hasSession: true,
-    sessionExpiresAt: new Date(Date.now() + 20 * 60 * 60 * 1000).toISOString(),
+    hasSession: false,
+    sessionExpiresAt: null,
   }
 
   for (const [index, outletId] of outletIds.entries()) {
@@ -294,6 +295,14 @@ export function createMockAggregatorSyncAdapter(
 
       state.health = { ...state.health, awaitingOneTimePassword: null, running: true }
       state.pendingLogin = false
+
+      // One login restores both channels (Model A): the Zomato sign-in captures the
+      // Hyperpure session in the same pass, so answering the code heals Hyperpure
+      // too. Its next read will report ok; here it is enough that the session is
+      // back and the line stops asking to be reconnected.
+      hyperpure.hasSession = true
+      hyperpure.lastOutcome = 'ok'
+      hyperpure.sessionExpiresAt = new Date(Date.now() + 20 * 60 * 60 * 1000).toISOString()
 
       // The session is back, so the row that asked for it stops asking. Kept on
       // the page rather than removed: "Zomato signed us out on Tuesday" is worth

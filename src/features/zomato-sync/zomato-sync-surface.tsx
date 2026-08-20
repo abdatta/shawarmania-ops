@@ -282,7 +282,13 @@ export function ZomatoSyncSurface() {
             onRun={() => act(() => aggregatorSync.requestRun(outletId!))}
           />
 
-          {hyperpure && <HyperpureHealthLine health={hyperpure} />}
+          {hyperpure && (
+            <HyperpureHealthLine
+              health={hyperpure}
+              busy={acting || waiting !== null}
+              onReconnect={() => act(() => aggregatorSync.requestReconnect(outletId!))}
+            />
+          )}
 
           <UploadStatement busy={acting} wrote={uploadWrote} onUpload={onUpload} />
 
@@ -456,17 +462,27 @@ function HealthLine({
 }
 
 /**
- * Hyperpure's health, beside Zomato's but thinner and read-only.
+ * Hyperpure's health, beside Zomato's but thinner.
  *
- * It has no "Read now" and no reconnect of its own, because it has neither in
- * life: Hyperpure rides the Zomato login, so a lapsed session is fixed by
- * reconnecting Zomato — which is why a stale line points there rather than
- * offering a button that would only send the owner to the same place. Account
- * level, so it says nothing about which outlet is in scope. Before this line
- * existed, a broken Hyperpure read was a red CI job the owner never saw; this is
- * the whole of it becoming visible.
+ * It has no "Read now" of its own, and its reconnect is the Zomato one: Hyperpure
+ * rides the Zomato login, so one sign-in restores both. But a channel that is down
+ * must offer the way to fix it wherever the owner is looking — and a healthy Zomato
+ * shows no reconnect anywhere, so a lapsed Hyperpure with only a Zomato session
+ * still alive would strand the owner with a broken line and no button. So when
+ * Hyperpure's session has ended, this line carries the reconnect itself: the same
+ * action, which signs back into Zomato and captures Hyperpure in the same pass.
+ * Account level, so it says nothing about which outlet is in scope. Before this
+ * line existed, a broken Hyperpure read was a red CI job the owner never saw.
  */
-function HyperpureHealthLine({ health }: { health: HyperpureHealth }) {
+function HyperpureHealthLine({
+  health,
+  busy,
+  onReconnect,
+}: {
+  health: HyperpureHealth
+  busy: boolean
+  onReconnect: () => void
+}) {
   const when = health.lastRunAt
     ? new Date(health.lastRunAt).toLocaleString(undefined, {
         day: 'numeric',
@@ -476,9 +492,9 @@ function HyperpureHealthLine({ health }: { health: HyperpureHealth }) {
       })
     : null
 
-  // A session that has ended, or a read that failed on it, is the owner's to fix —
-  // by reconnecting Zomato. A shape change is a maintainer's. Everything else is
-  // quiet. Same vocabulary as the Zomato line, so the two read as one screen.
+  // A session that has ended, or a read that failed on it, is the owner's to fix,
+  // and this is where they fix it. A shape change is a maintainer's. Everything
+  // else is quiet. Same vocabulary as the Zomato line, so the two read as one.
   const stale = !health.hasSession || health.lastOutcome === 'session_lapsed'
   const [word, wrong] = health.running
     ? (['Reading', false] as const)
@@ -491,7 +507,7 @@ function HyperpureHealthLine({ health }: { health: HyperpureHealth }) {
           : (['Never run', false] as const)
 
   const note = stale
-    ? 'Reconnect Zomato to bring Hyperpure back'
+    ? 'Signs back into Zomato and restores Hyperpure in the same step'
     : word === 'Stuck'
       ? 'A statement could not be read — a maintainer has been told'
       : when
@@ -509,6 +525,16 @@ function HyperpureHealthLine({ health }: { health: HyperpureHealth }) {
         </p>
         <p className="text-xs text-content-muted">{note}</p>
       </div>
+      {stale && (
+        <Button
+          variant="secondary"
+          onClick={onReconnect}
+          disabled={busy}
+          data-testid="hyperpure-reconnect"
+        >
+          Reconnect
+        </Button>
+      )}
     </Card>
   )
 }

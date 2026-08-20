@@ -157,18 +157,24 @@ describe('the Zomato sync surface', () => {
     expect(other.className).not.toContain('bg-on-primary')
   })
 
-  it('shows Hyperpure health beside Zomato, read-only and account-level', async () => {
-    // Before this line existed a broken Hyperpure read was a red CI job the owner
-    // never saw. The demo seeds it healthy, so the line reads "All quiet" — and it
-    // is present on the outlet-scoped page because Hyperpure is account-level, not
-    // one outlet's. It carries no Read-now and no reconnect: Hyperpure rides the
-    // Zomato login, so it has neither in life.
+  it('carries a reconnect on the Hyperpure line when its session is down, even with Zomato healthy', async () => {
+    // The gap this closes: Hyperpure rides the Zomato login, but a healthy Zomato
+    // shows no reconnect anywhere, so a lapsed Hyperpure with only that button
+    // elsewhere would strand the owner. Kalyani's Zomato is healthy; Hyperpure
+    // starts lapsed. The line names the state and offers the fix on the spot.
     await renderSurface(OUTLET_KALYANI_ID)
 
     const line = await screen.findByTestId('hyperpure-health')
     expect(line).toHaveTextContent(/Hyperpure/)
-    expect(line).toHaveTextContent(/All quiet/)
-    expect(within(line).queryByRole('button')).not.toBeInTheDocument()
+    expect(line).toHaveTextContent(/Session ended/)
+    const reconnect = within(line).getByTestId('hyperpure-reconnect')
+    expect(reconnect).toBeEnabled()
+
+    // It is the same login as Zomato's: one code restores both channels.
+    await userEvent.click(reconnect)
+    expect(
+      await screen.findByText(/Zomato sent you a code/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
   })
 
   it('offers Read now only when reading again could say something new', async () => {
