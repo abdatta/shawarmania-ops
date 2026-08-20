@@ -557,16 +557,10 @@ export function createMockAttendanceAdapter(
 
     async checkIn({ personId, outletId, businessDate, reading, attemptId, expectedVersion }) {
       const serverAt = referenceNow().toISOString()
-      // Matched on person and date alone, mirroring
-      // `attendance_one_per_person_day`: a day started at the other outlet is
-      // the same day, and a second row for it is what the database refuses.
-      const outlet = outletFor(outletId)
-      if (!outlet.is_active) {
-        throw new AttendanceActionError('outlet_closed', 'This outlet is not accepting check-ins.')
-      }
-      if (!assignedOutlets(assignmentFixtures[personId] ?? []).includes(outletId)) {
-        throw new AttendanceActionError('not_permitted', 'You are not assigned to this outlet.')
-      }
+      // The live command resolves an accepted id before outlet/current-day
+      // validation. Demo must do the same: an exact lost-response replay stays
+      // available after rollover or outlet changes, while changed reuse is
+      // refused from the saved client facts before the new outlet is examined.
       const repeatedRecord = attemptId
         ? records.find((candidate) => candidate.attempts.some((item) => item.id === attemptId))
         : null
@@ -589,6 +583,17 @@ export function createMockAttendanceAdapter(
           )
         }
         return clone(repeatedRecord)
+      }
+
+      // Matched on person and date alone, mirroring
+      // `attendance_one_per_person_day`: a day started at the other outlet is
+      // the same day, and a second row for it is what the database refuses.
+      const outlet = outletFor(outletId)
+      if (!outlet.is_active) {
+        throw new AttendanceActionError('outlet_closed', 'This outlet is not accepting check-ins.')
+      }
+      if (!assignedOutlets(assignmentFixtures[personId] ?? []).includes(outletId)) {
+        throw new AttendanceActionError('not_permitted', 'You are not assigned to this outlet.')
       }
       const serverBusinessDate = resolveBusinessDate(new Date(serverAt), businessDayCutover(outlet))
       const named =

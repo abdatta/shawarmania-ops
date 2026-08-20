@@ -165,6 +165,11 @@ export function CheckInCard({
       setBusy(true)
       try {
         onChange(await action())
+        // The write-time database instant is final. Refresh the shared outlet
+        // context as well as adopting the returned row so a cutover crossed
+        // while GPS or the network was in flight cannot leave retry visibility
+        // comparing the canonical new day with a stale pre-write day.
+        onReload()
         setAttempt({ kind: 'idle' })
       } catch (cause) {
         if (

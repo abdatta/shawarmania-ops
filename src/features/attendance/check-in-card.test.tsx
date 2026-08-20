@@ -344,6 +344,30 @@ describe('the employee home', () => {
     // A context refresh is a read, never a background geolocation request.
     expect(getCurrentPosition).not.toHaveBeenCalled()
   })
+
+  it('refreshes server context after a successful write crosses cutover', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters()
+    const getCurrentContext = adapters.attendance.getCurrentContext.bind(adapters.attendance)
+    const context = vi
+      .spyOn(adapters.attendance, 'getCurrentContext')
+      .mockResolvedValueOnce({
+        serverAt: '1900-01-01T00:00:00.000Z',
+        outlets: [{ outletId: OUTLET_KALYANI_ID, businessDate: '1900-01-01' }],
+      })
+      .mockImplementation(getCurrentContext)
+    positionFails(1)
+
+    renderHome(adapters)
+    await user.click(await screen.findByTestId('attendance-action'))
+    await user.click(await screen.findByTestId('request-override'))
+
+    await waitFor(() => expect(context).toHaveBeenCalledTimes(2))
+    // The position-free write is retryable. It becomes visible only after the
+    // post-write context adopts the business date authored by the mock server.
+    expect(await screen.findByTestId('attendance-retry')).toBeInTheDocument()
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1)
+  })
 })
 
 /**

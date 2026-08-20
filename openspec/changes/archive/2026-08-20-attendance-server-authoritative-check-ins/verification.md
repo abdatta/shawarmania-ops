@@ -26,19 +26,40 @@ database time plus a date for each outlet already visible through RLS.
 
 The typed adapter and demo adapter both expose that context. Employee surfaces
 use it for first attempts, retry previews and current-day reads, refresh on
-foreground and named stale/day-closed responses, and preserve the database
-response as the rendered attendance row. Location is still requested only for a
-check-in action.
+foreground, named stale/day-closed responses and every successful write, and
+preserve the database response as the rendered attendance row. Location is
+still requested only for a check-in action.
+
+## Sol review repairs
+
+The archive review found that a successful check-in adopted the canonical row
+but did not refresh the shared outlet context. If a cutover passed while GPS or
+the network was in flight, a retryable position-free or outside-fence arrival
+could land on the new server day while retry visibility still compared it with
+the stale pre-write day. The card now refreshes backend context after adopting
+every successful write. The regression was proved red with that refresh removed
+(`getCurrentContext` remained at one call) and green after it was restored.
+
+The demo adapter also now resolves an accepted attempt id before examining the
+new outlet, matching the database's exact-replay-first ordering. An exact replay
+therefore remains available across later outlet/day changes, while a changed
+outlet under the same id is classified as changed reuse before that outlet can
+affect validation.
+
+The spec sync also exposed two older attendance requirement statements whose
+mandatory `SHALL` was wrapped onto the second line. OpenSpec validates the
+first statement line, so both were rewrapped without changing their meaning;
+the complete main attendance capability now passes strict validation.
 
 ## Automated gates
 
 | Gate | Evidence |
 |---|---|
-| Focused adapter/component tests | 3 files, 39 tests passed |
+| Focused adapter/component tests | 3 files, 40 tests passed |
 | `npm run format` / `npm run format:check` | Passed |
 | `npm run lint` | Passed; five pre-existing warnings and no errors |
 | `npm run typecheck` | Passed |
-| `npm test` | 112 files, 1,308 tests passed |
+| `npm test` | 112 files, 1,309 tests passed |
 | `npm run contrast` | 50 light/dark token pairs passed AA |
 | `npm run build` | Passed; existing chunk-size advisory only |
 | `npm run test:e2e` | 244 browser tests passed at tablet and desktop widths |
@@ -48,6 +69,7 @@ check-in action.
 | `npm run test:e2e:auth` | 21 real-backend browser tests passed |
 | `npm run db:types` | Generated declarations refreshed from the reset database |
 | `npx openspec validate attendance-server-authoritative-check-ins --strict` | Change is valid |
+| `npx openspec validate attendance-and-location --type spec --strict` | Synced main capability is valid |
 | `npm run roadmap:sync` | Roadmap already in sync; 0 rows updated |
 
 The REST check deliberately sends a date and timestamp in 2099 through the

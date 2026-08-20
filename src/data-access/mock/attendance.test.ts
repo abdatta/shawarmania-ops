@@ -69,6 +69,10 @@ describe('the demo attendance reference clock', () => {
         reading: { ...input.reading, at: '2099-01-01T00:00:01.000Z' },
       }),
     ).rejects.toMatchObject({ code: 'changed_request' } satisfies Partial<AttendanceActionError>)
+
+    await expect(
+      adapter.checkIn({ ...input, outletId: 'ffffffff-ffff-4fff-afff-ffffffffffff' }),
+    ).rejects.toMatchObject({ code: 'changed_request' } satisfies Partial<AttendanceActionError>)
   })
 
   it('uses its reference instant for position-free self-check-in but preserves manager testimony', async () => {
