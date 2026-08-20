@@ -48,6 +48,7 @@ Write behaviour, not implementation. A spec that names a React component or a fi
 This alphabetical list maps every capability required now. For planned work, read the
 [reconciled roadmap](../changes/ROADMAP.md).
 
+- [`aggregator-figures`](aggregator-figures/spec.md) — outlet-and-day channel figures kept apart from drawer counts, written only by ingest, with nullable undetermined commission and retained superseded values.
 - [`aggregator-settlement-sync`](aggregator-settlement-sync/spec.md) — measured per-order aggregator revenue reconciled against the payout that actually arrives, with provisional, settled, revised and disputed cycles, deductions dated to the purchase, and a run record a person can act on.
 - [`app-shell`](app-shell/spec.md) — four role-appropriate shells, gate-derived navigation, uniform real and demo sessions, reachable theme controls, stable role paths, and shared layout primitives.
 - [`attention-badges`](attention-badges/spec.md) — a consistent, contextual count of work waiting for a reader, visible wherever that work can be reached.
@@ -73,3 +74,5 @@ This alphabetical list maps every capability required now. For planned work, rea
 - [`profit-estimates`](profit-estimates/spec.md) — stated cash- or consumption-basis profit estimates that never double-count raw materials and always use integer paise.
 - [`project-scaffold`](project-scaffold/spec.md) — a buildable, testable repository whose security and delivery boundaries are enforced by tooling and CI.
 - [`pwa-and-deployment`](pwa-and-deployment/spec.md) — installable, offline shell access, non-disruptive updates, identifiable builds, and safe static sub-path hosting.
+- [`statement-uploads`](statement-uploads/spec.md) — content-recognised operator files that restore figures without a live reader, discard customer data, preserve outlet isolation, and ask before restating closed periods.
+- [`supply-statements`](supply-statements/spec.md) — supplier orders booked once by source identity and delivery date, separated from payout recoveries, with omitted delivered orders reported rather than ignored.
