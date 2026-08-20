@@ -5,7 +5,7 @@ import { FormSheet } from '@/components/layout/form-sheet'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardTitle } from '@/components/ui/card'
-import type { AttendanceRecord } from '@/data-access/adapters'
+import type { AttendanceCurrentContext, AttendanceRecord } from '@/data-access/adapters'
 import { useAdapters, type Tables } from '@/data-access'
 import { AttendanceActionError } from '@/data-access/adapters'
 import {
@@ -13,7 +13,6 @@ import {
   evaluateFence,
   formatMetres,
   instantOnBusinessDay,
-  resolveBusinessDate,
   type FenceVerdict,
 } from '@/domain'
 import { readPosition, type GeolocationFailureKind, type PositionReading } from '@/lib/geolocation'
@@ -130,8 +129,10 @@ export function CheckInCard({
   personId,
   outlets,
   outlet,
+  context,
   record,
   onChange,
+  onReload,
 }: {
   /** Whose day this is — the signed-in session's own account id. */
   personId: string
@@ -145,8 +146,11 @@ export function CheckInCard({
    * at, or the only one they work at. What today's status is rendered against.
    */
   outlet: Tables<'outlets'>
+  /** One backend timestamp and current date per assigned outlet. */
+  context: AttendanceCurrentContext
   record: AttendanceRecord | null
   onChange: (record: AttendanceRecord) => void
+  onReload: () => void
 }) {
   const { attendance } = useAdapters()
   const [attempt, setAttempt] = useState<Attempt>({ kind: 'idle' })
@@ -163,12 +167,11 @@ export function CheckInCard({
         onChange(await action())
         setAttempt({ kind: 'idle' })
       } catch (cause) {
-        if (cause instanceof AttendanceActionError && cause.code === 'stale_state') {
-          const latest = await attendance.getDay(
-            personId,
-            record?.businessDate ?? currentBusinessDate(outlet),
-          )
-          if (latest) onChange(latest)
+        if (
+          cause instanceof AttendanceActionError &&
+          (cause.code === 'stale_state' || cause.code === 'day_closed')
+        ) {
+          onReload()
         }
         setAttempt({
           kind: 'error',
@@ -181,7 +184,7 @@ export function CheckInCard({
         setBusy(false)
       }
     },
-    [attendance, onChange, outlet, personId, record?.businessDate],
+    [onChange, onReload],
   )
 
   const commitCheckIn = useCallback(
@@ -190,14 +193,14 @@ export function CheckInCard({
         attendance.checkIn({
           personId,
           outletId: target.id,
-          // The resolved outlet's own cutover, not the card's: the business
-          // day is the day at the shop they are standing in.
-          businessDate: businessDateOf(record, target),
+          // A first attempt uses this target outlet's server-derived current
+          // date. A retry keeps its canonical row's explicit date.
+          businessDate: businessDateOf(record, target, context),
           reading,
           expectedVersion: record?.stateVersion ?? null,
         }),
       ),
-    [attendance, personId, record, write],
+    [attendance, context, personId, record, write],
   )
 
   const prepareCheckIn = useCallback(
@@ -223,7 +226,7 @@ export function CheckInCard({
           previous.arrivalDeadline,
           previousOutlet.business_day_cutover,
         )
-      const nextAt = reading?.at ?? new Date().toISOString()
+      const nextAt = context.serverAt
       const nextLate =
         nextAt >
         instantOnBusinessDay(
@@ -242,7 +245,7 @@ export function CheckInCard({
       if (changes.length === 0) return commitCheckIn(target, reading)
       setAttempt({ kind: 'confirm', outlet: target, reading, changes })
     },
-    [commitCheckIn, outlet, outlets, record],
+    [commitCheckIn, context.serverAt, outlet, outlets, record],
   )
 
   async function onCheckIn() {
@@ -372,7 +375,8 @@ export function CheckInCard({
           record?.retry.allowed === true &&
           outlets.some(
             (candidate) =>
-              candidate.is_active && currentBusinessDate(candidate) === record.businessDate,
+              candidate.is_active &&
+              businessDateForOutlet(context, candidate) === record.businessDate,
           )
         }
         locating={attempt.kind === 'locating'}
@@ -729,11 +733,20 @@ function WhichOutletState({
  * exists, so a second attempt against a day the manager already opened cannot
  * land on a different date from the row it is amending.
  */
-function businessDateOf(record: AttendanceRecord | null, outlet: Tables<'outlets'>): string {
-  return record?.businessDate ?? currentBusinessDate(outlet)
+function businessDateOf(
+  record: AttendanceRecord | null,
+  outlet: Tables<'outlets'>,
+  context: AttendanceCurrentContext,
+): string {
+  return record?.businessDate ?? businessDateForOutlet(context, outlet)
 }
 
-/** Today, as this outlet reckons days. */
-function currentBusinessDate(outlet: Tables<'outlets'>): string {
-  return resolveBusinessDate(new Date(), outlet.business_day_cutover)
+/** The backend has already applied this outlet's own cutover. */
+function businessDateForOutlet(
+  context: AttendanceCurrentContext,
+  outlet: Tables<'outlets'>,
+): string {
+  const date = context.outlets.find((entry) => entry.outletId === outlet.id)?.businessDate
+  if (!date) throw new Error(`Attendance context omitted ${outlet.id}.`)
+  return date
 }

@@ -58,6 +58,7 @@ beforeEach(() => {
 
 afterEach(() => {
   Reflect.deleteProperty(navigator, 'geolocation')
+  vi.useRealTimers()
 })
 
 /**
@@ -292,6 +293,55 @@ describe('the employee home', () => {
     await screen.findByTestId('attendance-action')
 
     // The no-background-tracking rule, asserted rather than trusted.
+    expect(getCurrentPosition).not.toHaveBeenCalled()
+  })
+
+  it('uses server attendance context despite a deliberately skewed browser clock', async () => {
+    const adapters = createMockAdapters()
+    const context = {
+      serverAt: '2026-08-20T06:00:00.000Z',
+      outlets: [{ outletId: OUTLET_KALYANI_ID, businessDate: '2026-08-20' }],
+    }
+    vi.spyOn(adapters.attendance, 'getCurrentContext').mockResolvedValue(context)
+    const checkIn = vi.spyOn(adapters.attendance, 'checkIn')
+    getCurrentPosition.mockImplementation((onSuccess: PositionCallback) =>
+      onSuccess({
+        coords: AT_COUNTER,
+        // This is what the browser would report from a badly skewed device.
+        timestamp: Date.parse('2040-01-01T00:00:00.000Z'),
+      } as GeolocationPosition),
+    )
+
+    renderHome(adapters)
+    await userEvent.setup().click(await screen.findByTestId('attendance-action'))
+
+    await waitFor(() => expect(checkIn).toHaveBeenCalled())
+    expect(checkIn.mock.calls[0]?.[0].businessDate).toBe('2026-08-20')
+    expect(checkIn.mock.calls[0]?.[0].reading?.at).toBe('2040-01-01T00:00:00.000Z')
+  })
+
+  it('loads both server dates between outlet cutovers and refreshes context in the foreground', async () => {
+    const adapters = createMockAdapters()
+    const context = {
+      serverAt: '2026-08-20T02:00:00.000Z',
+      outlets: [
+        { outletId: OUTLET_KALYANI_ID, businessDate: '2026-08-20' },
+        { outletId: OUTLET_KANCHRAPARA_ID, businessDate: '2026-08-19' },
+      ],
+    }
+    const getContext = vi.spyOn(adapters.attendance, 'getCurrentContext').mockResolvedValue(context)
+    const getDay = vi.spyOn(adapters.attendance, 'getDay')
+
+    renderHome(adapters, bothOutletsSession)
+    await waitFor(() => expect(getDay).toHaveBeenCalledTimes(2))
+    expect(getDay.mock.calls.map(([, businessDate]) => businessDate)).toEqual(
+      expect.arrayContaining(['2026-08-20', '2026-08-19']),
+    )
+    expect(getCurrentPosition).not.toHaveBeenCalled()
+
+    document.dispatchEvent(new Event('visibilitychange'))
+    await waitFor(() => expect(getContext).toHaveBeenCalledTimes(2))
+    // A context refresh is a read, never a background geolocation request.
     expect(getCurrentPosition).not.toHaveBeenCalled()
   })
 })

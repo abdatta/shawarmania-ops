@@ -190,7 +190,11 @@ attribution.
   order clock and resolves the drawer clock at payment, so a 03:55 order paid
   at 04:05 puts revenue and cash on their respective business dates.
 - **Append-only once settled**, enforced by trigger: the only legal update is `settled → void` touching only the void columns, role-gated to the outlet's Franchise Admin and the Super Admin; deletes are refused even for privileged writers. A mistake is voided and re-rung; totals are never edited in place.
-- `business_date` is **validated at write time**: a bill (or shift, or attendance check-in) whose stated date contradicts its timestamp under the outlet's cutover is rejected, not repaired.
+- `business_date` is **validated at write time**: a bill or shift whose stated
+  date contradicts its timestamp under the outlet's cutover is rejected, not
+  repaired. A phone attendance check-in instead derives both its timestamp and
+  date at the database boundary; manager-entered and correction times remain
+  explicit and receive the same cutover validation.
 
 **`bill_items`**
 `id`, `bill_id`, `menu_item_id` (nullable reference, for analytics only), `item_name` (**snapshot**), `unit_price_paise` (**snapshot**), `quantity`, `line_total_paise`.
@@ -331,6 +335,19 @@ attempt's captured timestamp and GPS/manual evidence remain immutable. Both tabl
 append-only: updates and deletes are refused, including after a later retry or
 correction.
 
+For a `phone` self-check-in, the stored attempt time is the database statement
+receipt time, and the stored business date is calculated from that same instant
+and the outlet cutover. The browser's GPS-reading timestamp may remain in the
+legacy command shape so an already-loaded app can finish its request, but it is
+not stored as attendance time and it cannot choose or backdate the day. The
+canonical `check_in_at` initially equals that server time. A manual entry or a
+manager's time correction is different: it records the manager's deliberately
+chosen historical time, with the acting manager and cutover validation as its
+attestation. `created_at` remains the row-insertion audit timestamp, not a
+second asserted arrival time; it will normally be close to a phone attempt's
+server-authored `attempted_at`, while manual and corrected event times may be
+historical.
+
 The old evidence and approval columns on `attendance` remain as a compatibility
 projection for existing reads and service/seed setup; live browser mutations go
 only through the guarded attendance commands. The migration materialises every
@@ -339,14 +356,18 @@ recomputing historical GPS, and aborts on an unrecognised or lossy shape.
 
 **The command boundary owns attendance state.** Submit-attempt, decide-set,
 correct and manual-entry commands derive the caller and authority from the
-session, validate live assignments, active outlets, the target outlet's current
-explicit `business_date`, deadlines, evidence and reasons, lock the canonical
-person/day, and advance its version. Client UUIDs make an exact replay
-idempotent; reusing one with different evidence is refused. An expected version
-and attempt id make a stale sheet or racing decision fail instead of overwriting
-the winner. Time correction is settled-only and may reach historical days; the
-database refuses future timestamps and any timestamp whose outlet cutover maps
-it to a business date other than the row's explicit date.
+session, validate live assignments, active outlets, deadlines, evidence and
+reasons, lock the canonical person/day, and advance its version. A phone
+submit-attempt takes its current time and business date at the database, while
+manager commands validate the explicitly attested date and time. The
+`attendance_current_context` read exposes one server receipt time and the
+current business date for each outlet the caller can already read; it never
+widens outlet scope. Client UUIDs make an exact replay idempotent; reusing one
+with different evidence is refused. An expected version and attempt id make a
+stale sheet or racing decision fail instead of overwriting the winner. Time
+correction is settled-only and may reach historical days; the database refuses
+future timestamps and any timestamp whose outlet cutover maps it to a business
+date other than the row's explicit date.
 
 **There is no check-out.** Ten columns and four constraints were dropped by
 `attendance-approved-on-site` (#26, owner decision 2026-07-31), with a full

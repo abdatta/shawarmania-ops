@@ -4,8 +4,9 @@ import { instantOnBusinessDay, resolveBusinessDate, shiftBusinessDate } from '@/
 
 import { AttendanceActionError } from '../adapters'
 import { createMockAttendanceAdapter } from './attendance'
-import { DEMO_RUNNER_ACCOUNT_ID } from './fixtures/accounts'
+import { DEMO_HELPER_ACCOUNT_ID, DEMO_RUNNER_ACCOUNT_ID } from './fixtures/accounts'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
+import { personaFixtures } from './fixtures/personas'
 
 const managerReading = {
   latitude: 22.97505,
@@ -18,6 +19,86 @@ function today() {
   const outlet = outletFixtures.find((candidate) => candidate.id === OUTLET_KALYANI_ID)!
   return resolveBusinessDate(new Date(), outlet.business_day_cutover)
 }
+
+describe('the demo attendance reference clock', () => {
+  it('supplies one context instant across differing outlet cutovers and ignores device time', async () => {
+    let now = new Date('2026-08-20T02:00:00.000Z') // 07:30 in Kolkata.
+    const adapter = createMockAttendanceAdapter({
+      now: () => now,
+      businessDayCutovers: {
+        [OUTLET_KALYANI_ID]: '04:00:00',
+        [OUTLET_KANCHRAPARA_ID]: '12:00:00',
+      },
+    })
+    const context = await adapter.getCurrentContext([OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID])
+
+    expect(context).toEqual({
+      serverAt: '2026-08-20T02:00:00.000Z',
+      outlets: [
+        { outletId: OUTLET_KALYANI_ID, businessDate: '2026-08-20' },
+        { outletId: OUTLET_KANCHRAPARA_ID, businessDate: '2026-08-19' },
+      ],
+    })
+
+    const input = {
+      personId: personaFixtures.employee.profile.id,
+      outletId: OUTLET_KALYANI_ID,
+      // Both legacy clock fields are deliberately wrong.
+      businessDate: '2099-01-01',
+      reading: {
+        latitude: 22.97505,
+        longitude: 88.4346,
+        accuracyMetres: 12,
+        at: '2099-01-01T00:00:00.000Z',
+      },
+      attemptId: 'e1000000-0000-4000-a000-000000000099',
+    } as const
+    const first = await adapter.checkIn(input)
+
+    expect(first.businessDate).toBe('2026-08-20')
+    expect(first.checkIn?.at).toBe('2026-08-20T02:00:00.000Z')
+
+    now = new Date('2026-08-21T02:00:00.000Z')
+    const replay = await adapter.checkIn(input)
+    expect(replay.attempts).toHaveLength(1)
+    expect(replay.checkIn?.at).toBe('2026-08-20T02:00:00.000Z')
+
+    await expect(
+      adapter.checkIn({
+        ...input,
+        reading: { ...input.reading, at: '2099-01-01T00:00:01.000Z' },
+      }),
+    ).rejects.toMatchObject({ code: 'changed_request' } satisfies Partial<AttendanceActionError>)
+  })
+
+  it('uses its reference instant for position-free self-check-in but preserves manager testimony', async () => {
+    const adapter = createMockAttendanceAdapter({
+      now: () => new Date('2026-08-20T06:00:00.000Z'),
+    })
+    const positionFree = await adapter.checkIn({
+      personId: DEMO_HELPER_ACCOUNT_ID,
+      outletId: OUTLET_KALYANI_ID,
+      businessDate: '1900-01-01',
+      reading: null,
+    })
+    expect(positionFree.checkIn).toMatchObject({
+      at: '2026-08-20T06:00:00.000Z',
+      latitude: null,
+      longitude: null,
+    })
+
+    const manualAt = '2026-08-20T05:45:00.000Z'
+    const manual = await adapter.recordManualEntry({
+      personId: personaFixtures.biller.profile.id,
+      outletId: OUTLET_KALYANI_ID,
+      businessDate: '2026-08-20',
+      at: manualAt,
+      enteredBy: personaFixtures.franchise_admin.profile.id,
+    })
+    expect(manual.checkIn?.at).toBe(manualAt)
+    expect(manual.checkIn?.source).toBe('manual')
+  })
+})
 
 describe('mock attendance denial and retries', () => {
   it('denies without manager GPS, keeps retry open, and retains absence through weak retries', async () => {

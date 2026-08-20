@@ -106,7 +106,13 @@ describe('submitting a check-in', () => {
 
     expect(rpc).toHaveBeenCalledWith(
       'attendance_submit_attempt',
-      expect.objectContaining({ p_lat: 22.9752, p_lng: 88.4358, p_accuracy_m: 18 }),
+      expect.objectContaining({
+        p_business_date: '2026-08-04',
+        p_attempted_at: READING.at,
+        p_lat: 22.9752,
+        p_lng: 88.4358,
+        p_accuracy_m: 18,
+      }),
     )
   })
 
@@ -131,6 +137,43 @@ describe('submitting a check-in', () => {
       p_lng: null,
       p_accuracy_m: null,
     })
+  })
+})
+
+describe('reading current attendance context', () => {
+  it('requests the explicit outlet set and preserves one server reference instant', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        { outlet_id: 'o-1', server_at: '2026-08-04T07:00:00.000Z', business_date: '2026-08-04' },
+        { outlet_id: 'o-2', server_at: '2026-08-04T07:00:00.000Z', business_date: '2026-08-03' },
+      ],
+      error: null,
+    })
+
+    await expect(adapterWith(rpc).getCurrentContext(['o-2', 'o-1'])).resolves.toEqual({
+      serverAt: '2026-08-04T07:00:00.000Z',
+      outlets: [
+        { outletId: 'o-1', businessDate: '2026-08-04' },
+        { outletId: 'o-2', businessDate: '2026-08-03' },
+      ],
+    })
+    expect(rpc).toHaveBeenCalledWith('attendance_current_context', {
+      p_outlet_ids: ['o-2', 'o-1'],
+    })
+  })
+
+  it('refuses a malformed response that combines different server instants', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [
+        { outlet_id: 'o-1', server_at: '2026-08-04T07:00:00.000Z', business_date: '2026-08-04' },
+        { outlet_id: 'o-2', server_at: '2026-08-04T07:00:01.000Z', business_date: '2026-08-03' },
+      ],
+      error: null,
+    })
+
+    await expect(adapterWith(rpc).getCurrentContext(['o-1', 'o-2'])).rejects.toThrow(
+      'one server reference instant',
+    )
   })
 })
 

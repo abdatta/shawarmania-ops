@@ -5,6 +5,7 @@ import type { PositionReading } from '@/lib/geolocation'
 import type {
   AttendanceAdapter,
   AttendanceAttempt,
+  AttendanceCurrentContext,
   AttendanceDecision,
   AttendanceDecisionItem,
   AttendanceEvent,
@@ -113,6 +114,12 @@ interface JoinedRow {
   outlets: { name: string } | null
   attendance_attempts: JoinedAttempt[]
   attendance_decisions: JoinedDecision[]
+}
+
+interface CurrentContextRow {
+  outlet_id: string
+  server_at: string
+  business_date: string
 }
 
 function retryEligibility(row: JoinedRow, attempts: AttendanceAttempt[]) {
@@ -455,6 +462,29 @@ export function createSupabaseAttendanceAdapter(
   }
 
   return {
+    async getCurrentContext(outletIds) {
+      if (outletIds.length === 0) {
+        throw new AttendanceActionError('not_permitted', 'No outlet is available for attendance.')
+      }
+      const { data, error } = await client.rpc('attendance_current_context', {
+        p_outlet_ids: [...outletIds],
+      })
+      if (error) throw toActionError(error)
+
+      const rows = (data ?? []) as CurrentContextRow[]
+      const serverAt = rows[0]?.server_at
+      if (!serverAt || rows.some((row) => row.server_at !== serverAt)) {
+        throw new Error('Attendance context did not return one server reference instant.')
+      }
+      return {
+        serverAt,
+        outlets: rows.map((row) => ({
+          outletId: row.outlet_id,
+          businessDate: row.business_date,
+        })),
+      } satisfies AttendanceCurrentContext
+    },
+
     async getDay(personId, businessDate) {
       // No outlet filter: one person holds one row a business date, so naming
       // an outlet could only hide the row that exists.

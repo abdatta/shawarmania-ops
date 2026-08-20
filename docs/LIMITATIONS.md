@@ -365,6 +365,16 @@ person retrying, or on their manager recording it for them — and a manual entr
 carries the manager's name rather than the employee's evidence. Whether that is
 worth an offline attendance queue is its own decision, and it has not been made.
 
+### A self check-in records database receipt, not the physical tap
+
+For a phone self-check-in, the recorded arrival is when the database receives
+the command, not the time shown by the handset or emitted by its GPS reading.
+That removes a bad phone clock as a reason to refuse, future-date or backdate an
+arrival, but it cannot prove when somebody physically tapped the button: a slow
+location lookup or network path can make receipt later than the gesture. The
+manager manual-entry and correction paths remain the deliberate attestation
+escape hatch when that distinction matters.
+
 ### A badge is not a notification, and its count can be stale
 
 The count on the Attendance tab reaches only somebody already holding the app. Nothing pushes: a manager who does not open it does not find out, and the person whose day it is finds out when they query their pay. Reaching somebody who is not looking needs a service-worker subscription, a server to hold it and a key pair to sign with, none of which exists; it is tracked in `openspec/todos/pending-approval-notification.md`.

@@ -257,6 +257,41 @@ describe('the attendance adapter', () => {
     }
   })
 
+  it('accepts the deployed eight-argument RPC payload but stamps server time and date', async () => {
+    const attemptId = 'f1000000-0000-4000-a000-000000000090'
+    const before = Date.now()
+    const { data, error } = await employeeClient.rpc('attendance_submit_attempt', {
+      p_attempt_id: attemptId,
+      p_outlet_id: OUTLET_KALYANI,
+      // Both are deliberately wrong legacy clock facts. PostgREST must still
+      // find the unchanged signature, while the database must not trust them.
+      p_business_date: '2099-01-01',
+      p_attempted_at: '2099-01-01T00:00:00.000Z',
+      p_lat: 22.984,
+      p_lng: 88.4345,
+      p_accuracy_m: 20,
+    })
+    const after = Date.now()
+
+    expect(error).toBeNull()
+    expect(data).not.toBeNull()
+    const { data: attempt, error: readError } = await employeeClient
+      .from('attendance_attempts')
+      .select('attempted_at, business_date')
+      .eq('id', attemptId)
+      .single()
+    expect(readError).toBeNull()
+    expect(attempt?.business_date).not.toBe('2099-01-01')
+    expect(attempt?.attempted_at).not.toBe('2099-01-01T00:00:00+00:00')
+    // The local database container can be a few seconds behind the Node host;
+    // this is a transport compatibility test, while pgTAP pins the database
+    // statement clock exactly. Keep the transport assertion broad enough not
+    // to confuse container drift with the 2099 device clock it rejects.
+    expect(new Date(attempt!.attempted_at).getTime()).toBeGreaterThanOrEqual(before - 60_000)
+    expect(new Date(attempt!.attempted_at).getTime()).toBeLessThanOrEqual(after + 60_000)
+    expect(new Date(data!.check_in_at!).getTime()).toBe(new Date(attempt!.attempted_at).getTime())
+  })
+
   it('records a check-in, and the database adjudicates the claim', async () => {
     const attendance = createSupabaseAttendanceAdapter(employeeClient)
     const outlets = createSupabaseOutletsAdapter(employeeClient)

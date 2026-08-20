@@ -6,7 +6,6 @@ import { PageHeader } from '@/components/layout/page-header'
 import { LoadingList } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
 import type { AttendanceRecord } from '@/data-access/adapters'
-import { resolveBusinessDate } from '@/domain'
 import { useSession } from '@/session/context'
 import { sessionOutlets } from '@/session/session'
 
@@ -45,9 +44,9 @@ export function MyAttendance() {
   // Today as their outlets reckon it — the later, where cutovers disagree, so a
   // day that has started at one of their shops is not hidden.
   const today =
-    outlets && outlets.length > 0
-      ? outlets
-          .map((outlet) => resolveBusinessDate(new Date(), outlet.business_day_cutover))
+    own.status === 'ready'
+      ? own.context.outlets
+          .map((entry) => entry.businessDate)
           .reduce((latest, candidate) => (candidate > latest ? candidate : latest), '')
       : null
 

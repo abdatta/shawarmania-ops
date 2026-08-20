@@ -152,6 +152,39 @@ describe('token claims', () => {
 })
 
 describe('hand-crafted attendance commands', () => {
+  it('returns attendance context only for outlets each real session may read', async () => {
+    const [employee, manager, owner] = await Promise.all([
+      session(PERSONAS.employeeKalyani.email),
+      session(PERSONAS.faKalyani.email),
+      session(PERSONAS.superAdmin.email),
+    ])
+    const requested = [OUTLETS.kalyani, OUTLETS.kanchrapara]
+    const [employeeContext, managerContext, ownerContext] = await Promise.all([
+      employee.client.rpc('attendance_current_context', { p_outlet_ids: requested }),
+      manager.client.rpc('attendance_current_context', { p_outlet_ids: requested }),
+      owner.client.rpc('attendance_current_context', { p_outlet_ids: requested }),
+    ])
+
+    expect(employeeContext.error).toBeNull()
+    expect(managerContext.error).toBeNull()
+    expect(ownerContext.error).toBeNull()
+    // Naming Kanchrapara from a Kalyani-only session reveals no context there;
+    // the security-invoker read follows the ordinary outlet policy.
+    expect(employeeContext.data?.map((row) => row.outlet_id)).toEqual([OUTLETS.kalyani])
+    expect(managerContext.data?.map((row) => row.outlet_id)).toEqual([OUTLETS.kalyani])
+    expect(new Set(ownerContext.data?.map((row) => row.outlet_id))).toEqual(
+      new Set([OUTLETS.kalyani, OUTLETS.kanchrapara]),
+    )
+    expect(new Set(ownerContext.data?.map((row) => row.server_at)).size).toBe(1)
+
+    const { data: borrowedOnly, error: borrowedError } = await employee.client.rpc(
+      'attendance_current_context',
+      { p_outlet_ids: [OUTLETS.kanchrapara] },
+    )
+    expect(borrowedError).toBeNull()
+    expect(borrowedOnly).toEqual([])
+  })
+
   it('refuses an employee naming an outlet where they have no assignment', async () => {
     const { client } = await signIn(PERSONAS.employeeKalyani.email)
     const businessDate = resolveBusinessDate(new Date(), '04:00')

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { useAdapters, type Tables } from '@/data-access'
-import type { AttendanceRecord } from '@/data-access/adapters'
-import { resolveBusinessDate } from '@/domain'
+import type { AttendanceCurrentContext, AttendanceRecord } from '@/data-access/adapters'
 
 /**
  * What every Employee attendance surface needs: which outlets judge them, and
@@ -31,6 +30,8 @@ export type OwnAttendance =
       status: 'ready'
       /** Every outlet they are assigned to, for the fence to choose between. */
       outlets: Tables<'outlets'>[]
+      /** One backend reference clock and every assigned outlet's current day. */
+      context: AttendanceCurrentContext
       /**
        * The outlet today's status is rendered against: the one their record was
        * worked at, or their first while there is nothing recorded and the fence
@@ -56,6 +57,7 @@ export function useOwnAttendance(personId: string, outletIds: readonly string[])
         /** Which outlets this result is for, so a stale one reads as loading. */
         key: string
         outlets: Tables<'outlets'>[]
+        context: AttendanceCurrentContext
         record: AttendanceRecord | null
       }
   >({ kind: 'loading' })
@@ -64,6 +66,7 @@ export function useOwnAttendance(personId: string, outletIds: readonly string[])
   // A stable key for the set, so the effect does not re-run on every render
   // just because the caller built a fresh array.
   const key = [...outletIds].sort().join(',')
+  const reload = useCallback(() => setNonce((value) => value + 1), [])
 
   useEffect(() => {
     if (key === '') return
@@ -81,18 +84,24 @@ export function useOwnAttendance(personId: string, outletIds: readonly string[])
           return
         }
 
-        // One date for nearly everybody. Two only where the cutovers disagree
-        // and the clock happens to sit between them, and at most one of them
-        // can hold a row.
-        const dates = [
-          ...new Set(found.map((o) => resolveBusinessDate(new Date(), o.business_day_cutover))),
-        ]
+        const context = await attendance.getCurrentContext(found.map((outlet) => outlet.id))
+        const currentDates = new Map(
+          context.outlets.map((entry) => [entry.outletId, entry.businessDate]),
+        )
+        if (found.some((outlet) => !currentDates.has(outlet.id))) {
+          throw new Error('Attendance context omitted an assigned outlet.')
+        }
+
+        // One date for nearly everybody. Two only where cutovers disagree and
+        // the one server reference instant sits between them. At most one can
+        // hold a row because attendance is one-person-one-business-day.
+        const dates = [...new Set(found.map((outlet) => currentDates.get(outlet.id) as string))]
         const rows = (
           await Promise.all(dates.map((date) => attendance.getDay(personId, date)))
         ).filter((row): row is AttendanceRecord => row !== null)
         if (!active) return
 
-        setState({ kind: 'loaded', key, outlets: found, record: rows[0] ?? null })
+        setState({ kind: 'loaded', key, outlets: found, context, record: rows[0] ?? null })
       } catch {
         if (active) setState({ kind: 'error' })
       }
@@ -103,11 +112,21 @@ export function useOwnAttendance(personId: string, outletIds: readonly string[])
     }
   }, [personId, key, outlets, attendance, nonce])
 
+  // A foreground return is the only regular refresh. There is no attendance
+  // clock timer or background location read; the write remains final at a
+  // boundary crossed while the app was away.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') reload()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [reload])
+
   const setRecord = useCallback((record: AttendanceRecord) => {
     setState((current) => (current.kind === 'loaded' ? { ...current, record } : current))
   }, [])
-
-  const reload = useCallback(() => setNonce((value) => value + 1), [])
 
   if (key === '') return { status: 'no-outlet' }
   if (state.kind === 'error') return { status: 'error' }
@@ -121,13 +140,17 @@ export function useOwnAttendance(personId: string, outletIds: readonly string[])
   // a check-in the fence has not resolved yet.
   const outlet =
     state.outlets.find((candidate) => candidate.id === state.record?.outletId) ?? state.outlets[0]
-  if (!outlet) return { status: 'error' }
+  const businessDate = state.context.outlets.find(
+    (entry) => entry.outletId === outlet?.id,
+  )?.businessDate
+  if (!outlet || !businessDate) return { status: 'error' }
 
   return {
     status: 'ready',
     outlets: state.outlets,
     outlet,
-    businessDate: resolveBusinessDate(new Date(), outlet.business_day_cutover),
+    context: state.context,
+    businessDate,
     record: state.record,
     setRecord,
     reload,

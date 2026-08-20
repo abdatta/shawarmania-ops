@@ -70,8 +70,10 @@ export function StaffHome() {
           // Where today's row was worked, or their first outlet while there is
           // no row and the fence has had nothing to judge.
           outlet={own.outlet}
+          context={own.context}
           record={own.record}
           onChange={own.setRecord}
+          onReload={own.reload}
         />
       )}
     </div>

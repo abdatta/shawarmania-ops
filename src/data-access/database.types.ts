@@ -3088,6 +3088,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      attendance_current_context: {
+        Args: { p_outlet_ids: string[] }
+        Returns: {
+          business_date: string
+          outlet_id: string
+          server_at: string
+        }[]
+      }
       attendance_decide_set: {
         Args: {
           p_action: string

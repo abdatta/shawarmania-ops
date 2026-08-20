@@ -653,6 +653,22 @@ export interface CheckInInput {
   expectedVersion?: number | null
 }
 
+/** One outlet's business day at the reference instant the backend supplied. */
+export interface AttendanceCurrentOutlet {
+  outletId: string
+  businessDate: string
+}
+
+/**
+ * The attendance surface's one authoritative clock read. `serverAt` is shared
+ * by every outlet date, so different cutovers can be compared without asking a
+ * device what time it is.
+ */
+export interface AttendanceCurrentContext {
+  serverAt: string
+  outlets: AttendanceCurrentOutlet[]
+}
+
 /**
  * An admin recording an arrival on somebody's behalf — the escape hatch that
  * keeps a hard arrival rule humane: the phone died, the person forgot, the
@@ -789,6 +805,12 @@ export function isRecoverableSetRefusal(cause: unknown): cause is AttendanceActi
 }
 
 export interface AttendanceAdapter {
+  /**
+   * Current business dates for the named readable outlets, derived at one
+   * backend instant. The caller still chooses the set; the backend decides
+   * which outlets it may see.
+   */
+  getCurrentContext(outletIds: readonly string[]): Promise<AttendanceCurrentContext>
   /**
    * One person's record for a business date, or null if they have not started.
    *

@@ -67,9 +67,10 @@ function metresFromOutlet(
 function eventFromReading(
   outlet: (typeof outletFixtures)[number],
   reading: PositionReading | null,
+  at: string,
 ): AttendanceEvent {
   return {
-    at: reading?.at ?? new Date().toISOString(),
+    at,
     latitude: reading?.latitude ?? null,
     longitude: reading?.longitude ?? null,
     accuracyMetres: reading?.accuracyMetres ?? null,
@@ -101,8 +102,23 @@ function adjudicate(
 /** The demo manager, as the fallback author of a seeded manual arrival. */
 const DEMO_MANAGER_ID = personaFixtures.franchise_admin.profile.id
 
-export function createMockAttendanceAdapter(): AttendanceAdapter {
-  const today = resolveBusinessDate(new Date(), outletFor(OUTLET_KALYANI_ID).business_day_cutover)
+export function createMockAttendanceAdapter(
+  options: {
+    now?: () => Date
+    /** Test/demo-only outlet cutover overrides, still read by the adapter. */
+    businessDayCutovers?: Readonly<Record<string, string>>
+  } = {},
+): AttendanceAdapter {
+  // Demo has no database, so its adapter owns one reference clock. Components
+  // receive the resulting context and never use their device clock for
+  // attendance authority.
+  const referenceNow = options.now ?? (() => new Date())
+  const businessDayCutover = (outlet: (typeof outletFixtures)[number]) =>
+    options.businessDayCutovers?.[outlet.id] ?? outlet.business_day_cutover
+  const today = resolveBusinessDate(
+    referenceNow(),
+    businessDayCutover(outletFor(OUTLET_KALYANI_ID)),
+  )
 
   /** `09:04` on a business date, as an instant. Demo data, so IST is assumed. */
   const instantAt = (businessDate: string, time: string): string =>
@@ -376,6 +392,19 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
    * only thing a surface can observe.
    */
   const commands = new Map<string, readonly string[]>()
+  const checkInCommands = new Map<
+    string,
+    {
+      personId: string
+      outletId: string
+      businessDate: string
+      attemptedAt: string | null
+      latitude: number | null
+      longitude: number | null
+      accuracyMetres: number | null
+      expectedVersion: number | null
+    }
+  >()
 
   const replay = (commandId: string): AttendanceRecord[] | null => {
     const settled = commands.get(commandId)
@@ -414,7 +443,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
     const distance = reading ? metresFromOutlet(outlet, reading.latitude, reading.longitude) : null
     const onSite = distance !== null && distance <= outlet.geofence_radius_m
     const sameDay =
-      record.businessDate === resolveBusinessDate(new Date(), outlet.business_day_cutover)
+      record.businessDate === resolveBusinessDate(referenceNow(), businessDayCutover(outlet))
     return !(onSite && sameDay)
   }
 
@@ -422,6 +451,25 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
     record.businessDate >= from && record.businessDate <= to
 
   return {
+    async getCurrentContext(outletIds) {
+      const serverAt = referenceNow().toISOString()
+      const ids = [...new Set(outletIds)]
+      return {
+        serverAt,
+        outlets: ids.flatMap((outletId) => {
+          const outlet = outletFixtures.find((candidate) => candidate.id === outletId)
+          return outlet
+            ? [
+                {
+                  outletId,
+                  businessDate: resolveBusinessDate(new Date(serverAt), businessDayCutover(outlet)),
+                },
+              ]
+            : []
+        }),
+      }
+    },
+
     async getDay(personId, businessDate) {
       const record = records.find(
         (candidate) => candidate.personId === personId && candidate.businessDate === businessDate,
@@ -508,12 +556,10 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
     },
 
     async checkIn({ personId, outletId, businessDate, reading, attemptId, expectedVersion }) {
+      const serverAt = referenceNow().toISOString()
       // Matched on person and date alone, mirroring
       // `attendance_one_per_person_day`: a day started at the other outlet is
       // the same day, and a second row for it is what the database refuses.
-      const existing = records.find(
-        (candidate) => candidate.personId === personId && candidate.businessDate === businessDate,
-      )
       const outlet = outletFor(outletId)
       if (!outlet.is_active) {
         throw new AttendanceActionError('outlet_closed', 'This outlet is not accepting check-ins.')
@@ -521,29 +567,49 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       if (!assignedOutlets(assignmentFixtures[personId] ?? []).includes(outletId)) {
         throw new AttendanceActionError('not_permitted', 'You are not assigned to this outlet.')
       }
-      if (businessDate !== resolveBusinessDate(new Date(), outlet.business_day_cutover)) {
-        throw new AttendanceActionError(
-          'day_closed',
-          'That outlet has moved to a new business day.',
-        )
-      }
-      const repeated = attemptId
-        ? existing?.attempts.find((candidate) => candidate.id === attemptId)
+      const repeatedRecord = attemptId
+        ? records.find((candidate) => candidate.attempts.some((item) => item.id === attemptId))
         : null
-      if (repeated) {
+      if (repeatedRecord) {
+        const saved = checkInCommands.get(attemptId!)
         if (
-          repeated.outletId !== outletId ||
-          repeated.latitude !== (reading?.latitude ?? null) ||
-          repeated.longitude !== (reading?.longitude ?? null) ||
-          repeated.accuracyMetres !== (reading?.accuracyMetres ?? null)
+          !saved ||
+          saved.personId !== personId ||
+          saved.outletId !== outletId ||
+          saved.businessDate !== businessDate ||
+          saved.attemptedAt !== (reading?.at ?? null) ||
+          saved.latitude !== (reading?.latitude ?? null) ||
+          saved.longitude !== (reading?.longitude ?? null) ||
+          saved.accuracyMetres !== (reading?.accuracyMetres ?? null) ||
+          saved.expectedVersion !== (expectedVersion ?? null)
         ) {
           throw new AttendanceActionError(
             'changed_request',
             'This request ID was reused with changed evidence.',
           )
         }
-        return clone(existing as AttendanceRecord)
+        return clone(repeatedRecord)
       }
+      const serverBusinessDate = resolveBusinessDate(new Date(serverAt), businessDayCutover(outlet))
+      const named =
+        expectedVersion == null
+          ? null
+          : records.find(
+              (candidate) =>
+                candidate.personId === personId && candidate.businessDate === businessDate,
+            )
+      if (named && named.businessDate !== serverBusinessDate) {
+        throw new AttendanceActionError(
+          'day_closed',
+          'That outlet has moved to a new business day.',
+        )
+      }
+      const existing =
+        named ??
+        records.find(
+          (candidate) =>
+            candidate.personId === personId && candidate.businessDate === serverBusinessDate,
+        )
       if (existing && expectedVersion != null && existing.stateVersion !== expectedVersion) {
         throw new AttendanceActionError(
           'stale_state',
@@ -571,21 +637,31 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       }
 
       const person = personFor(personId)
-      const event = eventFromReading(outlet, reading)
+      const event = eventFromReading(outlet, reading, serverAt)
 
       const nextAttemptId = attemptId ?? crypto.randomUUID()
+      checkInCommands.set(nextAttemptId, {
+        personId,
+        outletId,
+        businessDate,
+        attemptedAt: reading?.at ?? null,
+        latitude: reading?.latitude ?? null,
+        longitude: reading?.longitude ?? null,
+        accuracyMetres: reading?.accuracyMetres ?? null,
+        expectedVersion: expectedVersion ?? null,
+      })
       const attempt: AttendanceAttempt = {
         id: nextAttemptId,
         outletId,
         outletName: outlet.name,
-        businessDate,
+        businessDate: serverBusinessDate,
         ...event,
         arrivalDeadline: outlet.arrival_deadline,
         supersededAt: null,
         settledAt: null,
       }
       const priorAttempts = existing?.attempts ?? []
-      const now = new Date().toISOString()
+      const now = serverAt
       for (const prior of priorAttempts) {
         if (prior.id === existing?.currentAttemptId) prior.supersededAt = now
       }
@@ -595,7 +671,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         outletName: outlet.name,
         personId,
         personName: person.full_name,
-        businessDate,
+        businessDate: serverBusinessDate,
         status: adjudicate('present', event, false),
         stateVersion: (existing?.stateVersion ?? 0) + 1,
         currentAttemptId: nextAttemptId,
@@ -631,7 +707,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
      * boundary lives in the database this mock stands in for.
      */
     async recordManualEntry({ personId, outletId, businessDate, at, enteredBy }) {
-      if (new Date(at).getTime() > Date.now()) {
+      if (new Date(at).getTime() > referenceNow().getTime()) {
         throw new AttendanceActionError('future_entry', 'A manual entry cannot be in the future.')
       }
 
@@ -693,7 +769,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
       record.approval = {
         by: enteredBy,
         byName: entererName,
-        at: new Date().toISOString(),
+        at: referenceNow().toISOString(),
         reason: null,
         latitude: null,
         longitude: null,
@@ -783,7 +859,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         }
       }
 
-      const now = new Date().toISOString()
+      const now = referenceNow().toISOString()
       commands.set(
         commandId,
         items.map((each) => each.attendanceId),
@@ -866,7 +942,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         }
       }
 
-      const now = new Date().toISOString()
+      const now = referenceNow().toISOString()
       commands.set(
         commandId,
         items.map((each) => each.attendanceId),
@@ -942,7 +1018,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
           'Only an absent day can allow another check-in.',
         )
       }
-      const now = new Date().toISOString()
+      const now = referenceNow().toISOString()
       const id = decisionId ?? crypto.randomUUID()
       const newStatus =
         action === 'present'
@@ -965,7 +1041,7 @@ export function createMockAttendanceAdapter(): AttendanceAdapter {
         if (Number.isNaN(corrected.getTime())) {
           throw new AttendanceActionError('time_invalid', 'Choose a valid check-in time.')
         }
-        if (corrected.getTime() > Date.now()) {
+        if (corrected.getTime() > referenceNow().getTime()) {
           throw new AttendanceActionError(
             'time_future',
             'A corrected check-in time cannot be in the future.',

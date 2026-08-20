@@ -266,6 +266,15 @@ the reset migration and prove each of these layers:
   settled rows, repeated old-to-new audit entries, future and cross-cutover
   refusal, immutable attempts, preserved approval/retry state and both directions
   across the stamped late deadline;
+- `supabase/tests/26_attendance_server_time.sql` proves a forward- or
+  backward-skewed phone timestamp cannot choose the stored time, business date
+  or late classification; a positionless arrival has the same server authority;
+  exact retries retain their original canonical day across a cutover; and manual
+  entry still preserves a manager's chosen historical time. The accompanying
+  RLS probe proves the current-context read returns only outlets already in
+  scope, while the real PostgREST adapter test proves the existing eight-argument
+  submit shape remains accepted and the database, not the browser, overwrites
+  its legacy time/date values;
 - concurrent approve/deny and retry/decision calls leave one outcome, one current
   attempt, one waiting outlet and complete append-only history;
 - RLS and authenticated REST probes include forged actor, unassigned/cross-outlet
@@ -294,7 +303,11 @@ the reset migration and prove each of these layers:
   confirmation combination, cancel-without-write and stale reload;
 - waiting/notification tests prove retry transfers a count between outlets,
   zero badges stay absent, foreground refresh is fresh and a switched outlet
-  never renders the previous outlet's rows under a new label.
+  never renders the previous outlet's rows under a new label. Employee check-in
+  tests additionally pin distinct outlet cutovers, a wildly skewed GPS timestamp
+  and foreground refresh: the submitted initial day comes from returned server
+  context, and refreshing it does not read location merely because the app was
+  brought forward.
 
 Finally walk live and demo at phone and tablet widths in both light and dark:
 ordinary row density, approve/deny, denial sheet, retry confirmation,
