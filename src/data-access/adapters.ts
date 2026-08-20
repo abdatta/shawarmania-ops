@@ -1994,21 +1994,40 @@ export interface ManualLedgerDay {
   zomatoSettlement: ZomatoSettlement | null
 }
 
-/** Where a day's Zomato figures came from, and what they moved from. */
+/**
+ * A day's measured Zomato figures, and where they came from.
+ *
+ * It carries the figures now, because they live on their own row rather than the
+ * day's, so a caller holding a day has nowhere else to read them. A day the sync
+ * has never touched has no settlement at all.
+ */
 export interface ZomatoSettlement {
+  /** What Zomato stated the day took, before commission. */
+  revenuePaise: number
+  /**
+   * What Zomato kept. **`null` means undetermined**, not nought: the week has not
+   * settled and no route reaches the figure yet. A channel that sold nothing is
+   * charged nought, which is known and so not null.
+   */
+  commissionPaise: number | null
   /**
    * `provisional` the week is not paid yet; `settled` it is paid and reconciles;
    * `disputed` it is paid and does not. The third is not a kind of provisional:
    * a disputed week will never settle on its own.
    */
   state: 'provisional' | 'settled' | 'disputed'
-  /** What the owner had typed before the sync took the day over, if anything. */
-  supersededTyped: { revenuePaise: number; commissionPaise: number; at: string } | null
+  /**
+   * Which origin wrote the figures: the twice-daily reader, a settlement
+   * statement, or a statement supplied by hand when the reader was blocked.
+   */
+  origin: 'daily_reader' | 'settlement' | 'supplied_by_hand'
+  /** What an earlier origin's figures were, where this write replaced them. */
+  supersededTyped: { revenuePaise: number; commissionPaise: number | null; at: string } | null
   /**
    * What the day read before its week settled, kept only where settling moved
    * it. Present is precisely what "revised" means.
    */
-  revisedFrom: { revenuePaise: number; commissionPaise: number } | null
+  revisedFrom: { revenuePaise: number; commissionPaise: number | null } | null
   revisedAt: string | null
 }
 
@@ -2291,8 +2310,31 @@ export interface AggregatorSyncHealth {
   syncedFrom: string | null
 }
 
+/**
+ * Hyperpure's health, which is account-level and thinner than Zomato's.
+ *
+ * Hyperpure rides Zomato's login, so it has no reconnect of its own and no
+ * one-time-password: a stale session is fixed by reconnecting Zomato, which
+ * refreshes both. And it is a supply cost, not a payout, so there is no synced-from
+ * boundary and no reconciliation — only whether the last read worked and whether
+ * the session it rides is still alive. `shape_changed` is the maintainer's signal;
+ * `session_lapsed` is the one that asks the owner to reconnect Zomato.
+ */
+export interface HyperpureHealth {
+  lastRunAt: string | null
+  lastOutcome: 'ok' | 'session_lapsed' | 'shape_changed' | null
+  running: boolean
+  hasSession: boolean
+  sessionExpiresAt: string | null
+}
+
 export interface AggregatorSyncAdapter {
   getHealth(outletId: string): Promise<AggregatorSyncHealth>
+  /**
+   * Hyperpure's health, account-level (no outlet). Null-ish fields until the first
+   * read runs; the surface shows a read-only line, since reconnect is Zomato's.
+   */
+  getHyperpureHealth(): Promise<HyperpureHealth>
   listEvents(outletId: string): Promise<AggregatorSyncEventRow[]>
   /**
    * How many things want the owner, per outlet they can reach.
@@ -2342,6 +2384,37 @@ export interface AggregatorSyncAdapter {
    * forever asking a question that has already been answered.
    */
   markNotDuplicate(outletId: string, eventId: string): Promise<void>
+  /**
+   * Bring a period in from a statement supplied by hand, when the reader cannot.
+   *
+   * This is the disaster-recovery path: the file is self-sufficient, parsed by
+   * the same code the reader uses, and written for the outlets the caller may
+   * reach. It resolves to what was written — which kind of file it was and how it
+   * landed — so the surface can say so rather than leaving the owner to wonder
+   * whether a silent upload did anything.
+   *
+   * A `StatementUploadConfirmation`-shaped return with `needsConfirmation` set
+   * means the file would replace figures a settlement had already closed; the
+   * surface asks, and calls again with `confirmed`.
+   */
+  uploadStatement(file: StatementUpload): Promise<StatementUploadResult>
+}
+
+/** A statement's bytes, on their way to the parser. */
+export interface StatementUpload {
+  /** The file's own name, kept for the audit trail, never used to recognise it. */
+  filename: string
+  /** The raw file, base64-encoded for transit. */
+  base64: string
+  /** Set on a second call to go ahead past a settled-week replacement. */
+  confirmed?: boolean
+}
+
+export interface StatementUploadResult {
+  /** What the file turned out to be, once its content was read. */
+  kind: 'zomato-order-history' | 'zomato-settlement' | 'hyperpure-statement'
+  /** A short, human line per outlet the upload touched. */
+  wrote: readonly string[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

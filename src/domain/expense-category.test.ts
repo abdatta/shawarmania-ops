@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeCategory } from './expense-category'
+import { normalizeCategory, reservedCategoryConflict } from './expense-category'
 
 describe('normalizeCategory', () => {
   it.each([
@@ -16,5 +16,40 @@ describe('normalizeCategory', () => {
 
   it('preserves the case that was typed', () => {
     expect(normalizeCategory('  HyperPure  Goods ')).toBe('HyperPure Goods')
+  })
+})
+
+describe('reservedCategoryConflict', () => {
+  const reserved = ['Hyperpure']
+
+  it('catches the exact reserved name', () => {
+    expect(reservedCategoryConflict('Hyperpure', reserved)).toBe('Hyperpure')
+  })
+
+  it('catches the spellings that must not slip through', () => {
+    // The whole reason it is wider than equality: a second spelling would
+    // recreate the exact duplicate reserving it exists to prevent.
+    for (const spelling of [
+      'hyperpure',
+      'HYPERPURE',
+      'hyper pure',
+      'Hyper-Pure',
+      'HyperPure Goods',
+      ' hyperpure ',
+    ]) {
+      expect(reservedCategoryConflict(spelling, reserved), spelling).toBe('Hyperpure')
+    }
+  })
+
+  it('leaves an unrelated category alone', () => {
+    expect(reservedCategoryConflict('Chicken', reserved)).toBeNull()
+    expect(reservedCategoryConflict('Gas', reserved)).toBeNull()
+    expect(reservedCategoryConflict('', reserved)).toBeNull()
+  })
+
+  it('names the longest matching reserved category', () => {
+    expect(reservedCategoryConflict('Hyperpure Veg Goods', ['Hyperpure', 'Hyperpure Veg'])).toBe(
+      'Hyperpure Veg',
+    )
   })
 })

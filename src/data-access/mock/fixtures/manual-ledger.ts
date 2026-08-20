@@ -77,6 +77,15 @@ export interface ManualLedgerExpenseSeed {
    */
   recordedBy?: 'owner' | 'manager' | 'biller' | 'employee'
   /**
+   * A supply row read from a statement rather than typed. When set, the row
+   * carries this origin and reference and no recorder, and the demo shows a
+   * Hyperpure cost that arrived on its own — the state the freeze produces.
+   */
+  sourceSystem?: string
+  sourceRef?: string
+  /** A cost drawn on by both kitchens from one inventory, booked once. */
+  sharedCost?: boolean
+  /**
    * Recorded by somebody holding no assignment at this outlet, which the guard
    * stamps at insert.
    *
@@ -213,6 +222,20 @@ export const manualLedgerExpenseSeeds: ManualLedgerExpenseSeed[] = [
     note: 'Paper bags and foil, 500 each',
     time: '11:20',
     recordedBy: 'employee',
+  },
+  // Read from Hyperpure's own statement, not typed: one order, booked once as a
+  // shared cost because both kitchens draw on one inventory. It is what the freeze
+  // produces, and the walkthrough shows a supply cost that arrived on its own.
+  {
+    daysAgo: 3,
+    category: 'Hyperpure',
+    isCash: false,
+    amountPaise: 931_100,
+    note: 'Hyperpure ZHPWB27-OR-DEMO',
+    time: '09:58',
+    sourceSystem: 'hyperpure',
+    sourceRef: 'ZHPWB27-OR-DEMO',
+    sharedCost: true,
   },
   // The owner's, from the drawer, and settled without being at the outlet — the
   // one combination that earns a from-away marker. Expected cash moved and

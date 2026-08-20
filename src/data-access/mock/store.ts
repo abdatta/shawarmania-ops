@@ -134,6 +134,12 @@ export interface DemoStore {
   manualLedgerDays: Tables<'manual_ledger_days'>[]
   /** Owned by the manual-ledger adapter (#36). Temporary. */
   manualLedgerExpenses: Tables<'manual_ledger_expenses'>[]
+  /**
+   * A channel's measured figures, on their own table so a figure can exist for a
+   * date with no day row. Written only by the sync in production; the mock seeds
+   * them and the form never writes them.
+   */
+  aggregatorChannelDays: Tables<'aggregator_channel_days'>[]
 }
 
 /** The outlet every demo persona but the owner belongs to. */
@@ -647,7 +653,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       is_cash: seed.isCash,
       amount_paise: seed.amountPaise,
       description: seed.note ?? null,
-      recorded_by: LEDGER_RECORDERS[seed.recordedBy ?? 'owner'],
+      // A sourced supply row was recorded by nobody, exactly as production stores
+      // it: the recorder is null when a source system is present.
+      recorded_by: seed.sourceSystem ? null : LEDGER_RECORDERS[seed.recordedBy ?? 'owner'],
       // Stamped at insert by the guard, from the recorder's assignments as they
       // stood then. Declared on the seed rather than derived here — see the
       // fixture, where the reason is that the demo owner manages Kalyani and a
@@ -661,11 +669,12 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
         : null,
       voided_by: seed.voidedAtTime ? LEDGER_RECORDERS[seed.recordedBy ?? 'owner'] : null,
       voided_reason: seed.voidedReason ?? null,
-      // Seeded rows are all hand-entered, so none carries an external source.
-      // The synced ones the demo needs are added after this list, where the
-      // contrast between a typed row and a sourced one is the point.
-      source_system: null,
-      source_ref: null,
+      // Most seeded rows are hand-entered; a Hyperpure row carries its statement
+      // origin, so the walkthrough shows a supply cost that arrived on its own
+      // beside the ones a person typed.
+      source_system: seed.sourceSystem ?? null,
+      source_ref: seed.sourceRef ?? null,
+      shared_cost: seed.sharedCost ?? false,
     }),
   )
 
@@ -683,46 +692,75 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
    * week paid" is demonstrable rather than merely described. The superseded pair goes
    * with it: a synced day archives what the owner had typed before it was taken over.
    */
-  function settlementFor(daysAgo: number, revenuePaise: number, commissionPaise: number | null) {
-    const blank = {
-      zomato_settlement_state: null as string | null,
-      zomato_superseded_revenue_paise: null as number | null,
-      zomato_superseded_commission_paise: null as number | null,
-      zomato_superseded_at: null as string | null,
-      zomato_provisional_revenue_paise: null as number | null,
-      zomato_provisional_commission_paise: null as number | null,
-      zomato_revised_at: null as string | null,
+  /**
+   * The measured figures for a seeded day, as a row on its own table.
+   *
+   * All four demonstrable states appear on purpose, assigned by age, so one
+   * scroll of the walkthrough shows a day read today with its commission still
+   * undetermined, a settled week that grew when it paid, a disputed week, and an
+   * ordinary settled day. There is no "typed by the owner" state any more: typing
+   * a Zomato figure is exactly what this change removed, so every figure here has
+   * an origin that is not a person.
+   */
+  function figureFor(
+    outletId: string,
+    daysAgo: number,
+    index: number,
+    revenuePaise: number,
+    commissionPaise: number | null,
+  ): Tables<'aggregator_channel_days'> | null {
+    const base = {
+      id: `ac000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
+      outlet_id: outletId,
+      channel: 'zomato',
+      business_date: businessDate(daysAgo),
+      revenue_paise: revenuePaise,
+      commission_paise: commissionPaise,
+      settlement_state: 'settled',
+      origin: 'settlement',
+      superseded_revenue_paise: null as number | null,
+      superseded_commission_paise: null as number | null,
+      superseded_at: null as string | null,
+      provisional_revenue_paise: null as number | null,
+      provisional_commission_paise: null as number | null,
+      revised_at: null as string | null,
+      created_at: instantAt(businessDate(daysAgo), '23:00'),
+      updated_at: instantAt(businessDate(daysAgo), '23:00'),
     }
 
     if (daysAgo === 1) {
       // Read today: the revenue is exact and the commission is not stated yet.
-      return { ...blank, zomato_settlement_state: 'provisional', zomato_commission_paise: null }
+      return {
+        ...base,
+        commission_paise: null,
+        settlement_state: 'provisional',
+        origin: 'daily_reader',
+      }
     }
     if (daysAgo === 2) {
       return {
-        ...blank,
-        zomato_settlement_state: 'settled',
-        // It grew when the week paid, which is the cancellation-refund case: an order
-        // rejected after the kitchen cooked it is refunded a share and paid, and the
-        // live figure never showed it.
-        zomato_provisional_revenue_paise: revenuePaise - 7_915,
-        zomato_provisional_commission_paise: commissionPaise,
-        zomato_revised_at: new Date().toISOString(),
-        zomato_superseded_revenue_paise: revenuePaise - 21_500,
-        zomato_superseded_commission_paise: commissionPaise,
-        zomato_superseded_at: new Date().toISOString(),
+        ...base,
+        // It grew when the week paid, which is the cancellation-refund case: an
+        // order rejected after the kitchen cooked it is refunded a share and paid,
+        // and the live figure never showed it.
+        provisional_revenue_paise: revenuePaise - 7_915,
+        provisional_commission_paise: commissionPaise,
+        revised_at: new Date().toISOString(),
+        superseded_revenue_paise: revenuePaise - 21_500,
+        superseded_commission_paise: commissionPaise,
+        superseded_at: new Date().toISOString(),
       }
     }
     if (daysAgo === 3) {
       return {
-        ...blank,
-        zomato_settlement_state: 'disputed',
-        zomato_superseded_revenue_paise: revenuePaise - 15_000,
-        zomato_superseded_commission_paise: commissionPaise,
-        zomato_superseded_at: new Date().toISOString(),
+        ...base,
+        settlement_state: 'disputed',
+        superseded_revenue_paise: revenuePaise - 15_000,
+        superseded_commission_paise: commissionPaise,
+        superseded_at: new Date().toISOString(),
       }
     }
-    return blank
+    return base
   }
 
   const manualLedgerDays: Tables<'manual_ledger_days'>[] = manualLedgerDaySeeds.map(
@@ -733,14 +771,12 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       opening_cash_paise: seed.openingCashPaise,
       cash_revenue_paise: seed.cashRevenuePaise,
       upi_revenue_paise: seed.upiRevenuePaise,
-      zomato_revenue_paise: seed.zomatoRevenuePaise,
       swiggy_revenue_paise: seed.swiggyRevenuePaise,
       cash_added_paise: seed.cashAddedPaise ?? 0,
       cash_added_reason: seed.cashAddedReason ?? null,
       cash_removed_paise: seed.cashRemovedPaise ?? 0,
       cash_removed_reason: seed.cashRemovedReason ?? null,
       counted_cash_paise: seed.countedCashPaise,
-      zomato_commission_paise: seed.zomatoCommissionPaise,
       swiggy_commission_paise: seed.swiggyCommissionPaise,
       note: seed.note ?? null,
       recorded_by: OWNER_ID,
@@ -749,19 +785,24 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       // One day carries a manager's correction, so the "recorded by X, last
       // corrected by Y" reading appears in the walkthrough rather than only in a
       // test (design D6).
-      /*
-       * Where each seeded day's Zomato figures came from.
-       *
-       * All four states are present on purpose, because the chip that names them is
-       * the thing being demonstrated and three of the four would otherwise never
-       * appear on screen. `settlementFor` below assigns them by age, so the
-       * walkthrough shows a typed day, a day read today, a settled week and a week
-       * that would not add up, in one scroll.
-       */
-      ...settlementFor(seed.daysAgo, seed.zomatoRevenuePaise, seed.zomatoCommissionPaise),
       updated_by: seed.correctedByManager ? MANAGER_ID : null,
     }),
   )
+
+  // The measured figures, on their own table, keyed to the same dates. A day and
+  // its figure are two rows now, so the "day nobody recorded" the sync writes has
+  // somewhere to live and the drawer count is never invented to hold a figure.
+  const aggregatorChannelDays: Tables<'aggregator_channel_days'>[] = manualLedgerDaySeeds
+    .map((seed, index) =>
+      figureFor(
+        DEMO_OUTLET_ID,
+        seed.daysAgo,
+        index,
+        seed.zomatoRevenuePaise,
+        seed.zomatoCommissionPaise,
+      ),
+    )
+    .filter((row): row is Tables<'aggregator_channel_days'> => row !== null)
 
   const categoryNames = new Map<string, string>()
   for (const row of [...expenses, ...manualLedgerExpenses]) {
@@ -842,5 +883,6 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     openingCashPaise: OPENING_CASH_PAISE,
     manualLedgerDays,
     manualLedgerExpenses,
+    aggregatorChannelDays,
   }
 }

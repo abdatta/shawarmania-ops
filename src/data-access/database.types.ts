@@ -210,6 +210,71 @@ export type Database = {
         }
         Relationships: []
       }
+      aggregator_channel_days: {
+        Row: {
+          business_date: string
+          channel: string
+          commission_paise: number | null
+          created_at: string
+          id: string
+          origin: string
+          outlet_id: string
+          provisional_commission_paise: number | null
+          provisional_revenue_paise: number | null
+          revenue_paise: number
+          revised_at: string | null
+          settlement_state: string
+          superseded_at: string | null
+          superseded_commission_paise: number | null
+          superseded_revenue_paise: number | null
+          updated_at: string
+        }
+        Insert: {
+          business_date: string
+          channel: string
+          commission_paise?: number | null
+          created_at?: string
+          id?: string
+          origin: string
+          outlet_id: string
+          provisional_commission_paise?: number | null
+          provisional_revenue_paise?: number | null
+          revenue_paise: number
+          revised_at?: string | null
+          settlement_state: string
+          superseded_at?: string | null
+          superseded_commission_paise?: number | null
+          superseded_revenue_paise?: number | null
+          updated_at?: string
+        }
+        Update: {
+          business_date?: string
+          channel?: string
+          commission_paise?: number | null
+          created_at?: string
+          id?: string
+          origin?: string
+          outlet_id?: string
+          provisional_commission_paise?: number | null
+          provisional_revenue_paise?: number | null
+          revenue_paise?: number
+          revised_at?: string | null
+          settlement_state?: string
+          superseded_at?: string | null
+          superseded_commission_paise?: number | null
+          superseded_revenue_paise?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aggregator_channel_days_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       aggregator_cycle_deductions: {
         Row: {
           accepted_at: string | null
@@ -316,6 +381,62 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "aggregator_cycle_reconciliations_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      aggregator_dismissed_duplicates: {
+        Row: {
+          dismissed_at: string
+          dismissed_by: string
+          expense_a: string
+          expense_b: string
+          id: string
+          outlet_id: string
+        }
+        Insert: {
+          dismissed_at?: string
+          dismissed_by: string
+          expense_a: string
+          expense_b: string
+          id?: string
+          outlet_id: string
+        }
+        Update: {
+          dismissed_at?: string
+          dismissed_by?: string
+          expense_a?: string
+          expense_b?: string
+          id?: string
+          outlet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aggregator_dismissed_duplicates_dismissed_by_fkey"
+            columns: ["dismissed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aggregator_dismissed_duplicates_expense_a_fkey"
+            columns: ["expense_a"]
+            isOneToOne: false
+            referencedRelation: "manual_ledger_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aggregator_dismissed_duplicates_expense_b_fkey"
+            columns: ["expense_b"]
+            isOneToOne: false
+            referencedRelation: "manual_ledger_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aggregator_dismissed_duplicates_outlet_id_fkey"
             columns: ["outlet_id"]
             isOneToOne: false
             referencedRelation: "outlets"
@@ -2101,15 +2222,6 @@ export type Database = {
           updated_at: string
           updated_by: string | null
           upi_revenue_paise: number
-          zomato_commission_paise: number | null
-          zomato_provisional_commission_paise: number | null
-          zomato_provisional_revenue_paise: number | null
-          zomato_revenue_paise: number
-          zomato_revised_at: string | null
-          zomato_settlement_state: string | null
-          zomato_superseded_at: string | null
-          zomato_superseded_commission_paise: number | null
-          zomato_superseded_revenue_paise: number | null
         }
         Insert: {
           business_date: string
@@ -2130,15 +2242,6 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
           upi_revenue_paise?: number
-          zomato_commission_paise?: number | null
-          zomato_provisional_commission_paise?: number | null
-          zomato_provisional_revenue_paise?: number | null
-          zomato_revenue_paise?: number
-          zomato_revised_at?: string | null
-          zomato_settlement_state?: string | null
-          zomato_superseded_at?: string | null
-          zomato_superseded_commission_paise?: number | null
-          zomato_superseded_revenue_paise?: number | null
         }
         Update: {
           business_date?: string
@@ -2159,15 +2262,6 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
           upi_revenue_paise?: number
-          zomato_commission_paise?: number | null
-          zomato_provisional_commission_paise?: number | null
-          zomato_provisional_revenue_paise?: number | null
-          zomato_revenue_paise?: number
-          zomato_revised_at?: string | null
-          zomato_settlement_state?: string | null
-          zomato_superseded_at?: string | null
-          zomato_superseded_commission_paise?: number | null
-          zomato_superseded_revenue_paise?: number | null
         }
         Relationships: [
           {
@@ -2205,6 +2299,7 @@ export type Database = {
           outlet_id: string
           recorded_away: boolean
           recorded_by: string | null
+          shared_cost: boolean
           source_ref: string | null
           source_system: string | null
           updated_at: string
@@ -2224,6 +2319,7 @@ export type Database = {
           outlet_id: string
           recorded_away?: boolean
           recorded_by?: string | null
+          shared_cost?: boolean
           source_ref?: string | null
           source_system?: string | null
           updated_at?: string
@@ -2243,6 +2339,7 @@ export type Database = {
           outlet_id?: string
           recorded_away?: boolean
           recorded_by?: string | null
+          shared_cost?: boolean
           source_ref?: string | null
           source_system?: string | null
           updated_at?: string
@@ -2683,6 +2780,7 @@ export type Database = {
           created_at: string
           district: string | null
           geofence_radius_m: number
+          hyperpure_delivery: boolean
           id: string
           is_active: boolean
           latitude: number | null
@@ -2693,6 +2791,7 @@ export type Database = {
           name: string
           phone: string | null
           pincode: string | null
+          zomato_res_id: string | null
         }
         Insert: {
           address_line1?: string | null
@@ -2705,6 +2804,7 @@ export type Database = {
           created_at?: string
           district?: string | null
           geofence_radius_m?: number
+          hyperpure_delivery?: boolean
           id?: string
           is_active?: boolean
           latitude?: number | null
@@ -2715,6 +2815,7 @@ export type Database = {
           name: string
           phone?: string | null
           pincode?: string | null
+          zomato_res_id?: string | null
         }
         Update: {
           address_line1?: string | null
@@ -2727,6 +2828,7 @@ export type Database = {
           created_at?: string
           district?: string | null
           geofence_radius_m?: number
+          hyperpure_delivery?: boolean
           id?: string
           is_active?: boolean
           latitude?: number | null
@@ -2737,6 +2839,7 @@ export type Database = {
           name?: string
           phone?: string | null
           pincode?: string | null
+          zomato_res_id?: string | null
         }
         Relationships: []
       }
@@ -2764,6 +2867,27 @@ export type Database = {
           is_active?: boolean
           phone?: string | null
           role_title?: string | null
+        }
+        Relationships: []
+      }
+      reserved_expense_categories: {
+        Row: {
+          category: string
+          created_at: string
+          guidance: string
+          owned_by: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          guidance: string
+          owned_by: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          guidance?: string
+          owned_by?: string
         }
         Relationships: []
       }
@@ -3388,6 +3512,11 @@ export type Database = {
         Args: { p_person_id: string; p_shift_id: string }
         Returns: string
       }
+      expense_category_reserved_owner: {
+        Args: { p_category: string }
+        Returns: string
+      }
+      fold_expense_category: { Args: { p_value: string }; Returns: string }
       forget_aggregator_session: {
         Args: { p_channel: string }
         Returns: undefined
@@ -3409,6 +3538,10 @@ export type Database = {
         }[]
       }
       ingest_aggregator_cycle: {
+        Args: { p_payload: Json; p_permitted_outlets: string[] }
+        Returns: Json
+      }
+      ingest_supply_statement: {
         Args: { p_payload: Json; p_permitted_outlets: string[] }
         Returns: Json
       }
@@ -3493,6 +3626,10 @@ export type Database = {
           state_fingerprint: string
         }[]
       }
+      may_reach_operator_statement: {
+        Args: { object_name: string }
+        Returns: boolean
+      }
       merge_expense_category: {
         Args: { p_from: string; p_into: string }
         Returns: {
@@ -3502,6 +3639,10 @@ export type Database = {
       }
       normalize_expense_category: { Args: { p_value: string }; Returns: string }
       normalize_indian_phone: { Args: { p_input: string }; Returns: string }
+      operator_statement_outlet: {
+        Args: { object_name: string }
+        Returns: string
+      }
       outlet_reference_counts: {
         Args: { p_outlet: string }
         Returns: {

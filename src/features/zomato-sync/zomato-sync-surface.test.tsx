@@ -157,6 +157,20 @@ describe('the Zomato sync surface', () => {
     expect(other.className).not.toContain('bg-on-primary')
   })
 
+  it('shows Hyperpure health beside Zomato, read-only and account-level', async () => {
+    // Before this line existed a broken Hyperpure read was a red CI job the owner
+    // never saw. The demo seeds it healthy, so the line reads "All quiet" — and it
+    // is present on the outlet-scoped page because Hyperpure is account-level, not
+    // one outlet's. It carries no Read-now and no reconnect: Hyperpure rides the
+    // Zomato login, so it has neither in life.
+    await renderSurface(OUTLET_KALYANI_ID)
+
+    const line = await screen.findByTestId('hyperpure-health')
+    expect(line).toHaveTextContent(/Hyperpure/)
+    expect(line).toHaveTextContent(/All quiet/)
+    expect(within(line).queryByRole('button')).not.toBeInTheDocument()
+  })
+
   it('offers Read now only when reading again could say something new', async () => {
     /*
      * Two reasons to withhold it, and they are different in kind [owner,
@@ -264,4 +278,54 @@ describe('the Zomato sync surface', () => {
     expect(field).toHaveAttribute('autocomplete', 'one-time-code')
     expect(field).toHaveAttribute('inputmode', 'numeric')
   }, 15_000)
+
+  it('takes a statement uploaded by hand and says what it wrote, per outlet', async () => {
+    await renderSurface(OUTLET_KALYANI_ID)
+
+    const upload = await screen.findByTestId('upload-statement')
+    // The control names the three files it takes, so a person reaching for it
+    // under pressure is not guessing which to bring.
+    expect(within(upload).getByText(/order history/i)).toBeInTheDocument()
+
+    const file = new File(['fake-bytes'], 'order_history_20260817_20260818.zip')
+    await userEvent.upload(screen.getByTestId('upload-input'), file)
+
+    const result = await screen.findByTestId('upload-result')
+    // A per-outlet report rather than a silent refresh: the owner sees the upload
+    // did something and where.
+    expect(result).toHaveTextContent(/Kalyani/)
+    expect(result).toHaveTextContent(/Kanchrapara/)
+  })
+
+  it('refuses a file it cannot place, in the file’s own words', async () => {
+    await renderSurface(OUTLET_KALYANI_ID)
+    await screen.findByTestId('upload-statement')
+
+    const file = new File(['nope'], 'holiday-photos.zip')
+    await userEvent.upload(screen.getByTestId('upload-input'), file)
+
+    // The specific refusal, not a generic "did not go through": "matches no known
+    // shape" tells the owner the file is wrong rather than the connection.
+    expect(await screen.findByText(/matches no known statement shape/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('upload-result')).not.toBeInTheDocument()
+  })
+
+  it('says an upload needs a connection rather than pretending to queue it', async () => {
+    const online = Object.getOwnPropertyDescriptor(navigator, 'onLine')
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+    try {
+      await renderSurface(OUTLET_KALYANI_ID)
+      await screen.findByTestId('upload-statement')
+
+      const file = new File(['x'], 'order_history_20260817_20260818.zip')
+      await userEvent.upload(screen.getByTestId('upload-input'), file)
+
+      // Said outright, and nothing written: a statement is a deliberate recovery,
+      // not something to replay later against figures that may have moved.
+      expect(await screen.findByText(/needs a connection/i)).toBeInTheDocument()
+      expect(screen.queryByTestId('upload-result')).not.toBeInTheDocument()
+    } finally {
+      if (online) Object.defineProperty(navigator, 'onLine', online)
+    }
+  })
 })

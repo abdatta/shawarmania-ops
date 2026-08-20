@@ -57,26 +57,30 @@ function optionalActor(id: string | null): LedgerActor | null {
   return id ? actor(id) : null
 }
 
-function toDay(row: Tables<'manual_ledger_days'>): ManualLedgerDay {
+function toDay(
+  row: Tables<'manual_ledger_days'>,
+  figure: Tables<'aggregator_channel_days'> | null,
+): ManualLedgerDay {
+  const settlement = toZomatoSettlement(figure)
   return {
     outletId: row.outlet_id,
     businessDate: row.business_date,
     openingCashPaise: row.opening_cash_paise,
     cashRevenuePaise: row.cash_revenue_paise,
     upiRevenuePaise: row.upi_revenue_paise,
-    zomatoRevenuePaise: row.zomato_revenue_paise,
+    zomatoRevenuePaise: settlement?.revenuePaise ?? 0,
     swiggyRevenuePaise: row.swiggy_revenue_paise,
     cashAddedPaise: row.cash_added_paise,
     cashAddedReason: row.cash_added_reason,
     cashRemovedPaise: row.cash_removed_paise,
     cashRemovedReason: row.cash_removed_reason,
     countedCashPaise: row.counted_cash_paise,
-    zomatoCommissionPaise: row.zomato_commission_paise,
+    zomatoCommissionPaise: settlement?.commissionPaise ?? null,
     swiggyCommissionPaise: row.swiggy_commission_paise,
     note: row.note,
     recordedBy: actor(row.recorded_by),
     updatedBy: optionalActor(row.updated_by),
-    zomatoSettlement: toZomatoSettlement(row),
+    zomatoSettlement: settlement,
   }
 }
 
@@ -144,9 +148,12 @@ function refuseImpossibleDay(day: ManualLedgerDayInput): void {
    * something. The bound is stated as min/max of nought and the revenue so a
    * refunded day, whose revenue is negative, is bounded the same way in the other
    * direction. Mirrors the database constraint of the same name.
+   *
+   * Only Swiggy is checked. Zomato is sourced and frozen: its figures never
+   * arrive through this input, so validating the nought-and-null the form sends
+   * for it would refuse every save.
    */
   for (const [commission, revenue, label] of [
-    [day.zomatoCommissionPaise, day.zomatoRevenuePaise, 'Zomato'],
     [day.swiggyCommissionPaise, day.swiggyRevenuePaise, 'Swiggy'],
   ] as const) {
     // Nothing sold means nothing charged, and that is known rather than pending.
@@ -220,6 +227,21 @@ export function createMockManualLedgerAdapter(
     )
   }
 
+  /** The measured figure for an outlet-date, or none — its own table now. */
+  function figureFor(
+    outletId: string,
+    businessDate: string,
+  ): Tables<'aggregator_channel_days'> | null {
+    return (
+      store.aggregatorChannelDays.find(
+        (row) =>
+          row.outlet_id === outletId &&
+          row.channel === 'zomato' &&
+          row.business_date === businessDate,
+      ) ?? null
+    )
+  }
+
   /** The expense record: everyone at the outlet, whoever recorded the row. */
   function refuseExpenses(outletId: string): void {
     if (isOwner) return
@@ -280,7 +302,7 @@ export function createMockManualLedgerAdapter(
       const row = store.manualLedgerDays.find(
         (day) => day.outlet_id === outletId && day.business_date === businessDate,
       )
-      return row ? toDay(row) : null
+      return row ? toDay(row, figureFor(outletId, businessDate)) : null
     },
 
     async getPreviousDay(outletId, businessDate) {
@@ -290,7 +312,7 @@ export function createMockManualLedgerAdapter(
       const row = store.manualLedgerDays
         .filter((day) => day.outlet_id === outletId && day.business_date < businessDate)
         .sort((a, b) => b.business_date.localeCompare(a.business_date))[0]
-      return row ? toDay(row) : null
+      return row ? toDay(row, figureFor(outletId, row.business_date)) : null
     },
 
     async upsertDay(day: ManualLedgerDayInput) {
@@ -300,10 +322,11 @@ export function createMockManualLedgerAdapter(
       const existing = store.manualLedgerDays.find(
         (row) => row.outlet_id === day.outletId && row.business_date === day.businessDate,
       )
-      // Whether Zomato has taken this day over. The state column is the only thing
-      // that says so, now that typed and synced figures share their columns.
-      const isSynced = (existing?.zomato_settlement_state ?? null) !== null
 
+      // No Zomato figures are written from here. They live on their own table,
+      // which no signed-in session may write, so the day row this form saves
+      // carries only the drawer and the still-typed channels. A figure already
+      // stored for this date is left exactly where it is.
       const written: Tables<'manual_ledger_days'> = {
         id: existing?.id ?? `dd000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`,
         outlet_id: day.outletId,
@@ -318,34 +341,6 @@ export function createMockManualLedgerAdapter(
         cash_removed_reason: trimmed(day.cashRemovedReason),
         counted_cash_paise: day.countedCashPaise,
         swiggy_commission_paise: day.swiggyCommissionPaise,
-
-        /*
-         * Zomato's two figures are the form's on a day nobody synced, and
-         * untouchable on a day the sync covers.
-         *
-         * This mirrors `guard_manual_ledger_settlement_is_read`, which stopped
-         * being a rule about *columns* when commission became an amount: typed and
-         * synced figures now share the same pair, so the guard refuses a day rather
-         * than a field. The mock has to refuse the same day or the demo would let
-         * somebody overwrite a settled figure that production would reject.
-         */
-        zomato_revenue_paise: isSynced
-          ? (existing?.zomato_revenue_paise ?? day.zomatoRevenuePaise)
-          : day.zomatoRevenuePaise,
-        zomato_commission_paise: isSynced
-          ? (existing?.zomato_commission_paise ?? day.zomatoCommissionPaise)
-          : day.zomatoCommissionPaise,
-
-        // The markers say a figure was read and reconciled. The sync writes them
-        // and no signed-in session may, so a day written through this form carries
-        // whatever it already had.
-        zomato_settlement_state: existing?.zomato_settlement_state ?? null,
-        zomato_superseded_revenue_paise: existing?.zomato_superseded_revenue_paise ?? null,
-        zomato_superseded_commission_paise: existing?.zomato_superseded_commission_paise ?? null,
-        zomato_superseded_at: existing?.zomato_superseded_at ?? null,
-        zomato_provisional_revenue_paise: existing?.zomato_provisional_revenue_paise ?? null,
-        zomato_provisional_commission_paise: existing?.zomato_provisional_commission_paise ?? null,
-        zomato_revised_at: existing?.zomato_revised_at ?? null,
         note: trimmed(day.note),
         // Frozen on a correction, as the guard freezes it: a second owner — or
         // now a manager — may fix a figure without becoming the day's author.
@@ -362,7 +357,7 @@ export function createMockManualLedgerAdapter(
       } else {
         store.manualLedgerDays.push(written)
       }
-      return toDay(written)
+      return toDay(written, figureFor(day.outletId, day.businessDate))
     },
 
     async deleteDay(outletId, businessDate) {
@@ -419,6 +414,8 @@ export function createMockManualLedgerAdapter(
         // the possible-duplicate signal compares against.
         source_system: null,
         source_ref: null,
+        // A hand-entered expense is one outlet's own, never a shared supply cost.
+        shared_cost: false,
         // What the guard stamps: did the recorder hold an assignment here? The
         // owner holds none anywhere, which is the case the marker exists for.
         recorded_away: !assignedAt(expense.outletId),
@@ -492,7 +489,7 @@ export function createMockManualLedgerAdapter(
         days: store.manualLedgerDays
           .filter((day) => day.outlet_id === outletId && inMonth(day.business_date))
           .sort((a, b) => a.business_date.localeCompare(b.business_date))
-          .map(toDay),
+          .map((row) => toDay(row, figureFor(outletId, row.business_date))),
         expenses: store.manualLedgerExpenses
           .filter((expense) => expense.outlet_id === outletId && inMonth(expense.business_date))
           .sort((a, b) => a.business_date.localeCompare(b.business_date))

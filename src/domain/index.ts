@@ -74,7 +74,7 @@ export {
   type FenceVerdict,
 } from './geo'
 export { formatPaise, NotPaiseError, paiseToRupees, rupeesToPaise } from './money'
-export { normalizeCategory } from './expense-category'
+export { normalizeCategory, reservedCategoryConflict } from './expense-category'
 export {
   foldCategory,
   matchCategory,

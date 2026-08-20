@@ -111,6 +111,9 @@ export function createMockOutletsAdapter(): OutletsAdapter {
         business_day_cutover: outlet.businessDayCutover ?? '04:00:00',
         arrival_deadline: outlet.arrivalDeadline ?? '13:00:00',
         billing_live_from: null,
+        // A new outlet is unlinked from any aggregator until it is deliberately connected.
+        zomato_res_id: null,
+        hyperpure_delivery: false,
         is_active: true,
         created_at: new Date().toISOString(),
         // A new outlet has never been stood in, so it judges nobody until

@@ -215,11 +215,9 @@ function draftToDay(
 ): ManualLedgerDayInput | null {
   const openingCashPaise = requiredPaise(draft.openingCash)
   const countedCashPaise = requiredPaise(draft.countedCash)
-  const zomatoCommissionPaise = commissionFor(draft.zomatoRevenue, draft.zomatoCommission)
   const swiggyCommissionPaise = commissionFor(draft.swiggyRevenue, draft.swiggyCommission)
   const cashRevenuePaise = counterRevenue?.cashRevenuePaise ?? paise(draft.cashRevenue)
   const upiRevenuePaise = counterRevenue?.upiRevenuePaise ?? paise(draft.upiRevenue)
-  const zomatoRevenuePaise = paise(draft.zomatoRevenue)
   const swiggyRevenuePaise = paise(draft.swiggyRevenue)
   const cashAddedPaise = paise(draft.cashAdded)
   const cashRemovedPaise = paise(draft.cashRemoved)
@@ -229,11 +227,9 @@ function draftToDay(
     countedCashPaise === null ||
     // `undefined` is an unparseable entry and blocks the save; `null` is a
     // deliberate "not known yet" and does not.
-    zomatoCommissionPaise === undefined ||
     swiggyCommissionPaise === undefined ||
     cashRevenuePaise === null ||
     upiRevenuePaise === null ||
-    zomatoRevenuePaise === null ||
     swiggyRevenuePaise === null ||
     cashAddedPaise === null ||
     cashRemovedPaise === null ||
@@ -251,14 +247,17 @@ function draftToDay(
     openingCashPaise,
     cashRevenuePaise,
     upiRevenuePaise,
-    zomatoRevenuePaise,
+    // Zomato is sourced and frozen: the form sends nothing for it, and the write
+    // ignores these two regardless. They are held at the type's shape — nought
+    // revenue, undetermined commission — so a stale value can never travel.
+    zomatoRevenuePaise: 0,
     swiggyRevenuePaise,
     cashAddedPaise,
     cashAddedReason: draft.cashAddedReason.trim() || null,
     cashRemovedPaise,
     cashRemovedReason: draft.cashRemovedReason.trim() || null,
     countedCashPaise,
-    zomatoCommissionPaise,
+    zomatoCommissionPaise: null,
     swiggyCommissionPaise,
     note: draft.note.trim() || null,
   }
@@ -497,16 +496,15 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
                 only one of the three that is actually money received — nowhere at
                 all.
               */}
-              <Aggregator
-                name="Zomato"
-                statedId="zomato-revenue"
-                stated={draft.zomatoRevenue}
-                onStated={(value) => change('zomatoRevenue', value)}
-                commissionId="zomato-commission"
-                commission={draft.zomatoCommission}
-                onCommission={(value) => change('zomatoCommission', value)}
-                netPaise={netOf(draft.zomatoRevenue, draft.zomatoCommission)}
-              />
+              {/*
+                Zomato is a reading, not an entry. Its figures are sourced from
+                the daily read or a settlement statement and no longer live on
+                this row, so there is no field to type into — even while the rest
+                of the day is being edited. Swiggy is not sourced, so it keeps its
+                fields, and the note below says why the two look different rather
+                than leaving the asymmetry to read as a fault.
+              */}
+              <ZomatoReading settlement={recorded?.zomatoSettlement ?? null} />
               <Aggregator
                 name="Swiggy"
                 statedId="swiggy-revenue"
@@ -517,6 +515,10 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
                 onCommission={(value) => change('swiggyCommission', value)}
                 netPaise={netOf(draft.swiggyRevenue, draft.swiggyCommission)}
               />
+              <p className="px-1 text-xs text-content-muted" data-testid="why-zomato-differs">
+                Zomato&rsquo;s figures are read from Zomato and cannot be typed. Swiggy is still
+                entered by hand until its statements are read too.
+              </p>
             </section>
 
             <section className="space-y-2">
@@ -769,6 +771,7 @@ function RecordedDay({
           paise={reading.netZomatoPaise}
           testId="recorded-zomato-net"
         />
+        <SupersededNote settlement={reading.zomato.settlement} />
       </div>
 
       <div className="space-y-1 border-t border-border pt-2">
@@ -1055,6 +1058,96 @@ function InfoHint({
  * which meant this block mixed two units and needed a `%` suffix to tell them
  * apart; two money fields side by side need no such hint.
  */
+/**
+ * Zomato as a reading inside the edit form.
+ *
+ * The same three figures the recorded card shows — gross, commission, net —
+ * carrying no field, because the freeze is that a person cannot type them. An
+ * undetermined commission says so rather than showing nought, for the reason it
+ * does everywhere: nought would claim the whole of the revenue arrived. A day the
+ * sync has never reached shows an empty state rather than an input, so nothing
+ * about the block invites the figure to be entered.
+ */
+function ZomatoReading({ settlement }: { settlement: ZomatoSettlement | null }) {
+  const netPaise =
+    settlement === null || settlement.commissionPaise === null
+      ? null
+      : settlement.revenuePaise - settlement.commissionPaise
+
+  return (
+    <div
+      className="space-y-2 rounded-lg border border-border bg-surface-raised/40 p-2.5"
+      data-testid="aggregator-zomato"
+    >
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-bold text-content">Zomato</span>
+        <SourceTag channel="zomato" settlement={settlement} />
+      </div>
+      {settlement === null ? (
+        <p className="px-1 text-xs text-content-muted" data-testid="zomato-none-yet">
+          No Zomato figures have arrived for this day yet.
+        </p>
+      ) : (
+        <>
+          <Row label="As stated" paise={settlement.revenuePaise} testId="zomato-revenue" />
+          <Row
+            label="Commission"
+            paise={settlement.commissionPaise === null ? null : -settlement.commissionPaise}
+            testId="zomato-commission"
+          />
+          <p className="flex items-baseline justify-between gap-2">
+            <span className="text-xs text-content-muted">Actually received</span>
+            {netPaise === null ? (
+              <span className="text-sm text-content-muted" data-testid="zomato-revenue-net">
+                &mdash;
+              </span>
+            ) : (
+              <Money
+                paise={netPaise}
+                className="text-sm font-semibold"
+                data-testid="zomato-revenue-net"
+              />
+            )}
+          </p>
+          <SupersededNote settlement={settlement} />
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * What a figure replaced, where anything did — and never part of a total.
+ *
+ * Two traces: a figure an earlier origin wrote and this one superseded, and the
+ * provisional figure a settling week revised. Both are shown so a number that
+ * moved can be seen to have moved, which is the whole reason they are retained;
+ * neither is added to anything, because the current figure already is.
+ */
+function SupersededNote({ settlement }: { settlement: ZomatoSettlement | null }) {
+  if (!settlement) return null
+  const { supersededTyped, revisedFrom } = settlement
+  if (!supersededTyped && !revisedFrom) return null
+
+  const was = supersededTyped ?? revisedFrom
+  if (!was) return null
+  const net = was.commissionPaise === null ? null : was.revenuePaise - was.commissionPaise
+
+  return (
+    <p
+      className="flex items-baseline justify-between gap-2 text-xs text-content-muted"
+      data-testid="recorded-zomato-superseded"
+    >
+      <span>{supersededTyped ? 'Was, before the sync' : 'Was, before the week settled'}</span>
+      {net === null ? (
+        <span>not known then</span>
+      ) : (
+        <Money paise={net} className="text-xs" data-testid="recorded-zomato-superseded-net" />
+      )}
+    </p>
+  )
+}
+
 function Aggregator({
   name,
   statedId,
@@ -1239,10 +1332,17 @@ function SourceTag({
   channel,
   settlement,
 }: {
-  /** Named in the test id, because on a typed day both channels wear this chip. */
+  /** Named in the test id; only Swiggy still wears the typed chip. */
   channel: 'zomato' | 'swiggy'
   settlement: ZomatoSettlement | null
 }) {
+  // Zomato no longer takes a typed figure — it is read from Zomato or from an
+  // uploaded statement, full stop. So a Zomato day with nothing read is "not read
+  // yet", not "typed", and it wears no chip at all: the row's own words already say
+  // no figures have arrived, and a "Typed" chip beside them would contradict that.
+  // Swiggy is still entered by hand, so its absence of a reading really is typed.
+  if (settlement === null && channel === 'zomato') return null
+
   const [label, tone, why] =
     settlement === null
       ? ([
@@ -1250,23 +1350,32 @@ function SourceTag({
           'border-border text-content-muted',
           'Entered by hand. Nothing was read from the aggregator for this day.',
         ] as const)
-      : settlement.state === 'settled'
+      : // A statement supplied by hand is named for how it arrived, not for the
+        // week it settles, because that is the fact the reader cares about: the
+        // automation was not running and somebody uploaded the file.
+        settlement.origin === 'supplied_by_hand'
         ? ([
-            'Settled',
-            'border-success text-success',
-            "Read from Zomato's weekly payout statement, and it adds up to what they paid.",
+            'Uploaded',
+            'border-primary text-primary',
+            'Read from a statement you uploaded, because the automation was not running. The figures are the statement’s own.',
           ] as const)
-        : settlement.state === 'disputed'
+        : settlement.state === 'settled'
           ? ([
-              'Disputed',
-              'border-danger text-danger',
-              'Zomato has paid this week and the figures do not add up to the payment. Nothing was overwritten.',
+              'Settled',
+              'border-success text-success',
+              "Read from Zomato's weekly payout statement, and it adds up to what they paid.",
             ] as const)
-          : ([
-              'Daily',
-              'border-primary text-primary',
-              'Read from Zomato today. The commission is not stated until the week closes, so this figure firms up on Sunday.',
-            ] as const)
+          : settlement.state === 'disputed'
+            ? ([
+                'Disputed',
+                'border-danger text-danger',
+                'Zomato has paid this week and the figures do not add up to the payment. Nothing was overwritten.',
+              ] as const)
+            : ([
+                'Daily',
+                'border-primary text-primary',
+                'Read from Zomato today. The commission is not stated until the week closes, so this figure firms up on Sunday.',
+              ] as const)
 
   return (
     <span

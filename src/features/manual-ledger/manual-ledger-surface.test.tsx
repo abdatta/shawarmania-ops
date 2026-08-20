@@ -134,7 +134,8 @@ describe('the manual ledger surface', () => {
      * carrying it forward would offer a number that is wrong by construction and
      * looks deliberate, which is worse than an empty field.
      */
-    expect(screen.getByTestId('zomato-commission')).toHaveValue('')
+    // Zomato has no field to inherit into any more — it is a reading, frozen.
+    expect(screen.queryByTestId('zomato-commission')).not.toBeInTheDocument()
     expect(screen.getByTestId('swiggy-commission')).toHaveValue('')
 
     // Editable, because the figure is stored per day and a day may genuinely have
@@ -154,7 +155,7 @@ describe('the manual ledger surface', () => {
     await waitFor(() => {
       expect(opening).toHaveValue('')
     })
-    expect(screen.getByTestId('zomato-commission')).toHaveValue('')
+    expect(screen.queryByTestId('zomato-commission')).not.toBeInTheDocument()
     expect(
       screen.getByText(/first day at this outlet, so nothing is inherited/i),
     ).toBeInTheDocument()
@@ -385,31 +386,18 @@ describe('the manual ledger surface', () => {
      * here flatters the shop.
      */
     const { adapters } = renderLedger()
-    await screen.findByTestId('ledger-day-form')
 
-    await userEvent.type(screen.getByTestId('cash-revenue'), '12000')
-    await userEvent.type(screen.getByTestId('zomato-revenue'), '3310')
-    // The commission field is left deliberately empty.
-    await userEvent.type(screen.getByTestId('counted-cash'), '19950')
+    // The day read today: revenue is exact and commission is undetermined. It is
+    // a figure the sync wrote, not one a person typed, because typing it is
+    // exactly what this change removed. The demo seeds one such day.
+    const month = await adapters.manualLedger.getMonth(OUTLET_KALYANI_ID, await currentMonth())
+    const provisional = month.days.find((day) => day.zomatoSettlement?.state === 'provisional')
+    if (!provisional) throw new Error('The demo no longer seeds a provisional day.')
 
-    // Nothing to compute for that block yet, and it does not show nil as a result.
-    expect(screen.getByTestId('zomato-revenue-net')).toHaveTextContent('—')
+    expect(provisional.zomatoCommissionPaise).toBeNull()
 
-    // And the day is nonetheless saveable: an unanswerable question is not an
-    // unfinished form.
-    await userEvent.click(screen.getByTestId('save-day'))
+    await openDay(provisional.businessDate)
     const card = await screen.findByTestId('ledger-day-recorded')
-
-    // Read from the picker rather than computed, for the reason `currentMonth` is:
-    // the outlet's own trading day is what the surface opened on, and a date
-    // derived here could differ from it across a 04:00 cutover.
-    const openedOn = (screen.getByTestId('ledger-day-picker') as HTMLInputElement).value
-    expect(await adapters.manualLedger.getDay(OUTLET_KALYANI_ID, openedOn)).toMatchObject({
-      zomatoRevenuePaise: 331_000,
-      zomatoCommissionPaise: null,
-      // Swiggy sold nothing, so its commission is nought — known, not pending.
-      swiggyCommissionPaise: 0,
-    })
 
     // In words, not a dash and not a nought: both of those are claims.
     expect(within(card).getByTestId('recorded-zomato-commission')).toHaveTextContent(
@@ -445,17 +433,19 @@ describe('the manual ledger surface', () => {
      */
     const { adapters } = renderLedger()
     const month = await adapters.manualLedger.getMonth(OUTLET_KALYANI_ID, await currentMonth())
-    const dayFor = (state: string | null) =>
-      month.days.find((day) => (day.zomatoSettlement?.state ?? null) === state)
+    // A Zomato figure is never typed now, so there is no 'typed' chip for it. The
+    // demonstrable Zomato states are the three the sync produces, matched by the
+    // settlement's own state.
+    const dayFor = (state: string) =>
+      month.days.find((day) => day.zomatoSettlement?.state === state)
 
     for (const [state, chip] of [
-      [null, 'typed'],
       ['provisional', 'daily'],
       ['settled', 'settled'],
       ['disputed', 'disputed'],
     ] as const) {
       const day = dayFor(state)
-      if (!day) throw new Error(`The demo no longer seeds a ${state ?? 'typed'} day.`)
+      if (!day) throw new Error(`The demo no longer seeds a ${state} day.`)
 
       await openDay(day.businessDate)
       const card = await screen.findByTestId('ledger-day-recorded')
@@ -465,6 +455,27 @@ describe('the manual ledger surface', () => {
       // from an absence.
       expect(within(card).getByTestId('source-tag-swiggy-typed')).toBeInTheDocument()
     }
+  })
+
+  it('shows what a settled figure replaced, beside it and out of the total', async () => {
+    const { adapters } = renderLedger()
+    const month = await adapters.manualLedger.getMonth(OUTLET_KALYANI_ID, await currentMonth())
+    // The seeded settled day carries both a superseded and a revised pre-image.
+    const settled = month.days.find(
+      (day) => day.zomatoSettlement?.state === 'settled' && day.zomatoSettlement.supersededTyped,
+    )
+    if (!settled) throw new Error('The demo no longer seeds a settled day with a prior figure.')
+
+    await openDay(settled.businessDate)
+    const card = await screen.findByTestId('ledger-day-recorded')
+
+    // The "was" line is present and is a smaller figure than the current net, so
+    // it reads as history rather than as a second amount to add in.
+    const was = within(card).getByTestId('recorded-zomato-superseded')
+    expect(was).toHaveTextContent(/was/i)
+    // The current net is the one that reaches the day's total; the superseded one
+    // sits beside it and is not the same node.
+    expect(within(card).getByTestId('recorded-zomato-net')).toBeInTheDocument()
   })
 
   it('tells an unrecorded month apart from a recorded zero', async () => {
@@ -549,10 +560,13 @@ describe('the manual ledger surface', () => {
       expect(screen.queryByLabelText(/^Cash$/)).not.toBeInTheDocument()
       expect(screen.queryByLabelText(/^UPI$/)).not.toBeInTheDocument()
 
-      // Aggregators remain the temporary typed inputs, both figures of them.
-      await userEvent.type(screen.getByTestId('zomato-revenue'), '3310')
-      await userEvent.type(screen.getByTestId('zomato-commission'), '595.80')
-      expect(screen.getByTestId('zomato-revenue-net')).toHaveTextContent(formatPaise(271_420))
+      // Swiggy is the surviving typed aggregator; Zomato is a reading with no
+      // field at all, so the counter takeover leaves the one and cannot touch
+      // the other.
+      expect(screen.queryByTestId('zomato-revenue')).not.toBeInTheDocument()
+      await userEvent.type(screen.getByTestId('swiggy-revenue'), '3310')
+      await userEvent.type(screen.getByTestId('swiggy-commission'), '595.80')
+      expect(screen.getByTestId('swiggy-revenue-net')).toHaveTextContent(formatPaise(271_420))
 
       await userEvent.type(screen.getByTestId('counted-cash'), '9000')
       await userEvent.click(screen.getByTestId('save-day'))
@@ -581,21 +595,20 @@ describe('the manual ledger surface', () => {
       expect(screen.queryByTestId('hint-drawer-panel')).not.toBeInTheDocument()
     })
 
-    it('nets each aggregator as it is typed, from that block’s own two figures', async () => {
+    it('nets the typed aggregator as it is typed, from that block’s own two figures', async () => {
       renderLedger()
       await screen.findByTestId('ledger-day-form')
 
-      // ₹3,310 stated, ₹595.80 charged. One subtraction, no rounding rule.
-      await userEvent.type(screen.getByTestId('zomato-revenue'), '3310')
-      await userEvent.type(screen.getByTestId('zomato-commission'), '595.80')
-      expect(screen.getByTestId('zomato-revenue-net')).toHaveTextContent(formatPaise(271_420))
-
-      // Swiggy's block is reduced by Swiggy's own charge and is untouched by
-      // Zomato's, which is the claim that the two blocks do not leak into each other.
+      // Swiggy is the one aggregator still typed. ₹2,260 stated, ₹474.60 charged.
+      // One subtraction, no rounding rule.
       await userEvent.type(screen.getByTestId('swiggy-revenue'), '2260')
       await userEvent.type(screen.getByTestId('swiggy-commission'), '474.60')
       expect(screen.getByTestId('swiggy-revenue-net')).toHaveTextContent(formatPaise(178_540))
-      expect(screen.getByTestId('zomato-revenue-net')).toHaveTextContent(formatPaise(271_420))
+
+      // Zomato offers no field to type into, so it cannot be netted from typing
+      // and cannot leak into Swiggy's block.
+      expect(screen.queryByTestId('zomato-commission')).not.toBeInTheDocument()
+      expect(screen.getByTestId('swiggy-revenue-net')).toHaveTextContent(formatPaise(178_540))
     })
 
     it('computes nothing from a commission nobody has given', async () => {
@@ -603,12 +616,12 @@ describe('the manual ledger surface', () => {
       await chooseOutlet(OUTLET_KANCHRAPARA_ID)
       await screen.findByTestId('ledger-day-form')
       await waitFor(() => {
-        expect(screen.getByTestId('zomato-commission')).toHaveValue('')
+        expect(screen.getByTestId('swiggy-commission')).toHaveValue('')
       })
 
       // ₹0 here would be a figure standing where an unanswered question is.
-      await userEvent.type(screen.getByTestId('zomato-revenue'), '3310')
-      expect(screen.getByTestId('zomato-revenue-net')).toHaveTextContent('—')
+      await userEvent.type(screen.getByTestId('swiggy-revenue'), '3310')
+      expect(screen.getByTestId('swiggy-revenue-net')).toHaveTextContent('—')
     })
   })
 
@@ -633,14 +646,14 @@ describe('the manual ledger surface', () => {
       // commission each channel charged, so the net can be checked without opening
       // a form.
       expect(within(card).getByTestId('recorded-upi')).toHaveTextContent(formatPaise(400_000))
-      // One line per channel, and no percentage in either label: there is no stored
-      // rate left to name. Both read nought here because this day was saved with no
-      // aggregator sales at all, which is the case that used to be impossible —
-      // commission was inherited from yesterday, so a quiet day arrived carrying a
-      // charge against revenue it never earned.
+      // One line per channel, and no percentage in either label: there is no
+      // stored rate left to name. Swiggy was typed with no sales, so its
+      // commission is nought — known. Zomato has no figure at all for a day the
+      // sync never reached, so its commission is undetermined rather than nought:
+      // the freeze means a day can no longer carry a typed Zomato zero.
       expect(within(card).getAllByText(/Less commission/)).toHaveLength(2)
       expect(within(card).getByTestId('recorded-zomato-commission')).toHaveTextContent(
-        formatPaise(0),
+        /not known yet/i,
       )
       expect(within(card).getByTestId('recorded-swiggy-commission')).toHaveTextContent(
         formatPaise(0),
@@ -694,28 +707,35 @@ describe('the manual ledger surface', () => {
 
   describe('a retrospective correction', () => {
     it('moves the month’s profit and never the day’s drawer', async () => {
+      // Swiggy, because it is the aggregator still corrected by hand. Zomato's
+      // figures are frozen and can only be moved by re-uploading a statement, so
+      // the "correct a commission through the form" path this asserts is Swiggy's
+      // now. Recorded on a fresh day so the correction has a known starting point.
       const { adapters } = renderLedger()
-      const month = await adapters.manualLedger.getMonth(OUTLET_KALYANI_ID, await currentMonth())
-      const target = month.days.find((day) => day.zomatoRevenuePaise > 0)
-      if (!target) throw new Error('The demo month no longer has an aggregator day.')
+      await screen.findByTestId('ledger-day-form')
+      await userEvent.type(screen.getByTestId('cash-revenue'), '12000')
+      await userEvent.type(screen.getByTestId('swiggy-revenue'), '3310')
+      await userEvent.type(screen.getByTestId('swiggy-commission'), '595.80')
+      await userEvent.type(screen.getByTestId('counted-cash'), '19950')
+      await userEvent.click(screen.getByTestId('save-day'))
 
-      await openDay(target.businessDate)
-      // A recorded day opens as a reading, so a correction is a deliberate act.
       await screen.findByTestId('ledger-day-recorded')
+      const openedOn = (screen.getByTestId('ledger-day-picker') as HTMLInputElement).value
+      const before = await adapters.manualLedger.getDay(OUTLET_KALYANI_ID, openedOn)
       const expectedBefore = screen.getByTestId('expected-cash').textContent
 
       await userEvent.click(screen.getByTestId('edit-day'))
-      await userEvent.clear(screen.getByTestId('zomato-commission'))
+      await userEvent.clear(screen.getByTestId('swiggy-commission'))
       // Rupees, not per cent: the field is money on both sides of the block now.
-      await userEvent.type(screen.getByTestId('zomato-commission'), '30')
+      await userEvent.type(screen.getByTestId('swiggy-commission'), '30')
       await userEvent.click(screen.getByTestId('save-day'))
       await screen.findByTestId('day-saved')
 
       // The drawer did not move: commission is not cash.
       expect(screen.getByTestId('expected-cash')).toHaveTextContent(expectedBefore ?? '')
-      const saved = await adapters.manualLedger.getDay(OUTLET_KALYANI_ID, target.businessDate)
-      expect(saved?.zomatoCommissionPaise).toBe(3_000)
-      expect(saved?.countedCashPaise).toBe(target.countedCashPaise)
+      const saved = await adapters.manualLedger.getDay(OUTLET_KALYANI_ID, openedOn)
+      expect(saved?.swiggyCommissionPaise).toBe(3_000)
+      expect(saved?.countedCashPaise).toBe(before?.countedCashPaise)
     })
 
     it('leaves every later day’s stored figures byte-for-byte where they were', async () => {

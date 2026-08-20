@@ -2,6 +2,7 @@ import type {
   AggregatorSyncAdapter,
   AggregatorSyncEventRow,
   AggregatorSyncHealth,
+  HyperpureHealth,
 } from '../adapters'
 import type { Role } from '@/session/session'
 import type { DemoStore } from './store'
@@ -132,6 +133,17 @@ export function createMockAggregatorSyncAdapter(
 
   const states = new Map<string, OutletSyncState>()
 
+  // Hyperpure is account-level and healthy in the demo: read a few hours ago, on a
+  // session with most of its day left. It has no reconnect of its own here, because
+  // in life it has none either — it rides the Zomato login.
+  const hyperpure: HyperpureHealth = {
+    lastRunAt: at(3 * 60),
+    lastOutcome: 'ok',
+    running: false,
+    hasSession: true,
+    sessionExpiresAt: new Date(Date.now() + 20 * 60 * 60 * 1000).toISOString(),
+  }
+
   for (const [index, outletId] of outletIds.entries()) {
     const healthy = index === 0
     states.set(outletId, {
@@ -176,6 +188,11 @@ export function createMockAggregatorSyncAdapter(
   return {
     async getHealth(outletId) {
       return { ...stateFor(outletId).health }
+    },
+
+    async getHyperpureHealth() {
+      refuse()
+      return { ...hyperpure }
     },
 
     async listEvents(outletId) {
@@ -355,6 +372,34 @@ export function createMockAggregatorSyncAdapter(
         event: { kind: 'week-settled', from, to, netPaise: 1_516_759 + difference },
       })
       state.health = { ...state.health, lastOutcome: 'ok' }
+    },
+
+    async uploadStatement(file) {
+      refuse()
+      // The demo does not parse a real file — there is nothing behind it to write
+      // to — so it recognises the shape from the filename it was handed and
+      // answers as the real path would, which is what the surface is built
+      // against. A file it cannot place is refused with the same message.
+      const name = file.filename.toLowerCase()
+      const kind = name.includes('order_history')
+        ? ('zomato-order-history' as const)
+        : name.includes('soa') || name.includes('hyperpure')
+          ? ('hyperpure-statement' as const)
+          : name.includes('settlement')
+            ? ('zomato-settlement' as const)
+            : null
+      if (!kind) {
+        throw new Error(
+          'This file matches no known statement shape. Upload a Zomato order history, a Zomato settlement, or a Hyperpure statement.',
+        )
+      }
+      return {
+        kind,
+        wrote:
+          kind === 'hyperpure-statement'
+            ? ['Kanchrapara · supply costs updated from the statement']
+            : ['Kalyani · figures updated', 'Kanchrapara · figures updated'],
+      }
     },
   }
 }

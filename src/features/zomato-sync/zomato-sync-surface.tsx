@@ -6,7 +6,11 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { LoadingBlock } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
-import type { AggregatorSyncEventRow, AggregatorSyncHealth } from '@/data-access/adapters'
+import type {
+  AggregatorSyncEventRow,
+  AggregatorSyncHealth,
+  HyperpureHealth,
+} from '@/data-access/adapters'
 import { useLocation } from 'react-router'
 
 import { attentionChanged } from '@/features/attention/attention'
@@ -91,6 +95,7 @@ export function ZomatoSyncSurface() {
   })
 
   const [health, setHealth] = useState<AggregatorSyncHealth | null>(null)
+  const [hyperpure, setHyperpure] = useState<HyperpureHealth | null>(null)
   const [events, setEvents] = useState<AggregatorSyncEventRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [code, setCode] = useState('')
@@ -112,10 +117,17 @@ export function ZomatoSyncSurface() {
   // pattern the lint rule watches for.
   const refresh = useCallback(() => {
     if (!outletId) return Promise.resolve()
-    return Promise.all([aggregatorSync.getHealth(outletId), aggregatorSync.listEvents(outletId)])
-      .then(([nextHealth, nextEvents]) => {
+    return Promise.all([
+      aggregatorSync.getHealth(outletId),
+      aggregatorSync.listEvents(outletId),
+      // Account-level, so it does not depend on the outlet in scope; read here so
+      // it refreshes on the same beat as the Zomato health, including mid-run.
+      aggregatorSync.getHyperpureHealth(),
+    ])
+      .then(([nextHealth, nextEvents, nextHyperpure]) => {
         setHealth(nextHealth)
         setEvents(nextEvents)
+        setHyperpure(nextHyperpure)
         setReadAgainIn(readAgainInHours(nextHealth))
       })
       .catch(() => {
@@ -183,6 +195,43 @@ export function ZomatoSyncSurface() {
     await act(() => aggregatorSync.answerOneTimePassword(outletId, entered))
   }
 
+  const [uploadWrote, setUploadWrote] = useState<readonly string[] | null>(null)
+
+  /**
+   * The disaster-recovery upload: a statement supplied by hand when the reader
+   * cannot run.
+   *
+   * It does not go through `act`, because its failure is worth showing in the
+   * file's own words — "this matches no known statement shape" is actionable in a
+   * way "that did not go through" is not — and its success is a per-outlet list
+   * rather than a silent refresh. The file is read to base64 and handed to the
+   * one parser both callers share.
+   */
+  const onUpload = async (file: File) => {
+    // Uploading parses and writes server-side, so it needs a connection. Said
+    // outright rather than left to fail as a timeout, and it does not queue: a
+    // statement is a deliberate recovery act, not something to replay silently
+    // later against figures that may have moved in between.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setError('Uploading a statement needs a connection. Try again once you are back online.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setUploadWrote(null)
+    try {
+      const base64 = await fileToBase64(file)
+      const result = await aggregatorSync.uploadStatement({ filename: file.name, base64 })
+      setUploadWrote(result.wrote)
+      await refresh()
+      attentionChanged()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'That upload did not go through.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   /**
    * Where a day lives in the ledger.
    *
@@ -232,6 +281,10 @@ export function ZomatoSyncSurface() {
             readAgainIn={readAgainIn}
             onRun={() => act(() => aggregatorSync.requestRun(outletId!))}
           />
+
+          {hyperpure && <HyperpureHealthLine health={hyperpure} />}
+
+          <UploadStatement busy={acting} wrote={uploadWrote} onUpload={onUpload} />
 
           {waiting && (
             <Card className="border-warning/60 bg-warning/5 p-4">
@@ -398,6 +451,147 @@ function HealthLine({
           </p>
         )}
       </div>
+    </Card>
+  )
+}
+
+/**
+ * Hyperpure's health, beside Zomato's but thinner and read-only.
+ *
+ * It has no "Read now" and no reconnect of its own, because it has neither in
+ * life: Hyperpure rides the Zomato login, so a lapsed session is fixed by
+ * reconnecting Zomato — which is why a stale line points there rather than
+ * offering a button that would only send the owner to the same place. Account
+ * level, so it says nothing about which outlet is in scope. Before this line
+ * existed, a broken Hyperpure read was a red CI job the owner never saw; this is
+ * the whole of it becoming visible.
+ */
+function HyperpureHealthLine({ health }: { health: HyperpureHealth }) {
+  const when = health.lastRunAt
+    ? new Date(health.lastRunAt).toLocaleString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null
+
+  // A session that has ended, or a read that failed on it, is the owner's to fix —
+  // by reconnecting Zomato. A shape change is a maintainer's. Everything else is
+  // quiet. Same vocabulary as the Zomato line, so the two read as one screen.
+  const stale = !health.hasSession || health.lastOutcome === 'session_lapsed'
+  const [word, wrong] = health.running
+    ? (['Reading', false] as const)
+    : stale
+      ? (['Session ended', true] as const)
+      : health.lastOutcome === 'shape_changed'
+        ? (['Stuck', true] as const)
+        : health.lastOutcome === 'ok'
+          ? (['All quiet', false] as const)
+          : (['Never run', false] as const)
+
+  const note = stale
+    ? 'Reconnect Zomato to bring Hyperpure back'
+    : word === 'Stuck'
+      ? 'A statement could not be read — a maintainer has been told'
+      : when
+        ? `${when} · twice a day`
+        : 'Twice a day'
+
+  return (
+    <Card
+      className="flex flex-wrap items-center justify-between gap-3 p-3"
+      data-testid="hyperpure-health"
+    >
+      <div>
+        <p className={cn('text-sm font-medium', wrong ? 'text-danger' : 'text-content')}>
+          Hyperpure · {word}
+        </p>
+        <p className="text-xs text-content-muted">{note}</p>
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * A file's bytes as base64, for handing to the parser through the adapter.
+ *
+ * `FileReader` rather than reading into a buffer, because this runs in the
+ * browser and the data-URL prefix is stripped so only the payload travels.
+ */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('That file could not be read.'))
+    reader.onload = () => {
+      const result = String(reader.result)
+      resolve(result.slice(result.indexOf(',') + 1))
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+/**
+ * The fallback made visible: bring a period in by hand when the reader is blocked.
+ *
+ * Deliberately quiet — a control, not a call to action — because the automation
+ * is the normal path and this is the one for the day it stops. It says which
+ * three files it takes and what each is for, so a person reaching for it under
+ * pressure is not guessing, and it reports back per outlet rather than resolving
+ * into silence.
+ */
+function UploadStatement({
+  busy,
+  wrote,
+  onUpload,
+}: {
+  busy: boolean
+  wrote: readonly string[] | null
+  onUpload: (file: File) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  return (
+    <Card className="p-4" data-testid="upload-statement">
+      <h2 className="text-sm font-medium text-content">Upload a statement</h2>
+      <p className="mt-1 text-sm text-content-muted">
+        If the automation is blocked, bring a period in by hand: a Zomato order history, a Zomato
+        settlement report, or a Hyperpure statement. The file is read the same way the robot reads
+        it.
+      </p>
+      <div className="mt-3">
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx,.zip,.csv"
+          className="sr-only"
+          aria-label="Upload a Zomato or Hyperpure statement file"
+          data-testid="upload-input"
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            // Cleared so the same file can be chosen again after a fix.
+            event.target.value = ''
+            if (file) onUpload(file)
+          }}
+        />
+        <Button
+          variant="secondary"
+          disabled={busy}
+          data-testid="upload-choose"
+          onClick={() => inputRef.current?.click()}
+        >
+          Choose a file
+        </Button>
+      </div>
+      {wrote && wrote.length > 0 && (
+        <ul className="mt-3 space-y-1" data-testid="upload-result">
+          {wrote.map((line, index) => (
+            <li key={index} className="text-sm text-content">
+              {line}
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   )
 }

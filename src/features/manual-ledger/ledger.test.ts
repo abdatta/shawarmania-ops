@@ -368,6 +368,25 @@ describe('a month read for one outlet', () => {
     ])
   })
 
+  it('pins a historical month’s totals, so the aggregator freeze cannot move them', () => {
+    // The carried concern from #42: a month already looked at must read the same
+    // after the figures moved to their own table. These are the exact paise this
+    // fixture has always produced, pinned as bare numbers so any change that
+    // shifts the arithmetic fails here by name rather than somewhere downstream.
+    const month = readMonth(days, expenses)
+
+    expect(month.grossCashPaise).toBe(2_075_000)
+    expect(month.grossUpiPaise).toBe(750_000)
+    expect(month.grossZomatoPaise).toBe(700_000)
+    expect(month.grossSwiggyPaise).toBe(450_000)
+    expect(month.netZomatoPaise).toBe(560_500)
+    expect(month.netSwiggyPaise).toBe(355_500)
+    expect(month.netRevenuePaise).toBe(3_741_000)
+    expect(month.totalExpensesPaise).toBe(1_640_000)
+    expect(month.profit.profitPaise).toBe(2_101_000)
+    expect(month.undeterminedDays).toBe(0)
+  })
+
   it('groups category spellings that differ only by case or spacing', () => {
     const month = readMonth(days, [
       expense({ category: ' Chicken ', amountPaise: 240_000 }),

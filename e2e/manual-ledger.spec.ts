@@ -34,25 +34,27 @@ test('the owner records a full trading day on a phone and reads its difference',
   // drawer really does open with what it closed on.
   await expect(page.getByTestId('opening-cash')).not.toHaveValue('')
 
-  // Commission deliberately does NOT [owner, 2026-08-17]. It is an amount now, so
-  // yesterday's is a function of yesterday's revenue: carrying it forward would
+  // Zomato has no field to inherit into: it is a reading now, frozen, and typing
+  // it is exactly what this change removed. Swiggy is the surviving typed channel,
+  // and its commission still does not inherit yesterday's [owner, 2026-08-17]:
+  // an amount is a function of that day's revenue, so carrying it forward would
   // offer a figure wrong by construction that looks deliberate.
-  await expect(page.getByTestId('zomato-commission')).toHaveValue('')
+  await expect(page.getByTestId('zomato-commission')).toHaveCount(0)
+  await expect(page.getByTestId('swiggy-commission')).toHaveValue('')
 
   const opening = Number(await page.getByTestId('opening-cash').inputValue())
 
   await page.getByTestId('cash-revenue').fill('12000')
   await page.getByTestId('upi-revenue').fill('4000')
-  await page.getByTestId('zomato-revenue').fill('3000')
   await page.getByTestId('swiggy-revenue').fill('2500')
 
   // With revenue typed and the commission still blank, the block says there is
   // nothing to compute rather than showing the gross as though it all arrived.
-  await expect(page.getByTestId('zomato-revenue-net')).toHaveText('—')
+  await expect(page.getByTestId('swiggy-revenue-net')).toHaveText('—')
 
   // Given the commission, it says what actually arrives, before anything is saved.
-  await page.getByTestId('zomato-commission').fill('900')
-  await expect(page.getByTestId('zomato-revenue-net')).not.toHaveText('—')
+  await page.getByTestId('swiggy-commission').fill('900')
+  await expect(page.getByTestId('swiggy-revenue-net')).not.toHaveText('—')
   await expect(page.getByTestId('aggregator-swiggy')).toContainText('Actually received')
 
   // The rules are one tap away rather than filling the form: the whole entry card
@@ -171,29 +173,30 @@ test('recording a day at each outlet keeps the two apart', async ({ page }) => {
 })
 
 test('a retrospective commission edit moves the month and not the drawer', async ({ page }) => {
+  // Swiggy, because it is the aggregator still corrected by hand. Zomato's figures
+  // are frozen — a recorded synced day opens as a reading with no Zomato field —
+  // so the only commission a person edits through the form is Swiggy's. Recorded
+  // fresh on today so the correction has a known starting point.
   await page.goto('demo/owner/ledger')
   await expect(page.getByTestId('ledger-day-form')).toBeVisible()
 
-  // A recorded day with aggregator revenue on it: the day before today, reached
-  // the way the owner reaches it — one step back.
-  await expect(page.getByTestId('ledger-day-open')).toHaveText('Today')
-  await page.getByTestId('ledger-step-back').click()
-  await expect(page.getByTestId('ledger-day-open')).not.toHaveText('Today')
-  await expect(page.getByTestId('ledger-day-state')).toContainText('Recorded')
+  await page.getByTestId('cash-revenue').fill('12000')
+  await page.getByTestId('swiggy-revenue').fill('3310')
+  await page.getByTestId('swiggy-commission').fill('595.80')
+  await page.getByTestId('counted-cash').fill('19950')
+  await page.getByTestId('save-day').click()
+  await expect(page.getByTestId('ledger-day-recorded')).toBeVisible()
 
   const expectedBefore = await page.getByTestId('expected-cash').textContent()
 
   await page.getByTestId('ledger-view-month').click()
   const profitBefore = await page.getByTestId('month-profit-figure').textContent()
-
-  // Back to the same day: the chosen date survives a look at the month, so
-  // stepping again here would silently correct the day before the one measured.
   await page.getByTestId('ledger-view-day').click()
   await expect(page.getByTestId('expected-cash')).toHaveText(expectedBefore ?? '')
 
   // A recorded day opens as a reading, so correcting it is a deliberate act.
   await page.getByTestId('edit-day').click()
-  await page.getByTestId('zomato-commission').fill('30')
+  await page.getByTestId('swiggy-commission').fill('30')
   await page.getByTestId('save-day').click()
   await expect(page.getByTestId('day-saved')).toBeVisible()
 

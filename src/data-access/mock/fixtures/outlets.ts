@@ -42,6 +42,8 @@ export const outletFixtures: Tables<'outlets'>[] = [
     business_day_cutover: '04:00:00',
     arrival_deadline: '13:00:00',
     billing_live_from: null,
+    zomato_res_id: '21917311',
+    hyperpure_delivery: false,
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: 9,
@@ -73,6 +75,8 @@ export const outletFixtures: Tables<'outlets'>[] = [
     // (docs/LIMITATIONS.md).
     arrival_deadline: '20:00:00',
     billing_live_from: null,
+    zomato_res_id: '22675834',
+    hyperpure_delivery: true,
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
     // Never surveyed, mirroring supabase/seed.sql — so the demo shows both
@@ -105,6 +109,8 @@ export const outletFixtures: Tables<'outlets'>[] = [
     // Nothing is rostered here, nobody's account points at it, and no day was
     // ever traded — which is exactly the precondition that makes deleting it
     // destroy no history.
+    zomato_res_id: null,
+    hyperpure_delivery: false,
     is_active: false,
     created_at: FIXTURE_CREATED_AT,
     location_accuracy_m: null,

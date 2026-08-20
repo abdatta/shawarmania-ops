@@ -86,7 +86,21 @@ describe('mock manual ledger adapter', () => {
 
       const read = await adapter.getDay(DEMO_OUTLET_ID, store.today)
       expect(read?.cashRevenuePaise).toBe(1_200_000)
-      expect(read?.zomatoCommissionPaise).toBe(70_200)
+      // Swiggy is still typed, so its figure round-trips through the form.
+      expect(read?.swiggyCommissionPaise).toBe(52_080)
+    })
+
+    it('does not write a Zomato figure from the form, because the freeze owns it', async () => {
+      const { store, adapter, dayInput } = over()
+      // The input still carries the field for shape's sake, but the write drops
+      // it: today has no measured figure, so the read is undetermined rather than
+      // the number the form tried to send.
+      await adapter.upsertDay(dayInput({ zomatoCommissionPaise: 70_200 }))
+
+      const read = await adapter.getDay(DEMO_OUTLET_ID, store.today)
+      expect(read?.zomatoRevenuePaise).toBe(0)
+      expect(read?.zomatoCommissionPaise).toBeNull()
+      expect(read?.zomatoSettlement).toBeNull()
     })
 
     it('corrects a day in place rather than adding a second one', async () => {
@@ -178,10 +192,11 @@ describe('mock manual ledger adapter', () => {
       const { adapter, dayInput } = over()
       // The bound is the day's own revenue now that commission is an amount, not a
       // percentage ceiling. A commission above the takings is not a steep rate, it
-      // is a figure in the wrong box.
+      // is a figure in the wrong box. Asserted against Swiggy: Zomato is frozen and
+      // its figures never pass through this input to be validated at all.
       await expect(
         adapter.upsertDay(
-          dayInput({ zomatoRevenuePaise: 312_000, zomatoCommissionPaise: 312_001 }),
+          dayInput({ swiggyRevenuePaise: 312_000, swiggyCommissionPaise: 312_001 }),
         ),
       ).rejects.toThrow(/between zero and that day/)
       await expect(adapter.upsertDay(dayInput({ swiggyCommissionPaise: -1 }))).rejects.toThrow(

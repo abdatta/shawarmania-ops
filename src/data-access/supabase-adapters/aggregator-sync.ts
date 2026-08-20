@@ -5,6 +5,8 @@ import type {
   AggregatorSyncEvent,
   AggregatorSyncEventRow,
   AggregatorSyncHealth,
+  HyperpureHealth,
+  StatementUploadResult,
 } from '../adapters'
 import type { Database } from '../database.types'
 
@@ -85,6 +87,30 @@ export function createSupabaseAggregatorSyncAdapter(
     }
   }
 
+  async function hyperpureHealth(): Promise<HyperpureHealth> {
+    // Account-level: the statement covers every Hyperpure outlet, so the run is not
+    // filtered by outlet — the latest hyperpure run is the account's last read.
+    const [run, credential] = await Promise.all([
+      client
+        .from('aggregator_sync_runs')
+        .select('started_at, finished_at, outcome, rehearsal')
+        .eq('channel', 'hyperpure')
+        .eq('rehearsal', false)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      client.rpc('aggregator_credential_health', { p_channel: 'hyperpure' }).maybeSingle(),
+    ])
+
+    return {
+      lastRunAt: run.data?.started_at ?? null,
+      lastOutcome: (run.data?.outcome ?? null) as HyperpureHealth['lastOutcome'],
+      running: run.data !== null && run.data.finished_at === null,
+      hasSession: credential.data?.has_session ?? false,
+      sessionExpiresAt: credential.data?.session_expires_at ?? null,
+    }
+  }
+
   /**
    * Every line the page shows, newest first.
    *
@@ -93,7 +119,7 @@ export function createSupabaseAggregatorSyncAdapter(
    * is where a total quietly doubles.
    */
   async function events(outletId: string): Promise<AggregatorSyncEventRow[]> {
-    const [runs, cycles, days, typed, sourced] = await Promise.all([
+    const [runs, cycles, days, typed, sourced, dismissedPairs] = await Promise.all([
       client
         .from('aggregator_sync_runs')
         .select('id, started_at, outcome, detail, rehearsal')
@@ -112,12 +138,13 @@ export function createSupabaseAggregatorSyncAdapter(
         .order('cycle_start', { ascending: false })
         .limit(8),
       client
-        .from('manual_ledger_days')
+        .from('aggregator_channel_days')
         .select(
-          'business_date, zomato_revenue_paise, zomato_commission_paise, zomato_provisional_revenue_paise, zomato_provisional_commission_paise, zomato_revised_at',
+          'business_date, revenue_paise, commission_paise, provisional_revenue_paise, provisional_commission_paise, revised_at',
         )
         .eq('outlet_id', outletId)
-        .not('zomato_revised_at', 'is', null)
+        .eq('channel', 'zomato')
+        .not('revised_at', 'is', null)
         .order('business_date', { ascending: false })
         .limit(20),
       client
@@ -132,7 +159,17 @@ export function createSupabaseAggregatorSyncAdapter(
         .eq('outlet_id', outletId)
         .eq('source_system', 'zomato')
         .is('voided_at', null),
+      client
+        .from('aggregator_dismissed_duplicates')
+        .select('expense_a, expense_b')
+        .eq('outlet_id', outletId),
     ])
+
+    // Pairs the owner has already settled as two real purchases. Keyed the same
+    // way the event id is built, so a dismissed pair never raises the flag again.
+    const dismissed = new Set(
+      (dismissedPairs.data ?? []).map((row) => `${row.expense_a}-${row.expense_b}`),
+    )
 
     const rows: AggregatorSyncEventRow[] = []
     const push = (id: string, at: string, event: AggregatorSyncEvent, resolvedAt: string | null) =>
@@ -186,12 +223,11 @@ export function createSupabaseAggregatorSyncAdapter(
     for (const day of days.data ?? []) {
       // Present is what "revised" means, and the constraint guarantees both sides are
       // there when it is, so neither coalesce below can hide a missing figure.
-      const was =
-        (day.zomato_provisional_revenue_paise ?? 0) - (day.zomato_provisional_commission_paise ?? 0)
-      const now = (day.zomato_revenue_paise ?? 0) - (day.zomato_commission_paise ?? 0)
+      const was = (day.provisional_revenue_paise ?? 0) - (day.provisional_commission_paise ?? 0)
+      const now = (day.revenue_paise ?? 0) - (day.commission_paise ?? 0)
       push(
         `revised-${day.business_date}`,
-        day.zomato_revised_at as string,
+        day.revised_at as string,
         {
           kind: 'day-revised',
           businessDate: day.business_date,
@@ -223,6 +259,8 @@ export function createSupabaseAggregatorSyncAdapter(
         return apart <= DUPLICATE_DAYS
       })
       if (!twin) continue
+      // Already settled as two real purchases, so it is not raised again.
+      if (dismissed.has(`${mine.id}-${twin.id}`)) continue
 
       push(
         `duplicate-${mine.id}-${twin.id}`,
@@ -251,6 +289,7 @@ export function createSupabaseAggregatorSyncAdapter(
 
   return {
     getHealth: health,
+    getHyperpureHealth: hyperpureHealth,
     listEvents: events,
 
     async countNeedsOwner() {
@@ -351,19 +390,48 @@ export function createSupabaseAggregatorSyncAdapter(
       )
     },
 
-    async markNotDuplicate(_outletId, eventId) {
-      /*
-       * Deliberately unbuilt, and it fails loudly rather than quietly.
-       *
-       * Saying "these two are both real" has to be REMEMBERED, or the flag returns on
-       * the next read and the owner answers the same question forever. There is
-       * nowhere to remember it yet: the row is derived from two expenses and carries no
-       * state of its own. Returning silently would make the button appear to work and
-       * the flag reappear tomorrow, which is worse than a button that says it cannot.
-       */
-      throw new Error(
-        `Dismissing a duplicate is not built yet (${eventId}). Withdraw one of the two in the ledger instead.`,
-      )
+    async markNotDuplicate(outletId, eventId) {
+      // The event id is `duplicate-<typed>-<synced>`, the two expenses the signal
+      // paired. The decision is remembered against that ordered pair, so the next
+      // read excludes it and the owner is not asked again. Neither expense is
+      // touched: they are two real purchases, and both belong in the ledger.
+      const match = eventId.match(/^duplicate-([0-9a-f-]{36})-([0-9a-f-]{36})$/)
+      if (!match) {
+        throw new Error(`That is not a duplicate flag this surface can dismiss (${eventId}).`)
+      }
+      const expenseA = match[1] ?? ''
+      const expenseB = match[2] ?? ''
+      const { data: session } = await client.auth.getUser()
+      const { error } = await client.from('aggregator_dismissed_duplicates').insert({
+        outlet_id: outletId,
+        expense_a: expenseA,
+        expense_b: expenseB,
+        dismissed_by: session.user?.id ?? '',
+      })
+      // A pair dismissed twice is already remembered, which is success, not an error.
+      if (error && error.code !== '23505') {
+        throw new Error('That did not go through')
+      }
+    },
+
+    async uploadStatement(file) {
+      // The bytes go to the one parser both callers share; the outlets it writes
+      // for are re-derived server-side from the caller's own session, never sent.
+      const { data, error } = await client.functions.invoke('parse-operator-statement', {
+        body: { file_base64: file.base64, filename: file.filename, confirmed: file.confirmed },
+      })
+      if (error) {
+        // The function speaks a small vocabulary of refusals; the surface only
+        // needs to distinguish "this file is wrong" from "that did not go
+        // through", and the former is worth showing verbatim.
+        const detail = (error as { context?: { detail?: string } }).context?.detail
+        throw new Error(detail ?? 'That upload did not go through')
+      }
+      const result = data as { kind: StatementUploadResult['kind']; results: unknown[] }
+      return {
+        kind: result.kind,
+        wrote: result.results.map((r) => JSON.stringify(r)),
+      }
     },
   }
 }

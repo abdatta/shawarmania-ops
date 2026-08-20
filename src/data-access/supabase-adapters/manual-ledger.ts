@@ -11,6 +11,7 @@ import {
   type ManualLedgerExpensePatch,
   type ManualLedgerMonth,
   type NewManualLedgerExpense,
+  type ZomatoSettlement,
 } from '../adapters'
 import type { Database, Tables } from '../database.types'
 import { toZomatoSettlement } from '../zomato-settlement'
@@ -82,6 +83,7 @@ function toDay(
   row: Tables<'manual_ledger_days'>,
   people: People,
   counterRevenue: ManualLedgerCounterRevenue | null = null,
+  settlement: ZomatoSettlement | null = null,
 ): ManualLedgerDay {
   return {
     outletId: row.outlet_id,
@@ -89,20 +91,55 @@ function toDay(
     openingCashPaise: row.opening_cash_paise,
     cashRevenuePaise: counterRevenue?.cashRevenuePaise ?? row.cash_revenue_paise,
     upiRevenuePaise: counterRevenue?.upiRevenuePaise ?? row.upi_revenue_paise,
-    zomatoRevenuePaise: row.zomato_revenue_paise,
+    // Zomato's figures live on their own row now. They reach the day through the
+    // settlement, or they are absent, and absent reads as nought revenue with an
+    // undetermined commission — the same shape a day carried before the sync
+    // ever touched it.
+    zomatoRevenuePaise: settlement?.revenuePaise ?? 0,
     swiggyRevenuePaise: row.swiggy_revenue_paise,
     cashAddedPaise: row.cash_added_paise,
     cashAddedReason: row.cash_added_reason,
     cashRemovedPaise: row.cash_removed_paise,
     cashRemovedReason: row.cash_removed_reason,
     countedCashPaise: row.counted_cash_paise,
-    zomatoCommissionPaise: row.zomato_commission_paise,
+    zomatoCommissionPaise: settlement?.commissionPaise ?? null,
     swiggyCommissionPaise: row.swiggy_commission_paise,
     note: row.note,
     recordedBy: actor(row.recorded_by, people),
-    zomatoSettlement: toZomatoSettlement(row),
+    zomatoSettlement: settlement,
     updatedBy: optionalActor(row.updated_by, people),
   }
+}
+
+/**
+ * A channel's measured figures for a range, keyed by business date.
+ *
+ * Read alongside the day rows rather than joined in SQL, because a figure can
+ * exist for a date that has no day row, and a join would drop exactly those. The
+ * reading model stitches the two by date; a date present here but absent from the
+ * days is the "day nobody recorded" the sync now writes.
+ */
+async function readAggregatorFigures(
+  client: SupabaseClient<Database>,
+  outletId: string,
+  from: string,
+  to: string,
+): Promise<Map<string, ZomatoSettlement>> {
+  const { data, error } = await client
+    .from('aggregator_channel_days')
+    .select('*')
+    .eq('outlet_id', outletId)
+    .eq('channel', 'zomato')
+    .gte('business_date', from)
+    .lt('business_date', to)
+  if (error) throw toLedgerError(error)
+
+  const byDate = new Map<string, ZomatoSettlement>()
+  for (const row of data ?? []) {
+    const settlement = toZomatoSettlement(row)
+    if (settlement) byDate.set(row.business_date, settlement)
+  }
+  return byDate
 }
 
 function nextDate(date: string): string {
@@ -218,7 +255,7 @@ export function createSupabaseManualLedgerAdapter(
     },
 
     async getDay(outletId, businessDate) {
-      const [{ data, error }, people, revenue] = await Promise.all([
+      const [{ data, error }, people, revenue, figures] = await Promise.all([
         client
           .from('manual_ledger_days')
           .select(ALL)
@@ -227,9 +264,12 @@ export function createSupabaseManualLedgerAdapter(
           .maybeSingle(),
         readPeople(client),
         readCounterRevenueRange(client, outletId, businessDate, nextDate(businessDate)),
+        readAggregatorFigures(client, outletId, businessDate, nextDate(businessDate)),
       ])
       if (error) throw toLedgerError(error)
-      return data ? toDay(data, people, revenueOn(revenue, businessDate)) : null
+      return data
+        ? toDay(data, people, revenueOn(revenue, businessDate), figures.get(businessDate) ?? null)
+        : null
     },
 
     async getPreviousDay(outletId, businessDate) {
@@ -248,41 +288,25 @@ export function createSupabaseManualLedgerAdapter(
       ])
       if (error) throw toLedgerError(error)
       if (!data) return null
-      const revenue = await readCounterRevenueRange(
-        client,
-        outletId,
-        data.business_date,
-        nextDate(data.business_date),
+      const [revenue, figures] = await Promise.all([
+        readCounterRevenueRange(client, outletId, data.business_date, nextDate(data.business_date)),
+        readAggregatorFigures(client, outletId, data.business_date, nextDate(data.business_date)),
+      ])
+      return toDay(
+        data,
+        people,
+        revenueOn(revenue, data.business_date),
+        figures.get(data.business_date) ?? null,
       )
-      return toDay(data, people, revenueOn(revenue, data.business_date))
     },
 
     async upsertDay(day: ManualLedgerDayInput) {
       const counterRevenue = await this.getCounterRevenue(day.outletId, day.businessDate)
 
-      /*
-       * Whether Zomato has taken this day over.
-       *
-       * Read first, because the guard refuses ANY change to a synced day's Zomato
-       * figures — and this upsert would otherwise send them on every save. A
-       * manager correcting the drawer count on a day the sync had filled in would
-       * have their save refused with a message about settlement figures they never
-       * touched, which is the worst kind of error: correct, and about something
-       * else.
-       *
-       * Sending the stored values back unchanged would satisfy the guard equally,
-       * and is worse: the form would be echoing figures it does not own, and a
-       * stale read would overwrite a run that landed in between.
-       */
-      const { data: existing, error: readError } = await client
-        .from('manual_ledger_days')
-        .select('zomato_settlement_state')
-        .eq('outlet_id', day.outletId)
-        .eq('business_date', day.businessDate)
-        .maybeSingle()
-      if (readError) throw toLedgerError(readError)
-      const synced = (existing?.zomato_settlement_state ?? null) !== null
-
+      // No Zomato figures are sent from here at all now, so the old dance of
+      // reading the settlement state first — to avoid re-sending figures the
+      // guard would refuse — is gone. The columns do not exist on this row; the
+      // freeze is that there is nothing to write, not that a guard turns it away.
       const { data, error } = await client
         .from('manual_ledger_days')
         // The upsert is the edit: one row per outlet per date, corrected in
@@ -302,21 +326,28 @@ export function createSupabaseManualLedgerAdapter(
             counted_cash_paise: day.countedCashPaise,
             swiggy_commission_paise: day.swiggyCommissionPaise,
             note: trimmed(day.note),
-            // Omitted entirely on a synced day, so the stored figures are left
-            // exactly as the sync wrote them.
-            ...(synced
-              ? {}
-              : {
-                  zomato_revenue_paise: day.zomatoRevenuePaise,
-                  zomato_commission_paise: day.zomatoCommissionPaise,
-                }),
           },
           { onConflict: 'outlet_id,business_date' },
         )
         .select(ALL)
         .single()
       if (error) throw toLedgerError(error)
-      return toDay(data, await readPeople(client), counterRevenue)
+
+      // The measured figures are read back rather than assumed absent: this
+      // outlet-date may well carry a synced figure the drawer edit did not touch,
+      // and the returned day must still show it.
+      const figures = await readAggregatorFigures(
+        client,
+        day.outletId,
+        day.businessDate,
+        nextDate(day.businessDate),
+      )
+      return toDay(
+        data,
+        await readPeople(client),
+        counterRevenue,
+        figures.get(day.businessDate) ?? null,
+      )
     },
 
     async deleteDay(outletId, businessDate) {
@@ -419,7 +450,7 @@ export function createSupabaseManualLedgerAdapter(
       const from = `${month}-01`
       const to = firstOfNextMonth(month)
 
-      const [days, expenses, people, revenue] = await Promise.all([
+      const [days, expenses, people, revenue, figures] = await Promise.all([
         client
           .from('manual_ledger_days')
           .select(ALL)
@@ -436,6 +467,7 @@ export function createSupabaseManualLedgerAdapter(
           .order('business_date', { ascending: true }),
         readPeople(client),
         readCounterRevenueRange(client, outletId, from, to),
+        readAggregatorFigures(client, outletId, from, to),
       ])
 
       if (days.error) throw toLedgerError(days.error)
@@ -443,7 +475,12 @@ export function createSupabaseManualLedgerAdapter(
 
       return {
         days: (days.data ?? []).map((row) =>
-          toDay(row, people, revenueOn(revenue, row.business_date)),
+          toDay(
+            row,
+            people,
+            revenueOn(revenue, row.business_date),
+            figures.get(row.business_date) ?? null,
+          ),
         ),
         expenses: (expenses.data ?? []).map((row) => toExpense(row, people)),
       } satisfies ManualLedgerMonth
