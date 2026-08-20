@@ -90,6 +90,31 @@ describe('mock manual ledger adapter', () => {
       expect(read?.swiggyCommissionPaise).toBe(52_080)
     })
 
+    it('surfaces the Zomato figures on a day nobody counted, rather than claiming none arrived', async () => {
+      const { store, adapter } = over()
+      const template = store.aggregatorChannelDays.find(
+        (row) => row.outlet_id === DEMO_OUTLET_ID && row.channel === 'zomato',
+      )
+      if (!template) throw new Error('The demo no longer seeds a Zomato figure to template from.')
+
+      // A date with a Zomato reading but no cash count — the "day nobody counted"
+      // the sync writes to its own table (exactly the prod 19/20 case).
+      const uncounted = '2026-01-15'
+      store.aggregatorChannelDays.push({
+        ...template,
+        business_date: uncounted,
+        revenue_paise: 246_800,
+        commission_paise: null,
+      })
+
+      // No cash was counted, so there is no ledger day...
+      expect(await adapter.getDay(DEMO_OUTLET_ID, uncounted)).toBeNull()
+      // ...but the Zomato figures are there, so the day view can show them instead
+      // of "no figures arrived".
+      const figures = await adapter.getDayFigures(DEMO_OUTLET_ID, uncounted)
+      expect(figures?.revenuePaise).toBe(246_800)
+    })
+
     it('does not write a Zomato figure from the form, because the freeze owns it', async () => {
       const { store, adapter, dayInput } = over()
       // The input still carries the field for shape's sake, but the write drops

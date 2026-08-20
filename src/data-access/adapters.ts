@@ -2147,6 +2147,14 @@ export class ManualLedgerActionError extends DataActionError {
 
 export interface ManualLedgerAdapter {
   getDay(outletId: string, businessDate: string): Promise<ManualLedgerDay | null>
+  /**
+   * The aggregator (Zomato) figures for a date, whether or not anyone counted the
+   * cash. `getDay` returns null on a day with no cash count and discards the
+   * figures with it — but the sync writes those figures to their own table, so a
+   * date can carry a real Zomato reading with no ledger row behind it. This
+   * surfaces that reading so the day view shows it instead of claiming none arrived.
+   */
+  getDayFigures(outletId: string, businessDate: string): Promise<ZomatoSettlement | null>
   /** Null before this outlet's billing-live date; zeroes are meaningful after it. */
   getCounterRevenue(
     outletId: string,

@@ -305,6 +305,12 @@ export function createMockManualLedgerAdapter(
       return row ? toDay(row, figureFor(outletId, businessDate)) : null
     },
 
+    async getDayFigures(outletId, businessDate) {
+      refuseDay(outletId)
+      const figure = figureFor(outletId, businessDate)
+      return figure ? toZomatoSettlement(figure) : null
+    },
+
     async getPreviousDay(outletId, businessDate) {
       refuseDay(outletId)
       // The most recent row before this date, not literally yesterday: a gap in

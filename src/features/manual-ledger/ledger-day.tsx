@@ -269,6 +269,9 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
 
   const [previous, setPrevious] = useState<ManualLedgerDay | null>(null)
   const [recorded, setRecorded] = useState<ManualLedgerDay | null>(null)
+  // The Zomato figures for this date, read on their own so they show even on a
+  // day nobody counted — where `recorded` is null and would otherwise hide them.
+  const [dayFigures, setDayFigures] = useState<ZomatoSettlement | null>(null)
   const [counterRevenue, setCounterRevenue] = useState<
     ManualLedgerCounterRevenue | null | undefined
   >(undefined)
@@ -302,11 +305,13 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
       adapter.getPreviousDay(outletId, businessDate),
       adapter.listExpenses(outletId, businessDate),
       adapter.getCounterRevenue(outletId, businessDate),
+      adapter.getDayFigures(outletId, businessDate),
     ])
-      .then(([day, earlier, list, fromCounter]) => {
+      .then(([day, earlier, list, fromCounter, figures]) => {
         if (!active) return
         setRecorded(day)
         setPrevious(earlier)
+        setDayFigures(figures)
         // A recorded day is shown as it was stored. A new one inherits the
         // previous close, and inherits nothing on the first day.
         const nextDraft = day ? draftFrom(day) : draftInheriting(earlier)
@@ -504,7 +509,7 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
                 fields, and the note below says why the two look different rather
                 than leaving the asymmetry to read as a fault.
               */}
-              <ZomatoReading settlement={recorded?.zomatoSettlement ?? null} />
+              <ZomatoReading settlement={recorded?.zomatoSettlement ?? dayFigures} />
               <Aggregator
                 name="Swiggy"
                 statedId="swiggy-revenue"

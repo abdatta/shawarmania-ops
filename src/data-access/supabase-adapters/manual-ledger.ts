@@ -272,6 +272,18 @@ export function createSupabaseManualLedgerAdapter(
         : null
     },
 
+    async getDayFigures(outletId, businessDate) {
+      // Read the aggregator figures directly, so a date with a Zomato reading but no
+      // cash count still shows the reading rather than "nothing arrived yet".
+      const figures = await readAggregatorFigures(
+        client,
+        outletId,
+        businessDate,
+        nextDate(businessDate),
+      )
+      return figures.get(businessDate) ?? null
+    },
+
     async getPreviousDay(outletId, businessDate) {
       // The most recent row BEFORE this date, not literally yesterday: a gap in
       // the notebook is normal and the chain runs between the rows that exist.
