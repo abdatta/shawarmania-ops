@@ -337,46 +337,26 @@ SHALL decide every read and write from the assignment.
 
 The ledger SHALL record at most one day row per outlet per business date,
 enforced by a uniqueness constraint in the database. Each row SHALL hold, in
-integer paise: revenue received as cash, as UPI, through Zomato and through
-Swiggy; cash brought into the drawer; cash taken out of the drawer; opening
-cash; and the drawer count at close. It SHALL also hold a reason for any
-non-zero cash movement, an optional free-text note, and the **commission charged
-on each aggregator channel that day, as an integer-paise amount**.
+integer paise: revenue received as cash and as UPI; revenue for each aggregator
+channel the ledger does **not** source; cash brought into the drawer; cash taken
+out of the drawer; opening cash; and the drawer count at close. It SHALL also
+hold a reason for any non-zero cash movement and an optional free-text note.
 
-Commission SHALL NOT be stored as a rate [owner, 2026-08-17]. The measured take
-moves between roughly 24% and 35% day to day, and is the sum of a base service
-fee, a per-kilometre fulfilment fee, a capping discount, a payment fee and tax on
-all of it; on one sampled order the published 14% base fee produced an actual take
-of 37.8%. A single stored percentage therefore expressed an estimate in the shape
-of an exact figure. Typed days SHALL take the amount off the statement, as synced
-days take it from the aggregator.
-
-Each channel SHALL hold exactly one revenue figure and one commission figure,
-whether they were typed or read. A channel's **net** SHALL be computed as revenue
-less commission and SHALL NOT be stored, because a stored third figure can
-disagree with the two it is derived from.
-
-Where a channel is sourced by `aggregator-settlement-sync`, the row SHALL
-additionally hold a **settlement state** of provisional, settled or disputed,
-which is the only thing that says whether that channel's figures were typed or
-read; the revenue and commission the owner had typed before the sync superseded
-them, together with the moment it did so; and, where settling changed the
-figures, the provisional figures they replaced. The retained typed figures SHALL
-participate in no computation at all.
+A sourced channel's revenue and commission SHALL NOT be columns on this row. They
+belong to `aggregator-figures`, because this row cannot exist without a drawer
+count while a sourced figure must be readable for a day nobody counted.
 
 Money SHALL be integer paise throughout, so that no figure on this surface is
 ever a float. The business date SHALL be an explicit `date` column and SHALL NOT
 be derived from a timestamp when read.
 
 A negative revenue figure SHALL be permitted, because a cash refund is recorded
-by reducing that day's cash revenue. A negative opening cash, drawer count or
-cash movement figure SHALL be refused, as SHALL a future business date, and a
-commission outside the range bounded by nought and that channel's own revenue for
-the day.
+by reducing that day's cash revenue. A negative opening cash, drawer count,
+cash-in or cash-out figure SHALL be refused, as SHALL a future business date.
 
 #### Scenario: A day is recorded for one outlet
 
-- **WHEN** the owner records revenue across four channels, a drawer count and any cash movements for an outlet and business date
+- **WHEN** the owner records cash and UPI revenue, any unsourced aggregator revenue, a drawer count and any cash movements for an outlet and business date
 - **THEN** one day row is stored in integer paise against that explicit business date
 
 #### Scenario: A second row for the same day is refused
@@ -401,18 +381,13 @@ the day.
 
 #### Scenario: An impossible figure is refused
 
-- **WHEN** a negative drawer count, negative opening cash, negative cash movement, future business date, or a commission larger than that channel's own revenue for the day, is submitted by a hand-crafted request
+- **WHEN** a negative drawer count, negative opening cash, negative cash movement or future business date is submitted by a hand-crafted request
 - **THEN** the database refuses the write
 
-#### Scenario: A synced channel writes the same two figures a typed one does
+#### Scenario: A sourced figure cannot be attached to the day row
 
-- **WHEN** a day row's Zomato revenue is sourced by the sync
-- **THEN** that row's Zomato revenue and commission hold the figures read from Zomato, its settlement state says they were read rather than typed, and the day's Zomato net is revenue less commission
-
-#### Scenario: A day the sync does not cover is unchanged in shape
-
-- **WHEN** a day row carries an aggregator channel with no synced figures
-- **THEN** its settlement state is absent, that channel's revenue and commission are the typed figures, and its net is revenue less commission exactly as for a synced day
+- **WHEN** a day row is submitted carrying a sourced channel's revenue or commission, including by a hand-crafted request
+- **THEN** the database refuses the write rather than accepting the row and discarding those figures
 
 ### Requirement: An expense is its own row, categorised and marked cash or non-cash
 
@@ -646,39 +621,55 @@ computed from the figures as they are typed rather than only after a save.
 
 ### Requirement: The entry form groups each aggregator with its own rate and result, and its explanations are available rather than displayed
 
-Each aggregator's stated revenue SHALL be presented together with the commission
-rate stored against that day, as one group, and that group SHALL show what was
-actually received, computed as the figures are typed through the same rounding
-rule the month uses. Where no rate has been given, the group SHALL show that
-there is nothing to compute rather than showing nil.
+Each aggregator SHALL be presented as one group showing what was measured: the
+stated revenue, the commission charged on it, and what those two produce. That
+group SHALL contain **no revenue field and no commission field**, for every
+aggregator the ledger sources, whether or not a figure has arrived for that day
+yet. Where commission is not yet known, the group SHALL say so and SHALL NOT
+present the stated figure as though all of it had arrived.
 
-How a sourced channel's group is presented is **not settled by this change**. It
-is specified by `freeze-aggregator-and-supply-entry`, which withdraws the entry
-fields for every aggregator rather than only for a sourced one, and moves the
-figures out of the day row. Stating the sourced-reading behaviour here would
-describe a form that this change did not build and that the next change replaces.
+The withdrawal is total rather than conditional on the day being sourced. A form
+offering fields for one channel and a reading for another invites the reader to
+believe the difference is about the day rather than about the channel, and the
+figures no longer live on the row the form saves, so there is nothing for a field
+to write to.
 
-The explanations of how the ledger treats a figure — a rate held per day, a
-capital purchase recorded as cash out, a refund recorded as negative revenue,
-a provisional figure that will be replaced when the week settles — SHALL be
-reachable from the section they govern rather than displayed permanently beside
-the fields. They SHALL be reachable by tap as well as by pointer, SHALL state
-whether they are open, and SHALL be dismissable from the keyboard.
+Where the ledger does not source a channel, that channel SHALL keep its entry
+fields, and the form SHALL state why the two channels differ rather than leaving
+the asymmetry to read as a fault.
+
+The explanations of how the ledger treats a figure — a capital purchase recorded
+as cash out, a refund recorded as negative revenue, a provisional figure that
+will be replaced when the week settles, a commission that may never be determined
+— SHALL be reachable from the section they govern rather than displayed
+permanently beside the fields. They SHALL be reachable by tap as well as by
+pointer, SHALL state whether they are open, and SHALL be dismissable from the
+keyboard.
 
 Every entry field's accessible name SHALL identify the figure unambiguously,
-including which aggregator or which drawer movement it belongs to, whatever the
-visible label is shortened to. No entry field's font size SHALL fall below the
-threshold at which a mobile browser zooms the viewport on focus.
+including which drawer movement it belongs to, whatever the visible label is
+shortened to. No entry field's font size SHALL fall below the threshold at which
+a mobile browser zooms the viewport on focus.
 
-#### Scenario: An aggregator's result is visible while it is being entered
+#### Scenario: A sourced aggregator offers nothing to type
 
-- **WHEN** a stated aggregator figure is typed and a rate is present for that day
-- **THEN** the amount actually received is shown in that aggregator's group, matching what the month would compute for the same figures
+- **WHEN** the owner opens the entry form for any business date
+- **THEN** the sourced aggregator's group shows its figures as a reading, and carries no revenue field and no commission field
 
-#### Scenario: No commission means no net
+#### Scenario: A day with no figures yet still offers nothing to type
 
-- **WHEN** a stated aggregator figure is typed on a day whose commission for that channel is still blank
-- **THEN** the group shows that there is nothing to compute, and does not show the stated figure as though all of it had arrived
+- **WHEN** the owner opens a day for which no aggregator figure has arrived
+- **THEN** the group says no figure has arrived, and still carries no field for entering one
+
+#### Scenario: An undetermined commission says so
+
+- **WHEN** a sourced day's commission is not yet known
+- **THEN** the group states the commission is not known yet, and does not present the stated revenue as the amount received
+
+#### Scenario: A channel the ledger does not source keeps its fields
+
+- **WHEN** the owner opens the entry form and one aggregator is sourced while another is not
+- **THEN** the unsourced channel keeps its revenue and commission fields, and the form states why the two differ
 
 #### Scenario: An explanation is asked for
 
@@ -687,8 +678,8 @@ threshold at which a mobile browser zooms the viewport on focus.
 
 #### Scenario: A shortened label still identifies its field
 
-- **WHEN** two aggregator groups present fields with identical visible labels
-- **THEN** each field's accessible name names its aggregator and its unit, so the groups are distinguishable without seeing them
+- **WHEN** two drawer-movement fields present identical visible labels
+- **THEN** each field's accessible name names its movement and its unit, so they are distinguishable without seeing them
 
 ### Requirement: A month reads as revenue by channel, aggregator revenue net of commission, and cash-basis profit that names its basis
 
