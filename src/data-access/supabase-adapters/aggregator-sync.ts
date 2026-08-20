@@ -24,6 +24,26 @@ import type { Database } from '../database.types'
  * query that returns rows has already proved the caller is the owner.
  */
 
+/**
+ * One raw ingest result, rendered as a human line for the upload confirmation.
+ *
+ * The parser returns per-write bookkeeping — orders written for a supply
+ * statement, days written (or a reconciliation refusal) for a Zomato cycle. The
+ * owner needs the plain fact, not the JSON: "17 Hyperpure supply orders written".
+ */
+function describeUpload(kind: StatementUploadResult['kind'], r: Record<string, unknown>): string {
+  const count = (value: unknown) => (typeof value === 'number' ? value : Number(value) || 0)
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+  if (kind === 'hyperpure-statement') {
+    return `${plural(count(r.orders_written), 'Hyperpure supply order', 'Hyperpure supply orders')} written`
+  }
+  if (r.outcome === 'reconciliation_failed') {
+    return 'A week did not add up to what Zomato paid — nothing was overwritten'
+  }
+  return `${plural(count(r.days_written), 'day', 'days')} of Zomato figures written`
+}
+
 /** How wide a net the duplicate signal casts. Deliberately loose; see below. */
 const DUPLICATE_DAYS = 4
 const DUPLICATE_FLOOR_PAISE = 5_000
@@ -427,10 +447,13 @@ export function createSupabaseAggregatorSyncAdapter(
         const detail = (error as { context?: { detail?: string } }).context?.detail
         throw new Error(detail ?? 'That upload did not go through')
       }
-      const result = data as { kind: StatementUploadResult['kind']; results: unknown[] }
+      const result = data as {
+        kind: StatementUploadResult['kind']
+        results: Record<string, unknown>[]
+      }
       return {
         kind: result.kind,
-        wrote: result.results.map((r) => JSON.stringify(r)),
+        wrote: result.results.map((r) => describeUpload(result.kind, r)),
       }
     },
   }

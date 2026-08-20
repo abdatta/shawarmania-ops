@@ -296,14 +296,6 @@ export function createMockAggregatorSyncAdapter(
       state.health = { ...state.health, awaitingOneTimePassword: null, running: true }
       state.pendingLogin = false
 
-      // One login restores both channels (Model A): the Zomato sign-in captures the
-      // Hyperpure session in the same pass, so answering the code heals Hyperpure
-      // too. Its next read will report ok; here it is enough that the session is
-      // back and the line stops asking to be reconnected.
-      hyperpure.hasSession = true
-      hyperpure.lastOutcome = 'ok'
-      hyperpure.sessionExpiresAt = new Date(Date.now() + 20 * 60 * 60 * 1000).toISOString()
-
       // The session is back, so the row that asked for it stops asking. Kept on
       // the page rather than removed: "Zomato signed us out on Tuesday" is worth
       // being able to find later, and it is the same record either way.

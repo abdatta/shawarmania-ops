@@ -282,20 +282,7 @@ export function ZomatoSyncSurface() {
             onRun={() => act(() => aggregatorSync.requestRun(outletId!))}
           />
 
-          {hyperpure && (
-            <HyperpureHealthLine
-              health={hyperpure}
-              // Disabled only while a tap is in flight — deliberately NOT while a
-              // code is pending. A reconnect that opened a request which then
-              // expired unanswered would otherwise leave this the only control that
-              // could reopen one, disabled behind the very request it needs to
-              // replace. Tapping it again sweeps the expired request and dispatches
-              // a fresh login; a still-live request is left alone (the server
-              // answers already-awaiting and does not double-dispatch).
-              busy={acting}
-              onReconnect={() => act(() => aggregatorSync.requestReconnect(outletId!))}
-            />
-          )}
+          {hyperpure && <HyperpureHealthLine health={hyperpure} />}
 
           <UploadStatement busy={acting} wrote={uploadWrote} onUpload={onUpload} />
 
@@ -469,27 +456,17 @@ function HealthLine({
 }
 
 /**
- * Hyperpure's health, beside Zomato's but thinner.
+ * Hyperpure's health, beside Zomato's but thinner and read-only.
  *
- * It has no "Read now" of its own, and its reconnect is the Zomato one: Hyperpure
- * rides the Zomato login, so one sign-in restores both. But a channel that is down
- * must offer the way to fix it wherever the owner is looking — and a healthy Zomato
- * shows no reconnect anywhere, so a lapsed Hyperpure with only a Zomato session
- * still alive would strand the owner with a broken line and no button. So when
- * Hyperpure's session has ended, this line carries the reconnect itself: the same
- * action, which signs back into Zomato and captures Hyperpure in the same pass.
- * Account level, so it says nothing about which outlet is in scope. Before this
- * line existed, a broken Hyperpure read was a red CI job the owner never saw.
+ * Account level, so it says nothing about which outlet is in scope. It carries no
+ * reconnect button **for now**: the automated Zomato→Hyperpure session handoff is
+ * not yet working from the runner, so a button that dispatches a reconnect which
+ * cannot capture the session would only strand the owner. Until that lands, a
+ * session that has ended points at the manual path — upload the account statement
+ * on this page — which does bring the figures in. Before this line existed, a
+ * broken Hyperpure read was a red CI job the owner never saw.
  */
-function HyperpureHealthLine({
-  health,
-  busy,
-  onReconnect,
-}: {
-  health: HyperpureHealth
-  busy: boolean
-  onReconnect: () => void
-}) {
+function HyperpureHealthLine({ health }: { health: HyperpureHealth }) {
   const when = health.lastRunAt
     ? new Date(health.lastRunAt).toLocaleString(undefined, {
         day: 'numeric',
@@ -499,8 +476,8 @@ function HyperpureHealthLine({
       })
     : null
 
-  // A session that has ended, or a read that failed on it, is the owner's to fix,
-  // and this is where they fix it. A shape change is a maintainer's. Everything
+  // A shape change is a maintainer's. A session that has ended points the owner at
+  // the upload below rather than a reconnect that cannot yet complete. Everything
   // else is quiet. Same vocabulary as the Zomato line, so the two read as one.
   const stale = !health.hasSession || health.lastOutcome === 'session_lapsed'
   const [word, wrong] = health.running
@@ -514,7 +491,7 @@ function HyperpureHealthLine({
           : (['Never run', false] as const)
 
   const note = stale
-    ? 'Signs back into Zomato and restores Hyperpure in the same step'
+    ? 'Upload the Hyperpure account statement below to bring its figures in'
     : word === 'Stuck'
       ? 'A statement could not be read — a maintainer has been told'
       : when
@@ -532,16 +509,6 @@ function HyperpureHealthLine({
         </p>
         <p className="text-xs text-content-muted">{note}</p>
       </div>
-      {stale && (
-        <Button
-          variant="secondary"
-          onClick={onReconnect}
-          disabled={busy}
-          data-testid="hyperpure-reconnect"
-        >
-          Reconnect
-        </Button>
-      )}
     </Card>
   )
 }

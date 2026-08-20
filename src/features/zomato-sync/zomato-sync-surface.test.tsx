@@ -157,24 +157,19 @@ describe('the Zomato sync surface', () => {
     expect(other.className).not.toContain('bg-on-primary')
   })
 
-  it('carries a reconnect on the Hyperpure line when its session is down, even with Zomato healthy', async () => {
-    // The gap this closes: Hyperpure rides the Zomato login, but a healthy Zomato
-    // shows no reconnect anywhere, so a lapsed Hyperpure with only that button
-    // elsewhere would strand the owner. Kalyani's Zomato is healthy; Hyperpure
-    // starts lapsed. The line names the state and offers the fix on the spot.
+  it('shows Hyperpure health and points a lapsed session at the upload, with no reconnect yet', async () => {
+    // The automated Zomato->Hyperpure session handoff is not working from the runner
+    // yet, so the line deliberately carries NO reconnect button — one that could not
+    // capture the session would only strand the owner. A lapsed session points at
+    // the manual upload on this page instead. The demo seeds Hyperpure lapsed.
     await renderSurface(OUTLET_KALYANI_ID)
 
     const line = await screen.findByTestId('hyperpure-health')
     expect(line).toHaveTextContent(/Hyperpure/)
     expect(line).toHaveTextContent(/Session ended/)
-    const reconnect = within(line).getByTestId('hyperpure-reconnect')
-    expect(reconnect).toBeEnabled()
-
-    // It is the same login as Zomato's: one code restores both channels.
-    await userEvent.click(reconnect)
-    expect(
-      await screen.findByText(/Zomato sent you a code/, {}, { timeout: 3000 }),
-    ).toBeInTheDocument()
+    expect(line).toHaveTextContent(/upload the hyperpure account statement/i)
+    expect(within(line).queryByTestId('hyperpure-reconnect')).not.toBeInTheDocument()
+    expect(within(line).queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('offers Read now only when reading again could say something new', async () => {
