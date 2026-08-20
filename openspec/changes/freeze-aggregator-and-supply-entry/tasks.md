@@ -50,7 +50,7 @@ even if later sections are still moving.
 ## 5. Reading and arithmetic
 
 - [x] 5.1 `ledger.ts` reads a channel's figures from `aggregator_channel_days`, not from the day row.
-- [ ] 5.2 A day reading exists where no day row exists — the write side is done (the sync now records a figure for a day nobody counted, proved in 33), but the ledger UI showing it is the owner-deferred backlog item (paired with 6.8, "to be thought more later").
+- [x] 5.2 A day reading exists where no day row exists. Built this session: `getMonth`/`getDay`/`getDayFigures` now surface a figure-only day (no counted drawer) as a `counted: false` reading in both day and month views; `readMonth` counts only truly-counted days in `daysRecorded`. Proved in the mock and Supabase adapter suites (1305 unit tests green) and confirmed live — 19-Aug (both outlets) and 20-Aug (Kanchrapara) figures read without a drawer count.
 - [x] 5.3 A month containing an undetermined commission is stated as a ceiling and says so.
 - [x] 5.4 **Carried from #42 (5.2):** a test pinning a historical month's totals so this change cannot move them silently.
 - [x] 5.5 Integer paise throughout; no float constructed on any path added here.
@@ -64,7 +64,7 @@ even if later sections are still moving.
 - [x] 6.5 A superseded figure is shown beside the current one, marked superseded, and reaches no total.
 - [x] 6.6 Extend the existing explanation affordance: provisional, revised, disputed, and a commission that may never be determined. Reachable by tap, self-reporting as open, dismissable from the keyboard.
 - [x] 6.7 Extend `SourceTag` to name the three origins.
-- [ ] 6.8 A past date with no ledger row opens showing its figures rather than a blank form that hides them.
+- [x] 6.8 A past date with no ledger row opens showing its figures rather than a blank form that hides them. `ledger-day.tsx` now loads `getDayFigures` alongside the recorded day and renders `<ZomatoReading settlement={recorded?.zomatoSettlement ?? dayFigures} />`, so the "No Zomato figures have arrived for this day yet" line is replaced by the actual figures when they exist; the obsolete "Typed" chip was removed and "By hand" renamed "Uploaded".
 - [x] 6.9 Accessible names, and no added field below the mobile-zoom threshold.
 
 ## 7. One parser, two callers
