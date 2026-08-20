@@ -280,6 +280,46 @@ describe('mock manual ledger adapter', () => {
     })
   })
 
+  describe('the month', () => {
+    it('includes a day nobody counted, carrying its Zomato figures and marked uncounted', async () => {
+      const { store, adapter } = over()
+      const template = store.aggregatorChannelDays.find(
+        (row) => row.outlet_id === DEMO_OUTLET_ID && row.channel === 'zomato',
+      )
+      if (!template) throw new Error('The demo no longer seeds a Zomato figure to template from.')
+
+      const month = store.today.slice(0, 7)
+      const countedThisMonth = new Set(
+        store.manualLedgerDays
+          .filter((d) => d.outlet_id === DEMO_OUTLET_ID && d.business_date.startsWith(`${month}-`))
+          .map((d) => d.business_date),
+      )
+      // A date this month with a Zomato reading but no cash count.
+      let uncounted = ''
+      for (let d = 1; d <= 28; d += 1) {
+        const candidate = `${month}-${String(d).padStart(2, '0')}`
+        if (!countedThisMonth.has(candidate)) {
+          uncounted = candidate
+          break
+        }
+      }
+      store.aggregatorChannelDays.push({
+        ...template,
+        business_date: uncounted,
+        revenue_paise: 333_300,
+        commission_paise: null,
+      })
+
+      const result = await adapter.getMonth(DEMO_OUTLET_ID, month)
+      const day = result.days.find((d) => d.businessDate === uncounted)
+      expect(day?.counted).toBe(false)
+      expect(day?.zomatoRevenuePaise).toBe(333_300)
+      // A genuinely counted day is not marked uncounted, so the month can tell them
+      // apart for its recorded-day tally.
+      expect(result.days.some((d) => d.counted !== false)).toBe(true)
+    })
+  })
+
   describe('expenses', () => {
     it('records one and lists it for its day', async () => {
       const { store, adapter, expenseInput } = over()

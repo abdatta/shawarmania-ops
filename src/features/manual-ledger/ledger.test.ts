@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ManualLedgerDayInput, ManualLedgerExpense } from '@/data-access/adapters'
+import type {
+  ManualLedgerDayFigures,
+  ManualLedgerDayInput,
+  ManualLedgerExpense,
+} from '@/data-access/adapters'
 import { NotPaiseError } from '@/domain'
 
 import {
@@ -340,6 +344,31 @@ describe('a month read for one outlet', () => {
     const categories = month.expensesByCategory.map((total) => total.category)
     expect(categories).not.toContain('other')
     expect(month.totalExpensesPaise).toBe(240_000 + 180_000 + 320_000 + 900_000)
+  })
+
+  it('counts a day nobody counted in the totals but not in the recorded tally', () => {
+    // Aggregator figures for a date with no cash count — the "day nobody counted"
+    // the sync writes to its own table. It shows and totals, but is not recorded.
+    const uncounted: ManualLedgerDayFigures = {
+      ...day({
+        businessDate: '2026-08-19',
+        openingCashPaise: 0,
+        zomatoRevenuePaise: 148_500,
+        // Provisional: nobody has stated yet what Zomato kept.
+        zomatoCommissionPaise: null,
+        swiggyCommissionPaise: null,
+        countedCashPaise: 0,
+      }),
+      counted: false,
+    }
+
+    const month = readMonth([...days, uncounted], expenses)
+
+    // Its Zomato gross totals in as a ceiling, and it lifts the undetermined count.
+    expect(month.grossZomatoPaise).toBe(700_000 + 148_500)
+    expect(month.undeterminedDays).toBeGreaterThanOrEqual(1)
+    // But it is not a day the owner recorded, so the tally is unchanged.
+    expect(month.daysRecorded).toBe(days.length)
   })
 
   it('names its basis and reconciles exactly against its expenses by category', () => {

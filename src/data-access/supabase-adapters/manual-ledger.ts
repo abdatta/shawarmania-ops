@@ -6,6 +6,7 @@ import {
   type ManualLedgerAdapter,
   type ManualLedgerCounterRevenue,
   type ManualLedgerDay,
+  type ManualLedgerDayFigures,
   type ManualLedgerDayInput,
   type ManualLedgerExpense,
   type ManualLedgerExpensePatch,
@@ -108,6 +109,40 @@ function toDay(
     recordedBy: actor(row.recorded_by, people),
     zomatoSettlement: settlement,
     updatedBy: optionalActor(row.updated_by, people),
+  }
+}
+
+/**
+ * A date the sync wrote figures for but nobody counted the cash of.
+ *
+ * It carries the Zomato reading and nothing else — cash is nil because none was
+ * counted, not because the drawer was empty — and `counted: false` so the month
+ * knows not to count it as a day the owner recorded. No ledger row exists behind
+ * it; this is assembled in memory from the figures table alone.
+ */
+function uncountedFiguresDay(
+  outletId: string,
+  businessDate: string,
+  settlement: ZomatoSettlement,
+): ManualLedgerDayFigures {
+  return {
+    outletId,
+    businessDate,
+    openingCashPaise: 0,
+    cashRevenuePaise: 0,
+    upiRevenuePaise: 0,
+    zomatoRevenuePaise: settlement.revenuePaise,
+    swiggyRevenuePaise: 0,
+    cashAddedPaise: 0,
+    cashAddedReason: null,
+    cashRemovedPaise: 0,
+    cashRemovedReason: null,
+    countedCashPaise: 0,
+    zomatoCommissionPaise: settlement.commissionPaise,
+    swiggyCommissionPaise: null,
+    note: null,
+    zomatoSettlement: settlement,
+    counted: false,
   }
 }
 
@@ -485,14 +520,24 @@ export function createSupabaseManualLedgerAdapter(
       if (days.error) throw toLedgerError(days.error)
       if (expenses.error) throw toLedgerError(expenses.error)
 
+      const countedDates = new Set((days.data ?? []).map((row) => row.business_date))
+      const counted = (days.data ?? []).map((row) =>
+        toDay(
+          row,
+          people,
+          revenueOn(revenue, row.business_date),
+          figures.get(row.business_date) ?? null,
+        ),
+      )
+      // Dates the sync wrote figures for but nobody counted — added in memory so
+      // their Zomato figures show and total, without inventing a ledger row.
+      const uncounted = [...figures.entries()]
+        .filter(([date]) => !countedDates.has(date))
+        .map(([date, settlement]) => uncountedFiguresDay(outletId, date, settlement))
+
       return {
-        days: (days.data ?? []).map((row) =>
-          toDay(
-            row,
-            people,
-            revenueOn(revenue, row.business_date),
-            figures.get(row.business_date) ?? null,
-          ),
+        days: [...counted, ...uncounted].sort((a, b) =>
+          a.businessDate.localeCompare(b.businessDate),
         ),
         expenses: (expenses.data ?? []).map((row) => toExpense(row, people)),
       } satisfies ManualLedgerMonth

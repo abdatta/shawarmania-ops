@@ -363,7 +363,9 @@ export function readMonth(
 
   return {
     recorded: days.length > 0 || allExpenses.length > 0,
-    daysRecorded: days.length,
+    // A day nobody counted (aggregator figures, no cash count) is not a day the
+    // owner recorded, so it does not swell this count even though it shows above.
+    daysRecorded: days.filter((day) => day.counted !== false).length,
     grossCashPaise,
     grossUpiPaise,
     grossZomatoPaise,

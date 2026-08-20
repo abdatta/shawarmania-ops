@@ -2116,6 +2116,12 @@ export type ManualLedgerDayInput = Omit<
  */
 export type ManualLedgerDayFigures = ManualLedgerDayInput & {
   zomatoSettlement?: ZomatoSettlement | null
+  /**
+   * False on a day that has aggregator figures but no cash count — the "day nobody
+   * counted", surfaced so its Zomato figures still show and total. Absent means
+   * counted, so every existing day and form payload needs no change.
+   */
+  counted?: boolean
 }
 
 export interface NewManualLedgerExpense {
@@ -2134,7 +2140,10 @@ export type ManualLedgerExpensePatch = Partial<
 
 /** Everything a month reading needs, unaggregated. The maths is not the adapter's. */
 export interface ManualLedgerMonth {
-  days: ManualLedgerDay[]
+  // Figures rather than full days: the month reading needs only the figures, and
+  // typing it this way lets a date with aggregator figures but no cash count join
+  // the list without a ledger row behind it (the "day nobody counted").
+  days: ManualLedgerDayFigures[]
   expenses: ManualLedgerExpense[]
 }
 

@@ -5,16 +5,49 @@ import {
   type LedgerActor,
   type ManualLedgerAdapter,
   type ManualLedgerDay,
+  type ManualLedgerDayFigures,
   type ManualLedgerDayInput,
   type ManualLedgerExpense,
   type ManualLedgerExpensePatch,
   type NewManualLedgerExpense,
+  type ZomatoSettlement,
 } from '../adapters'
 import type { Tables } from '../database.types'
 import { toZomatoSettlement } from '../zomato-settlement'
 import { personaFixtures } from './fixtures/personas'
 import type { DemoStore } from './store'
 import { captureMockCategory } from './expense-categories'
+
+/**
+ * A date the sync wrote figures for but nobody counted — the "day nobody counted".
+ * Cash is nil because none was counted, and `counted: false` keeps it out of the
+ * month's recorded-day tally. No ledger row exists behind it.
+ */
+function uncountedFiguresDay(
+  outletId: string,
+  businessDate: string,
+  settlement: ZomatoSettlement,
+): ManualLedgerDayFigures {
+  return {
+    outletId,
+    businessDate,
+    openingCashPaise: 0,
+    cashRevenuePaise: 0,
+    upiRevenuePaise: 0,
+    zomatoRevenuePaise: settlement.revenuePaise,
+    swiggyRevenuePaise: 0,
+    cashAddedPaise: 0,
+    cashAddedReason: null,
+    cashRemovedPaise: 0,
+    cashRemovedReason: null,
+    countedCashPaise: 0,
+    zomatoCommissionPaise: settlement.commissionPaise,
+    swiggyCommissionPaise: null,
+    note: null,
+    zomatoSettlement: settlement,
+    counted: false,
+  }
+}
 
 /**
  * The mock manual-ledger adapter (#36) — **temporary, deleted with the
@@ -491,11 +524,31 @@ export function createMockManualLedgerAdapter(
       refuseDay(outletId)
       const inMonth = (businessDate: string) => businessDate.startsWith(`${month}-`)
 
+      const counted = store.manualLedgerDays
+        .filter((day) => day.outlet_id === outletId && inMonth(day.business_date))
+        .map((row) => toDay(row, figureFor(outletId, row.business_date)))
+      const countedDates = new Set(counted.map((day) => day.businessDate))
+
+      // Dates the sync wrote Zomato figures for but nobody counted — surfaced from
+      // the figures table alone, no ledger row invented.
+      const uncounted = store.aggregatorChannelDays
+        .filter(
+          (row) =>
+            row.outlet_id === outletId &&
+            row.channel === 'zomato' &&
+            inMonth(row.business_date) &&
+            !countedDates.has(row.business_date),
+        )
+        .map((row) => {
+          const settlement = toZomatoSettlement(row)
+          return settlement ? uncountedFiguresDay(outletId, row.business_date, settlement) : null
+        })
+        .filter((day): day is ManualLedgerDayFigures => day !== null)
+
       return {
-        days: store.manualLedgerDays
-          .filter((day) => day.outlet_id === outletId && inMonth(day.business_date))
-          .sort((a, b) => a.business_date.localeCompare(b.business_date))
-          .map((row) => toDay(row, figureFor(outletId, row.business_date))),
+        days: [...counted, ...uncounted].sort((a, b) =>
+          a.businessDate.localeCompare(b.businessDate),
+        ),
         expenses: store.manualLedgerExpenses
           .filter((expense) => expense.outlet_id === outletId && inMonth(expense.business_date))
           .sort((a, b) => a.business_date.localeCompare(b.business_date))
