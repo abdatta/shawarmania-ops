@@ -1091,7 +1091,6 @@ describe('the manual ledger over HTTP', () => {
         business_date: YESTERDAY,
         opening_cash_paise: 0,
         counted_cash_paise: 0,
-        zomato_commission_paise: 0,
         swiggy_commission_paise: 0,
       })
       expect(day.error?.code).toBe('42501')
@@ -1172,7 +1171,6 @@ describe('the manual ledger over HTTP', () => {
       business_date: YESTERDAY,
       opening_cash_paise: 0,
       counted_cash_paise: 0,
-      zomato_commission_paise: 0,
       swiggy_commission_paise: 0,
     })
     expect(day.error?.code).toBe('42501')

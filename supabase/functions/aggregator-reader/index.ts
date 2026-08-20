@@ -37,6 +37,16 @@ const ACTIONS: readonly Action[] = [
   'finish_login',
 ]
 
+/**
+ * The channels whose session this door may hold. Hyperpure rides the same Zomato
+ * partner login (one sign-in auto-authorises both), so its session is captured in
+ * the same pass and stored under its own channel — but it has no one-time-password
+ * of its own, so the `await_code` / `reject_code` / `finish_login` actions are only
+ * ever exercised by Zomato. Widening the guard here does not invent an OTP flow for
+ * Hyperpure; it only lets its session be saved, read and forgotten.
+ */
+const KNOWN_CHANNELS: readonly string[] = ['zomato', 'hyperpure']
+
 /** Zomato rejects a wrong code and offers the field again. Three is enough. */
 const MAX_ATTEMPTS = 3
 
@@ -71,7 +81,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const channel = str(body['channel']) ?? 'zomato'
 
   if (!action || !ACTIONS.includes(action)) return json({ error: 'unknown_action' }, 400)
-  if (channel !== 'zomato') return json({ error: 'unknown_channel' }, 400)
+  if (!KNOWN_CHANNELS.includes(channel)) return json({ error: 'unknown_channel' }, 400)
 
   const service = serviceClient()
   const now = new Date()

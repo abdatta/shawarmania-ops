@@ -58,30 +58,52 @@ returns jsonb language sql as $$
                             '00000000-0000-4000-a000-000000000002'::uuid]))
 $$;
 
--- A typed day, as the owner records one. Every cycle below lands on days that
--- already exist, which is the contract: the sync attaches figures, it does not
--- invent trading days.
--- Swiggy is charged nought here because these days sell nothing on Swiggy, which
--- the commission-within-revenue constraint now insists on: a charge against
--- revenue that does not exist is a figure in the wrong box.
-create function pg_temp.typed_day(p_outlet uuid, d date, revenue bigint, commission bigint)
+-- A day the owner recorded: a drawer count and nothing else. It no longer
+-- carries aggregator figures, and it no longer needs to exist before the sync
+-- can write one, which is the whole point of the move. Kept in the tests because
+-- several cases below assert that writing figures leaves the drawer alone.
+create function pg_temp.recorded_day(p_outlet uuid, d date)
 returns void language plpgsql as $$
 begin
   insert into public.manual_ledger_days
     (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-     cash_revenue_paise, zomato_revenue_paise, zomato_commission_paise,
-     swiggy_commission_paise, recorded_by)
-  values (p_outlet, d, 500000, 500000, 0, revenue, commission, 0,
+     cash_revenue_paise, swiggy_commission_paise, recorded_by)
+  values (p_outlet, d, 500000, 500000, 0, 0,
           '10000000-0000-4000-a000-000000000001')
   on conflict (outlet_id, business_date) do nothing;
+end;
+$$;
+
+-- A figure some earlier origin already wrote, for the cases about replacing one.
+create function pg_temp.sourced_day(p_outlet uuid, d date, revenue bigint,
+                                    commission bigint, state text default 'provisional',
+                                    origin text default 'daily_reader')
+returns void language plpgsql as $$
+begin
+  insert into public.aggregator_channel_days
+    (outlet_id, channel, business_date, revenue_paise, commission_paise,
+     settlement_state, origin)
+  values (p_outlet, 'zomato', d, revenue, commission, state, origin)
+  on conflict (outlet_id, channel, business_date) do update
+    set revenue_paise = excluded.revenue_paise,
+        commission_paise = excluded.commission_paise,
+        settlement_state = excluded.settlement_state,
+        origin = excluded.origin;
 end;
 $$;
 
 -- ---------------------------------------------------------------------------
 -- 1. A reconciling cycle is written, and each day gets its own triple.
 
-select pg_temp.typed_day(:'KAL', pg_temp.day(9), 295000, 2825);
-select pg_temp.typed_day(:'KAL', pg_temp.day(8), 180000, 2825);
+select pg_temp.recorded_day(:'KAL', pg_temp.day(9));
+select pg_temp.recorded_day(:'KAL', pg_temp.day(8));
+
+-- Figures an earlier read already wrote, so this cycle replaces something and the
+-- retention assertions below have a replacement to be about. They used to be
+-- about the owner's typed estimate; typed figures are gone, and the property is
+-- the same one: nothing changes without what it replaced staying readable.
+select pg_temp.sourced_day(:'KAL', pg_temp.day(9), 295000, 2825);
+select pg_temp.sourced_day(:'KAL', pg_temp.day(8), 180000, 2825);
 
 select is(
   pg_temp.ingest(jsonb_build_object(
@@ -106,9 +128,9 @@ select is(
 -- stored net any more: with commission exact it would be a third figure able to
 -- disagree with the two it came from.
 select results_eq(
-  format($$select business_date, zomato_revenue_paise, zomato_commission_paise,
-                  zomato_revenue_paise - zomato_commission_paise, zomato_settlement_state
-             from public.manual_ledger_days
+  format($$select business_date, revenue_paise, commission_paise,
+                  revenue_paise - commission_paise, settlement_state
+             from public.aggregator_channel_days
             where outlet_id = %L and business_date in (%L, %L)
             order by business_date$$,
     :'KAL', pg_temp.day(9), pg_temp.day(8)),
@@ -123,21 +145,21 @@ select results_eq(
 -- double-counted. There is one pair now, so the claim worth making is that it holds
 -- Zomato's figures rather than the owner's: 297003 measured where 295000 was typed.
 select isnt(
-  (select zomato_revenue_paise from public.manual_ledger_days
+  (select revenue_paise from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(9)),
   295000::bigint,
   'and the day now reads Zomato''s figure rather than the one the owner typed');
 
 select results_eq(
-  format($$select zomato_superseded_revenue_paise, zomato_superseded_commission_paise
-             from public.manual_ledger_days
+  format($$select superseded_revenue_paise, superseded_commission_paise
+             from public.aggregator_channel_days
             where outlet_id = %L and business_date = %L$$, :'KAL', pg_temp.day(9)),
   $$values (295000::bigint, 2825::bigint)$$,
   'what the owner had typed is retained beside it, so the estimate can be '
   'compared against the settled truth');
 
 select isnt(
-  (select zomato_superseded_at from public.manual_ledger_days
+  (select superseded_at from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(9)),
   null,
   'with the moment it was superseded');
@@ -148,10 +170,10 @@ select isnt(
 create function pg_temp.day_fingerprint(p_outlet uuid)
 returns text language sql as $$
   select coalesce(string_agg(
-    format('%s|%s|%s|%s|%s', business_date, zomato_revenue_paise, zomato_commission_paise,
-           zomato_settlement_state, zomato_superseded_at),
+    format('%s|%s|%s|%s|%s', business_date, revenue_paise, commission_paise,
+           settlement_state, superseded_at),
     ' ' order by business_date), '')
-    from public.manual_ledger_days where outlet_id = p_outlet
+    from public.aggregator_channel_days where outlet_id = p_outlet
 $$;
 
 savepoint before_rerun;
@@ -178,7 +200,7 @@ select is(
   'and creates no second row for a day it already wrote');
 
 select is(
-  (select zomato_superseded_revenue_paise from public.manual_ledger_days
+  (select superseded_revenue_paise from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(9)),
   295000::bigint,
   'nor supersedes the typed figure a second time with the zero it wrote itself, '
@@ -189,8 +211,8 @@ rollback to savepoint before_rerun;
 -- ---------------------------------------------------------------------------
 -- 3. The cutover: a late-night order belongs to the shift that cooked it.
 
-select pg_temp.typed_day(:'KAL', pg_temp.day(7), 0, 0);
-select pg_temp.typed_day(:'KAL', pg_temp.day(6), 0, 0);
+select pg_temp.recorded_day(:'KAL', pg_temp.day(7));
+select pg_temp.recorded_day(:'KAL', pg_temp.day(6));
 
 select is(
   pg_temp.ingest(jsonb_build_object(
@@ -211,14 +233,14 @@ select is(
   'a cycle spanning the cutover is accepted');
 
 select is(
-  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
+  (select revenue_paise - commission_paise from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(7)),
   35000::bigint,
   'an order placed at 00:30 lands on the trading day that cooked it, not on the '
   'calendar day the clock had already moved to');
 
 select is(
-  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
+  (select revenue_paise - commission_paise from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(6)),
   50000::bigint,
   'and an order at exactly 04:00 opens the new one, the cutover being an '
@@ -227,7 +249,7 @@ select is(
 -- ---------------------------------------------------------------------------
 -- 4. Settlement replaces the estimate in place, and says what it replaced.
 
-select pg_temp.typed_day(:'KPA', pg_temp.day(12), 0, 0);
+select pg_temp.recorded_day(:'KPA', pg_temp.day(12));
 
 select is(
   pg_temp.ingest(jsonb_build_object(
@@ -261,15 +283,15 @@ select is(
   'in place, staying one row per outlet per business date');
 
 select results_eq(
-  format($$select zomato_revenue_paise - zomato_commission_paise, zomato_settlement_state,
-                  zomato_provisional_revenue_paise - zomato_provisional_commission_paise
-             from public.manual_ledger_days
+  format($$select revenue_paise - commission_paise, settlement_state,
+                  provisional_revenue_paise - provisional_commission_paise
+             from public.aggregator_channel_days
             where outlet_id = %L and business_date = %L$$, :'KPA', pg_temp.day(12)),
   $$values (217915::bigint, 'settled', 210000::bigint)$$,
   'marked settled, carrying the provisional figure it grew from');
 
 select isnt(
-  (select zomato_revised_at from public.manual_ledger_days
+  (select revised_at from public.aggregator_channel_days
     where outlet_id = :'KPA'::uuid and business_date = pg_temp.day(12)),
   null,
   'and stamped with the moment it was revised');
@@ -288,7 +310,7 @@ select is(
   'ok', 'a later live read of an already settled week is accepted');
 
 select is(
-  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
+  (select revenue_paise - commission_paise from public.aggregator_channel_days
     where outlet_id = :'KPA'::uuid and business_date = pg_temp.day(12)),
   217915::bigint,
   'but changes nothing, because a settled figure has already reconciled and the '
@@ -296,7 +318,7 @@ select is(
 
 -- A day that settles unchanged is not marked revised: the marker describes a
 -- movement, and claiming one that did not happen is its own small lie.
-select pg_temp.typed_day(:'KPA', pg_temp.day(13), 0, 0);
+select pg_temp.recorded_day(:'KPA', pg_temp.day(13));
 
 select is(
   pg_temp.ingest(jsonb_build_object(
@@ -319,7 +341,7 @@ select is(
   )) ->> 'outcome', 'ok', 'and settles with the same figures');
 
 select is(
-  (select zomato_revised_at from public.manual_ledger_days
+  (select revised_at from public.aggregator_channel_days
     where outlet_id = :'KPA'::uuid and business_date = pg_temp.day(13)),
   null,
   'a day that settled unchanged is not marked revised');
@@ -327,7 +349,7 @@ select is(
 -- ---------------------------------------------------------------------------
 -- 5. Rounding noise is accepted, and the stored figures stay Zomato's own.
 
-select pg_temp.typed_day(:'KAL', pg_temp.day(14), 0, 0);
+select pg_temp.recorded_day(:'KAL', pg_temp.day(14));
 
 select is(
   pg_temp.ingest(jsonb_build_object(
@@ -345,7 +367,7 @@ select is(
   'nightly on displayed figures');
 
 select is(
-  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
+  (select revenue_paise - commission_paise from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(14)),
   140000::bigint,
   'and the stored figure is the aggregator''s own, not adjusted to close the gap');
@@ -353,8 +375,8 @@ select is(
 -- ---------------------------------------------------------------------------
 -- 6. A week that does not reconcile is refused whole and marked disputed.
 
-select pg_temp.typed_day(:'KAL', pg_temp.day(20), 0, 0);
-select pg_temp.typed_day(:'KAL', pg_temp.day(19), 0, 0);
+select pg_temp.recorded_day(:'KAL', pg_temp.day(20));
+select pg_temp.recorded_day(:'KAL', pg_temp.day(19));
 
 select is(
   pg_temp.ingest(jsonb_build_object(
@@ -404,17 +426,17 @@ select is(
   'and the difference is reported, naming both totals');
 
 select is(
-  (select count(*) from public.manual_ledger_days
+  (select count(*) from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid
       and business_date in (pg_temp.day(20), pg_temp.day(19))
-      and zomato_settlement_state = 'disputed'),
+      and settlement_state = 'disputed'),
   2::bigint,
   'its days read disputed, so a paid week that does not add up cannot be '
   'mistaken for the current week awaiting payment');
 
 select is(
-  (select sum(zomato_revenue_paise - zomato_commission_paise)::bigint
-     from public.manual_ledger_days
+  (select sum(revenue_paise - commission_paise)::bigint
+     from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid
       and business_date in (pg_temp.day(20), pg_temp.day(19))),
   630000::bigint,
@@ -437,10 +459,10 @@ select is(
   'ok', 're-checking a disputed week that now reconciles is accepted');
 
 select is(
-  (select count(*) from public.manual_ledger_days
+  (select count(*) from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid
       and business_date in (pg_temp.day(20), pg_temp.day(19))
-      and zomato_settlement_state = 'settled'),
+      and settlement_state = 'settled'),
   2::bigint,
   'and it stops reading disputed');
 
@@ -464,8 +486,8 @@ select results_eq(
   'it, rather than spread across the days until the total looked right');
 
 select is(
-  (select sum(zomato_revenue_paise - zomato_commission_paise)::bigint
-     from public.manual_ledger_days
+  (select sum(revenue_paise - commission_paise)::bigint
+     from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid
       and business_date in (pg_temp.day(20), pg_temp.day(19))),
   630000::bigint,
@@ -483,7 +505,7 @@ select is(
 -- ---------------------------------------------------------------------------
 -- 7. Deductions land on the day the money was spent.
 
-select pg_temp.typed_day(:'KAL', pg_temp.day(30), 0, 0);
+select pg_temp.recorded_day(:'KAL', pg_temp.day(30));
 
 select is(
   pg_temp.ingest(jsonb_build_object(
@@ -658,16 +680,26 @@ select is(
     'orders', jsonb_build_array(
       jsonb_build_object('order_id', 'P1', 'placed_at', pg_temp.at_ist(pg_temp.day(60), '12:00'),
                          'gross_paise', 100000, 'commission_paise', 30000, 'net_paise', 70000))
-  )) ->> 'days_pending',
+  )) ->> 'days_without_a_recorded_day',
   (pg_temp.day(60))::text,
-  'a trading day with no ledger row is reported as pending');
+  'a trading day with no ledger row is named in the answer');
+
+-- This is the part that used to be impossible, and the reason the figures moved.
+-- The date is written now: the refusal existed only because a figure needed a day
+-- row to live on, and a day row needs a drawer count nobody took.
+select is(
+  (select revenue_paise from public.aggregator_channel_days
+    where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(60)),
+  100000::bigint,
+  'and its figures are written rather than withheld, because they no longer need '
+  'a day row to live on');
 
 select is(
   (select count(*) from public.manual_ledger_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(60)),
   0::bigint,
-  'and no day row is invented for it, because a fabricated opening balance and '
-  'a drawer count of zero would reconcile and mean nothing');
+  'while still no day row is invented for it, because a fabricated opening '
+  'balance and a drawer count of zero would reconcile and mean nothing');
 
 -- ---------------------------------------------------------------------------
 -- The sync boundary: everything before it is the owner's, forever.
@@ -678,7 +710,7 @@ select is(
 -- the past", which is the one thing a ledger must never do to a figure somebody
 -- entered and has already acted on.
 
-select pg_temp.typed_day(:'KAL', pg_temp.day(50), 111100, 33300);
+select pg_temp.recorded_day(:'KAL', pg_temp.day(50));
 
 -- Move the boundary forward so day 20 sits behind it, and day 9 in front.
 alter table public.outlet_channel_sync disable trigger outlet_channel_sync_guarded;
@@ -704,12 +736,22 @@ select is(
   'ok',
   'a cycle reaching behind the boundary is accepted rather than refused');
 
-select results_eq(
-  format($$select zomato_revenue_paise, zomato_commission_paise, zomato_settlement_state
-             from public.manual_ledger_days
-            where outlet_id = %L and business_date = %L$$, :'KAL', pg_temp.day(50)),
-  $$values (111100::bigint, 33300::bigint, null::text)$$,
-  'but the day behind it keeps the owner''s own figures and stays untouched');
+-- The claim is now an absence rather than a preserved pair. There is nothing to
+-- preserve: a day behind the boundary has no measured figure at all, and the
+-- boundary's job is to see that it never gains one. Asserting the absence is the
+-- stronger of the two, because a row written with the owner's old numbers would
+-- have satisfied the previous version of this.
+select is(
+  (select count(*) from public.aggregator_channel_days
+    where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(50)),
+  0::bigint,
+  'but the day behind the boundary gains no measured figure at all');
+
+select is(
+  (select count(*) from public.manual_ledger_days
+    where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(50)),
+  1::bigint,
+  'while the day the owner recorded behind it is left exactly where it was');
 
 select is(
   (select (pg_temp.ingest(jsonb_build_object(
@@ -743,9 +785,9 @@ select is(
                          'placed_at', (pg_temp.day(55) + time '13:00')::timestamptz,
                          'gross_paise', 5000, 'commission_paise', 1000,
                          'net_paise', 4000))
-  )) ->> 'days_pending',
+  )) ->> 'days_without_a_recorded_day',
   '',
-  'a day behind the boundary is not reported as pending either');
+  'a day behind the boundary is not named there either, because it was never a candidate');
 
 -- An outlet nobody switched on is refused outright rather than silently ignored.
 alter table public.outlet_channel_sync disable trigger outlet_channel_sync_guarded;
@@ -761,5 +803,225 @@ select throws_ok(
   '22023', null,
   'and an outlet with no sync date at all is refused, not quietly skipped');
 
+
+-- Both outlets switched on again. A case above removes a sync date on purpose,
+-- to prove an unconfigured outlet is refused rather than quietly skipped, and
+-- everything below needs one.
+alter table public.outlet_channel_sync disable trigger outlet_channel_sync_guarded;
+insert into public.outlet_channel_sync (outlet_id, channel, synced_from)
+values ('00000000-0000-4000-a000-000000000001', 'zomato',
+        public.app_business_date(now(), time '04:00') - 60),
+       ('00000000-0000-4000-a000-000000000002', 'zomato',
+        public.app_business_date(now(), time '04:00') - 60)
+on conflict (outlet_id, channel) do update set synced_from = excluded.synced_from;
+alter table public.outlet_channel_sync enable trigger outlet_channel_sync_guarded;
+
+/*
+ * A collection is not a purchase.
+ *
+ * Every assertion below exists because of one row pair in production. Order
+ * ZHPWB27-OR-0028753023, worth Rs 9,311.11, was typed once by the owner and
+ * written again by the sync as two payout recoveries, Rs 2,555.24 at Kalyani and
+ * Rs 2,981.29 at Kanchrapara, with a third slice of Rs 3,774.58 still to arrive.
+ * The purchase was booked twice because collecting a debt looked like incurring
+ * one.
+ *
+ * The property that must hold, and the one a functional test would miss: the
+ * recovery still counts toward what the payout is measured against, while
+ * writing nothing. Drop it from the sum and the cycle stops reconciling against
+ * a payout that really was reduced; write it as an expense and the cost is
+ * counted twice. Both are wrong, and they are wrong in opposite directions.
+ */
+
+select is(
+  pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', '00000000-0000-4000-a000-000000000001'::uuid,
+    'channel', 'zomato',
+    'cycle_start', pg_temp.day(31), 'cycle_end', pg_temp.day(31),
+    'cycle_state', 'settled',
+    -- The recovery is subtracted here. If the sum stopped counting it, this
+    -- stated payout would no longer be the one the arithmetic produces.
+    'stated_payout_paise', 70000 - 255524,
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'REC1', 'placed_at', pg_temp.at_ist(pg_temp.day(31), '12:00'),
+                         'gross_paise', 100000, 'commission_paise', 30000, 'net_paise', 70000)),
+    'deductions', jsonb_build_array(
+      jsonb_build_object('source_ref', 'HPREC-1',
+                         'spent_on', pg_temp.day(33),
+                         'amount_paise', 255524,
+                         'description', 'Zomato Hyperpure 72669988',
+                         'category', 'Hyperpure'))
+  )) ->> 'outcome',
+  'ok',
+  'a cycle carrying a supply recovery still reconciles, because the money did '
+  'leave the payout and the sum still counts it');
+
+select is(
+  (select count(*) from public.manual_ledger_expenses where source_ref = 'HPREC-1'),
+  0::bigint,
+  'and the recovery writes no expense, because the supplier''s own statement '
+  'already recorded that purchase');
+
+select is(
+  pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', '00000000-0000-4000-a000-000000000001'::uuid,
+    'channel', 'zomato',
+    'cycle_start', pg_temp.day(31), 'cycle_end', pg_temp.day(31),
+    'cycle_state', 'settled',
+    'stated_payout_paise', 70000 - 255524,
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'REC1', 'placed_at', pg_temp.at_ist(pg_temp.day(31), '12:00'),
+                         'gross_paise', 100000, 'commission_paise', 30000, 'net_paise', 70000)),
+    'deductions', jsonb_build_array(
+      jsonb_build_object('source_ref', 'HPREC-1', 'spent_on', pg_temp.day(33),
+                         'amount_paise', 255524,
+                         'description', 'Zomato Hyperpure 72669988',
+                         'category', 'Hyperpure'))
+  )) ->> 'outcome',
+  'ok',
+  'and re-running the identical cycle stays reconciled, so recognising a '
+  'recovery is not a one-time effect of the first write');
+
+-- The production case in full: one purchase, two outlets, two cycles.
+select is(
+  pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', '00000000-0000-4000-a000-000000000002'::uuid,
+    'channel', 'zomato',
+    'cycle_start', pg_temp.day(31), 'cycle_end', pg_temp.day(31),
+    'cycle_state', 'settled',
+    'stated_payout_paise', 70000 - 298129,
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'REC2', 'placed_at', pg_temp.at_ist(pg_temp.day(31), '12:00'),
+                         'gross_paise', 100000, 'commission_paise', 30000, 'net_paise', 70000)),
+    'deductions', jsonb_build_array(
+      jsonb_build_object('source_ref', 'HPREC-2', 'spent_on', pg_temp.day(33),
+                         'amount_paise', 298129,
+                         'description', 'Zomato Hyperpure 72669988',
+                         'category', 'Hyperpure'))
+  )) ->> 'outcome',
+  'ok',
+  'the second outlet''s slice of the same purchase reconciles too');
+
+select is(
+  (select count(*) from public.manual_ledger_expenses
+    where source_ref in ('HPREC-1', 'HPREC-2')),
+  0::bigint,
+  'and neither outlet gains an expense, so one purchase recovered in slices '
+  'across two outlets is still not counted at all here');
+
+-- A deduction that is nobody else's record still becomes an expense. Without
+-- this, the split would have quietly stopped recording advertising.
+select is(
+  pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', '00000000-0000-4000-a000-000000000001'::uuid,
+    'channel', 'zomato',
+    'cycle_start', pg_temp.day(32), 'cycle_end', pg_temp.day(32),
+    'cycle_state', 'settled',
+    'stated_payout_paise', 70000 - 50000,
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'ADS1', 'placed_at', pg_temp.at_ist(pg_temp.day(32), '12:00'),
+                         'gross_paise', 100000, 'commission_paise', 30000, 'net_paise', 70000)),
+    'deductions', jsonb_build_array(
+      jsonb_build_object('source_ref', 'ADS-1', 'spent_on', pg_temp.day(32),
+                         'amount_paise', 50000,
+                         'description', 'Zomato Advertising ADS-1',
+                         'category', 'Advertising'))
+  )) ->> 'outcome',
+  'ok',
+  'an advertising deduction reconciles');
+
+select is(
+  (select count(*) from public.manual_ledger_expenses where source_ref = 'ADS-1'),
+  1::bigint,
+  'and still becomes an expense, because no other origin sees it');
+
+-- A recovery dated before the boundary is still Zomato taking money out of this
+-- cycle's payout, so it counts toward what the cycle is measured against; and it
+-- is still a collection of a purchase Hyperpure invoiced, so it writes nothing.
+-- The stated payout is set as if the recovery were subtracted, which only
+-- reconciles if the sum counted it despite its date.
+select is(
+  pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', '00000000-0000-4000-a000-000000000001'::uuid,
+    'channel', 'zomato',
+    'cycle_start', pg_temp.day(34), 'cycle_end', pg_temp.day(34),
+    'cycle_state', 'settled',
+    'stated_payout_paise', 70000 - 255524,
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'RECOLD', 'placed_at', pg_temp.at_ist(pg_temp.day(34), '12:00'),
+                         'gross_paise', 100000, 'commission_paise', 30000, 'net_paise', 70000)),
+    'deductions', jsonb_build_array(
+      jsonb_build_object('source_ref', 'HPREC-OLD',
+                         -- Dated 100 days back, far behind any boundary here.
+                         'spent_on', pg_temp.day(100),
+                         'amount_paise', 255524,
+                         'description', 'Zomato Hyperpure old', 'category', 'Hyperpure'))
+  )) ->> 'outcome',
+  'ok',
+  'a recovery dated before the boundary is counted in the cycle sum, so the '
+  'cycle still reconciles');
+
+select is(
+  (select count(*) from public.manual_ledger_expenses where source_ref = 'HPREC-OLD'),
+  0::bigint,
+  'and writes no expense, because it is a collection Hyperpure already recorded');
+
+/*
+ * A reserved category is refused to a person, and refused to their second
+ * spelling.
+ *
+ * This is the one place the free-text rule's usual defence does not apply. That
+ * rule accepts a warned category because a refusal is defeated by a different
+ * spelling; here a different spelling would recreate the exact duplicate the
+ * reservation exists to prevent, so the refusal has to survive one.
+ */
+select throws_ok(
+  format($$insert into public.manual_ledger_expenses
+             (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
+           values (%L, public.app_business_date(now(), time '04:00'), 'Hyperpure',
+                   false, 100000, null)$$,
+    '00000000-0000-4000-a000-000000000001'),
+  '42501', null,
+  'a person may not type the reserved category at all');
+
+select throws_ok(
+  format($$insert into public.manual_ledger_expenses
+             (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
+           values (%L, public.app_business_date(now(), time '04:00'), 'hyper pure',
+                   false, 100000, null)$$,
+    '00000000-0000-4000-a000-000000000001'),
+  '42501', null,
+  'nor a differently spaced spelling of it');
+
+select throws_ok(
+  format($$insert into public.manual_ledger_expenses
+             (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
+           values (%L, public.app_business_date(now(), time '04:00'), 'HyperPure Goods',
+                   false, 100000, null)$$,
+    '00000000-0000-4000-a000-000000000001'),
+  '42501', null,
+  'nor a spelling that merely contains it, which is how a second category is '
+  'usually created by accident');
+
+select lives_ok(
+  format($$insert into public.manual_ledger_expenses
+             (outlet_id, business_date, category, is_cash, amount_paise,
+              source_system, source_ref, recorded_by)
+           values (%L, public.app_business_date(now(), time '04:00'), 'Hyperpure',
+                   false, 100000, 'hyperpure', 'ORDER-OWNED-1', null)$$,
+    '00000000-0000-4000-a000-000000000001'),
+  'while the origin that owns the category writes it freely, which is the point '
+  'of reserving it');
+
+select is(
+  (select count(*) from public.manual_ledger_expenses where source_ref = 'ORDER-OWNED-1'),
+  1::bigint,
+  'and that row is really there, so the owning path was not silently dropped '
+  'along with the relayed ones');
 select * from finish();
 rollback;

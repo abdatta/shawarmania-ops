@@ -58,7 +58,12 @@ classified as (
       -- for in this file. Classification alone proves nothing, which is why
       -- section 6 below tests what the exception actually costs: no outlet
       -- role holds any privilege on it at all.
-      when tbl in ('customers', 'expense_categories', 'expense_category_operations')
+      -- `reserved_expense_categories` joins them for the same reason the other
+      -- category tables did: which categories a person may not type is a fact
+      -- about the business, not about an outlet, and reserving one retires a
+      -- hand-entry path everywhere at once.
+      when tbl in ('customers', 'expense_categories', 'expense_category_operations',
+                   'reserved_expense_categories')
         then 'global'
       -- Tenant-less: belongs to no outlet at all, because the thing it counts
       -- happens before anybody has an outlet. Listed by name rather than

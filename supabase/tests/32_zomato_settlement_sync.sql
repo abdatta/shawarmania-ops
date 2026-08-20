@@ -101,15 +101,21 @@ values (:'KAL', 'zomato', pg_temp.ledger_day(-3)),
 
 -- A synced day at each outlet, so the column assertions below have something
 -- real to be refused.
+-- Two rows now rather than one, because the drawer and the measurement are two
+-- different records: the day a person keeps, and the figure nobody may type.
 insert into public.manual_ledger_days
   (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   zomato_revenue_paise, zomato_commission_paise, swiggy_commission_paise,
-   zomato_settlement_state, recorded_by)
+   swiggy_commission_paise, recorded_by)
 values
-  (:'KAL', pg_temp.ledger_day(2), 0, 0,
-   297003, 83892, 0, 'settled', :'OWNER'),
-  (:'KPA', pg_temp.ledger_day(2), 0, 0,
-   412200, 128000, 0, 'provisional', :'OWNER');
+  (:'KAL', pg_temp.ledger_day(2), 0, 0, 0, :'OWNER'),
+  (:'KPA', pg_temp.ledger_day(2), 0, 0, 0, :'OWNER');
+
+insert into public.aggregator_channel_days
+  (outlet_id, channel, business_date, revenue_paise, commission_paise,
+   settlement_state, origin)
+values
+  (:'KAL', 'zomato', pg_temp.ledger_day(2), 297003, 83892, 'settled', 'settlement'),
+  (:'KPA', 'zomato', pg_temp.ledger_day(2), 412200, 128000, 'provisional', 'daily_reader');
 
 -- ---------------------------------------------------------------------------
 -- 1. The owner reads all of it, across both outlets.
@@ -135,7 +141,7 @@ select is(
 -- exact, a stored third figure would be a copy able to disagree with the two it
 -- came from, so the reading computes it and there is nothing to store.
 select is(
-  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
+  (select revenue_paise - commission_paise from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(2)),
   213111::bigint,
   'and a synced day''s measured net, as the difference of the two figures stored');
@@ -174,6 +180,14 @@ begin
     into n;
   return next is(n, 0::bigint,
     format('%s reads no sync date at %s outlet', persona, whose));
+
+  -- The figures live on their own table now, and it answers the same way: no
+  -- outlet role reaches a measured figure, at any outlet including their own.
+  execute format(
+    'select count(*) from public.aggregator_channel_days where outlet_id = %L', p_outlet)
+    into n;
+  return next is(n, 0::bigint,
+    format('%s reads no measured figure at %s outlet', persona, whose));
 
   return next throws_ok(
     format($q$
@@ -272,7 +286,7 @@ begin
   perform pg_temp.impersonate(p_sub);
 
   execute format(
-    'select count(*) from public.manual_ledger_days where %I is not null', col)
+    'select count(*) from public.aggregator_channel_days where %I is not null', col)
     into visible;
   return next is(visible, 0::bigint,
     format('%s reads no %s on any day', persona, col));
@@ -282,45 +296,60 @@ end;
 $$;
 
 select * from pg_temp.day_column_unreadable('biller_kalyani', :'BILLER_KAL',
-  'zomato_settlement_state');
+  'settlement_state');
 select * from pg_temp.day_column_unreadable('employee_kalyani', :'EMPLOYEE_KAL',
-  'zomato_commission_paise');
+  'commission_paise');
 select * from pg_temp.day_column_unreadable('employee_kalyani', :'EMPLOYEE_KAL',
-  'zomato_superseded_revenue_paise');
+  'superseded_revenue_paise');
 
 -- A plain typed day with no settlement figures at all, so the refusals below
 -- exercise the guard rather than the state machine or a CHECK.
 select pg_temp.unimpersonate();
 insert into public.manual_ledger_days
   (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   zomato_revenue_paise, zomato_commission_paise, swiggy_commission_paise, recorded_by)
-values (:'KAL', pg_temp.ledger_day(3), 0, 0, 295000, 83338, 0, :'OWNER');
+   swiggy_commission_paise, recorded_by)
+values (:'KAL', pg_temp.ledger_day(3), 0, 0, 0, :'OWNER');
+insert into public.aggregator_channel_days
+  (outlet_id, channel, business_date, revenue_paise, commission_paise,
+   settlement_state, origin)
+values (:'KAL', 'zomato', pg_temp.ledger_day(3), 295000, 83338,
+        'settled', 'settlement');
 
-create function pg_temp.day_column_unwritable(persona text, p_sub uuid, col text, val text)
+-- The refusal is now `42501` rather than `P0001`, and the change is the point.
+--
+-- It used to come from a trigger: the columns lived on a row every manager may
+-- write, so something had to stand in front of them and raise. The figures have
+-- their own table now and no client role is granted insert, update or delete on
+-- it at all, so the request is refused before any policy or trigger is
+-- consulted. A guard that has to fire is a guard that can be got round; a
+-- privilege that was never granted cannot.
+create function pg_temp.figure_column_unwritable(persona text, p_sub uuid, col text, val text)
 returns setof text language plpgsql as $$
 begin
   perform pg_temp.impersonate(p_sub);
 
   return next throws_ok(
-    format('update public.manual_ledger_days set %I = %s '
+    format('update public.aggregator_channel_days set %I = %s '
            'where outlet_id = %L and business_date = %L',
       col, val, '00000000-0000-4000-a000-000000000001',
       public.app_business_date(now(), time '04:00') - 3),
-    'P0001', null,
+    '42501', null,
     format('%s cannot type %s on a day at their own outlet', persona, col));
 
   execute 'reset role';
 end;
 $$;
 
--- The manager who CAN correct that same row's drawer figures, proving the
--- refusal comes from the column rather than from the row being out of reach.
-select * from pg_temp.day_column_unwritable('fa_kalyani', :'FA_KAL',
-  'zomato_settlement_state', '''settled''');
-select * from pg_temp.day_column_unwritable('fa_kalyani', :'FA_KAL',
-  'zomato_superseded_revenue_paise', '95000');
-select * from pg_temp.day_column_unwritable('the owner', :'OWNER',
-  'zomato_settlement_state', '''settled''');
+-- The manager who CAN correct that same day's drawer figures, proving the
+-- refusal comes from the figure rather than from the day being out of reach.
+select * from pg_temp.figure_column_unwritable('fa_kalyani', :'FA_KAL',
+  'settlement_state', '''settled''');
+select * from pg_temp.figure_column_unwritable('fa_kalyani', :'FA_KAL',
+  'superseded_revenue_paise', '95000');
+select * from pg_temp.figure_column_unwritable('the owner', :'OWNER',
+  'settlement_state', '''settled''');
+select * from pg_temp.figure_column_unwritable('the owner', :'OWNER',
+  'revenue_paise', '95000');
 
 select pg_temp.impersonate(:'FA_KAL');
 select lives_ok(
@@ -332,17 +361,20 @@ select lives_ok(
   'refusal above is about the figure and not about the row');
 reset role;
 
+-- `42501` rather than `P0001`: the owner is refused the whole table rather than
+-- refused these columns on a table they may otherwise write. There is no longer
+-- a way to record a day AS THOUGH it had been measured, because the day row and
+-- the measurement are different records and only one of them accepts typing.
 select pg_temp.impersonate(:'OWNER');
 select throws_ok(
   format($q$
-    insert into public.manual_ledger_days
-      (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       zomato_revenue_paise, zomato_commission_paise, swiggy_commission_paise,
-       zomato_settlement_state)
-    values (%L, %L, 0, 0, 100000, 30000, 0, 'settled') $q$,
+    insert into public.aggregator_channel_days
+      (outlet_id, channel, business_date, revenue_paise, commission_paise,
+       settlement_state, origin)
+    values (%L, 'zomato', %L, 100000, 30000, 'settled', 'settlement') $q$,
     :'KAL', pg_temp.ledger_day(15)),
-  'P0001', null,
-  'and a day cannot be recorded as though it had been synced');
+  '42501', null,
+  'and a day cannot be recorded as though it had been measured');
 reset role;
 
 -- ---------------------------------------------------------------------------
@@ -350,19 +382,17 @@ reset role;
 
 select pg_temp.unimpersonate();
 
+-- A figure row rather than a day row, because that is where these constraints
+-- live now. Revenue and the settlement state are supplied by every caller that
+-- needs them, so they are not defaulted here: a case naming one would otherwise
+-- collide with this list.
 create function pg_temp.bad_day(cols text, vals text)
 returns text language sql as $$
   select format(
-    'insert into public.manual_ledger_days '
-    '(outlet_id, business_date, opening_cash_paise, counted_cash_paise, '
-    ' recorded_by, %s) '
-    -- The commission columns are omitted rather than defaulted to nought here, so
-    -- a case below can name them without colliding with this list. Both are NOT
-    -- NULL with a nought default, which is the honest value for a day that sold
-    -- nothing on a channel.
-    'values (''00000000-0000-4000-a000-000000000001'', '
-    'public.app_business_date(now(), time ''04:00'') - 9, 0, 0, '
-    '''10000000-0000-4000-a000-000000000001'', %s)',
+    'insert into public.aggregator_channel_days '
+    '(outlet_id, channel, business_date, origin, %s) '
+    'values (''00000000-0000-4000-a000-000000000001'', ''zomato'', '
+    'public.app_business_date(now(), time ''04:00'') - 9, ''daily_reader'', %s)',
     cols, vals)
 $$;
 
@@ -385,14 +415,14 @@ $$;
  */
 
 select throws_ok(
-  pg_temp.bad_day('zomato_settlement_state', '''guessed'''),
+  pg_temp.bad_day('revenue_paise, settlement_state', '100000, ''guessed'''),
   '23514', null,
   'an unknown settlement state is refused');
 
 select throws_ok(
   pg_temp.bad_day(
-    'zomato_settlement_state, zomato_superseded_revenue_paise',
-    '''settled'', 95000'),
+    'revenue_paise, settlement_state, superseded_revenue_paise',
+    '100000, ''settled'', 95000'),
   '23514', null,
   'a retained figure without the moment it was superseded is refused');
 
@@ -402,8 +432,8 @@ select throws_ok(
 -- known in order to avoid storing the half that never existed.
 select lives_ok(
   pg_temp.bad_day(
-    'zomato_revenue_paise, zomato_settlement_state, zomato_superseded_revenue_paise, '
-    'zomato_superseded_at',
+    'revenue_paise, settlement_state, superseded_revenue_paise, '
+    'superseded_at',
     '100000, ''settled'', 95000, now()'),
   'an archive may keep the revenue with the commission undetermined');
 
@@ -411,32 +441,37 @@ select lives_ok(
 -- case on it expects to be the one inserting. The two `lives_ok` cases in this
 -- section would otherwise collide on the uniqueness constraint rather than on the
 -- claim being tested.
-delete from public.manual_ledger_days
+delete from public.aggregator_channel_days
  where outlet_id = '00000000-0000-4000-a000-000000000001'
    and business_date = public.app_business_date(now(), time '04:00') - 9;
 
+-- `23502` rather than `23514`, and the mechanism changed rather than the claim.
+-- A retained figure with nothing retaining it used to need a CHECK, because the
+-- current figure lived in a nullable column on a row that existed for other
+-- reasons. A figure row exists only to hold a figure, so revenue is NOT NULL and
+-- the impossible state is now unrepresentable rather than merely refused.
 select throws_ok(
   pg_temp.bad_day(
-    'zomato_superseded_revenue_paise, zomato_superseded_commission_paise, '
-    'zomato_superseded_at',
-    '95000, 25000, now()'),
-  '23514', null,
+    'settlement_state, superseded_revenue_paise, superseded_commission_paise, '
+    'superseded_at',
+    '''settled'', 95000, 25000, now()'),
+  '23502', null,
   'nothing can be superseded without something superseding it');
 
 select throws_ok(
   pg_temp.bad_day(
-    'zomato_revenue_paise, zomato_commission_paise, zomato_settlement_state, '
-    'zomato_provisional_revenue_paise, zomato_provisional_commission_paise, '
-    'zomato_revised_at',
+    'revenue_paise, commission_paise, settlement_state, '
+    'provisional_revenue_paise, provisional_commission_paise, '
+    'revised_at',
     '100000, 30000, ''provisional'', 99000, 29000, now()'),
   '23514', null,
   'only a settled day can have been revised');
 
 select throws_ok(
   pg_temp.bad_day(
-    'zomato_revenue_paise, zomato_commission_paise, zomato_settlement_state, '
-    'zomato_provisional_revenue_paise, zomato_provisional_commission_paise, '
-    'zomato_revised_at',
+    'revenue_paise, commission_paise, settlement_state, '
+    'provisional_revenue_paise, provisional_commission_paise, '
+    'revised_at',
     '100000, 30000, ''settled'', 100000, 30000, now()'),
   '23514', null,
   'and a day whose settled figures match the provisional ones cannot be marked '
@@ -444,9 +479,9 @@ select throws_ok(
 
 select lives_ok(
   pg_temp.bad_day(
-    'zomato_revenue_paise, zomato_commission_paise, zomato_settlement_state, '
-    'zomato_provisional_revenue_paise, zomato_provisional_commission_paise, '
-    'zomato_revised_at',
+    'revenue_paise, commission_paise, settlement_state, '
+    'provisional_revenue_paise, provisional_commission_paise, '
+    'revised_at',
     '100000, 30000, ''settled'', 92085, 30000, now()'),
   'a settled day that grew when its week paid is stored with what it grew from');
 
@@ -455,7 +490,7 @@ select lives_ok(
 
 select is(
   pg_temp.rows_changed(format(
-    'update public.manual_ledger_days set zomato_settlement_state = ''settled'' '
+    'update public.aggregator_channel_days set settlement_state = ''settled'' '
     'where outlet_id = %L and business_date = %L',
     :'KPA', pg_temp.ledger_day(2))),
   1::bigint,
@@ -463,7 +498,7 @@ select is(
 
 select throws_ok(
   format($q$
-    update public.manual_ledger_days set zomato_settlement_state = 'provisional'
+    update public.aggregator_channel_days set settlement_state = 'provisional'
      where outlet_id = %L and business_date = %L $q$,
     :'KPA', pg_temp.ledger_day(2)),
   'P0001', null,
@@ -471,24 +506,23 @@ select throws_ok(
 
 select throws_ok(
   format($q$
-    update public.manual_ledger_days set zomato_settlement_state = 'disputed'
+    update public.aggregator_channel_days set settlement_state = 'disputed'
      where outlet_id = %L and business_date = %L $q$,
     :'KPA', pg_temp.ledger_day(2)),
   'P0001', null,
   'nor disputed, because a settled figure has already reconciled');
 
 -- A paid week that does not add up, and its way back out.
-insert into public.manual_ledger_days
-  (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   zomato_revenue_paise, zomato_commission_paise, swiggy_commission_paise,
-   zomato_settlement_state, recorded_by)
+insert into public.aggregator_channel_days
+  (outlet_id, channel, business_date, revenue_paise, commission_paise,
+   settlement_state, origin)
 values
-  (:'KAL', pg_temp.ledger_day(11), 0, 0,
-   250000, 70000, 0, 'provisional', :'OWNER');
+  (:'KAL', 'zomato', pg_temp.ledger_day(11), 250000, 70000,
+   'provisional', 'daily_reader');
 
 select is(
   pg_temp.rows_changed(format(
-    'update public.manual_ledger_days set zomato_settlement_state = ''disputed'' '
+    'update public.aggregator_channel_days set settlement_state = ''disputed'' '
     'where outlet_id = %L and business_date = %L',
     :'KAL', pg_temp.ledger_day(11))),
   1::bigint,
@@ -497,7 +531,7 @@ select is(
 
 select throws_ok(
   format($q$
-    update public.manual_ledger_days set zomato_settlement_state = 'provisional'
+    update public.aggregator_channel_days set settlement_state = 'provisional'
      where outlet_id = %L and business_date = %L $q$,
     :'KAL', pg_temp.ledger_day(11)),
   'P0001', null,
@@ -505,7 +539,7 @@ select throws_ok(
 
 select is(
   pg_temp.rows_changed(format(
-    'update public.manual_ledger_days set zomato_settlement_state = ''settled'' '
+    'update public.aggregator_channel_days set settlement_state = ''settled'' '
     'where outlet_id = %L and business_date = %L',
     :'KAL', pg_temp.ledger_day(11))),
   1::bigint,
@@ -765,6 +799,29 @@ select isnt(
   0::bigint,
   'with the assignment and the account restored, the owner reads them again');
 reset role;
+
+-- Switching a channel off leaves the figures it already read alone.
+--
+-- Carried from #42's rollback concern: clearing an outlet's synced-from date must
+-- not touch the measured figures it produced. The figures live on their own table
+-- with no reference to the sync row, so deleting the sync row cannot cascade —
+-- proved rather than assumed, because "it has no foreign key" is the kind of fact
+-- a later migration quietly changes.
+select pg_temp.unimpersonate();
+select is(
+  (select count(*) from public.aggregator_channel_days
+    where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(2)),
+  1::bigint,
+  'the outlet has a measured figure before its sync is switched off');
+
+delete from public.outlet_channel_sync
+ where outlet_id = :'KAL'::uuid and channel = 'zomato';
+
+select is(
+  (select revenue_paise from public.aggregator_channel_days
+    where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(2)),
+  297003::bigint,
+  'and clearing the synced-from date leaves that figure exactly where it was');
 
 select * from finish();
 rollback;

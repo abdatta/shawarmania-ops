@@ -169,3 +169,12 @@ verify_jwt = true
 # revokes.
 [functions.aggregator-reader]
 verify_jwt = false
+
+# The one door a statement comes through, from either caller: the reader posting
+# the bytes it downloaded, or a person uploading the file they saved. Open at the
+# gateway because it answers two kinds of caller and the gateway can verify only
+# one — it checks them itself, the reader's shared secret or a person's session
+# token whose outlet authority is re-derived inside. The parser it shares with the
+# reader is what makes the disaster-recovery upload exercised on every run.
+[functions.parse-operator-statement]
+verify_jwt = false

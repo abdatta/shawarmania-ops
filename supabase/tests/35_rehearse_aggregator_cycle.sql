@@ -50,13 +50,23 @@ returns date language sql stable as $$
   select public.app_business_date(now(), time '04:00') - back
 $$;
 
--- A plain typed day, of the kind the sync supersedes. Deliberately carrying a
--- typed figure, because the interesting rollback is of the supersede: that path
--- moves the owner's own two numbers aside and stamps the moment it did.
+-- A day the owner recorded, and a figure an earlier read already wrote.
+--
+-- This used to be one row carrying a typed Zomato figure, because the
+-- interesting rollback was of the supersede. Typed Zomato figures no longer
+-- exist, so the interesting rollback is now of a settling run replacing what an
+-- earlier read wrote: the same property, a figure moved aside and a moment
+-- stamped, reached by the path that still happens.
 insert into public.manual_ledger_days
   (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   zomato_revenue_paise, zomato_commission_paise, swiggy_commission_paise, recorded_by)
-values (:'KAL'::uuid, pg_temp.ledger_day(3), 500000, 500000, 250000, 2800, 0, :'OWNER'::uuid);
+   swiggy_commission_paise, recorded_by)
+values (:'KAL'::uuid, pg_temp.ledger_day(3), 500000, 500000, 0, :'OWNER'::uuid);
+
+insert into public.aggregator_channel_days
+  (outlet_id, channel, business_date, revenue_paise, commission_paise,
+   settlement_state, origin)
+values (:'KAL'::uuid, 'zomato', pg_temp.ledger_day(3), 250000, 2800,
+        'provisional', 'daily_reader');
 
 -- Reconciles exactly: 216000 of orders, less 40000 of deductions, is 176000.
 create function pg_temp.payload(p_state text, p_stated bigint)
@@ -184,38 +194,39 @@ select is(
 -- to be null any more, so the honest claim is that the subtraction still answers
 -- with what they typed.
 select is(
-  (select zomato_revenue_paise - zomato_commission_paise from public.manual_ledger_days
+  (select revenue_paise - commission_paise from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(3)),
   247200::bigint,
   'the day still nets to what the owner typed, not to what Zomato reported'
 );
 
 select is(
-  (select zomato_settlement_state from public.manual_ledger_days
+  (select settlement_state from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(3)),
-  null,
-  'and no settlement state'
+  'provisional',
+  'and the state the earlier read left, rather than the one the rehearsal would '
+  'have written'
 );
 
 -- The owner's typed figure is untouched, in both places it could have moved: the
 -- live column and the superseded pre-image. A rehearsal that zeroed the typed
 -- revenue would have taken a real number off a real day.
 select is(
-  (select zomato_revenue_paise from public.manual_ledger_days
+  (select revenue_paise from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(3)),
   250000::bigint,
   'the typed revenue is exactly as the owner left it'
 );
 
 select is(
-  (select zomato_commission_paise from public.manual_ledger_days
+  (select commission_paise from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(3)),
   2800::bigint,
   'and so is the commission they typed against it'
 );
 
 select is(
-  (select zomato_superseded_at from public.manual_ledger_days
+  (select superseded_at from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(3)),
   null,
   'nothing was superseded'
@@ -260,9 +271,9 @@ select is(
 );
 
 select is(
-  (select zomato_settlement_state from public.manual_ledger_days
+  (select settlement_state from public.aggregator_channel_days
     where outlet_id = :'KAL'::uuid and business_date = pg_temp.ledger_day(3)),
-  null,
+  'provisional',
   'and marks nothing disputed, because a rehearsal decides and does not record'
 );
 
