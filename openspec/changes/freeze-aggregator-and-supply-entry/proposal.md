@@ -50,11 +50,14 @@ More than half of August's supply spend is missing from the books. The dating is
 ### Modified Capabilities
 
 - `manual-ledger`: aggregator revenue and commission leave the day row and lose every typed path; a day's aggregator reading no longer requires the day to exist.
-- `outlet-expenses`: a supply purchase gains a source identity that is unique per purchase rather than per payout line, and Hyperpure loses its typed path.
 - `expense-categories`: categories may be reserved, and a reserved category refuses near-spellings instead of warning about them.
-- `outlet-tenancy`: isolation extends to stored files, so a statement is unreachable by an outlet it does not concern.
-- `profit-estimates`: a month containing an undetermined commission is stated as a ceiling rather than a figure.
-- `demo-mode`: the new surfaces and states are demonstrable without a credential.
+
+Three capabilities the proposal originally listed as modified carry no requirement
+change and so get no delta, only implementation: `outlet-expenses` keeps its
+four-field rule unchanged, since it is the category that is refused rather than
+the form that is restructured; stored-file isolation is stated by
+`statement-uploads` rather than duplicated into `outlet-tenancy`; and demo
+fixtures are tasks, not requirements.
 
 ## Impact
 

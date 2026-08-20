@@ -68,7 +68,7 @@ Payment methods the system must record, taken from how the business actually sel
 
 **Only `cash` flows into the daily cash record.** This is the single most important rule connecting billing to reconciliation — a UPI sale increases revenue but not the drawer.
 
-Swiggy and Zomato are recorded as bills so revenue and item-level sales stay complete, but the money arrives later via aggregator settlement, net of commission. The app does not reconcile aggregator payouts; see [Limitations](LIMITATIONS.md).
+Swiggy and Zomato revenue arrives later via aggregator settlement, net of commission. **Zomato is now read and reconciled** against the payout automatically (#42, #43) — the daily order history and the weekly settlement workbook — with Hyperpure supply costs read the same way; Swiggy is still typed. Item-level aggregator sales are not captured; see [Limitations](LIMITATIONS.md).
 
 ## How a counter shift actually runs
 

@@ -208,6 +208,15 @@ Anything requiring the service-role key runs in an Edge Function. The service-ro
   person whose token presented itself. The two secrets are minted here rather
   than in Postgres for one reason: only the hash may ever reach the database, and
   the plaintext must be returned to exactly one caller and stored nowhere.
+- **Ingest an aggregator or supply statement** — `parse-operator-statement`
+  decodes the uploaded bytes and routes the result to `ingest_aggregator_cycle`
+  or `ingest_supply_statement`. Its parser is **one core with no third-party
+  imports** (`_shared/statement-parser-core.ts`), so the same recognition,
+  PII-dropping and money arithmetic run in Deno here and in a Node unit test —
+  the reader in the private repo posts the same bytes to the same door, so the
+  by-hand upload is exercised on every scheduled run. It answers two callers: the
+  reader's shared secret and a person's session token, each narrowed to the
+  outlets they may write, because being an Edge Function is not authorisation.
 
 Each privileged function re-derives the caller from their token and reads live
 assignments from the database. Being an Edge Function is not authorisation.

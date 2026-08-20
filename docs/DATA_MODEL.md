@@ -465,11 +465,10 @@ reference from a live surface, greppable.
 
 **`manual_ledger_days`** — `id`, `outlet_id`, `business_date`,
 `opening_cash_paise`, `cash_revenue_paise`, `upi_revenue_paise`,
-`zomato_revenue_paise`, `swiggy_revenue_paise`, `cash_added_paise`,
-`cash_added_reason`, `cash_removed_paise`, `cash_removed_reason`,
-`counted_cash_paise`, `zomato_commission_paise`, `swiggy_commission_paise`,
-`note`, `recorded_by`, `updated_by`, `created_at`, `updated_at`.
-`unique (outlet_id, business_date)`.
+`swiggy_revenue_paise`, `cash_added_paise`, `cash_added_reason`,
+`cash_removed_paise`, `cash_removed_reason`, `counted_cash_paise`,
+`swiggy_commission_paise`, `note`, `recorded_by`, `updated_by`, `created_at`,
+`updated_at`. `unique (outlet_id, business_date)`.
 
 Commission is an **exact amount in paise, never a rate** [owner, 2026-08-17]. The
 measured take moves between roughly 24% and 35% day to day, because the charge is
@@ -479,14 +478,29 @@ real take was 37.8%. A stored percentage was therefore an estimate in the shape 
 an exact figure. A channel's **net is revenue less commission and is not stored**,
 because a third column could disagree with the two it is derived from.
 
-Where the Zomato sync covers a day, the same two columns hold the figures read
-from Zomato, and `zomato_settlement_state` is the only thing that says so. The
-row then also carries `zomato_superseded_revenue_paise`,
-`zomato_superseded_commission_paise` and `zomato_superseded_at` — what the owner
-had typed before the sync took the day over, kept for comparison and excluded
-from every computation — and `zomato_provisional_revenue_paise`,
-`zomato_provisional_commission_paise` and `zomato_revised_at`, present only where
-settling actually moved the figures.
+**Zomato's figures are no longer on this row** (#43). They moved to
+`aggregator_channel_days`, because this row cannot exist without an opening
+balance and a drawer count, yet a day nobody counted must still show what Zomato
+paid. Swiggy stays here, because it is still typed. A day-row write that still
+names a Zomato column fails on the absent column, which is the freeze against a
+stale client.
+
+**`aggregator_channel_days`** — `id`, `outlet_id`, `channel`, `business_date`
+(`unique (outlet_id, channel, business_date)`), `revenue_paise`,
+`commission_paise` (**nullable — null is undetermined, not nought**),
+`settlement_state` (`provisional | settled | disputed`), `origin`
+(`daily_reader | settlement | supplied_by_hand`), the superseded pair
+(`superseded_revenue_paise`, `superseded_commission_paise`, `superseded_at`) kept
+when a figure is replaced and excluded from every total, the revision pre-image
+(`provisional_revenue_paise`, `provisional_commission_paise`, `revised_at`)
+present only where settling moved the figures, `created_at`, `updated_at`.
+
+**No client role may write it.** The freeze is the absence of an
+insert/update/delete grant, not a disabled control: only the ingest path writes,
+so a hand-crafted request and a missing form field are refused by one rule. The
+owner reads across outlets; every outlet role is refused read entirely. A figure
+can exist here for a business date that has no `manual_ledger_days` row, which is
+the "day nobody counted" the sync now records instead of refusing.
 
 **`manual_ledger_expenses`** — `id`, `outlet_id`, `business_date`, `category`
 (the same normalised free-text snapshot used by `expenses`), `is_cash`,
@@ -510,9 +524,22 @@ Seven properties are load-bearing and easy to undo by accident:
   and for the same underlying reason: correcting day 3's count must not silently
   move day 4 through day 31. The cost is that the chain can break, and the
   surface reports the break rather than repairing it.
-- **Commission is basis points and applied per day**, then summed. Never applied
-  to a month's total, because days in a month may carry different rates — which is
-  the entire point of storing the rate on the row.
+- **Commission is an exact amount, applied per day**, then summed — never a rate
+  on a month's total, because each day's commission is its own measured figure.
+  A day whose commission is still undetermined makes the month a **ceiling** and
+  the surface says so.
+- **Hyperpure is a reserved category** (#43). A person may not type it, nor any
+  near-spelling of it — `reserved_expense_categories` names it and the folded,
+  squashed, contained match refuses "hyper pure" and "Hyperpure Goods" alike, so
+  a second spelling cannot recreate the duplicate reserving it prevents. It is
+  written only by the supply origin, from a statement.
+- **A supply purchase carries a source identity and a shared-cost marker.**
+  `source_system`/`source_ref` (unique per outlet) key one supplier order to one
+  row, so a re-read, a later statement and a hand upload cannot triplicate it;
+  `shared_cost` marks a purchase booked once against its delivery outlet but drawn
+  on by both kitchens from one inventory. A payout recovery of such a purchase is
+  reconciliation only and writes no expense, because the supplier's own statement
+  already recorded it.
 - **There is no capital marker, deliberately.** Capital spending is not recorded
   here at all, so the monthly figure is a cash-basis *operating* estimate and the
   surface says so. Equipment paid for from the drawer is recorded as cash taken

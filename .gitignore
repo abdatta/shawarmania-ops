@@ -55,3 +55,6 @@ coverage/
 *.tsbuildinfo
 playwright-report/
 test-results/
+
+# Playwright MCP session artifacts (snapshots, console/network logs) — may carry live tokens
+.playwright-mcp/

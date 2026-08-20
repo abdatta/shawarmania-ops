@@ -20,9 +20,9 @@ The project exists because Shawarmania has outgrown running two counters on memo
 Deliberately out of scope. Each of these is a real thing a restaurant might want, and each is excluded because including it would slow down the thing the business actually needs first.
 
 - **It is not an accounting system.** Profit and loss here is an operational estimate for running a shop, not a filing-grade financial report. See [Limitations](LIMITATIONS.md) for what that means concretely.
-- **It is not a customer-facing ordering app.** Swiggy and Zomato already do delivery; those orders are recorded as bills, not fulfilled here.
+- **It is not a customer-facing ordering app.** Swiggy and Zomato already do delivery; their revenue reaches the ledger (Zomato read from Zomato, Swiggy typed), not rung as counter bills and not fulfilled here.
 - **It does not do payroll.** No salary is stored anywhere in the system (owner decision, 2026-07-28). Attendance feeds whatever payroll process runs outside the app, and wages actually paid are recorded as expenses like any other cost.
-- **It does not integrate with Swiggy/Zomato APIs.** Aggregator orders are entered at the counter as bills with the matching payment method.
+- **Zomato is read, Swiggy is not.** Zomato revenue, commission and Hyperpure supply costs are read automatically from Zomato's and Hyperpure's own statements and reconciled against the payout (#42, #43), and can no longer be typed; Swiggy is still entered by hand until its statements are read too. No customer-facing ordering is fulfilled here.
 - **It does not print receipts, compute GST, or send digital receipts** — in v1. The data model is built so all three can be added without migrating historical bills. See [Limitations](LIMITATIONS.md).
 - **It is not a supplier or purchase-order system.** Stock arriving is a movement and an expense, not a procurement workflow.
 

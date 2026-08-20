@@ -51,12 +51,14 @@ Still open:
 - What happens to a payout that arrives short, late, or not at all? The typed figure and the typed rate produce an expected net; nothing yet compares it against what the bank received. That is a reconciliation exception, and the system already has a shape for those.
 - Does anything need the item-level sales picture for aggregator orders? Recovering it means ringing aggregator orders at the counter, which is a billing change and not a settlement one. Worth separating: someone asking "what does Swiggy sell for us" wants that, and someone asking "did the payout match" does not.
 
-## Trigger to promote
+## Settlement reconciliation — done (#42, #43)
 
-Either of two, and they are different pieces of work.
+**Settled by `zomato-settlement-sync` (#42) and `freeze-aggregator-and-supply-entry` (#43), 2026-08.** Zomato revenue and commission are read from Zomato itself — the daily order history and the weekly settlement workbook — reconciled against the stated payout to the paisa, and can no longer be typed. Commission is an exact amount, undetermined until the week closes. Hyperpure supply expenses are read the same way, one per order, with payout recoveries reconciled rather than double-booked. A manual statement upload is the fallback when the reader is blocked. So the settlement-reconciliation trigger below is discharged; what remains open is the item-level picture and directly-paid supply bills.
 
-**Settlement reconciliation**: when the owner would act differently on the typed net than on what the bank actually paid, or when a payout is first found to disagree with the ledger.
+## Trigger to promote (what is left)
 
-**Aggregator billing**: when the missing item-level picture changes a decision about the menu or preparation, which is the cost paid on 2026-08-11 for keeping V1 small.
+**Aggregator billing**: when the missing item-level picture changes a decision about the menu or preparation, which is the cost paid on 2026-08-11 for keeping V1 small. Aggregator orders carry one number per platform per day, not line snapshots.
+
+**Directly-paid supply bills**: tracked separately in `supply-bills-paid-outside-the-payout.md` — a purchase paid by transfer rather than through a payout is known only to the supplier, and is entered by hand until a supplier-portal reader exists.
 
 **Dependencies when seeded**: `owner-console-live` (#13), which owns the P&L and reports.

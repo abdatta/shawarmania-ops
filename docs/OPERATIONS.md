@@ -450,28 +450,28 @@ per outlet, from a phone, and the figures build the month by themselves.
    reports a gap between the two, correct whichever day is wrong rather than
    overwriting the figure to make the warning go away. That warning is the whole
    reason the opening is stored per day.
-3. **Record the four channels.** Before this outlet's billing handover, type
+3. **Record cash, UPI and Swiggy.** Before this outlet's billing handover, type
    Cash and UPI. From the scheduled date those values are labelled **from
    counter** and cannot be typed; check them against the tablet's settled bills.
-   Always type what Zomato and Swiggy **state**, not what they settle. Each
-   aggregator stays in its own block with the rate that applies to this day, and
-   the block shows what actually arrives as you type.
-4. **Check each block's rate.** It carries forward from the previous day. Edit it
-   on the day the rate actually changed and no earlier day moves.
-5. **Record each expense under the words the month should group by.** Category
+   Type what Swiggy **states**, not what it settles, with the commission it
+   actually charged. **Zomato cannot be typed** (#43): its block is a reading —
+   gross, commission, net, and a chip saying where it came from — filled by the
+   sync or an uploaded statement. A commission not yet known reads "not known
+   yet" rather than nought. The form says why the two channels differ.
+4. **Record each expense under the words the month should group by.** Category
    is free text with business-wide suggestions; type a new one when the existing
    list does not fit. Add an optional Note only when the category needs detail.
    Mark it cash only if it came out of this drawer.
-6. **Cash added and cash withdrawn, each with a reason.** Banking, a float
+5. **Cash added and cash withdrawn, each with a reason.** Banking, a float
    top-up, an owner drawing. **Equipment bought with drawer cash goes in Cash
    withdrawn, not in expenses** — the drawer is genuinely lighter, and recording
    it as an expense would double-count it while recording it nowhere would make
    the day read short.
-7. **Count the drawer and type it.** The difference appears as you type. If it
+6. **Count the drawer and type it.** The difference appears as you type. If it
    does not balance, write a note saying what you found.
-8. **Save.** The form gives way to a reading of what you just stored: the revenue
-   side with each aggregator's rate and what actually arrived, and the drawer
-   below it.
+7. **Save.** The form gives way to a reading of what you just stored: the revenue
+   side with each channel's commission and what actually arrived — Zomato's read
+   from the sync, Swiggy's as you typed it — and the drawer below it.
 
 At the tablet, **Finish day** is a separate online boundary: use it only after
 the activity rail has no open orders and Sync says everything is sent. It drains
@@ -490,9 +490,43 @@ is hidden that you need in order to type a figure; what is hidden is what you on
 need to read once.
 
 At month end, switch to **The month**: revenue by channel with each aggregator net
-of its own daily rate, expenses by category with every line behind the total, and
-a cash-basis operating profit estimate. It is an *operating* figure — equipment is
-deliberately not recorded here — and the screen says so.
+of its own daily commission, expenses by category with every line behind the total,
+and a cash-basis operating profit estimate. It is an *operating* figure — equipment
+is deliberately not recorded here — and the screen says so.
+
+## Bringing a period in by hand when the sync is blocked *(#43)*
+
+Zomato revenue and Hyperpure expenses are read automatically twice a day and can
+no longer be typed. The day the automation is blocked — Zomato changed an API,
+blocking got aggressive, a CI policy changed — a person recovers the period by
+uploading the operator's own statement, on **Super Admin → Ledger → Zomato →
+Upload a statement**. The file is parsed by the same code the robot uses, so this
+path is exercised on every scheduled run, not only when it is needed.
+
+Three files, each downloaded from the operator's own portal and recognised by
+what is inside it, never by its name:
+
+| File | Where | Covers |
+|---|---|---|
+| Zomato order history | Order history → **Download data → Order history** (a zip) | revenue to **yesterday**, commission undetermined |
+| Zomato settlement | Finance → **Payouts →** download a **paid** cycle (xlsx); pick **Legal Entity** for all outlets in one file | a settled week's commission |
+| Hyperpure statement | menu → **Account statement** → dates → **Download** (xlsx, ≤92 days) | supply purchases, one per order |
+
+Notes that save a support call:
+
+- **Order history stops at yesterday** — the portal says so — and the settlement
+  workbook exists only once a cycle is **paid**, so the current week's commission
+  is obtainable by no route until Zomato settles it. That is why a commission can
+  read "not known yet" and a month total is a ceiling.
+- **The upload writes only the outlets you may reach**, derived from your own
+  session, and a stored statement is reachable only from those outlets. A file
+  that matches no known shape is refused in the file's own words and writes
+  nothing.
+- **Re-uploading the same file changes nothing.** A purchase is keyed on its order
+  number and a settled day is final, so nothing is counted twice.
+
+If the reader itself has merely lost its session, prefer **Reconnect** on the same
+page over an upload: it repairs the session and the next scheduled run catches up.
 
 ## First production deploy
 

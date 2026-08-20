@@ -56,10 +56,10 @@ Seven bounds worth knowing, because each is a decision:
   rupee went. Where equipment was paid for out of the drawer it is recorded as
   cash taken out with its reason, which keeps that day's count reconciling
   without entering the month's expenses.
-- **Opening cash and both commission rates are stored per day**, offered from the
-  previous recorded day and editable. Correcting an old day therefore changes
-  only that day. The price is that the chain can break — a day's stored opening
-  may disagree with the previous day's count — and the surface reports that
+- **Opening cash is stored per day**, offered from the previous recorded day and
+  editable. Correcting an old day therefore changes only that day. The price is
+  that the chain can break — a day's stored opening may disagree with the previous
+  day's count — and the surface reports that
   without repairing it, because a figure somebody counted is evidence and a
   recomputed one is not.
 - **No consumption-basis profit**, because no stock is valued here. Raw materials
@@ -204,10 +204,18 @@ The cash-basis / consumption-basis distinction is real and the UI always states 
 
 ### Bills are not complete revenue in v1
 
-Swiggy and Zomato orders are **not rung as bills**. Their stated revenue and the
-commission rate that applied that day live only in the temporary ledger, where
-the net is computed per day. Therefore any figure quoted from `bills` as “total
-sales” understates the outlet: bills cover only Cash and UPI counter trade.
+Swiggy and Zomato orders are **not rung as bills**. Zomato's revenue and
+commission are now read from Zomato itself — the daily order history and the
+weekly settlement — and reconciled against the payout (#42, #43); Swiggy's are
+still typed with the commission it charged. Both live in the temporary ledger,
+where the net is computed per day. Any figure quoted from `bills` as "total
+sales" understates the outlet: bills cover only Cash and UPI counter trade.
+
+Hyperpure supply expenses are likewise read from Hyperpure's own statement, one
+per order, and can no longer be typed. What remains not automated is a supply
+purchase paid **directly** rather than through a Zomato payout — the supplier
+alone knows of it, and it is entered by hand until a supplier-portal reader is
+built (`openspec/todos/supply-bills-paid-outside-the-payout.md`).
 
 #12 owns retiring the remaining drawer/manual-day path and #13 owns the complete
 reporting view. Until those changes deliberately integrate aggregator trade,
