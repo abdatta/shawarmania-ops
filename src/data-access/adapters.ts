@@ -2359,6 +2359,17 @@ export interface AggregatorSyncHealth {
  * the session it rides is still alive. `shape_changed` is the maintainer's signal;
  * `session_lapsed` is the one that asks the owner to reconnect Zomato.
  */
+/**
+ * Hyperpure's health, which is account-level and thinner than Zomato's.
+ *
+ * Hyperpure rides Zomato's login (Model A: one reconnect fixes both channels),
+ * but its session can lapse independently of the parent's — and since the
+ * capture-only repair landed, a lapsed Hyperpure under a warm Zomato is
+ * repaired without any sign-in at all. It is a supply cost, not a payout, so
+ * there is no synced-from boundary and no reconciliation — only whether the
+ * last read worked and whether the session is still alive. `shape_changed` is
+ * the maintainer's signal; `session_lapsed` asks the owner to reconnect.
+ */
 export interface HyperpureHealth {
   lastRunAt: string | null
   lastOutcome: 'ok' | 'session_lapsed' | 'shape_changed' | null
@@ -2366,6 +2377,16 @@ export interface HyperpureHealth {
   hasSession: boolean
   sessionExpiresAt: string | null
 }
+
+/**
+ * What a reconnect decided, from the repair ladder.
+ *
+ * `dispatched` means a runner is on it (capture-only or the full login — the
+ * surface follows the health reads either way). `still_signed_in` means the
+ * probe found both channels alive and nothing was dispatched: the owner is
+ * told so rather than being shown a busy button for nothing.
+ */
+export type ReconnectResult = { outcome: 'dispatched' | 'still_signed_in' }
 
 export interface AggregatorSyncAdapter {
   getHealth(outletId: string): Promise<AggregatorSyncHealth>
@@ -2396,8 +2417,17 @@ export interface AggregatorSyncAdapter {
    * a button say "synced" about a job that had not started reading anything.
    */
   requestRun(outletId: string): Promise<void>
-  /** Begin repairing a lapsed session; the job then asks for a code. */
-  requestReconnect(outletId: string): Promise<void>
+  /**
+   * Begin repairing a channel, through the repair ladder.
+   *
+   * The server probes both sessions first: a warm parent with a cold child
+   * dispatches the capture-only runner, a cold parent dispatches the full
+   * login (whose runner asks for a code only when the login requests one), and
+   * two warm channels mean nothing is dispatched at all — the owner simply
+   * learns they are still signed in. Resolves once the ladder has decided,
+   * not when any repair finished.
+   */
+  requestReconnect(outletId: string, channel?: 'zomato' | 'hyperpure'): Promise<ReconnectResult>
   /**
    * The code the owner read off their own phone.
    *

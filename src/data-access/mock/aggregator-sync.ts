@@ -135,14 +135,23 @@ export function createMockAggregatorSyncAdapter(
 
   // Hyperpure is account-level, and the demo starts it with a lapsed session — the
   // state the owner is actually in until the first reconnect captures it. It shows
-  // the reconnect this line now carries; answering the code heals it, because one
-  // Zomato login restores both channels (Model A).
+  // the reconnect this line now carries; the repair ladder heals it, silently when
+  // the parent is warm and alongside the code flow when it is not (Model A).
   const hyperpure: HyperpureHealth = {
     lastRunAt: at(3 * 60),
     lastOutcome: 'session_lapsed',
     running: false,
     hasSession: false,
     sessionExpiresAt: null,
+  }
+
+  /** The capture landed or the login completed: the child rides the parent back to quiet. */
+  function healHyperpure(): void {
+    hyperpure.running = false
+    hyperpure.hasSession = true
+    hyperpure.lastOutcome = 'ok'
+    hyperpure.lastRunAt = new Date().toISOString()
+    hyperpure.sessionExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
   }
 
   for (const [index, outletId] of outletIds.entries()) {
@@ -266,23 +275,6 @@ export function createMockAggregatorSyncAdapter(
       })
     },
 
-    async requestReconnect(outletId) {
-      const state = stateFor(outletId)
-      state.pendingLogin = true
-      state.health = { ...state.health, running: true }
-
-      void wait(1_200).then(() => {
-        state.health = {
-          ...state.health,
-          running: false,
-          awaitingOneTimePassword: {
-            requestedAt: now().toISOString(),
-            expiresAt: new Date(Date.now() + OTP_VALID_MILLISECONDS).toISOString(),
-          },
-        }
-      })
-    },
-
     async answerOneTimePassword(outletId, code) {
       const state = stateFor(outletId)
       if (!state.health.awaitingOneTimePassword) {
@@ -319,7 +311,70 @@ export function createMockAggregatorSyncAdapter(
           resolvedAt: null,
           event: { kind: 'days-written', days: 7, from: day(7), to: day(1) },
         })
+        // Model A: one sign-in restores both channels, so the child heals with
+        // the parent instead of staying lapsed behind a healthy Zomato.
+        healHyperpure()
       })
+    },
+
+    async requestReconnect(outletId, channel = 'zomato') {
+      const state = stateFor(outletId)
+
+      if (channel === 'hyperpure') {
+        // The ladder, as the demo can walk it. The Hyperpure line starts
+        // lapsed, so its Reconnect exercises whichever rung this outlet's
+        // parent earns: a warm Zomato dispatches the silent capture-only
+        // repair; a cold one needs the full login and its code — after which
+        // both channels come back together.
+        if (hyperpure.hasSession && hyperpure.lastOutcome === 'ok') {
+          return { outcome: 'still_signed_in' }
+        }
+
+        const parentCold = state.health.lastOutcome === 'session_lapsed'
+        hyperpure.running = true
+        if (!parentCold) {
+          void wait(RUN_MILLISECONDS).then(() => {
+            healHyperpure()
+          })
+          return { outcome: 'dispatched' }
+        }
+
+        // Full-login rung: the code card appears (the runner opened the mailbox
+        // when the login asked for it), and answering it heals both channels.
+        state.pendingLogin = true
+        state.health = { ...state.health, running: true }
+        void wait(1_200).then(() => {
+          state.health = {
+            ...state.health,
+            running: false,
+            awaitingOneTimePassword: {
+              requestedAt: now().toISOString(),
+              expiresAt: new Date(Date.now() + OTP_VALID_MILLISECONDS).toISOString(),
+            },
+          }
+        })
+        return { outcome: 'dispatched' }
+      }
+
+      // The Zomato line's own reconnect keeps its shape: a lapsed session runs
+      // the full login and asks for a code; a healthy one has nothing to
+      // repair, and the ladder says so instead of dispatching a runner.
+      if (state.health.lastOutcome !== 'session_lapsed' || state.health.awaitingOneTimePassword) {
+        return { outcome: 'still_signed_in' }
+      }
+      state.pendingLogin = true
+      state.health = { ...state.health, running: true }
+      void wait(1_200).then(() => {
+        state.health = {
+          ...state.health,
+          running: false,
+          awaitingOneTimePassword: {
+            requestedAt: now().toISOString(),
+            expiresAt: new Date(Date.now() + OTP_VALID_MILLISECONDS).toISOString(),
+          },
+        }
+      })
+      return { outcome: 'dispatched' }
     },
 
     async recheckWeek(outletId, from, to) {

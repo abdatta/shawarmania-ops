@@ -1,53 +1,43 @@
 import { callerFrom, isOwner, serviceClient } from '../_shared/authority.ts'
 import { json, preflight, readJson, str } from '../_shared/http.ts'
+import { probeChannel } from '../_shared/aggregator-probe.ts'
+import { decideRung } from '../_shared/reconnect-ladder.ts'
 
 /**
  * "Read now", and "Reconnect", from the owner's phone.
  *
  * A sync you cannot start is a sync you cannot try, and a session you must repair
- * from a terminal is a session that stays broken while the owner is out. Both
- * were non-goals in the proposal and neither survived contact with using the
- * thing.
+ * from a terminal is a session that stays broken while the owner is out.
+ *
+ * **A reconnect is a repair ladder, not a login redo** (change #44). It probes
+ * both channels' stored sessions with one real authenticated call each, then takes
+ * the cheapest rung that repairs what is actually broken:
+ *
+ *   - Both alive           -> answer still-signed-in; nothing dispatched.
+ *   - Zomato warm, HP cold -> dispatch capture-hyperpure.yml, which re-mints the
+ *                            child from the stored parent. No code request opens.
+ *   - Zomato cold          -> dispatch login.yml, whose runner opens the mailbox
+ *                            itself when the login actually asks for a code.
+ *   - Could not tell       -> refuse rather than guess: an unknown must not spend
+ *                            the owner's code on a network hiccup.
  *
  * What this function is careful about:
  *
- *  1. **No GitHub credential reaches the browser.** The token that dispatches the
- *     reader's workflow is a server-side secret held here. Had the app held it,
- *     every phone with the app installed would carry the ability to run arbitrary
- *     workflows in a private repository.
- *
- *  2. **Authority is re-derived from the caller's own token**, never from the
- *     body. This function holds the service role, so RLS is not watching: being
- *     an Edge Function is not authorisation (docs/ROLES_AND_PERMISSIONS.md).
- *
- *  3. **A repeatedly tapped button cannot start six readers.** A dispatch is
- *     refused while a run for that outlet is still open, and refused again if one
- *     was started moments ago. Both matter for a different reason: overlapping
- *     readers would race each other for one Zomato session, and the sliding idle
- *     window means the loser can invalidate the winner.
- *
- *  4. **A reconnect and a sync are the same dispatch with a different input.**
- *     One door, so there is one place where the rate limit lives.
- *
- * Registered with verify_jwt = true in supabase/config.toml: the caller is a
- * person holding a session, and the gateway should refuse an anonymous request
- * before it reaches any of this.
+ *  1. **No GitHub credential reaches the browser.**
+ *  2. **Authority is re-derived from the caller's own token**, never the body.
+ *  3. **A repeatedly tapped button cannot start six readers**: a dispatch is
+ *     refused while a run for that outlet is open or moments old.
+ *  4. **One door, so one rate limit.**
  */
 
 /**
- * How recently is too recently.
- *
- * Not a guess: a browser-free read of two cycles takes well under a minute, and
- * a login run takes about five. Ninety seconds refuses the double tap and the
- * impatient retry while still letting somebody who genuinely needs a second run
- * have one without waiting for a schedule.
+ * How recently is too recently. Ninety seconds refuses the double tap and the
+ * impatient retry while still letting a genuine second attempt through without
+ * waiting for a schedule.
  */
 const COOLDOWN_SECONDS = 90
 
 type Mode = 'sync' | 'reconnect'
-
-/** Zomato's own code lifetime. Theirs to change, so it is stated once, here. */
-const OTP_LIFETIME_MINUTES = 5
 
 interface DispatchTarget {
   owner: string
@@ -56,22 +46,20 @@ interface DispatchTarget {
   ref: string
 }
 
-function dispatchTarget(mode: Mode): DispatchTarget | null {
+function repositoryParts(): [string, string] | null {
   const repository = Deno.env.get('AGGREGATOR_SYNC_REPOSITORY')
-  // A reconnect and a read are DIFFERENT jobs: reconnect signs in with a browser
-  // and waits for the owner's code (login.yml); a read is a browser-free fetch
-  // (sync.yml). Dispatching one workflow for both — passing `mode` and trusting it
-  // to branch — is exactly the bug that ran the figures-reader on a reconnect and
-  // never asked for a code. So the workflow is chosen by mode here.
-  const workflow =
-    mode === 'reconnect'
-      ? (Deno.env.get('AGGREGATOR_RECONNECT_WORKFLOW') ?? 'login.yml')
-      : (Deno.env.get('AGGREGATOR_SYNC_WORKFLOW') ?? 'sync.yml')
-  const ref = Deno.env.get('AGGREGATOR_SYNC_REF') ?? 'main'
   if (!repository || !repository.includes('/')) return null
   const [owner, repo] = repository.split('/', 2)
   if (!owner || !repo) return null
-  return { owner, repo, workflow, ref }
+  return [owner, repo]
+}
+
+function targetFor(workflowEnvName: string, fallbackWorkflow: string): DispatchTarget | null {
+  const parts = repositoryParts()
+  if (!parts) return null
+  const ref = Deno.env.get('AGGREGATOR_SYNC_REF') ?? 'main'
+  const workflow = Deno.env.get(workflowEnvName) ?? fallbackWorkflow
+  return { owner: parts[0], repo: parts[1], workflow, ref }
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -80,11 +68,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const token = Deno.env.get('GITHUB_DISPATCH_TOKEN')
   if (!token) {
-    // Distinguished from a refusal on purpose. "Not configured" is a message for
-    // whoever deploys this; "not permitted" is a message about the caller, and
-    // conflating them would send the owner looking for the wrong problem. The
-    // workflow target is resolved once the mode is known, since the two modes go
-    // to different workflows.
     console.error('the reader dispatch is not configured; refusing every caller')
     return json({ error: 'not_configured' }, 503)
   }
@@ -106,43 +89,35 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const mode: Mode = body['mode'] === 'reconnect' ? 'reconnect' : 'sync'
   const rehearse = body['rehearse'] === true
 
-  // Resolved now that the mode is known: a reconnect and a read go to different
-  // workflows.
-  const target = dispatchTarget(mode)
-  if (!target) {
-    console.error('the reader dispatch is not configured; refusing every caller')
-    return json({ error: 'not_configured' }, 503)
+  // The configured-outlet guard applies where it ever made sense: a zomato sync
+  // needs the outlet's restaurant id, which is exactly what the configuration row
+  // carries. Hyperpure is account-level with no configuration row by design; its
+  // repair does not depend on which outlet's screen the tap came from.
+  if (channel !== 'hyperpure') {
+    const { data: configured, error: configuredError } = await service
+      .from('outlet_channel_sync')
+      .select('outlet_id')
+      .eq('outlet_id', outletId)
+      .eq('channel', 'zomato')
+      .maybeSingle()
+
+    if (configuredError) {
+      console.error('could not read the channel configuration check', configuredError)
+      return json({ error: 'backend_failure' }, 503)
+    }
+    if (!outletId || !configured) return json({ error: 'channel_not_configured' }, 409)
   }
 
-  if (!outletId) return json({ error: 'outlet_required' }, 400)
-  if (channel !== 'zomato') return json({ error: 'unknown_channel' }, 400)
-
-  // The outlet has to be one the sync is actually configured for. An owner
-  // reaches every outlet, so this is not an authority check: it stops a dispatch
-  // for an outlet the reader has no restaurant id for, which would burn a runner
-  // to discover something this function already knows.
-  const { data: configured, error: configuredError } = await service
-    .from('outlet_channel_sync')
-    .select('outlet_id')
-    .eq('outlet_id', outletId)
-    .eq('channel', channel)
-    .maybeSingle()
-
-  if (configuredError) {
-    console.error('could not read the channel configuration', configuredError)
-    return json({ error: 'backend_failure' }, 503)
-  }
-  if (!configured) return json({ error: 'channel_not_configured' }, 409)
-
-  // Nothing may be started while something is running. `finished_at is null` is
-  // the open-run marker; a run that died without recording itself would hold the
-  // door shut, so runs older than the cooldown are not counted as open.
+  // Nothing may be started while something is running. A dead run that never
+  // closed itself would hold the door shut forever, so runs older than the
+  // cooldown are not counted as open.
   const since = new Date(Date.now() - COOLDOWN_SECONDS * 1000).toISOString()
+  const runChannel = channel === 'hyperpure' && mode === 'sync' ? 'zomato' : channel
   const { data: recent, error: recentError } = await service
     .from('aggregator_sync_runs')
     .select('id, started_at, finished_at')
     .eq('outlet_id', outletId)
-    .eq('channel', channel)
+    .eq('channel', runChannel)
     .gte('started_at', since)
     .order('started_at', { ascending: false })
     .limit(1)
@@ -156,52 +131,41 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   /*
-   * A reconnect opens the mailbox before the runner starts.
-   *
-   * Opened here rather than by the runner so that the moment the owner taps
-   * Reconnect, the surface has something to show. If the runner opened it, the
-   * screen would sit on "starting" for the ninety seconds it takes a runner to
-   * boot, with no way to tell a slow start from a failed one.
-   *
-   * The unique index on one-open-per-channel is the arbiter, not this read: two
-   * taps arriving together both see no open request, and the second insert is
-   * refused by the database rather than by a check that raced.
+   * Probe both channels, then take the ladder's rung. Probes run together; one
+   * that cannot tell answers alive-null and decideRung refuses rather than guess.
    */
-  if (mode === 'reconnect') {
-    // Close any request that expired without being answered before opening a new
-    // one. The one-open-per-channel index counts by closed_at, not expiry, so a
-    // request left open when its code ran out would deadlock the channel against
-    // every future reconnect — "already awaiting a code" for a code nobody will
-    // ever send. A still-live request is not touched, so a genuine reconnect in
-    // flight still yields already_awaiting_code below.
-    const { error: sweepError } = await service
-      .from('aggregator_auth_requests')
-      .update({ closed_at: new Date().toISOString(), outcome: 'expired' })
-      .eq('channel', channel)
-      .is('closed_at', null)
-      .lt('expires_at', new Date().toISOString())
-    if (sweepError) {
-      console.error('could not clear an expired auth request', sweepError)
-      return json({ error: 'backend_failure' }, 503)
-    }
+  let rung: 'still_signed_in' | 'capture_only' | 'full_login' | 'probe_failed'
+  if (mode === 'sync') {
+    rung = 'full_login'
+  } else {
+    const [parentProbe, childProbe] = await Promise.all([
+      probeChannel('zomato'),
+      probeChannel('hyperpure'),
+    ])
+    rung = decideRung(parentProbe, childProbe)
+  }
 
-    const { error: openError } = await service.from('aggregator_auth_requests').insert({
-      channel,
-      requested_from_outlet_id: outletId,
-      requested_by: resolution.caller.id,
-      expires_at: new Date(Date.now() + OTP_LIFETIME_MINUTES * 60_000).toISOString(),
-    })
+  if (rung === 'probe_failed') return json({ error: 'probe_failed' }, 503)
 
-    if (openError) {
-      // 23505 is the one-open-per-channel index. A reconnect already under way is
-      // not an error the owner needs to read as one: the screen they are looking
-      // at is already the right screen.
-      if ((openError as { code?: string }).code === '23505') {
-        return json({ outcome: 'already_awaiting_code' }, 200)
-      }
-      console.error('could not open the auth request', openError)
-      return json({ error: 'backend_failure' }, 503)
-    }
+  // Choose the workflow by WHAT THE RUNG IS, never by trusting the caller's mode
+  // string alone: choosing it by mode was exactly the bug that once ran the
+  // figures-reader on a reconnect and never asked for a code.
+  let target: DispatchTarget | null = null
+  if (mode === 'sync') {
+    target = targetFor('AGGREGATOR_SYNC_WORKFLOW', 'sync.yml')
+  } else if (rung === 'capture_only') {
+    target = targetFor('AGGREGATOR_CAPTURE_WORKFLOW', 'capture-hyperpure.yml')
+  } else if (rung === 'full_login') {
+    target = targetFor('AGGREGATOR_RECONNECT_WORKFLOW', 'login.yml')
+  } else if (rung === 'still_signed_in') {
+    // Nothing to repair. Say so and stop: no runner boots, no request opens,
+    // and the surface tells the owner they are already signed in.
+    return json({ outcome: 'still_signed_in', mode, rehearsal: rehearse }, 200)
+  }
+
+  if (!target) {
+    console.error('the reader dispatch is not configured; refusing every caller')
+    return json({ error: 'not_configured' }, 503)
   }
 
   const dispatch = await fetch(
@@ -217,43 +181,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
       },
       body: JSON.stringify({
         ref: target.ref,
-        inputs: {
-          channel,
-          outlet_id: outletId,
-          mode,
-          // GitHub workflow inputs are strings. Sent as the words the workflow
-          // compares against rather than as booleans, so a `false` cannot arrive
-          // as the string "false" and read as truthy on the other side.
-          rehearse: rehearse ? 'true' : 'false',
-        },
+        inputs: { channel, outlet_id: outletId, mode, rehearse: rehearse ? 'true' : 'false' },
       }),
     },
   )
 
   if (!dispatch.ok) {
     const detail = await dispatch.text()
-    // Never the token, and never the whole response, which echoes request
-    // headers on some GitHub errors.
     console.error('the reader dispatch was refused', dispatch.status, detail.slice(0, 300))
-
-    if (mode === 'reconnect') {
-      // The mailbox was opened for a runner that will never arrive. Left open it
-      // would hold the channel shut against the next attempt and leave the
-      // surface waiting for a code nobody will send.
-      const { error: closeError } = await service
-        .from('aggregator_auth_requests')
-        .update({ closed_at: new Date().toISOString(), outcome: 'abandoned' })
-        .eq('channel', channel)
-        .is('closed_at', null)
-      if (closeError) console.error('could not close the orphaned auth request', closeError)
-    }
-
     return json({ error: 'dispatch_failed' }, 502)
   }
 
   // 204 with no body is what a successful dispatch returns, so there is no run id
-  // to hand back. The surface follows the run rather than the request for exactly
-  // this reason: what it wants to know next is what the reader did, and that
-  // arrives in `aggregator_sync_runs`.
-  return json({ outcome: 'dispatched', mode, rehearsal: rehearse }, 202)
+  // to hand back. The surface follows the run rather than the request.
+  return json(
+    { outcome: 'dispatched', mode: mode === 'sync' ? 'sync' : 'reconnect', rehearsal: rehearse },
+    202,
+  )
 })

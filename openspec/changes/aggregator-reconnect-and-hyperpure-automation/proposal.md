@@ -42,6 +42,85 @@
 - **How the login signals that a code was actually requested**, so the OTP prompt can be conditioned on it rather than shown unconditionally.
 - **What the health line shows** in each state once Reconnect returns: alive, needs-reconnect (session lapsed), and needs-code.
 
+## Owner decisions (2026-08-22)
+
+Settled with the owner before expanding; they bind the `/opsx:propose` session.
+
+- **Reconnect on a still-alive session verifies and stops.** The app checks whether
+  the stored login still works *before* opening any code request; if it does, the
+  screen says the owner is still signed in and nothing else happens — no code box,
+  no fresh read. Read again remains how figures get refreshed.
+- **A half-successful reconnect is named on the spot.** If the Zomato sign-in lands
+  but the Hyperpure handoff fails, the Hyperpure health line says so plainly at
+  that moment rather than quietly leaving the manual upload as the only signal.
+- **Live verification fires whenever the owner is around** — a real code may be
+  requested whenever the owner is present to type it within its few-minute life;
+  no trading-hours restriction applies to reconnect attempts.
+- **Model A itself is reopened — the owner wants to weigh full separation.**
+  Probe first: does hyperpure.com offer its own standalone login (phone + code)
+  when signed out? If yes, #44 is rescoped as two independent channels — separate
+  credential, health line, reconnect and mailbox per channel, accepting two
+  sessions that age and lapse separately — which drops the dependence on the
+  fragile partner-portal handoff entirely. If it only accepts the Zomato SSO,
+  separation is impossible and this change finishes the outlet-picker handoff as
+  described above. Either way the channel machinery (`request-aggregator-sync`
+  refuses non-zomato today; `aggregator_channel_credentials`,
+  `aggregator_sync_runs`, `aggregator_auth_requests`, `outlet_channel_sync` and
+  the health RPC all assume one channel) learning a second channel is
+  known-sized work.
+
+## Reconnect is a repair ladder, not a login redo (settled 2026-08-22)
+
+Today every reconnect dispatches `login.yml`, whose `login()` always performs a
+full fresh sign-in — identifier submitted, code requested — whether or not
+anything needs repairing. That is why a reconnect costs an OTP even when the
+sessions are healthy, and why an unhidden Hyperpure button would inherit the
+same behaviour. Under this change **Reconnect means "repair what is actually
+broken, with the cheapest tool that works"**, decided as a ladder:
+
+1. **Probe aliveness for real** before opening anything: a browser-free,
+   authenticated call per channel against the live APIs — not the stored expiry
+   claims, which cannot be trusted for Hyperpure (no sliding claim exists).
+2. **Zomato warm, Hyperpure cold → capture-only.** Load the *stored* Zomato
+   session into the headed runner, drive the verified outlet-picker hop, save
+   the minted Hyperpure session. No auth request is opened, no code box shown.
+3. **Both fine → report "still signed in" and stop**, per the owner decision
+   above. Read again remains the way to refresh figures.
+4. **Zomato itself genuinely dead → the full login runs** — the ladder's last
+   rung. Because step 1 proved a code is actually coming, the prompt appears
+   only when the code arrives.
+
+This ladder is what makes the restored Hyperpure Reconnect button honest: on
+today's production state (Zomato warm, Hyperpure absent) it heals silently,
+with no OTP, instead of dragging the owner through a login that nothing
+requires. An OTP is spent only when the parent credential itself has died —
+rare, because the twice-daily sync keeps sliding it alive.
+
+Open question carried to `/opsx:propose`: whether the scheduled sync should
+also auto-heal a cold Hyperpure under a warm Zomato without any tap at all
+(true self-healing), weighed against the xvfb cost it adds to `sync.yml`.
+
+## Verified locally (2026-08-22)
+
+Reproduced on the owner's machine with their own Edge cookies transplanted into a
+fresh browser — no logins, no codes, answering the first design question below
+empirically before `/opsx:propose`:
+
+- **A bare `hyperpure.com` visit does not SSO** even with a live Zomato partner
+  session in the context. This is exactly why the current `captureHyperpure`
+  finds no token.
+- **The outlet-picker hop works and is fast**: navigate
+  `zomato.com/partners/onlineordering/hyperPure/`, click the outlet card, press
+  its `Start buying` button — the Hyperpure `token` cookie landed within ~3s.
+  Two clicks and waits; fully scriptable headless-under-xvfb like the rest of
+  `login.yml`.
+- **The Hyperpure JWT carries no `bExp` claim**, so its lifespan stays
+  unmeasured; keep the day-floor expiry fallback.
+- The captured state read a live 8KB statement through the existing reader, so
+  capture → read is proven end to end. Side observation: `readStatement`'s
+  missing-orders list spans all delivered history against the statement window,
+  so short windows flag long-settled orders — consider window-filtering here.
+
 ## Watch out for
 
 - **Session tokens and customer PII never get logged**, and the `.playwright-mcp/` capture artifacts are gitignored and carry live tokens — clean them after any verification run.

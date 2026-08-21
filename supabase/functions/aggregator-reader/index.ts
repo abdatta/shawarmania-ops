@@ -1,5 +1,6 @@
 import { serviceClient } from '../_shared/authority.ts'
 import { json, preflight, readJson, str } from '../_shared/http.ts'
+import { probeChannel } from '../_shared/aggregator-probe.ts'
 
 /**
  * The reader's own door: its session, and the code it is waiting for.
@@ -26,15 +27,24 @@ import { json, preflight, readJson, str } from '../_shared/http.ts'
  */
 
 type Action =
-  'load_session' | 'save_session' | 'forget_session' | 'await_code' | 'reject_code' | 'finish_login'
+  | 'load_session'
+  | 'save_session'
+  | 'forget_session'
+  | 'open_code_request'
+  | 'await_code'
+  | 'reject_code'
+  | 'finish_login'
+  | 'probe'
 
 const ACTIONS: readonly Action[] = [
   'load_session',
   'save_session',
   'forget_session',
+  'open_code_request',
   'await_code',
   'reject_code',
   'finish_login',
+  'probe',
 ]
 
 /**
@@ -49,6 +59,9 @@ const KNOWN_CHANNELS: readonly string[] = ['zomato', 'hyperpure']
 
 /** Zomato rejects a wrong code and offers the field again. Three is enough. */
 const MAX_ATTEMPTS = 3
+
+/** Zomato's own code lifetime. Theirs to change, so it is stated once, here. */
+const OTP_LIFETIME_MINUTES = 5
 
 function secretMatches(offered: string, expected: string): boolean {
   if (offered.length !== expected.length) return false
@@ -277,6 +290,69 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return json({ error: 'backend_failure' }, 503)
       }
       return json({ outcome: 'closed' })
+    }
+
+    /*
+     * Open the mailbox — called by the login runner at the moment the OTP screen
+     * actually renders, never at dispatch time.
+     *
+     * This used to happen eagerly in `request-aggregator-sync`, which is why the
+     * owner was once shown a code box for a code that never came: the request
+     * opened before anyone knew whether the login would ask for a code at all.
+     * Only the login flow knows that, so only the login flow opens it. The sweep
+     * of expired requests moves here with it, so a request left open past its
+     * code's life still cannot deadlock the channel against future reconnects.
+     */
+    case 'open_code_request': {
+      if (channel !== 'zomato') {
+        // Hyperpure rides the Zomato login and has no one-time password of its
+        // own; there is no mailbox to open for it.
+        return json({ error: 'no_code_channel' }, 400)
+      }
+
+      const outletId = str(body['outlet_id'])
+
+      const { error: sweepError } = await service
+        .from('aggregator_auth_requests')
+        .update({ closed_at: now.toISOString(), outcome: 'expired' })
+        .eq('channel', channel)
+        .is('closed_at', null)
+        .lt('expires_at', now.toISOString())
+      if (sweepError) {
+        console.error('could not clear an expired auth request', sweepError)
+        return json({ error: 'backend_failure' }, 503)
+      }
+
+      const expiresAt = new Date(now.getTime() + OTP_LIFETIME_MINUTES * 60_000).toISOString()
+      const { error } = await service.from('aggregator_auth_requests').insert({
+        channel,
+        requested_from_outlet_id: outletId || null,
+        requested_by: null,
+        expires_at: expiresAt,
+      })
+
+      if (error) {
+        // 23505 is the one-open-per-channel index. A request already under way is
+        // not an error: its mailbox is still the right one for this attempt.
+        if ((error as { code?: string }).code === '23505') {
+          return json({ outcome: 'already_awaiting' })
+        }
+        console.error('could not open the auth request', error)
+        return json({ error: 'backend_failure' }, 503)
+      }
+      return json({ outcome: 'opened' })
+    }
+
+    /*
+     * One authenticated call per channel: is the stored session actually alive?
+     *
+     * Answered by a real call rather than a stored expiry claim, because the
+     * claim cannot answer for Hyperpure (its token carries no sliding-expiry
+     * claim) and Zomato's own has been observed stale while the session worked.
+     * The ladder refuses on "could not tell" instead of guessing.
+     */
+    case 'probe': {
+      return json({ probe: await probeChannel(channel) })
     }
   }
 })

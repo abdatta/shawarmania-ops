@@ -111,6 +111,19 @@ export function ZomatoSyncSurface() {
    */
   const [readAgainIn, setReadAgainIn] = useState<number | null>(null)
 
+  /**
+   * When a Hyperpure reconnect was asked for, or null.
+   *
+   * Set the moment the ladder dispatches the repair, then resolved against what
+   * the health read says afterwards: until a Hyperpure run newer than the tap
+   * appears, the runner has not reported either way, so nothing is claimed;
+   * once it has, the claim either heals (the flag clears) or stands as the named
+   * half-success — Zomato signed in, Hyperpure did not follow. Held as a
+   * timestamp rather than a boolean so the comparison with the run's own time
+   * stays honest, and never read during render.
+   */
+  const [reconnectAskedAt, setReconnectAskedAt] = useState<number | null>(null)
+
   // Written as a promise chain rather than an awaited async call, matching the
   // ledger surface beside it: state set inside a `then` is set after the render
   // that started it, which is what keeps this out of the cascading-render
@@ -129,6 +142,13 @@ export function ZomatoSyncSurface() {
         setEvents(nextEvents)
         setHyperpure(nextHyperpure)
         setReadAgainIn(readAgainInHours(nextHealth))
+        setReconnectAskedAt((askedAt) => {
+          if (askedAt === null || !nextHyperpure?.lastRunAt) return askedAt
+          // The runner has not reported since the tap: no verdict exists yet.
+          if (new Date(nextHyperpure.lastRunAt).getTime() < askedAt) return askedAt
+          const healed = nextHyperpure.hasSession && nextHyperpure.lastOutcome !== 'session_lapsed'
+          return healed ? null : askedAt
+        })
       })
       .catch(() => {
         setError('Could not read the sync. Try again in a moment.')
@@ -149,7 +169,11 @@ export function ZomatoSyncSurface() {
    */
   const wasRunning = useRef(false)
   useEffect(() => {
-    if (!health?.running) {
+    // A capture-only repair never touches the Zomato run rows, so following the
+    // surface means watching EITHER channel's running state — a Hyperpure
+    // reconnect would otherwise dispatch a runner the screen never followed.
+    const anyRunning = (health?.running ?? false) || (hyperpure?.running ?? false)
+    if (!anyRunning) {
       // A run that has just finished is the moment the work it did becomes
       // visible, and the tab's badge is somewhere else on the screen. Nudging
       // when the action was *asked for* would be too early: asking succeeds
@@ -165,7 +189,7 @@ export function ZomatoSyncSurface() {
       void refresh().catch(() => undefined)
     }, 700)
     return () => clearInterval(timer)
-  }, [health?.running, refresh])
+  }, [health?.running, hyperpure?.running, refresh])
 
   const act = async (action: () => Promise<void>) => {
     setBusy(true)
@@ -251,7 +275,7 @@ export function ZomatoSyncSurface() {
    * design, so the buttons would come back to life while the reader was still
    * out reading Zomato, and a second Check again would race the first.
    */
-  const acting = busy || (health?.running ?? false)
+  const acting = busy || (health?.running ?? false) || (hyperpure?.running ?? false)
 
   const waiting = health?.awaitingOneTimePassword ?? null
   const actionable = events?.filter((row) => needsOwner(row)) ?? []
@@ -282,7 +306,20 @@ export function ZomatoSyncSurface() {
             onRun={() => act(() => aggregatorSync.requestRun(outletId!))}
           />
 
-          {hyperpure && <HyperpureHealthLine health={hyperpure} />}
+          {hyperpure && (
+            <HyperpureHealthLine
+              health={hyperpure}
+              busy={acting}
+              halfFailed={reconnectAskedAt !== null}
+              onReconnect={() =>
+                act(() =>
+                  aggregatorSync.requestReconnect(outletId!, 'hyperpure').then((result) => {
+                    if (result.outcome === 'dispatched') setReconnectAskedAt(Date.now())
+                  }),
+                )
+              }
+            />
+          )}
 
           <UploadStatement busy={acting} wrote={uploadWrote} onUpload={onUpload} />
 
@@ -331,7 +368,9 @@ export function ZomatoSyncSurface() {
                   onAccept={(from, to) =>
                     void act(() => aggregatorSync.acceptDifference(outletId!, from, to))
                   }
-                  onReconnect={() => void act(() => aggregatorSync.requestReconnect(outletId!))}
+                  onReconnect={() =>
+                    void act(() => aggregatorSync.requestReconnect(outletId!).then(() => undefined))
+                  }
                   onNotDuplicate={() =>
                     void act(() => aggregatorSync.markNotDuplicate(outletId!, row.id))
                   }
@@ -361,7 +400,9 @@ export function ZomatoSyncSurface() {
                   onAccept={(from, to) =>
                     void act(() => aggregatorSync.acceptDifference(outletId!, from, to))
                   }
-                  onReconnect={() => void act(() => aggregatorSync.requestReconnect(outletId!))}
+                  onReconnect={() =>
+                    void act(() => aggregatorSync.requestReconnect(outletId!).then(() => undefined))
+                  }
                   onNotDuplicate={() =>
                     void act(() => aggregatorSync.markNotDuplicate(outletId!, row.id))
                   }
@@ -456,17 +497,32 @@ function HealthLine({
 }
 
 /**
- * Hyperpure's health, beside Zomato's but thinner and read-only.
+ * Hyperpure's health, beside Zomato's but thinner.
  *
- * Account level, so it says nothing about which outlet is in scope. It carries no
- * reconnect button **for now**: the automated Zomato→Hyperpure session handoff is
- * not yet working from the runner, so a button that dispatches a reconnect which
- * cannot capture the session would only strand the owner. Until that lands, a
- * session that has ended points at the manual path — upload the account statement
- * on this page — which does bring the figures in. Before this line existed, a
- * broken Hyperpure read was a red CI job the owner never saw.
+ * Account level, so it says nothing about which outlet is in scope. Its
+ * Reconnect dispatches the repair ladder for this channel: with the parent
+ * warm it re-mints the session silently (no code), and only a genuinely lapsed
+ * Zomato login ever leads to the shared code card. A shape change stays a
+ * maintainer's. The manual upload below remains available in every state —
+ * the automation is the normal path and this is the one for the day it stops.
+ *
+ * `halfFailed` names the moment that hurts: the owner tapped Reconnect, Zomato
+ * came back signed-in, and Hyperpure did not follow. Saying so on this line —
+ * rather than leaving the upload as the only signal — is what keeps a silent
+ * half from reading as a whole.
  */
-function HyperpureHealthLine({ health }: { health: HyperpureHealth }) {
+function HyperpureHealthLine({
+  health,
+  busy,
+  halfFailed,
+  onReconnect,
+}: {
+  health: HyperpureHealth
+  busy: boolean
+  /** A reconnect was asked for and the read says Hyperpure still did not follow. */
+  halfFailed: boolean
+  onReconnect: () => void
+}) {
   const when = health.lastRunAt
     ? new Date(health.lastRunAt).toLocaleString(undefined, {
         day: 'numeric',
@@ -476,9 +532,9 @@ function HyperpureHealthLine({ health }: { health: HyperpureHealth }) {
       })
     : null
 
-  // A shape change is a maintainer's. A session that has ended points the owner at
-  // the upload below rather than a reconnect that cannot yet complete. Everything
-  // else is quiet. Same vocabulary as the Zomato line, so the two read as one.
+  // Same vocabulary as the Zomato line, so the two read as one. A shape change
+  // is a maintainer's; a lapsed session offers repair rather than only the
+  // manual path.
   const stale = !health.hasSession || health.lastOutcome === 'session_lapsed'
   const [word, wrong] = health.running
     ? (['Reading', false] as const)
@@ -490,13 +546,21 @@ function HyperpureHealthLine({ health }: { health: HyperpureHealth }) {
           ? (['All quiet', false] as const)
           : (['Never run', false] as const)
 
-  const note = stale
-    ? 'Upload the Hyperpure account statement below to bring its figures in'
-    : word === 'Stuck'
-      ? 'A statement could not be read — a maintainer has been told'
-      : when
-        ? `${when} · twice a day`
-        : 'Twice a day'
+  let note: string
+  if (health.running) {
+    // A capture-only repair boots a runner before it touches anything, so the
+    // honest message is that this takes minutes — not silence, and not a
+    // verdict that does not exist yet.
+    note = 'Repairing the session — this can take a few minutes'
+  } else if (halfFailed) {
+    note = 'Signed into Zomato, but Hyperpure didn’t follow — try again'
+  } else if (stale) {
+    note = 'Upload the Hyperpure account statement below to bring its figures in'
+  } else if (word === 'Stuck') {
+    note = 'A statement could not be read — a maintainer has been told'
+  } else {
+    note = when ? `${when} · twice a day` : 'Twice a day'
+  }
 
   return (
     <Card
@@ -509,6 +573,18 @@ function HyperpureHealthLine({ health }: { health: HyperpureHealth }) {
         </p>
         <p className="text-xs text-content-muted">{note}</p>
       </div>
+      {stale && !health.running && (
+        <div className="text-right">
+          <Button
+            variant="secondary"
+            onClick={onReconnect}
+            disabled={busy}
+            data-testid="hyperpure-reconnect"
+          >
+            Reconnect
+          </Button>
+        </div>
+      )}
     </Card>
   )
 }

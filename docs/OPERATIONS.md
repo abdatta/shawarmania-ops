@@ -528,6 +528,16 @@ Notes that save a support call:
 If the reader itself has merely lost its session, prefer **Reconnect** on the same
 page over an upload: it repairs the session and the next scheduled run catches up.
 
+One reconnect covers both channels *(#44)*. Pressing it first checks what is
+actually broken, then does the least repair that works: if only Hyperpure has
+lost its session while Zomato is still signed in, a runner quietly re-mints the
+Hyperpure session from the live Zomato login — no second sign-in, no code, a few
+minutes. If Zomato itself has been signed out, the full sign-in runs, and only
+then does a code box appear — at the moment Zomato has actually sent one, not
+before. If nothing is wrong at all, the screen says you are still signed in and
+starts nothing. The manual upload above stays valid in every state for the day
+even the fallback path is wanted.
+
 ## First production deploy
 
 Once, per environment. Until it is done the deployed site is **demo-only**: the

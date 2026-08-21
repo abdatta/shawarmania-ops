@@ -375,11 +375,20 @@ export function createSupabaseAggregatorSyncAdapter(
       )
     },
 
-    async requestReconnect(outletId) {
-      await call(
-        { outlet_id: outletId, channel: 'zomato', mode: 'reconnect' },
-        'request-aggregator-sync',
-      )
+    async requestReconnect(outletId, channel = 'zomato') {
+      // The body carries the ladder's verdict: `dispatched` (a runner is on it)
+      // or `still_signed_in` (the probe found both channels alive). Anything
+      // else — already running, not configured, probe failed — is an error the
+      // surface reports as its own did-not-go-through, and the next health read
+      // shows what is actually true.
+      const { data, error } = await client.functions.invoke('request-aggregator-sync', {
+        body: { outlet_id: outletId, channel, mode: 'reconnect' },
+      })
+      if (error) throw new Error('request-aggregator-sync did not go through')
+      const outcome = (data as { outcome?: string } | null)?.outcome
+      return outcome === 'still_signed_in'
+        ? { outcome: 'still_signed_in' }
+        : { outcome: 'dispatched' }
     },
 
     async answerOneTimePassword(_outletId, code) {

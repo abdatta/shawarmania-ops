@@ -157,19 +157,36 @@ describe('the Zomato sync surface', () => {
     expect(other.className).not.toContain('bg-on-primary')
   })
 
-  it('shows Hyperpure health and points a lapsed session at the upload, with no reconnect yet', async () => {
-    // The automated Zomato->Hyperpure session handoff is not working from the runner
-    // yet, so the line deliberately carries NO reconnect button — one that could not
-    // capture the session would only strand the owner. A lapsed session points at
-    // the manual upload on this page instead. The demo seeds Hyperpure lapsed.
+  it('shows Hyperpure health with a working Reconnect once its session has ended', async () => {
+    // #43 hid this button because the capture behind it could not complete, and a
+    // button that lies is worse than none. #44 proved the handoff and rebuilt the
+    // reconnect as the repair ladder, so a lapsed session now offers repair
+    // beside the manual upload, which stays available in every state. The demo
+    // seeds Hyperpure lapsed; at Kalyani the Zomato parent is healthy, so acting
+    // on it takes the silent capture-only rung (no code card may appear).
     await renderSurface(OUTLET_KALYANI_ID)
 
     const line = await screen.findByTestId('hyperpure-health')
     expect(line).toHaveTextContent(/Hyperpure/)
     expect(line).toHaveTextContent(/Session ended/)
-    expect(line).toHaveTextContent(/upload the hyperpure account statement/i)
-    expect(within(line).queryByTestId('hyperpure-reconnect')).not.toBeInTheDocument()
-    expect(within(line).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(line).getByTestId('hyperpure-reconnect')).toBeEnabled()
+
+    await userEvent.click(within(line).getByTestId('hyperpure-reconnect'))
+
+    // Capture-only heals without any sign-in: the code card must never appear,
+    // and the line comes back to quiet with a fresh read time.
+    await waitFor(() => expect(line).toHaveTextContent(/All quiet/), { timeout: 5_000 })
+    expect(screen.queryByLabelText(/one time password/i)).not.toBeInTheDocument()
+  })
+
+  it('never shows a code card while nothing waits for one', async () => {
+    // The mailbox opens when a login asks for a code, never before. On a surface
+    // where no reconnect has run and no request exists, the card must be absent
+    // rather than sitting there waiting for an SMS that is not coming — that was
+    // the exact complaint this change set out to fix.
+    await renderSurface(OUTLET_KANCHRAPARA_ID)
+    await screen.findByTestId('hyperpure-health')
+    expect(screen.queryByLabelText(/one time password zomato sent/i)).not.toBeInTheDocument()
   })
 
   it('offers Read now only when reading again could say something new', async () => {
