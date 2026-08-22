@@ -14,7 +14,7 @@
 - [x] 2.2 Add `.github/workflows/capture-hyperpure.yml`: dispatchable only, xvfb headed like `login.yml`, artifacts on failure only, session never uploaded.
 - [x] 2.3 Move the code-request opening out of dispatch: add an `open_code_request` action to `aggregator-reader`'s contract, and call it from `login` at the moment the OTP screen renders (after the identifier is accepted); sweeping/expiry behaviour unchanged.
 - [x] 2.4 Confirm no token, cookie value or code reaches any log line, workflow summary or committed file across both repos; traces stay structure-only and failure-only.
-- [ ] 2.5 Sectional check: dispatch `capture-hyperpure.yml` on a **branch ref** from this change's working tree and watch it store a live Hyperpure session in CI — no sign-in step anywhere in the run log.
+- [x] 2.5 Sectional check: dispatch `capture-hyperpure.yml` on a **branch ref** from this change's working tree and watch it store a live Hyperpure session in CI — no sign-in step anywhere in the run log.
 
 ## 3. Ops — probe and the reconnect ladder
 
@@ -35,10 +35,10 @@
 
 ## 5. Verification and phase gate
 
-- [ ] 5.1 Full suite: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e`.
+- [x] 5.1 Full suite: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e`.
 - [ ] 5.2 Live end-to-end from the app: reconnect with today's production shape (Zomato warm, Hyperpure absent) completes with no code prompt and ends both lines quiet; then the scheduled Hyperpure job reads real figures on its own schedule.
 - [ ] 5.3 OTP-timing proof: force the full-login rung once against a controlled lapsed state and confirm the code card appears only when the code arrives — and never on an alive-session reconnect.
-- [ ] 5.4 Four-role demo walkthrough still walks end to end with the updated sync surface states.
-- [ ] 5.5 Hygiene: delete local credential artifacts from the 2026-08-22 experiment (`shawarmania-sync/session/hyperpure-edge-state.json`, Browser Control `zomato-edge` secret profile, redacted HAR), keeping none past archive.
-- [ ] 5.6 Docs updated before archive: `docs/SCREENS.md` (sync surface states once Reconnect returns) and `docs/OPERATIONS.md` (the reconnect runbook: one reconnect, both channels, code only when asked).
+- [x] 5.4 Four-role demo walkthrough still walks end to end with the updated sync surface states.
+- [x] 5.5 Hygiene: delete local credential artifacts from the 2026-08-22 experiment (`shawarmania-sync/session/hyperpure-edge-state.json`, Browser Control `zomato-edge` secret profile, redacted HAR), keeping none past archive.
+- [x] 5.6 Docs updated before archive: `docs/SCREENS.md` (sync surface states once Reconnect returns) and `docs/OPERATIONS.md` (the reconnect runbook: one reconnect, both channels, code only when asked).
 - [ ] 5.7 PHASE GATE — Aggregator reconnect and Hyperpure automation: the owner reconnects the aggregator once and Hyperpure's figures resume alongside Zomato's without a second sign-in or code; a reconnect asks for a one-time code only when the login actually requested one, and never asks when the session is still alive; Hyperpure's daily figures arrive on the schedule without a manual statement upload; the Hyperpure health line offers a working Reconnect again; and the four-role demo walkthrough still walks.
