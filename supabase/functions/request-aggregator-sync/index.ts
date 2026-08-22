@@ -168,6 +168,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json({ error: 'not_configured' }, 503)
   }
 
+  // The workflow inputs describe THE JOB, never the button that asked for it:
+  // login.yml signs in to Zomato whichever line's Reconnect was tapped (Model
+  // A — one sign-in restores both channels), and its `channel` choice input
+  // admits only zomato. Forwarding the tap's channel here was exactly the 422
+  // that broke the first live Hyperpure reconnect: GitHub refused the whole
+  // dispatch over a label.
+  const workflowChannel = mode === 'sync' || rung === 'full_login' ? 'zomato' : 'hyperpure'
+
   const dispatch = await fetch(
     `https://api.github.com/repos/${target.owner}/${target.repo}/actions/workflows/${target.workflow}/dispatches`,
     {
@@ -181,7 +189,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       },
       body: JSON.stringify({
         ref: target.ref,
-        inputs: { channel, outlet_id: outletId, mode, rehearse: rehearse ? 'true' : 'false' },
+        inputs: {
+          channel: workflowChannel,
+          outlet_id: outletId,
+          mode,
+          rehearse: rehearse ? 'true' : 'false',
+        },
       }),
     },
   )
