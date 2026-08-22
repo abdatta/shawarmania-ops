@@ -122,7 +122,17 @@ export function ZomatoSyncSurface() {
    * timestamp rather than a boolean so the comparison with the run's own time
    * stays honest, and never read during render.
    */
-  const [reconnectAskedAt, setReconnectAskedAt] = useState<number | null>(null)
+  // When a Hyperpure reconnect was dispatched, or null. A ref rather than
+  // state: nothing renders from the tap itself — verdicts render, and they are
+  // derived against this timestamp inside the refresh chain below.
+  const reconnectAskedAtRef = useRef<number | null>(null)
+  /**
+   * Whether a VERDICT (a Hyperpure run newer than the tap) has confirmed the
+   * handoff failed — distinct from a mere tap, which proves nothing yet. The
+   * distinction matters: tonight's live run showed the note accusing a runner
+   * that was still booting, because the tap alone was taken as evidence.
+   */
+  const [halfFailure, setHalfFailure] = useState(false)
 
   // Written as a promise chain rather than an awaited async call, matching the
   // ledger surface beside it: state set inside a `then` is set after the render
@@ -142,12 +152,26 @@ export function ZomatoSyncSurface() {
         setEvents(nextEvents)
         setHyperpure(nextHyperpure)
         setReadAgainIn(readAgainInHours(nextHealth))
-        setReconnectAskedAt((askedAt) => {
-          if (askedAt === null || !nextHyperpure?.lastRunAt) return askedAt
-          // The runner has not reported since the tap: no verdict exists yet.
-          if (new Date(nextHyperpure.lastRunAt).getTime() < askedAt) return askedAt
-          const healed = nextHyperpure.hasSession && nextHyperpure.lastOutcome !== 'session_lapsed'
-          return healed ? null : askedAt
+        const askedAt = reconnectAskedAtRef.current
+        if (askedAt !== null && nextHyperpure?.lastRunAt && !nextHyperpure.running) {
+          const ranAfterTap = new Date(nextHyperpure.lastRunAt).getTime() >= askedAt
+          const healed =
+            ranAfterTap &&
+            nextHyperpure.hasSession &&
+            nextHyperpure.lastOutcome !== 'session_lapsed'
+          if (healed) reconnectAskedAtRef.current = null
+        }
+        setHalfFailure(() => {
+          // The named half-success needs a VERDICT, not a tap: until a run newer
+          // than the reconnect has reported, nothing has followed or failed to.
+          // Showing the note on the tap alone accused a runner that was still
+          // booting — observed live, 2026-08-22.
+          if (reconnectAskedAtRef.current === null) return false
+          const askedAt = reconnectAskedAtRef.current
+          if (!nextHyperpure || nextHyperpure.running) return false
+          if (!nextHyperpure.lastRunAt) return false
+          if (new Date(nextHyperpure.lastRunAt).getTime() < askedAt) return false
+          return !nextHyperpure.hasSession || nextHyperpure.lastOutcome === 'session_lapsed'
         })
       })
       .catch(() => {
@@ -281,6 +305,37 @@ export function ZomatoSyncSurface() {
   const actionable = events?.filter((row) => needsOwner(row)) ?? []
   const rest = events?.filter((row) => !needsOwner(row)) ?? []
 
+  /**
+   * Who is signed out, collapsed into ONE repair.
+   *
+   * Zomato's lapse arrives as event rows (a failed run writes one), Hyperpure's
+   * as the health line — two vocabularies for what is usually one problem,
+   * since a dead Zomato parent takes the Hyperpure child with it. When both are
+   * out the owner gets one card and one button, not two buttons for one
+   * sign-in; when only Hyperpure is out (the case only the child can produce),
+   * its own card says so and promises the quiet repair.
+   */
+  const zomatoLapsed =
+    health?.lastOutcome === 'session_lapsed' ||
+    (actionable.some((row) => row.event.kind === 'session-lapsed') ?? false)
+  const hyperpureLapsed =
+    hyperpure !== null &&
+    (!hyperpure.hasSession || hyperpure.lastOutcome === 'session_lapsed') &&
+    !hyperpure.running
+  const reconnectScope: 'both' | 'hyperpure' | 'zomato' | null =
+    zomatoLapsed && hyperpureLapsed
+      ? 'both'
+      : hyperpureLapsed
+        ? 'hyperpure'
+        : zomatoLapsed
+          ? 'zomato'
+          : null
+  // The card carries the action, so the event row that would duplicate it steps
+  // aside while the card is up; it resolves itself once the sign-in lands.
+  const actionableCovered = actionable.filter(
+    (row) => !(reconnectScope !== null && row.event.kind === 'session-lapsed'),
+  )
+
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader
@@ -306,20 +361,7 @@ export function ZomatoSyncSurface() {
             onRun={() => act(() => aggregatorSync.requestRun(outletId!))}
           />
 
-          {hyperpure && (
-            <HyperpureHealthLine
-              health={hyperpure}
-              busy={acting}
-              halfFailed={reconnectAskedAt !== null}
-              onReconnect={() =>
-                act(() =>
-                  aggregatorSync.requestReconnect(outletId!, 'hyperpure').then((result) => {
-                    if (result.outcome === 'dispatched') setReconnectAskedAt(Date.now())
-                  }),
-                )
-              }
-            />
-          )}
+          {hyperpure && <HyperpureHealthLine health={hyperpure} halfFailed={halfFailure} />}
 
           <UploadStatement busy={acting} wrote={uploadWrote} onUpload={onUpload} />
 
@@ -352,12 +394,33 @@ export function ZomatoSyncSurface() {
             </Card>
           )}
 
-          {actionable.length > 0 && (
+          {(reconnectScope !== null || actionableCovered.length > 0) && (
             <section className="space-y-2">
               <h2 className="text-xs font-medium uppercase tracking-wide text-content-muted">
                 Needs you
               </h2>
-              {actionable.map((row) => (
+              {reconnectScope !== null && (
+                <ReconnectCard
+                  scope={reconnectScope}
+                  busy={acting}
+                  onReconnect={() =>
+                    act(() =>
+                      aggregatorSync
+                        .requestReconnect(
+                          outletId!,
+                          reconnectScope === 'zomato' ? 'zomato' : 'hyperpure',
+                        )
+                        .then((result) => {
+                          if (result.outcome === 'dispatched') {
+                            reconnectAskedAtRef.current = Date.now()
+                            setHalfFailure(false)
+                          }
+                        }),
+                    )
+                  }
+                />
+              )}
+              {actionableCovered.map((row) => (
                 <SyncEventRow
                   key={row.id}
                   row={row}
@@ -513,15 +576,11 @@ function HealthLine({
  */
 function HyperpureHealthLine({
   health,
-  busy,
   halfFailed,
-  onReconnect,
 }: {
   health: HyperpureHealth
-  busy: boolean
-  /** A reconnect was asked for and the read says Hyperpure still did not follow. */
+  /** A reconnect was asked for and a verdict says Hyperpure still did not follow. */
   halfFailed: boolean
-  onReconnect: () => void
 }) {
   const when = health.lastRunAt
     ? new Date(health.lastRunAt).toLocaleString(undefined, {
@@ -573,18 +632,65 @@ function HyperpureHealthLine({
         </p>
         <p className="text-xs text-content-muted">{note}</p>
       </div>
-      {stale && !health.running && (
-        <div className="text-right">
-          <Button
-            variant="secondary"
-            onClick={onReconnect}
-            disabled={busy}
-            data-testid="hyperpure-reconnect"
-          >
-            Reconnect
-          </Button>
-        </div>
-      )}
+    </Card>
+  )
+}
+
+/**
+ * The one repair, however many channels are out.
+ *
+ * A dead Zomato parent takes the Hyperpure child with it, so two health lines
+ * saying "ended" are one problem and get one button — "Reconnect Zomato &
+ * Hyperpure" — rather than asking for two taps at one sign-in. When only the
+ * child is out (the only case a single channel can produce), its own card
+ * promises the quiet repair: Zomato is still signed in, so no code will be
+ * asked for. Lives under Needs you because that is what it is; the health
+ * lines above stay informational.
+ */
+function ReconnectCard({
+  scope,
+  busy,
+  onReconnect,
+}: {
+  scope: 'both' | 'hyperpure' | 'zomato'
+  busy: boolean
+  onReconnect: () => void
+}) {
+  const [title, body, action, testId] =
+    scope === 'both'
+      ? ([
+          'Zomato and Hyperpure are signed out',
+          'Nothing was written while they were out, so no figure is wrong. One sign-in brings both back.',
+          'Reconnect Zomato & Hyperpure',
+          'needs-reconnect-both',
+        ] as const)
+      : scope === 'hyperpure'
+        ? ([
+            "Hyperpure's session ended",
+            'Zomato is still signed in, so this repairs quietly — no code needed.',
+            'Reconnect Hyperpure',
+            'needs-reconnect-hyperpure',
+          ] as const)
+        : ([
+            'Zomato ended the session',
+            'Nothing was written while it was out, so no figure is wrong.',
+            'Reconnect Zomato',
+            'needs-reconnect-zomato',
+          ] as const)
+
+  return (
+    <Card className="border-warning/60 bg-warning/5 p-4">
+      <h2 className="text-sm font-medium text-content">{title}</h2>
+      <p className="mt-1 text-sm text-content-muted">{body}</p>
+      <Button
+        variant="secondary"
+        disabled={busy}
+        onClick={onReconnect}
+        className="mt-3"
+        data-testid={testId}
+      >
+        {action}
+      </Button>
     </Card>
   )
 }

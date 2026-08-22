@@ -169,9 +169,11 @@ describe('the Zomato sync surface', () => {
     const line = await screen.findByTestId('hyperpure-health')
     expect(line).toHaveTextContent(/Hyperpure/)
     expect(line).toHaveTextContent(/Session ended/)
-    expect(within(line).getByTestId('hyperpure-reconnect')).toBeEnabled()
+    // The action lives under Needs you now, as its own card — the health line
+    // is informational and carries no button of its own.
+    expect(within(line).queryByRole('button')).not.toBeInTheDocument()
 
-    await userEvent.click(within(line).getByTestId('hyperpure-reconnect'))
+    await userEvent.click(screen.getByTestId('needs-reconnect-hyperpure'))
 
     // Capture-only heals without any sign-in: the code card must never appear,
     // and the line comes back to quiet with a fresh read time.
