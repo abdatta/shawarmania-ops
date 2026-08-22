@@ -1426,6 +1426,7 @@ export type Database = {
           synced_at: string
           tax_paise: number
           total_paise: number
+          void_kind: string | null
           void_reason: string | null
           voided_at: string | null
           voided_by: string | null
@@ -1455,6 +1456,7 @@ export type Database = {
           synced_at?: string
           tax_paise?: number
           total_paise: number
+          void_kind?: string | null
           void_reason?: string | null
           voided_at?: string | null
           voided_by?: string | null
@@ -1484,6 +1486,7 @@ export type Database = {
           synced_at?: string
           tax_paise?: number
           total_paise?: number
+          void_kind?: string | null
           void_reason?: string | null
           voided_at?: string | null
           voided_by?: string | null
@@ -2569,6 +2572,7 @@ export type Database = {
           paid_at: string | null
           paid_by: string | null
           paid_shift_id: string | null
+          prepared_at: string | null
           pricing_mode: Database["public"]["Enums"]["pricing_mode"]
           status: Database["public"]["Enums"]["order_status"]
           subtotal_paise: number
@@ -2601,6 +2605,7 @@ export type Database = {
           paid_at?: string | null
           paid_by?: string | null
           paid_shift_id?: string | null
+          prepared_at?: string | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           status?: Database["public"]["Enums"]["order_status"]
           subtotal_paise: number
@@ -2633,6 +2638,7 @@ export type Database = {
           paid_at?: string | null
           paid_by?: string | null
           paid_shift_id?: string | null
+          prepared_at?: string | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           status?: Database["public"]["Enums"]["order_status"]
           subtotal_paise?: number
@@ -3330,6 +3336,17 @@ export type Database = {
         Args: { p_device_id: string }
         Returns: string
       }
+      cancel_paid_billing_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
       claim_aggregator_code: {
         Args: { p_channel: string }
         Returns: {
@@ -3680,6 +3697,17 @@ export type Database = {
         }
         Returns: Json
       }
+      prepare_billing_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
+      }
       preview_account_invite: {
         Args: { p_code_hash: string; p_ip_hash?: string }
         Returns: {
@@ -3821,6 +3849,17 @@ export type Database = {
       set_super_admin_account_email: {
         Args: { p_email: string; p_profile_id: string }
         Returns: undefined
+      }
+      unpay_billing_order: {
+        Args: {
+          p_command_id?: string
+          p_created_at?: string
+          p_payload?: Json
+          p_payload_hash?: string
+          p_schema_version?: number
+          p_shift_id?: string
+        }
+        Returns: Json
       }
       update_menu_item_with_category: {
         Args: {

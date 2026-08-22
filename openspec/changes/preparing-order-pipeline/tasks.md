@@ -7,20 +7,20 @@ for contract-touching work.
 
 ## 1. Schema and database rules
 
-- [ ] 1.1 Failing pgTAP first: `orders.prepared_at` accepts null and timestamptz; `set_order_preparation` marks and reprepares under a live shift; reprepare of a paid order is refused with a not-open category; preparation on a cancelled order is refused.
-- [ ] 1.2 Failing pgTAP first: `void_order_payment` inside the window voids kind `counter_unpay` and reopens the order atomically; `cancel_paid_order` voids kind `cancelled_after_paid` and cancels atomically; both refused outside five minutes of stored `paid_at`; both refused to a foreign tablet of the same outlet; both idempotent on exact replay; direct-table void still impossible for every role.
-- [ ] 1.3 Migration: `orders.prepared_at timestamptz null`.
-- [ ] 1.4 Migration: `bills.void_kind text null check (void_kind in ('manager_void','counter_unpay','cancelled_after_paid'))`; legacy rows stay NULL and read as manager voids.
-- [ ] 1.5 Migration: three apply functions mirroring the existing command shape — envelope validation, historical device/shift context, claim, row lock, guards, effects, receipt — plus `command_type` check-list additions and dispatch entries.
-- [ ] 1.6 pgTAP: mark-prepared on a paid-but-unprepared order succeeds (the upfront payer path); pay-then-prepare produces one bill and prepared state together readable.
-- [ ] 1.7 pgTAP: an unwind's void preserves every sale field byte-for-byte except status/kind/attribution, and shift-total queries exclude it.
-- [ ] 1.8 Regenerate `src/data-access/database.types.ts`; typecheck green.
+- [x] 1.1 Failing pgTAP first: `orders.prepared_at` accepts null and timestamptz; `set_order_preparation` marks and reprepares under a live shift; reprepare of a paid order is refused with a not-open category; preparation on a cancelled order is refused.
+- [x] 1.2 Failing pgTAP first: `void_order_payment` inside the window voids kind `counter_unpay` and reopens the order atomically; `cancel_paid_order` voids kind `cancelled_after_paid` and cancels atomically; both refused outside five minutes of stored `paid_at`; both refused to a foreign tablet of the same outlet; both idempotent on exact replay; direct-table void still impossible for every role.
+- [x] 1.3 Migration: `orders.prepared_at timestamptz null`.
+- [x] 1.4 Migration: `bills.void_kind text null check (void_kind in ('manager_void','counter_unpay','cancelled_after_paid'))`; legacy rows stay NULL and read as manager voids.
+- [x] 1.5 Migration: three apply functions mirroring the existing command shape — envelope validation, historical device/shift context, claim, row lock, guards, effects, receipt — plus `command_type` check-list additions and dispatch entries.
+- [x] 1.6 pgTAP: mark-prepared on a paid-but-unprepared order succeeds (the upfront payer path); pay-then-prepare produces one bill and prepared state together readable.
+- [x] 1.7 pgTAP: an unwind's void preserves every sale field byte-for-byte except status/kind/attribution, and shift-total queries exclude it.
+- [x] 1.8 Regenerate `src/data-access/database.types.ts`; typecheck green.
 
 ## 2. Shared command layer
 
-- [ ] 2.1 `shared/billing-command.ts`: three new types with payload interfaces; explicit-null argument completeness; canonical JSON/hash coverage.
-- [ ] 2.2 Cross-runtime hash vectors for every new payload shape in `src/lib/billing-command.test.ts`, SQL mirror asserted equal.
-- [ ] 2.3 Result categories named for new refusals (not-open, paid-state conflict, unwind-window-expired, wrong-device) flow through existing retry classification.
+- [x] 2.1 `shared/billing-command.ts`: three new types with payload interfaces; explicit-null argument completeness; canonical JSON/hash coverage.
+- [x] 2.2 Cross-runtime hash vectors for every new payload shape in `src/lib/billing-command.test.ts`, SQL mirror asserted equal.
+- [x] 2.3 Result categories named for new refusals (not-open, paid-state conflict, unwind-window-expired, wrong-device) flow through existing retry classification.
 
 ## 3. Live adapter and offline overlays
 
