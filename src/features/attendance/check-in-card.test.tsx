@@ -298,9 +298,17 @@ describe('the employee home', () => {
 
   it('uses server attendance context despite a deliberately skewed browser clock', async () => {
     const adapters = createMockAdapters()
+    // Today, by the demo store's own reckoning — deliberately rowless for the
+    // employee, so the card opens on the one big button whatever day this runs.
+    // A literal date here was a time bomb: it passed while the calendar agreed
+    // with it, and failed the day an approved seed drifted onto the date.
+    const today = (
+      await adapters.attendance.getCurrentContext([OUTLET_KALYANI_ID])
+    ).outlets[0]?.businessDate
+    expect(today).toBeTruthy()
     const context = {
       serverAt: '2026-08-20T06:00:00.000Z',
-      outlets: [{ outletId: OUTLET_KALYANI_ID, businessDate: '2026-08-20' }],
+      outlets: [{ outletId: OUTLET_KALYANI_ID, businessDate: today! }],
     }
     vi.spyOn(adapters.attendance, 'getCurrentContext').mockResolvedValue(context)
     const checkIn = vi.spyOn(adapters.attendance, 'checkIn')
@@ -316,7 +324,7 @@ describe('the employee home', () => {
     await userEvent.setup().click(await screen.findByTestId('attendance-action'))
 
     await waitFor(() => expect(checkIn).toHaveBeenCalled())
-    expect(checkIn.mock.calls[0]?.[0].businessDate).toBe('2026-08-20')
+    expect(checkIn.mock.calls[0]?.[0].businessDate).toBe(today!)
     expect(checkIn.mock.calls[0]?.[0].reading?.at).toBe('2040-01-01T00:00:00.000Z')
   })
 
