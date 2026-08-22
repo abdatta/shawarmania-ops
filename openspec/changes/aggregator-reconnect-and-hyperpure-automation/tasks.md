@@ -42,3 +42,34 @@
 - [x] 5.5 Hygiene: delete local credential artifacts from the 2026-08-22 experiment (`shawarmania-sync/session/hyperpure-edge-state.json`, Browser Control `zomato-edge` secret profile, redacted HAR), keeping none past archive.
 - [x] 5.6 Docs updated before archive: `docs/SCREENS.md` (sync surface states once Reconnect returns) and `docs/OPERATIONS.md` (the reconnect runbook: one reconnect, both channels, code only when asked).
 - [ ] 5.7 PHASE GATE — Aggregator reconnect and Hyperpure automation: the owner reconnects the aggregator once and Hyperpure's figures resume alongside Zomato's without a second sign-in or code; a reconnect asks for a one-time code only when the login actually requested one, and never asks when the session is still alive; Hyperpure's daily figures arrive on the schedule without a manual statement upload; the Hyperpure health line offers a working Reconnect again; and the four-role demo walkthrough still walks.
+
+## Verification evidence (2026-08-22)
+
+Recorded as each clause was proven, so the gate review reads from facts.
+
+- **Capture-only, live end to end**: dispatch on `main`
+  (run 32556192317) minted a Hyperpure session from the stored Zomato parent in
+  the CI runner — headed-under-xvfb after the headless drop, no sign-in step,
+  no code request anywhere in the log. Three prior failures were each diagnosed
+  and fixed en route (malformed origin entry; `__Host-` cookie forced under a
+  domain; navigation drops not escalating).
+- **Scheduled figures without upload**: run 32560375219 read the live account
+  through the captured session and wrote **25 supply orders**, outcome ok —
+  the first green `hyperpure` job since #43. The first *scheduled* tick lands
+  ~18:00 UTC today and closes 5.2's final clause.
+- **No spurious code prompt, live**: across every reconnect exercise today
+  (CI capture, app observation), no auth request row was ever opened; production
+  now reads All quiet on both lines with zero owner codes spent.
+- **OTP-timing, full-login rung**: proven at unit level (`reconnect-ladder.test`,
+  per-rung decisions), contract level (#43's mailbox lifecycle tests, sweep
+  unchanged), and demo e2e (card appeared exactly when the mock login asked;
+  one code healed both channels). Deliberately NOT forced against a real lapsed
+  session: that would destroy a working login and spend an owner OTP for no
+  operational gain — accepted as the 5.3 decision unless the owner prefers
+  waiting for the first natural lapse.
+- **Demo walkthrough**: `e2e/demo.spec.ts` + `e2e/owner-console.spec.ts` green
+  on the deployed commit; surface states walked by hand on phone/tablet,
+  light/dark.
+- **Suite gates**: lint, typecheck, format:check, unit, build, e2e, contrast —
+  all green on the deployed commit; deploy workflow green through migrations,
+  functions and Pages (run 32562993518).
