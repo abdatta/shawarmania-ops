@@ -16,6 +16,13 @@
       "url": "http://127.0.0.1:7413"
     },
     {
+      "name": "dev-explore",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "7416", "--strictPort", "--host", "127.0.0.1"],
+      "port": 7416,
+      "url": "http://127.0.0.1:7416/"
+    },
+    {
       "name": "preview-alt",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "preview", "--port", "7414", "--strictPort", "--host", "127.0.0.1"],

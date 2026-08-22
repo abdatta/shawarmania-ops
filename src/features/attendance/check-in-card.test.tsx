@@ -302,9 +302,8 @@ describe('the employee home', () => {
     // employee, so the card opens on the one big button whatever day this runs.
     // A literal date here was a time bomb: it passed while the calendar agreed
     // with it, and failed the day an approved seed drifted onto the date.
-    const today = (
-      await adapters.attendance.getCurrentContext([OUTLET_KALYANI_ID])
-    ).outlets[0]?.businessDate
+    const today = (await adapters.attendance.getCurrentContext([OUTLET_KALYANI_ID])).outlets[0]
+      ?.businessDate
     expect(today).toBeTruthy()
     const context = {
       serverAt: '2026-08-20T06:00:00.000Z',
