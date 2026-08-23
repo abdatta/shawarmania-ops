@@ -21,13 +21,13 @@
 
 ## 3. Channel-neutral ingest and reconciliation
 
-- [ ] 3.1 Generalize the normalized order/cycle payload to carry channel, external restaurant reference, operator cycle identity, bank status, gross/reduction/net, timestamped adjustments and cycle-only adjustments; verify runtime validation rejects floats, unsupported channels, incomplete settled money and ambiguous/unmapped references.
-- [ ] 3.2 Generalize the ingest Edge Function and SQL transaction so channel is authenticated/allowlisted rather than hard-coded to Zomato; verify a valid Swiggy payload commits and Hyperpure or a mismatched outlet mapping is refused before any write.
-- [ ] 3.3 Apply the outlet's cutover to each order placement timestamp inside the transaction and refuse unattributed required rows; verify 03:59 belongs to the prior business date, 04:00 opens the new date and no portal calendar date bypasses the rule.
-- [ ] 3.4 Reconcile `sum(order net payouts) +/- dated and cycle adjustments` to the exact stated final payout with one ₹1 cycle-level tolerance; verify a match commits atomically, a larger mismatch changes nothing and marks the candidate disputed, and rounding tolerance is not applied per row.
-- [ ] 3.5 Preserve provisional, settled, revised and disputed monotonicity per outlet/channel/date, with bank status independent; verify FINAL Pending can settle, live data cannot downgrade it and a later changed final retains prior values as a revision.
-- [ ] 3.6 Generalize rehearse, recheck and accept-difference commands to Swiggy with channel-safe identities; verify rehearsal performs all arithmetic with zero financial writes, recheck cannot conceal a discrepancy and acceptance records the exact difference without changing a day.
-- [ ] 3.7 Generalize sync event recording and no-zero failure outcomes for auth lapse, access denial, transport exhaustion, source-shape change, unmapped identity, unattributed order and reconciliation dispute; verify every failure leaves prior money byte-for-byte unchanged.
+- [x] 3.1 Generalize the normalized order/cycle payload to carry channel, external restaurant reference, operator cycle identity, bank status, gross/reduction/net, timestamped adjustments and cycle-only adjustments; verify runtime validation rejects floats, unsupported channels, incomplete settled money and ambiguous/unmapped references.
+- [x] 3.2 Generalize the ingest Edge Function and SQL transaction so channel is authenticated/allowlisted rather than hard-coded to Zomato; verify a valid Swiggy payload commits and Hyperpure or a mismatched outlet mapping is refused before any write.
+- [x] 3.3 Apply the outlet's cutover to each order placement timestamp inside the transaction and refuse unattributed required rows; verify 03:59 belongs to the prior business date, 04:00 opens the new date and no portal calendar date bypasses the rule.
+- [x] 3.4 Reconcile `sum(order net payouts) +/- dated and cycle adjustments` to the exact stated final payout with one ₹1 cycle-level tolerance; verify a match commits atomically, a larger mismatch changes nothing and marks the candidate disputed, and rounding tolerance is not applied per row.
+- [x] 3.5 Preserve provisional, settled, revised and disputed monotonicity per outlet/channel/date, with bank status independent; verify FINAL Pending can settle, live data cannot downgrade it and a later changed final retains prior values as a revision.
+- [x] 3.6 Generalize rehearse, recheck and accept-difference commands to Swiggy with channel-safe identities; verify rehearsal performs all arithmetic with zero financial writes, recheck cannot conceal a discrepancy and acceptance records the exact difference without changing a day.
+- [x] 3.7 Generalize sync event recording and no-zero failure outcomes for auth lapse, access denial, transport exhaustion, source-shape change, unmapped identity, unattributed order and reconciliation dispute; verify every failure leaves prior money byte-for-byte unchanged.
 
 ## 4. Independent Swiggy session boundary
 

@@ -41,6 +41,11 @@ values ('00000000-0000-4000-a000-000000000001', 'zomato',
 on conflict (outlet_id, channel) do update set synced_from = excluded.synced_from;
 alter table public.outlet_channel_sync enable trigger outlet_channel_sync_guarded;
 
+-- The zomato mapping a legacy payload without a reference resolves through.
+insert into public.outlet_channel_restaurants
+  (outlet_id, channel, external_ref, state)
+values ('00000000-0000-4000-a000-000000000001', 'zomato', '21917311', 'enabled');
+
 
 \set OWNER '10000000-0000-4000-a000-000000000001'
 \set KAL '00000000-0000-4000-a000-000000000001'
@@ -79,6 +84,7 @@ returns jsonb language sql stable as $$
     'cycle_end', pg_temp.ledger_day(3),
     'cycle_state', p_state,
     'stated_payout_paise', p_stated,
+    'operator_cycle_ref', 'Z-REHEARSAL',
     'orders', jsonb_build_array(
       jsonb_build_object(
         'order_id', 'rehearsal-1',
