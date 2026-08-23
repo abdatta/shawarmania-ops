@@ -58,13 +58,13 @@
 
 ## 7. Official-file fallback
 
-- [ ] 7.1 Extend byte/MIME/size recognition to XLSX and deterministic PDF shapes without trusting name/extension; verify renamed valid fixtures pass while forged, oversized, encrypted, scanned, malformed and unknown-layout files fail with zero writes.
-- [ ] 7.2 Parse the payout-annexure workbook's Summary, Payout Breakup, Order Level and adjustment sheets into the shared normalized candidate; verify header drift fails closed and the real redacted fixture reconciles the exact final payout across the outlet cutover.
-- [ ] 7.3 Parse the Business Metrics Report's explicit restaurant rows and `Overview=SALES` / `Metric=Net Sales` date columns as portal-calendar evidence; verify unmapped/ambiguous restaurant rows are refused and a 04:00-cutover outlet is not given an authoritative business-date write from calendar totals alone.
-- [ ] 7.4 Parse only fixture-proved payment-advice PDF fields into a cycle-target candidate and treat tax-invoice/other PDFs according to facts they prove; verify a PDF with final payout but insufficient stored order/day evidence cannot settle or invent days.
-- [ ] 7.5 Drop customer identifiers, phone numbers, names and addresses before normalized output, logs or retained evidence, retaining only an opaque/non-reversible replay value when required; verify fixture scans and assertions find no PII.
-- [ ] 7.6 Store a digest, parser/version metadata and sanitized evidence under server-generated outlet/channel isolation rather than raw PII-bearing bytes; verify bucket policies refuse guessed/cross-outlet paths for all client roles.
-- [ ] 7.7 Make upload replay idempotent and settled-period restatement confirmation bind to the digest and structured before/after proposal; verify same upload is inert, a changed file asks, and an altered proposal cannot reuse confirmation.
+- [x] 7.1 Extend byte/MIME/size recognition to XLSX and deterministic PDF shapes without trusting name/extension; verify renamed valid fixtures pass while forged, oversized, encrypted, scanned, malformed and unknown-layout files fail with zero writes.
+- [x] 7.2 Parse the payout-annexure workbook's Summary, Payout Breakup, Order Level and adjustment sheets into the shared normalized candidate; verify header drift fails closed and the real redacted fixture reconciles the exact final payout across the outlet cutover.
+- [x] 7.3 Parse the Business Metrics Report's explicit restaurant rows and `Overview=SALES` / `Metric=Net Sales` date columns as portal-calendar evidence; verify unmapped/ambiguous restaurant rows are refused and a 04:00-cutover outlet is not given an authoritative business-date write from calendar totals alone.
+- [x] 7.4 Parse only fixture-proved payment-advice PDF fields into a cycle-target candidate and treat tax-invoice/other PDFs according to facts they prove; verify a PDF with final payout but insufficient stored order/day evidence cannot settle or invent days.
+- [x] 7.5 Drop customer identifiers, phone numbers, names and addresses before normalized output, logs or retained evidence, retaining only an opaque/non-reversible replay value when required; verify fixture scans and assertions find no PII.
+- [x] 7.6 Store a digest, parser/version metadata and sanitized evidence under server-generated outlet/channel isolation rather than raw PII-bearing bytes; verify bucket policies refuse guessed/cross-outlet paths for all client roles.
+- [x] 7.7 Make upload replay idempotent and settled-period restatement confirmation bind to the digest and structured before/after proposal; verify same upload is inert, a changed file asks, and an altered proposal cannot reuse confirmation.
 
 ## 8. Ops adapters, Swiggy tab and ledger
 
