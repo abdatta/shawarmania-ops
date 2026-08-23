@@ -1,6 +1,6 @@
 # Proposal: Aggregator Login Live Stages
 
-> **Model**: Opus · **Wave**: D · **Depends on**: #44 · **Gate**: when the
+> **Model**: Opus · **Wave**: D · **Depends on**: #47 · **Gate**: when the
 > owner taps Reconnect and the full-login rung fires, the screen shows where the
 > sign-in actually is — starting, opening the partner portal, signing in as you,
 > waiting for your code (with the input field appearing at that stage), checking
