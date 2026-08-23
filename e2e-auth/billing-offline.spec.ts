@@ -52,7 +52,9 @@ async function markPaid(page: Page, customerName: string) {
   const dialog = page.getByRole('dialog', { name: 'Record payment' })
   await dialog.getByRole('button', { name: 'Cash', exact: true }).click()
   await dialog.getByRole('button', { name: 'Mark Paid', exact: true }).click()
-  await expect(page.getByTestId('bill-total')).toHaveText('₹0')
+  // Durable locally: the confirmation shows whether or not the backend is
+  // reachable, because acceptance happened at IndexedDB.
+  await expect(page.getByTestId('settled-confirmation')).toBeVisible()
 }
 
 async function managerAccessToken(request: APIRequestContext): Promise<string> {
