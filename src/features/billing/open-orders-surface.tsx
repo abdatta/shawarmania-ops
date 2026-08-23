@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { Flame, ReceiptText } from 'lucide-react'
+import { ReceiptText } from 'lucide-react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
@@ -10,20 +10,22 @@ import {
   type BillingOrder,
   type PaymentAllocation,
 } from '@/data-access/adapters'
-import { formatPaise } from '@/domain'
 import { SessionContext } from '@/session/context'
 import { CounterDeviceContext } from '@/session/counter-context'
 
 import { CancelOrderDialog } from './cancel-order-dialog'
-import { flyGhost, useFlip, waitForElement } from './flip'
+import { captureCardFlight, flyCapturedCardToDestination, useFlip, waitForElement } from './flip'
 import { PipelineCard } from './pipeline-card'
 import { splitPipeline } from './pipeline'
 import { PaymentDialog } from './payment-dialog'
 import { useCounterState } from './use-counter-state'
 
 /**
- * The pipeline, whole-outlet: **Preparing** over a labelled divider over
- * **Unpaid Prepared Orders**.
+ * The pipeline, whole-outlet, in two colour-coded bands: **Preparing** (ember)
+ * over a plain hairline over **Unpaid Prepared Orders** (green). There are no
+ * section headings and no action confirmations — the card colours, the divider,
+ * and the section-to-section glide say everything; the counter reads state at a
+ * glance, not by reading words.
  *
  * The old single "Open orders" list answered neither of the two questions the
  * counter actually asks — is the food made, is it paid — so everything sat in
@@ -40,7 +42,7 @@ export function OpenOrdersHeading({ embedded }: { embedded: boolean }) {
       {embedded ? null : (
         <>
           <h1 id="open-orders-title" className="text-2xl font-black text-content">
-            Unpaid Prepared Orders
+            Open orders
           </h1>
           <p className="text-sm text-content-muted">
             The whole outlet&rsquo;s pipeline — from every tablet at this counter.
@@ -60,15 +62,12 @@ function methodLabelOf(bill: BillingBill): string | null {
 
 export function OpenOrdersSurface({
   embedded = false,
-  hideHeading = false,
   refreshKey = 0,
   onActivityChanged,
   editingOrderId = null,
   onEditOrder,
 }: {
   embedded?: boolean
-  /** The combined rail renders the section headings itself. */
-  hideHeading?: boolean
   refreshKey?: number
   onActivityChanged?: () => void
   editingOrderId?: string | null
@@ -82,7 +81,9 @@ export function OpenOrdersSurface({
   const [tenders, setTenders] = useState<Map<string, string>>(new Map())
   const [paying, setPaying] = useState<BillingOrder | null>(null)
   const [cancelling, setCancelling] = useState<BillingOrder | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  // Errors only. Success is carried by the motion and the card's new band —
+  // the counter asked for no inserted info bars.
+  const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const outletId = counterDevice?.device.outletId ?? session?.outletId ?? null
@@ -112,22 +113,21 @@ export function OpenOrdersSurface({
   useEffect(() => {
     void Promise.resolve()
       .then(load)
-      .catch(() => setMessage('Could not load the pipeline.'))
+      .catch(() => setError('Could not load the pipeline.'))
   }, [load, refreshKey])
 
-  const act = async (operation: () => Promise<unknown>, success: string) => {
+  const act = async (operation: () => Promise<unknown>) => {
     setBusy(true)
-    setMessage(null)
+    setError(null)
     try {
       const result = await operation()
       setPaying(null)
       setCancelling(null)
-      setMessage(success)
       await load()
       onActivityChanged?.()
       return result
     } catch (cause) {
-      setMessage(
+      setError(
         cause instanceof DataActionError ? cause.message : 'That action could not be completed.',
       )
       return undefined
@@ -138,33 +138,17 @@ export function OpenOrdersSurface({
 
   function recordPayment(payments: PaymentAllocation[]) {
     if (!paying) return
-    const reference = paying.localReference ?? String(paying.orderNumber)
-    // The money flies from the card's place into the bills column — capture
-    // where it stood before the refresh takes the card away.
-    const fromRect = document
-      .querySelector<HTMLElement>(`[data-flip-id="${paying.id}"]`)
-      ?.getBoundingClientRect()
-    void act(
-      () => billing.payOrder(paying.id, payments),
-      `Order ${reference} recorded as paid. Bill number assigned after delivery.`,
-    ).then((bill) => {
+    // A settlement replaces an order id with a bill id. Capture the whole
+    // ticket before the refresh removes it, so the visual identity survives
+    // the cross-column handoff instead of leaving a separate amount badge.
+    const source = document.querySelector<HTMLElement>(`[data-flip-id="${paying.id}"]`)
+    const flight = source ? captureCardFlight(source) : null
+    void act(() => billing.payOrder(paying.id, payments)).then((bill) => {
       if (!bill || typeof bill !== 'object' || !('id' in bill)) return
-      if (!fromRect) return
+      if (!flight) return
       void waitForElement(`[data-testid="shift-bill-${String(bill.id)}"]`).then((destination) => {
         if (!destination) return
-        flyGhost({
-          fromRect: {
-            left: fromRect.left,
-            top: fromRect.top,
-            width: fromRect.width,
-            height: fromRect.height,
-          },
-          resolveToRect: () => {
-            const rect = destination.getBoundingClientRect()
-            return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
-          },
-          label: formatPaise(paying.totalPaise),
-        })
+        flyCapturedCardToDestination(flight, destination)
       })
     })
   }
@@ -178,40 +162,33 @@ export function OpenOrdersSurface({
   useFlip(flipRootRef, [orders])
 
   if (orders === null) {
-    // The rail's own silhouette: two section headings over compact ticket
-    // cards — the shape this column fills once the pipeline arrives. Reshaped
-    // with the layout in the same change, per the standing placeholder rule.
+    // The rail's own silhouette: compact ticket cards over a hairline — the
+    // shape this column fills once the pipeline arrives. Reshaped with the
+    // layout in the same change, per the standing placeholder rule.
     return (
-      <LoadingRegion label="the pipeline" className="space-y-2">
-        <Shimmer className="mb-1 h-4 w-20" />
-        <Shimmer className="h-24" />
-        <Shimmer className="h-24" />
-        <div className="my-3 border-t border-border" />
-        <Shimmer className="mb-1 h-4 w-28" />
-        <Shimmer className="h-24" />
+      <LoadingRegion label="the pipeline" className="space-y-1">
+        <Shimmer className="h-[92px]" />
+        <Shimmer className="h-[92px]" />
+        <div className="my-1 border-t border-border" />
+        <Shimmer className="h-[92px]" />
       </LoadingRegion>
     )
   }
 
   const renderSection = (
-    title: string,
-    Icon: typeof Flame,
+    label: string,
     sectionOrders: BillingOrder[],
     section: 'preparing' | 'unpaid-prepared',
     emptyText: string,
     testid: string,
   ) => (
-    <section data-testid={testid} aria-label={title}>
-      {!hideHeading && (
-        <h4 className="mb-1 flex items-center gap-1.5 text-sm font-black text-content">
-          <Icon aria-hidden size={15} className="text-accent-text" />
-          {title}
-        </h4>
-      )}
+    <section data-testid={testid} aria-label={label}>
       {sectionOrders.length === 0 ? (
-        <p className="rounded-lg bg-surface-raised p-2 text-xs text-content-muted">{emptyText}</p>
+        embedded ? null : (
+          <p className="rounded-lg bg-surface-raised p-2 text-xs text-content-muted">{emptyText}</p>
+        )
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-1">
           {sectionOrders.map((order) => (
             <li key={order.id}>
               <PipelineCard
@@ -222,30 +199,24 @@ export function OpenOrdersSurface({
                 {...(onEditOrder ? { onEdit: onEditOrder } : {})}
                 tenderLabel={order.billId ? (tenders.get(order.billId) ?? null) : null}
                 onMarkPrepared={(target) =>
-                  void act(
-                    () => billing.markOrderPrepared(target.id, true),
-                    `${target.localReference ?? `Order #${target.orderNumber}`} marked prepared.`,
-                  )
+                  void act(() => billing.markOrderPrepared(target.id, true))
+                }
+                onUnprepare={(target) =>
+                  void act(() => billing.markOrderPrepared(target.id, false))
                 }
                 onMarkPaid={(target) => {
-                  setMessage(null)
+                  setError(null)
                   setPaying(target)
                 }}
                 onCancel={(target) => {
-                  setMessage(null)
+                  setError(null)
                   setCancelling(target)
                 }}
                 onUnpay={(target, reason) =>
-                  void act(
-                    () => billing.unpayOrder(target.id, target.billId!, reason),
-                    'The payment was taken back and the order reopened.',
-                  )
+                  void act(() => billing.unpayOrder(target.id, target.billId!, reason))
                 }
                 onCancelAfterPaid={(target, reason) =>
-                  void act(
-                    () => billing.cancelPaidOrder(target.id, reason),
-                    'The bill was voided and the order cancelled.',
-                  )
+                  void act(() => billing.cancelPaidOrder(target.id, reason))
                 }
               />
             </li>
@@ -258,17 +229,17 @@ export function OpenOrdersSurface({
   return (
     <section
       ref={flipRootRef}
-      className={embedded ? 'space-y-2' : 'space-y-4'}
+      className={embedded ? 'space-y-1.5' : 'space-y-4'}
       aria-labelledby="open-orders-title"
     >
-      {!hideHeading && <OpenOrdersHeading embedded={embedded} />}
+      <OpenOrdersHeading embedded={embedded} />
 
-      {message && (
+      {error && (
         <p
-          role="status"
-          className="rounded-lg border border-border bg-surface p-2 text-sm font-semibold text-content"
+          role="alert"
+          className="rounded-lg border border-border bg-surface p-2 text-sm font-semibold text-danger"
         >
-          {message}
+          {error}
         </p>
       )}
 
@@ -287,14 +258,13 @@ export function OpenOrdersSurface({
         <>
           {renderSection(
             'Preparing',
-            Flame,
             preparing,
             'preparing',
             'Nothing waiting to be made.',
             'pipeline-preparing',
           )}
           <div
-            className="my-3 flex items-center gap-2"
+            className="my-2 flex items-center gap-2"
             role="separator"
             aria-label="Prepared, waiting for money"
           >
@@ -306,7 +276,6 @@ export function OpenOrdersSurface({
           </div>
           {renderSection(
             'Unpaid Prepared Orders',
-            ReceiptText,
             unpaidPrepared,
             'unpaid-prepared',
             'No prepared order is waiting for money.',
@@ -332,10 +301,7 @@ export function OpenOrdersSurface({
         onClose={() => setCancelling(null)}
         onConfirm={(reason) => {
           if (!cancelling) return
-          void act(
-            () => billing.cancelOrder(cancelling.id, reason),
-            `Order ${cancelling.localReference ?? cancelling.orderNumber} cancelled.`,
-          )
+          void act(() => billing.cancelOrder(cancelling.id, reason))
         }}
       />
     </section>

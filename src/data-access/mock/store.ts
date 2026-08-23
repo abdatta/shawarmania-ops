@@ -87,6 +87,12 @@ export interface DemoStore {
   billItems: Tables<'bill_items'>[]
   /** Exact tender allocation for each bill, including split payments. */
   billPayments: Map<string, PaymentAllocation[]>
+  /**
+   * Tender held against a paid order that has no bill yet — the upfront payer
+   * whose food is still being made. It becomes `billPayments` when preparation
+   * settles the order, and is discarded by an Un-pay.
+   */
+  orderPayments: Map<string, { payments: PaymentAllocation[]; paidAt: string; shiftId: string }>
   /** Owned by the billing adapter; open, paid and cancelled lifecycle records. */
   orders: Tables<'orders'>[]
   /** Immutable snapshots belonging to `orders`. */
@@ -237,6 +243,10 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
   const bills: Tables<'bills'>[] = []
   const billItems: Tables<'bill_items'>[] = []
   const billPayments = new Map<string, PaymentAllocation[]>()
+  const orderPayments = new Map<
+    string,
+    { payments: PaymentAllocation[]; paidAt: string; shiftId: string }
+  >()
   const billNumbers = new Map<string, number>()
   const orders: Tables<'orders'>[] = []
   const orderItems: Tables<'order_items'>[] = []
@@ -889,6 +899,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     bills,
     billItems,
     billPayments,
+    orderPayments,
     orders,
     orderItems,
     orderNumbers,

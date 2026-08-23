@@ -332,7 +332,9 @@ describe('mock billing adapter', () => {
       outletIds: [DEMO_OUTLET_ID],
     })
     const saved = await biller.saveOrder(orderDraft(store, '30000000-0000-4000-8000-000000000001'))
+    await biller.markOrderPrepared(saved.id, true)
     const paid = await biller.payOrder(saved.id, [{ method: 'upi', amountPaise: saved.totalPaise }])
+    if (!paid) throw new Error('a prepared order settles into a bill')
     const shiftHistory = await biller.listShiftHistory(DEMO_OPEN_SHIFT_ID)
     const corrected = await biller.correctBillPayment(paid.id, 0, [
       { method: 'cash', amountPaise: saved.totalPaise },
@@ -366,10 +368,12 @@ describe('mock billing adapter', () => {
     const biller = createMockBillingAdapter(store)
     const before = await biller.listShiftHistory(DEMO_OPEN_SHIFT_ID)
     const saved = await biller.saveOrder(orderDraft(store, '31000000-0000-4000-8000-000000000001'))
+    await biller.markOrderPrepared(saved.id, true)
     const paid = await biller.payOrder(saved.id, [
       { method: 'cash', amountPaise: 10000 },
       { method: 'upi', amountPaise: 3900 },
     ])
+    if (!paid) throw new Error('a prepared order settles into a bill')
     const history = await biller.listShiftHistory(DEMO_OPEN_SHIFT_ID)
 
     expect(paid.paymentMethod).toBe('mixed')
@@ -518,23 +522,43 @@ describe('mock billing adapter', () => {
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
       expect(store.orders.find((order) => order.id === saved.id)?.prepared_at).not.toBeNull()
 
-      await adapter.payOrder(saved.id, [{ method: 'cash', amountPaise: saved.totalPaise }])
+      const paid = await adapter.payOrder(saved.id, [
+        { method: 'cash', amountPaise: saved.totalPaise },
+      ])
+      if (!paid) throw new Error('a prepared order settles into a bill')
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
 
       // Reprepare dies at the bills border.
       await expect(adapter.markOrderPrepared(saved.id, false)).rejects.toThrow(/paid/)
 
-      // The upfront payer's path: marking prepared on a paid-but-unprepared
-      // order succeeds. Reach that state by taking this payment back first.
-      const [order] = await adapter.listOpenOrders(DEMO_OUTLET_ID)
-      void order
-      const bill = store.bills.find((row) => row.order_id === saved.id)!
-      const reopened = await adapter.unpayOrder(saved.id, bill.id, 'Wrong total rung')
+      // Back to open with its preparation preserved...
+      const reopened = await adapter.unpayOrder(saved.id, paid.id, 'Wrong total rung')
       expect(reopened.status).toBe('open')
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
 
-      await adapter.cancelOrder(saved.id, 'Test cleanup')
+      // ...so clearing the mark is legal again, and the upfront payer's path
+      // opens: paying an unprepared order holds the money without a bill, and
+      // marking prepared is what settles it.
+      await adapter.markOrderPrepared(saved.id, false)
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      const billsBeforeHeldPay = store.bills.length
+      const held = await adapter.payOrder(saved.id, [
+        { method: 'cash', amountPaise: saved.totalPaise },
+      ])
+      expect(held).toBeNull()
+      expect(store.bills.length).toBe(billsBeforeHeldPay)
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+      // Preparation is what mints the bill for the upfront payer.
+      await adapter.markOrderPrepared(saved.id, true)
+      expect(store.bills.length).toBe(billsBeforeHeldPay)
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      expect(store.bills.length).toBe(billsBeforeHeldPay + 1)
+      const settledRow = store.bills.find(
+        (bill) => bill.order_id === saved.id && bill.status === 'settled',
+      )
+      expect(settledRow).toBeDefined()
+      expect(store.orders.find((order) => order.id === saved.id)?.bill_id).toBe(settledRow!.id)
       void prepared
     })
 
@@ -546,12 +570,22 @@ describe('mock billing adapter', () => {
       )
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
 
-      const paid = await adapter.payOrder(saved.id, [
+      // No bill yet: an order enters Bills only when prepared AND paid.
+      const held = await adapter.payOrder(saved.id, [
         { method: 'cash', amountPaise: saved.totalPaise },
       ])
+      expect(held).toBeNull()
+      expect(store.bills.some((bill) => bill.order_id === saved.id)).toBe(false)
       const listed = await adapter.listOpenOrders(DEMO_OUTLET_ID)
       const card = listed.find((order) => order.id === saved.id)
-      expect(card).toMatchObject({ status: 'paid', preparedAt: null, billId: paid.id })
+      expect(card).toMatchObject({ status: 'paid', preparedAt: null, billId: null })
+
+      // Preparation is what carries it across the bills border.
+      await adapter.markOrderPrepared(saved.id, true)
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      expect(store.bills.some((bill) => bill.order_id === saved.id)).toBe(true)
+      const settled = await adapter.listOpenOrders(DEMO_OUTLET_ID)
+      expect(settled.find((order) => order.id === saved.id)).toBeUndefined()
     })
 
     it('takes a payment back within the window as one atomic unwind, and refuses outside it', async () => {
@@ -561,9 +595,11 @@ describe('mock billing adapter', () => {
         orderDraft(store, '63000000-0000-4000-8000-000000000001'),
       )
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      await adapter.markOrderPrepared(saved.id, true)
       const paid = await adapter.payOrder(saved.id, [
         { method: 'cash', amountPaise: saved.totalPaise },
       ])
+      if (!paid) throw new Error('a prepared order settles into a bill')
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
       const billsBefore = store.bills.length
 
@@ -589,9 +625,11 @@ describe('mock billing adapter', () => {
         orderDraft(store, '65000000-0000-4000-8000-000000000001'),
       )
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      await adapter.markOrderPrepared(saved.id, true)
       const paid = await adapter.payOrder(saved.id, [
         { method: 'cash', amountPaise: saved.totalPaise },
       ])
+      if (!paid) throw new Error('a prepared order settles into a bill')
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
 
       // The clock is measured from when the money changed hands, never a timer.
@@ -610,9 +648,11 @@ describe('mock billing adapter', () => {
         orderDraft(store, '64000000-0000-4000-8000-000000000001'),
       )
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      await adapter.markOrderPrepared(saved.id, true)
       const paid = await adapter.payOrder(saved.id, [
         { method: 'upi', amountPaise: saved.totalPaise },
       ])
+      if (!paid) throw new Error('a prepared order settles into a bill')
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
 
       await expect(adapter.cancelPaidOrder(saved.id, ' ')).rejects.toThrow(/reason/)

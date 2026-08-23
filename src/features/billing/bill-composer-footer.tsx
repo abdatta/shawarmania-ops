@@ -172,7 +172,7 @@ export function BillComposerFooter({
             data-testid="settle"
             onClick={onPaid}
           >
-            Mark Paid
+            Paid
           </Button>
         )}
       </div>

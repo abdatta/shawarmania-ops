@@ -42,17 +42,18 @@ for contract-touching work.
 
 - [x] 5.1 Middle column hosts Bills this shift: PaymentTotalCards top, collapsed bills below with countdown chip on eligible ones; reshaped shimmer silhouettes for both middle and rail content.
 - [x] 5.2 Composer overlays the middle column on first item tap and during edits; returns on save/settle/cancel-edit; draft suspension semantics unchanged.
-- [x] 5.3 Right rail becomes Preparing over divider over Unpaid Prepared Orders; whole-outlet scope; settled confirmation follows the money into the bills column.
+- [x] 5.3 Right rail becomes Preparing over divider over Unpaid Prepared Orders; whole-outlet scope; a settle hands the middle column back to Bills this shift with the bill queued in it � no confirmation bar is inserted.
 - [x] 5.4 Rename applied everywhere user-visible (rail headings, standalone surface + its outlet-wide subtitle, manager labels, test ids' accessible names); slugs and DB vocabulary unchanged.
 - [x] 5.5 Column resize keys keep working for the two resizable columns.
 
 ## 6. Pipeline cards
 
 - [x] 6.1 Compact ticket card: meta line, bold quantity prefixes without per-line prices, total top-right, PAID chip beside total on paid-unprepared cards.
-- [x] 6.2 One primary action per card by section (Mark prepared / Mark paid / Mark prepared on paid-unprepared); docked-edit variant unchanged in kind.
-- [x] 6.3 Kebab overflow with touch-safe labelled rows: Edit + Cancel (unpaid), Reprepare (unpaid prepared), Un-pay + Cancel after paid (paid, within window); Edit absent/refused on paid cards.
+- [x] 6.2 Card actions by band, verb-only labels (Prepared + Paid in Preparing; green Paid + Reprepare in Unpaid Prepared); docked-edit variant unchanged in kind.
+- [x] 6.3 Kebab overflow with touch-safe labelled rows: Edit + Cancel (unpaid), Un-pay + Cancel after paid (paid, within window); Edit absent/refused on paid cards; Reprepare promoted out of the overflow onto the prepared card.
 - [x] 6.4 Un-pay confirmation naming amount and tender; cancel-after-paid dialog warning that money leaves the drawer, reasoned, loud styling.
-- [ ] 6.5 Density proof: ≥6 one-item cards visible in the rail at landscape-tablet height without scrolling (browser-checked).
+- [x] 6.5 Density proof: ≥6 one-item cards visible in the rail at landscape-tablet height without scrolling (browser-checked: 725px rail ÷ 98px card = 7).
+- [x] 6.6 Owner feedback round: no section headings and no inserted info bars — bands are colour-coded (ember Preparing, green Unpaid Prepared via a contrast-gated --on-success/--success pair) with the labelled divider as their only words; the reference number renders bright in the primary colour; paying a preparing order holds the money without creating a bill until preparation settles it (spec: Bills only when prepared AND paid).
 
 ## 7. Motion
 
@@ -68,8 +69,8 @@ for contract-touching work.
 
 ## 9. Close-out sweep
 
-- [ ] 9.1 Full local suite green: lint, format:check, typecheck, test, contrast (both themes), build, e2e; Docker job — db reset, test:db, test:rls, test:e2e:auth, db:types diff clean.
-- [ ] 9.2 Offline exercise through the real UI: offline → order → prepare → pay → unpay → online → exactly once.
-- [ ] 9.3 Demo walk: four roles still walk; demo makes no request beyond app origin; banner undismissable.
-- [ ] 9.4 Phone + tablet viewports, light and dark, zero console errors.
-- [ ] 9.5 ROADMAP row #45 reconciled via roadmap:sync.
+- [x] 9.1 Full local suite green: lint, format:check, typecheck, test, contrast (both themes), build, e2e; Docker job — db reset, test:db, test:rls, test:e2e:auth, db:types diff clean.
+- [x] 9.2 Offline exercise through the real UI: offline → order → prepare → pay → unpay → online → exactly once.
+- [x] 9.3 Demo walk: four roles still walk; demo makes no request beyond app origin; banner undismissable.
+- [x] 9.4 Phone + tablet viewports, light and dark, zero console errors.
+- [x] 9.5 ROADMAP row #45 reconciled via roadmap:sync.

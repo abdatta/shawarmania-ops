@@ -10,16 +10,20 @@ obeying the same replay and conflict rules as every sibling command.
 `set_order_preparation` SHALL carry the order id, an explicit prepared flag
 and its command time, and SHALL be refused for an order that is not open,
 except that marking prepared is accepted for a paid order whose preparation is
-not yet recorded. Repreparing a paid order SHALL be refused.
+not yet recorded — settling that order into a bill when its payment was taken
+upfront. Repreparing a paid order SHALL be refused.
 
-`void_order_payment` and `cancel_paid_order` SHALL each name the order and the
-bill they unwind, carry a non-blank reason, and execute as one atomic
-transaction: the bill's void transition with its structured kind, and the
-order's return to open or to cancelled respectively. Both SHALL be refused
-unless the commanding tablet and shift are the ones that took the payment,
-under the same historical-shift validity every delayed command uses; the bill
+`void_order_payment` and `cancel_paid_order` SHALL each name the order and
+carry a non-blank reason, and execute as one atomic transaction: the bill's
+void transition with its structured kind where a bill exists — an upfront
+payer paid before preparation holds its money without one, and unwinding it
+discards the held tender — and the order's return to open or to cancelled
+respectively. Both SHALL be refused unless the commanding tablet and shift are
+the ones that took the payment,
+under the same historical-shift validity every delayed command uses; where a
+bill exists it
 is settled and not already voided; the order is paid; and the commanding time
-falls within five minutes of the bill's stored `paid_at`. Outside that window
+falls within five minutes of the money's own `paid_at`. Outside that window
 both SHALL be refused permanently. Direct table writes performing either
 effect SHALL remain impossible for every client role.
 

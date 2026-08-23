@@ -322,6 +322,7 @@ describe('the live tablet acceptance boundary', () => {
     const paid = await billing.payOrder(orderId, [
       { method: 'cash', amountPaise: draft.lines[0]!.unitPricePaise },
     ])
+    if (!paid) throw new Error('a prepared order settles into a bill')
     await settle()
 
     // Paid *and* prepared has crossed into Bills this shift — it no longer

@@ -5,7 +5,6 @@ import { AlertsSurface } from '@/features/alerts/alerts-surface'
 import { MyAttendance } from '@/features/attendance/my-attendance'
 import { OutletAttendance } from '@/features/attendance/outlet-attendance'
 import { BillingCounter } from '@/features/billing/billing-counter'
-import { GhostLayer } from '@/features/billing/flip'
 import { ManagerBillingHistory } from '@/features/billing/manager-billing-history'
 import { MyShiftSurface } from '@/features/billing/my-shift-surface'
 import { OpenOrdersSurface } from '@/features/billing/open-orders-surface'
@@ -94,7 +93,6 @@ export const roleSurfaceRoutes: RouteObject[] = [
       <GatedSurface path="open-orders">
         <div className="mx-auto h-full max-w-3xl p-4">
           <OpenOrdersSurface />
-          <GhostLayer />
         </div>
       </GatedSurface>
     ),

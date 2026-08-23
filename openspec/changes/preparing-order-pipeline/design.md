@@ -93,3 +93,12 @@ Display text becomes **Unpaid Prepared Orders** everywhere user-visible: rail he
 ## D9 — Demo parity rides along, as tasks
 
 Four fidelity gaps close with the adapter work: mock commands all queue uniformly with provisional `Local · XXXX` references until a simulated delivery assigns numbers; the seeded pending bill drains on subscribe like the live coordinator does; open-order lists go outlet-wide with a second fabricated tablet contributing seed orders (exercising creator chips and cross-device cards); and `payOrder`/`saveOrder` stop being instant while direct bills queue. Demo-sim quirkiness observed during exploration (fixture timestamps later than the viewer's clock) is left as-is deliberately: the scenario spanning a trading day is the point.
+
+## D10 — Owner feedback round: colour, silence, and the deferred bill
+
+Counter-owner review reshaped the rail’s language and one settlement rule. Each directive, and what it decided:
+
+- **No headings, no info bars.** The two bands are identified by colour alone (ember for Preparing, green for Unpaid Prepared) with the labelled divider as their only words; actions never insert a confirmation bar — the card’s new band, the PAID chip, and the money flight are the acknowledgement. Errors keep the inline ole=alert line: a refusal that says nothing is a mystery, not silence.
+- **Green is a token pair.** --on-success joins the semantic layer in both themes (--brand-white on veg-deep, stone-900 on veg-soft), mirroring on-warning, and is contrast-gated like every pair. Components never touch the hexes.
+- **Verb-only labels.** Mark prepared / Mark paid become **Prepared** / **Paid** everywhere on the counter, dialog confirm included. Preparing cards grow a secondary **Paid** (pay upfront directly); Unpaid Prepared cards promote Reprepare out of the kebab into a visible secondary.
+- **Bills only when prepared AND paid.** Paying an unprepared order holds its tender against the order without creating a bill; marking it prepared is what settles it. The mock implements this fully (held tender store, settle-on-prepare at delivery, unwinds that discard held money when no bill exists). The live adapter keeps today’s settle-at-pay behaviour until its promoting change carries the matching database functions — the divergence is deliberate, typed in the interface (“null = held”), and confined to the demo gate.

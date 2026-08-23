@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 import type { BillingOrder } from '@/data-access/adapters'
 
@@ -24,18 +24,17 @@ export function CounterActivityRail({
   refreshKey,
   editingOrder,
   onEditOrder,
+  onActivityChanged,
   pin,
 }: {
   refreshKey: number
   editingOrder: BillingOrder | null
   onEditOrder: (order: BillingOrder) => void
+  /** The pipeline already reloads itself; notify the bills column only. */
+  onActivityChanged: () => void
   /** The docked card, built by the composer that owns the draft it displays. */
   pin: ReactNode
 }) {
-  const [localRefresh, setLocalRefresh] = useState(0)
-  const refresh = useCallback(() => setLocalRefresh((value) => value + 1), [])
-  const combinedRefresh = refreshKey + localRefresh
-
   const editing = editingOrder !== null
 
   return (
@@ -65,13 +64,13 @@ export function CounterActivityRail({
           marginLeft: 'calc(var(--dock-overhang) * -1)',
           paddingLeft: 'calc(0.75rem + var(--dock-overhang))',
         }}
-        className="min-h-0 flex-1 overflow-y-auto rounded-br-xl py-3 pr-3"
+        className="min-h-0 flex-1 overflow-y-auto rounded-br-xl py-2 pr-3"
       >
         <CounterActivity
-          refreshKey={combinedRefresh}
+          refreshKey={refreshKey}
           editingOrderId={editingOrder?.id ?? null}
           onEditOrder={onEditOrder}
-          onActivityChanged={refresh}
+          onActivityChanged={onActivityChanged}
           pin={
             editing && (
               /*

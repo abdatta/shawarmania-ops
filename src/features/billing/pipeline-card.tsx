@@ -33,6 +33,7 @@ export function PipelineCard({
   tenderLabel = null,
   onEdit,
   onMarkPrepared,
+  onUnprepare,
   onMarkPaid,
   onCancel,
   onUnpay,
@@ -52,23 +53,45 @@ export function PipelineCard({
   tenderLabel?: string | null
   onEdit?: (order: BillingOrder) => void
   onMarkPrepared: (order: BillingOrder) => void
+  /** Only wired for Unpaid Prepared cards, where it is a visible secondary. */
+  onUnprepare: (order: BillingOrder) => void
   onMarkPaid: (order: BillingOrder) => void
   onCancel: (order: BillingOrder) => void
   onUnpay: (order: BillingOrder, reason: string) => void
   onCancelAfterPaid: (order: BillingOrder, reason: string) => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<{ bottom: number; right: number } | null>(null)
   const [unpaying, setUnpaying] = useState(false)
   const [cancellingAfterPaid, setCancellingAfterPaid] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  function placeMenu() {
+    const rect = menuRef.current?.getBoundingClientRect()
+    if (!rect) return
+    // The counter workspace scrolls horizontally, which necessarily clips
+    // vertical overflow too. A fixed panel still opens above its trigger but
+    // belongs to the viewport instead of that clipped scrolling box.
+    setMenuPosition({
+      bottom: window.innerHeight - rect.top + 4,
+      right: window.innerWidth - rect.right,
+    })
+  }
 
   useEffect(() => {
     if (!menuOpen) return
     function onPointerDown(event: PointerEvent) {
       if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
     }
+    placeMenu()
+    window.addEventListener('resize', placeMenu)
+    window.addEventListener('scroll', placeMenu, true)
     document.addEventListener('pointerdown', onPointerDown)
-    return () => document.removeEventListener('pointerdown', onPointerDown)
+    return () => {
+      window.removeEventListener('resize', placeMenu)
+      window.removeEventListener('scroll', placeMenu, true)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
   }, [menuOpen])
 
   const totalPaise = order.lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
@@ -109,15 +132,6 @@ export function PipelineCard({
         },
       })
     }
-    if (order.preparedAt !== null) {
-      kebabRows.push({
-        label: 'Reprepare',
-        act: () => {
-          setMenuOpen(false)
-          onMarkPrepared(order)
-        },
-      })
-    }
     kebabRows.push({
       label: 'Cancel order',
       dangerous: true,
@@ -127,13 +141,6 @@ export function PipelineCard({
       },
     })
   } else if (unwindOpen) {
-    kebabRows.push({
-      label: 'Un-pay',
-      act: () => {
-        setMenuOpen(false)
-        setUnpaying(true)
-      },
-    })
     kebabRows.push({
       label: 'Cancel after paid',
       dangerous: true,
@@ -151,33 +158,37 @@ export function PipelineCard({
         order.localReference ? `open-order-local-${order.id}` : `open-order-${order.orderNumber}`
       }
       data-paid={isPaid || undefined}
-      className="rounded-xl border border-border bg-surface-raised p-2"
+      className="rounded-xl border border-border bg-surface-raised px-2 py-1.5"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          {/* One meta line: customer if any, reference, age, and the creator
-              when somebody else took the order. */}
-          <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-            {order.customerName && (
-              <span className="flex items-center gap-1 text-sm font-black leading-5 text-content">
-                <UserRound aria-hidden className="shrink-0 text-accent-text" size={14} />
-                <span className="max-w-40 truncate">{order.customerName}</span>
-              </span>
-            )}
-            <span className="rounded-md border border-border bg-surface px-1 py-px text-xs font-bold text-content-muted">
-              {reference}
-            </span>
-            <span className="text-xs text-content-muted">{formatRecentAge(order.orderedAt)}</span>
-            {showCreator && (
-              <span className="truncate text-xs text-content-muted">· {order.creatorName}</span>
-            )}
+      <div className="flex min-w-0 items-stretch gap-2">
+        {/* The taller reference anchors the header. Customer and timing share
+            its height rather than adding two extra rows to the ticket. */}
+        <span
+          data-testid={`order-reference-${order.id}`}
+          className="flex shrink-0 items-center text-xl font-black leading-6 text-primary"
+        >
+          {order.localReference ?? `#${order.orderNumber}`}
+        </span>
+        <div className="min-w-0 flex-1 self-center">
+          {order.customerName && (
+            <div className="flex min-w-0 items-center gap-1 text-sm font-black leading-5 text-content">
+              <UserRound aria-hidden className="shrink-0 text-accent-text" size={14} />
+              <span className="max-w-40 truncate">{order.customerName}</span>
+            </div>
+          )}
+          <div
+            data-testid={`order-metadata-${order.id}`}
+            className="flex min-w-0 items-center gap-x-1.5 text-xs leading-4 text-content-muted"
+          >
+            <span>{formatRecentAge(order.orderedAt)}</span>
+            {showCreator && <span className="truncate">· {order.creatorName}</span>}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 self-center items-center gap-1.5">
           {isPaid && (
             <span
               data-testid={`paid-chip-${order.id}`}
-              className="rounded-md bg-primary px-1.5 py-0.5 text-xs font-black text-on-primary"
+              className="rounded-md bg-success px-1.5 py-0.5 text-xs font-black text-on-success"
             >
               PAID
             </span>
@@ -187,7 +198,7 @@ export function PipelineCard({
       </div>
 
       {showItems && order.lines.length > 0 && (
-        <ul className="mt-1.5 space-y-0.5" aria-label={`Items for ${reference}`}>
+        <ul className="mt-0.5 space-y-0" aria-label={`Items for ${reference}`}>
           {order.lines.map((line) => (
             <li key={line.menuItemId} className="flex items-start gap-1.5 text-sm leading-5">
               <span className="min-w-6 shrink-0 font-black text-content">{line.quantity}×</span>
@@ -197,20 +208,61 @@ export function PipelineCard({
         </ul>
       )}
 
-      <div className="mt-2 flex items-stretch justify-between gap-2">
+      <div className="mt-1 flex items-stretch justify-between gap-1.5">
         {section === 'unpaid-prepared' ? (
-          <Button size="phone" className="flex-1" disabled={busy} onClick={() => onMarkPaid(order)}>
-            Mark Paid
-          </Button>
+          /* Green is this card's identity: prepared food waiting for money.
+             Filled success actions use their own contrast-gated token pair. */
+          <>
+            <Button
+              size="phone"
+              className="h-9 flex-1 bg-success px-3 text-on-success"
+              disabled={busy}
+              onClick={() => onMarkPaid(order)}
+            >
+              Paid
+            </Button>
+            <Button
+              variant="secondary"
+              size="phone"
+              className="h-9 flex-1 px-3"
+              disabled={busy}
+              onClick={() => onUnprepare(order)}
+            >
+              Reprepare
+            </Button>
+          </>
         ) : (
-          <Button
-            size="phone"
-            className="flex-1"
-            disabled={busy}
-            onClick={() => onMarkPrepared(order)}
-          >
-            Mark prepared
-          </Button>
+          <>
+            <Button
+              size="phone"
+              className="h-9 flex-1 px-3"
+              disabled={busy}
+              onClick={() => onMarkPrepared(order)}
+            >
+              Prepared
+            </Button>
+            {unwindOpen ? (
+              <Button
+                variant="secondary"
+                size="phone"
+                className="h-9 flex-1 px-3"
+                disabled={busy}
+                onClick={() => setUnpaying(true)}
+              >
+                Un-pay
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                size="phone"
+                className="h-9 flex-1 px-3"
+                disabled={busy || isPaid}
+                onClick={() => onMarkPaid(order)}
+              >
+                Paid
+              </Button>
+            )}
+          </>
         )}
 
         {kebabRows.length > 0 && (
@@ -218,11 +270,14 @@ export function PipelineCard({
             <Button
               variant="secondary"
               size="phone"
-              className="w-11 px-0"
+              className="h-9 w-9 px-0"
               aria-label={`More actions for ${reference}`}
               aria-expanded={menuOpen}
               disabled={busy}
-              onClick={() => setMenuOpen((open) => !open)}
+              onClick={() => {
+                if (!menuOpen) placeMenu()
+                setMenuOpen((open) => !open)
+              }}
             >
               <MoreVertical aria-hidden size={17} />
             </Button>
@@ -230,7 +285,8 @@ export function PipelineCard({
               <div
                 role="menu"
                 aria-label={`More actions for ${reference}`}
-                className="absolute bottom-full right-0 z-20 mb-1 w-44 rounded-xl border border-border bg-surface p-1 shadow-lg"
+                style={{ position: 'fixed', ...menuPosition }}
+                className="z-30 w-44 rounded-xl border border-border bg-surface p-1 shadow-lg"
               >
                 {kebabRows.map((row) => (
                   <button

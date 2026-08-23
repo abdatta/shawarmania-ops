@@ -161,7 +161,7 @@ export function createMockBillingAdapter(
   >()
   const pendingUnwinds = new Map<
     string,
-    { orderId: string; billId: string; shiftId: string; reason: string }
+    { orderId: string; billId: string | null; shiftId: string; reason: string }
   >()
 
   const sortedPending = () => [...pending.values()].sort((a, b) => a.acceptedAtMs - b.acceptedAtMs)
@@ -621,6 +621,79 @@ export function createMockBillingAdapter(
     const row = store.orders.find((candidate) => candidate.id === orderId)
     if (!row || (row.status !== 'open' && !(row.status === 'paid' && prepared))) return
     row.prepared_at = prepared ? new Date().toISOString() : null
+    // Settling the upfront payer: money is already held against this order,
+    // and preparation was the last thing its bill waited for.
+    if (prepared && row.status === 'paid') {
+      const held = store.orderPayments.get(row.id)
+      if (held) {
+        store.orderPayments.delete(row.id)
+        materialiseBill(row, held.payments, held.paidAt, held.shiftId)
+      }
+    }
+  }
+
+  /** Create the settled bill a fully-prepared-and-paid order has earned. */
+  function materialiseBill(
+    row: Tables<'orders'>,
+    payments: PaymentAllocation[],
+    paidAt: string,
+    shiftId: string,
+    billId: string = crypto.randomUUID(),
+  ) {
+    const shift = store.shifts.find((candidate) => candidate.id === shiftId)
+    if (!shift) throw new Error(`Settling order ${row.id} has no shift to attribute to.`)
+    const nextNumber = (store.billNumbers.get(row.outlet_id) ?? 0) + 1
+    store.billNumbers.set(row.outlet_id, nextNumber)
+    const bill: Tables<'bills'> = {
+      id: billId,
+      outlet_id: row.outlet_id,
+      bill_number: nextNumber,
+      biller_profile_id: row.paid_by ?? shift.biller_profile_id,
+      counter_device_id: shift.counter_device_id,
+      shift_id: shift.id,
+      counter_shift_id: null,
+      order_id: row.id,
+      business_date: row.business_date,
+      created_at: paidAt,
+      ordered_at: row.ordered_at,
+      paid_at: paidAt,
+      payment_business_date: shift.business_date,
+      synced_at: new Date().toISOString(),
+      customer_id: row.customer_id,
+      customer_name: row.customer_name,
+      customer_phone: row.customer_phone,
+      payment_method: payments.length === 1 ? payments[0]!.method : null,
+      pricing_mode: 'no_tax',
+      status: 'settled',
+      subtotal_paise: row.subtotal_paise,
+      discount_paise: 0,
+      tax_paise: 0,
+      total_paise: row.total_paise,
+      void_kind: null,
+      void_reason: null,
+      voided_at: null,
+      voided_by: null,
+    }
+    store.bills.push(bill)
+    store.billPayments.set(billId, payments)
+    // The edit window runs from the money's own clock — for an upfront payer
+    // that is when they handed the cash over, not when the kitchen finished.
+    acceptedPaymentTimes.set(billId, Date.parse(paidAt))
+    store.orderItems
+      .filter((line) => line.order_id === row.id)
+      .forEach((line, index) =>
+        store.billItems.push({
+          id: `${billId}-${index}`,
+          bill_id: billId,
+          menu_item_id: line.menu_item_id,
+          item_name: line.item_name,
+          unit_price_paise: line.unit_price_paise,
+          quantity: line.quantity,
+          line_total_paise: line.line_total_paise,
+        }),
+      )
+    row.bill_id = billId
+    return billId
   }
 
   function applyPayOrder(payment: {
@@ -635,58 +708,23 @@ export function createMockBillingAdapter(
     if (!row || row.status !== 'open') return
     const shift = store.shifts.find((candidate) => candidate.id === payment.shiftId)
     if (!shift) throw new Error(`Queued payment ${payment.billId} has no shift to attribute to.`)
-    const nextNumber = (store.billNumbers.get(row.outlet_id) ?? 0) + 1
-    store.billNumbers.set(row.outlet_id, nextNumber)
-    const bill: Tables<'bills'> = {
-      id: payment.billId,
-      outlet_id: row.outlet_id,
-      bill_number: nextNumber,
-      biller_profile_id: shift.biller_profile_id,
-      counter_device_id: shift.counter_device_id,
-      shift_id: shift.id,
-      counter_shift_id: null,
-      order_id: row.id,
-      business_date: row.business_date,
-      created_at: payment.paidAt,
-      ordered_at: row.ordered_at,
-      paid_at: payment.paidAt,
-      payment_business_date: payment.paymentBusinessDate,
-      synced_at: payment.paidAt,
-      customer_id: row.customer_id,
-      customer_name: row.customer_name,
-      customer_phone: row.customer_phone,
-      payment_method: payment.payments.length === 1 ? payment.payments[0]!.method : null,
-      pricing_mode: 'no_tax',
-      status: 'settled',
-      subtotal_paise: row.subtotal_paise,
-      discount_paise: 0,
-      tax_paise: 0,
-      total_paise: row.total_paise,
-      void_kind: null,
-      void_reason: null,
-      voided_at: null,
-      voided_by: null,
-    }
-    store.bills.push(bill)
-    store.billPayments.set(payment.billId, payment.payments)
-    store.orderItems
-      .filter((line) => line.order_id === row.id)
-      .forEach((line, index) =>
-        store.billItems.push({
-          id: `${payment.billId}-${index}`,
-          bill_id: payment.billId,
-          menu_item_id: line.menu_item_id,
-          item_name: line.item_name,
-          unit_price_paise: line.unit_price_paise,
-          quantity: line.quantity,
-          line_total_paise: line.line_total_paise,
-        }),
-      )
     row.status = 'paid'
-    row.bill_id = payment.billId
     row.paid_at = payment.paidAt
     row.paid_by = shift.biller_profile_id
     row.paid_shift_id = shift.id
+    if (row.prepared_at !== null) {
+      // Prepared already: the order crosses into Bills at once, keeping the
+      // id the provisional view was built from.
+      materialiseBill(row, payment.payments, payment.paidAt, shift.id, payment.billId)
+    } else {
+      // The upfront payer: hold the money against the order. No bill exists
+      // until preparation lands — Bills holds only prepared-and-paid work.
+      store.orderPayments.set(row.id, {
+        payments: payment.payments,
+        paidAt: payment.paidAt,
+        shiftId: shift.id,
+      })
+    }
   }
 
   /** The shared spine of both unwinds: void the bill with its structured kind and reason. */
@@ -820,7 +858,11 @@ export function createMockBillingAdapter(
             overlaid.set(record.orderId, {
               ...current,
               status: 'paid',
-              billId: record.billId,
+              // A bill exists only when the order was already prepared; the
+              // upfront payer holds its money without one until preparation
+              // settles it at delivery. Once delivered the command leaves the
+              // pending set and the row's own truth shows through.
+              billId: current.preparedAt !== null ? record.billId : null,
             })
           }
           break
@@ -1334,8 +1376,10 @@ export function createMockBillingAdapter(
       ) {
         throw new BillingActionError('not_found', 'That payment is not on this tablet.')
       }
-      const paidAtMs = paidAtOf(billId)
-      if (paidAtMs === null) {
+      // The window runs from the money's own clock: a settled bill's stored
+      // paid_at, or the moment an upfront payer's cash was handed over.
+      const paidAtMs = billId !== null ? paidAtOf(billId) : Date.parse(projected.paidAt ?? '')
+      if (!Number.isFinite(paidAtMs) || paidAtMs === null || Number.isNaN(paidAtMs)) {
         throw new BillingActionError('not_found', 'That payment is not on this tablet.')
       }
       if (paidAtMs + PAYMENT_EDIT_WINDOW_MS <= paymentNow()) {
@@ -1346,13 +1390,14 @@ export function createMockBillingAdapter(
       }
       const commandId = crypto.randomUUID()
       pendingUnwinds.set(commandId, { orderId, billId, shiftId: shift.id, reason: cleanReason })
-      acceptedPaymentTimes.delete(billId)
+      if (billId !== null) acceptedPaymentTimes.delete(billId)
       accept({
         commandId,
         type: 'void_order_payment',
         acceptedAtMs: Date.now(),
         apply: () => {
-          voidBillRow(billId, 'counter_unpay', cleanReason)
+          if (billId !== null) voidBillRow(billId, 'counter_unpay', cleanReason)
+          store.orderPayments.delete(orderId)
           reopenPaidOrder(orderId)
         },
       })
@@ -1371,15 +1416,15 @@ export function createMockBillingAdapter(
       const shift = requireOpenShift()
       const cleanReason = requireReason(reason)
       const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (!projected || projected.deviceId !== shift.counter_device_id || !projected.billId) {
+      if (!projected || projected.deviceId !== shift.counter_device_id) {
         throw new BillingActionError(
           'not_found',
           'That paid order is not one this tablet can cancel.',
         )
       }
       const billId = projected.billId
-      const paidAtMs = paidAtOf(billId)
-      if (paidAtMs === null) {
+      const paidAtMs = billId !== null ? paidAtOf(billId) : Date.parse(projected.paidAt ?? '')
+      if (paidAtMs === null || Number.isNaN(paidAtMs)) {
         throw new BillingActionError('not_found', 'That payment is not on this tablet.')
       }
       if (paidAtMs + PAYMENT_EDIT_WINDOW_MS <= paymentNow()) {
@@ -1390,13 +1435,14 @@ export function createMockBillingAdapter(
       }
       const commandId = crypto.randomUUID()
       pendingUnwinds.set(commandId, { orderId, billId, shiftId: shift.id, reason: cleanReason })
-      acceptedPaymentTimes.delete(billId)
+      if (billId !== null) acceptedPaymentTimes.delete(billId)
       accept({
         commandId,
         type: 'cancel_paid_order',
         acceptedAtMs: Date.now(),
         apply: () => {
-          voidBillRow(billId, 'cancelled_after_paid', cleanReason)
+          if (billId !== null) voidBillRow(billId, 'cancelled_after_paid', cleanReason)
+          store.orderPayments.delete(orderId)
           cancelPaidOrderRow(orderId, shift.id, cleanReason)
         },
       })
@@ -1440,13 +1486,17 @@ export function createMockBillingAdapter(
         paymentBusinessDate: shift.business_date,
       }
       pendingOrderPayments.set(billId, record)
-      acceptedPaymentTimes.set(billId, paymentNow())
+      if (projected.preparedAt !== null) acceptedPaymentTimes.set(billId, paymentNow())
       accept({
         commandId: billId,
         type: 'pay_order',
         acceptedAtMs: paymentNow(),
         apply: () => applyPayOrder(record),
       })
+      // An unprepared order has no bill yet — its money is held until
+      // preparation settles it. The surface reads the null and lets the card
+      // keep wearing its Paid marker in Preparing instead of flying left.
+      if (projected.preparedAt === null) return null
       return provisionalBillView(billId, {
         outletId: projected.outletId,
         businessDate: projected.businessDate,

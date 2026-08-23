@@ -1268,21 +1268,28 @@ export interface BillingAdapter {
     input: Pick<SaveOrderInput, 'lines' | 'customerId' | 'customerName' | 'customerPhone'>,
   ): Promise<BillingOrder>
   listOpenOrders(outletId: string): Promise<BillingOrder[]>
-  payOrder(orderId: string, payments: PaymentAllocation[]): Promise<BillingBill>
+  /**
+   * Record tender against an open order. When the order is already prepared
+   * this settles it into a bill and resolves with that bill; when its food is
+   * still owed the money is held against the order and **null** resolves — no
+   * bill exists yet, because an order enters Bills only when prepared and paid.
+   */
+  payOrder(orderId: string, payments: PaymentAllocation[]): Promise<BillingBill | null>
   cancelOrder(orderId: string, reason: string): Promise<BillingOrder>
   /**
    * Mark an order prepared, or reprepare it by clearing the mark. The order
    * must be open — or paid but not yet prepared, the upfront payer's path into
-   * Bills. Repreparing a paid order is refused: the bills border is terminal in
-   * that direction.
+   * Bills: settling that order is what marking prepared does. Repreparing a
+   * paid order is refused: the bills border is terminal in that direction.
    */
   markOrderPrepared(orderId: string, prepared: boolean): Promise<BillingOrder>
   /**
-   * Take this tablet's own payment back within the grace window: the bill is
-   * voided as `counter_unpay` and the order reopens. Queued behind the payment
+   * Take this tablet's own payment back within the grace window. A settled
+   * bill is voided as `counter_unpay`; money held against a paid-but-unprepared
+   * order is discarded. Either way the order reopens. Queued behind the payment
    * it reverses, so offline acceptance cannot overtake it.
    */
-  unpayOrder(orderId: string, billId: string, reason: string): Promise<BillingOrder>
+  unpayOrder(orderId: string, billId: string | null, reason: string): Promise<BillingOrder>
   /**
    * Cancel a paid order within the same window: one reasoned act that voids
    * the bill as `cancelled_after_paid` and cancels the order — warned about

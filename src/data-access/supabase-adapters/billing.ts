@@ -1104,7 +1104,7 @@ export function createSupabaseBillingAdapter(
       return readOrders(outletId, true)
     },
 
-    async payOrder(orderId, payments): Promise<BillingBill> {
+    async payOrder(orderId, payments): Promise<BillingBill | null> {
       const { session, shift } = requireTablet()
       const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
       if (!existing) throw new BillingActionError('not_found', 'That order is no longer open.')
@@ -1123,6 +1123,10 @@ export function createSupabaseBillingAdapter(
         },
       })
       await accept(command, existing.outletId, existing.businessDate, orderId)
+      // Until the promoting change moves settlement to prepare-time, the live
+      // database settles every payment at once — even for an unprepared order.
+      // The mock already defers; this path returns the provisional bill so the
+      // two adapters keep one interface.
       // Kept, not deleted: a paid-but-unprepared order is still pipeline work,
       // and marking it prepared must not depend on a fresh server read.
       const paidOrder: BillingOrder = {
@@ -1223,7 +1227,10 @@ export function createSupabaseBillingAdapter(
       if (!reason.trim())
         throw new BillingActionError('blank_reason', 'Taking a payment back needs a reason.')
       const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
-      if (!existing || existing.billId !== billId) {
+      // Until the promoting change moves settlement to prepare-time, every
+      // live payment settles immediately — so only a bill-backed unwind
+      // exists here. A held payment without a bill is a mock-only state.
+      if (!existing || billId === null || existing.billId !== billId) {
         throw new BillingActionError('not_found', 'That payment is not on this tablet.')
       }
       const command = await createBillingCommand({

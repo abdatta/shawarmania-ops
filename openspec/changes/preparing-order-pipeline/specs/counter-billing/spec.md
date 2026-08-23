@@ -2,14 +2,16 @@
 
 ### Requirement: The right rail is the preparation pipeline
 
-The activity column SHALL present this outlet's unpaid work as two labelled
-sections of one continuous rail: **Preparing**, holding saved orders not yet
-marked prepared, then a labelled divider, then **Unpaid Prepared Orders**,
-holding prepared orders awaiting payment. Both sections SHALL list the whole
-outlet's orders, showing the creator's name when another operator took the
-order. A paid order whose preparation is not yet recorded SHALL remain in
-Preparing wearing a Paid marker, because its food is still owed. An order
-SHALL enter Bills only when prepared and paid.
+The activity column SHALL present this outlet's unpaid work as two
+colour-coded bands of one continuous rail: **Preparing**, holding saved orders
+not yet marked prepared, then a labelled divider, then **Unpaid Prepared
+Orders**, holding prepared orders awaiting payment. The bands SHALL carry no
+section headings — the card colouring and the divider say which is which, and
+no informational bar SHALL be inserted when an action lands. Both bands SHALL
+list the whole outlet's orders, showing the creator's name when another
+operator took the order. A paid order whose preparation is not yet recorded
+SHALL remain in Preparing wearing a Paid marker, because its food is still
+owed. An order SHALL enter Bills only when prepared and paid.
 
 #### Scenario: An order lands in Preparing
 
@@ -29,33 +31,35 @@ SHALL enter Bills only when prepared and paid.
 #### Scenario: The upfront payer stays visible
 
 - **WHEN** an order is paid before being marked prepared
-- **THEN** it remains in Preparing marked Paid, and marking it prepared moves it into Bills
+- **THEN** it remains in Preparing marked Paid with no bill created, and marking it prepared settles it into Bills
 
 #### Scenario: Another tablet's order is on the board
 
 - **WHEN** a second billing device at the outlet saves an order
 - **THEN** it appears in the same pipeline with its creator named
 
-### Requirement: Pipeline cards are compact tickets with one primary action
+### Requirement: Pipeline cards are compact tickets with visible next steps
 
-A pipeline card SHALL show one meta line — customer name when present,
-reference, relative age, creator when another operator took the order — with
-the total prominent at the right, complete untruncated item lines with bold
-quantity prefixes, and exactly one primary action naming the section's next
-step: **Mark prepared** in Preparing, **Mark paid** in Unpaid Prepared Orders.
+A pipeline card SHALL show its reference with the number part in the brand's
+bright primary colour, one meta line — customer name when present, relative
+age, creator when another operator took the order — the total prominent at the
+right, and complete untruncated item lines with bold quantity prefixes.
 Per-line prices SHALL NOT appear on a pipeline card; line amounts remain
-available in the composer and on the bill. All uncommon actions SHALL sit
+available in the composer and on the bill. Each band colours its next step:
+a Preparing card SHALL offer **Prepared** as its primary action beside a
+secondary **Paid**, and an Unpaid Prepared card SHALL offer **Paid** on the
+band's green beside a secondary **Reprepare**. All uncommon actions SHALL sit
 behind one overflow control presenting touch-safe labelled rows: Edit and
-Cancel always on an unpaid card, Reprepare only on an unpaid prepared card,
-and on a paid card within its window Un-pay and Cancel after paid instead of
-Edit, which SHALL be unavailable once an order is paid. A one-item card SHALL
-stand no taller than about 120px so at least six fit the rail at landscape
-tablet height without scrolling. Item names SHALL never truncate.
+Cancel always on an unpaid card, and on a paid card within its window Un-pay
+and Cancel after paid instead of Edit, which SHALL be unavailable once an
+order is paid. A one-item card SHALL stand no taller than about 120px so at
+least six fit the rail at landscape tablet height without scrolling. Item
+names SHALL never truncate.
 
 #### Scenario: The section's next step is the big button
 
 - **WHEN** a biller reads a Preparing card and an Unpaid Prepared card side by side
-- **THEN** the first offers Mark prepared as its primary action and the second Mark paid
+- **THEN** the first offers Prepared as its primary action and the second a green Paid
 
 #### Scenario: Rare actions keep their safety
 
@@ -309,7 +313,7 @@ reasoned cancellation by that outlet's manager, and no transfer or recovery
 path SHALL exist. Cards across the pipeline SHALL label secondary numbers as
 Order #, show complete item lines, use relative age for today's order, and omit
 the creator when the current shift holder took the order. The payment action
-SHALL read Mark Paid and the preparation action Mark prepared.
+SHALL read Paid and the preparation action Prepared.
 
 #### Scenario: Another operator uses the same tablet
 - **WHEN** a different operator's shift begins on the order's tablet
