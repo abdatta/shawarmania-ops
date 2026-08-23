@@ -131,7 +131,7 @@ describe('useFlip', () => {
     const source = document.createElement('article')
     source.dataset.flipId = ticketId
     source.dataset.stage = 'preparing'
-    source.textContent = 'Order #104 · ₹278'
+    source.textContent = 'Order #' + '104 · ₹278'
 
     const billRow = document.createElement('li')
     billRow.dataset.stage = 'prepared'
@@ -145,7 +145,9 @@ describe('useFlip', () => {
 
     expect(destination).toHaveStyle({ opacity: '0' })
     expect(billRow.querySelector('[data-flip-placeholder]')).not.toBeNull()
-    expect(document.body.querySelector('[data-flip-ghost]')).toHaveTextContent('Order #104 · ₹278')
+    expect(document.body.querySelector('[data-flip-ghost]')).toHaveTextContent(
+      'Order #' + '104 · ₹278',
+    )
 
     billRow.remove()
     document.body.querySelector('[data-flip-ghost]')?.remove()
