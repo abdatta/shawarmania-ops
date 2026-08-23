@@ -37,7 +37,9 @@ import { BillComposerFooter } from './bill-composer-footer'
 import { BillPanel } from './bill-panel'
 import { CounterActivityRail } from './counter-activity-rail'
 import { EditingOrderPin } from './editing-order-pin'
+import { GhostLayer } from './flip'
 import { MenuGrid } from './menu-grid'
+import { MyShiftSurface } from './my-shift-surface'
 import { PaymentDialog } from './payment-dialog'
 import { useCounterState } from './use-counter-state'
 
@@ -622,7 +624,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         )}
       </div>
 
-      <div className="relative flex min-h-0 flex-col gap-2">
+      <div className="relative flex min-h-0 flex-col gap-2" data-testid="bill-column">
         <div
           role="separator"
           aria-label="Resize current bill column"
@@ -641,61 +643,6 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           onKeyDown={(event) => resizeColumnWithKeyboard('bill', event)}
           className="absolute -left-2.5 top-0 z-20 h-full w-5 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
         />
-        <BillPanel
-          lines={lines}
-          onChangeQuantity={changeQuantity}
-          {...(editingOrder
-            ? {
-                editingOrderReference:
-                  editingOrder.localReference ?? `order #${editingOrder.orderNumber}`,
-              }
-            : { footer: composerFooter })}
-        />
-
-        {visibleCustomerMatch && (
-          <div
-            className="rounded-xl border border-primary bg-surface p-3"
-            role="status"
-            data-testid="customer-match"
-          >
-            <div className="flex gap-2">
-              <UserRoundCheck aria-hidden className="mt-0.5 text-primary" size={20} />
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-content">Returning customer found</p>
-                <p className="text-sm text-content-muted">
-                  {visibleCustomerMatch.name
-                    ? customerName.trim() && customerName.trim() !== visibleCustomerMatch.name
-                      ? `Use ${visibleCustomerMatch.name}? This replaces the name in this order only.`
-                      : `Fill this order with ${visibleCustomerMatch.name}?`
-                    : 'This phone has no saved name.'}
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    size="phone"
-                    onClick={() => {
-                      if (visibleCustomerMatch.name) setCustomerName(visibleCustomerMatch.name)
-                      setCustomerMatch(null)
-                      setDeclinedPhone(validateIndianPhone(customerPhone).phone)
-                    }}
-                  >
-                    Use saved details
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="phone"
-                    onClick={() => {
-                      setCustomerMatch(null)
-                      setDeclinedPhone(validateIndianPhone(customerPhone).phone)
-                    }}
-                  >
-                    Keep this order
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {confirmation && (
           <div
             role="status"
@@ -714,6 +661,77 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
               </p>
             </div>
           </div>
+        )}
+        {/*
+          The middle column is Bills this shift by default, and the composer is
+          a mode over it (design D5): composition starts on the first item tap,
+          ends on save, settle or cancel-edit, and the money list it serves is
+          what shows through in between. An order opened for edit borrows the
+          same mode.
+        */}
+        {lines.length > 0 || editingOrder ? (
+          <>
+            <BillPanel
+              lines={lines}
+              onChangeQuantity={changeQuantity}
+              {...(editingOrder
+                ? {
+                    editingOrderReference:
+                      editingOrder.localReference ?? `order #${editingOrder.orderNumber}`,
+                  }
+                : { footer: composerFooter })}
+            />
+
+            {visibleCustomerMatch && (
+              <div
+                className="rounded-xl border border-primary bg-surface p-3"
+                role="status"
+                data-testid="customer-match"
+              >
+                <div className="flex gap-2">
+                  <UserRoundCheck aria-hidden className="mt-0.5 text-primary" size={20} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-content">Returning customer found</p>
+                    <p className="text-sm text-content-muted">
+                      {visibleCustomerMatch.name
+                        ? customerName.trim() && customerName.trim() !== visibleCustomerMatch.name
+                          ? `Use ${visibleCustomerMatch.name}? This replaces the name in this order only.`
+                          : `Fill this order with ${visibleCustomerMatch.name}?`
+                        : 'This phone has no saved name.'}
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        size="phone"
+                        onClick={() => {
+                          if (visibleCustomerMatch.name) setCustomerName(visibleCustomerMatch.name)
+                          setCustomerMatch(null)
+                          setDeclinedPhone(validateIndianPhone(customerPhone).phone)
+                        }}
+                      >
+                        Use saved details
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="phone"
+                        onClick={() => {
+                          setCustomerMatch(null)
+                          setDeclinedPhone(validateIndianPhone(customerPhone).phone)
+                        }}
+                      >
+                        Keep this order
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <MyShiftSurface
+            embedded
+            refreshKey={activityRefresh}
+            onActivityChanged={() => setActivityRefresh((value) => value + 1)}
+          />
         )}
       </div>
 
@@ -765,6 +783,13 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         onClose={() => setPaymentDialogOpen(false)}
         onConfirm={(payments) => void settle(payments)}
       />
+
+      {/*
+        Stage changes read as movement, not replacement: cards glide between
+        sections and columns (design D7). One layer serves the whole workspace;
+        it renders nothing until a flight is announced.
+      */}
+      <GhostLayer />
     </div>
   )
 }

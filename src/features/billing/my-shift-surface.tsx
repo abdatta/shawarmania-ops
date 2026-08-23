@@ -1,5 +1,5 @@
 import { AlertTriangle, ClipboardList } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,8 @@ import { newUuid } from '@/lib/uuid'
 import { ShiftBillList } from './shift-bill-list'
 import { PaymentDialog } from './payment-dialog'
 import { PaymentTotalCards } from './payment-total-cards'
+import { UnpayDialog, CancelAfterPaidDialog } from './pipeline-card'
+import { useFlip } from './flip'
 import { useCounterState } from './use-counter-state'
 
 export function MyShiftSurface({
@@ -37,6 +39,11 @@ export function MyShiftSurface({
   const [message, setMessage] = useState<string | null>(null)
   const [editingPayment, setEditingPayment] = useState<BillingBill | null>(null)
   const [savingPayment, setSavingPayment] = useState(false)
+  const [unpayingBill, setUnpayingBill] = useState<BillingBill | null>(null)
+  const [cancellingPaidBill, setCancellingPaidBill] = useState<BillingBill | null>(null)
+  // Bill rows glide when the list reorders or a row unwinds away.
+  const billListRef = useRef<HTMLDivElement | null>(null)
+  useFlip(billListRef, [history])
 
   const load = useCallback(async () => {
     await Promise.resolve()
@@ -74,11 +81,25 @@ export function MyShiftSurface({
 
   if (history === null)
     return (
-      <LoadingRegion label="this shift" className="space-y-2">
-        <Shimmer className="h-12" />
-        <Shimmer className="h-28" />
+      // The bills column's own silhouette: the totals pair over collapsed bill
+      // rows — reshaped beside this column's new layout, per the standing
+      // placeholder rule.
+      <LoadingRegion label="this shift" className="space-y-2" data-testid="bills-loading">
+        <div className="grid grid-cols-2 gap-2">
+          <Shimmer className="h-12" />
+          <Shimmer className="h-12" />
+        </div>
+        {[1, 2, 3].map((key) => (
+          <Shimmer key={key} className="h-9" />
+        ))}
       </LoadingRegion>
     )
+
+  const tenderLabelOf = (bill: BillingBill): string | null => {
+    const methods = [...new Set(bill.payments.map((payment) => payment.method))]
+    if (methods.length === 0) return null
+    return methods.map((method) => (method === 'upi' ? 'UPI' : 'Cash')).join(' + ')
+  }
 
   return (
     <section className={embedded ? 'space-y-2' : 'space-y-5'} aria-labelledby="my-shift-title">
@@ -116,17 +137,27 @@ export function MyShiftSurface({
           <EmptyState icon={ClipboardList} title="No paid bills in this shift yet." />
         )
       ) : (
-        <ShiftBillList
-          bills={history.bills}
-          compact={embedded}
-          onEditPayment={(bill) => {
-            setMessage(null)
-            setEditingPayment(bill)
-          }}
-          {...(billing.advanceDemoPaymentClock && {
-            onAdvanceDemoClock: billing.advanceDemoPaymentClock,
-          })}
-        />
+        <div ref={billListRef}>
+          <ShiftBillList
+            bills={history.bills}
+            compact={embedded}
+            onEditPayment={(bill) => {
+              setMessage(null)
+              setEditingPayment(bill)
+            }}
+            onTakeBackPayment={(bill) => {
+              setMessage(null)
+              setUnpayingBill(bill)
+            }}
+            onCancelAfterPaid={(bill) => {
+              setMessage(null)
+              setCancellingPaidBill(bill)
+            }}
+            {...(billing.advanceDemoPaymentClock && {
+              onAdvanceDemoClock: billing.advanceDemoPaymentClock,
+            })}
+          />
+        </div>
       )}
       {attention
         .filter((item) => item.state === 'needs_attention')
@@ -184,6 +215,47 @@ export function MyShiftSurface({
             </div>
           </article>
         ))}
+      <UnpayDialog
+        open={unpayingBill !== null}
+        reference={
+          unpayingBill
+            ? `bill ${unpayingBill.billNumber > 0 ? unpayingBill.billNumber : 'pending'}`
+            : ''
+        }
+        totalPaise={unpayingBill?.totalPaise ?? 0}
+        tenderLabel={unpayingBill ? tenderLabelOf(unpayingBill) : null}
+        busy={savingPayment}
+        onClose={() => setUnpayingBill(null)}
+        onConfirm={(why) => {
+          if (!unpayingBill?.orderId) return
+          const bill = unpayingBill
+          setUnpayingBill(null)
+          void resolve(
+            () => billing.unpayOrder(bill.orderId!, bill.id, why),
+            'The payment was taken back and the order reopened.',
+          )
+        }}
+      />
+      <CancelAfterPaidDialog
+        open={cancellingPaidBill !== null}
+        reference={
+          cancellingPaidBill
+            ? `bill ${cancellingPaidBill.billNumber > 0 ? cancellingPaidBill.billNumber : 'pending'}`
+            : ''
+        }
+        totalPaise={cancellingPaidBill?.totalPaise ?? 0}
+        busy={savingPayment}
+        onClose={() => setCancellingPaidBill(null)}
+        onConfirm={(why) => {
+          if (!cancellingPaidBill?.orderId) return
+          const bill = cancellingPaidBill
+          setCancellingPaidBill(null)
+          void resolve(
+            () => billing.cancelPaidOrder(bill.orderId!, why),
+            'The bill was voided and the order cancelled.',
+          )
+        }}
+      />
       <PaymentDialog
         open={editingPayment !== null}
         mode="correct"

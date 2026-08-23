@@ -312,26 +312,24 @@ describe('BillingCounter', () => {
     ])
   })
 
-  it('combines open orders above expandable shift bills in the tablet activity rail', async () => {
+  it('keeps the pipeline in the rail and the money in the middle column', async () => {
     const person = user()
     renderCounter()
 
+    // The rail is the pipeline: two sections, no money history.
     const rail = await screen.findByTestId('counter-activity-rail')
-    const openHeading = await within(rail).findByRole('heading', { name: 'Open orders' })
-    const billsHeading = within(rail).getByRole('heading', { name: 'Bills this shift' })
-    expect(openHeading.parentElement?.nextElementSibling).toHaveClass('mt-2')
-    expect(
-      openHeading.compareDocumentPosition(billsHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-    expect(within(rail).getByTestId('shift-total-cash')).toHaveTextContent('Cash')
-    expect(within(rail).getByTestId('shift-total-cash')).toHaveClass('p-3')
-    expect(within(rail).getByTestId('shift-total-upi')).toHaveTextContent('UPI')
-    expect(within(rail).queryByText("This tablet's unpaid orders.")).not.toBeInTheDocument()
-    expect(
-      within(rail).queryByText("Paid bills from this tablet's current shift only."),
-    ).not.toBeInTheDocument()
+    await within(rail).findByText('Preparing')
+    await within(rail).findByText('Unpaid Prepared Orders')
+    expect(within(rail).getByTestId('pipeline-preparing')).toBeInTheDocument()
+    expect(within(rail).getByTestId('pipeline-unpaid-prepared')).toBeInTheDocument()
 
-    const disclosure = rail.querySelector('details')
+    // The middle column hosts Bills this shift: totals on top, expandable
+    // collapsed bills beneath.
+    expect(screen.getByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
+    expect(screen.getByTestId('shift-total-cash')).toHaveTextContent('Cash')
+    expect(screen.getByTestId('shift-total-upi')).toHaveTextContent('UPI')
+
+    const disclosure = screen.getByTestId('bill-column').querySelector('details')
     expect(disclosure).not.toBeNull()
     const summary = disclosure?.querySelector('summary')
     expect(summary).not.toBeNull()
@@ -342,13 +340,20 @@ describe('BillingCounter', () => {
     )
   })
 
-  it('refuses to settle an empty bill', async () => {
-    const { adapters } = renderCounter()
-    const settleBill = vi.spyOn(adapters.billing, 'settleBill')
+  it('opens the composer over the bills column on the first tap and gives way again', async () => {
+    const person = user()
+    renderCounter()
 
-    await screen.findByTestId('menu-grid')
+    // Before anything is tapped there is nothing to compose, so the middle
+    // column shows the money list and offers no settle control at all.
+    expect(screen.queryByTestId('settle')).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    expect(screen.getByTestId(`bill-line-${MENU_ITEM_CLASSIC_ID}`)).toBeInTheDocument()
+    // Present but held: no customer identity on the order yet (see the
+    // requires-identity test below for the full rule).
     expect(screen.getByTestId('settle')).toBeDisabled()
-    expect(settleBill).not.toHaveBeenCalled()
   })
 
   it('shows a local reference that is not a bill number, and clears itself', async () => {
@@ -428,8 +433,9 @@ describe('BillingCounter', () => {
     await recordPaid(person)
 
     expect(screen.queryByTestId('undo-settle')).not.toBeInTheDocument()
-    const paidBill = screen
-      .getAllByText('Demo Regular')
+    // The money column mounts once the composer gives way; its bill carries
+    // the customer and the tender-edit action.
+    const paidBill = (await screen.findAllByText('Demo Regular'))
       .map((name) => name.closest('details'))
       .find((details) => details?.querySelector('summary')?.textContent?.includes('₹278'))
     if (!paidBill) throw new Error('Expected the new paid bill in shift history')
@@ -527,11 +533,12 @@ describe('BillingCounter', () => {
     // Delivered, it has left the queue and carries its permanent daily number.
     await vi.advanceTimersByTimeAsync(500)
     const delivered = await within(rail).findByTestId('open-order-106')
-    expect(within(delivered).getByText(/Order #106/)).toBeInTheDocument()
+    expect(within(delivered).getByText(/Order [#]106/)).toBeInTheDocument()
     expect(within(rail).queryByText(/Local · /)).not.toBeInTheDocument()
 
     expect(screen.queryByTestId('saved-order-confirmation')).not.toBeInTheDocument()
-    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹0')
+    // The composer gave way: the middle column is the money list again.
+    expect(screen.getByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
   })
 
   it('shows another creator while omitting the current shift holder', async () => {
@@ -561,7 +568,11 @@ describe('BillingCounter', () => {
 
     const rail = await screen.findByTestId('counter-activity-rail')
     const openOrder = await within(rail).findByTestId('open-order-104')
-    await person.click(within(openOrder).getByRole('button', { name: 'Edit order 104' }))
+    // Uncommon actions live behind the kebab; Edit is one of them.
+    await person.click(
+      within(openOrder).getByRole('button', { name: /^More actions for Order .104$/ }),
+    )
+    await person.click(within(openOrder).getByRole('menuitem', { name: 'Edit' }))
 
     const editHeading = screen.getByRole('heading', { name: /Editing order/ })
     expect(editHeading).toHaveTextContent('104')
@@ -622,7 +633,10 @@ describe('BillingCounter', () => {
     await waitFor(() => expect(within(updated).getByText('Updated customer')).toBeInTheDocument())
     expect(within(updated).getByText('Mayonnaise Chicken Shawarma')).toBeInTheDocument()
 
-    await person.click(within(updated).getByRole('button', { name: 'Edit order 104' }))
+    await person.click(
+      within(updated).getByRole('button', { name: /^More actions for Order .104$/ }),
+    )
+    await person.click(within(updated).getByRole('menuitem', { name: 'Edit' }))
     await person.click(screen.getByRole('button', { name: 'One more Classic Chicken Shawarma' }))
     await person.click(screen.getByTestId('cancel-edit'))
     expect(screen.getByPlaceholderText('Customer name')).toHaveValue('Waiting customer')
@@ -633,6 +647,8 @@ describe('BillingCounter', () => {
     const person = user()
     renderCounter()
 
+    // The composer opens on the first tap; the customer fields live there.
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
     await person.type(screen.getByPlaceholderText('Customer name'), 'Ria')
     await person.type(screen.getByPlaceholderText('Phone number'), '9000000101')
 
@@ -695,7 +711,8 @@ describe('BillingCounter', () => {
     await person.click(screen.getByTestId('save-order'))
 
     await waitFor(() => expect(saveOrder).toHaveBeenCalledOnce())
-    expect(screen.getByTestId('bill-total')).toHaveTextContent(/0/)
+    // The panel cleared even though the directory request never answered.
+    expect(screen.getByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
   })
 
   it('says what to do when no shift is open, rather than showing a dead settle button', async () => {

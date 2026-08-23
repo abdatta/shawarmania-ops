@@ -5,19 +5,20 @@ import type { BillingOrder } from '@/data-access/adapters'
 import { CounterActivity } from './counter-activity'
 
 /**
- * Open work above closed work, in one continuous tablet-side activity rail.
+ * The outlet's pipeline, in one continuous rail: Preparing over Unpaid Prepared
+ * Orders, whole-outlet scope.
  *
  * While the composer holds a saved order, the rail says so without a word of
  * explanation: it takes the same accent outline as the panel, the order under
- * edit leaves the ordinary list, and its card slides out of the rail's own margin
+ * edit leaves the ordinary lists, and its card slides out of the rail's own margin
  * to dock against the composer's column — left corners flattened, left border
  * dropped — so the two become one accent-outlined piece of work rather than two
  * panels that happen to be adjacent.
  *
  * The docked card sits **outside** this rail's scroller, so the biller can scroll
- * the whole rail through other orders and this shift's bills and it cannot go out
- * of view. That is also why the rail no longer clips its own overflow: a card that
- * has to cross the gap cannot live in a box that clips at the gap.
+ * the whole pipeline and it cannot go out of view. That is also why the rail no
+ * longer clips its own overflow: a card that has to cross the gap cannot live in
+ * a box that clips at the gap.
  */
 export function CounterActivityRail({
   refreshKey,
@@ -40,7 +41,7 @@ export function CounterActivityRail({
   return (
     <aside
       id="counter-activity-rail"
-      aria-label="Orders and bills"
+      aria-label="The pipeline"
       data-testid="counter-activity-rail"
       /*
         Deliberately not accent-outlined during an edit. The accent marks what is

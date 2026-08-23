@@ -25,6 +25,7 @@ import { averageBillPaise, combinedTakingsPaise, paymentTotalPaise } from './day
 import { ManagerBillDetail } from './manager-bill-detail'
 import { ManagerSyncStatus } from './manager-sync-status'
 import { PaymentTotalCards } from './payment-total-cards'
+import { splitPipeline } from './pipeline'
 
 type View = 'bills' | 'orders' | 'status'
 
@@ -327,7 +328,7 @@ export function ManagerBillingHistory() {
         {(
           [
             ['bills', `Bills (${bills.length})`],
-            ['orders', `Open orders (${orders.length})`],
+            ['orders', `Unpaid prepared (${orders.length})`],
             ['status', 'Status'],
           ] as const
         ).map(([id, label]) => (
@@ -382,6 +383,16 @@ export function ManagerBillingHistory() {
                         >
                           {stateLabel}
                         </span>
+                        {/* The stored kind, displayed — never inferred from
+                            timestamps or reasons (design D4). */}
+                        {bill.status === 'void' && bill.voidKind === 'cancelled_after_paid' && (
+                          <span
+                            data-testid={`cancelled-after-paid-${bill.id}`}
+                            className="rounded-full border border-danger px-2 py-0.5 text-xs font-black text-danger"
+                          >
+                            Cancelled after paid
+                          </span>
+                        )}
                       </span>
                       <span className="mt-1 block text-sm font-normal text-content-muted">
                         {methodLabel(bill.paymentMethod)} · {formatDayTime(bill.paidAt)} · by{' '}
@@ -455,154 +466,175 @@ export function ManagerBillingHistory() {
         </div>
       ) : view === 'orders' ? (
         orders.length === 0 ? (
-          <EmptyState icon={ReceiptText} title="No stranded open orders at this outlet." />
+          <EmptyState icon={ReceiptText} title="No orders in the pipeline at this outlet." />
         ) : (
-          <ul className="space-y-2">
-            {orders.map((order) => {
-              const cancellingOrder = cancellingOrderId === order.id
-              return (
-                <li
-                  key={order.id}
-                  data-testid={`manager-open-order-${order.orderNumber}`}
-                  className="rounded-xl border border-border bg-surface p-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xl font-black text-content">Order {order.orderNumber}</p>
-                      <p className="mt-1 text-xs text-content-muted">
-                        {formatDayTime(order.orderedAt)} · created by {order.creatorName}
-                      </p>
-                    </div>
-                    <Money paise={order.totalPaise} display className="shrink-0" />
-                  </div>
-
-                  <section className="mt-3 rounded-xl border border-border bg-surface p-3">
-                    <h3 className="text-sm font-black text-content">Order items</h3>
-                    <ul className="mt-2 divide-y divide-border">
-                      {order.lines.map((line, index) => (
+          // The same two sections the counter rail derives, derived the same
+          // way — the manager reads the pipeline, not a flat pile.
+          (
+            [
+              ['Preparing', splitPipeline(orders).preparing],
+              ['Unpaid Prepared Orders', splitPipeline(orders).unpaidPrepared],
+            ] as const
+          ).map(
+            ([sectionTitle, sectionOrders]) =>
+              sectionOrders.length > 0 && (
+                <section key={sectionTitle} aria-label={sectionTitle} className="space-y-2">
+                  <h3 className="text-sm font-black text-content">{sectionTitle}</h3>
+                  <ul className="space-y-2">
+                    {sectionOrders.map((order) => {
+                      const cancellingOrder = cancellingOrderId === order.id
+                      return (
                         <li
-                          key={`${line.menuItemId}-${index}`}
-                          className="grid grid-cols-[1fr_auto] gap-x-3 py-2 first:pt-0 last:pb-0"
+                          key={order.id}
+                          data-testid={`manager-open-order-${order.orderNumber}`}
+                          className="rounded-xl border border-border bg-surface p-3"
                         >
-                          <div className="min-w-0">
-                            <p className="font-semibold leading-tight text-content">
-                              {line.itemName}
-                            </p>
-                            <p className="mt-1 text-xs text-content-muted">
-                              {line.quantity} × <Money paise={line.unitPricePaise} /> each
-                            </p>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xl font-black text-content">
+                                Order {order.orderNumber}
+                              </p>
+                              <p className="mt-1 text-xs text-content-muted">
+                                {formatDayTime(order.orderedAt)} · created by {order.creatorName}
+                              </p>
+                            </div>
+                            <Money paise={order.totalPaise} display className="shrink-0" />
                           </div>
-                          <Money
-                            paise={line.unitPricePaise * line.quantity}
-                            className="self-center font-bold"
-                          />
+
+                          <section className="mt-3 rounded-xl border border-border bg-surface p-3">
+                            <h3 className="text-sm font-black text-content">Order items</h3>
+                            <ul className="mt-2 divide-y divide-border">
+                              {order.lines.map((line, index) => (
+                                <li
+                                  key={`${line.menuItemId}-${index}`}
+                                  className="grid grid-cols-[1fr_auto] gap-x-3 py-2 first:pt-0 last:pb-0"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="font-semibold leading-tight text-content">
+                                      {line.itemName}
+                                    </p>
+                                    <p className="mt-1 text-xs text-content-muted">
+                                      {line.quantity} × <Money paise={line.unitPricePaise} /> each
+                                    </p>
+                                  </div>
+                                  <Money
+                                    paise={line.unitPricePaise * line.quantity}
+                                    className="self-center font-bold"
+                                  />
+                                </li>
+                              ))}
+                            </ul>
+                          </section>
+
+                          <section className="mt-3 rounded-xl border border-border bg-surface p-3">
+                            <h3 className="text-sm font-black text-content">Customer details</h3>
+                            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
+                              <div>
+                                <dt className="text-xs font-semibold text-content-muted">
+                                  Customer name
+                                </dt>
+                                <dd className="mt-0.5 text-sm font-semibold text-content">
+                                  {order.customerName || 'Not provided'}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-xs font-semibold text-content-muted">
+                                  Customer phone
+                                </dt>
+                                <dd className="mt-0.5 break-words text-sm font-semibold text-content">
+                                  {order.customerPhone || 'Not provided'}
+                                </dd>
+                              </div>
+                            </dl>
+                          </section>
+
+                          {!cancellingOrder && (
+                            <div className="mt-3 border-t border-border pt-3">
+                              <Button
+                                variant="secondary"
+                                className="text-danger"
+                                onClick={() => {
+                                  setCancellingOrderId(order.id)
+                                  setReason('')
+                                }}
+                              >
+                                Cancel this order
+                              </Button>
+                            </div>
+                          )}
+                          <Modal
+                            open={cancellingOrder}
+                            onClose={() => {
+                              setCancellingOrderId(null)
+                              setReason('')
+                            }}
+                            aria-label={`Cancel order ${order.orderNumber}`}
+                            className="m-auto w-[min(92vw,26rem)] rounded-2xl p-4"
+                          >
+                            <h2 className="text-lg font-black text-content">
+                              Cancel order {order.orderNumber}?
+                            </h2>
+                            <label
+                              htmlFor={`cancel-order-reason-${order.id}`}
+                              className="mt-4 block text-sm font-bold text-content"
+                            >
+                              Cancellation reason
+                            </label>
+                            <div
+                              className="mt-3 grid grid-cols-2 gap-2"
+                              role="group"
+                              aria-label="Common cancellation reasons"
+                            >
+                              {ORDER_CANCELLATION_REASONS.map((candidate) => (
+                                <Button
+                                  key={candidate}
+                                  variant={reason === candidate ? 'primary' : 'secondary'}
+                                  size="phone"
+                                  aria-pressed={reason === candidate}
+                                  onClick={() => setReason(candidate)}
+                                >
+                                  {candidate}
+                                </Button>
+                              ))}
+                            </div>
+                            <Input
+                              id={`cancel-order-reason-${order.id}`}
+                              aria-label={`Cancellation reason for order ${order.orderNumber}`}
+                              className="mt-1"
+                              placeholder="Or type a reason"
+                              value={reason}
+                              onChange={(event) => setReason(event.target.value)}
+                            />
+                            <div className="mt-4 grid grid-cols-2 gap-2">
+                              <Button
+                                variant="secondary"
+                                size="control"
+                                onClick={() => {
+                                  setCancellingOrderId(null)
+                                  setReason('')
+                                }}
+                              >
+                                Keep order
+                              </Button>
+                              <Button
+                                variant="danger"
+                                size="control"
+                                disabled={!reason.trim()}
+                                onClick={() =>
+                                  void mutate(() => billing.managerCancelOrder(order.id, reason))
+                                }
+                              >
+                                Cancel order
+                              </Button>
+                            </div>
+                          </Modal>
                         </li>
-                      ))}
-                    </ul>
-                  </section>
-
-                  <section className="mt-3 rounded-xl border border-border bg-surface p-3">
-                    <h3 className="text-sm font-black text-content">Customer details</h3>
-                    <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
-                      <div>
-                        <dt className="text-xs font-semibold text-content-muted">Customer name</dt>
-                        <dd className="mt-0.5 text-sm font-semibold text-content">
-                          {order.customerName || 'Not provided'}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs font-semibold text-content-muted">Customer phone</dt>
-                        <dd className="mt-0.5 break-words text-sm font-semibold text-content">
-                          {order.customerPhone || 'Not provided'}
-                        </dd>
-                      </div>
-                    </dl>
-                  </section>
-
-                  {!cancellingOrder && (
-                    <div className="mt-3 border-t border-border pt-3">
-                      <Button
-                        variant="secondary"
-                        className="text-danger"
-                        onClick={() => {
-                          setCancellingOrderId(order.id)
-                          setReason('')
-                        }}
-                      >
-                        Cancel this order
-                      </Button>
-                    </div>
-                  )}
-                  <Modal
-                    open={cancellingOrder}
-                    onClose={() => {
-                      setCancellingOrderId(null)
-                      setReason('')
-                    }}
-                    aria-label={`Cancel order ${order.orderNumber}`}
-                    className="m-auto w-[min(92vw,26rem)] rounded-2xl p-4"
-                  >
-                    <h2 className="text-lg font-black text-content">
-                      Cancel order {order.orderNumber}?
-                    </h2>
-                    <label
-                      htmlFor={`cancel-order-reason-${order.id}`}
-                      className="mt-4 block text-sm font-bold text-content"
-                    >
-                      Cancellation reason
-                    </label>
-                    <div
-                      className="mt-3 grid grid-cols-2 gap-2"
-                      role="group"
-                      aria-label="Common cancellation reasons"
-                    >
-                      {ORDER_CANCELLATION_REASONS.map((candidate) => (
-                        <Button
-                          key={candidate}
-                          variant={reason === candidate ? 'primary' : 'secondary'}
-                          size="phone"
-                          aria-pressed={reason === candidate}
-                          onClick={() => setReason(candidate)}
-                        >
-                          {candidate}
-                        </Button>
-                      ))}
-                    </div>
-                    <Input
-                      id={`cancel-order-reason-${order.id}`}
-                      aria-label={`Cancellation reason for order ${order.orderNumber}`}
-                      className="mt-1"
-                      placeholder="Or type a reason"
-                      value={reason}
-                      onChange={(event) => setReason(event.target.value)}
-                    />
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      <Button
-                        variant="secondary"
-                        size="control"
-                        onClick={() => {
-                          setCancellingOrderId(null)
-                          setReason('')
-                        }}
-                      >
-                        Keep order
-                      </Button>
-                      <Button
-                        variant="danger"
-                        size="control"
-                        disabled={!reason.trim()}
-                        onClick={() =>
-                          void mutate(() => billing.managerCancelOrder(order.id, reason))
-                        }
-                      >
-                        Cancel order
-                      </Button>
-                    </div>
-                  </Modal>
-                </li>
-              )
-            })}
-          </ul>
+                      )
+                    })}
+                  </ul>
+                </section>
+              ),
+          )
         )
       ) : null}
     </section>

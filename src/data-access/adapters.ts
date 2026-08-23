@@ -1109,6 +1109,8 @@ export interface BillingOrder {
   cancelReason: Tables<'orders'>['cancel_reason']
   cancelledAt: Tables<'orders'>['cancelled_at']
   cancelledByName: string | null
+  /** When the money arrived — what the five-minute unwind window measures from. */
+  paidAt: Tables<'orders'>['paid_at']
   billId: Tables<'orders'>['bill_id']
 }
 
@@ -1130,6 +1132,8 @@ export interface BillingBill {
   id: Tables<'bills'>['id']
   outletId: Tables<'bills'>['outlet_id']
   billNumber: Tables<'bills'>['bill_number']
+  /** The order this bill settled, when it came from one. What unwinds chain to. */
+  orderId: Tables<'bills'>['order_id']
   orderNumber: Tables<'orders'>['order_number'] | null
   businessDate: Tables<'bills'>['business_date']
   orderedAt: Tables<'bills'>['ordered_at']

@@ -353,7 +353,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
   // revenue: paid on handover, aggregator rider collection, and direct pay.
   // A cancelled and an open order add the two non-revenue states. The two paid
   // orders carry prepared_at — they were fired, made and handed over — while
-  // the open one (#105) is still preparing. #104 was taken by the morning
+  // the open one, 105, is still preparing. 104 was taken by the morning
   // biller before the handover and has been prepared but never paid: it shows
   // the Unpaid Prepared section with a creator who is not the current shift
   // holder, which is exactly the cross-person state the rail must read well.
@@ -389,7 +389,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
             (line) => line.bill_id === bills.find((bill) => bill.outlet_id === DEMO_OUTLET_ID)?.id,
           )
           .slice(0, 1)
-    const orderedAt = sourceBill?.ordered_at ?? instantAt(today, index === 2 ? '18:15' : index === 3 ? '18:40' : '19:10')
+    const orderedAt =
+      sourceBill?.ordered_at ??
+      instantAt(today, index === 2 ? '18:15' : index === 3 ? '18:40' : '19:10')
     const totals = billTotals(
       sourceLines.map((line) => ({
         unitPricePaise: line.unit_price_paise,

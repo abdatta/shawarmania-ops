@@ -1,4 +1,10 @@
-import { billTotals, classifySync, lineTotalPaise, PAYMENT_EDIT_WINDOW_MS, provisionalToken } from '@/domain'
+import {
+  billTotals,
+  classifySync,
+  lineTotalPaise,
+  PAYMENT_EDIT_WINDOW_MS,
+  provisionalToken,
+} from '@/domain'
 
 import {
   BillingActionError,
@@ -30,11 +36,7 @@ function billsAt(personId: string, outletId: string): boolean {
     (assignment) => assignment.role === 'biller' && assignment.outletId === outletId,
   )
 }
-import {
-  DEMO_BILLER_ID,
-  DEMO_BILLER_PIN,
-  DEMO_COUNTER_DEVICE_ID,
-} from './fixtures/billing'
+import { DEMO_BILLER_ID, DEMO_BILLER_PIN, DEMO_COUNTER_DEVICE_ID } from './fixtures/billing'
 import { DEMO_OUTLET_ID, type DemoStore } from './store'
 
 /**
@@ -137,8 +139,14 @@ export function createMockBillingAdapter(
   /** Side-data the projections and deliveries need, keyed by command id. */
   const pendingPayNowDrafts = new Map<string, BillDraft>()
   const pendingOrderInputs = new Map<string, SaveOrderInput>()
-  const pendingRevisions = new Map<string, { orderId: string; shiftId: string; input: SaveOrderInput }>()
-  const pendingCancellations = new Map<string, { orderId: string; shiftId: string; reason: string }>()
+  const pendingRevisions = new Map<
+    string,
+    { orderId: string; shiftId: string; input: SaveOrderInput }
+  >()
+  const pendingCancellations = new Map<
+    string,
+    { orderId: string; shiftId: string; reason: string }
+  >()
   const pendingPreparations = new Map<string, { orderId: string; prepared: boolean }>()
   const pendingOrderPayments = new Map<
     string,
@@ -330,6 +338,7 @@ export function createMockBillingAdapter(
       cancelReason: row.cancel_reason,
       cancelledAt: row.cancelled_at,
       cancelledByName: actorName(row.cancelled_by),
+      paidAt: row.paid_at,
       billId: row.bill_id,
     }
   }
@@ -348,6 +357,7 @@ export function createMockBillingAdapter(
       id: row.id,
       outletId: row.outlet_id,
       billNumber: row.bill_number,
+      orderId: row.order_id,
       orderNumber: order?.order_number ?? null,
       businessDate: row.business_date,
       orderedAt: row.ordered_at,
@@ -539,9 +549,7 @@ export function createMockBillingAdapter(
     // The number is minted here and nowhere else.
     const orderNumber = (store.orderNumbers.get(counterKey) ?? 0) + 1
     store.orderNumbers.set(counterKey, orderNumber)
-    const orderedAt = new Date(
-      acceptedPaymentTimes.get(input.clientId) ?? Date.now(),
-    ).toISOString()
+    const orderedAt = new Date(acceptedPaymentTimes.get(input.clientId) ?? Date.now()).toISOString()
     const row: Tables<'orders'> = {
       id: input.clientId,
       outlet_id: input.outletId,
@@ -597,11 +605,7 @@ export function createMockBillingAdapter(
     replaceOrderLines(row.id, record.input.lines)
   }
 
-  function applyCancelOrder(record: {
-    orderId: string
-    shiftId: string
-    reason: string
-  }) {
+  function applyCancelOrder(record: { orderId: string; shiftId: string; reason: string }) {
     const row = store.orders.find((candidate) => candidate.id === record.orderId)
     if (!row || row.status !== 'open') return
     const actor = store.shifts.find((candidate) => candidate.id === record.shiftId)
@@ -651,8 +655,7 @@ export function createMockBillingAdapter(
       customer_id: row.customer_id,
       customer_name: row.customer_name,
       customer_phone: row.customer_phone,
-      payment_method:
-        payment.payments.length === 1 ? payment.payments[0]!.method : null,
+      payment_method: payment.payments.length === 1 ? payment.payments[0]!.method : null,
       pricing_mode: 'no_tax',
       status: 'settled',
       subtotal_paise: row.subtotal_paise,
@@ -773,8 +776,7 @@ export function createMockBillingAdapter(
             preparedAt: null,
             status: 'open',
             creatorId: creatorShift?.biller_profile_id ?? '',
-            creatorName:
-              actorName(creatorShift?.biller_profile_id ?? null) ?? 'Counter operator',
+            creatorName: actorName(creatorShift?.biller_profile_id ?? null) ?? 'Counter operator',
             customerName: input.customerName?.trim() || null,
             customerPhone: input.customerPhone?.trim() || null,
             lines: structuredClone(input.lines),
@@ -782,6 +784,7 @@ export function createMockBillingAdapter(
             cancelReason: null,
             cancelledAt: null,
             cancelledByName: null,
+            paidAt: null,
             billId: null,
           })
           break
@@ -958,6 +961,7 @@ export function createMockBillingAdapter(
       customerPhone: string | null
       lines: BillLineDraft[]
       totalPaise: number
+      orderId: string | null
       orderNumber: number | null
       billerName: string
     },
@@ -968,6 +972,7 @@ export function createMockBillingAdapter(
       id: billId,
       outletId: content.outletId,
       billNumber: 0,
+      orderId: content.orderId,
       orderNumber: content.orderNumber,
       businessDate: content.businessDate,
       orderedAt: content.orderedAt ?? content.paidAt,
@@ -1130,9 +1135,9 @@ export function createMockBillingAdapter(
       const totalPaise = directDraft
         ? totalsOf(directDraft.lines).totalPaise
         : orderPayment
-          ? (projectedOrders(openShiftRow()?.outlet_id ?? '')
-              .find((order) => order.id === orderPayment.orderId)
-              ?.totalPaise ??
+          ? (projectedOrders(openShiftRow()?.outlet_id ?? '').find(
+              (order) => order.id === orderPayment.orderId,
+            )?.totalPaise ??
             store.orders.find((order) => order.id === orderPayment.orderId)?.total_paise)
           : row?.total_paise
       if (!Number.isFinite(paidAt) || totalPaise === undefined) {
@@ -1174,6 +1179,7 @@ export function createMockBillingAdapter(
         customerPhone: source?.customerPhone?.trim() || order?.customerPhone || null,
         lines: source?.lines ?? order?.lines ?? [],
         totalPaise,
+        orderId: orderPayment?.orderId ?? null,
         orderNumber: order?.orderNumber ?? null,
         billerName: actorName(openShiftRow()?.biller_profile_id ?? null) ?? 'Counter operator',
       })
@@ -1223,6 +1229,7 @@ export function createMockBillingAdapter(
         cancelReason: null,
         cancelledAt: null,
         cancelledByName: null,
+        paidAt: null,
         billId: null,
       }
     },
@@ -1352,6 +1359,7 @@ export function createMockBillingAdapter(
       return {
         ...projected,
         status: 'open',
+        paidAt: null,
         billId: null,
         cancelReason: null,
         cancelledAt: null,
@@ -1450,6 +1458,7 @@ export function createMockBillingAdapter(
         customerPhone: projected.customerPhone,
         lines: projected.lines,
         totalPaise: projected.totalPaise,
+        orderId: projected.id,
         orderNumber: projected.orderNumber,
         billerName: projected.creatorName,
       })
@@ -1528,6 +1537,7 @@ export function createMockBillingAdapter(
               customerPhone: draft.customerPhone?.trim() || null,
               lines: draft.lines,
               totalPaise: totalsOf(draft.lines).totalPaise,
+              orderId: null,
               orderNumber: null,
               billerName:
                 actorName(openShiftRow()?.biller_profile_id ?? null) ?? 'Counter operator',
@@ -1548,6 +1558,7 @@ export function createMockBillingAdapter(
             customerPhone: order?.customerPhone ?? null,
             lines: order?.lines ?? [],
             totalPaise: order?.totalPaise ?? 0,
+            orderId: record.orderId,
             orderNumber: order?.orderNumber ?? null,
             billerName: order?.creatorName ?? 'Counter operator',
           })

@@ -17,16 +17,25 @@ export function ShiftBillList({
   compact = false,
   onEditPayment,
   onAdvanceDemoClock,
+  onTakeBackPayment,
+  onCancelAfterPaid,
 }: {
   bills: BillingBill[]
   compact?: boolean
   onEditPayment?: (bill: BillingBill) => void
   onAdvanceDemoClock?: (milliseconds: number) => void
+  /**
+   * Offered beside tender editing while this tablet's five-minute window is
+   * open on an order bill: taking the money back reopens the order.
+   */
+  onTakeBackPayment?: (bill: BillingBill) => void
+  /** Same window, louder consequence: voids the money and cancels the order. */
+  onCancelAfterPaid?: (bill: BillingBill) => void
 }) {
   return (
     <ul className={cn('divide-y divide-border', !compact && 'rounded-xl border border-border')}>
       {bills.map((bill) => (
-        <li key={bill.id}>
+        <li key={bill.id} data-flip-id={bill.id}>
           <details className="group" data-testid={`shift-bill-${bill.id}`}>
             <summary
               className={cn(
@@ -124,6 +133,31 @@ export function ShiftBillList({
                   {...(onAdvanceDemoClock && { onAdvanceDemoClock })}
                 />
               )}
+              {(onTakeBackPayment || onCancelAfterPaid) &&
+                bill.orderId &&
+                bill.paymentEditableUntil && (
+                  <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-border pt-3">
+                    {onTakeBackPayment && (
+                      <Button
+                        size="phone"
+                        variant="secondary"
+                        onClick={() => onTakeBackPayment(bill)}
+                      >
+                        Un-pay
+                      </Button>
+                    )}
+                    {onCancelAfterPaid && (
+                      <Button
+                        size="phone"
+                        variant="secondary"
+                        className="text-danger"
+                        onClick={() => onCancelAfterPaid(bill)}
+                      >
+                        Cancel after paid
+                      </Button>
+                    )}
+                  </div>
+                )}
             </div>
           </details>
         </li>

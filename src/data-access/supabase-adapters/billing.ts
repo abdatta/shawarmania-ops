@@ -98,6 +98,7 @@ function orderView(row: OrderReadRow): BillingOrder {
     cancelReason: row.cancel_reason,
     cancelledAt: row.cancelled_at,
     cancelledByName: joined(row.canceller)?.full_name ?? null,
+    paidAt: row.paid_at,
     billId: row.bill_id,
   }
 }
@@ -133,6 +134,7 @@ function billView(
     id: row.id,
     outletId: row.outlet_id,
     billNumber: row.bill_number,
+    orderId: row.order_id,
     orderNumber: joined(row.order)?.order_number ?? null,
     businessDate: row.business_date,
     orderedAt: row.ordered_at,
@@ -421,6 +423,7 @@ export function createSupabaseBillingAdapter(
               cancelReason: null,
               cancelledAt: null,
               cancelledByName: null,
+              paidAt: null,
               billId: null,
             })
             break
@@ -463,6 +466,7 @@ export function createSupabaseBillingAdapter(
               overlaid.set(envelope.command.payload.orderId, {
                 ...current,
                 status: 'paid',
+                paidAt: envelope.command.payload.paidAt,
                 billId: envelope.command.payload.billId,
               })
             }
@@ -477,6 +481,7 @@ export function createSupabaseBillingAdapter(
               overlaid.set(envelope.command.payload.orderId, {
                 ...current,
                 status: 'open',
+                paidAt: null,
                 billId: null,
                 cancelReason: null,
                 cancelledAt: null,
@@ -637,6 +642,7 @@ export function createSupabaseBillingAdapter(
           cancelReason: null,
           cancelledAt: null,
           cancelledByName: null,
+          paidAt: null,
           billId: null,
         })
         continue
@@ -648,6 +654,7 @@ export function createSupabaseBillingAdapter(
           outletId: envelope.outletId,
           billNumber: bills.get(command.payload.billId)?.billNumber ?? 0,
           orderNumber: null,
+          orderId: null,
           businessDate: command.payload.businessDate,
           orderedAt: command.createdAt,
           paidAt: command.createdAt,
@@ -689,6 +696,7 @@ export function createSupabaseBillingAdapter(
             outletId: order.outletId,
             billNumber: 0,
             orderNumber: order.orderNumber,
+            orderId: command.payload.orderId,
             businessDate: order.businessDate,
             orderedAt: order.orderedAt,
             paidAt: command.payload.paidAt,
@@ -953,6 +961,7 @@ export function createSupabaseBillingAdapter(
         outletId: draft.outletId,
         billNumber: 0,
         orderNumber: null,
+        orderId: null,
         businessDate: draft.businessDate,
         orderedAt: command.createdAt,
         paidAt: command.createdAt,
@@ -1066,6 +1075,7 @@ export function createSupabaseBillingAdapter(
         cancelReason: null,
         cancelledAt: null,
         cancelledByName: null,
+        paidAt: null,
         billId: null,
       }
       orderCache.set(input.clientId, localOrder)
@@ -1118,6 +1128,7 @@ export function createSupabaseBillingAdapter(
       const paidOrder: BillingOrder = {
         ...existing,
         status: 'paid',
+        paidAt: command.payload.paidAt,
         billId: command.payload.billId,
       }
       orderCache.set(orderId, paidOrder)
@@ -1126,6 +1137,7 @@ export function createSupabaseBillingAdapter(
         outletId: existing.outletId,
         billNumber: 0,
         orderNumber: existing.orderNumber,
+        orderId: orderId,
         businessDate: existing.businessDate,
         orderedAt: existing.orderedAt,
         paidAt: command.payload.paidAt,
@@ -1228,6 +1240,7 @@ export function createSupabaseBillingAdapter(
       const reopened: BillingOrder = {
         ...existing,
         status: 'open',
+        paidAt: null,
         billId: null,
         cancelReason: null,
         cancelledAt: null,
@@ -1240,7 +1253,8 @@ export function createSupabaseBillingAdapter(
 
     async cancelPaidOrder(orderId, reason): Promise<BillingOrder> {
       const { session, shift } = requireTablet()
-      if (!reason.trim()) throw new BillingActionError('blank_reason', 'A cancellation needs a reason.')
+      if (!reason.trim())
+        throw new BillingActionError('blank_reason', 'A cancellation needs a reason.')
       const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
       if (!existing || !existing.billId) {
         throw new BillingActionError(
@@ -1261,6 +1275,7 @@ export function createSupabaseBillingAdapter(
       const cancelled: BillingOrder = {
         ...existing,
         status: 'cancelled',
+        paidAt: null,
         billId: null,
         cancelReason: reason.trim(),
         cancelledAt: command.createdAt,

@@ -466,7 +466,9 @@ describe('mock billing adapter', () => {
       const ordersBefore = store.orders.length
       const highestBefore = store.orderNumbers.get(`${DEMO_OUTLET_ID}:${store.today}`)!
 
-      const saved = await adapter.saveOrder(orderDraft(store, '60000000-0000-4000-8000-000000000001'))
+      const saved = await adapter.saveOrder(
+        orderDraft(store, '60000000-0000-4000-8000-000000000001'),
+      )
 
       // Waiting: visible under a local reference, unwritten and unnumbered.
       expect(adapter.getCounterState().sync.pending).toBe(1)
@@ -506,7 +508,9 @@ describe('mock billing adapter', () => {
     it('marks prepared, refuses to reprepare once paid, and allows prepare-after-pay', async () => {
       const store = createDemoStore()
       const adapter = createMockBillingAdapter(store)
-      const saved = await adapter.saveOrder(orderDraft(store, '61000000-0000-4000-8000-000000000001'))
+      const saved = await adapter.saveOrder(
+        orderDraft(store, '61000000-0000-4000-8000-000000000001'),
+      )
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
 
       const prepared = await adapter.markOrderPrepared(saved.id, true)
@@ -537,10 +541,14 @@ describe('mock billing adapter', () => {
     it('keeps a paid-but-unprepared order in the pipeline wearing its paid state', async () => {
       const store = createDemoStore()
       const adapter = createMockBillingAdapter(store)
-      const saved = await adapter.saveOrder(orderDraft(store, '62000000-0000-4000-8000-000000000001'))
+      const saved = await adapter.saveOrder(
+        orderDraft(store, '62000000-0000-4000-8000-000000000001'),
+      )
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
 
-      const paid = await adapter.payOrder(saved.id, [{ method: 'cash', amountPaise: saved.totalPaise }])
+      const paid = await adapter.payOrder(saved.id, [
+        { method: 'cash', amountPaise: saved.totalPaise },
+      ])
       const listed = await adapter.listOpenOrders(DEMO_OUTLET_ID)
       const card = listed.find((order) => order.id === saved.id)
       expect(card).toMatchObject({ status: 'paid', preparedAt: null, billId: paid.id })
@@ -549,9 +557,13 @@ describe('mock billing adapter', () => {
     it('takes a payment back within the window as one atomic unwind, and refuses outside it', async () => {
       const store = createDemoStore()
       const adapter = createMockBillingAdapter(store)
-      const saved = await adapter.saveOrder(orderDraft(store, '63000000-0000-4000-8000-000000000001'))
+      const saved = await adapter.saveOrder(
+        orderDraft(store, '63000000-0000-4000-8000-000000000001'),
+      )
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
-      const paid = await adapter.payOrder(saved.id, [{ method: 'cash', amountPaise: saved.totalPaise }])
+      const paid = await adapter.payOrder(saved.id, [
+        { method: 'cash', amountPaise: saved.totalPaise },
+      ])
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
       const billsBefore = store.bills.length
 
@@ -573,13 +585,17 @@ describe('mock billing adapter', () => {
     it('refuses an unwind outside the five-minute window', async () => {
       const store = createDemoStore()
       const adapter = createMockBillingAdapter(store)
-      const saved = await adapter.saveOrder(orderDraft(store, '65000000-0000-4000-8000-000000000001'))
+      const saved = await adapter.saveOrder(
+        orderDraft(store, '65000000-0000-4000-8000-000000000001'),
+      )
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
-      const paid = await adapter.payOrder(saved.id, [{ method: 'cash', amountPaise: saved.totalPaise }])
+      const paid = await adapter.payOrder(saved.id, [
+        { method: 'cash', amountPaise: saved.totalPaise },
+      ])
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
 
       // The clock is measured from when the money changed hands, never a timer.
-      adapter.advanceDemoPaymentClock(PAYMENT_EDIT_WINDOW_MS)
+      adapter.advanceDemoPaymentClock!(PAYMENT_EDIT_WINDOW_MS)
       await expect(adapter.unpayOrder(saved.id, paid.id, 'Too late')).rejects.toThrow(
         /no longer be taken back/,
       )
@@ -590,9 +606,13 @@ describe('mock billing adapter', () => {
     it('cancels a paid order with one reasoned act that voids and cancels together', async () => {
       const store = createDemoStore()
       const adapter = createMockBillingAdapter(store)
-      const saved = await adapter.saveOrder(orderDraft(store, '64000000-0000-4000-8000-000000000001'))
+      const saved = await adapter.saveOrder(
+        orderDraft(store, '64000000-0000-4000-8000-000000000001'),
+      )
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
-      const paid = await adapter.payOrder(saved.id, [{ method: 'upi', amountPaise: saved.totalPaise }])
+      const paid = await adapter.payOrder(saved.id, [
+        { method: 'upi', amountPaise: saved.totalPaise },
+      ])
       await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
 
       await expect(adapter.cancelPaidOrder(saved.id, ' ')).rejects.toThrow(/reason/)
