@@ -35,18 +35,31 @@ export interface OutletMap {
   zomatoResIds: Record<string, string>
   /** The operator outlet a Hyperpure delivery is booked against (shared cost). */
   hyperpureOutletId: string
+  /** Swiggy portal restaurant reference -> operator outlet uuid. */
+  swiggyRefs?: Record<string, string>
 }
 
 export type ParsedStatement =
   | { kind: 'zomato-order-history'; cycles: AggregatorCyclePayload[] }
   | { kind: 'zomato-settlement'; cycles: AggregatorCyclePayload[] }
   | { kind: 'hyperpure-statement'; statement: SupplyStatementPayload }
+  | { kind: 'swiggy-annexure'; cycles: AggregatorCyclePayload[] }
+  | { kind: 'swiggy-metrics-evidence'; days: SwiggyMetricsDay[] }
+
+/** One calendar-day reading from a Business Metrics Report: evidence, never a ledger write. */
+export interface SwiggyMetricsDay {
+  restaurant_ref: string
+  calendar_date: string
+  net_sales_paise: number
+}
 
 /** The shape `ingest_aggregator_cycle` accepts, one per outlet. */
 export interface AggregatorCyclePayload {
   contract_version: 1
   outlet_id: string
-  channel: 'zomato'
+  channel: 'zomato' | 'swiggy'
+  restaurant_ref?: string
+  operator_cycle_ref?: string
   cycle_start: string
   cycle_end: string
   cycle_state: 'provisional' | 'settled'
@@ -213,7 +226,7 @@ function columnLocator(
 // --- recognition -----------------------------------------------------------
 
 const KNOWN_SHAPES =
-  'Zomato order history (a zip of order_history_*.csv), Zomato settlement (an Order Level sheet), or Hyperpure statement (Overall SOA and Payment Ledger sheets)'
+  'Zomato order history (a zip of order_history_*.csv), Zomato settlement (an Order Level sheet), Hyperpure statement (Overall SOA and Payment Ledger sheets), Swiggy payout annexure (Summary and Payout Breakup sheets), or a Swiggy Business Metrics Report'
 
 export function recognise(decoded: DecodedStatement): ParsedStatement['kind'] {
   const csvNames = Object.keys(decoded.csv ?? {})
@@ -222,16 +235,192 @@ export function recognise(decoded: DecodedStatement): ParsedStatement['kind'] {
   }
   const sheets = decoded.sheets ?? {}
   const sheetNames = Object.keys(sheets)
+  const lower = sheetNames.map((name) => name.trim().toLowerCase())
+  // A Swiggy annexure ALSO has an "Order Level" sheet, so the workbook is
+  // identified by the pair that only an annexure carries, before the Zomato
+  // settlement check can reach for its own "Order Level" match.
+  if (lower.includes('summary') && lower.includes('payout breakup')) {
+    return 'swiggy-annexure'
+  }
+  if (
+    sheetNames.some((name) => {
+      const rows = sheets[name] ?? []
+      return rows.some(
+        (row) =>
+          row.some((value) => String(value).trim().toLowerCase() === 'overview') &&
+          row.some((value) => String(value).trim().toLowerCase() === 'metric'),
+      )
+    })
+  ) {
+    // Calendar-day evidence about the portal's own numbers. It names no
+    // business window, so it can never become a ledger write; it is returned
+    // only so the caller can say what a file was rather than failing blankly.
+    return 'swiggy-metrics-evidence'
+  }
   if (sheetNames.some((name) => name.trim().toLowerCase() === 'order level')) {
     return 'zomato-settlement'
   }
-  const lower = sheetNames.map((name) => name.trim().toLowerCase())
   if (lower.includes('overall soa') && lower.includes('payment ledger')) {
     return 'hyperpure-statement'
   }
   throw new StatementShapeError(
     `this file matches no known statement shape. Expected one of: ${KNOWN_SHAPES}.`,
   )
+}
+
+// --- Swiggy -----------------------------------------------------------------
+
+/**
+ * The one Swiggy payout annexure, as a settled cycle candidate.
+ *
+ * The file is generated for a PAID period: it carries every order's earnings
+ * and taxes, a breakup whose Net Payout line must agree with the Summary's
+ * Total Payout, and the bank UTR proving money moved. That is why this parser,
+ * alone among the file paths, may claim `settled` - and why its operator cycle
+ * reference is derived from the workbook's own digest: the same file uploaded
+ * twice is inert at the ingest upsert, while a changed file is a new proposal
+ * the caller must confirm.
+ *
+ * Only whitelisted columns are read. Customer name and phone columns exist in
+ * this workbook; they are never copied into the payload, so no scrubbing pass
+ * can be forgotten later.
+ */
+export function parseSwiggyAnnexure(
+  decoded: DecodedStatement,
+  outlets: OutletMap,
+  digestHex: string,
+): AggregatorCyclePayload {
+  const summarySheet =
+    Object.keys(decoded.sheets ?? {}).find((n) => n.trim().toLowerCase() === 'summary') ?? ''
+  const orderSheetName = Object.keys(decoded.sheets ?? {}).find(
+    (n) => n.trim().toLowerCase() === 'order level',
+  )
+  if (!summarySheet || !orderSheetName) {
+    throw new StatementShapeError('the Swiggy annexure is missing Summary or Order Level')
+  }
+
+  const summary = decoded.sheets?.[summarySheet] ?? []
+  let rid = ''
+  let totalPayout: number | null = null
+  for (const row of summary) {
+    for (let c = 0; c < row.length; c += 1) {
+      const value = String(row[c] ?? '').trim()
+      const ridMatch = value.match(/^Rest\.?\s*ID\s*-\s*(\d+)$/i)
+      if (ridMatch) rid = ridMatch[1] ?? ''
+      if (/^Total Payout$/i.test(value)) {
+        totalPayout = toPaise(String(row[c + 1] ?? ''), 'Total Payout')
+      }
+    }
+  }
+  if (!rid || !/^\d+$/.test(rid)) {
+    throw new StatementShapeError('the Summary sheet does not name a numeric restaurant ID')
+  }
+  const outletId = outlets.swiggyRefs?.[rid]
+  if (!outletId) {
+    throw new StatementShapeError(`no outlet is mapped for Swiggy restaurant ${rid}`)
+  }
+
+  // The breakup's Net Payout total is the file's own arithmetic; the Summary's
+  // Total Payout is the headline. They must agree or the file is not trusted.
+  const breakupName = Object.keys(decoded.sheets ?? {}).find(
+    (n) => n.trim().toLowerCase() === 'payout breakup',
+  )
+  if (breakupName && totalPayout !== null) {
+    const breakupRows = decoded.sheets?.[breakupName] ?? []
+    const netPayoutRow = breakupRows.find((row) =>
+      row.some((value) => /^Net Payout/i.test(String(value).trim())),
+    )
+    // The row reads Delivered | Cancelled | Total; the grand total is its LAST
+    // populated amount, wherever the workbook's leading columns place it.
+    let breakupTotal: number | null = null
+    if (netPayoutRow) {
+      for (let c = netPayoutRow.length - 1; c >= 0; c -= 1) {
+        const value = String(netPayoutRow[c] ?? '').trim()
+        if (value === '') continue
+        breakupTotal = toPaise(value, 'Net Payout')
+        break
+      }
+    }
+    if (breakupTotal !== null && Math.abs(breakupTotal - totalPayout) > 100) {
+      throw new StatementShapeError(
+        `the annexure disagrees with itself: Summary Total Payout ${totalPayout} vs Payout Breakup ${breakupTotal}`,
+      )
+    }
+  }
+
+  const orders = parseSwiggyOrderLevel(decoded.sheets?.[orderSheetName] ?? [])
+
+  // No year appears in the file's Payout Period label, so the cycle window is
+  // taken from the order rows themselves - min date to max date - which is also
+  // what proves the file covers whole days rather than a fragment.
+  if (orders.length === 0) throw new StatementShapeError('the Order Level sheet lists no orders')
+  const dates = orders.map((o) => o.placed_at.slice(0, 10)).sort()
+  const cycle_start = dates[0] ?? ''
+  const cycle_end = dates[dates.length - 1] ?? ''
+
+  return {
+    contract_version: 1,
+    outlet_id: outletId,
+    channel: 'swiggy',
+    restaurant_ref: rid,
+    operator_cycle_ref: `file::${digestHex.slice(0, 16)}`,
+    cycle_start,
+    cycle_end,
+    cycle_state: 'settled',
+    stated_payout_paise: totalPayout,
+    orders,
+    deductions: [],
+    cycle_deductions: [],
+  }
+}
+
+/**
+ * The annexure's Order Level sheet, read by column NAME.
+ *
+ * The header sits below two title/numbering rows, so it is located by finding
+ * the row that names Order ID. Every wanted column must be present or the file
+ * fails closed; anything not named here - including the customer-identifying
+ * columns - never leaves the parser.
+ */
+function parseSwiggyOrderLevel(rows: Rows): AggregatorCyclePayload['orders'] {
+  const headerRow = rows.findIndex((row) =>
+    row.some((value) => String(value).trim().toLowerCase() === 'order id'),
+  )
+  if (headerRow < 0) throw new StatementShapeError('the Order Level sheet has no header row')
+  const at = columnLocator(
+    rows[headerRow] ?? [],
+    [
+      'Order ID',
+      'Order Date',
+      'Order Status',
+      'Net Bill Value (before taxes) [1+2-3]',
+      'Net Payout for Order (after taxes)\n[A-B-C-D]',
+    ],
+    'Order Level',
+  )
+
+  const orders: AggregatorCyclePayload['orders'] = []
+  for (let r = headerRow + 1; r < rows.length; r += 1) {
+    const row = rows[r]
+    if (!row) continue
+    const orderId = cell(row, at('Order ID')).trim()
+    if (!orderId || !/^\d+$/.test(orderId)) continue
+
+    const placedAt = parseWorkbookInstant(cell(row, at('Order Date')))
+    const gross = toPaise(cell(row, at('Net Bill Value (before taxes) [1+2-3]')), 'Net Bill Value')
+    const net = toPaise(
+      cell(row, at('Net Payout for Order (after taxes)\n[A-B-C-D]')),
+      'Net Payout for Order',
+    )
+    orders.push({
+      order_id: orderId,
+      placed_at: placedAt,
+      gross_paise: gross,
+      commission_paise: null,
+      net_paise: net,
+    })
+  }
+  return orders
 }
 
 // --- Hyperpure -------------------------------------------------------------
@@ -490,14 +679,82 @@ export function parseZomatoSettlement(
 
 // --- entry -----------------------------------------------------------------
 
+/**
+ * A Business Metrics Report's calendar-day readings, as evidence only.
+ *
+ * The report totals its days on the portal's own calendar. An outlet whose
+ * counter runs past midnight books those hours to the previous business day,
+ * so a calendar total is never a ledger figure here; it names no business
+ * window and none may be invented for it.
+ */
+export function parseSwiggyMetricsEvidence(decoded: DecodedStatement): SwiggyMetricsDay[] {
+  const days: SwiggyMetricsDay[] = []
+  for (const rows of Object.values(decoded.sheets ?? {})) {
+    const headerRowIndex = rows.findIndex((row) => {
+      const lower = row.map((value) => String(value).trim().toLowerCase())
+      return lower.includes('overview') && lower.includes('metric')
+    })
+    if (headerRowIndex < 0) continue
+    const header = rows[headerRowIndex] ?? []
+    const dateColumns: { index: number; ymd: string }[] = []
+    let restaurantRefColumn = -1
+    for (let c = 0; c < header.length; c += 1) {
+      const value = String(header[c] ?? '').trim()
+      const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null
+      if (parsedDate) dateColumns.push({ index: c, ymd: parsedDate })
+      if (/restaurant/i.test(value)) restaurantRefColumn = c
+    }
+    if (dateColumns.length === 0 || restaurantRefColumn < 0) continue
+
+    for (let r = headerRowIndex + 1; r < rows.length; r += 1) {
+      const row = rows[r]
+      if (!row) continue
+      const overview = String(row.find((value) => /^sales$/i.test(String(value).trim())) ?? '')
+      const metricCell = row.findIndex((value) => /^net\s*sales$/i.test(String(value).trim()))
+      // Overview=SALES rows carry the Net Sales metric; anything else is not
+      // the basis this app reconciles against, and mixing them would compare
+      // different definitions of a day's takings.
+      void overview
+      if (metricCell < 0) continue
+      const rid = cell(row, restaurantRefColumn).trim()
+      if (!/^\d+$/.test(rid)) {
+        throw new StatementShapeError('a metrics row does not name a numeric restaurant reference')
+      }
+      for (const column of dateColumns) {
+        const paise = toPaise(cell(row, column.index), `Net Sales ${column.ymd}`)
+        if (paise === 0 && cell(row, column.index).trim() === '') continue
+        days.push({ restaurant_ref: rid, calendar_date: column.ymd, net_sales_paise: paise })
+      }
+    }
+  }
+  return days.sort(
+    (a, b) =>
+      a.restaurant_ref.localeCompare(b.restaurant_ref) ||
+      a.calendar_date.localeCompare(b.calendar_date),
+  )
+}
+
 /** Recognise a decoded statement and shape it for the ingest it belongs to. */
-export function parseStatement(decoded: DecodedStatement, outlets: OutletMap): ParsedStatement {
+export function parseStatement(
+  decoded: DecodedStatement,
+  outlets: OutletMap,
+  { digestHex = '' }: { digestHex?: string } = {},
+): ParsedStatement {
   const kind = recognise(decoded)
   if (kind === 'hyperpure-statement') {
     return { kind, statement: parseHyperpure(decoded, outlets) }
   }
   if (kind === 'zomato-order-history') {
     return { kind, cycles: parseOrderHistory(decoded, outlets) }
+  }
+  if (kind === 'swiggy-metrics-evidence') {
+    return { kind, days: parseSwiggyMetricsEvidence(decoded) }
+  }
+  if (kind === 'swiggy-annexure') {
+    if (!digestHex) {
+      throw new StatementShapeError('a Swiggy annexure needs its content digest to be named')
+    }
+    return { kind, cycles: [parseSwiggyAnnexure(decoded, outlets, digestHex)] }
   }
   return { kind: 'zomato-settlement', cycles: parseZomatoSettlement(decoded, outlets) }
 }

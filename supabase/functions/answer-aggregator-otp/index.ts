@@ -58,10 +58,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const code = str(body['code'])
 
   // Swiggy owns an independent mailbox; its code can never answer Zomato's
-// request or the reverse, because the claim below filters by channel.
-if (channel !== 'zomato' && channel !== 'swiggy') {
-  return json({ error: 'unknown_channel' }, 400)
-}
+  // request or the reverse, because the claim below filters by channel.
+  if (channel !== 'zomato' && channel !== 'swiggy') {
+    return json({ error: 'unknown_channel' }, 400)
+  }
   if (!code || !CODE_SHAPE.test(code)) return json({ error: 'malformed_code' }, 400)
 
   /*

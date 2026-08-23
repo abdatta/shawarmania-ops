@@ -160,7 +160,10 @@ async function probeHyperpure(state: { cookies: StoredCookie[] }): Promise<Probe
  * that header alone — CORS forbids credentialed calls entirely
  * (`Access-Control-Allow-Origin: *`), so cookies are neither sent nor needed.
  */
-function swiggyToken(state: { cookies?: StoredCookie[]; localStorage?: { name: string; value: string }[] }): string | null {
+function swiggyToken(state: {
+  cookies?: StoredCookie[]
+  localStorage?: { name: string; value: string }[]
+}): string | null {
   const fromStorage = (state.localStorage ?? [])
     .filter((e) => String(e?.name ?? '') === 'access_token')
     .map((e) => String(e.value ?? ''))
@@ -171,7 +174,10 @@ function swiggyToken(state: { cookies?: StoredCookie[]; localStorage?: { name: s
   return state.cookies?.find((c) => c.name === 'access_token')?.value ?? null
 }
 
-async function probeSwiggy(state: { cookies?: StoredCookie[]; localStorage?: { name: string; value: string }[] }): Promise<ProbeResult> {
+async function probeSwiggy(state: {
+  cookies?: StoredCookie[]
+  localStorage?: { name: string; value: string }[]
+}): Promise<ProbeResult> {
   const token = swiggyToken(state)
   if (!token) return { alive: false, reason: 'no_token' }
 
@@ -240,7 +246,9 @@ export async function probeChannel(channel: string): Promise<ProbeResult> {
   if (!state || typeof state !== 'object') return { alive: false, reason: 'unusable_session' }
   if (channel === 'hyperpure') return probeHyperpure(state as { cookies: StoredCookie[] })
   if (channel === 'swiggy')
-    return probeSwiggy(state as { cookies?: StoredCookie[]; localStorage?: { name: string; value: string }[] })
+    return probeSwiggy(
+      state as { cookies?: StoredCookie[]; localStorage?: { name: string; value: string }[] },
+    )
   if (channel === 'zomato') return probeZomato(state as { cookies: StoredCookie[] })
   // Never guess: an unknown channel has no probe, so it cannot be called alive.
   return { alive: null, reason: 'unknown_channel' }
