@@ -184,7 +184,7 @@ test.describe('the counter', () => {
     // Green is the unpaid-prepared band's identity, and Reprepare is a visible
     // secondary beside the green Paid.
     const greenPaid = preparedCard.getByRole('button', { name: 'Paid', exact: true })
-    await expect(greenPaid).toHaveClass(/bg-success-action/)
+    await expect(greenPaid).toHaveClass(/bg-success/)
     await expect(preparedCard.getByRole('button', { name: 'Reprepare', exact: true })).toBeVisible()
 
     // And then the money, which flies left into Bills this shift. The dialog
@@ -259,8 +259,8 @@ test.describe('the counter', () => {
     // beside it as a visible secondary rather than hiding in the overflow.
     const preparedBand = rail.getByTestId('pipeline-unpaid-prepared')
     const greenPaid = preparedBand.getByRole('button', { name: 'Paid', exact: true })
-    await expect(greenPaid).toHaveClass(/bg-success-action/)
-    await expect(greenPaid).toHaveClass(/text-on-success-action/)
+    await expect(greenPaid).toHaveClass(/bg-success/)
+    await expect(greenPaid).toHaveClass(/text-on-success/)
     const preparedCard = preparedBand.getByTestId(/^open-order/).first()
     const reprepare = preparedCard.getByRole('button', { name: 'Reprepare', exact: true })
     await expect(reprepare).toBeVisible()
