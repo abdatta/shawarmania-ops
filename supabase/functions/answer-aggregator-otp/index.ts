@@ -57,7 +57,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const channel = str(body['channel']) ?? 'zomato'
   const code = str(body['code'])
 
-  if (channel !== 'zomato') return json({ error: 'unknown_channel' }, 400)
+  // Swiggy owns an independent mailbox; its code can never answer Zomato's
+// request or the reverse, because the claim below filters by channel.
+if (channel !== 'zomato' && channel !== 'swiggy') {
+  return json({ error: 'unknown_channel' }, 400)
+}
   if (!code || !CODE_SHAPE.test(code)) return json({ error: 'malformed_code' }, 400)
 
   /*
