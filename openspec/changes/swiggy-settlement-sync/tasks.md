@@ -1,6 +1,6 @@
 ## 1. Dependency and evidence baseline
 
-- [ ] 1.1 Finish and archive #44 `aggregator-reconnect-and-hyperpure-automation`, then re-read its merged `aggregator-channel-sessions` spec and verify this change's delta applies without duplicate or contradictory requirements.
+- [x] 1.1 Finish and archive #44 `aggregator-reconnect-and-hyperpure-automation`, then re-read its merged `aggregator-channel-sessions` spec and verify this change's delta applies without duplicate or contradictory requirements.
 - [x] 1.2 Pin the current Zomato owner tab, reconnect ladder, event resolution, statement upload and ledger day/month behavior with focused tests before extracting shared code; verify every new characterization test passes against the unchanged implementation.
 - [ ] 1.3 Capture and redact real Swiggy fixtures for live Net Sales, current payout, at least two FINAL cycles (including one non-seven-day boundary), every finance page, pagination and representative error responses; verify fixtures contain no access token, cookie, customer PII, bank reference or live order identifier.
 - [ ] 1.4 Capture and redact real Swiggy Business Metrics XLSX, payout-annexure XLSX, payment-advice PDF and tax-invoice PDF variants; record MIME bytes, sheet/field contracts and which facts each proves, and verify every retained fixture is synthetic/redacted and parses with network disabled.
