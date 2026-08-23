@@ -37,12 +37,12 @@
 ## 5. Verification and phase gate
 
 - [x] 5.1 Full suite: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run test:e2e`.
-- [ ] 5.2 Live end-to-end from the app: reconnect with today's production shape (Zomato warm, Hyperpure absent) completes with no code prompt and ends both lines quiet; then the scheduled Hyperpure job reads real figures on its own schedule.
+- [x] 5.2 Live end-to-end from the app: reconnect with today's production shape (Zomato warm, Hyperpure absent) completes with no code prompt and ends both lines quiet; then the scheduled Hyperpure job reads real figures on its own schedule.
 - [x] 5.3 OTP-timing proof: force the full-login rung once against a controlled lapsed state and confirm the code card appears only when the code arrives — and never on an alive-session reconnect.
 - [x] 5.4 Four-role demo walkthrough still walks end to end with the updated sync surface states.
 - [x] 5.5 Hygiene: delete local credential artifacts from the 2026-08-22 experiment (`shawarmania-sync/session/hyperpure-edge-state.json`, Browser Control `zomato-edge` secret profile, redacted HAR), keeping none past archive.
 - [x] 5.6 Docs updated before archive: `docs/SCREENS.md` (sync surface states once Reconnect returns) and `docs/OPERATIONS.md` (the reconnect runbook: one reconnect, both channels, code only when asked).
-- [ ] 5.7 PHASE GATE — Aggregator reconnect and Hyperpure automation: the owner reconnects the aggregator once and Hyperpure's figures resume alongside Zomato's without a second sign-in or code; a reconnect asks for a one-time code only when the login actually requested one, and never asks when the session is still alive; Hyperpure's daily figures arrive on the schedule without a manual statement upload; the Hyperpure health line offers a working Reconnect again; and the four-role demo walkthrough still walks.
+- [x] 5.7 PHASE GATE — Aggregator reconnect and Hyperpure automation: the owner reconnects the aggregator once and Hyperpure's figures resume alongside Zomato's without a second sign-in or code; a reconnect asks for a one-time code only when the login actually requested one, and never asks when the session is still alive; Hyperpure's daily figures arrive on the schedule without a manual statement upload; the Hyperpure health line offers a working Reconnect again; and the four-role demo walkthrough still walks.
 
 ## Verification evidence (2026-08-23, the healed card)
 
