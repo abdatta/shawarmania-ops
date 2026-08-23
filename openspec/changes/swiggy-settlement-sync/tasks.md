@@ -2,10 +2,10 @@
 
 - [x] 1.1 Finish and archive #44 `aggregator-reconnect-and-hyperpure-automation`, then re-read its merged `aggregator-channel-sessions` spec and verify this change's delta applies without duplicate or contradictory requirements.
 - [x] 1.2 Pin the current Zomato owner tab, reconnect ladder, event resolution, statement upload and ledger day/month behavior with focused tests before extracting shared code; verify every new characterization test passes against the unchanged implementation.
-- [ ] 1.3 Capture and redact real Swiggy fixtures for live Net Sales, current payout, at least two FINAL cycles (including one non-seven-day boundary), every finance page, pagination and representative error responses; verify fixtures contain no access token, cookie, customer PII, bank reference or live order identifier.
-- [ ] 1.4 Capture and redact real Swiggy Business Metrics XLSX, payout-annexure XLSX, payment-advice PDF and tax-invoice PDF variants; record MIME bytes, sheet/field contracts and which facts each proves, and verify every retained fixture is synthetic/redacted and parses with network disabled.
-- [ ] 1.5 Capture one multi-restaurant Business Metrics report or explicitly record that its row partition remains unsupported; verify the parser fixture proves each restaurant row is mapped independently or rejects the ambiguous shape.
-- [ ] 1.6 Write a short evidence matrix in the change notes or tests mapping portal/API/file fields to normalized gross, order payout, adjustment, cycle finality and bank status; verify Total Customer Paid is excluded from the Net Sales gross basis and no percentage is an input.
+- [x] 1.3 Capture and redact real Swiggy fixtures for live Net Sales, current payout, at least two FINAL cycles (including one non-seven-day boundary), every finance page, pagination and representative error responses; verify fixtures contain no access token, cookie, customer PII, bank reference or live order identifier.
+- [x] 1.4 Capture and redact real Swiggy Business Metrics XLSX, payout-annexure XLSX, payment-advice PDF and tax-invoice PDF variants; record MIME bytes, sheet/field contracts and which facts each proves, and verify every retained fixture is synthetic/redacted and parses with network disabled.
+- [x] 1.5 Capture one multi-restaurant Business Metrics report or explicitly record that its row partition remains unsupported; verify the parser fixture proves each restaurant row is mapped independently or rejects the ambiguous shape.
+- [x] 1.6 Write a short evidence matrix in the change notes or tests mapping portal/API/file fields to normalized gross, order payout, adjustment, cycle finality and bank status; verify Total Customer Paid is excluded from the Net Sales gross basis and no percentage is an input.
 
 ## 2. Channel-aware database foundation
 
