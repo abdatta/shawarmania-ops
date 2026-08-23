@@ -31,11 +31,11 @@
 
 ## 4. Independent Swiggy session boundary
 
-- [ ] 4.1 Extend the Ops reader boundary to read/save/forget Swiggy Vault material and return secret-free health with truthful unknown expiry; verify app clients receive metadata only and no service-role or session material.
-- [ ] 4.2 Add a cheap authenticated Swiggy GraphQL probe with alive/lapsed/access-denied/shape/transport outcomes; verify it never defaults an unknown channel to Zomato and tests cover each classification.
-- [ ] 4.3 Make reconnect dispatch branch explicitly by channel: Swiggy probes and repairs only Swiggy, while the existing Zomato/Hyperpure ladder remains unchanged; verify healthy Swiggy returns `still_signed_in`, lapsed Swiggy dispatches only `login.yml(channel=swiggy)`, and unconfigured Kanchrapara is refused.
-- [ ] 4.4 Extend the OTP mailbox actions and answer function to Swiggy with atomic per-channel claim, sweep and expiry behavior; verify a Swiggy code cannot answer Zomato, duplicate answers are inert/refused and no submitted code is logged or returned.
-- [ ] 4.5 Update every Edge Function declaration/config block affected by the new channel and verify `npm run lint:functions` passes with the intended JWT boundary.
+- [x] 4.1 Extend the Ops reader boundary to read/save/forget Swiggy Vault material and return secret-free health with truthful unknown expiry; verify app clients receive metadata only and no service-role or session material.
+- [x] 4.2 Add a cheap authenticated Swiggy GraphQL probe with alive/lapsed/access-denied/shape/transport outcomes; verify it never defaults an unknown channel to Zomato and tests cover each classification.
+- [x] 4.3 Make reconnect dispatch branch explicitly by channel: Swiggy probes and repairs only Swiggy, while the existing Zomato/Hyperpure ladder remains unchanged; verify healthy Swiggy returns `still_signed_in`, lapsed Swiggy dispatches only `login.yml(channel=swiggy)`, and unconfigured Kanchrapara is refused.
+- [x] 4.4 Extend the OTP mailbox actions and answer function to Swiggy with atomic per-channel claim, sweep and expiry behavior; verify a Swiggy code cannot answer Zomato, duplicate answers are inert/refused and no submitted code is logged or returned.
+- [x] 4.5 Update every Edge Function declaration/config block affected by the new channel and verify `npm run lint:functions` passes with the intended JWT boundary.
 
 ## 5. Browser-free Swiggy readers in the sync repository
 
