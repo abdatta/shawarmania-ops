@@ -43,6 +43,25 @@
 - [x] 5.6 Docs updated before archive: `docs/SCREENS.md` (sync surface states once Reconnect returns) and `docs/OPERATIONS.md` (the reconnect runbook: one reconnect, both channels, code only when asked).
 - [ ] 5.7 PHASE GATE — Aggregator reconnect and Hyperpure automation: the owner reconnects the aggregator once and Hyperpure's figures resume alongside Zomato's without a second sign-in or code; a reconnect asks for a one-time code only when the login actually requested one, and never asks when the session is still alive; Hyperpure's daily figures arrive on the schedule without a manual statement upload; the Hyperpure health line offers a working Reconnect again; and the four-role demo walkthrough still walks.
 
+## Verification evidence (2026-08-23, the first live OTP rung)
+
+- **Diagnosis**: across eight dispatches (2026-08-22 evening through 08-23
+  morning) every runner reached the OTP stage and opened its mailbox row
+  correctly — `open_code_request` is proven live — and every row expired
+  unclaimed. The RPC was exonerated by emulation (owner JWT replayed over the
+  pooler against a synthetic open row, rolled back): `aggregator_credential_health`
+  answers `awaiting_code_since` exactly as the adapter expects. The break was
+  the surface's watch: keyed to the memory of a tap, it died with the visit,
+  and the runner's measured ~8-minute boot outlived every look the owner took.
+- **Fix**: the five-second watch is keyed to what the server says (a repair
+  card is showing) rather than to the tap, so the code form survives leaving
+  the page, coming back, and refreshing — the owner's stated requirement.
+  Pinned by a test that counts health reads while a repair shows (fails on the
+  old code, proven by stash) and one that asserts the quiet surface stays
+  quiet; the button colour under Needs you moved to the alert fill to match
+  every row beside it.
+- **5.3 live proof**: recorded after the run below.
+
 ## Verification evidence (2026-08-22)
 
 Recorded as each clause was proven, so the gate review reads from facts.

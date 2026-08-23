@@ -215,27 +215,6 @@ export function ZomatoSyncSurface() {
     return () => clearInterval(timer)
   }, [health?.running, hyperpure?.running, refresh])
 
-  /*
-   * Follow a dispatched sign-in even though it writes no run rows.
-   *
-   * The full-login rung does all its work before anything lands in
-   * `aggregator_sync_runs`, so neither channel's running flag rises while the
-   * robot boots, enters the identifier, and waits for a code — and without
-   * this loop the code card would appear only whenever somebody happened to
-   * reload. For ten minutes after any dispatched reconnect, a quiet five-second
-   * read keeps the surface honest about what the login is doing. Outside that
-   * window the interval no-ops.
-   */
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const askedAt = reconnectAskedAtRef.current
-      if (askedAt !== null && Date.now() - askedAt < 10 * 60_000) {
-        void refresh().catch(() => undefined)
-      }
-    }, 5_000)
-    return () => clearInterval(timer)
-  }, [refresh])
-
   const act = async (action: () => Promise<void>) => {
     setBusy(true)
     setError(null)
@@ -356,6 +335,30 @@ export function ZomatoSyncSurface() {
   const actionableCovered = actionable.filter(
     (row) => !(reconnectScope !== null && row.event.kind === 'session-lapsed'),
   )
+
+  /*
+   * A login is worth watching while a repair card is on screen.
+   *
+   * The full-login rung does all its work before anything lands in
+   * `aggregator_sync_runs`, so neither channel's running flag rises while the
+   * robot boots, enters the identifier, and waits for a code — and without a
+   * watch the code card would appear only whenever somebody happened to reload.
+   * Whether to watch is read from what the SERVER says — a repair card is
+   * showing — not from the memory of a tap: measured live 2026-08-23, the tap's
+   * ref died with the visit, so leaving the page and coming back mid-login left
+   * nothing polling, and a five-minute mailbox waited out its whole life with
+   * no form on screen to type the code into. Keyed to the repair state, the
+   * watch survives navigation and refreshes, and stops the moment both lines go
+   * quiet.
+   */
+  const watchForLogin = reconnectScope !== null || waiting !== null
+  useEffect(() => {
+    if (!watchForLogin) return
+    const timer = setInterval(() => {
+      void refresh().catch(() => undefined)
+    }, 5_000)
+    return () => clearInterval(timer)
+  }, [watchForLogin, refresh])
 
   return (
     <div className="mx-auto max-w-2xl">

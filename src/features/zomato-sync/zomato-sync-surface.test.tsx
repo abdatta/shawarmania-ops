@@ -34,14 +34,16 @@ import { readAgainInHours, ZomatoSyncSurface } from './zomato-sync-surface'
  * starts in.
  */
 
-async function renderSurface(outletId: string) {
-  render(
+async function renderSurface(outletId: string, adapters?: ReturnType<typeof createMockAdapters>) {
+  const view = render(
     // At its real address, because the ledger link is derived from it: the role
     // segment differs per shell and demo mode carries the persona in the URL, so
     // a hard-coded path would walk the reader into somebody else's shell.
     <MemoryRouter initialEntries={['/demo/owner/ledger/zomato']}>
       <SessionContext.Provider value={demoSessionFor('super_admin')}>
-        <AdaptersContext.Provider value={createMockAdapters('super_admin')}>
+        {/* Shared when given, so a test can leave the page and come back to the
+            same underlying state — which is the thing navigation loses. */}
+        <AdaptersContext.Provider value={adapters ?? createMockAdapters('super_admin')}>
           <ZomatoSyncSurface />
         </AdaptersContext.Provider>
       </SessionContext.Provider>
@@ -51,6 +53,7 @@ async function renderSurface(outletId: string) {
   // lapsed session and a week that will not reconcile, and each test needs the
   // one whose state it is about.
   await chooseOutlet(outletId)
+  return view
 }
 
 /** Which section a row currently sits under, by its heading. */
@@ -298,6 +301,72 @@ describe('the Zomato sync surface', () => {
     expect(field).toHaveAttribute('autocomplete', 'one-time-code')
     expect(field).toHaveAttribute('inputmode', 'numeric')
   }, 15_000)
+
+  it('keeps watching for an opened code request while a repair is showing', async () => {
+    /*
+     * Measured live 2026-08-23: the runner boots for roughly eight minutes
+     * before it reaches the code screen, and the mailbox it opens lives five.
+     * A surface that kept watching only while it remembered a tap lost both
+     * races the moment the owner navigated away and back — the ref died with
+     * the visit, nothing polled again, and a five-minute code waited out its
+     * whole life with no form on screen to type it into. Whether to keep
+     * watching must come from what the server says (a repair is showing), so
+     * the watch — like the form itself — survives leaving the page and coming
+     * back, and costs nothing when everything is quiet.
+     */
+    const adapters = createMockAdapters('super_admin')
+    const readsHealth = adapters.aggregatorSync.getHealth
+    let healthReads = 0
+    adapters.aggregatorSync.getHealth = (outletId) => {
+      healthReads += 1
+      return readsHealth(outletId)
+    }
+
+    await renderSurface(OUTLET_KANCHRAPARA_ID, adapters)
+    await screen.findByTestId('hyperpure-health')
+    const readsAtMount = healthReads
+
+    // The repair cards are showing, no code is waiting yet, and nobody has
+    // tapped anything on this visit. The page must STILL keep asking whether a
+    // dispatched login has opened its mailbox — that steady beat is the whole
+    // mechanism by which the code form survives navigation and refreshes. One
+    // five-second beat inside the window is enough to prove the heart beats.
+    await waitFor(() => expect(healthReads).toBeGreaterThanOrEqual(readsAtMount + 1), {
+      timeout: 9_000,
+    })
+  }, 15_000)
+
+  it('stops watching when neither channel is asking for repair', async () => {
+    /*
+     * The watch above is keyed to the repair state, so the quiet case must stay
+     * quiet: a surface where every line reads "All quiet" polls nothing, exactly
+     * as before this watch existed. The demo starts Hyperpure lapsed at BOTH
+     * outlets — which rightly counts as asking for repair — so this walks the
+     * silent capture-only healing first and asserts on what it leaves behind.
+     */
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('super_admin')
+    const readsHealth = adapters.aggregatorSync.getHealth
+    let healthReads = 0
+    adapters.aggregatorSync.getHealth = (outletId) => {
+      healthReads += 1
+      return readsHealth(outletId)
+    }
+
+    await renderSurface(OUTLET_KALYANI_ID, adapters)
+    await screen.findByTestId('hyperpure-health')
+
+    // Heal the one lapsed channel the demo starts with, exactly as its own
+    // test does: a warm parent means the quiet capture-only rung.
+    await user.click(screen.getByTestId('needs-reconnect-hyperpure'))
+    const line = screen.getByTestId('hyperpure-health')
+    await waitFor(() => expect(line).toHaveTextContent(/All quiet/), { timeout: 8_000 })
+    const readsWhenQuiet = healthReads
+
+    // Long enough that the five-second beat would have fired at least once.
+    await new Promise((resolve) => setTimeout(resolve, 6_500))
+    expect(healthReads).toBe(readsWhenQuiet)
+  }, 20_000)
 
   it('takes a statement uploaded by hand and says what it wrote, per outlet', async () => {
     await renderSurface(OUTLET_KALYANI_ID)
