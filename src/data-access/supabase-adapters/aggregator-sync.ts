@@ -139,7 +139,7 @@ export function createSupabaseAggregatorSyncAdapter(
    * is where a total quietly doubles.
    */
   async function events(outletId: string): Promise<AggregatorSyncEventRow[]> {
-    const [runs, cycles, days, typed, sourced, dismissedPairs] = await Promise.all([
+    const [runs, recovered, cycles, days, typed, sourced, dismissedPairs] = await Promise.all([
       client
         .from('aggregator_sync_runs')
         .select('id, started_at, outcome, detail, rehearsal')
@@ -148,6 +148,21 @@ export function createSupabaseAggregatorSyncAdapter(
         .in('outcome', ['session_lapsed', 'shape_changed'])
         .order('started_at', { ascending: false })
         .limit(20),
+      // When reading last worked. One successful run ends every failure older
+      // than it — they were all symptoms of the one dead session — which is the
+      // newest-run-wins rule the tab's badge has counted by all along; without
+      // it here the badge says quiet while the page below keeps asking. A
+      // rehearsal proves nothing about the live session, so only a real one heals.
+      client
+        .from('aggregator_sync_runs')
+        .select('started_at')
+        .eq('outlet_id', outletId)
+        .eq('channel', 'zomato')
+        .eq('outcome', 'ok')
+        .eq('rehearsal', false)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
       client
         .from('aggregator_cycle_reconciliations')
         .select(
@@ -195,6 +210,11 @@ export function createSupabaseAggregatorSyncAdapter(
     const push = (id: string, at: string, event: AggregatorSyncEvent, resolvedAt: string | null) =>
       rows.push({ id, outletId, at, event, resolvedAt })
 
+    // A failure is over once reading works again, which the next successful run
+    // proves — and it ends every failure older than itself at once. Resolved
+    // rather than removed: "Zomato signed us out on Tuesday" is worth being able
+    // to find.
+    const healedAt = recovered.data?.started_at ?? null
     for (const run of runs.data ?? []) {
       push(
         `run-${run.id}`,
@@ -202,10 +222,7 @@ export function createSupabaseAggregatorSyncAdapter(
         run.outcome === 'session_lapsed'
           ? { kind: 'session-lapsed', detail: run.detail }
           : { kind: 'shape-changed', detail: run.detail },
-        // A lapse is over once a session exists again, which the next successful run
-        // proves. Resolved rather than removed: "Zomato signed us out on Tuesday" is
-        // worth being able to find.
-        null,
+        healedAt !== null && run.started_at < healedAt ? healedAt : null,
       )
     }
 
