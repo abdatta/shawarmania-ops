@@ -703,13 +703,9 @@ function ReconnectCard({
     <Card className="border-warning/60 bg-warning/5 p-4">
       <h2 className="text-sm font-medium text-content">{title}</h2>
       <p className="mt-1 text-sm text-content-muted">{body}</p>
-      <Button
-        variant="secondary"
-        disabled={busy}
-        onClick={onReconnect}
-        className="mt-3"
-        data-testid={testId}
-      >
+      {/* The default variant is the alert fill: this is a Needs-you action, and
+          Needs-you actions are the loud ones, matching every row below. */}
+      <Button disabled={busy} onClick={onReconnect} className="mt-3" data-testid={testId}>
         {action}
       </Button>
     </Card>
