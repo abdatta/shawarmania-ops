@@ -42,7 +42,7 @@ for contract-touching work.
 
 - [x] 5.1 Middle column hosts Bills this shift: PaymentTotalCards top, collapsed bills below with countdown chip on eligible ones; reshaped shimmer silhouettes for both middle and rail content.
 - [x] 5.2 Composer overlays the middle column on first item tap and during edits; returns on save/settle/cancel-edit; draft suspension semantics unchanged.
-- [x] 5.3 Right rail becomes Preparing over divider over Unpaid Prepared Orders; whole-outlet scope; a settle hands the middle column back to Bills this shift with the bill queued in it � no confirmation bar is inserted.
+- [x] 5.3 Right rail becomes Preparing over divider over Unpaid Prepared Orders; whole-outlet scope; a settle hands the middle column back to Bills this shift with the bill queued in it � no confirmation bar is inserted.
 - [x] 5.4 Rename applied everywhere user-visible (rail headings, standalone surface + its outlet-wide subtitle, manager labels, test ids' accessible names); slugs and DB vocabulary unchanged.
 - [x] 5.5 Column resize keys keep working for the two resizable columns.
 
@@ -74,3 +74,38 @@ for contract-touching work.
 - [x] 9.3 Demo walk: four roles still walk; demo makes no request beyond app origin; banner undismissable.
 - [x] 9.4 Phone + tablet viewports, light and dark, zero console errors.
 - [x] 9.5 ROADMAP row #45 reconciled via roadmap:sync.
+
+## 10. Production follow-up: history that predates preparation
+
+The deploy put a nullable axis onto nine days of rows and taught the pipeline
+to read paid-but-unprepared as work still owed — so every settled order since
+the counter's first day re-entered the rail (269 in production within hours).
+The data was never wrong: payment has always settled bills. What was missing
+was the decision that history counts as prepared at its paid moment.
+
+- [x] 10.1 Failing pgTAP first (`40_prepared_history_backfill.sql`): a paid order with null `prepared_at` — the exact legacy shape — is stamped prepared at its stored `paid_at`; open orders stay preparing; cancelled stays terminal; bills keep status and total byte-for-byte; a second run moves nothing.
+- [x] 10.2 Migration `20260823000000_prepared_history_backfill.sql`: guarded maintenance helper (`backfill_prepared_history`, execute revoked from anon/authenticated/public) plus one invocation so every environment built from the chain agrees with production.
+- [x] 10.3 Manager history tab keeps its plain `Open orders (N)` name (owner's call against "Pipeline") and now counts the whole board honestly; `Unpaid prepared (N)` had labelled one section while counting both bands.
+- [ ] 10.4 Post-deploy check on prod: the owner's pipeline tab reads single digits at both outlets, demo mode still walks, and no bill totals moved.
+
+Deliberately not done here: bounding pipeline reads by business date. Stale
+unpaid work must stay visible for a manager to cancel it (spec: an order
+stranded on an unavailable tablet); hiding it would strand it forever. The
+backfill removes the flood's cause; accumulation from genuine upfront payers
+is daily-visible work, not drift.
+
+## 11. Counter follow-up: the board shares its height
+
+Production day one exposed the rail's last stacking assumption: a busy
+Preparing band scrolls the whole column, and the money band — the section a
+counter most needs in view — slides off screen behind it. The board now
+shares its panel: each band grows with its work, scrolls its own list once
+the work exceeds that share, and keeps a measured floor under itself so at
+least one complete card stays visible however short the viewport.
+
+- [x] 11.1 Failing component test first (`pipeline-board.test.tsx`): populated bands claim `flex-grow` equal to their order count from a zero basis; each band's list is its own `overflow-y-auto` region; an empty band claims nothing; every populated band carries a floor class standing in for measurement.
+- [x] 11.2 The embedded board becomes two floored, proportionally-grown bands over a non-shrinking divider; floors are measured from each band's first rendered card (resize-aware), falling back to the spec's 120px one-ticket figure pre-measurement; standalone page keeps document flow.
+- [x] 11.3 The rail's docked-card region stops being a scroller entirely — the pin sits above both bands in an unmoving region, so no scroll anywhere can take an order under edit out of view.
+- [x] 11.4 Shimmer reviewed against the rework per the standing placeholder rule: what arrives at rest is unchanged (cards over a hairline), so the silhouette stands; scroll containment is invisible until a band overflows.
+- [x] 11.5 Browser proof at short viewports (620px and 500px, light and dark, production build via the Playwright rig): with Preparing at nine orders, the bottom band's divider and first complete card stay visible; scrolling the top band moves only top-band orders; zero console errors.
+- [x] 11.6 Tighten the creator-chip test the browser proof exposed: it asserted a relative age that only holds while the wall clock shares the seed's calendar date, so it was green all day and red past midnight. The test now freezes the clock before the store seeds, pinning the fixture order at five minutes old — proved by running it in the very hour it failed.

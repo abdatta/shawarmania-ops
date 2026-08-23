@@ -3252,6 +3252,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      backfill_prepared_history: { Args: never; Returns: number }
       billing_assert_day_ready: {
         Args: { p_business_date: string; p_outlet_id: string }
         Returns: undefined

@@ -13,10 +13,22 @@ operator took the order. A paid order whose preparation is not yet recorded
 SHALL remain in Preparing wearing a Paid marker, because its food is still
 owed. An order SHALL enter Bills only when prepared and paid.
 
+The panel's height SHALL be shared between the bands rather than scrolled as
+one sheet: each populated band SHALL grow in proportion to its work and SHALL
+scroll its own orders once they exceed that share, while a band with little
+work yields the remainder to the other. No populated band SHALL be squeezed
+below what it takes to keep its first complete card visible beneath the
+divider, at any viewport height.
+
 #### Scenario: An order lands in Preparing
 
 - **WHEN** an operator saves an order
 - **THEN** it appears in Preparing immediately, without waiting for delivery
+
+#### Scenario: A long Preparing band cannot push the money band away
+
+- **WHEN** many saved orders fill Preparing on a short viewport
+- **THEN** Unpaid Prepared Orders keeps at least its first complete card on screen, and scrolling Preparing moves orders within Preparing only
 
 #### Scenario: Marked prepared moves it down the rail
 

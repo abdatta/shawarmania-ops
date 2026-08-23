@@ -703,7 +703,7 @@ test.describe('manager billing history', () => {
     await expect(page.getByTestId('billing-total-average')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
 
-    await page.getByRole('tab', { name: /Unpaid prepared/ }).click()
+    await page.getByRole('tab', { name: /Open orders/ }).click()
     const openOrder = page.getByTestId('manager-open-order-104')
     await expect(openOrder).toContainText('Order items')
     await expect(openOrder).toContainText('Customer details')

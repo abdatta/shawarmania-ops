@@ -1,5 +1,6 @@
-import { useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ReceiptText } from 'lucide-react'
+import type { CSSProperties } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
@@ -35,6 +36,13 @@ import { useCounterState } from './use-counter-state'
  *
  * The scope is the **outlet**, matching what live adapters have always served:
  * another tablet's work is this counter's work too, shown with its creator.
+ *
+ * On the counter (embedded) the two bands share the panel's height instead of
+ * stacking into one long sheet: each grows with its work and scrolls its own
+ * orders once they exceed that share, floored at what one complete card needs.
+ * A rush in one band can no longer push the other off the screen — the board
+ * always shows both questions the counter is answering. The standalone page
+ * keeps the natural document flow it has always had.
  */
 export function OpenOrdersHeading({ embedded }: { embedded: boolean }) {
   return (
@@ -161,10 +169,61 @@ export function OpenOrdersSurface({
   const flipRootRef = useRef<HTMLElement | null>(null)
   useFlip(flipRootRef, [orders])
 
+  // Each band's floor is its own first ticket, measured live: whatever the
+  // viewport or the order's line count, a populated band never starts smaller
+  // than one complete card. Before the first measurement lands, the section's
+  // min-h-[120px] class — the spec's own one-item figure — holds the floor.
+  const [floors, setFloors] = useState<{ preparing: number | null; unpaid: number | null }>({
+    preparing: null,
+    unpaid: null,
+  })
+  const measureFloors = useCallback(() => {
+    const next = {
+      preparing:
+        document.querySelector<HTMLElement>('[data-testid="pipeline-preparing-list"] > li')
+          ?.offsetHeight || null,
+      unpaid:
+        document.querySelector<HTMLElement>('[data-testid="pipeline-unpaid-prepared-list"] > li')
+          ?.offsetHeight || null,
+    }
+    setFloors((current) =>
+      current.preparing === next.preparing && current.unpaid === next.unpaid ? current : next,
+    )
+  }, [])
+  // One frame after commit: layout must exist before it can be measured, and
+  // the compiler rightly objects to a synchronous setState inside an effect.
+  useLayoutEffect(() => {
+    const frame = requestAnimationFrame(measureFloors)
+    return () => cancelAnimationFrame(frame)
+  })
+  useEffect(() => {
+    window.addEventListener('resize', measureFloors)
+    return () => window.removeEventListener('resize', measureFloors)
+  }, [measureFloors])
+
+  /**
+   * A band claims shares of the free panel in proportion to its work, so a
+   * busy Preparing grows while a two-order money band keeps exactly what it
+   * needs — and both keep at least their floor, which is what pins the bottom
+   * band's first card on screen however long the day's list above it gets.
+   */
+  const bandStyle = (count: number, floor: number | null): CSSProperties | undefined =>
+    embedded
+      ? {
+          flexGrow: count,
+          flexShrink: 1,
+          flexBasis: 0,
+          ...(floor !== null && { minHeight: floor + 6 }),
+        }
+      : undefined
+
   if (orders === null) {
     // The rail's own silhouette: compact ticket cards over a hairline — the
-    // shape this column fills once the pipeline arrives. Reshaped with the
-    // layout in the same change, per the standing placeholder rule.
+    // shape this column fills once the pipeline arrives. Reviewed against this
+    // change's height-sharing rework per the standing placeholder rule: what
+    // arrives at rest is still cards over a hairline (the scroll containment
+    // between them is invisible until a band overflows), so the silhouette's
+    // shape stands.
     return (
       <LoadingRegion label="the pipeline" className="space-y-1">
         <Shimmer className="h-[92px]" />
@@ -181,14 +240,31 @@ export function OpenOrdersSurface({
     section: 'preparing' | 'unpaid-prepared',
     emptyText: string,
     testid: string,
+    band: { floor: number | null },
   ) => (
-    <section data-testid={testid} aria-label={label}>
+    <section
+      data-testid={testid}
+      aria-label={label}
+      style={bandStyle(sectionOrders.length, band.floor)}
+      /*
+        The 120px class is the pre-measurement floor — the spec's one-ticket
+        figure; a live measurement overrides it through the inline style.
+      */
+      className={embedded ? 'flex min-h-[120px] flex-col' : undefined}
+    >
       {sectionOrders.length === 0 ? (
         embedded ? null : (
           <p className="rounded-lg bg-surface-raised p-2 text-xs text-content-muted">{emptyText}</p>
         )
       ) : (
-        <ul className="space-y-1">
+        <ul
+          data-testid={`${testid}-list`}
+          /*
+            The scroll containment the board promises: this list scrolls its own
+            orders and nothing else, so a full band never moves its neighbour.
+          */
+          className={`min-h-0 flex-1 space-y-1 ${embedded ? 'overflow-y-auto' : ''}`}
+        >
           {sectionOrders.map((order) => (
             <li key={order.id}>
               <PipelineCard
@@ -229,7 +305,7 @@ export function OpenOrdersSurface({
   return (
     <section
       ref={flipRootRef}
-      className={embedded ? 'space-y-1.5' : 'space-y-4'}
+      className={embedded ? 'flex min-h-0 flex-1 flex-col gap-1.5' : 'space-y-4'}
       aria-labelledby="open-orders-title"
     >
       <OpenOrdersHeading embedded={embedded} />
@@ -237,7 +313,7 @@ export function OpenOrdersSurface({
       {error && (
         <p
           role="alert"
-          className="rounded-lg border border-border bg-surface p-2 text-sm font-semibold text-danger"
+          className="shrink-0 rounded-lg border border-border bg-surface p-2 text-sm font-semibold text-danger"
         >
           {error}
         </p>
@@ -262,9 +338,10 @@ export function OpenOrdersSurface({
             'preparing',
             'Nothing waiting to be made.',
             'pipeline-preparing',
+            { floor: floors.preparing },
           )}
           <div
-            className="my-2 flex items-center gap-2"
+            className="my-2 flex shrink-0 items-center gap-2"
             role="separator"
             aria-label="Prepared, waiting for money"
           >
@@ -280,6 +357,7 @@ export function OpenOrdersSurface({
             'unpaid-prepared',
             'No prepared order is waiting for money.',
             'pipeline-unpaid-prepared',
+            { floor: floors.unpaid },
           )}
         </>
       )}

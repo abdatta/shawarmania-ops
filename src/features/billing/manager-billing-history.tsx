@@ -328,7 +328,9 @@ export function ManagerBillingHistory() {
         {(
           [
             ['bills', `Bills (${bills.length})`],
-            ['orders', `Unpaid prepared (${orders.length})`],
+            // The count is the whole board — both bands — under the plain name
+            // this page has always used; the band names live in the sections.
+            ['orders', `Open orders (${orders.length})`],
             ['status', 'Status'],
           ] as const
         ).map(([id, label]) => (
@@ -466,7 +468,7 @@ export function ManagerBillingHistory() {
         </div>
       ) : view === 'orders' ? (
         orders.length === 0 ? (
-          <EmptyState icon={ReceiptText} title="No orders in the pipeline at this outlet." />
+          <EmptyState icon={ReceiptText} title="No open orders at this outlet." />
         ) : (
           // The same two sections the counter rail derives, derived the same
           // way — the manager reads the pipeline, not a flat pile.

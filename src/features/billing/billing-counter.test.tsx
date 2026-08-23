@@ -595,6 +595,13 @@ describe('BillingCounter', () => {
   })
 
   it('shows another creator while omitting the current shift holder', async () => {
+    // The card's age line is relative only while the order shares the clock's
+    // calendar date, and the seed stamps its own "today" from the clock it
+    // reads at creation. Freezing the clock before the store exists pins both
+    // sides of that comparison: the fixture order is always five minutes old,
+    // so the assertion below tests the creator, not what hour it is. Without
+    // this, the test is green all day and red past midnight.
+    vi.setSystemTime(new Date('2026-08-23T18:45:00+05:30'))
     const store = createDemoStore()
     const openOrder = store.orders.find((order) => order.order_number === 104)
     if (!openOrder) throw new Error('Expected the demo open order')
