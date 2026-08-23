@@ -321,8 +321,11 @@ $$, $$ values
   -- ordinary states, not-yet and already-used. What is refused is whitespace,
   -- which would have the runner submitting blanks to Zomato and spending the
   -- request's attempts on nothing.
-  ('aggregator_auth_requests_code_not_blank')
-$$, 'every not-blank constraint in the schema is accounted for, and no others exist');
+  ('aggregator_auth_requests_code_not_blank'),
+  -- A restaurant mapping names an external identity; one that occupies the
+  -- field and says nothing would be an ambiguous write waiting to happen.
+  ('outlet_channel_restaurants_ref_not_blank')
+ $$, 'every not-blank constraint in the schema is accounted for, and no others exist');
 
 -- The manual ledger's two cash-movement reasons are blank-checked too, under
 -- names the pattern above does not match: each constraint does two jobs at once

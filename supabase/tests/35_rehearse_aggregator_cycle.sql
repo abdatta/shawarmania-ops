@@ -63,9 +63,9 @@ insert into public.manual_ledger_days
 values (:'KAL'::uuid, pg_temp.ledger_day(3), 500000, 500000, 0, :'OWNER'::uuid);
 
 insert into public.aggregator_channel_days
-  (outlet_id, channel, business_date, revenue_paise, commission_paise,
+  (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
    settlement_state, origin)
-values (:'KAL'::uuid, 'zomato', pg_temp.ledger_day(3), 250000, 2800,
+values (:'KAL'::uuid, 'zomato', pg_temp.ledger_day(3), 250000, 2800, 247200,
         'provisional', 'daily_reader');
 
 -- Reconciles exactly: 216000 of orders, less 40000 of deductions, is 176000.

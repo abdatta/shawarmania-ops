@@ -1,7 +1,7 @@
 ## 1. Dependency and evidence baseline
 
 - [ ] 1.1 Finish and archive #44 `aggregator-reconnect-and-hyperpure-automation`, then re-read its merged `aggregator-channel-sessions` spec and verify this change's delta applies without duplicate or contradictory requirements.
-- [ ] 1.2 Pin the current Zomato owner tab, reconnect ladder, event resolution, statement upload and ledger day/month behavior with focused tests before extracting shared code; verify every new characterization test passes against the unchanged implementation.
+- [x] 1.2 Pin the current Zomato owner tab, reconnect ladder, event resolution, statement upload and ledger day/month behavior with focused tests before extracting shared code; verify every new characterization test passes against the unchanged implementation.
 - [ ] 1.3 Capture and redact real Swiggy fixtures for live Net Sales, current payout, at least two FINAL cycles (including one non-seven-day boundary), every finance page, pagination and representative error responses; verify fixtures contain no access token, cookie, customer PII, bank reference or live order identifier.
 - [ ] 1.4 Capture and redact real Swiggy Business Metrics XLSX, payout-annexure XLSX, payment-advice PDF and tax-invoice PDF variants; record MIME bytes, sheet/field contracts and which facts each proves, and verify every retained fixture is synthetic/redacted and parses with network disabled.
 - [ ] 1.5 Capture one multi-restaurant Business Metrics report or explicitly record that its row partition remains unsupported; verify the parser fixture proves each restaurant row is mapped independently or rejects the ambiguous shape.
@@ -9,15 +9,15 @@
 
 ## 2. Channel-aware database foundation
 
-- [ ] 2.1 Add a normalized channel-scoped external restaurant mapping with unique `(channel, external_ref)`, one-outlet ownership, enabled/dormant state and audit metadata; verify schema tests allow multiple Swiggy references for Kalyani, reject ambiguous mappings and leave Kanchrapara unmapped.
-- [ ] 2.2 Widen restaurant-money constraints on channel days, cycle deductions, cycle reconciliations, sync boundaries and ingest inputs to admit Swiggy while continuing to reject Hyperpure; verify schema coverage tests enumerate the intended channel set for every table and RPC.
-- [ ] 2.3 Widen credential, auth-request and sync-run channel constraints to admit Swiggy independently; verify one open request is allowed per channel, Swiggy metadata cannot close a Zomato request and client roles cannot read Vault material.
-- [ ] 2.4 Extend channel-day storage with exact gross, order-level reduction, net payout, source/as-of metadata and legacy provenance without floats; verify zero-gross/negative-net cancellation rows, nullable provisional net, settled completeness and `net + reduction = gross` invariants.
-- [ ] 2.5 Extend cycle reconciliation with operator cycle identity, declared start/end, stated final payout and separate bank status; verify coincident Zomato/Swiggy dates do not collide and shortened month-boundary cycles persist unchanged.
-- [ ] 2.6 Make source, deduction and accepted-difference identities include channel and stable operator reference; verify replays are inert within one channel and cannot overwrite the other channel's same-date record.
-- [ ] 2.7 Add/adjust RLS so Super Admin reads all channel days and internals, Franchise Admin reads only assigned-outlet channel days, and Biller/Employee read none; verify assigned, cross-outlet, deactivated and hand-crafted SELECT/INSERT/UPDATE/DELETE cases in `test:db` and `test:rls`.
-- [ ] 2.8 Keep cycle records, deductions, mappings, sync runs, credentials and auth requests owner/server-only even at an assigned outlet; verify a Franchise Admin receives no row from every protected table and cannot invoke an owner command.
-- [ ] 2.9 Regenerate `src/data-access/database.types.ts` from the reset schema and verify `npm run db:types` leaves no unexpected generated-type diff.
+- [x] 2.1 Add a normalized channel-scoped external restaurant mapping with unique `(channel, external_ref)`, one-outlet ownership, enabled/dormant state and audit metadata; verify schema tests allow multiple Swiggy references for Kalyani, reject ambiguous mappings and leave Kanchrapara unmapped.
+- [x] 2.2 Widen restaurant-money constraints on channel days, cycle deductions, cycle reconciliations, sync boundaries and ingest inputs to admit Swiggy while continuing to reject Hyperpure; verify schema coverage tests enumerate the intended channel set for every table and RPC.
+- [x] 2.3 Widen credential, auth-request and sync-run channel constraints to admit Swiggy independently; verify one open request is allowed per channel, Swiggy metadata cannot close a Zomato request and client roles cannot read Vault material.
+- [x] 2.4 Extend channel-day storage with exact gross, order-level reduction, net payout, source/as-of metadata and legacy provenance without floats; verify zero-gross/negative-net cancellation rows, nullable provisional net, settled completeness and `net + reduction = gross` invariants.
+- [x] 2.5 Extend cycle reconciliation with operator cycle identity, declared start/end, stated final payout and separate bank status; verify coincident Zomato/Swiggy dates do not collide and shortened month-boundary cycles persist unchanged.
+- [x] 2.6 Make source, deduction and accepted-difference identities include channel and stable operator reference; verify replays are inert within one channel and cannot overwrite the other channel's same-date record.
+- [x] 2.7 Add/adjust RLS so Super Admin reads all channel days and internals, Franchise Admin reads only assigned-outlet channel days, and Biller/Employee read none; verify assigned, cross-outlet, deactivated and hand-crafted SELECT/INSERT/UPDATE/DELETE cases in `test:db` and `test:rls`.
+- [x] 2.8 Keep cycle records, deductions, mappings, sync runs, credentials and auth requests owner/server-only even at an assigned outlet; verify a Franchise Admin receives no row from every protected table and cannot invoke an owner command.
+- [x] 2.9 Regenerate `src/data-access/database.types.ts` from the reset schema and verify `npm run db:types` leaves no unexpected generated-type diff.
 
 ## 3. Channel-neutral ingest and reconciliation
 

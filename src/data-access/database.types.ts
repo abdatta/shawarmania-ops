@@ -212,11 +212,13 @@ export type Database = {
       }
       aggregator_channel_days: {
         Row: {
+          as_of_at: string | null
           business_date: string
           channel: string
           commission_paise: number | null
           created_at: string
           id: string
+          net_paise: number | null
           origin: string
           outlet_id: string
           provisional_commission_paise: number | null
@@ -224,17 +226,20 @@ export type Database = {
           revenue_paise: number
           revised_at: string | null
           settlement_state: string
+          source_ref: string | null
           superseded_at: string | null
           superseded_commission_paise: number | null
           superseded_revenue_paise: number | null
           updated_at: string
         }
         Insert: {
+          as_of_at?: string | null
           business_date: string
           channel: string
           commission_paise?: number | null
           created_at?: string
           id?: string
+          net_paise?: number | null
           origin: string
           outlet_id: string
           provisional_commission_paise?: number | null
@@ -242,17 +247,20 @@ export type Database = {
           revenue_paise: number
           revised_at?: string | null
           settlement_state: string
+          source_ref?: string | null
           superseded_at?: string | null
           superseded_commission_paise?: number | null
           superseded_revenue_paise?: number | null
           updated_at?: string
         }
         Update: {
+          as_of_at?: string | null
           business_date?: string
           channel?: string
           commission_paise?: number | null
           created_at?: string
           id?: string
+          net_paise?: number | null
           origin?: string
           outlet_id?: string
           provisional_commission_paise?: number | null
@@ -260,6 +268,7 @@ export type Database = {
           revenue_paise?: number
           revised_at?: string | null
           settlement_state?: string
+          source_ref?: string | null
           superseded_at?: string | null
           superseded_commission_paise?: number | null
           superseded_revenue_paise?: number | null
@@ -341,12 +350,14 @@ export type Database = {
       aggregator_cycle_reconciliations: {
         Row: {
           accepted_at: string | null
+          bank_status: string | null
           channel: string
           computed_paise: number
           created_at: string
           cycle_end: string
           cycle_start: string
           id: string
+          operator_cycle_ref: string
           outcome: string
           outlet_id: string
           stated_payout_paise: number
@@ -354,12 +365,14 @@ export type Database = {
         }
         Insert: {
           accepted_at?: string | null
+          bank_status?: string | null
           channel: string
           computed_paise: number
           created_at?: string
           cycle_end: string
           cycle_start: string
           id?: string
+          operator_cycle_ref: string
           outcome: string
           outlet_id: string
           stated_payout_paise: number
@@ -367,12 +380,14 @@ export type Database = {
         }
         Update: {
           accepted_at?: string | null
+          bank_status?: string | null
           channel?: string
           computed_paise?: number
           created_at?: string
           cycle_end?: string
           cycle_start?: string
           id?: string
+          operator_cycle_ref?: string
           outcome?: string
           outlet_id?: string
           stated_payout_paise?: number
@@ -2735,6 +2750,47 @@ export type Database = {
             columns: ["paid_shift_id"]
             isOneToOne: false
             referencedRelation: "counter_shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outlet_channel_restaurants: {
+        Row: {
+          channel: string
+          created_at: string
+          external_ref: string
+          id: string
+          label: string | null
+          outlet_id: string
+          state: string
+          updated_at: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          external_ref: string
+          id?: string
+          label?: string | null
+          outlet_id: string
+          state: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          external_ref?: string
+          id?: string
+          label?: string | null
+          outlet_id?: string
+          state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outlet_channel_restaurants_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
             referencedColumns: ["id"]
           },
         ]

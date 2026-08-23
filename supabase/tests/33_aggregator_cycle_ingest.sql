@@ -81,12 +81,14 @@ create function pg_temp.sourced_day(p_outlet uuid, d date, revenue bigint,
 returns void language plpgsql as $$
 begin
   insert into public.aggregator_channel_days
-    (outlet_id, channel, business_date, revenue_paise, commission_paise,
+    (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
      settlement_state, origin)
-  values (p_outlet, 'zomato', d, revenue, commission, state, origin)
+  values (p_outlet, 'zomato', d, revenue, commission,
+          revenue - commission, state, origin)
   on conflict (outlet_id, channel, business_date) do update
     set revenue_paise = excluded.revenue_paise,
         commission_paise = excluded.commission_paise,
+        net_paise = excluded.net_paise,
         settlement_state = excluded.settlement_state,
         origin = excluded.origin;
 end;
