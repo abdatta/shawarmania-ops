@@ -50,11 +50,11 @@
 
 ## 6. Headed Swiggy login job
 
-- [ ] 6.1 Implement the Swiggy identifier → OTP → verified-login capture with resilient selectors and one identifier submission/no automatic resend; verify fixture/UI tests open the mailbox only after the genuine OTP screen renders.
-- [ ] 6.2 Capture only the minimum replayable Swiggy session, write it directly to the Ops Vault boundary and destroy local state; verify logs, summaries and failure artifacts contain no token, cookie, storage value, OTP, restaurant money or customer data.
-- [ ] 6.3 Extend the manual `login.yml` dispatch for `channel=swiggy` under headed Playwright/Xvfb with one channel-specific concurrency group and failure-only short-lived structural artifacts; verify Zomato/Hyperpure workflow behavior remains unchanged.
-- [ ] 6.4 After capture, launch a fresh plain-HTTP client from Vault and complete the Swiggy probe/reader before reporting success; verify a capture that cannot replay remains failed and does not mark health live.
-- [ ] 6.5 Measure a real token's expiry/refresh behavior without recording the token, then encode the truthful metadata rule; verify missing evidence displays unknown expiry and is never replaced by an invented timestamp.
+- [x] 6.1 Implement the Swiggy identifier → OTP → verified-login capture with resilient selectors and one identifier submission/no automatic resend; verify fixture/UI tests open the mailbox only after the genuine OTP screen renders.
+- [x] 6.2 Capture only the minimum replayable Swiggy session, write it directly to the Ops Vault boundary and destroy local state; verify logs, summaries and failure artifacts contain no token, cookie, storage value, OTP, restaurant money or customer data.
+- [x] 6.3 Extend the manual `login.yml` dispatch for `channel=swiggy` under headed Playwright/Xvfb with one channel-specific concurrency group and failure-only short-lived structural artifacts; verify Zomato/Hyperpure workflow behavior remains unchanged.
+- [x] 6.4 After capture, launch a fresh plain-HTTP client from Vault and complete the Swiggy probe/reader before reporting success; verify a capture that cannot replay remains failed and does not mark health live.
+- [x] 6.5 Measure a real token's expiry/refresh behavior without recording the token, then encode the truthful metadata rule; verify missing evidence displays unknown expiry and is never replaced by an invented timestamp.
 
 ## 7. Official-file fallback
 
