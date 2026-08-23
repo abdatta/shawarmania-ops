@@ -24,19 +24,19 @@ for contract-touching work.
 
 ## 3. Live adapter and offline overlays
 
-- [ ] 3.1 `markOrderPrepared(orderId, prepared)`, `unpayOrder(orderId, billId, reason)`, `cancelPaidOrder(orderId, reason)` on `BillingAdapter`; both implementations compile against mocks typed from schema.
-- [ ] 3.2 Local acceptance at the IndexedDB boundary; chainId = orderId so unwinds queue behind their payment; replay-safe.
-- [ ] 3.3 `readOrders` overlay projects preparation commands (prepared/unprepared), unwinds (order reappears open or vanishes as cancelled), and keeps paying overlays intact.
-- [ ] 3.4 `overlayDurableBills` projects counter-kind voids so shift totals drop an unwound bill before delivery.
-- [ ] 3.5 Unit tests: offline sequence order → prepare → pay → unpay → prepare again lands exactly once online in chain order.
+- [x] 3.1 `markOrderPrepared(orderId, prepared)`, `unpayOrder(orderId, billId, reason)`, `cancelPaidOrder(orderId, reason)` on `BillingAdapter`; both implementations compile against mocks typed from schema.
+- [x] 3.2 Local acceptance at the IndexedDB boundary; chainId = orderId so unwinds queue behind their payment; replay-safe.
+- [x] 3.3 `readOrders` overlay projects preparation commands (prepared/unprepared), unwinds (order reappears open or vanishes as cancelled), and keeps paying overlays intact.
+- [x] 3.4 `overlayDurableBills` projects counter-kind voids so shift totals drop an unwound bill before delivery.
+- [x] 3.5 Unit tests: offline sequence order → prepare → pay → unpay → prepare again lands exactly once online in chain order.
 
 ## 4. Mock adapter parity and demo seeds
 
-- [ ] 4.1 All commands queue uniformly: saveOrder/payOrder/settleBill/preparation/unwinds accept → pending → delivered (~400ms), numbers assigned at delivery.
-- [ ] 4.2 Provisional `Local · XXXX` references until simulated delivery, matching live wording exactly.
-- [ ] 4.3 Drain on subscribe like the live coordinator; seeded pending bill delivers without a network event.
-- [ ] 4.4 Outlet-wide pipeline lists; second fabricated tablet contributes seed orders (creator chips exercised); subtitle states outlet scope.
-- [ ] 4.5 Mock enforces the same guards (reprepare-after-paid refusal, unwind window, foreign-device refusal) so demo cannot show what production refuses.
+- [x] 4.1 All commands queue uniformly: saveOrder/payOrder/settleBill/preparation/unwinds accept → pending → delivered (~400ms), numbers assigned at delivery.
+- [x] 4.2 Provisional `Local · XXXX` references until simulated delivery, matching live wording exactly.
+- [x] 4.3 Drain on subscribe like the live coordinator; seeded pending bill delivers without a network event.
+- [x] 4.4 Outlet-wide pipeline lists; second fabricated tablet contributes seed orders (creator chips exercised); subtitle states outlet scope.
+- [x] 4.5 Mock enforces the same guards (reprepare-after-paid refusal, unwind window, foreign-device refusal) so demo cannot show what production refuses.
 
 ## 5. Workspace rearrangement
 

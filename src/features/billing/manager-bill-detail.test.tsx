@@ -32,6 +32,7 @@ const bill: BillingBill = {
     },
   ],
   totalPaise: 13_900,
+  voidKind: null,
   voidReason: null,
   voidedAt: null,
   voidedBy: null,

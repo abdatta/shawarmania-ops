@@ -1093,6 +1093,12 @@ export interface BillingOrder {
   localReference?: string | null
   businessDate: Tables<'orders'>['business_date']
   orderedAt: Tables<'orders'>['ordered_at']
+  /**
+   * The preparation axis, independent of `status` (the money lifecycle). Null
+   * means still preparing; a timestamp means prepared, and clearing it back to
+   * null is reprepare. Paid-but-null is the upfront payer still waiting for food.
+   */
+  preparedAt: Tables<'orders'>['prepared_at']
   status: OrderStatus
   creatorId: Tables<'orders'>['created_by']
   creatorName: string
@@ -1105,6 +1111,9 @@ export interface BillingOrder {
   cancelledByName: string | null
   billId: Tables<'orders'>['bill_id']
 }
+
+/** Which kind of act voided a settled bill, stamped by the performing transaction. */
+export type BillVoidKind = NonNullable<Tables<'bills'>['void_kind']>
 
 export interface SaveOrderInput {
   clientId: string
@@ -1141,6 +1150,12 @@ export interface BillingBill {
   customerPhone: Tables<'bills'>['customer_phone']
   lines: BillLineDraft[]
   totalPaise: Tables<'bills'>['total_paise']
+  /**
+   * The structured kind stamped when this bill was voided: `manager_void`,
+   * `counter_unpay` or `cancelled_after_paid`. Legacy rows read null and are
+   * displayed as manager voids. Never inferred at read time.
+   */
+  voidKind: Tables<'bills'>['void_kind']
   voidReason: Tables<'bills'>['void_reason']
   voidedAt: Tables<'bills'>['voided_at']
   /** The actor stamped by the database when the immutable bill was cancelled. */
@@ -1251,6 +1266,25 @@ export interface BillingAdapter {
   listOpenOrders(outletId: string): Promise<BillingOrder[]>
   payOrder(orderId: string, payments: PaymentAllocation[]): Promise<BillingBill>
   cancelOrder(orderId: string, reason: string): Promise<BillingOrder>
+  /**
+   * Mark an order prepared, or reprepare it by clearing the mark. The order
+   * must be open — or paid but not yet prepared, the upfront payer's path into
+   * Bills. Repreparing a paid order is refused: the bills border is terminal in
+   * that direction.
+   */
+  markOrderPrepared(orderId: string, prepared: boolean): Promise<BillingOrder>
+  /**
+   * Take this tablet's own payment back within the grace window: the bill is
+   * voided as `counter_unpay` and the order reopens. Queued behind the payment
+   * it reverses, so offline acceptance cannot overtake it.
+   */
+  unpayOrder(orderId: string, billId: string, reason: string): Promise<BillingOrder>
+  /**
+   * Cancel a paid order within the same window: one reasoned act that voids
+   * the bill as `cancelled_after_paid` and cancels the order — warned about
+   * first by the surface, because the money leaves the drawer.
+   */
+  cancelPaidOrder(orderId: string, reason: string): Promise<BillingOrder>
   listShiftHistory(shiftId: string): Promise<ShiftBillingHistory>
   listManagerHistory(filters: BillingHistoryFilters): Promise<BillingBill[]>
   getBill(billId: string): Promise<BillingBill | null>

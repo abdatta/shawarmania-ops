@@ -461,7 +461,11 @@ export function ManagerBillingHistory() {
             {orders.map((order) => {
               const cancellingOrder = cancellingOrderId === order.id
               return (
-                <li key={order.id} className="rounded-xl border border-border bg-surface p-3">
+                <li
+                  key={order.id}
+                  data-testid={`manager-open-order-${order.orderNumber}`}
+                  className="rounded-xl border border-border bg-surface p-3"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xl font-black text-content">Order {order.orderNumber}</p>

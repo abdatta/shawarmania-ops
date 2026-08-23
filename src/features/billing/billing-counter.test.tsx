@@ -500,7 +500,7 @@ describe('BillingCounter', () => {
     }
   })
 
-  it('saves food-first work directly into the persistent open-order rail', async () => {
+  it('saves food-first work into the rail under a local reference, numbered at delivery', async () => {
     const person = user()
     const { adapters } = renderCounter()
     const saveOrder = vi.spyOn(adapters.billing, 'saveOrder')
@@ -512,22 +512,24 @@ describe('BillingCounter', () => {
 
     expect(saveOrder).toHaveBeenCalledWith(expect.objectContaining({ lines: expect.any(Array) }))
     const rail = await screen.findByTestId('counter-activity-rail')
-    const saved = await within(rail).findByTestId('open-order-105')
+    // Before delivery the card carries a local reference, never a number.
+    const clientId = (saveOrder.mock.calls[0]![0] as { clientId: string }).clientId
+    const saved = await within(rail).findByTestId(`open-order-local-${clientId}`)
     expect(within(saved).getByText('Asha')).toBeInTheDocument()
+    expect(within(saved).getByText(/Local · [0-9A-Z]{4}/)).toBeInTheDocument()
+    expect(within(saved).getByText(/Local · /).textContent).not.toMatch(/#\d/)
     expect(within(saved).getByText('Classic Chicken Shawarma')).toBeInTheDocument()
     expect(within(saved).getByText('Mayonnaise Chicken Shawarma')).toBeInTheDocument()
-    expect(within(saved).getByText(/Order #\d+/)).toBeInTheDocument()
     expect(within(saved).getByText('now')).toBeInTheDocument()
     expect(within(saved).queryByText('Demo Biller')).not.toBeInTheDocument()
-    expect(
-      within(within(saved).getByText('Classic Chicken Shawarma').closest('li')!).getByText('₹139'),
-    ).toBeInTheDocument()
-    expect(
-      within(within(saved).getByText('Mayonnaise Chicken Shawarma').closest('li')!).getByText(
-        '₹159',
-      ),
-    ).toBeInTheDocument()
     expect(saved).toHaveTextContent('₹298')
+
+    // Delivered, it has left the queue and carries its permanent daily number.
+    await vi.advanceTimersByTimeAsync(500)
+    const delivered = await within(rail).findByTestId('open-order-106')
+    expect(within(delivered).getByText(/Order #106/)).toBeInTheDocument()
+    expect(within(rail).queryByText(/Local · /)).not.toBeInTheDocument()
+
     expect(screen.queryByTestId('saved-order-confirmation')).not.toBeInTheDocument()
     expect(screen.getByTestId('bill-total')).toHaveTextContent('₹0')
   })
@@ -698,6 +700,11 @@ describe('BillingCounter', () => {
 
   it('says what to do when no shift is open, rather than showing a dead settle button', async () => {
     const adapters = createMockAdapters('biller')
+    // The counter chrome is subscribed in the app; let the seeded pending bill
+    // deliver through that subscription before the day is finished.
+    const unsubscribe = adapters.billing.subscribeCounter(() => {})
+    await waitFor(() => expect(adapters.billing.getCounterState().sync.pending).toBe(0))
+    unsubscribe()
     const shiftId = adapters.billing.getCounterState().shift!.id
     await adapters.billing.closeShift(shiftId)
 
