@@ -215,6 +215,27 @@ export function ZomatoSyncSurface() {
     return () => clearInterval(timer)
   }, [health?.running, hyperpure?.running, refresh])
 
+  /*
+   * Follow a dispatched sign-in even though it writes no run rows.
+   *
+   * The full-login rung does all its work before anything lands in
+   * `aggregator_sync_runs`, so neither channel's running flag rises while the
+   * robot boots, enters the identifier, and waits for a code — and without
+   * this loop the code card would appear only whenever somebody happened to
+   * reload. For ten minutes after any dispatched reconnect, a quiet five-second
+   * read keeps the surface honest about what the login is doing. Outside that
+   * window the interval no-ops.
+   */
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const askedAt = reconnectAskedAtRef.current
+      if (askedAt !== null && Date.now() - askedAt < 10 * 60_000) {
+        void refresh().catch(() => undefined)
+      }
+    }, 5_000)
+    return () => clearInterval(timer)
+  }, [refresh])
+
   const act = async (action: () => Promise<void>) => {
     setBusy(true)
     setError(null)
