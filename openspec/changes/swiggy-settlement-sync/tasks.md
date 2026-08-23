@@ -39,14 +39,14 @@
 
 ## 5. Browser-free Swiggy readers in the sync repository
 
-- [ ] 5.1 Harden the plain-HTTP Swiggy client around the captured access token, GraphQL errors and bounded 408/429/5xx retry; verify tests distinguish session lapse, access denial, source-shape error and exhausted transport without logging request secrets.
-- [ ] 5.2 Implement cursor-complete finance history, payout detail and order-level payout reads using portal-declared IDs and dates; verify fixtures cover multiple pages, FINAL Pending/Paid/On Hold and shortened cycle boundaries.
-- [ ] 5.3 Implement live/open-cycle reading with captured/as-of time and a bounded lookback including yesterday; verify a second read advances a provisional value idempotently and a multi-date aggregate is never assigned to one date.
-- [ ] 5.4 Investigate and fixture-prove a timestamped same-day source carrying the Net Sales/Net Bill Value basis, including the post-midnight cutover case; verify the reader refuses authoritative same-day ledger output unless it can assign each amount to the 04:00 business window.
-- [ ] 5.5 Build the Swiggy normalized cycle candidate from order gross/net plus dated and cycle-only components; verify real redacted fixtures reproduce the portal's final payout within tolerance without percentage math or pro-rata allocation.
-- [ ] 5.6 Implement mapping-aware Ops configuration loading and candidate posting for every enabled Swiggy restaurant reference; verify dormant Kalyani is skipped, active Kalyani posts to the correct outlet and Kanchrapara produces no run or zero row.
-- [ ] 5.7 Add browser-free no-write rehearsal and write modes to the Swiggy CLI/workflow entry point; verify rehearsal prints only secret-free outcome counts and write mode posts the same normalized candidate bytes.
-- [ ] 5.8 Prove scheduled-reader dependency hygiene by checking the runtime bundle/workflow contains no Playwright/browser/display-server launch path; verify the full reader suite runs in a Node-only CI job.
+- [x] 5.1 Harden the plain-HTTP Swiggy client around the captured access token, GraphQL errors and bounded 408/429/5xx retry; verify tests distinguish session lapse, access denial, source-shape error and exhausted transport without logging request secrets.
+- [x] 5.2 Implement cursor-complete finance history, payout detail and order-level payout reads using portal-declared IDs and dates; verify fixtures cover multiple pages, FINAL Pending/Paid/On Hold and shortened cycle boundaries.
+- [x] 5.3 Implement live/open-cycle reading with captured/as-of time and a bounded lookback including yesterday; verify a second read advances a provisional value idempotently and a multi-date aggregate is never assigned to one date.
+- [x] 5.4 Investigate and fixture-prove a timestamped same-day source carrying the Net Sales/Net Bill Value basis, including the post-midnight cutover case; verify the reader refuses authoritative same-day ledger output unless it can assign each amount to the 04:00 business window.
+- [x] 5.5 Build the Swiggy normalized cycle candidate from order gross/net plus dated and cycle-only components; verify real redacted fixtures reproduce the portal's final payout within tolerance without percentage math or pro-rata allocation.
+- [x] 5.6 Implement mapping-aware Ops configuration loading and candidate posting for every enabled Swiggy restaurant reference; verify dormant Kalyani is skipped, active Kalyani posts to the correct outlet and Kanchrapara produces no run or zero row.
+- [x] 5.7 Add browser-free no-write rehearsal and write modes to the Swiggy CLI/workflow entry point; verify rehearsal prints only secret-free outcome counts and write mode posts the same normalized candidate bytes.
+- [x] 5.8 Prove scheduled-reader dependency hygiene by checking the runtime bundle/workflow contains no Playwright/browser/display-server launch path; verify the full reader suite runs in a Node-only CI job.
 
 ## 6. Headed Swiggy login job
 
