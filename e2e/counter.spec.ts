@@ -72,8 +72,9 @@ test.describe('the counter', () => {
 
     await recordPaid(page)
 
-    // Cleared for the next customer, immediately.
-    await expect(page.getByTestId('bill-total')).toHaveText('₹0')
+    // Cleared for the next customer, immediately: the composer gives way and
+    // the money list it serves is what shows through.
+    await expect(page.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
 
     const confirmation = page.getByTestId('settled-confirmation')
     await expect(confirmation).toContainText('₹727')
@@ -155,8 +156,9 @@ test.describe('the counter', () => {
     await correctedBill.getByRole('button', { name: 'Demo: expire' }).click()
     await expect(correctedBill.getByRole('button', { name: /^Edit \(/ })).toHaveCount(0)
 
-    await expect(page.getByTestId('bill-total')).toHaveText('₹0')
-    await expect(page.getByPlaceholder('Customer name')).toHaveValue('')
+    // Long settled: the composer never came back after the payment.
+    await expect(page.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
+    await expect(page.getByTestId('bill-total')).toHaveCount(0)
   })
 
   test('saves and records a food-first order from the persistent rail', async ({ page }) => {
@@ -167,34 +169,37 @@ test.describe('the counter', () => {
     await expect(page.getByTestId('saved-order-confirmation')).toHaveCount(0)
 
     const rail = page.getByTestId('counter-activity-rail')
-    await expect(rail.getByRole('heading', { name: 'Open orders' })).toBeVisible()
-    const saved = rail.getByTestId('open-order-105')
+    // Before delivery the card carries a local reference, never a number — and
+    // no per-line prices: the total is what the pipeline card shows.
+    const saved = rail.getByTestId(/^open-order-local-/)
     await expect(saved.getByText('Asha', { exact: true })).toBeVisible()
     await expect(saved.getByText('Classic Chicken Shawarma', { exact: true })).toBeVisible()
     await expect(saved.getByText('Mayonnaise Chicken Shawarma', { exact: true })).toBeVisible()
-    await expect(saved.getByText('Order #105', { exact: true })).toBeVisible()
+    await expect(saved.getByText(/^Local · [0-9A-Z]{4}$/)).toBeVisible()
     await expect(saved.getByText('now', { exact: true })).toBeVisible()
     await expect(saved.getByText('Demo Biller', { exact: true })).toHaveCount(0)
-    await expect(
-      saved.getByText('Classic Chicken Shawarma', { exact: true }).locator('..'),
-    ).toContainText('₹139')
-    await expect(
-      saved.getByText('Mayonnaise Chicken Shawarma', { exact: true }).locator('..'),
-    ).toContainText('₹159')
     await expect(saved).toContainText('₹298')
-    await saved.getByRole('button', { name: 'Mark Paid', exact: true }).click()
+
+    // The section's next step is preparation, not money.
+    await saved.getByRole('button', { name: 'Mark prepared', exact: true }).click()
+    const preparedCard = rail
+      .getByTestId('pipeline-unpaid-prepared')
+      .getByTestId(/^open-order-local-/)
+    await expect(preparedCard).toBeVisible()
+
+    // And then the money, which flies left into Bills this shift.
+    await preparedCard.getByRole('button', { name: 'Mark Paid', exact: true }).click()
     const payment = page.getByRole('dialog', { name: 'Record payment' })
     await payment.getByRole('button', { name: 'UPI', exact: true }).click()
     await payment.getByRole('button', { name: 'Mark Paid', exact: true }).click()
     await expect(page.getByText(/recorded as paid. Bill number assigned/)).toBeVisible()
 
-    const shiftBills = rail.getByRole('region', { name: 'Bills this shift' })
+    const shiftBills = page.getByRole('region', { name: 'Bills this shift' })
     const closed = shiftBills
       .locator('details')
       .filter({ hasText: 'Mayonnaise Chicken Shawarma' })
       .filter({ hasText: 'Asha' })
     await expect(closed).toBeVisible()
-    await expect(shiftBills.locator('details').first()).toContainText('Asha')
     await expect(closed.getByLabel('Payment editable')).toBeVisible()
     await closed.locator('summary').click()
     await expect(closed.getByRole('button', { name: /^Edit \(5 min\)$/ })).toBeVisible()
@@ -210,7 +215,9 @@ test.describe('the counter', () => {
 
     const rail = page.getByTestId('counter-activity-rail')
     const order = rail.getByTestId('open-order-104')
-    await order.getByRole('button', { name: 'Edit order 104' }).click()
+    // Uncommon actions live behind the touch-safe kebab.
+    await order.getByRole('button', { name: /^More actions for Order .104$/ }).click()
+    await order.getByRole('menuitem', { name: 'Edit' }).click()
     await expect(page.getByRole('heading', { name: 'Editing order #104' })).toBeVisible()
 
     // The mode is spatial, not just labelled: the order leaves the list and its
@@ -267,7 +274,8 @@ test.describe('the counter', () => {
     await expect(order.getByText('Updated customer', { exact: true })).toBeVisible()
     await expect(order.getByText('Mayonnaise Chicken Shawarma', { exact: true })).toBeVisible()
 
-    await order.getByRole('button', { name: 'Edit order 104' }).click()
+    await order.getByRole('button', { name: /^More actions for Order .104$/ }).click()
+    await order.getByRole('menuitem', { name: 'Edit' }).click()
     await page.getByRole('button', { name: 'One more Classic Chicken Shawarma' }).click()
     await page.getByTestId('cancel-edit').click()
     await expect(page.getByPlaceholder('Customer name')).toHaveValue('Waiting customer')
@@ -277,6 +285,8 @@ test.describe('the counter', () => {
   test('offers exact-phone autofill only after the complete number and keeps conflicts local', async ({
     page,
   }) => {
+    // The customer fields live in the composer, which opens on the first tap.
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await page.getByPlaceholder('Customer name').fill('Ria')
     await page.getByPlaceholder('Phone number').fill('900000010')
     await expect(page.getByTestId('customer-match')).toHaveCount(0)
@@ -307,8 +317,9 @@ test.describe('the counter', () => {
   test('cancels a compact open order with a one-tap reason and confirmation', async ({ page }) => {
     const rail = page.getByTestId('counter-activity-rail')
     const order = rail.getByTestId('open-order-104')
-    await expect(order.getByRole('button', { name: 'Edit order 104' })).toBeVisible()
-    await order.getByRole('button', { name: 'Cancel order 104' }).click()
+    await expect(order.getByRole('button', { name: /^More actions for Order .104$/ })).toBeVisible()
+    await order.getByRole('button', { name: /^More actions for Order .104$/ }).click()
+    await order.getByRole('menuitem', { name: 'Cancel order' }).click()
 
     const dialog = page.getByRole('dialog', { name: 'Cancel order 104' })
     const reason = dialog.getByRole('textbox', { name: 'Cancellation reason' })
@@ -323,14 +334,15 @@ test.describe('the counter', () => {
   })
 
   test('shows current-shift totals and exposes originating-tablet correction', async ({ page }) => {
-    const rail = page.getByTestId('counter-activity-rail')
-    await expect(rail.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
-    await expect(rail.getByTestId('shift-total-cash')).toBeVisible()
-    await expect(rail.getByTestId('shift-total-upi')).toBeVisible()
-    await expect(rail.getByTestId('shift-total-swiggy')).toHaveCount(0)
-    await expect(rail.getByTestId('shift-total-zomato')).toHaveCount(0)
-    await expect(rail.getByText('Payment needs attention')).toBeVisible()
-    await rail.getByRole('button', { name: 'Correct with new copy' }).click()
+    // Money history lives in the middle column now; the rail is the pipeline.
+    const billsColumn = page.getByTestId('bill-column')
+    await expect(billsColumn.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
+    await expect(page.getByTestId('shift-total-cash')).toBeVisible()
+    await expect(page.getByTestId('shift-total-upi')).toBeVisible()
+    await expect(page.getByTestId('shift-total-swiggy')).toHaveCount(0)
+    await expect(page.getByTestId('shift-total-zomato')).toHaveCount(0)
+    await expect(billsColumn.getByText('Payment needs attention')).toBeVisible()
+    await billsColumn.getByRole('button', { name: 'Correct with new copy' }).click()
     await expect(page.getByText(/linked correction was created/)).toBeVisible()
   })
 
@@ -352,8 +364,12 @@ test.describe('the counter', () => {
     page,
   }) => {
     const rail = page.getByTestId('counter-activity-rail')
-    const panel = page.getByTestId('bill-panel')
     const grid = page.getByTestId('counter-workspace')
+
+    // Open the composer so the middle column's own panel is measurable.
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+    const panel = page.getByTestId('bill-panel')
+    await expect(panel).toBeVisible()
 
     // Default widths match; the menu takes the slack until a counter user changes either one.
     const wide = { panel: (await panel.boundingBox())!, rail: (await rail.boundingBox())! }
@@ -424,6 +440,7 @@ test.describe('the counter', () => {
   })
 
   test('requests the native numeric keypad for customer phone', async ({ page }) => {
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
     await expect(page.getByPlaceholder('Phone number')).toHaveAttribute('inputmode', 'numeric')
     await expect(page.getByPlaceholder('Phone number')).toHaveAttribute('pattern', '[0-9]*')
   })
@@ -453,7 +470,11 @@ test.describe('the counter offline', () => {
     for (let index = 0; index < 5; index += 1) {
       await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
       await recordPaid(page)
-      await expect(page.getByTestId('bill-total')).toHaveText('₹0')
+      // Cleared for the next customer even offline: durable locally, not sent.
+      const confirmation = page.getByTestId('settled-confirmation')
+      await expect(confirmation).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
+      await expect(confirmation).toBeHidden({ timeout: AFTER_SUCCESS_MS })
     }
 
     await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'stalled')
@@ -484,7 +505,10 @@ test.describe('the counter in both themes', () => {
 
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
       await expect(page.getByTestId('menu-grid')).toBeVisible()
-      await expect(page.getByTestId('bill-panel')).toBeVisible()
+      // The middle column's default is the money list; the composer is a mode.
+      await expect(
+        page.getByRole('heading', { name: 'Bills this shift' }),
+      ).toBeVisible()
 
       await testInfo.attach(`counter-${theme}`, {
         body: await page.screenshot(),
@@ -601,8 +625,8 @@ test.describe('manager billing history', () => {
     await expect(page.getByTestId('billing-total-average')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
 
-    await page.getByRole('tab', { name: /Open orders/ }).click()
-    const openOrder = page.getByText(/Order 104/).locator('xpath=ancestor::li')
+    await page.getByRole('tab', { name: /Unpaid prepared/ }).click()
+    const openOrder = page.getByTestId('manager-open-order-104')
     await expect(openOrder).toContainText('Order items')
     await expect(openOrder).toContainText('Customer details')
     await expect(openOrder).toContainText('created by')

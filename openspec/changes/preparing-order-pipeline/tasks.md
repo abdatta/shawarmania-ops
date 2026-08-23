@@ -40,31 +40,31 @@ for contract-touching work.
 
 ## 5. Workspace rearrangement
 
-- [ ] 5.1 Middle column hosts Bills this shift: PaymentTotalCards top, collapsed bills below with countdown chip on eligible ones; reshaped shimmer silhouettes for both middle and rail content.
-- [ ] 5.2 Composer overlays the middle column on first item tap and during edits; returns on save/settle/cancel-edit; draft suspension semantics unchanged.
-- [ ] 5.3 Right rail becomes Preparing over divider over Unpaid Prepared Orders; whole-outlet scope; settled confirmation follows the money into the bills column.
-- [ ] 5.4 Rename applied everywhere user-visible (rail headings, standalone surface + its outlet-wide subtitle, manager labels, test ids' accessible names); slugs and DB vocabulary unchanged.
-- [ ] 5.5 Column resize keys keep working for the two resizable columns.
+- [x] 5.1 Middle column hosts Bills this shift: PaymentTotalCards top, collapsed bills below with countdown chip on eligible ones; reshaped shimmer silhouettes for both middle and rail content.
+- [x] 5.2 Composer overlays the middle column on first item tap and during edits; returns on save/settle/cancel-edit; draft suspension semantics unchanged.
+- [x] 5.3 Right rail becomes Preparing over divider over Unpaid Prepared Orders; whole-outlet scope; settled confirmation follows the money into the bills column.
+- [x] 5.4 Rename applied everywhere user-visible (rail headings, standalone surface + its outlet-wide subtitle, manager labels, test ids' accessible names); slugs and DB vocabulary unchanged.
+- [x] 5.5 Column resize keys keep working for the two resizable columns.
 
 ## 6. Pipeline cards
 
-- [ ] 6.1 Compact ticket card: meta line, bold quantity prefixes without per-line prices, total top-right, PAID chip beside total on paid-unprepared cards.
-- [ ] 6.2 One primary action per card by section (Mark prepared / Mark paid / Mark prepared on paid-unprepared); docked-edit variant unchanged in kind.
-- [ ] 6.3 Kebab overflow with touch-safe labelled rows: Edit + Cancel (unpaid), Reprepare (unpaid prepared), Un-pay + Cancel after paid (paid, within window); Edit absent/refused on paid cards.
-- [ ] 6.4 Un-pay confirmation naming amount and tender; cancel-after-paid dialog warning that money leaves the drawer, reasoned, loud styling.
+- [x] 6.1 Compact ticket card: meta line, bold quantity prefixes without per-line prices, total top-right, PAID chip beside total on paid-unprepared cards.
+- [x] 6.2 One primary action per card by section (Mark prepared / Mark paid / Mark prepared on paid-unprepared); docked-edit variant unchanged in kind.
+- [x] 6.3 Kebab overflow with touch-safe labelled rows: Edit + Cancel (unpaid), Reprepare (unpaid prepared), Un-pay + Cancel after paid (paid, within window); Edit absent/refused on paid cards.
+- [x] 6.4 Un-pay confirmation naming amount and tender; cancel-after-paid dialog warning that money leaves the drawer, reasoned, loud styling.
 - [ ] 6.5 Density proof: ≥6 one-item cards visible in the rail at landscape-tablet height without scrolling (browser-checked).
 
 ## 7. Motion
 
-- [ ] 7.1 FLIP layer + portal ghost flight between sections and columns; origin collapse; destination shimmer placeholder expanding then collapsing; ~300ms budget.
-- [ ] 7.2 Coalescing rapid moves (last-state-wins); realtime-originated refreshes animate identically.
-- [ ] 7.3 Reduced-motion crossfade; no position depends on animation having run.
-- [ ] 7.4 No animation dependency added to package.json.
+- [x] 7.1 FLIP layer + portal ghost flight between sections and columns; origin collapse; destination shimmer placeholder expanding then collapsing; ~300ms budget.
+- [x] 7.2 Coalescing rapid moves (last-state-wins); realtime-originated refreshes animate identically.
+- [x] 7.3 Reduced-motion crossfade; no position depends on animation having run.
+- [x] 7.4 No animation dependency added to package.json.
 
 ## 8. Manager surface
 
-- [ ] 8.1 Billing history renders Cancelled after Paid marker from stored kind; actor/time/reason readable in detail; totals unaffected.
-- [ ] 8.2 Manager open-orders view reflects the two sections and the rename.
+- [x] 8.1 Billing history renders Cancelled after Paid marker from stored kind; actor/time/reason readable in detail; totals unaffected.
+- [x] 8.2 Manager open-orders view reflects the two sections and the rename.
 
 ## 9. Close-out sweep
 
