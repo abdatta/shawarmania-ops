@@ -51,6 +51,7 @@ const DUPLICATE_FRACTION = 0.02
 
 export function createSupabaseAggregatorSyncAdapter(
   client: SupabaseClient<Database>,
+  { channel = 'zomato' }: { channel?: 'zomato' | 'swiggy' } = {},
 ): AggregatorSyncAdapter {
   async function call(body: Record<string, unknown>, fn: string): Promise<void> {
     const { error } = await client.functions.invoke(fn, { body })
@@ -69,7 +70,7 @@ export function createSupabaseAggregatorSyncAdapter(
         .from('aggregator_sync_runs')
         .select('started_at, finished_at, outcome, rehearsal')
         .eq('outlet_id', outletId)
-        .eq('channel', 'zomato')
+        .eq('channel', channel)
         // A rehearsal wrote nothing, so it is not what "last ran" means to somebody
         // asking whether their figures are current.
         .eq('rehearsal', false)
@@ -80,11 +81,11 @@ export function createSupabaseAggregatorSyncAdapter(
         .from('outlet_channel_sync')
         .select('synced_from')
         .eq('outlet_id', outletId)
-        .eq('channel', 'zomato')
+        .eq('channel', channel)
         .maybeSingle(),
       // Owner-only, and it answers with dates and booleans: whether a session exists,
       // when it dies, and whether a code is being waited for. Never the session.
-      client.rpc('aggregator_credential_health', { p_channel: 'zomato' }).maybeSingle(),
+      client.rpc('aggregator_credential_health', { p_channel: channel }).maybeSingle(),
     ])
 
     const waiting = credential.data?.awaiting_code_since
@@ -144,7 +145,7 @@ export function createSupabaseAggregatorSyncAdapter(
         .from('aggregator_sync_runs')
         .select('id, started_at, outcome, detail, rehearsal')
         .eq('outlet_id', outletId)
-        .eq('channel', 'zomato')
+        .eq('channel', channel)
         .in('outcome', ['session_lapsed', 'shape_changed'])
         .order('started_at', { ascending: false })
         .limit(20),
@@ -157,7 +158,7 @@ export function createSupabaseAggregatorSyncAdapter(
         .from('aggregator_sync_runs')
         .select('started_at')
         .eq('outlet_id', outletId)
-        .eq('channel', 'zomato')
+        .eq('channel', channel)
         .eq('outcome', 'ok')
         .eq('rehearsal', false)
         .order('started_at', { ascending: false })
@@ -169,7 +170,7 @@ export function createSupabaseAggregatorSyncAdapter(
           'id, cycle_start, cycle_end, computed_paise, stated_payout_paise, outcome, accepted_at, updated_at',
         )
         .eq('outlet_id', outletId)
-        .eq('channel', 'zomato')
+        .eq('channel', channel)
         .order('cycle_start', { ascending: false })
         .limit(8),
       client
@@ -178,7 +179,7 @@ export function createSupabaseAggregatorSyncAdapter(
           'business_date, revenue_paise, commission_paise, provisional_revenue_paise, provisional_commission_paise, revised_at',
         )
         .eq('outlet_id', outletId)
-        .eq('channel', 'zomato')
+        .eq('channel', channel)
         .not('revised_at', 'is', null)
         .order('business_date', { ascending: false })
         .limit(20),
@@ -192,7 +193,7 @@ export function createSupabaseAggregatorSyncAdapter(
         .from('manual_ledger_expenses')
         .select('id, business_date, amount_paise, description, created_at')
         .eq('outlet_id', outletId)
-        .eq('source_system', 'zomato')
+        .eq('source_system', channel)
         .is('voided_at', null),
       client
         .from('aggregator_dismissed_duplicates')
@@ -338,17 +339,17 @@ export function createSupabaseAggregatorSyncAdapter(
        * that hides at exactly the moment it is worth having.
        */
       const [outlets, disputed, lapsed] = await Promise.all([
-        client.from('outlet_channel_sync').select('outlet_id').eq('channel', 'zomato'),
+        client.from('outlet_channel_sync').select('outlet_id').eq('channel', channel),
         client
           .from('aggregator_cycle_reconciliations')
           .select('outlet_id')
-          .eq('channel', 'zomato')
+          .eq('channel', channel)
           .eq('outcome', 'disputed')
           .is('accepted_at', null),
         client
           .from('aggregator_sync_runs')
           .select('outlet_id, started_at, outcome')
-          .eq('channel', 'zomato')
+          .eq('channel', channel)
           .eq('rehearsal', false)
           .order('started_at', { ascending: false })
           .limit(50),
@@ -386,20 +387,17 @@ export function createSupabaseAggregatorSyncAdapter(
     },
 
     async requestRun(outletId) {
-      await call(
-        { outlet_id: outletId, channel: 'zomato', mode: 'sync' },
-        'request-aggregator-sync',
-      )
+      await call({ outlet_id: outletId, channel, mode: 'sync' }, 'request-aggregator-sync')
     },
 
-    async requestReconnect(outletId, channel = 'zomato') {
+    async requestReconnect(outletId, requestedChannel = channel) {
       // The body carries the ladder's verdict: `dispatched` (a runner is on it)
       // or `still_signed_in` (the probe found both channels alive). Anything
       // else — already running, not configured, probe failed — is an error the
       // surface reports as its own did-not-go-through, and the next health read
       // shows what is actually true.
       const { data, error } = await client.functions.invoke('request-aggregator-sync', {
-        body: { outlet_id: outletId, channel, mode: 'reconnect' },
+        body: { outlet_id: outletId, channel: requestedChannel, mode: 'reconnect' },
       })
       if (error) throw new Error('request-aggregator-sync did not go through')
       const outcome = (data as { outcome?: string } | null)?.outcome
@@ -411,23 +409,20 @@ export function createSupabaseAggregatorSyncAdapter(
     async answerOneTimePassword(_outletId, code) {
       // The code goes nowhere else. Not logged, not held, not put in a URL: it is
       // handed over and this adapter keeps nothing.
-      await call({ channel: 'zomato', code }, 'answer-aggregator-otp')
+      await call({ channel, code }, 'answer-aggregator-otp')
     },
 
     async recheckWeek(outletId, _from, _to) {
       // A re-check is an ordinary run. The reader re-reads whole cycles every time, so
       // there is nothing to narrow and nothing gained by pretending otherwise.
-      await call(
-        { outlet_id: outletId, channel: 'zomato', mode: 'sync' },
-        'request-aggregator-sync',
-      )
+      await call({ outlet_id: outletId, channel, mode: 'sync' }, 'request-aggregator-sync')
     },
 
     async acceptDifference(outletId, from, to) {
       await call(
         {
           outlet_id: outletId,
-          channel: 'zomato',
+          channel,
           mode: 'accept',
           cycle_start: from,
           cycle_end: to,
@@ -483,4 +478,21 @@ export function createSupabaseAggregatorSyncAdapter(
       }
     },
   }
+}
+
+/**
+ * The same reads, pointed at the Swiggy channel.
+ *
+ * Nothing about Swiggy's figures is a different shape from Zomato's: runs,
+ * reconciliations and channel days answer the same questions, so the variant
+ * threads through every outlet-scoped query, credential health check and
+ * action body rather than forking a second adapter a future change would have
+ * to keep in step. A Swiggy tab can therefore never read - or ask to repair -
+ * another channel's rows; the Hyperpure sub-health stays a Zomato-variant
+ * fact, and the Swiggy surface does not render it.
+ */
+export function createSupabaseSwiggySyncAdapter(
+  client: SupabaseClient<Database>,
+): AggregatorSyncAdapter {
+  return createSupabaseAggregatorSyncAdapter(client, { channel: 'swiggy' })
 }

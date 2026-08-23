@@ -188,6 +188,7 @@ function clientForTables(
     auth: { getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'u-1' } } }) },
   }
   return {
+    client: client as unknown as SupabaseClient<Database>,
     adapter: createSupabaseAggregatorSyncAdapter(client as unknown as SupabaseClient<Database>),
     queries,
     invoke,
@@ -581,6 +582,7 @@ describe('what health says', () => {
       auth: { getUser: vi.fn() },
     }
     return {
+      client: client as unknown as SupabaseClient<Database>,
       adapter: createSupabaseAggregatorSyncAdapter(client as unknown as SupabaseClient<Database>),
     }
   }
@@ -659,5 +661,39 @@ describe('upload answers are described for the owner', () => {
     expect(result.wrote).toEqual([
       'A week did not add up to what Zomato paid — nothing was overwritten',
     ])
+  })
+})
+
+describe('the Swiggy variant of the sync adapter', () => {
+  it('asks a read through the swiggy channel', async () => {
+    const { client, invoke } = clientForTables({})
+    const { createSupabaseSwiggySyncAdapter } = await import('./aggregator-sync')
+    await createSupabaseSwiggySyncAdapter(client).requestRun('o-1')
+    expect(invoke).toHaveBeenCalledWith('request-aggregator-sync', {
+      body: { outlet_id: 'o-1', channel: 'swiggy', mode: 'sync' },
+    })
+  })
+
+  it('answers its one-time password against the swiggy mailbox only', async () => {
+    const { client, invoke } = clientForTables({})
+    const { createSupabaseSwiggySyncAdapter } = await import('./aggregator-sync')
+    invoke.mockResolvedValue({ data: null, error: null })
+    await createSupabaseSwiggySyncAdapter(client).answerOneTimePassword('o-1', '123456')
+    expect(invoke).toHaveBeenCalledWith('answer-aggregator-otp', {
+      body: expect.objectContaining({ channel: 'swiggy' }),
+    })
+  })
+
+  it('reads runs scoped to the swiggy channel and never zomato', async () => {
+    const { client, queries } = clientForTables({})
+    const { createSupabaseSwiggySyncAdapter } = await import('./aggregator-sync')
+    const health = await createSupabaseSwiggySyncAdapter(client).getHealth('o-1')
+    void health
+    const runQueries = queries.filter((q) => q.table === 'aggregator_sync_runs')
+    expect(runQueries.length).toBeGreaterThan(0)
+    for (const query of runQueries) {
+      expect(query.filters).toContain('channel=swiggy')
+      expect(query.filters).not.toContain('channel=zomato')
+    }
   })
 })

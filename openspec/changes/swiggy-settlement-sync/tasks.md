@@ -68,7 +68,7 @@
 
 ## 8. Ops adapters, Swiggy tab and ledger
 
-- [ ] 8.1 Generalize sync adapter types and Supabase/mock implementations around a restaurant-channel configuration while preserving Zomato responses; verify existing Zomato adapter tests and new Swiggy health/event/action tests pass together.
+- [x] 8.1 Generalize sync adapter types and Supabase/mock implementations around a restaurant-channel configuration while preserving Zomato responses; verify existing Zomato adapter tests and new Swiggy health/event/action tests pass together.
 - [ ] 8.2 Extract the shared sync surface and event presentation, parameterizing channel labels, capabilities and filters; verify Zomato still shows Hyperpure and Swiggy never shows a Hyperpure line/action, with both shimmers matching any changed layout.
 - [ ] 8.3 Add `owner-swiggy-sync`, `/ledger/swiggy`, owner navigation and an independent attention key; verify the gate hides the route/nav when off, direct access is refused for non-owners and Zomato attention cannot clear or create Swiggy attention.
 - [ ] 8.4 Implement configured, not-connected, quiet, reading, lapsed, awaiting-code, stuck, provisional, final Pending/Paid, revised and disputed Swiggy states with Read again suppression, reconnect, upload, recheck and accept actions; verify focused surface tests cover every state and action.

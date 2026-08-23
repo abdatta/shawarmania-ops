@@ -2472,7 +2472,10 @@ export interface AggregatorSyncAdapter {
    * learns they are still signed in. Resolves once the ladder has decided,
    * not when any repair finished.
    */
-  requestReconnect(outletId: string, channel?: 'zomato' | 'hyperpure'): Promise<ReconnectResult>
+  requestReconnect(
+    outletId: string,
+    channel?: 'zomato' | 'swiggy' | 'hyperpure',
+  ): Promise<ReconnectResult>
   /**
    * The code the owner read off their own phone.
    *
