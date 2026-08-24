@@ -1,6 +1,6 @@
 # Proposal: Swiggy Settlement Sync
 
-> **Model**: Opus · **Wave**: D · **Depends on**: #44 `aggregator-reconnect-and-hyperpure-automation` · **Gate**: Kalyani's Swiggy sales appear in the ledger from two browser-free reads each day; a portal-declared closed payout cycle settles those days against the exact payout after every fee, tax, ad charge, complaint, cancellation, refund and adjustment; a headed login is used only when the independent Swiggy session genuinely needs repair; a real Swiggy annexure can reproduce the same result offline; legacy typed Swiggy history survives the handover; and an unserved outlet is shown as not connected rather than as zero trade.
+> **Model**: Ox Alpha · **Wave**: D · **Depends on**: #44 `aggregator-reconnect-and-hyperpure-automation` · **Gate**: Kalyani's Swiggy sales appear in the ledger from two browser-free reads each day; a portal-declared closed payout cycle settles those days against the exact payout after every fee, tax, ad charge, complaint, cancellation, refund and adjustment; a headed login is used only when the independent Swiggy session genuinely needs repair; a real Swiggy annexure can reproduce the same result offline; legacy typed Swiggy history survives the handover; and an unserved outlet is shown as not connected rather than as zero trade.
 
 ## Why
 
