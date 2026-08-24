@@ -51,10 +51,10 @@ A `hidden` surface is **absent**, not greyed out. A half-visible product looks u
 
 Promoting a surface from `demo` to `live` is the visible outcome of every `*-live` change. The roadmap is done when no surface is left in `demo`.
 
-The owner Swiggy sync tab is fully walkable in demo but remains demo-gated until
-the browser-free production reader completes its independent login, no-write
-rehearsal and one successful scheduled write. A money-reporting surface does
-not become visible merely because its mock is complete.
+The owner Swiggy sync tab is live because its browser-free production reader
+has completed a no-write rehearsal and a successful scheduled write from the
+captured session. A money-reporting surface does not become visible merely
+because its mock is complete.
 
 Billing is now a worked example of that promotion without composition drift.
 Real personal accounts receive manager history or staff phone surfaces; the

@@ -200,20 +200,18 @@ const defs = {
   /**
    * What the Swiggy sync did, and what needs you about it (#47).
    *
-   * `demo` until its readers are scheduled and a real capture has been
-   * rehearsed end to end (tasks 9–10 of swiggy-settlement-sync): the screen is
-   * finished, but a surface whose whole job is reporting on live money should
-   * not go live ahead of the automation it reports on. It carries navigation
-   * for the same reason Zomato's does — a surface has to be findable before
-   * its first failure — and an attention key of its own, because Swiggy's
-   * session is independent of Zomato's and its waiting work can neither be
-   * created nor cleared by anything on the Zomato page.
+   * Live because the browser-free reader has completed its production
+   * no-write rehearsal and a scheduled write from the captured session. It carries
+   * navigation for the same reason Zomato's does — a surface has to be
+   * findable before its first failure — and an attention key of its own,
+   * because Swiggy's session is independent of Zomato's and its waiting work
+   * can neither be created nor cleared by anything on the Zomato page.
    */
   'owner-swiggy-sync': {
     role: 'super_admin',
     path: 'ledger/swiggy',
     nav: { label: 'Swiggy', icon: UtensilsCrossed, order: 5, attention: 'swiggy-needs-you' },
-    state: 'demo',
+    state: 'live',
   },
   /**
    * The owner's counterpart to `admin-devices`, across every outlet.

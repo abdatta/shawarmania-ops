@@ -144,4 +144,17 @@ describe('gate registry', () => {
       expect(surfaces.find((surface) => surface.id === id)?.state, id).toBe('live')
     }
   })
+
+  it('makes the independently verified Swiggy controls reachable to owners in real mode', () => {
+    const swiggy = surfaces.find((surface) => surface.id === 'owner-swiggy-sync')
+
+    expect(swiggy).toMatchObject({
+      role: 'super_admin',
+      path: 'ledger/swiggy',
+      state: 'live',
+    })
+    expect(visibleSurfaces(['super_admin'], 'real').map((surface) => surface.id)).toContain(
+      'owner-swiggy-sync',
+    )
+  })
 })
