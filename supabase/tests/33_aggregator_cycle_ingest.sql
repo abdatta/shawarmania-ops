@@ -84,8 +84,8 @@ returns void language plpgsql as $$
 begin
   insert into public.manual_ledger_days
     (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-     cash_revenue_paise, swiggy_commission_paise, recorded_by)
-  values (p_outlet, d, 500000, 500000, 0, 0,
+     cash_revenue_paise, recorded_by)
+  values (p_outlet, d, 500000, 500000, 0,
           '10000000-0000-4000-a000-000000000001')
   on conflict (outlet_id, business_date) do nothing;
 end;

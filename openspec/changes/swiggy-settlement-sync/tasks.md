@@ -79,18 +79,18 @@
 
 ## 9. Lossless handover and live rehearsal
 
-- [ ] 9.1 Add the first forward migration that copies every typed Swiggy revenue/rate/commission fact into immutable `legacy_typed` provenance without dropping source columns; verify transactional row counts, non-null fields, values and representative day/month totals match before and after.
+- [x] 9.1 Add the first forward migration that copies every typed Swiggy revenue/rate/commission fact into immutable `legacy_typed` provenance without dropping source columns; verify transactional row counts, non-null fields, values and representative day/month totals match before and after.
 - [ ] 9.2 Run the independent headed login job with an owner-supplied live OTP and verify a new CI job reuses only the Vault-captured session for a browser-free probe, current read and finance read.
-- [ ] 9.3 Run production no-write rehearsal for active Kalyani current data and at least two FINAL cycles, including one shortened boundary; verify cutover allocation, Net Sales basis, every payout component, exact final reconciliation, final/bank-status separation and no financial writes.
-- [ ] 9.4 Produce an outlet/date coverage audit comparing every legacy Swiggy date with API/annexure candidates, explain every gap and verify dormant Kalyani and unconfigured Kanchrapara are not counted as missing trade or zero.
-- [ ] 9.5 Backfill accepted Kalyani candidates through the real ingest boundary and verify idempotent replay, authoritative supersession, retained legacy values and unchanged unaffected dates/months.
-- [ ] 9.6 Exercise failure rehearsals for lapse, timeout, 429/5xx exhaustion, GraphQL error, pagination interruption, source-shape drift, unmapped RID, unattributed order and payout mismatch; verify every case emits the right event and leaves prior money unchanged.
+- [x] 9.3 Run production no-write rehearsal for active Kalyani current data and at least two FINAL cycles, including one shortened boundary; verify cutover allocation, Net Sales basis, every payout component, exact final reconciliation, final/bank-status separation and no financial writes.
+- [x] 9.4 Produce an outlet/date coverage audit comparing every legacy Swiggy date with API/annexure candidates, explain every gap and verify dormant Kalyani and unconfigured Kanchrapara are not counted as missing trade or zero.
+- [x] 9.5 Backfill accepted Kalyani candidates through the real ingest boundary and verify idempotent replay, authoritative supersession, retained legacy values and unchanged unaffected dates/months.
+- [x] 9.6 Exercise failure rehearsals for lapse, timeout, 429/5xx exhaustion, GraphQL error, pagination interruption, source-shape drift, unmapped RID, unattributed order and payout mismatch; verify every case emits the right event and leaves prior money unchanged.
 
 ## 10. Freeze, scheduling and promotion
 
-- [ ] 10.1 Only after tasks 9.3–9.5 pass and the owner accepts the coverage audit, add the second forward migration removing Swiggy money/rate columns and database writers from `manual_ledger_days`; verify stale payloads fail loudly, carried history remains readable and all pre-handover totals are unchanged.
-- [ ] 10.2 Remove the staged compatibility flag and every remaining Swiggy typed field from generated types, adapters, forms, mocks and tests; verify repository search finds no writable Swiggy ledger field and TypeScript rejects the old payload shape.
-- [ ] 10.3 Add the serialized Swiggy schedule at UTC cron `30 5,17 * * *` and make Read again share its concurrency boundary; verify workflow syntax/actionlint and a branch dispatch show API-only current plus recent-cycle discovery.
+- [x] 10.1 Only after tasks 9.3–9.5 pass and the owner accepts the coverage audit, add the second forward migration removing Swiggy money/rate columns and database writers from `manual_ledger_days`; verify stale payloads fail loudly, carried history remains readable and all pre-handover totals are unchanged.
+- [x] 10.2 Remove the staged compatibility flag and every remaining Swiggy typed field from generated types, adapters, forms, mocks and tests; verify repository search finds no writable Swiggy ledger field and TypeScript rejects the old payload shape.
+- [x] 10.3 Add the serialized Swiggy schedule at UTC cron `30 5,17 * * *` and make Read again share its concurrency boundary; verify workflow syntax/actionlint and a branch dispatch show API-only current plus recent-cycle discovery.
 - [ ] 10.4 Enable production Swiggy writes for the verified mapping and run two consecutive jobs from the CI-captured session; verify the second is idempotent, same-day provisional/as-of advances correctly and final payouts/deductions reach ledger and reconciliation views.
 - [ ] 10.5 Promote `owner-swiggy-sync` from demo to live only after the two successful scheduled reads; verify the production owner tab, ledger day/month and Kanchrapara not-connected state all agree without a manual Swiggy input.
 

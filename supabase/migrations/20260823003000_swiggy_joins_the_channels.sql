@@ -150,6 +150,15 @@ alter table public.aggregator_channel_days
   -- what "as of" means; a settled day carries the moment its cycle was read.
   add column as_of_at timestamptz;
 
+-- Production's existing rows are Zomato days whose commission is already
+-- determined, and the constraints below demand net to exist exactly when
+-- commission does. Backfill the new column from the two figures every legacy
+-- row already stores - one subtraction, the same definition the reading uses -
+-- rather than letting the first constrained write discover them one by one.
+update public.aggregator_channel_days
+   set net_paise = case when commission_paise is null then null
+                        else revenue_paise - commission_paise end;
+
 -- Typed history carried through the handover keeps its values readable under
 -- an origin that says where it came from. It must never be relabelled as a
 -- supplied-by-hand statement, which only an operator-issued file proves.

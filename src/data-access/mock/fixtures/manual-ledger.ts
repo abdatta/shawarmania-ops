@@ -37,14 +37,12 @@ export interface ManualLedgerDaySeed {
   cashRevenuePaise: number
   upiRevenuePaise: number
   zomatoRevenuePaise: number
-  swiggyRevenuePaise: number
   cashAddedPaise?: number
   cashAddedReason?: string
   cashRemovedPaise?: number
   cashRemovedReason?: string
   countedCashPaise: number
   zomatoCommissionPaise: number
-  swiggyCommissionPaise: number
   note?: string
   /**
    * What this day's drawer is *meant* to be out by, in paise. Zero unless the
@@ -117,10 +115,8 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
     cashRevenuePaise: 1_240_000,
     upiRevenuePaise: 386_000,
     zomatoRevenuePaise: 312_000,
-    swiggyRevenuePaise: 248_000,
     countedCashPaise: 1_500_000,
     zomatoCommissionPaise: 70_200,
-    swiggyCommissionPaise: 52_080,
   },
   // Three days ago. Banked ₹10,000, and the drawer came up ₹250 short.
   //   15,000 + 11,800 − 1,800 − 10,000 = 15,000, counted 14,750
@@ -130,7 +126,6 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
     cashRevenuePaise: 1_180_000,
     upiRevenuePaise: 402_000,
     zomatoRevenuePaise: 288_000,
-    swiggyRevenuePaise: 194_000,
     cashRemovedPaise: 1_000_000,
     cashRemovedReason: 'Banked on the way home',
     countedCashPaise: 1_475_000,
@@ -138,7 +133,6 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
     // the mix of distances and discounts, and the month's arithmetic is only worth
     // asserting against fixtures where it visibly does.
     zomatoCommissionPaise: 51_840,
-    swiggyCommissionPaise: 40_740,
     note: 'Counted twice. Two ₹100 notes and some change unaccounted for.',
     expectedDifferencePaise: -25_000,
     // The short day is the one a manager went back into, which is exactly when a
@@ -155,12 +149,10 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
     cashRevenuePaise: 960_000,
     upiRevenuePaise: 355_000,
     zomatoRevenuePaise: 331_000,
-    swiggyRevenuePaise: 226_000,
     cashAddedPaise: 200_000,
     cashAddedReason: 'Owner topped up the float',
     countedCashPaise: 2_570_000,
     zomatoCommissionPaise: 74_475,
-    swiggyCommissionPaise: 47_460,
   },
   // Yesterday. **A visibly different Zomato take** — 18% where the other days sit
   // near 22.5%. It is a fixture rather than a special case: the take moves with
@@ -179,12 +171,10 @@ export const manualLedgerDaySeeds: ManualLedgerDaySeed[] = [
     cashRevenuePaise: 875_000,
     upiRevenuePaise: 418_000,
     zomatoRevenuePaise: 402_000,
-    swiggyRevenuePaise: 233_000,
     cashRemovedPaise: 1_200_000,
     cashRemovedReason: 'Second fridge, bought from Kalyani Electronics',
     countedCashPaise: 795_000,
     zomatoCommissionPaise: 72_360,
-    swiggyCommissionPaise: 48_930,
   },
 ]
 

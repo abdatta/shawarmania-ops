@@ -104,11 +104,10 @@ values (:'KAL', 'zomato', pg_temp.ledger_day(-3)),
 -- Two rows now rather than one, because the drawer and the measurement are two
 -- different records: the day a person keeps, and the figure nobody may type.
 insert into public.manual_ledger_days
-  (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   swiggy_commission_paise, recorded_by)
+  (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
 values
-  (:'KAL', pg_temp.ledger_day(2), 0, 0, 0, :'OWNER'),
-  (:'KPA', pg_temp.ledger_day(2), 0, 0, 0, :'OWNER');
+  (:'KAL', pg_temp.ledger_day(2), 0, 0, :'OWNER'),
+  (:'KPA', pg_temp.ledger_day(2), 0, 0, :'OWNER');
 
 insert into public.aggregator_channel_days
   (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
@@ -320,9 +319,8 @@ select * from pg_temp.day_column_unreadable('employee_kalyani', :'EMPLOYEE_KAL',
 -- exercise the guard rather than the state machine or a CHECK.
 select pg_temp.unimpersonate();
 insert into public.manual_ledger_days
-  (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   swiggy_commission_paise, recorded_by)
-values (:'KAL', pg_temp.ledger_day(3), 0, 0, 0, :'OWNER');
+  (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
+values (:'KAL', pg_temp.ledger_day(3), 0, 0, :'OWNER');
 insert into public.aggregator_channel_days
   (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
    settlement_state, origin)

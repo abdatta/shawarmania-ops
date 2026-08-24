@@ -34,28 +34,20 @@ test('the owner records a full trading day on a phone and reads its difference',
   // drawer really does open with what it closed on.
   await expect(page.getByTestId('opening-cash')).not.toHaveValue('')
 
-  // Zomato has no field to inherit into: it is a reading now, frozen, and typing
-  // it is exactly what this change removed. Swiggy is the surviving typed channel,
-  // and its commission still does not inherit yesterday's [owner, 2026-08-17]:
-  // an amount is a function of that day's revenue, so carrying it forward would
-  // offer a figure wrong by construction that looks deliberate.
+  // Neither channel has a field to inherit into or type into: both are
+  // readings fed by their own syncs, so the form offers nothing at all.
   await expect(page.getByTestId('zomato-commission')).toHaveCount(0)
-  await expect(page.getByTestId('swiggy-commission')).toHaveValue('')
+  await expect(page.getByTestId('swiggy-commission')).toHaveCount(0)
+  await expect(page.getByTestId('swiggy-revenue')).toHaveCount(0)
 
   const opening = Number(await page.getByTestId('opening-cash').inputValue())
 
   await page.getByTestId('cash-revenue').fill('12000')
   await page.getByTestId('upi-revenue').fill('4000')
-  await page.getByTestId('swiggy-revenue').fill('2500')
-
-  // With revenue typed and the commission still blank, the block says there is
-  // nothing to compute rather than showing the gross as though it all arrived.
-  await expect(page.getByTestId('swiggy-revenue-net')).toHaveText('—')
-
-  // Given the commission, it says what actually arrives, before anything is saved.
-  await page.getByTestId('swiggy-commission').fill('900')
-  await expect(page.getByTestId('swiggy-revenue-net')).not.toHaveText('—')
-  await expect(page.getByTestId('aggregator-swiggy')).toContainText('Actually received')
+  // Both aggregator blocks render as readings beside the fields that remain,
+  // and neither offers a place where a portal figure could be pre-empted.
+  await expect(page.getByTestId('aggregator-zomato')).toBeVisible()
+  await expect(page.getByTestId('aggregator-swiggy')).toBeVisible()
 
   // The rules are one tap away rather than filling the form: the whole entry card
   // has to fit a phone, which is the only device this gets typed on.
@@ -172,17 +164,16 @@ test('recording a day at each outlet keeps the two apart', async ({ page }) => {
   await expect(page.getByText(/first day at this outlet/i)).toBeVisible()
 })
 
-test('a retrospective commission edit moves the month and not the drawer', async ({ page }) => {
-  // Swiggy, because it is the aggregator still corrected by hand. Zomato's figures
-  // are frozen — a recorded synced day opens as a reading with no Zomato field —
-  // so the only commission a person edits through the form is Swiggy's. Recorded
-  // fresh on today so the correction has a known starting point.
+test('a retrospective edit moves the month and never the drawer', async ({ page }) => {
+  // UPI, because it is revenue-side and non-cash: correcting it changes what
+  // the month's profit says without touching a single drawer figure. Both
+  // aggregators would once have been the vehicle for this; they are readings
+  // now, so the form's own correctable non-cash figure is the one under test.
   await page.goto('demo/owner/ledger')
   await expect(page.getByTestId('ledger-day-form')).toBeVisible()
 
   await page.getByTestId('cash-revenue').fill('12000')
-  await page.getByTestId('swiggy-revenue').fill('3310')
-  await page.getByTestId('swiggy-commission').fill('595.80')
+  await page.getByTestId('upi-revenue').fill('4000')
   await page.getByTestId('counted-cash').fill('19950')
   await page.getByTestId('save-day').click()
   await expect(page.getByTestId('ledger-day-recorded')).toBeVisible()
@@ -196,11 +187,11 @@ test('a retrospective commission edit moves the month and not the drawer', async
 
   // A recorded day opens as a reading, so correcting it is a deliberate act.
   await page.getByTestId('edit-day').click()
-  await page.getByTestId('swiggy-commission').fill('30')
+  await page.getByTestId('upi-revenue').fill('4500')
   await page.getByTestId('save-day').click()
   await expect(page.getByTestId('day-saved')).toBeVisible()
 
-  // The drawer is untouched: commission is not cash, and never was.
+  // The drawer is untouched: UPI is not cash, and never was.
   await expect(page.getByTestId('expected-cash')).toHaveText(expectedBefore ?? '')
 
   await page.getByTestId('ledger-view-month').click()

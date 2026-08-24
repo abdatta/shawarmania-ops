@@ -23,14 +23,12 @@ const DAY_INPUT = {
   cashRevenuePaise: 5_000,
   upiRevenuePaise: 250_000,
   zomatoRevenuePaise: 999_999,
-  swiggyRevenuePaise: 123_400,
   cashAddedPaise: 0,
   cashAddedReason: null,
   cashRemovedPaise: 500_000,
   cashRemovedReason: 'Bank deposit',
   countedCashPaise: 850_000,
   zomatoCommissionPaise: 99_999,
-  swiggyCommissionPaise: 12_340,
   note: null,
 }
 

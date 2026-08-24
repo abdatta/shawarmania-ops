@@ -123,15 +123,9 @@ export function readSwiggy(day: ManualLedgerDayFigures): ZomatoReading {
       settlement,
     }
   }
-  const grossPaise = assertPaise(day.swiggyRevenuePaise ?? 0, 'Swiggy revenue')
-  const commissionPaise = day.swiggyCommissionPaise ?? null
-  return {
-    grossPaise,
-    commissionPaise:
-      commissionPaise === null ? null : assertPaise(commissionPaise, 'Swiggy commission'),
-    netPaise: netAggregatorPaise(grossPaise, commissionPaise),
-    settlement: null,
-  }
+  // Typed Swiggy figures no longer exist anywhere in the contract: a day the
+  // sync has not covered reads as not yet measured, never as zero.
+  return { grossPaise: 0, commissionPaise: null, netPaise: 0, settlement: null }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

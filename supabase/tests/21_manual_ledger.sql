@@ -91,13 +91,13 @@ select lives_ok(
   format($q$
     insert into public.manual_ledger_days
       (outlet_id, business_date, opening_cash_paise,
-       cash_revenue_paise, upi_revenue_paise, swiggy_revenue_paise,
+       cash_revenue_paise, upi_revenue_paise,
        cash_added_paise, cash_added_reason, cash_removed_paise, cash_removed_reason,
-       counted_cash_paise, swiggy_commission_paise, note, recorded_by)
+       counted_cash_paise, note, recorded_by)
     values (%L, %L, 500000,
-            1200000, 400000, 250000,
+            1200000, 400000,
             100000, 'Float topped up', 400000, 'Banked on the way home',
-            1350000, 52500, 'Counted twice', %L) $q$,
+            1350000, 'Counted twice', %L) $q$,
     :'KAL', pg_temp.ledger_day(1), :'OWNER'),
   'the owner records a trading day at Kalyani');
 
@@ -105,8 +105,8 @@ select lives_ok(
   format($q$
     insert into public.manual_ledger_days
       (outlet_id, business_date, opening_cash_paise, cash_revenue_paise,
-       counted_cash_paise, swiggy_commission_paise, recorded_by)
-    values (%L, %L, 200000, 700000, 900000, 0, %L) $q$,
+       counted_cash_paise, recorded_by)
+    values (%L, %L, 200000, 700000, 900000, %L) $q$,
     :'KPA', pg_temp.ledger_day(1), :'OWNER'),
   'the owner records a trading day at Kanchrapara too, on the same date');
 
@@ -154,8 +154,10 @@ select col_not_null('public', 'manual_ledger_days', 'opening_cash_paise',
  */
 select col_is_null('public', 'aggregator_channel_days', 'commission_paise',
   'a sourced commission may be undetermined, which is not the same as nought');
-select col_is_null('public', 'manual_ledger_days', 'swiggy_commission_paise',
-  'and so may a typed one');
+select hasnt_column('public', 'manual_ledger_days', 'swiggy_revenue_paise',
+  'and Swiggy''s typed revenue has left the row entirely, superseded by sourced days');
+select hasnt_column('public', 'manual_ledger_days', 'swiggy_commission_paise',
+  'as has its typed commission');
 select hasnt_column('public', 'manual_ledger_days', 'zomato_commission_paise',
   'and Zomato''s has left this row entirely, so no form field can reach it');
 select hasnt_column('public', 'manual_ledger_days', 'zomato_revenue_paise',
@@ -175,14 +177,16 @@ select throws_ok(
   '42703', null,
   'a day-row write still carrying a Zomato figure fails on the absent column');
 
--- Swiggy is not sourced, so its figures remain writable on the day row.
-select lives_ok(
+-- Swiggy is sourced now, so its typed figures are gone from the day row: a
+-- write that still names them dies on the absent column, exactly like Zomato's.
+select throws_ok(
   format($$insert into public.manual_ledger_days
     (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
      swiggy_revenue_paise, swiggy_commission_paise, recorded_by)
     values (%L, public.app_business_date(now(), time '04:00') - 21, 0, 0, 250000, 52500, %L)$$,
     :'KAL', :'OWNER'),
-  'while a Swiggy figure on the day row is accepted, because Swiggy is still typed');
+  '42703', null,
+  'a day-row write still carrying a Swiggy figure fails on the absent column');
 
 -- No capital marker exists on the expense table, by owner decision. Asserted as
 -- a catalog fact so a later migration cannot quietly reintroduce a field that
@@ -220,9 +224,8 @@ select is(
 select throws_ok(
   format($q$
     insert into public.manual_ledger_days
-      (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       swiggy_commission_paise, recorded_by)
-    values (%L, %L, 0, 0, 0, %L) $q$,
+      (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
+    values (%L, %L, 0, 0, %L) $q$,
     :'KAL', pg_temp.ledger_day(1), :'OWNER'),
   '23505',
   null,
@@ -243,93 +246,79 @@ $$;
 
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, swiggy_commission_paise',
-    '-1, 0, 0'),
+    'opening_cash_paise, counted_cash_paise',
+    '-1, 0'),
   '23514', null, 'a negative opening cash is refused');
 
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, swiggy_commission_paise',
-    '0, -1, 0'),
+    'opening_cash_paise, counted_cash_paise',
+    '0, -1'),
   '23514', null, 'a negative drawer count is refused');
 
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, cash_added_paise, cash_added_reason, '
-    'swiggy_commission_paise',
-    '0, 0, -1, ''x'', 0'),
+    'opening_cash_paise, counted_cash_paise, cash_added_paise, cash_added_reason',
+    '0, 0, -1, ''x'''),
   '23514', null, 'a negative cash-in is refused');
 
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, cash_removed_paise, cash_removed_reason, '
-    'swiggy_commission_paise',
-    '0, 0, -1, ''x'', 0'),
+    'opening_cash_paise, counted_cash_paise, cash_removed_paise, cash_removed_reason',
+    '0, 0, -1, ''x'''),
   '23514', null, 'a negative cash-out is refused');
 
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, cash_added_paise, '
-    'swiggy_commission_paise',
-    '0, 0, 50000, 0'),
+    'opening_cash_paise, counted_cash_paise, cash_added_paise',
+    '0, 0, 50000'),
   '23514', null, 'cash brought in without a reason is refused');
 
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, cash_removed_paise, cash_removed_reason, '
-    'swiggy_commission_paise',
-    '0, 0, 50000, ''   '', 0'),
+    'opening_cash_paise, counted_cash_paise, cash_removed_paise, cash_removed_reason',
+    '0, 0, 50000, ''   '''),
   '23514', null, 'cash taken out with a whitespace-only reason is refused');
 
 select throws_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, note, swiggy_commission_paise',
-    '0, 0, ''  '', 0'),
+    'opening_cash_paise, counted_cash_paise, note',
+    '0, 0, ''  '''),
   '23514', null, 'a whitespace-only note is refused, where a note is given at all');
 
--- The bound on a commission is the revenue it comes off, not a percentage
--- ceiling. A charge larger than the takings is not a steep rate; it is a figure in
--- the wrong box, and it would make the day's net negative while the day looked
--- ordinary.
--- Zomato's own version of this now lives in 36_aggregator_figures.sql, because
--- its figures left this row. Swiggy's stay, and so does the constraint.
-select throws_ok(
-  pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, swiggy_revenue_paise, swiggy_commission_paise',
-    '0, 0, 100000, 100001'),
-  '23514', null, 'a commission larger than that channel''s revenue is refused');
-
-select throws_ok(
-  pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, swiggy_commission_paise',
-    '0, 0, -1'),
-  '23514', null, 'a negative commission is refused on a channel that earned nothing');
-
--- And a channel that earned nothing must be charged nothing, which the same
--- constraint gives: least(0, 0) and greatest(0, 0) are both nought.
-select throws_ok(
-  pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, swiggy_commission_paise',
-    '0, 0, 1'),
-  '23514', null, 'a commission on a channel with no revenue is refused');
+-- Both channels' commission boundaries have left this table with their columns:
+-- Zomato's moved to 36_aggregator_figures.sql, Swiggy's to the channel-day
+-- invariant net = gross - commission. Assert the absence itself, so a later
+-- migration cannot quietly reintroduce either column or its old constraint.
+select is(
+  (select count(*) from pg_constraint
+    where conrelid = 'public.manual_ledger_days'::regclass
+      and conname like '%swiggy%'),
+  0::bigint,
+  'no Swiggy column constraint survives on the day row');
+select is(
+  (select count(*) from pg_attribute a
+    where a.attrelid = 'public.manual_ledger_days'::regclass
+      and a.attnum > 0 and not a.attisdropped
+      and a.attname like 'swiggy%'),
+  0::bigint,
+  'no Swiggy column survives on the day row');
 
 -- Negative revenue is the one figure that must be ACCEPTED: a cash refund is
 -- recorded by lowering that day's cash revenue.
 select lives_ok(
   pg_temp.bad_day(
-    'opening_cash_paise, counted_cash_paise, cash_revenue_paise, '
-    'swiggy_commission_paise',
-    '0, 0, -25000, 0'),
+    'opening_cash_paise, counted_cash_paise, cash_revenue_paise',
+    '0, 0, -25000'),
   'negative cash revenue is accepted, because that is how a refund is recorded');
 
 -- The future-date trigger, on both tables.
 select throws_ok(
   format($q$
     insert into public.manual_ledger_days
-      (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       swiggy_commission_paise, recorded_by)
+      (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
     values (%L, public.app_business_date(now(), time '04:00') + 1,
-            0, 0, 0, %L) $q$,
+            0, 0, %L) $q$,
     :'KAL', :'OWNER'),
   'P0001', null, 'a day dated after the outlet''s own trading day is refused');
 
@@ -458,10 +447,9 @@ select is(
 select throws_ok(
   format($q$
     insert into public.manual_ledger_days
-      (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       swiggy_commission_paise, recorded_by)
+      (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
     values (%L, public.app_business_date(now(), time '04:00') - 3,
-            0, 0, 0, %L) $q$,
+            0, 0, %L) $q$,
     :'KAL', :'FA_KAL'),
   '42501', null, 'the owner cannot record a day as somebody else');
 
@@ -488,10 +476,9 @@ select is(
 select throws_ok(
   format($q$
     insert into public.manual_ledger_days
-      (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       swiggy_commission_paise, recorded_by, updated_by)
+      (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by, updated_by)
     values (%L, public.app_business_date(now(), time '04:00') - 6,
-            0, 0, 0, %L, %L) $q$,
+            0, 0, %L, %L) $q$,
     :'KAL', :'OWNER', :'OWNER'),
   'P0001', null,
   'a row cannot be recorded as though it had already been corrected');
@@ -546,10 +533,9 @@ begin
   return next throws_ok(
     format($q$
       insert into public.manual_ledger_days
-        (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-         swiggy_commission_paise, recorded_by)
+        (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
       values (%L, public.app_business_date(now(), time '04:00') - 4,
-              0, 0, 0, %L) $q$, p_outlet, p_sub),
+              0, 0, %L) $q$, p_outlet, p_sub),
     '42501', null,
     format('%s cannot insert a manual-ledger day at %s outlet', persona, whose));
 
@@ -951,9 +937,8 @@ select pg_temp.impersonate(:'OWNER');
 select lives_ok(
   format($q$
     insert into public.manual_ledger_days
-      (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       swiggy_commission_paise)
-    values (%L, %L, 0, 0, 0) $q$,
+      (outlet_id, business_date, opening_cash_paise, counted_cash_paise)
+    values (%L, %L, 0, 0) $q$,
     :'KPA', pg_temp.ledger_day(7)),
   'the owner records a day at the other outlet, typed against the wrong date');
 select is(
@@ -1076,9 +1061,8 @@ select is(
 select throws_ok(
   format($q$
     insert into public.manual_ledger_days
-      (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-       swiggy_commission_paise, recorded_by)
-    values (%L, public.app_business_date(now(), time '04:00') - 5, 0, 0, 0, %L) $q$,
+      (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
+    values (%L, public.app_business_date(now(), time '04:00') - 5, 0, 0, %L) $q$,
     :'KAL', :'OWNER'),
   '42501', null,
   'and cannot write either');

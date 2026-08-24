@@ -63,9 +63,8 @@ $$;
 -- earlier read wrote: the same property, a figure moved aside and a moment
 -- stamped, reached by the path that still happens.
 insert into public.manual_ledger_days
-  (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   swiggy_commission_paise, recorded_by)
-values (:'KAL'::uuid, pg_temp.ledger_day(3), 500000, 500000, 0, :'OWNER'::uuid);
+  (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
+values (:'KAL'::uuid, pg_temp.ledger_day(3), 500000, 500000, :'OWNER'::uuid);
 
 insert into public.aggregator_channel_days
   (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,

@@ -49,6 +49,7 @@ This alphabetical list maps every capability required now. For planned work, rea
 [reconciled roadmap](../changes/ROADMAP.md).
 
 - [`aggregator-figures`](aggregator-figures/spec.md) — outlet-and-day channel figures kept apart from drawer counts, written only by ingest, with nullable undetermined commission and retained superseded values.
+- [`aggregator-channel-sessions`](aggregator-channel-sessions/spec.md) — one Vault session per restaurant channel, an independent mailbox per login, a probe that asks the portal itself, and reconnect dispatches that can only ever repair their own channel.
 - [`aggregator-settlement-sync`](aggregator-settlement-sync/spec.md) — measured per-order aggregator revenue reconciled against the payout that actually arrives, with provisional, settled, revised and disputed cycles, deductions dated to the purchase, and a run record a person can act on.
 - [`app-shell`](app-shell/spec.md) — four role-appropriate shells, gate-derived navigation, uniform real and demo sessions, reachable theme controls, stable role paths, and shared layout primitives.
 - [`attention-badges`](attention-badges/spec.md) — a consistent, contextual count of work waiting for a reader, visible wherever that work can be reached.

@@ -245,10 +245,25 @@ export async function probeChannel(channel: string): Promise<ProbeResult> {
   }
   if (!state || typeof state !== 'object') return { alive: false, reason: 'unusable_session' }
   if (channel === 'hyperpure') return probeHyperpure(state as { cookies: StoredCookie[] })
-  if (channel === 'swiggy')
+  if (channel === 'swiggy') {
+    // The probe needs a REAL restaurant reference: the composer rejects a
+    // placeholder with an auth-worded error that reads like a lapse. The
+    // enabled mapping rows are exactly where the real ones live.
+    const { data: refs, error: refsError } = await service
+      .from('outlet_channel_restaurants')
+      .select('external_ref')
+      .eq('channel', 'swiggy')
+      .eq('enabled', true)
+      .limit(5)
+    if (refsError) {
+      console.error('probe could not read swiggy mappings', refsError.code)
+      return { alive: null, reason: 'backend_failure' }
+    }
     return probeSwiggy(
       state as { cookies?: StoredCookie[]; localStorage?: { name: string; value: string }[] },
+      (refs ?? []).map((r) => Number(r.external_ref)).filter(Number.isFinite),
     )
+  }
   if (channel === 'zomato') return probeZomato(state as { cookies: StoredCookie[] })
   // Never guess: an unknown channel has no probe, so it cannot be called alive.
   return { alive: null, reason: 'unknown_channel' }

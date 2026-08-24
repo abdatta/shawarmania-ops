@@ -2018,7 +2018,6 @@ export interface ManualLedgerDay {
   cashRevenuePaise: number
   upiRevenuePaise: number
   zomatoRevenuePaise: number
-  swiggyRevenuePaise: number
   cashAddedPaise: number
   cashAddedReason: string | null
   cashRemovedPaise: number
@@ -2036,7 +2035,6 @@ export interface ManualLedgerDay {
    * that sold nothing is charged nought, which is known and therefore not null.
    */
   zomatoCommissionPaise: number | null
-  swiggyCommissionPaise: number | null
   /** Optional, unlike an expense description: it explains a cash difference. */
   note: string | null
   /**
@@ -2197,12 +2195,7 @@ export interface ManualLedgerExpense {
  */
 export type ManualLedgerDayInput = Omit<
   ManualLedgerDay,
-  | 'recordedBy'
-  | 'updatedBy'
-  | 'zomatoSettlement'
-  | 'swiggySettlement'
-  | 'swiggyRevenuePaise'
-  | 'swiggyCommissionPaise'
+  'recordedBy' | 'updatedBy' | 'zomatoSettlement' | 'swiggySettlement'
 >
 
 /**
@@ -2217,9 +2210,7 @@ export type ManualLedgerDayFigures = ManualLedgerDayInput & {
   zomatoSettlement?: ZomatoSettlement | null
   swiggySettlement?: ChannelSettlement | null
   /** Typed history only; never written by this app any more. */
-  swiggyRevenuePaise?: number
   /** Typed history only; `null` meant undetermined then and still does. */
-  swiggyCommissionPaise?: number | null
   /**
    * False on a day that has aggregator figures but no cash count — the "day nobody
    * counted", surfaced so its figures still show and total. Absent means

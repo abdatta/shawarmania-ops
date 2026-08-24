@@ -31,9 +31,8 @@ $$;
 
 -- A recorded day, so the books have an opening the fallback can find.
 insert into public.manual_ledger_days
-  (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   swiggy_commission_paise, recorded_by)
-values (:'KAL', pg_temp.day(30), 500000, 500000, 0,
+  (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
+values (:'KAL', pg_temp.day(30), 500000, 500000,
         '10000000-0000-4000-a000-000000000001');
 
 -- ---------------------------------------------------------------------------

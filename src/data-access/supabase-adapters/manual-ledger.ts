@@ -1,4 +1,4 @@
-﻿import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
+import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import {
   ManualLedgerActionError,
@@ -99,14 +99,12 @@ function toDay(
     // measured reading is authoritative over a legacy typed figure, because a
     // portal read is evidence. Absent reads as whatever the day itself stores.
     zomatoRevenuePaise: zomato?.revenuePaise ?? 0,
-    swiggyRevenuePaise: swiggy?.revenuePaise ?? row.swiggy_revenue_paise,
     cashAddedPaise: row.cash_added_paise,
     cashAddedReason: row.cash_added_reason,
     cashRemovedPaise: row.cash_removed_paise,
     cashRemovedReason: row.cash_removed_reason,
     countedCashPaise: row.counted_cash_paise,
     zomatoCommissionPaise: zomato?.commissionPaise ?? null,
-    swiggyCommissionPaise: swiggy?.commissionPaise ?? row.swiggy_commission_paise,
     note: row.note,
     recordedBy: actor(row.recorded_by, people),
     zomatoSettlement: zomato,
@@ -138,14 +136,12 @@ function uncountedFiguresDay(
     cashRevenuePaise: 0,
     upiRevenuePaise: 0,
     zomatoRevenuePaise: zomato?.revenuePaise ?? 0,
-    swiggyRevenuePaise: swiggy?.revenuePaise ?? 0,
     cashAddedPaise: 0,
     cashAddedReason: null,
     cashRemovedPaise: 0,
     cashRemovedReason: null,
     countedCashPaise: 0,
     zomatoCommissionPaise: zomato?.commissionPaise ?? null,
-    swiggyCommissionPaise: swiggy?.commissionPaise ?? null,
     note: null,
     zomatoSettlement: zomato,
     swiggySettlement: swiggy,

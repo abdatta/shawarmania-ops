@@ -713,8 +713,7 @@ describe('the manual ledger surface', () => {
       await screen.findByTestId('ledger-day-recorded')
       const openedOn = (screen.getByTestId('ledger-day-picker') as HTMLInputElement).value
       const saved = await adapters.manualLedger.getDay(OUTLET_KALYANI_ID, openedOn)
-      expect(saved?.swiggyRevenuePaise).toBe(0)
-      expect(saved?.swiggyCommissionPaise).toBeNull()
+      expect(saved?.swiggySettlement).toBeNull()
       expect(saved?.zomatoCommissionPaise).toBeNull()
     })
 

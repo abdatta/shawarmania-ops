@@ -89,8 +89,7 @@ describe('mock manual ledger adapter', () => {
       // Swiggy is no longer typed: nothing is written from the form, so an
       // unmeasured day reads as undetermined rather than carrying a figure
       // somebody would have had to invent.
-      expect(read?.swiggyRevenuePaise).toBe(0)
-      expect(read?.swiggyCommissionPaise).toBeNull()
+      expect(read?.swiggySettlement).toBeNull()
     })
 
     it('surfaces the Zomato figures on a day nobody counted, rather than claiming none arrived', async () => {
@@ -225,12 +224,9 @@ describe('mock manual ledger adapter', () => {
       // ignore them exactly as the real upsert's omitted columns do.
       const sneaky = {
         ...dayInput(),
-        swiggyRevenuePaise: 312_000,
-        swiggyCommissionPaise: -1,
       } as unknown as Parameters<typeof adapter.upsertDay>[0]
       const saved = await adapter.upsertDay(sneaky)
-      expect(saved.swiggyRevenuePaise).toBe(0)
-      expect(saved.swiggyCommissionPaise).toBeNull()
+      expect(saved.swiggySettlement).toBeNull()
     })
 
     it('removes a day typed against the wrong date', async () => {

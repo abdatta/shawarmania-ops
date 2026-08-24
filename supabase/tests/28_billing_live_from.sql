@@ -60,30 +60,22 @@ select is(
 select throws_ok(
   format($q$insert into public.manual_ledger_days
     (outlet_id,business_date,opening_cash_paise,cash_revenue_paise,upi_revenue_paise,
-     swiggy_revenue_paise,cash_added_paise,cash_removed_paise,
-     counted_cash_paise,swiggy_commission_paise)
-    values (%L,current_date,10000,100,200,400,0,0,10000,80)$q$, :'KAL'),
+     cash_added_paise,cash_removed_paise,
+     counted_cash_paise)
+    values (%L,current_date,10000,100,200,0,0,10000)$q$, :'KAL'),
   'P0001', null, 'typed Cash/UPI is refused from the live date onward');
 
--- Swiggy rather than Zomato, and the narrowing is the point rather than a
--- convenience: Zomato's figures are sourced now and have left this row, so the
--- claim they used to make here cannot be made about them. An UNSOURCED channel
--- stays typed after counter go-live, which is the property this always tested
--- and the reason Swiggy keeps its columns.
-insert into public.manual_ledger_days
-  (outlet_id,business_date,opening_cash_paise,cash_revenue_paise,upi_revenue_paise,
-   swiggy_revenue_paise,cash_added_paise,cash_removed_paise,
-   counted_cash_paise,swiggy_commission_paise)
-values (:'KAL',current_date,10000,0,0,400,0,0,10000,80);
-update public.manual_ledger_days set swiggy_revenue_paise = 500,
-  swiggy_commission_paise = 0
-where outlet_id = :'KAL' and business_date = current_date;
-select results_eq(
-  $$select swiggy_revenue_paise,swiggy_commission_paise
-      from public.manual_ledger_days where outlet_id='00000000-0000-4000-a000-000000000001'
-      and business_date=current_date$$,
-  $$values (500::bigint,0::bigint)$$,
-  'an unsourced aggregator''s revenue and commission remain typed after counter go-live');
+-- There is no unsourced aggregator left to keep typed: Zomato's figures left
+-- this row when they were sourced, and Swiggy's have now followed them. The
+-- property this block used to demonstrate is gone by design, so what remains
+-- to assert is the absence itself — no channel column a form could reach.
+select is(
+  (select count(*) from pg_attribute a
+    where a.attrelid = 'public.manual_ledger_days'::regclass
+      and a.attnum > 0 and not a.attisdropped
+      and (a.attname like 'swiggy%' or a.attname like 'zomato%')),
+  0::bigint,
+  'no aggregator column remains typed on the day row after counter go-live');
 
 select pg_temp.impersonate(:'FA_KAL');
 select is((select count(*) from public.manual_ledger_counter_revenue(

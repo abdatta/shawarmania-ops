@@ -2235,8 +2235,6 @@ export type Database = {
           opening_cash_paise: number
           outlet_id: string
           recorded_by: string
-          swiggy_commission_paise: number | null
-          swiggy_revenue_paise: number
           updated_at: string
           updated_by: string | null
           upi_revenue_paise: number
@@ -2255,8 +2253,6 @@ export type Database = {
           opening_cash_paise: number
           outlet_id: string
           recorded_by?: string
-          swiggy_commission_paise?: number | null
-          swiggy_revenue_paise?: number
           updated_at?: string
           updated_by?: string | null
           upi_revenue_paise?: number
@@ -2275,8 +2271,6 @@ export type Database = {
           opening_cash_paise?: number
           outlet_id?: string
           recorded_by?: string
-          swiggy_commission_paise?: number | null
-          swiggy_revenue_paise?: number
           updated_at?: string
           updated_by?: string | null
           upi_revenue_paise?: number

@@ -22,14 +22,12 @@ function day(overrides: Partial<ManualLedgerDayFigures> = {}): ManualLedgerDayFi
     cashRevenuePaise: 0,
     upiRevenuePaise: 0,
     zomatoRevenuePaise: 0,
-    swiggyRevenuePaise: 0,
     cashAddedPaise: 0,
     cashAddedReason: null,
     cashRemovedPaise: 0,
     cashRemovedReason: null,
     countedCashPaise: 500_000,
     zomatoCommissionPaise: 0,
-    swiggyCommissionPaise: 0,
     note: null,
     ...overrides,
   }
@@ -138,7 +136,6 @@ describe('a day read against its count', () => {
         cashRevenuePaise: 1_000_000,
         upiRevenuePaise: 400_000,
         zomatoRevenuePaise: 300_000,
-        swiggyRevenuePaise: 250_000,
         countedCashPaise: 1_500_000,
       }),
       [expense({ amountPaise: 180_000, isCash: false, category: 'electricity' })],
@@ -149,7 +146,7 @@ describe('a day read against its count', () => {
     expect(reading.cashExpensesPaise).toBe(0)
     expect(reading.nonCashExpensesPaise).toBe(180_000)
     // The month still knows about all of it.
-    expect(reading.grossRevenuePaise).toBe(1_950_000)
+    expect(reading.grossRevenuePaise).toBe(1_700_000)
   })
 
   it('accepts a refund as negative cash revenue', () => {
@@ -256,27 +253,24 @@ describe('a month read for one outlet', () => {
       cashRevenuePaise: 1_200_000,
       upiRevenuePaise: 400_000,
       zomatoRevenuePaise: 300_000,
-      swiggyRevenuePaise: 250_000,
       zomatoCommissionPaise: 67_500,
-      swiggyCommissionPaise: 52_500,
       countedCashPaise: 1_650_000,
+      swiggySettlement: swiggySettlement(),
     }),
     day({
       businessDate: '2026-08-02',
       cashRevenuePaise: 900_000,
       upiRevenuePaise: 350_000,
       zomatoRevenuePaise: 400_000,
-      swiggyRevenuePaise: 200_000,
       // A visibly lighter take on this day: 18% where the day before was 22.5%.
       zomatoCommissionPaise: 72_000,
-      swiggyCommissionPaise: 42_000,
       countedCashPaise: 1_400_000,
+      swiggySettlement: swiggySettlement({ revenuePaise: 200_000, commissionPaise: 42_000 }),
     }),
     day({
       businessDate: '2026-08-03',
       cashRevenuePaise: -25_000,
       zomatoRevenuePaise: 0,
-      swiggyRevenuePaise: 0,
       countedCashPaise: 475_000,
     }),
   ]
@@ -313,8 +307,8 @@ describe('a month read for one outlet', () => {
     expect(month.zomatoCommissionPaise).toBe(67_500 + 72_000)
 
     // Swiggy: ₹2,500 and ₹2,000, both at 21%.
-    expect(month.grossSwiggyPaise).toBe(450_000)
-    expect(month.netSwiggyPaise).toBe(197_500 + 158_000)
+    expect(month.grossSwiggyPaise).toBe(350_000)
+    expect(month.netSwiggyPaise).toBe(105_000 + 158_000)
   })
 
   it('would report a different figure if one rate were applied to the month total', () => {
@@ -352,7 +346,6 @@ describe('a month read for one outlet', () => {
         zomatoRevenuePaise: 148_500,
         // Provisional: nobody has stated yet what Zomato kept.
         zomatoCommissionPaise: null,
-        swiggyCommissionPaise: null,
         countedCashPaise: 0,
       }),
       counted: false,
@@ -403,12 +396,12 @@ describe('a month read for one outlet', () => {
     expect(month.grossCashPaise).toBe(2_075_000)
     expect(month.grossUpiPaise).toBe(750_000)
     expect(month.grossZomatoPaise).toBe(700_000)
-    expect(month.grossSwiggyPaise).toBe(450_000)
+    expect(month.grossSwiggyPaise).toBe(350_000)
     expect(month.netZomatoPaise).toBe(560_500)
-    expect(month.netSwiggyPaise).toBe(355_500)
-    expect(month.netRevenuePaise).toBe(3_741_000)
+    expect(month.netSwiggyPaise).toBe(263_000)
+    expect(month.netRevenuePaise).toBe(3_648_500)
     expect(month.totalExpensesPaise).toBe(1_640_000)
-    expect(month.profit.profitPaise).toBe(2_101_000)
+    expect(month.profit.profitPaise).toBe(2_008_500)
     expect(month.undeterminedDays).toBe(0)
   })
 
@@ -527,7 +520,7 @@ function swiggySettlement(overrides: Partial<ChannelSettlement> = {}): ChannelSe
 describe('the Swiggy reading of a day', () => {
   it('lets a measured settlement stand over a legacy typed figure', () => {
     const reading = readSwiggy({
-      ...day({ swiggyRevenuePaise: 999_00, swiggyCommissionPaise: 1_00 }),
+      ...day(),
       swiggySettlement: swiggySettlement(),
     })
 
@@ -538,11 +531,14 @@ describe('the Swiggy reading of a day', () => {
     expect(reading.settlement?.state).toBe('settled')
   })
 
-  it('falls back to the typed columns where no measurement exists', () => {
-    const reading = readSwiggy(day({ swiggyRevenuePaise: 200_00, swiggyCommissionPaise: 50_00 }))
+  it('reads not yet measured where no settlement exists', () => {
+    const reading = readSwiggy(day())
 
-    expect(reading.grossPaise).toBe(200_00)
-    expect(reading.netPaise).toBe(150_00)
+    // Typed Swiggy money no longer exists in the contract; an uncovered day
+    // states that it has not been measured rather than inventing a zero.
+    expect(reading.grossPaise).toBe(0)
+    expect(reading.commissionPaise).toBeNull()
+    expect(reading.netPaise).toBe(0)
     expect(reading.settlement).toBeNull()
   })
 

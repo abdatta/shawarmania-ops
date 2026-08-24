@@ -1,4 +1,4 @@
-﻿/**
+/**
  * REST-level isolation probes — the roadmap gate stated literally: a valid,
  * really-signed-in session issuing hand-crafted PostgREST requests for the
  * other outlet's rows, and getting nothing.
@@ -1124,7 +1124,6 @@ describe('the manual ledger over HTTP', () => {
         business_date: YESTERDAY,
         opening_cash_paise: 0,
         counted_cash_paise: 0,
-        swiggy_commission_paise: 0,
       })
       expect(day.error?.code).toBe('42501')
     })
@@ -1204,7 +1203,6 @@ describe('the manual ledger over HTTP', () => {
       business_date: YESTERDAY,
       opening_cash_paise: 0,
       counted_cash_paise: 0,
-      swiggy_commission_paise: 0,
     })
     expect(day.error?.code).toBe('42501')
   })
