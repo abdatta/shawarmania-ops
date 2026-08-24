@@ -109,6 +109,12 @@ Pure functions over integer paise, so they are trivially testable and there is n
 - The manual ledger's month reconciling exactly against its own expenses by
   category — the guarantee that no category or marker is quietly excluded from the
   profit estimate.
+- Swiggy daily gross: a timestamped Finance detail must derive pre-tax gross as
+  `Total Customer Paid - GST Collected`, or as zero for the explicit
+  cancelled/no-GST shape; missing/duplicate/malformed
+  fields fail closed. A no-write rehearsal compares that result with payout
+  annexure Net Bill Value at paisa precision, while tests assert that the reader
+  never requests customer-paid list values or payout UTRs.
 
 **No floating point anywhere.** A test that asserts a money value equals a float is itself a bug.
 

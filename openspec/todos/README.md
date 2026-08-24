@@ -18,6 +18,7 @@ Keep entries behavior-focused:
 | [Bill Digital Share](./bill-digital-share.md) | Feature | Anticipated | Billing | The owner wants digital receipts, or paper is being skipped anyway |
 | [Supply Bills Paid Outside The Payout](./supply-bills-paid-outside-the-payout.md) | Feature | Owner asked to explore, 2026-08-18 | Outlet expenses | The owner asks in earnest and picks a route: supplier portal, invoice email, or bank statement |
 | [Aggregator Settlement](./aggregator-settlement.md) | Feature | Anticipated | Reporting | Aggregator volume grows enough to distort a decision |
+| [Swiggy Detail Calls Must Stay Bounded As Open-Cycle Order Volume Grows](./swiggy-open-cycle-detail-call-scaling.md) | Scaling risk | Watch after #47 | Aggregator sync | The reader approaches its time budget or receives throttling, or open-cycle detail reads become materially expensive |
 | [Shared Menu Catalogue](./shared-menu-catalogue.md) | Feature | Anticipated | Menu | Per-outlet menu drift becomes a brand consistency problem |
 | [Customer Loyalty And Cross-Outlet Insights](./customer-loyalty-and-cross-outlet-insights.md) | Feature | Anticipated | Customers | A concrete loyalty or repeat-customer decision needs activity across outlets |
 | [Audit Log](./audit-log.md) | Feature | Anticipated | Security | The first franchise dispute, or headcount outgrowing "a small trusted team" |

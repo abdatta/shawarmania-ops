@@ -205,11 +205,11 @@ The cash-basis / consumption-basis distinction is real and the UI always states 
 ### Bills are not complete revenue in v1
 
 Swiggy and Zomato orders are **not rung as bills**. Zomato's revenue and
-commission are now read from Zomato itself — the daily order history and the
-weekly settlement — and reconciled against the payout (#42, #43); Swiggy's are
-still typed with the commission it charged. Both live in the temporary ledger,
-where the net is computed per day. Any figure quoted from `bills` as "total
-sales" understates the outlet: bills cover only Cash and UPI counter trade.
+commission are read from its daily order history and weekly settlement; Swiggy's
+provisional stated gross is read from timestamped Finance order detail and its
+final figures from the payout annexure. Both are reconciled against operator
+evidence and neither is typed. Any figure quoted from `bills` as "total sales"
+understates the outlet: bills cover only Cash and UPI counter trade.
 
 Hyperpure supply expenses are likewise read from Hyperpure's own statement, one
 per order, and can no longer be typed. What remains not automated is a supply

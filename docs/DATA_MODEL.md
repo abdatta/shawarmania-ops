@@ -486,9 +486,9 @@ reference from a live surface, greppable.
 
 **`manual_ledger_days`** — `id`, `outlet_id`, `business_date`,
 `opening_cash_paise`, `cash_revenue_paise`, `upi_revenue_paise`,
-`swiggy_revenue_paise`, `cash_added_paise`, `cash_added_reason`,
+`cash_added_paise`, `cash_added_reason`,
 `cash_removed_paise`, `cash_removed_reason`, `counted_cash_paise`,
-`swiggy_commission_paise`, `note`, `recorded_by`, `updated_by`, `created_at`,
+`note`, `recorded_by`, `updated_by`, `created_at`,
 `updated_at`. `unique (outlet_id, business_date)`.
 
 Commission is an **exact amount in paise, never a rate** [owner, 2026-08-17]. The
@@ -499,18 +499,18 @@ real take was 37.8%. A stored percentage was therefore an estimate in the shape 
 an exact figure. A channel's **net is revenue less commission and is not stored**,
 because a third column could disagree with the two it is derived from.
 
-**Zomato's figures are no longer on this row** (#43). They moved to
+**Neither aggregator's figures are on this row.** They live in
 `aggregator_channel_days`, because this row cannot exist without an opening
-balance and a drawer count, yet a day nobody counted must still show what Zomato
-paid. Swiggy stays here, because it is still typed. A day-row write that still
-names a Zomato column fails on the absent column, which is the freeze against a
-stale client.
+balance and a drawer count, yet a day nobody counted must still show what an
+aggregator stated. A day-row write carrying a removed Zomato or Swiggy money
+field is refused rather than silently discarding it.
 
 **`aggregator_channel_days`** — `id`, `outlet_id`, `channel`, `business_date`
 (`unique (outlet_id, channel, business_date)`), `revenue_paise`,
 `commission_paise` (**nullable — null is undetermined, not nought**),
-`settlement_state` (`provisional | settled | disputed`), `origin`
-(`daily_reader | settlement | supplied_by_hand`), the superseded pair
+`net_paise` (present with commission on a settled row), `settlement_state`
+(`provisional | settled | disputed`), `origin` (`daily_reader | settlement |
+supplied_by_hand | legacy_typed`), `source_ref`, `as_of_at`, the superseded pair
 (`superseded_revenue_paise`, `superseded_commission_paise`, `superseded_at`) kept
 when a figure is replaced and excluded from every total, the revision pre-image
 (`provisional_revenue_paise`, `provisional_commission_paise`, `revised_at`)
@@ -519,9 +519,10 @@ present only where settling moved the figures, `created_at`, `updated_at`.
 **No client role may write it.** The freeze is the absence of an
 insert/update/delete grant, not a disabled control: only the ingest path writes,
 so a hand-crafted request and a missing form field are refused by one rule. The
-owner reads across outlets; every outlet role is refused read entirely. A figure
-can exist here for a business date that has no `manual_ledger_days` row, which is
-the "day nobody counted" the sync now records instead of refusing.
+owner reads across outlets; an assigned Franchise Admin reads only their
+outlet's daily aggregate, while Biller and Employee read none. A figure can
+exist here for a business date that has no `manual_ledger_days` row, which is the
+"day nobody counted" the sync now records instead of refusing.
 
 **`manual_ledger_expenses`** — `id`, `outlet_id`, `business_date`, `category`
 (the same normalised free-text snapshot used by `expenses`), `is_cash`,

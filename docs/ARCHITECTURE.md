@@ -218,6 +218,13 @@ Anything requiring the service-role key runs in an Edge Function. The service-ro
   reader's shared secret and a person's session token, each narrowed to the
   outlets they may write, because being an Edge Function is not authorisation.
 
+The private Swiggy reader is deliberately browser-free once a session has been
+captured. It derives an open-cycle business-day gross from each order's Finance
+detail and placement timestamp, then posts the same normalized order/cycle
+contract as an accepted payout annexure. The reader sends no UTR, customer field
+or raw export to Ops; the database alone applies the outlet cutover and decides
+whether a provisional or settled candidate may change money.
+
 Each privileged function re-derives the caller from their token and reads live
 assignments from the database. Being an Edge Function is not authorisation.
 

@@ -4,7 +4,7 @@
 
 For every outlet, channel and business date the sync covers, the ledger SHALL store the aggregator's gross order value, the commission-and-fee reduction from that gross, and the net order payout, each as its own integer-paise value normalized from the aggregator rather than from a stored percentage.
 
-For Swiggy, gross SHALL use the portal's Net Sales basis: item subtotal plus packaging, less restaurant-funded discounts, platform fee and taxes, before Swiggy's commission and settlement deductions. It SHALL NOT use Total Customer Paid including GST. The net order payout SHALL use the order-level amount payable to the restaurant after order-level fees and taxes. The reduction SHALL be gross minus net, so net plus reduction equals gross even when a cancelled order has zero gross and a negative net payout.
+For Swiggy, gross SHALL use the timestamped order-detail basis `Total Customer Paid - GST Collected`, which fixture reconciliation proves equals the payout-annexure `Net Bill Value (before taxes)` at paisa precision. It SHALL NOT use Total Customer Paid including GST, `customerPaidAmount` from `getOrderLevelPayoutsV2`, or the calendar-day Business Metrics Net Sales card as ledger gross. The net order payout SHALL use the order-level amount payable to the restaurant after order-level fees and taxes. The reduction SHALL be gross minus net, so net plus reduction equals gross even when a cancelled order has zero gross and a negative net payout.
 
 An undated cycle-level ad investment, refund, recovery, outstanding amount or other adjustment SHALL NOT be forced into a daily reduction; it remains a cycle deduction used to reconcile the exact final payout. No percentage SHALL be stored or used to calculate a synced net. An effective rate MAY be presented from stored values for display only.
 
@@ -13,10 +13,10 @@ An undated cycle-level ad investment, refund, recovery, outstanding amount or ot
 - **WHEN** the sync writes an outlet's Swiggy business date from order rows
 - **THEN** gross, reduction and net order payout are stored as integer paise and net plus reduction equals gross
 
-#### Scenario: Total Customer Paid is not ledger gross
+#### Scenario: GST-inclusive Total Customer Paid is not ledger gross
 
 - **WHEN** a Swiggy order includes GST collected from the customer
-- **THEN** ledger gross follows the proved Net Sales/Net Bill Value basis and does not include that GST merely because the customer paid it
+- **THEN** ledger gross subtracts the order-detail `GST Collected` amount from `Total Customer Paid`, and does not include that GST merely because the customer paid it
 
 #### Scenario: A cycle-only deduction remains cycle-only
 
@@ -181,7 +181,7 @@ No application client role SHALL insert, update or delete sourced figures, cycle
 
 ### Requirement: Swiggy daily sales respect evidence time and the outlet cutover
 
-A Swiggy daily write SHALL use order placement timestamps converted through the outlet's business-day cutover whenever it asserts an authoritative business date. Portal dashboard/report dates are Asia/Kolkata calendar days and SHALL NOT silently become business dates for an outlet whose cutover is not midnight.
+A Swiggy daily write SHALL use order placement timestamps converted through the outlet's business-day cutover whenever it asserts an authoritative business date. For every non-annexure order it SHALL obtain the detail `payoutSummary`, require exactly one parseable `Total Customer Paid` header and exactly one parseable `GST Collected` sub-header, and use their difference as gross. The sole exception is an order detail whose own status explicitly says cancelled and omits GST Collected: it SHALL record zero gross because the final annexure's Net Bill Value is zero for that state, even if the detail carries customer-payment components. A non-cancelled omission SHALL fail as a source-shape change. Portal dashboard/report dates are Asia/Kolkata calendar days and SHALL NOT silently become business dates for an outlet whose cutover is not midnight.
 
 The live Net Sales metric MAY be stored as provisional only for a range that is proved to correspond exactly to one business-date window. If the API cannot provide order timestamps or a cutover-aligned range, the metric SHALL remain health/cross-check telemetry rather than an authoritative ledger write. A multi-date aggregate SHALL never be assigned to its last date.
 
@@ -191,6 +191,16 @@ Each provisional row SHALL retain its capture/as-of time. A later same-day read 
 
 - **WHEN** a Swiggy order is placed at 00:30 at an outlet whose cutover is 04:00
 - **THEN** it contributes to the previous business date even if the portal dashboard labels it with the new calendar date
+
+#### Scenario: A daily order reproduces the settlement gross
+
+- **WHEN** a live Swiggy order detail shows `Total Customer Paid` and `GST Collected`
+- **THEN** its provisional gross is their integer-paise difference and matches that order's later payout-annexure Net Bill Value when the cycle settles
+
+#### Scenario: Missing detail cannot become GST-inclusive gross
+
+- **WHEN** the order-detail response omits, duplicates or cannot parse either required money label
+- **THEN** the candidate fails as a source-shape change, no daily amount is written, and the reader does not fall back to `customerPaidAmount` or a calendar aggregate
 
 #### Scenario: A calendar aggregate cannot prove a business date
 

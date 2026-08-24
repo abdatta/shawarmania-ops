@@ -72,11 +72,11 @@ Three observations have distinct authority:
 2. **Current Payout:** stored/displayed only as a provisional cycle estimate with its A–F component snapshot and as-of time. It never changes a settled day merely because its arithmetic currently closes.
 3. **FINAL payout:** eligible for settlement as soon as Swiggy labels the cycle final and supplies enough evidence to reconcile, even when bank status is Pending or On Hold. Bank status is separate and may later become Paid.
 
-The business-metrics calendar-day card/report is used as a live health and gross cross-check until a cutover-safe order source is proven. Implementation must inspect the portal's order/detail APIs for timestamped Net Bill Value. If no such live source exists, the phase gate does not permit same-day authoritative ledger writes; the tab may show clearly labelled portal-calendar telemetry, and final annexure/order data settles the ledger later. This refuses to violate the hard business-day rule to manufacture apparent parity.
+The business-metrics calendar-day card/report remains a live health and cross-check only. The captured `getOrderLevelPayoutDetails` response supplies a placement timestamp and its `payoutSummary` A header (`Total Customer Paid`) plus `GST Collected` sub-header. Its exact per-order gross is `A - GST Collected`; the initial normal-order probe matched the final annexure's `Net Bill Value (before taxes)` at paisa precision. The one proved exception is a response explicitly marked cancelled that omits the GST row: although it can display customer-payment and discount components, its final annexure Net Bill Value is zero, so the reader stores zero gross and may retain a negative payout. Any other omitted, duplicate or impossible field fails the complete candidate. The reader requests this detail for every non-annexure order and never falls back to the GST-inclusive `customerPaidAmount` field from the list response. The fresh-session, multi-cycle reconciliation remains a promotion gate; until it passes, this source makes no production daily write. This keeps same-day reading cutover-safe without relabelling the calendar aggregate as a business-day source.
 
 The final-cycle builder uses Order Level Net Bill Value before taxes as gross and Net Payout for Order after taxes as daily net. Their difference is the order-level commission/fee/tax reduction. Cancelled rows may produce negative net at zero gross and remain valid. Undated ads, recoveries and other owner-level adjustments stay on the cycle and enter the exact reconciliation; they are not smeared over days. Where a real service/spend date exists, the existing dated-deduction path records it.
 
-**Rejected:** Total Customer Paid as gross. It includes GST and uses a different basis from the ledger and dashboard.
+**Rejected:** Total Customer Paid by itself as gross. It includes GST; only `Total Customer Paid - GST Collected` is the proved ledger/annexure basis.
 
 **Rejected:** derive exact payout from a fixed commission rate. Observed fees and deductions are multi-component and vary.
 
@@ -90,9 +90,9 @@ One rupee remains the maximum reconciliation tolerance because rendered source v
 
 **Rejected:** a separate weekly payout cron or generated Monday/Sunday ranges. Observed cycles split at month boundaries and finality can precede bank payment.
 
-### 5. Run one serialized API-only workflow at 11:00 and 23:00 IST
+### 5. Run one serialized API-only workflow at 11:15 and 23:15 IST
 
-The sync repository's Swiggy workflow uses UTC cron `30 5,17 * * *`, matching 11:00 and 23:00 IST year-round. One channel-specific concurrency group serializes scheduled, Read again and settlement work so two candidates cannot race. Each run:
+The sync repository's Swiggy workflow uses UTC cron `45 5,17 * * *`, matching 11:15 and 23:15 IST year-round. One channel-specific concurrency group serializes scheduled, Read again and settlement work so two candidates cannot race. Each run:
 
 1. loads the narrow Swiggy session and enabled mappings from the Ops reader boundary;
 2. makes a browser-free authenticated probe;
@@ -165,7 +165,7 @@ All financial tables deny direct client mutation, including Super Admin. The ing
 
 ## Risks / Trade-offs
 
-- **[No cutover-safe live gross endpoint is found]** → Keep the dashboard number as clearly labelled portal-calendar telemetry and block same-day authoritative promotion; final annexure/order facts can still settle later. The gate fails rather than weakening `business_date`.
+- **[The per-order detail field is unavailable or changes shape]** → Fail the whole daily candidate, retain the prior reading and expose the source-shape event. Keep Business Metrics as labelled portal-calendar telemetry; do not fall back to GST-inclusive list values or weaken `business_date`.
 - **[FINAL Pending later revises]** → Store bank status separately, reread two recent closed cycles and use settled restatement/audit rules; never mutate without retained prior values.
 - **[Token lifetime is shorter than the 12-hour interval]** → Measure a real login/replay, report unknown expiry truthfully, probe every run and make reconnect quick. Scheduling does not auto-login.
 - **[GraphQL or workbook shape changes]** → Required-field/label guards classify a shape event and preserve prior values. Redacted fixtures pin every accepted shape and parser version.
@@ -179,12 +179,12 @@ All financial tables deny direct client mutation, including Super Admin. The ing
 
 1. **Dependency gate:** finish and archive #44 so channel sessions, probe-first reconnect and just-in-time OTP are the main contract. Rebase this delta if #44 changes its final names.
 2. **Contract widening:** add `swiggy` only to restaurant-money/auth/sync allow-lists where appropriate; add normalized external mappings; make accepted-difference/source identities channel-safe; add RLS and generated-type updates. Do not enable writes or schedule.
-3. **Parser and reader fixtures:** capture/redact real API responses, the Business Metrics workbook, payout annexure and eligible PDFs; implement offline parsers, pagination, paise conversion, source-shape failures and no-zero tests in both repositories.
+3. **Parser and reader fixtures:** capture/redact the timestamped `getOrderLevelPayoutDetails` shape as well as real API responses, the Business Metrics workbook, payout annexure and eligible PDFs; implement offline parsers, bounded detail enrichment, `Total Customer Paid - GST Collected` paise conversion, source-shape failures and no-zero tests in both repositories.
 4. **Independent login proof:** configure the identifier through the owner-safe boundary, run the headed Swiggy login with an owner-supplied OTP, store Vault material and prove a fresh browser-free probe and reader. Record measured expiry behavior without exposing secrets.
-5. **No-write financial rehearsal:** run current data and at least two closed cycles for the active Kalyani mapping. Prove Net Sales basis, cutover attribution, component arithmetic, portal cycle boundaries, Current versus FINAL semantics, and no writes on mismatch/shape/lapse. Keep the dormant mapping disabled and Kanchrapara absent.
+5. **No-write financial rehearsal:** run current data and at least two closed cycles for the active Kalyani mapping. Prove that timestamped `Total Customer Paid - GST Collected` equals final Net Bill Value, cutover attribution, component arithmetic, portal cycle boundaries, Current versus FINAL semantics, and no writes on mismatch/shape/lapse. Keep the dormant mapping disabled and Kanchrapara absent.
 6. **Lossless legacy carry:** migrate typed Swiggy values to legacy provenance with transactional row/value/total assertions. Produce the outlet/date coverage audit and backfill authoritative data. Do not remove fields while any unexplained loss remains.
 7. **Enable ingest and owner UI:** enable channel-safe writes, reconciliation, private upload evidence and the gated Swiggy tab. Exercise provisional, final Pending, Paid, revised, disputed, upload and not-connected states; confirm assigned Franchise Admin daily visibility and every cross-outlet refusal.
-8. **Freeze and schedule:** after the coverage gate, remove Swiggy manual columns/writers, regenerate schema types, enable the two cron entries and promote `owner-swiggy-sync` to live. Verify two consecutive API-only runs from CI-captured auth.
+8. **Freeze and schedule:** after the coverage gate, remove Swiggy manual columns/writers, regenerate schema types, enable the two cron entries and promote `owner-swiggy-sync` to live. Verify one successful scheduled API-only run from CI-captured auth.
 9. **Documentation and roadmap:** update the listed docs, affected todos and dependencies; make #12 depend on #47 and sequence #46/navigation follow-up; run roadmap reconciliation.
 
 Because migrations and the removal of writable money fields are forward-only, rollback disables the schedule and Swiggy gate and leaves all new/audit rows intact. It does not recreate hidden writable columns. A corrective migration and adapter release are required if a post-freeze defect is found; prior measured and legacy values remain available for that recovery.

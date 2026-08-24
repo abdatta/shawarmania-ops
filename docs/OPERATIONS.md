@@ -414,8 +414,8 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
 12. **Schedule the ledger handover** (Super Admin → Outlets → Edit → **Counter
    billing starts on**) for a business date that has not started. From that date
    the ledger removes typed Cash and UPI and labels their settled bill totals
-   **from counter**. Keep typing Zomato, Swiggy, both commission rates, cash
-   movements, expenses and the drawer count.
+   **from counter**. Keep typing cash movements, expenses and the drawer count;
+   Zomato and Swiggy are sourced readings and have no ledger money fields.
 
 Roll billing out at **Kalyani first**, because it has the first tablet. Trade one
 full business day and close it cleanly before repeating setup and handover at
@@ -450,14 +450,13 @@ per outlet, from a phone, and the figures build the month by themselves.
    reports a gap between the two, correct whichever day is wrong rather than
    overwriting the figure to make the warning go away. That warning is the whole
    reason the opening is stored per day.
-3. **Record cash, UPI and Swiggy.** Before this outlet's billing handover, type
+3. **Record cash and UPI.** Before this outlet's billing handover, type
    Cash and UPI. From the scheduled date those values are labelled **from
    counter** and cannot be typed; check them against the tablet's settled bills.
-   Type what Swiggy **states**, not what it settles, with the commission it
-   actually charged. **Zomato cannot be typed** (#43): its block is a reading —
-   gross, commission, net, and a chip saying where it came from — filled by the
-   sync or an uploaded statement. A commission not yet known reads "not known
-   yet" rather than nought. The form says why the two channels differ.
+   **Neither aggregator can be typed.** Their blocks are readings — gross,
+   commission, net and a source/state chip — filled by the sync or accepted
+   operator evidence. A commission not yet known reads "not known yet" rather
+   than nought.
 4. **Record each expense under the words the month should group by.** Category
    is free text with business-wide suggestions; type a new one when the existing
    list does not fit. Add an optional Note only when the category needs detail.
@@ -470,8 +469,8 @@ per outlet, from a phone, and the figures build the month by themselves.
 6. **Count the drawer and type it.** The difference appears as you type. If it
    does not balance, write a note saying what you found.
 7. **Save.** The form gives way to a reading of what you just stored: the revenue
-   side with each channel's commission and what actually arrived — Zomato's read
-   from the sync, Swiggy's as you typed it — and the drawer below it.
+   side with each channel's commission and what actually arrived, including the
+   aggregator readings, and the drawer below it.
 
 At the tablet, **Finish day** is a separate online boundary: use it only after
 the activity rail has no open orders and Sync says everything is sent. It drains

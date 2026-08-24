@@ -8,6 +8,10 @@
 - **Never commit** `.env`, keys, real customer or employee data, or database dumps. The `.gitignore` covers the common shapes; that is a safety net, not permission to be careless.
 - **Every outlet-scoped table ships an RLS policy in the same migration that creates it.** A table without a policy is a data leak, not a to-do item.
 - **Never log** customer phone numbers, employee coordinates, or full bill contents.
+- **Aggregator sessions and exports are server-only.** Swiggy access tokens, OTPs,
+  payout UTRs and raw partner exports never reach a client, log, fixture or
+  workflow summary. The reader requests only the order fields needed to derive
+  the daily gross; customer identifiers and payout UTRs are not selected.
 - Access tokens live in memory and Supabase's managed storage. No hand-rolled token persistence.
 - **Compatible high-severity dependency fixes are applied promptly.** When an
   existing parent range admits a patched transitive release, the lockfile must

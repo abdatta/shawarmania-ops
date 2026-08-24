@@ -63,12 +63,12 @@ Payment methods the system must record, taken from how the business actually sel
 |---|---|
 | **Cash** | The only method that affects the cash drawer, and therefore the only one in daily cash reconciliation |
 | **UPI** | Expected to be the dominant digital method |
-| **Swiggy** | Aggregator order, entered manually at the counter |
-| **Zomato** | Aggregator order, entered manually at the counter |
+| **Swiggy** | Aggregator order; never a counter tender, sourced from Swiggy Finance evidence |
+| **Zomato** | Aggregator order; never a counter tender, sourced from Zomato evidence |
 
 **Only `cash` flows into the daily cash record.** This is the single most important rule connecting billing to reconciliation — a UPI sale increases revenue but not the drawer.
 
-Swiggy and Zomato revenue arrives later via aggregator settlement, net of commission. **Zomato is now read and reconciled** against the payout automatically (#42, #43) — the daily order history and the weekly settlement workbook — with Hyperpure supply costs read the same way; Swiggy is still typed. Item-level aggregator sales are not captured; see [Limitations](LIMITATIONS.md).
+Swiggy and Zomato revenue arrives later via aggregator settlement, net of commission. **Zomato is read and reconciled** against its payout from order history and the weekly settlement workbook (#42, #43); **Swiggy is read from its own Finance evidence**. A Swiggy provisional day uses each order's placement timestamp and `Total Customer Paid - GST Collected`, which equals the later annexure's pre-tax Net Bill Value. A detail explicitly marked cancelled and lacking GST has zero Net Bill Value even when it carries customer-payment components; its gross is therefore zero and its net payout may remain negative. The payout annexure supplies the final order/cycle settlement. Item-level aggregator analytics are not shown; see [Limitations](LIMITATIONS.md).
 
 ## How a counter shift actually runs
 

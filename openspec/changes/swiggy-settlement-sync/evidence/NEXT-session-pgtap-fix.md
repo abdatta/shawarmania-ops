@@ -44,5 +44,5 @@ tick nothing new (10.1/10.2 already ticked), and continue with 11.x.
 - Ops main = 436ce0f (freeze wave committed; CI red on pgTAP only).
 - Prod: sync switched on from Jul 1; 21 settlement days live; legacy rows
   superseding correctly; Aug 17 awaits FINAL cycle.
-- Tonight 23:00 IST + tomorrow 11:00 IST scheduled fires = task 10.4.
+- Tonight 23:15 IST + tomorrow 11:15 IST scheduled fires = task 10.4.
 - Remaining ticks after pgTAP green: 10.4, 10.5, 11.1-11.7.
