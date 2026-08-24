@@ -2045,29 +2045,29 @@ export interface ManualLedgerDay {
    * differ, so a day the owner recorded and a manager later fixed does not read
    * as though the owner entered the figures now on screen (design D6).
    */
-   recordedBy: LedgerActor
-   updatedBy: LedgerActor | null
-   /**
-    * Where this day's Zomato figures came from, where the sync covers it. Null on
-    * every day recorded before the sync, and on every day at an outlet it does
-    * not cover, which is what keeps a historical month computing exactly as it
-    * was recorded.
-    *
-    * It carries no figures of its own. Since commission became an amount, a synced
-    * day and a typed day store the same two numbers in the same two columns, and
-    * duplicating them here would be inviting the copy to disagree with the
-    * original.
-    */
-   zomatoSettlement: ZomatoSettlement | null
-   /**
-    * Swiggy's measured reading for the date, on the same terms. Where present it
-    * is authoritative over any legacy typed figure in the day's own columns,
-    * because a portal read is evidence and a memory is not; where absent — an
-    * outlet Swiggy does not cover, or a date before its first read — the typed
-    * columns stand exactly as they always did.
-    */
-   swiggySettlement: ChannelSettlement | null
- }
+  recordedBy: LedgerActor
+  updatedBy: LedgerActor | null
+  /**
+   * Where this day's Zomato figures came from, where the sync covers it. Null on
+   * every day recorded before the sync, and on every day at an outlet it does
+   * not cover, which is what keeps a historical month computing exactly as it
+   * was recorded.
+   *
+   * It carries no figures of its own. Since commission became an amount, a synced
+   * day and a typed day store the same two numbers in the same two columns, and
+   * duplicating them here would be inviting the copy to disagree with the
+   * original.
+   */
+  zomatoSettlement: ZomatoSettlement | null
+  /**
+   * Swiggy's measured reading for the date, on the same terms. Where present it
+   * is authoritative over any legacy typed figure in the day's own columns,
+   * because a portal read is evidence and a memory is not; where absent — an
+   * outlet Swiggy does not cover, or a date before its first read — the typed
+   * columns stand exactly as they always did.
+   */
+  swiggySettlement: ChannelSettlement | null
+}
 
 /**
  * A day's measured Zomato figures, and where they came from.
@@ -2102,8 +2102,8 @@ export interface ZomatoSettlement {
    * What the day read before its week settled, kept only where settling moved
    * it. Present is precisely what "revised" means.
    */
-   revisedFrom: { revenuePaise: number; commissionPaise: number | null } | null
-   revisedAt: string | null
+  revisedFrom: { revenuePaise: number; commissionPaise: number | null } | null
+  revisedAt: string | null
 }
 
 /**

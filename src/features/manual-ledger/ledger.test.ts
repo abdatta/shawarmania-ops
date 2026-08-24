@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type {
-  ManualLedgerDayFigures,
-  ManualLedgerExpense,
-} from '@/data-access/adapters'
+import type { ManualLedgerDayFigures, ManualLedgerExpense } from '@/data-access/adapters'
 import { NotPaiseError } from '@/domain'
 
 import {

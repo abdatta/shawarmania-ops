@@ -21,13 +21,7 @@ import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
 
 import { ExpenseList } from './expense-list'
-import {
-  checkOpeningChain,
-  readDay,
-  readSwiggy,
-  type ChainSignal,
-  type DayReading,
-} from './ledger'
+import { checkOpeningChain, readDay, readSwiggy, type ChainSignal, type DayReading } from './ledger'
 
 /**
  * One trading day in the manual ledger (#36) — **temporary, deleted with the
@@ -1095,7 +1089,11 @@ function ChannelReadingBlock({
         </p>
       ) : (
         <>
-          <Row label="As stated" paise={settlement.revenuePaise} testId={`${testIdPrefix}-revenue`} />
+          <Row
+            label="As stated"
+            paise={settlement.revenuePaise}
+            testId={`${testIdPrefix}-revenue`}
+          />
           <Row
             label="Commission"
             paise={settlement.commissionPaise === null ? null : -settlement.commissionPaise}
@@ -1104,7 +1102,10 @@ function ChannelReadingBlock({
           <p className="flex items-baseline justify-between gap-2">
             <span className="text-xs text-content-muted">Actually received</span>
             {netPaise === null ? (
-              <span className="text-sm text-content-muted" data-testid={`${testIdPrefix}-revenue-net`}>
+              <span
+                className="text-sm text-content-muted"
+                data-testid={`${testIdPrefix}-revenue-net`}
+              >
                 &mdash;
               </span>
             ) : (

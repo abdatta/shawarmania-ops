@@ -555,10 +555,7 @@ export function createSupabaseManualLedgerAdapter(
       // is the UNION of both channels' readings, and one virtual day carries every
       // channel that reported, so a Swiggy-only date joins the month on the same
       // terms as a Zomato-only one.
-      const figureDates = new Set<string>([
-        ...figures.zomato.keys(),
-        ...figures.swiggy.keys(),
-      ])
+      const figureDates = new Set<string>([...figures.zomato.keys(), ...figures.swiggy.keys()])
       const uncounted = [...figureDates]
         .filter((date) => !countedDates.has(date))
         .map((date) =>

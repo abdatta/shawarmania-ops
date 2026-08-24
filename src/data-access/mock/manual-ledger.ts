@@ -338,7 +338,9 @@ export function createMockManualLedgerAdapter(
       const row = store.manualLedgerDays.find(
         (day) => day.outlet_id === outletId && day.business_date === businessDate,
       )
-      return row ? toDay(row, figureFor(outletId, businessDate), swiggyFigureFor(outletId, businessDate)) : null
+      return row
+        ? toDay(row, figureFor(outletId, businessDate), swiggyFigureFor(outletId, businessDate))
+        : null
     },
 
     async getDayFigures(outletId, businessDate) {
@@ -354,7 +356,13 @@ export function createMockManualLedgerAdapter(
       const row = store.manualLedgerDays
         .filter((day) => day.outlet_id === outletId && day.business_date < businessDate)
         .sort((a, b) => b.business_date.localeCompare(a.business_date))[0]
-      return row ? toDay(row, figureFor(outletId, row.business_date), swiggyFigureFor(outletId, row.business_date)) : null
+      return row
+        ? toDay(
+            row,
+            figureFor(outletId, row.business_date),
+            swiggyFigureFor(outletId, row.business_date),
+          )
+        : null
     },
 
     async upsertDay(day: ManualLedgerDayInput) {
@@ -534,7 +542,13 @@ export function createMockManualLedgerAdapter(
 
       const counted = store.manualLedgerDays
         .filter((day) => day.outlet_id === outletId && inMonth(day.business_date))
-        .map((row) => toDay(row, figureFor(outletId, row.business_date), swiggyFigureFor(outletId, row.business_date)))
+        .map((row) =>
+          toDay(
+            row,
+            figureFor(outletId, row.business_date),
+            swiggyFigureFor(outletId, row.business_date),
+          ),
+        )
       const countedDates = new Set(counted.map((day) => day.businessDate))
 
       // Dates the sync wrote Zomato figures for but nobody counted — surfaced from
