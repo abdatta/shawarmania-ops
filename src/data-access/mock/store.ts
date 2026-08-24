@@ -750,6 +750,10 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       business_date: businessDate(daysAgo),
       revenue_paise: revenuePaise,
       commission_paise: commissionPaise,
+      net_paise:
+        commissionPaise === null ? null : ((revenuePaise - commissionPaise) as number | null),
+      source_ref: `cycle-${businessDate(daysAgo)}`,
+      as_of_at: instantAt(businessDate(daysAgo), '23:00'),
       settlement_state: 'settled',
       origin: 'settlement',
       superseded_revenue_paise: null as number | null,

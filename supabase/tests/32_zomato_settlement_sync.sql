@@ -111,11 +111,11 @@ values
   (:'KPA', pg_temp.ledger_day(2), 0, 0, 0, :'OWNER');
 
 insert into public.aggregator_channel_days
-  (outlet_id, channel, business_date, revenue_paise, commission_paise,
+  (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
    settlement_state, origin)
 values
-  (:'KAL', 'zomato', pg_temp.ledger_day(2), 297003, 83892, 'settled', 'settlement'),
-  (:'KPA', 'zomato', pg_temp.ledger_day(2), 412200, 128000, 'provisional', 'daily_reader');
+  (:'KAL', 'zomato', pg_temp.ledger_day(2), 297003, 83892, 213111, 'settled', 'settlement'),
+  (:'KPA', 'zomato', pg_temp.ledger_day(2), 412200, 128000, 284200, 'provisional', 'daily_reader');
 
 -- ---------------------------------------------------------------------------
 -- 1. The owner reads all of it, across both outlets.
@@ -156,7 +156,8 @@ reset role;
 -- while an insert's `with check` raises 42501. Asserting the wrong one of these
 -- is how a policy hole gets a passing test.
 
-create function pg_temp.settlement_refused(persona text, p_sub uuid, p_outlet uuid, whose text)
+create function pg_temp.settlement_refused(persona text, p_sub uuid, p_outlet uuid, whose text,
+                                           p_sees_figures boolean default false)
 returns setof text language plpgsql as $$
 declare
   n bigint;
@@ -181,13 +182,17 @@ begin
   return next is(n, 0::bigint,
     format('%s reads no sync date at %s outlet', persona, whose));
 
-  -- The figures live on their own table now, and it answers the same way: no
-  -- outlet role reaches a measured figure, at any outlet including their own.
+  -- Daily aggregates follow the ledger grant they were folded into: an assigned
+  -- Franchise Admin reads them at their own outlet and nowhere else, while
+  -- Biller, Employee and every cross-outlet request still see nothing. The
+  -- settlement internals above stay refused to every outlet role regardless.
   execute format(
     'select count(*) from public.aggregator_channel_days where outlet_id = %L', p_outlet)
     into n;
-  return next is(n, 0::bigint,
-    format('%s reads no measured figure at %s outlet', persona, whose));
+  return next is(n, (case when p_sees_figures then 1 else 0 end)::bigint,
+    format('%s %s measured figures at %s outlet', persona,
+      case when p_sees_figures then 'reads the assigned outlet''s'
+           else 'reads no' end, whose));
 
   return next throws_ok(
     format($q$
@@ -213,6 +218,15 @@ begin
   return next is(n, 0::bigint,
     format('%s changes no cycle deduction at %s outlet', persona, whose));
 
+  -- No client role is granted any write on the figures table, so a refused
+  -- write here is the grant's own denial rather than a filtered no-op.
+  return next throws_ok(
+    format($q$
+      update public.aggregator_channel_days set revenue_paise = 1
+       where outlet_id = %L $q$, p_outlet),
+    '42501', null,
+    format('%s changes no measured figure at %s outlet', persona, whose));
+
   n := pg_temp.rows_changed(format(
     'update public.outlet_channel_sync set synced_from = current_date + 60 where outlet_id = %L',
     p_outlet));
@@ -223,9 +237,9 @@ begin
 end;
 $$;
 
-select * from pg_temp.settlement_refused('fa_kalyani', :'FA_KAL', :'KAL', 'their own');
+select * from pg_temp.settlement_refused('fa_kalyani', :'FA_KAL', :'KAL', 'their own', true);
 select * from pg_temp.settlement_refused('fa_kalyani', :'FA_KAL', :'KPA', 'the other');
-select * from pg_temp.settlement_refused('fa_kanchrapara', :'FA_KPA', :'KPA', 'their own');
+select * from pg_temp.settlement_refused('fa_kanchrapara', :'FA_KPA', :'KPA', 'their own', true);
 select * from pg_temp.settlement_refused('biller_kalyani', :'BILLER_KAL', :'KAL', 'their own');
 select * from pg_temp.settlement_refused('biller_kalyani', :'BILLER_KAL', :'KPA', 'the other');
 select * from pg_temp.settlement_refused('employee_kalyani', :'EMPLOYEE_KAL', :'KAL', 'their own');
@@ -310,9 +324,9 @@ insert into public.manual_ledger_days
    swiggy_commission_paise, recorded_by)
 values (:'KAL', pg_temp.ledger_day(3), 0, 0, 0, :'OWNER');
 insert into public.aggregator_channel_days
-  (outlet_id, channel, business_date, revenue_paise, commission_paise,
+  (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
    settlement_state, origin)
-values (:'KAL', 'zomato', pg_temp.ledger_day(3), 295000, 83338,
+values (:'KAL', 'zomato', pg_temp.ledger_day(3), 295000, 83338, 211662,
         'settled', 'settlement');
 
 -- The refusal is now `42501` rather than `P0001`, and the change is the point.
@@ -460,29 +474,29 @@ select throws_ok(
 
 select throws_ok(
   pg_temp.bad_day(
-    'revenue_paise, commission_paise, settlement_state, '
+    'revenue_paise, commission_paise, net_paise, settlement_state, '
     'provisional_revenue_paise, provisional_commission_paise, '
     'revised_at',
-    '100000, 30000, ''provisional'', 99000, 29000, now()'),
+    '100000, 30000, 70000, ''provisional'', 99000, 29000, now()'),
   '23514', null,
   'only a settled day can have been revised');
 
 select throws_ok(
   pg_temp.bad_day(
-    'revenue_paise, commission_paise, settlement_state, '
+    'revenue_paise, commission_paise, net_paise, settlement_state, '
     'provisional_revenue_paise, provisional_commission_paise, '
     'revised_at',
-    '100000, 30000, ''settled'', 100000, 30000, now()'),
+    '100000, 30000, 70000, ''settled'', 100000, 30000, now()'),
   '23514', null,
   'and a day whose settled figures match the provisional ones cannot be marked '
   'revised, because nothing about it changed');
 
 select lives_ok(
   pg_temp.bad_day(
-    'revenue_paise, commission_paise, settlement_state, '
+    'revenue_paise, commission_paise, net_paise, settlement_state, '
     'provisional_revenue_paise, provisional_commission_paise, '
     'revised_at',
-    '100000, 30000, ''settled'', 92085, 30000, now()'),
+    '100000, 30000, 70000, ''settled'', 92085, 30000, now()'),
   'a settled day that grew when its week paid is stored with what it grew from');
 
 -- ---------------------------------------------------------------------------
@@ -514,10 +528,10 @@ select throws_ok(
 
 -- A paid week that does not add up, and its way back out.
 insert into public.aggregator_channel_days
-  (outlet_id, channel, business_date, revenue_paise, commission_paise,
+  (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
    settlement_state, origin)
 values
-  (:'KAL', 'zomato', pg_temp.ledger_day(11), 250000, 70000,
+  (:'KAL', 'zomato', pg_temp.ledger_day(11), 250000, 70000, 180000,
    'provisional', 'daily_reader');
 
 select is(

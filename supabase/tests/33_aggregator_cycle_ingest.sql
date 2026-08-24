@@ -27,9 +27,26 @@ insert into public.outlet_channel_sync (outlet_id, channel, synced_from)
 values ('00000000-0000-4000-a000-000000000001', 'zomato',
         public.app_business_date(now(), time '04:00') - 60),
        ('00000000-0000-4000-a000-000000000002', 'zomato',
+        public.app_business_date(now(), time '04:00') - 60),
+       ('00000000-0000-4000-a000-000000000001', 'swiggy',
         public.app_business_date(now(), time '04:00') - 60)
 on conflict (outlet_id, channel) do update set synced_from = excluded.synced_from;
 alter table public.outlet_channel_sync enable trigger outlet_channel_sync_guarded;
+
+-- The restaurant mapping, as migrations would plant it. Kalyani holds an
+-- enabled and a dormant Swiggy identity, and one reference deliberately mapped
+-- to Kanchrapara so a payload naming it against Kalyani can be refused by name.
+-- Kanchrapara itself gets no swiggy sync row, exactly as the real rollout will
+-- leave it until evidence arrives.
+insert into public.outlet_channel_restaurants
+  (outlet_id, channel, external_ref, state)
+values ('00000000-0000-4000-a000-000000000001', 'swiggy', 'RID-ACTIVE', 'enabled'),
+       ('00000000-0000-4000-a000-000000000001', 'swiggy', 'RID-DORMANT', 'dormant'),
+       ('00000000-0000-4000-a000-000000000002', 'swiggy', 'RID-KPA', 'enabled'),
+       -- The zomato scalars, mirrored: a legacy payload without a reference
+       -- resolves through them, and must find an enabled mapping waiting.
+       ('00000000-0000-4000-a000-000000000001', 'zomato', '21917311', 'enabled'),
+       ('00000000-0000-4000-a000-000000000002', 'zomato', '22675834', 'enabled');
 
 
 \set OWNER '10000000-0000-4000-a000-000000000001'
@@ -81,12 +98,14 @@ create function pg_temp.sourced_day(p_outlet uuid, d date, revenue bigint,
 returns void language plpgsql as $$
 begin
   insert into public.aggregator_channel_days
-    (outlet_id, channel, business_date, revenue_paise, commission_paise,
+    (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
      settlement_state, origin)
-  values (p_outlet, 'zomato', d, revenue, commission, state, origin)
+  values (p_outlet, 'zomato', d, revenue, commission,
+          revenue - commission, state, origin)
   on conflict (outlet_id, channel, business_date) do update
     set revenue_paise = excluded.revenue_paise,
         commission_paise = excluded.commission_paise,
+        net_paise = excluded.net_paise,
         settlement_state = excluded.settlement_state,
         origin = excluded.origin;
 end;
@@ -651,11 +670,11 @@ select throws_ok(
 
 select throws_ok(
   format($$select pg_temp.ingest(jsonb_build_object(
-    'contract_version', 1, 'outlet_id', %L, 'channel', 'swiggy',
+    'contract_version', 1, 'outlet_id', %L, 'channel', 'hyperpure',
     'cycle_start', %L, 'cycle_end', %L, 'cycle_state', 'provisional'))$$,
     :'KAL', pg_temp.day(9), pg_temp.day(9)),
   '22023', null,
-  'a channel this capability does not cover is refused');
+  'a supply channel is refused by name before any money can move');
 
 select throws_ok(
   format($$select pg_temp.ingest(
@@ -1023,5 +1042,228 @@ select is(
   1::bigint,
   'and that row is really there, so the owning path was not silently dropped '
   'along with the relayed ones');
+-- ---------------------------------------------------------------------------
+-- 9. The Swiggy contract: same arithmetic, its own identity.
+--
+-- Everything the zomato cases prove about cutover, reconciliation and
+-- monotonicity applies unchanged; what is Swiggy's own is the restaurant
+-- reference, the operator's cycle identity, bank status, and the rule that a
+-- settled cycle arrives complete. Kanchrapara has no swiggy sync row planted,
+-- so an unconfigured outlet is refused through the same door as above.
+
+select throws_ok(
+  format($$select pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1, 'outlet_id', %L, 'channel', 'swiggy',
+    'cycle_start', %L, 'cycle_end', %L, 'cycle_state', 'provisional',
+    'orders', '[]'::jsonb))$$,
+    :'KAL', pg_temp.day(9), pg_temp.day(8)),
+  '22023', null,
+  'a swiggy payload without a restaurant reference is refused rather than guessed');
+
+select throws_ok(
+  format($$select pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1, 'outlet_id', %L, 'channel', 'swiggy',
+    'restaurant_ref', 'RID-UNKNOWN',
+    'cycle_start', %L, 'cycle_end', %L, 'cycle_state', 'provisional',
+    'orders', '[]'::jsonb))$$,
+    :'KAL', pg_temp.day(9), pg_temp.day(8)),
+  '22023', null,
+  'an unmapped swiggy restaurant is refused with the reference named');
+
+select throws_ok(
+  format($$select pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1, 'outlet_id', %L, 'channel', 'swiggy',
+    'restaurant_ref', 'RID-KPA',
+    'cycle_start', %L, 'cycle_end', %L, 'cycle_state', 'provisional',
+    'orders', '[]'::jsonb))$$,
+    :'KAL', pg_temp.day(9), pg_temp.day(8)),
+  '22023', null,
+  'a reference mapped to another outlet never writes this one''s money');
+
+select throws_ok(
+  format($$select pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1, 'outlet_id', %L, 'channel', 'swiggy',
+    'restaurant_ref', 'RID-DORMANT',
+    'cycle_start', %L, 'cycle_end', %L, 'cycle_state', 'provisional',
+    'orders', '[]'::jsonb))$$,
+    :'KAL', pg_temp.day(9), pg_temp.day(8)),
+  '22023', null,
+  'a dormant reference stays dormant for automation too');
+
+select throws_ok(
+  format($$select pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1, 'outlet_id', %L, 'channel', 'zomato',
+    'restaurant_ref', '21917311',
+    'cycle_start', %L, 'cycle_end', %L, 'cycle_state', 'settled',
+    'stated_payout_paise', 144000, 'operator_cycle_ref', 'Z-1',
+    'orders', jsonb_build_array(jsonb_build_object(
+      'order_id', 'S1', 'placed_at', pg_temp.at_ist(pg_temp.day(9), '13:00'),
+      'gross_paise', 100.5, 'commission_paise', 30, 'net_paise', 70))))$$,
+    :'KAL', pg_temp.day(9), pg_temp.day(8)),
+  '22023', null,
+  'a decimal order figure is refused by name before any sum can hide it');
+
+select throws_ok(
+  format($$select pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1, 'outlet_id', %L, 'channel', 'zomato',
+    'cycle_start', %L, 'cycle_end', %L, 'cycle_state', 'settled',
+    'stated_payout_paise', 144.5, 'operator_cycle_ref', 'Z-2',
+    'orders', jsonb_build_array(jsonb_build_object(
+      'order_id', 'S2', 'placed_at', pg_temp.at_ist(pg_temp.day(9), '13:00'),
+      'gross_paise', 100000, 'commission_paise', 30000, 'net_paise', 70000))))$$,
+    :'KAL', pg_temp.day(9), pg_temp.day(8)),
+  '22023', null,
+  'and so is a decimal stated payout');
+
+-- A full valid swiggy cycle commits: days carry all three figures plus source
+-- provenance, and its deductions name their channel.
+select is(
+  pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', :'KAL',
+    'channel', 'swiggy',
+    'restaurant_ref', 'RID-ACTIVE',
+    'operator_cycle_ref', 'SW-CYCLE-9',
+    'bank_status', 'pending',
+    'source_ref', 'SW-PAYOUT-9',
+    'as_of_at', pg_temp.at_ist(pg_temp.day(0), '11:00'),
+    'cycle_start', pg_temp.day(9),
+    'cycle_end', pg_temp.day(8),
+    'cycle_state', 'settled',
+    'stated_payout_paise', 199_000,
+    'cycle_deductions', jsonb_build_array(
+      jsonb_build_object('kind', 'tax_deducted_at_source',
+                         'period_start', pg_temp.day(9), 'period_end', pg_temp.day(8),
+                         'amount_paise', -7000, 'source_ref', 'TDS::SW-CYCLE-9')),
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'SW1', 'placed_at', pg_temp.at_ist(pg_temp.day(9), '13:20'),
+                         'gross_paise', 150_000, 'commission_paise', 30_000, 'net_paise', 120_000),
+      -- A post-midnight order belongs to the shift that started the day before:
+      -- 03:59 on day(8) is still business date day(9) under the 04:00 cutover.
+      jsonb_build_object('order_id', 'SW2', 'placed_at', pg_temp.at_ist(pg_temp.day(8), '03:59'),
+                         'gross_paise', 80_000, 'commission_paise', 10_000, 'net_paise', 70_000),
+      jsonb_build_object('order_id', 'SW3', 'placed_at', pg_temp.at_ist(pg_temp.day(8), '19:40'),
+                         'gross_paise', 20_000, 'commission_paise', 4_000, 'net_paise', 16_000))
+  )) ->> 'outcome',
+  'ok',
+  'a complete reconciling swiggy cycle is written whole');
+
+select is(
+  (select count(*) from public.aggregator_channel_days
+    where outlet_id = :'KAL'::uuid and channel = 'swiggy'
+      and business_date between pg_temp.day(9) and pg_temp.day(8)
+      and net_paise + commission_paise = revenue_paise),
+  2::bigint,
+  'every swiggy day stores net plus reduction equal to gross');
+
+-- 230_000 of gross landed on two dates; the 03:59 order joined the earlier one.
+select is(
+  (select revenue_paise from public.aggregator_channel_days
+    where outlet_id = :'KAL'::uuid and channel = 'swiggy'
+      and business_date = pg_temp.day(9)),
+  230_000::bigint,
+  'the 03:59 order settles into the trading shift that started the day before');
+
+select is(
+  (select outcome || ':' || coalesce(bank_status, 'none')
+     from public.aggregator_cycle_reconciliations
+    where channel = 'swiggy' and operator_cycle_ref = 'SW-CYCLE-9'),
+  'reconciled:pending',
+  'a FINAL Pending payout settles the accounting record while the transfer waits');
+
+select is(
+  pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', :'KAL',
+    'channel', 'swiggy',
+    'restaurant_ref', 'RID-ACTIVE',
+    'operator_cycle_ref', 'SW-CYCLE-9',
+    'bank_status', 'paid',
+    'cycle_start', pg_temp.day(9),
+    'cycle_end', pg_temp.day(8),
+    'cycle_state', 'settled',
+    'stated_payout_paise', 199_000,
+    'cycle_deductions', jsonb_build_array(
+      jsonb_build_object('kind', 'tax_deducted_at_source',
+                         'period_start', pg_temp.day(9), 'period_end', pg_temp.day(8),
+                         'amount_paise', -7000, 'source_ref', 'TDS::SW-CYCLE-9')),
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'SW1', 'placed_at', pg_temp.at_ist(pg_temp.day(9), '13:20'),
+                         'gross_paise', 150_000, 'commission_paise', 30_000, 'net_paise', 120_000),
+      jsonb_build_object('order_id', 'SW2', 'placed_at', pg_temp.at_ist(pg_temp.day(8), '03:59'),
+                         'gross_paise', 80_000, 'commission_paise', 10_000, 'net_paise', 70_000),
+      jsonb_build_object('order_id', 'SW3', 'placed_at', pg_temp.at_ist(pg_temp.day(8), '19:40'),
+                         'gross_paise', 20_000, 'commission_paise', 4_000, 'net_paise', 16_000))
+  )) ->> 'outcome',
+  'ok',
+  'payment news arrives as information on a later read');
+
+select is(
+  (select bank_status from public.aggregator_cycle_reconciliations
+    where channel = 'swiggy' and operator_cycle_ref = 'SW-CYCLE-9'),
+  'paid',
+  'and updates only the bank status, leaving every figure exactly where it was');
+
+-- The channel-scoped TDS row is Swiggy's own fact, distinct from any Zomato
+-- deduction in the same week.
+select is(
+  (select source_system || ':' || amount_paise::text
+     from public.aggregator_cycle_deductions
+    where outlet_id = :'KAL'::uuid and source_ref = 'TDS::SW-CYCLE-9'),
+  'swiggy:-7000',
+  'a swiggy cycle''s deductions name their channel');
+
+select throws_ok(
+  format($$select pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1, 'outlet_id', %L, 'channel', 'swiggy',
+    'restaurant_ref', 'RID-ACTIVE', 'operator_cycle_ref', 'SW-INCOMPLETE',
+    'cycle_start', %L, 'cycle_end', %L, 'cycle_state', 'settled',
+    'stated_payout_paise', 1000,
+    'orders', jsonb_build_array(jsonb_build_object(
+      'order_id', 'NOC', 'placed_at', pg_temp.at_ist(pg_temp.day(9), '13:00'),
+      'gross_paise', 1000, 'commission_paise', 300))))$$,
+    :'KAL', pg_temp.day(9), pg_temp.day(8)),
+  '22023', null,
+  'a settled swiggy cycle needs every order''s payout present; undetermined is '
+  'not a settled answer');
+
+select throws_ok(
+  format($$select pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1, 'outlet_id', %L, 'channel', 'swiggy',
+    'restaurant_ref', 'RID-ACTIVE',
+    'bank_status', 'deposited',
+    'cycle_start', %L, 'cycle_end', %L, 'cycle_state', 'provisional',
+    'orders', '[]'::jsonb))$$,
+    :'KAL', pg_temp.day(9), pg_temp.day(8)),
+  '22023', null,
+  'bank status speaks the portal''s three words or none');
+
+-- A disputed swiggy week leaves prior money untouched and names the gap in its
+-- own identity, distinct from any zomato decision about the same dates.
+select is(
+  pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', :'KAL',
+    'channel', 'swiggy',
+    'restaurant_ref', 'RID-ACTIVE',
+    'operator_cycle_ref', 'SW-CYCLE-BAD',
+    'cycle_start', pg_temp.day(6),
+    'cycle_end', pg_temp.day(5),
+    'cycle_state', 'settled',
+    'stated_payout_paise', 500_000,
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'BAD1', 'placed_at', pg_temp.at_ist(pg_temp.day(6), '12:00'),
+                         'gross_paise', 90_000, 'commission_paise', 10_000, 'net_paise', 80_000))
+  )) ->> 'outcome',
+  'reconciliation_failed',
+  'a swiggy week that does not add up refuses to write');
+
+select is(
+  (select count(*) from public.aggregator_channel_days
+    where outlet_id = :'KAL'::uuid and channel = 'swiggy'
+      and business_date between pg_temp.day(6) and pg_temp.day(5)),
+  0::bigint,
+  'and no day of it was written, not even provisional');
+
 select * from finish();
 rollback;

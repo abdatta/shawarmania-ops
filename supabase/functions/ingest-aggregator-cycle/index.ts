@@ -2,11 +2,12 @@ import { serviceClient } from '../_shared/authority.ts'
 import { json, preflight, readJson, str } from '../_shared/http.ts'
 
 /**
- * The door the Zomato reader posts settlement through.
+ * The door the aggregator readers post settlement through.
  *
- * The reader itself lives in a separate private repository, because it holds a
- * live merchant session and this one is public. What lives here is the contract
- * it writes through, and the reasons that contract is shaped the way it is:
+ * The readers themselves live in a separate private repository, because they
+ * hold live merchant sessions and this one is public. What lives here is the
+ * contract they write through, and the reasons that contract is shaped the way
+ * it is:
  *
  *  1. **It decides almost nothing.** `ingest_aggregator_cycle` checks the
  *     contract version, resolves every order's trading day through the outlet's
@@ -39,6 +40,14 @@ import { json, preflight, readJson, str } from '../_shared/http.ts'
  */
 
 const CONTRACT_VERSION = 1
+
+/**
+ * The restaurant channels this boundary serves. Hyperpure is deliberately
+ * absent: its statement books supply expenses through a different contract,
+ * and a payload claiming it here is either a bug or an impostor — refused by
+ * name before anything reaches the database.
+ */
+const CHANNELS: readonly string[] = ['zomato', 'swiggy']
 
 type Outcome =
   'ok' | 'session_lapsed' | 'awaiting_one_time_password' | 'shape_changed' | 'reconciliation_failed'
@@ -103,6 +112,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   if (!outletId || !outlets.includes(outletId)) {
     return json({ error: 'outlet_not_permitted' }, 403)
+  }
+
+  if (!CHANNELS.includes(channel)) {
+    return json({ error: 'unknown_channel', channel }, 400)
   }
 
   if (declared !== undefined && !OUTCOMES.includes(declared)) {
@@ -174,7 +187,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (unreconciled > 0) {
     return await finish(
       'reconciliation_failed',
-      `${unreconciled} cycle(s) did not reconcile against the payout Zomato states it made`,
+      `${unreconciled} cycle(s) did not reconcile against the payout the portal states it made`,
       200,
       { results },
     )
