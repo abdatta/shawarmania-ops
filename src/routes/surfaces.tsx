@@ -25,6 +25,7 @@ import { MenuSurface } from '@/features/menu/menu-surface'
 import { OutletsSurface } from '@/features/outlets/outlets-surface'
 import { RoleHome } from '@/features/overview/role-home'
 import { ZomatoSyncSurface } from '@/features/zomato-sync/zomato-sync-surface'
+import { SwiggySyncSurface } from '@/features/aggregator-sync/swiggy-sync-surface'
 
 import { GatedSurface } from './gated-surface'
 import { NotFound } from './not-found'
@@ -204,6 +205,17 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="ledger/zomato">
         <ZomatoSyncSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // The Swiggy page of the shared sync surface, behind its own gate and its
+    // own attention key: an independent channel whose waiting work is neither
+    // created nor cleared by anything on the Zomato page.
+    path: 'ledger/swiggy',
+    element: (
+      <GatedSurface path="ledger/swiggy">
+        <SwiggySyncSurface />
       </GatedSurface>
     ),
   },

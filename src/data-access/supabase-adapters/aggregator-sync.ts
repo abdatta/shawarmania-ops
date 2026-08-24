@@ -31,17 +31,39 @@ import type { Database } from '../database.types'
  * statement, days written (or a reconciliation refusal) for a Zomato cycle. The
  * owner needs the plain fact, not the JSON: "17 Hyperpure supply orders written".
  */
-function describeUpload(kind: StatementUploadResult['kind'], r: Record<string, unknown>): string {
+function describeUpload(
+  kind: StatementUploadResult['kind'],
+  r: Record<string, unknown>,
+  channel: 'zomato' | 'swiggy',
+): string {
   const count = (value: unknown) => (typeof value === 'number' ? value : Number(value) || 0)
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+  const who = channel === 'swiggy' ? 'Swiggy' : 'Zomato'
 
   if (kind === 'hyperpure-statement') {
     return `${plural(count(r.orders_written), 'Hyperpure supply order', 'Hyperpure supply orders')} written`
   }
-  if (r.outcome === 'reconciliation_failed') {
-    return 'A week did not add up to what Zomato paid — nothing was overwritten'
+  if (kind === 'swiggy-annexure') {
+    if (r.outcome === 'reconciliation_failed') {
+      return 'The annexure did not add up to what Swiggy paid — nothing was overwritten'
+    }
+    const orders = count(r.orders_written)
+    const days = count(r.days_written)
+    if (orders > 0 && days > 0) {
+      return `${plural(days, 'day', 'days')} and ${plural(orders, 'order', 'orders')} of Swiggy figures written`
+    }
+    if (r.evidence_path) return 'Annexure kept as evidence'
+    return `${plural(days, 'day', 'days')} of Swiggy figures written`
   }
-  return `${plural(count(r.days_written), 'day', 'days')} of Zomato figures written`
+  if (kind === 'swiggy-metrics-evidence') {
+    // Written nowhere by design: calendar-day evidence about the portal's own
+    // numbers names no business window, so it can never become a ledger row.
+    return `${plural(count(r.days), 'calendar day', 'calendar days')} read as evidence only — nothing was written`
+  }
+  if (r.outcome === 'reconciliation_failed') {
+    return `A week did not add up to what ${who} paid — nothing was overwritten`
+  }
+  return `${plural(count(r.days_written), 'day', 'days')} of ${who} figures written`
 }
 
 /** How wide a net the duplicate signal casts. Deliberately loose; see below. */
@@ -474,7 +496,7 @@ export function createSupabaseAggregatorSyncAdapter(
       }
       return {
         kind: result.kind,
-        wrote: result.results.map((r) => describeUpload(result.kind, r)),
+        wrote: result.results.map((r) => describeUpload(result.kind, r, channel)),
       }
     },
   }

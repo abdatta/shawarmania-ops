@@ -2301,6 +2301,15 @@ export interface DataAdapters {
   manualLedger: ManualLedgerAdapter
   /** What the Zomato sync has done, and the two things the owner can do about it (#42). */
   aggregatorSync: AggregatorSyncAdapter
+  /**
+   * The same seam, pointed at Swiggy.
+   *
+   * An independent session, mailbox and set of figures, so a Zomato outage can
+   * never be visible on the Swiggy surface or the reverse. The interface is
+   * deliberately shared: runs, reconciliations and channel days answer the same
+   * questions, and two interfaces would drift exactly where they agree.
+   */
+  swiggySync: AggregatorSyncAdapter
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2529,7 +2538,12 @@ export interface StatementUpload {
 
 export interface StatementUploadResult {
   /** What the file turned out to be, once its content was read. */
-  kind: 'zomato-order-history' | 'zomato-settlement' | 'hyperpure-statement'
+  kind:
+    | 'zomato-order-history'
+    | 'zomato-settlement'
+    | 'hyperpure-statement'
+    | 'swiggy-annexure'
+    | 'swiggy-metrics-evidence'
   /** A short, human line per outlet the upload touched. */
   wrote: readonly string[]
 }
