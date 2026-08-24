@@ -93,3 +93,38 @@ Display text becomes **Unpaid Prepared Orders** everywhere user-visible: rail he
 ## D9 — Demo parity rides along, as tasks
 
 Four fidelity gaps close with the adapter work: mock commands all queue uniformly with provisional `Local · XXXX` references until a simulated delivery assigns numbers; the seeded pending bill drains on subscribe like the live coordinator does; open-order lists go outlet-wide with a second fabricated tablet contributing seed orders (exercising creator chips and cross-device cards); and `payOrder`/`saveOrder` stop being instant while direct bills queue. Demo-sim quirkiness observed during exploration (fixture timestamps later than the viewer's clock) is left as-is deliberately: the scenario spanning a trading day is the point.
+
+## D10 — Owner feedback round: colour, silence, and the deferred bill
+
+Counter-owner review reshaped the rail’s language and one settlement rule. Each directive, and what it decided:
+
+- **No headings, no info bars.** The two bands are identified by colour alone (ember for Preparing, green for Unpaid Prepared) with the labelled divider as their only words; actions never insert a confirmation bar — the card’s new band, the PAID chip, and the money flight are the acknowledgement. Errors keep the inline ole=alert line: a refusal that says nothing is a mystery, not silence.
+- **Green is a token pair.** --on-success joins the semantic layer in both themes (--brand-white on veg-deep, stone-900 on veg-soft), mirroring on-warning, and is contrast-gated like every pair. Components never touch the hexes.
+- **Verb-only labels.** Mark prepared / Mark paid become **Prepared** / **Paid** everywhere on the counter, dialog confirm included. Preparing cards grow a secondary **Paid** (pay upfront directly); Unpaid Prepared cards promote Reprepare out of the kebab into a visible secondary.
+- **Bills only when prepared AND paid.** Paying an unprepared order holds its tender against the order without creating a bill; marking it prepared is what settles it. The mock implements this fully (held tender store, settle-on-prepare at delivery, unwinds that discard held money when no bill exists). The live adapter keeps today’s settle-at-pay behaviour until its promoting change carries the matching database functions — the divergence is deliberate, typed in the interface (“null = held”), and confined to the demo gate.
+
+## D11 — Production follow-up: the day history re-entered the rail
+
+Deploying a nullable axis onto a live counter has a consequence this change under-specified: every row predating the axis wears the null that the pipeline reads as still preparing. Within hours, 269 paid orders since the counter’s first day stood in Preparing wearing Paid markers, and the owner’s history tab labelled them Unpaid prepared. The decision this records: **a paid order with no preparation record is history, not work in flight** — its payment moment is its preparation record. `backfill_prepared_history()` stamps exactly that (paid rows only; open stays open; cancelled is untouchable), runs once inside the migration chain so every environment agrees with production, and revokes itself from client roles because marking history prepared is maintenance, not a counter verb. The manager tab keeps its plain Open orders name, counting the whole board honestly; the section headings keep D8’s rename. Bounding pipeline reads by business date was
+considered and refused: stranded unpaid work must remain visible to be
+cancelled, and after the backfill there is no flood left to bound.
+
+## D12 — The board shares its height; nothing scrolls the whole rail
+
+The rail’s one long scroller carried a hidden assumption: that both bands fit.
+A lunch rush breaks it — Preparing fills the column and the money band, the
+section the counter most needs in view, slides off screen. The fix is not a
+max-height guess but a different sharing rule: each band takes `flex-grow`
+equal to its order count from a zero basis, so space follows work; each list
+scrolls inside its own band (`overflow-y-auto`, `min-h-0`); and every
+populated band holds a floor of one **measured** first card (resize-aware),
+with the spec’s 120px one-ticket figure as the pre-measurement fallback. A
+band with two orders yields everything it does not need; a band with forty
+cannot take the last ticket of its neighbour. The divider stops shrinking, so
+its label is always the seam between the two questions.
+
+The docked edit card gets stronger guarantees for free: it leaves the
+scroller entirely and sits in an unmoving region above both bands, so no
+scroll anywhere can take an order under edit out of view — previously true
+only while sticky positioning cooperated. FLIP flights are unaffected: they
+measure viewport-relative rects, which scroll containers do not change.

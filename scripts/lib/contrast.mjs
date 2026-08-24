@@ -73,7 +73,7 @@ export const CHECKS = [
 
   { fg: '--on-primary', bg: '--primary', min: AA_TEXT, note: 'label on a primary button' },
   { fg: '--on-warning', bg: '--warning', min: AA_TEXT, note: 'ink on warning — never white' },
-
+  { fg: '--on-success', bg: '--success', min: AA_TEXT, note: 'label on a success button' },
   {
     fg: '--qr-module',
     bg: '--qr-field',

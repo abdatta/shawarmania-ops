@@ -38,7 +38,9 @@ it('uses the same focused reason dialog when cancelling an open order', async ()
   )
 
   await user.click(await screen.findByRole('tab', { name: /Open orders/ }))
-  await user.click(screen.getByRole('button', { name: 'Cancel this order' }))
+  // Two pipeline sections are seeded; scope to order 104 so the assertion names one card.
+  const card = screen.getByTestId('manager-open-order-104')
+  await user.click(within(card).getByRole('button', { name: 'Cancel this order' }))
 
   const dialog = screen.getByRole('dialog', { name: 'Cancel order 104' })
   expect(dialog).toBeVisible()

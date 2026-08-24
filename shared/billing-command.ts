@@ -17,6 +17,9 @@ export type BillingCommandType =
   | 'void_bill'
   | 'manager_cancel_order'
   | 'confirm_end_of_day'
+  | 'set_order_preparation'
+  | 'void_order_payment'
+  | 'cancel_paid_order'
 
 export type BillingPaymentMethod = 'cash' | 'upi'
 export type BillingPricingMode = 'no_tax'
@@ -99,6 +102,19 @@ export interface ConfirmEndOfDayPayload {
   readonly needsAttentionCount: number
 }
 
+/** Marking prepared or repreparing an order, by the tablet that took it. */
+export interface SetOrderPreparationPayload {
+  readonly orderId: string
+  readonly prepared: boolean
+}
+
+/** One reasoned unwind of a counter payment, by the tablet that took it. */
+export interface UnwindOrderPaymentPayload {
+  readonly orderId: string
+  readonly billId: string
+  readonly reason: string
+}
+
 export interface BillingCommandPayloads {
   readonly create_order: CreateOrderPayload
   readonly revise_order: ReviseOrderPayload
@@ -109,6 +125,9 @@ export interface BillingCommandPayloads {
   readonly void_bill: VoidBillPayload
   readonly manager_cancel_order: CancelOrderPayload
   readonly confirm_end_of_day: ConfirmEndOfDayPayload
+  readonly set_order_preparation: SetOrderPreparationPayload
+  readonly void_order_payment: UnwindOrderPaymentPayload
+  readonly cancel_paid_order: UnwindOrderPaymentPayload
 }
 
 export interface BillingCommandEnvelope<
@@ -190,4 +209,7 @@ export const BILLING_COMMAND_RPC: Readonly<Record<BillingCommandType, string>> =
   void_bill: 'void_billing_bill',
   manager_cancel_order: 'manager_cancel_billing_order',
   confirm_end_of_day: 'confirm_billing_end_of_day',
+  set_order_preparation: 'prepare_billing_order',
+  void_order_payment: 'unpay_billing_order',
+  cancel_paid_order: 'cancel_paid_billing_order',
 }

@@ -87,6 +87,7 @@ function orderView(row: OrderReadRow): BillingOrder {
     localReference: null,
     businessDate: row.business_date,
     orderedAt: row.ordered_at,
+    preparedAt: row.prepared_at,
     status: row.status,
     creatorId: row.created_by,
     creatorName: joined(row.creator)?.full_name ?? 'Counter operator',
@@ -97,6 +98,7 @@ function orderView(row: OrderReadRow): BillingOrder {
     cancelReason: row.cancel_reason,
     cancelledAt: row.cancelled_at,
     cancelledByName: joined(row.canceller)?.full_name ?? null,
+    paidAt: row.paid_at,
     billId: row.bill_id,
   }
 }
@@ -132,6 +134,7 @@ function billView(
     id: row.id,
     outletId: row.outlet_id,
     billNumber: row.bill_number,
+    orderId: row.order_id,
     orderNumber: joined(row.order)?.order_number ?? null,
     businessDate: row.business_date,
     orderedAt: row.ordered_at,
@@ -149,6 +152,7 @@ function billView(
     customerPhone: row.customer_phone,
     lines: row.bill_items.map(lineView),
     totalPaise: row.total_paise,
+    voidKind: row.void_kind,
     voidReason: row.void_reason,
     voidedAt: row.voided_at,
     voidedBy: voider ? { id: voider.id, name: voider.full_name } : null,
@@ -351,7 +355,17 @@ export function createSupabaseBillingAdapter(
     })
   }
 
-  async function readOrders(outletId: string, onlyOpen: boolean): Promise<BillingOrder[]> {
+  /**
+   * Is this order still on the counter's pipeline? Open orders always are; a
+   * **paid but not yet prepared** order is too — it stays in Preparing wearing
+   * its Paid marker until preparation lands it in Bills. A paid and prepared
+   * order is fully done, and a cancelled one never was pipeline work.
+   */
+  function inPipeline(order: Pick<BillingOrder, 'status' | 'preparedAt'>): boolean {
+    return order.status === 'open' || (order.status === 'paid' && order.preparedAt === null)
+  }
+
+  async function readOrders(outletId: string, pipelineOnly: boolean): Promise<BillingOrder[]> {
     let query = client
       .from('orders')
       .select(
@@ -359,13 +373,14 @@ export function createSupabaseBillingAdapter(
       )
       .eq('outlet_id', outletId)
       .order('ordered_at', { ascending: false })
-    if (onlyOpen) query = query.eq('status', 'open')
+    // Both money states come back and `inPipeline` decides below.
+    if (pipelineOnly) query = query.in('status', ['open', 'paid'])
     const { data, error } = await query
     let orders: BillingOrder[]
     if (error) {
       if (!counterSession?.shift) throw actionError(error, 'Could not load open orders.')
       orders = [...orderCache.values()].filter(
-        (order) => order.outletId === outletId && (!onlyOpen || order.status === 'open'),
+        (order) => order.outletId === outletId && (!pipelineOnly || inPipeline(order)),
       )
     } else {
       orders = (data as unknown as OrderReadRow[]).map(orderView)
@@ -392,6 +407,7 @@ export function createSupabaseBillingAdapter(
               localReference: `Local · ${provisionalToken(envelope.commandId)}`,
               businessDate: payload.businessDate,
               orderedAt: envelope.command.createdAt,
+              preparedAt: null,
               status: 'open',
               creatorId: counterSession.shift?.personId ?? '',
               creatorName: 'Counter operator',
@@ -407,6 +423,7 @@ export function createSupabaseBillingAdapter(
               cancelReason: null,
               cancelledAt: null,
               cancelledByName: null,
+              paidAt: null,
               billId: null,
             })
             break
@@ -430,8 +447,61 @@ export function createSupabaseBillingAdapter(
             }
             break
           }
+          case 'set_order_preparation': {
+            const current = overlaid.get(envelope.command.payload.orderId)
+            if (current) {
+              overlaid.set(envelope.command.payload.orderId, {
+                ...current,
+                preparedAt: envelope.command.payload.prepared ? envelope.command.createdAt : null,
+              })
+            }
+            break
+          }
+          case 'pay_order': {
+            // Paid locally: the card leaves Unpaid Prepared Orders, but a paid
+            // and still-unprepared order stays in Preparing under its PAID
+            // marker rather than vanishing from the rail.
+            const current = overlaid.get(envelope.command.payload.orderId)
+            if (current) {
+              overlaid.set(envelope.command.payload.orderId, {
+                ...current,
+                status: 'paid',
+                paidAt: envelope.command.payload.paidAt,
+                billId: envelope.command.payload.billId,
+              })
+            }
+            break
+          }
+          case 'void_order_payment': {
+            // The unwind reopens the order before the server has seen either
+            // half, so a read between them shows one open order — not a paid
+            // ghost and an open double.
+            const current = overlaid.get(envelope.command.payload.orderId)
+            if (current) {
+              overlaid.set(envelope.command.payload.orderId, {
+                ...current,
+                status: 'open',
+                paidAt: null,
+                billId: null,
+                cancelReason: null,
+                cancelledAt: null,
+                cancelledByName: null,
+              })
+            }
+            break
+          }
+          case 'cancel_paid_order': {
+            const current = overlaid.get(envelope.command.payload.orderId)
+            if (current) {
+              overlaid.set(envelope.command.payload.orderId, {
+                ...current,
+                status: 'cancelled',
+                billId: null,
+              })
+            }
+            break
+          }
           case 'cancel_order':
-          case 'pay_order':
             overlaid.delete(envelope.command.payload.orderId)
             break
           default:
@@ -442,7 +512,7 @@ export function createSupabaseBillingAdapter(
     }
 
     for (const order of orders) orderCache.set(order.id, order)
-    return orders.filter((order) => !onlyOpen || order.status === 'open')
+    return orders.filter((order) => !pipelineOnly || inPipeline(order))
   }
 
   async function readOrder(orderId: string): Promise<BillingOrder | null> {
@@ -556,6 +626,7 @@ export function createSupabaseBillingAdapter(
             previous?.localReference ?? `Local · ${provisionalToken(command.payload.orderId)}`,
           businessDate: command.payload.businessDate,
           orderedAt: previous?.orderedAt ?? command.createdAt,
+          preparedAt: null,
           status: 'open',
           creatorId: counterSession.shift?.personId ?? '',
           creatorName: previous?.creatorName ?? 'Counter operator',
@@ -571,6 +642,7 @@ export function createSupabaseBillingAdapter(
           cancelReason: null,
           cancelledAt: null,
           cancelledByName: null,
+          paidAt: null,
           billId: null,
         })
         continue
@@ -582,6 +654,7 @@ export function createSupabaseBillingAdapter(
           outletId: envelope.outletId,
           billNumber: bills.get(command.payload.billId)?.billNumber ?? 0,
           orderNumber: null,
+          orderId: null,
           businessDate: command.payload.businessDate,
           orderedAt: command.createdAt,
           paidAt: command.createdAt,
@@ -604,6 +677,7 @@ export function createSupabaseBillingAdapter(
             quantity: line.quantity,
           })),
           totalPaise: command.payload.totalPaise,
+          voidKind: null,
           voidReason: null,
           voidedAt: null,
           voidedBy: null,
@@ -622,6 +696,7 @@ export function createSupabaseBillingAdapter(
             outletId: order.outletId,
             billNumber: 0,
             orderNumber: order.orderNumber,
+            orderId: command.payload.orderId,
             businessDate: order.businessDate,
             orderedAt: order.orderedAt,
             paidAt: command.payload.paidAt,
@@ -639,11 +714,20 @@ export function createSupabaseBillingAdapter(
             customerPhone: order.customerPhone,
             lines: order.lines,
             totalPaise: order.totalPaise,
+            voidKind: null,
             voidReason: null,
             voidedAt: null,
             voidedBy: null,
           })
         }
+        continue
+      }
+
+      if (command.type === 'void_order_payment' || command.type === 'cancel_paid_order') {
+        // The counter-kind void drops the bill from the shift before delivery,
+        // so the totals this screen shows never count money the counter has
+        // already taken back.
+        bills.delete(command.payload.billId)
         continue
       }
 
@@ -877,6 +961,7 @@ export function createSupabaseBillingAdapter(
         outletId: draft.outletId,
         billNumber: 0,
         orderNumber: null,
+        orderId: null,
         businessDate: draft.businessDate,
         orderedAt: command.createdAt,
         paidAt: command.createdAt,
@@ -893,6 +978,7 @@ export function createSupabaseBillingAdapter(
         customerPhone: draft.customerPhone?.trim() || null,
         lines: [...draft.lines],
         totalPaise: totals.totalPaise,
+        voidKind: null,
         voidReason: null,
         voidedAt: null,
         voidedBy: null,
@@ -978,6 +1064,7 @@ export function createSupabaseBillingAdapter(
         localReference: `Local · ${provisionalToken(input.clientId)}`,
         businessDate: input.businessDate,
         orderedAt: command.createdAt,
+        preparedAt: null,
         status: 'open',
         creatorId: shift.personId,
         creatorName: 'Counter operator',
@@ -988,6 +1075,7 @@ export function createSupabaseBillingAdapter(
         cancelReason: null,
         cancelledAt: null,
         cancelledByName: null,
+        paidAt: null,
         billId: null,
       }
       orderCache.set(input.clientId, localOrder)
@@ -1016,7 +1104,7 @@ export function createSupabaseBillingAdapter(
       return readOrders(outletId, true)
     },
 
-    async payOrder(orderId, payments): Promise<BillingBill> {
+    async payOrder(orderId, payments): Promise<BillingBill | null> {
       const { session, shift } = requireTablet()
       const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
       if (!existing) throw new BillingActionError('not_found', 'That order is no longer open.')
@@ -1035,12 +1123,25 @@ export function createSupabaseBillingAdapter(
         },
       })
       await accept(command, existing.outletId, existing.businessDate, orderId)
-      orderCache.delete(orderId)
+      // Until the promoting change moves settlement to prepare-time, the live
+      // database settles every payment at once — even for an unprepared order.
+      // The mock already defers; this path returns the provisional bill so the
+      // two adapters keep one interface.
+      // Kept, not deleted: a paid-but-unprepared order is still pipeline work,
+      // and marking it prepared must not depend on a fresh server read.
+      const paidOrder: BillingOrder = {
+        ...existing,
+        status: 'paid',
+        paidAt: command.payload.paidAt,
+        billId: command.payload.billId,
+      }
+      orderCache.set(orderId, paidOrder)
       const localBill: BillingBill = {
         id: command.payload.billId,
         outletId: existing.outletId,
         billNumber: 0,
         orderNumber: existing.orderNumber,
+        orderId: orderId,
         businessDate: existing.businessDate,
         orderedAt: existing.orderedAt,
         paidAt: command.payload.paidAt,
@@ -1057,6 +1158,7 @@ export function createSupabaseBillingAdapter(
         customerPhone: existing.customerPhone,
         lines: existing.lines,
         totalPaise: existing.totalPaise,
+        voidKind: null,
         voidReason: null,
         voidedAt: null,
         voidedBy: null,
@@ -1082,6 +1184,112 @@ export function createSupabaseBillingAdapter(
       await accept(command, existing.outletId, existing.businessDate, orderId)
       const cancelled = { ...existing, status: 'cancelled' as const, cancelReason: reason.trim() }
       orderCache.set(orderId, cancelled)
+      return cancelled
+    },
+
+    async markOrderPrepared(orderId, prepared): Promise<BillingOrder> {
+      const { session, shift } = requireTablet()
+      const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
+      if (!existing)
+        throw new BillingActionError('not_found', 'That order is no longer on the pipeline.')
+      // Mirrors the database's guard so a deterministic refusal never has to
+      // travel: only an open order moves, and a paid order may still be marked
+      // prepared — but never reprepared, because the bills border is terminal
+      // in that direction.
+      if (existing.status === 'paid' && !prepared) {
+        throw new BillingActionError(
+          'not_open',
+          'This order is paid, so it cannot go back to preparing. Take the payment back first.',
+        )
+      }
+      if (existing.status !== 'open' && !(existing.status === 'paid' && prepared)) {
+        throw new BillingActionError('not_open', `Order ${existing.orderNumber} is not open.`)
+      }
+      const command = await createBillingCommand({
+        commandId: newUuid(),
+        tabletId: session.device.deviceId,
+        shiftId: shift.id,
+        type: 'set_order_preparation',
+        createdAt: new Date().toISOString(),
+        payload: { orderId, prepared },
+      })
+      await accept(command, existing.outletId, existing.businessDate, orderId)
+      const updated: BillingOrder = {
+        ...existing,
+        preparedAt: prepared ? command.createdAt : null,
+      }
+      orderCache.set(orderId, updated)
+      return updated
+    },
+
+    async unpayOrder(orderId, billId, reason): Promise<BillingOrder> {
+      const { session, shift } = requireTablet()
+      if (!reason.trim())
+        throw new BillingActionError('blank_reason', 'Taking a payment back needs a reason.')
+      const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
+      // Until the promoting change moves settlement to prepare-time, every
+      // live payment settles immediately — so only a bill-backed unwind
+      // exists here. A held payment without a bill is a mock-only state.
+      if (!existing || billId === null || existing.billId !== billId) {
+        throw new BillingActionError('not_found', 'That payment is not on this tablet.')
+      }
+      const command = await createBillingCommand({
+        commandId: newUuid(),
+        tabletId: session.device.deviceId,
+        shiftId: shift.id,
+        type: 'void_order_payment',
+        createdAt: new Date().toISOString(),
+        payload: { orderId, billId, reason: reason.trim() },
+      })
+      // Same chain as the payment it reverses, so delivery can never overtake
+      // the pay_order that created the money in the first place.
+      await accept(command, existing.outletId, existing.businessDate, orderId)
+      const reopened: BillingOrder = {
+        ...existing,
+        status: 'open',
+        paidAt: null,
+        billId: null,
+        cancelReason: null,
+        cancelledAt: null,
+        cancelledByName: null,
+      }
+      orderCache.set(orderId, reopened)
+      localBillCache.delete(billId)
+      return reopened
+    },
+
+    async cancelPaidOrder(orderId, reason): Promise<BillingOrder> {
+      const { session, shift } = requireTablet()
+      if (!reason.trim())
+        throw new BillingActionError('blank_reason', 'A cancellation needs a reason.')
+      const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
+      if (!existing || !existing.billId) {
+        throw new BillingActionError(
+          'not_found',
+          'That paid order is not one this tablet can cancel.',
+        )
+      }
+      const billId = existing.billId
+      const command = await createBillingCommand({
+        commandId: newUuid(),
+        tabletId: session.device.deviceId,
+        shiftId: shift.id,
+        type: 'cancel_paid_order',
+        createdAt: new Date().toISOString(),
+        payload: { orderId, billId, reason: reason.trim() },
+      })
+      await accept(command, existing.outletId, existing.businessDate, orderId)
+      const cancelled: BillingOrder = {
+        ...existing,
+        status: 'cancelled',
+        paidAt: null,
+        billId: null,
+        cancelReason: reason.trim(),
+        cancelledAt: command.createdAt,
+        cancelledByName: null,
+      }
+      orderCache.set(orderId, cancelled)
+      localBillCache.delete(billId)
       return cancelled
     },
 

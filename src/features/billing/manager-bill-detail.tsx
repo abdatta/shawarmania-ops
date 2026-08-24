@@ -138,6 +138,9 @@ export function ManagerBillDetail({
         >
           <span className="font-black text-danger">Cancelled</span>
           <span>{` by ${cancellationActor}`}</span>
+          {bill.voidKind === 'cancelled_after_paid' && (
+            <span className="font-black text-danger">· Cancelled after paid</span>
+          )}
           <span aria-hidden className="text-content-muted">
             {' · '}
           </span>

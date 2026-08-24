@@ -16,7 +16,6 @@ import { EmptyState } from '@/components/layout/empty-state'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Button } from '@/components/ui/button'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
-import { Money } from '@/components/ui/money'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
@@ -38,6 +37,7 @@ import { BillPanel } from './bill-panel'
 import { CounterActivityRail } from './counter-activity-rail'
 import { EditingOrderPin } from './editing-order-pin'
 import { MenuGrid } from './menu-grid'
+import { MyShiftSurface } from './my-shift-surface'
 import { PaymentDialog } from './payment-dialog'
 import { useCounterState } from './use-counter-state'
 
@@ -52,15 +52,16 @@ import { useCounterState } from './use-counter-state'
  * to go looking for the order they were about to take money for.
  *
  * Food-first is the default. **Order** saves the preparation so the kitchen can
- * start, and the money is taken on handover, from the rail. **Mark Paid** is the
+ * start, and the money is taken on handover, from the rail. **Paid** is the
  * secondary path for the rarer upfront payment; neither settles on the spot —
  * tender is captured in a tap-first dialog.
  *
  * **A direct payment waits only for durable local acceptance.** The panel clears
- * after IndexedDB commits, never after a network response. What appears
- * afterwards is a short confirmation, and it clears itself: the next customer
- * never waits for delivery. Tender corrections remain available with the bill
- * in Bills this shift for five minutes.
+ * after IndexedDB commits, never after a network response, and no confirmation
+ * bar is inserted — the panel giving way to Bills this shift, with the new bill
+ * queued in it, is the signal. The next customer never waits for delivery.
+ * Tender corrections remain available with the bill in Bills this shift for
+ * five minutes.
  *
  * Editing a saved order borrows this same composer: the order goes onto the
  * panel, any draft already in progress is suspended and restored afterwards, and
@@ -75,13 +76,10 @@ interface Restorable {
   payments: PaymentAllocation[]
 }
 
-interface Confirmation {
-  clientId: string
-  totalPaise: number
-}
-
 const COUNTER_COLUMN_RESIZE_STEP = 16
 const COUNTER_COLUMN_WIDTHS_KEY = 'shawarmania.counter-column-widths'
+// `gap-3` sits between each pair of the three workspace tracks.
+const COUNTER_WORKSPACE_GAPS_WIDTH = 24
 
 type CounterColumn = 'bill' | 'activity'
 
@@ -135,23 +133,39 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   const [paymentPreset, setPaymentPreset] = useState<PaymentAllocation[]>([])
   const [error, setError] = useState<string | null>(null)
   const [settling, setSettling] = useState(false)
-  const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
   const [customerMatch, setCustomerMatch] = useState<CustomerIdentity | null>(null)
   const [customerMatchPhone, setCustomerMatchPhone] = useState<string | null>(null)
   const [declinedPhone, setDeclinedPhone] = useState<string | null>(null)
-  const [activityRefresh, setActivityRefresh] = useState(0)
+  // A command reloads the surface that performed it itself. These two signals
+  // refresh only the *other* column, preventing a pipeline action from loading
+  // the rail twice and replaying its FLIP motion.
+  const [billRefresh, setBillRefresh] = useState(0)
+  const [pipelineRefresh, setPipelineRefresh] = useState(0)
   const [editingOrder, setEditingOrder] = useState<BillingOrder | null>(null)
   const [columnWidths, setColumnWidths] = useState<CounterColumnWidths>(readCounterColumnWidths)
 
   const outletId = counterOutletId ?? session?.outletId ?? null
-  const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const suspendedDraft = useRef<Restorable | null>(null)
   const hasMenu = useRef(false)
+  const workspaceRef = useRef<HTMLDivElement>(null)
   const resize = useRef<{ column: CounterColumn; startX: number; startWidth: number } | null>(null)
 
   const resizeColumn = useCallback((column: CounterColumn, requestedWidth: number) => {
-    const width = Math.max(counterColumnMinWidth(), Math.round(requestedWidth))
     setColumnWidths((current) => {
+      const minimumWidth = counterColumnMinWidth()
+      const otherColumn = column === 'bill' ? 'activity' : 'bill'
+      const workspaceWidth = workspaceRef.current?.clientWidth ?? 0
+      // Once the menu has spent all of its flexible width, a wider resizable
+      // track would only create new horizontal overflow. On genuinely narrow
+      // viewports the three minimum tracks intentionally scroll sideways.
+      const maximumWidth =
+        workspaceWidth > 0
+          ? Math.max(
+              minimumWidth,
+              workspaceWidth - minimumWidth - current[otherColumn] - COUNTER_WORKSPACE_GAPS_WIDTH,
+            )
+          : Number.POSITIVE_INFINITY
+      const width = Math.min(maximumWidth, Math.max(minimumWidth, Math.round(requestedWidth)))
       const next = { ...current, [column]: width }
       try {
         window.localStorage.setItem(COUNTER_COLUMN_WIDTHS_KEY, JSON.stringify(next))
@@ -222,7 +236,8 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
 
   const refreshVisibleData = useCallback(() => {
     void Promise.resolve().then(refreshMenu)
-    setActivityRefresh((value) => value + 1)
+    setBillRefresh((value) => value + 1)
+    setPipelineRefresh((value) => value + 1)
   }, [refreshMenu])
 
   useEffect(() => {
@@ -249,13 +264,6 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     if (!outletId) return
     return counter.subscribeToOutletBilling(outletId, refreshVisibleData)
   }, [counter, outletId, refreshVisibleData])
-
-  useEffect(
-    () => () => {
-      if (dismissTimer.current) clearTimeout(dismissTimer.current)
-    },
-    [],
-  )
 
   /**
    * Hold off a waiting build while an order is being composed.
@@ -421,7 +429,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         customerPhone,
       })
       clearPanel()
-      setActivityRefresh((value) => value + 1)
+      setPipelineRefresh((value) => value + 1)
     } catch (cause) {
       setError(cause instanceof DataActionError ? cause.message : 'That order could not be saved.')
     } finally {
@@ -442,7 +450,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         customerPhone,
       })
       leaveOrderEdit()
-      setActivityRefresh((value) => value + 1)
+      setPipelineRefresh((value) => value + 1)
     } catch (cause) {
       setError(
         cause instanceof DataActionError ? cause.message : 'That order could not be updated.',
@@ -495,14 +503,8 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         customerPhone,
       })
       setPaymentDialogOpen(false)
-      setConfirmation({ clientId, totalPaise })
       clearPanel()
-      setActivityRefresh((value) => value + 1)
-
-      // The confirmation clears itself quickly; the durable five-minute edit
-      // action remains with the bill in Bills this shift.
-      if (dismissTimer.current) clearTimeout(dismissTimer.current)
-      dismissTimer.current = setTimeout(() => setConfirmation(null), 2_500)
+      setBillRefresh((value) => value + 1)
     } catch (cause) {
       setError(
         cause instanceof DataActionError
@@ -573,6 +575,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     */
     <div
       data-testid="counter-workspace"
+      ref={workspaceRef}
       className="grid h-full min-h-0 grid-cols-[minmax(22rem,1fr)_var(--counter-bill-width)_var(--counter-activity-width)] gap-3 overflow-x-auto overflow-y-hidden"
       style={
         {
@@ -622,7 +625,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         )}
       </div>
 
-      <div className="relative flex min-h-0 flex-col gap-2">
+      <div className="relative flex min-h-0 flex-col gap-2" data-testid="bill-column">
         <div
           role="separator"
           aria-label="Resize current bill column"
@@ -641,79 +644,76 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           onKeyDown={(event) => resizeColumnWithKeyboard('bill', event)}
           className="absolute -left-2.5 top-0 z-20 h-full w-5 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
         />
-        <BillPanel
-          lines={lines}
-          onChangeQuantity={changeQuantity}
-          {...(editingOrder
-            ? {
-                editingOrderReference:
-                  editingOrder.localReference ?? `order #${editingOrder.orderNumber}`,
-              }
-            : { footer: composerFooter })}
-        />
+        {/*
+          The middle column is Bills this shift by default, and the composer is
+          a mode over it (design D5): composition starts on the first item tap,
+          ends on save, settle or cancel-edit, and the money list it serves is
+          what shows through in between. An order opened for edit borrows the
+          same mode.
+        */}
+        {lines.length > 0 || editingOrder ? (
+          <>
+            <BillPanel
+              lines={lines}
+              onChangeQuantity={changeQuantity}
+              {...(editingOrder
+                ? {
+                    editingOrderReference:
+                      editingOrder.localReference ?? `order #${editingOrder.orderNumber}`,
+                  }
+                : { footer: composerFooter })}
+            />
 
-        {visibleCustomerMatch && (
-          <div
-            className="rounded-xl border border-primary bg-surface p-3"
-            role="status"
-            data-testid="customer-match"
-          >
-            <div className="flex gap-2">
-              <UserRoundCheck aria-hidden className="mt-0.5 text-primary" size={20} />
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-content">Returning customer found</p>
-                <p className="text-sm text-content-muted">
-                  {visibleCustomerMatch.name
-                    ? customerName.trim() && customerName.trim() !== visibleCustomerMatch.name
-                      ? `Use ${visibleCustomerMatch.name}? This replaces the name in this order only.`
-                      : `Fill this order with ${visibleCustomerMatch.name}?`
-                    : 'This phone has no saved name.'}
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <Button
-                    size="phone"
-                    onClick={() => {
-                      if (visibleCustomerMatch.name) setCustomerName(visibleCustomerMatch.name)
-                      setCustomerMatch(null)
-                      setDeclinedPhone(validateIndianPhone(customerPhone).phone)
-                    }}
-                  >
-                    Use saved details
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="phone"
-                    onClick={() => {
-                      setCustomerMatch(null)
-                      setDeclinedPhone(validateIndianPhone(customerPhone).phone)
-                    }}
-                  >
-                    Keep this order
-                  </Button>
+            {visibleCustomerMatch && (
+              <div
+                className="rounded-xl border border-primary bg-surface p-3"
+                role="status"
+                data-testid="customer-match"
+              >
+                <div className="flex gap-2">
+                  <UserRoundCheck aria-hidden className="mt-0.5 text-primary" size={20} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-content">Returning customer found</p>
+                    <p className="text-sm text-content-muted">
+                      {visibleCustomerMatch.name
+                        ? customerName.trim() && customerName.trim() !== visibleCustomerMatch.name
+                          ? `Use ${visibleCustomerMatch.name}? This replaces the name in this order only.`
+                          : `Fill this order with ${visibleCustomerMatch.name}?`
+                        : 'This phone has no saved name.'}
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        size="phone"
+                        onClick={() => {
+                          if (visibleCustomerMatch.name) setCustomerName(visibleCustomerMatch.name)
+                          setCustomerMatch(null)
+                          setDeclinedPhone(validateIndianPhone(customerPhone).phone)
+                        }}
+                      >
+                        Use saved details
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="phone"
+                        onClick={() => {
+                          setCustomerMatch(null)
+                          setDeclinedPhone(validateIndianPhone(customerPhone).phone)
+                        }}
+                      >
+                        Keep this order
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
-
-        {confirmation && (
-          <div
-            role="status"
-            data-testid="settled-confirmation"
-            className="flex items-center gap-2 rounded-xl border border-success bg-surface p-2"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-content">
-                Settled <Money paise={confirmation.totalPaise} />
-              </p>
-              <p className="truncate text-xs text-content-muted">
-                <span data-testid="local-reference">
-                  Local · {confirmation.clientId.replaceAll('-', '').slice(0, 4).toUpperCase()}
-                </span>{' '}
-                — saved on this tablet. Edit tender from Bills this shift.
-              </p>
-            </div>
-          </div>
+            )}
+          </>
+        ) : (
+          <MyShiftSurface
+            embedded
+            refreshKey={billRefresh}
+            onActivityChanged={() => setPipelineRefresh((value) => value + 1)}
+          />
         )}
       </div>
 
@@ -737,9 +737,10 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           className="absolute -left-2.5 top-0 z-20 h-full w-5 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
         />
         <CounterActivityRail
-          refreshKey={activityRefresh}
+          refreshKey={pipelineRefresh}
           editingOrder={editingOrder}
           onEditOrder={beginOrderEdit}
+          onActivityChanged={() => setBillRefresh((value) => value + 1)}
           pin={
             editingOrder && (
               <EditingOrderPin

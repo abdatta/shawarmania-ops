@@ -1093,6 +1093,12 @@ export interface BillingOrder {
   localReference?: string | null
   businessDate: Tables<'orders'>['business_date']
   orderedAt: Tables<'orders'>['ordered_at']
+  /**
+   * The preparation axis, independent of `status` (the money lifecycle). Null
+   * means still preparing; a timestamp means prepared, and clearing it back to
+   * null is reprepare. Paid-but-null is the upfront payer still waiting for food.
+   */
+  preparedAt: Tables<'orders'>['prepared_at']
   status: OrderStatus
   creatorId: Tables<'orders'>['created_by']
   creatorName: string
@@ -1103,8 +1109,13 @@ export interface BillingOrder {
   cancelReason: Tables<'orders'>['cancel_reason']
   cancelledAt: Tables<'orders'>['cancelled_at']
   cancelledByName: string | null
+  /** When the money arrived — what the five-minute unwind window measures from. */
+  paidAt: Tables<'orders'>['paid_at']
   billId: Tables<'orders'>['bill_id']
 }
+
+/** Which kind of act voided a settled bill, stamped by the performing transaction. */
+export type BillVoidKind = NonNullable<Tables<'bills'>['void_kind']>
 
 export interface SaveOrderInput {
   clientId: string
@@ -1121,6 +1132,8 @@ export interface BillingBill {
   id: Tables<'bills'>['id']
   outletId: Tables<'bills'>['outlet_id']
   billNumber: Tables<'bills'>['bill_number']
+  /** The order this bill settled, when it came from one. What unwinds chain to. */
+  orderId: Tables<'bills'>['order_id']
   orderNumber: Tables<'orders'>['order_number'] | null
   businessDate: Tables<'bills'>['business_date']
   orderedAt: Tables<'bills'>['ordered_at']
@@ -1141,6 +1154,12 @@ export interface BillingBill {
   customerPhone: Tables<'bills'>['customer_phone']
   lines: BillLineDraft[]
   totalPaise: Tables<'bills'>['total_paise']
+  /**
+   * The structured kind stamped when this bill was voided: `manager_void`,
+   * `counter_unpay` or `cancelled_after_paid`. Legacy rows read null and are
+   * displayed as manager voids. Never inferred at read time.
+   */
+  voidKind: Tables<'bills'>['void_kind']
   voidReason: Tables<'bills'>['void_reason']
   voidedAt: Tables<'bills'>['voided_at']
   /** The actor stamped by the database when the immutable bill was cancelled. */
@@ -1249,8 +1268,34 @@ export interface BillingAdapter {
     input: Pick<SaveOrderInput, 'lines' | 'customerId' | 'customerName' | 'customerPhone'>,
   ): Promise<BillingOrder>
   listOpenOrders(outletId: string): Promise<BillingOrder[]>
-  payOrder(orderId: string, payments: PaymentAllocation[]): Promise<BillingBill>
+  /**
+   * Record tender against an open order. When the order is already prepared
+   * this settles it into a bill and resolves with that bill; when its food is
+   * still owed the money is held against the order and **null** resolves — no
+   * bill exists yet, because an order enters Bills only when prepared and paid.
+   */
+  payOrder(orderId: string, payments: PaymentAllocation[]): Promise<BillingBill | null>
   cancelOrder(orderId: string, reason: string): Promise<BillingOrder>
+  /**
+   * Mark an order prepared, or reprepare it by clearing the mark. The order
+   * must be open — or paid but not yet prepared, the upfront payer's path into
+   * Bills: settling that order is what marking prepared does. Repreparing a
+   * paid order is refused: the bills border is terminal in that direction.
+   */
+  markOrderPrepared(orderId: string, prepared: boolean): Promise<BillingOrder>
+  /**
+   * Take this tablet's own payment back within the grace window. A settled
+   * bill is voided as `counter_unpay`; money held against a paid-but-unprepared
+   * order is discarded. Either way the order reopens. Queued behind the payment
+   * it reverses, so offline acceptance cannot overtake it.
+   */
+  unpayOrder(orderId: string, billId: string | null, reason: string): Promise<BillingOrder>
+  /**
+   * Cancel a paid order within the same window: one reasoned act that voids
+   * the bill as `cancelled_after_paid` and cancels the order — warned about
+   * first by the surface, because the money leaves the drawer.
+   */
+  cancelPaidOrder(orderId: string, reason: string): Promise<BillingOrder>
   listShiftHistory(shiftId: string): Promise<ShiftBillingHistory>
   listManagerHistory(filters: BillingHistoryFilters): Promise<BillingBill[]>
   getBill(billId: string): Promise<BillingBill | null>

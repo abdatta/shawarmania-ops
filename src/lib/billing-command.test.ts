@@ -99,8 +99,32 @@ describe('billing command canonical identity', () => {
       'void_bill',
       'manager_cancel_order',
       'confirm_end_of_day',
+      'set_order_preparation',
+      'void_order_payment',
+      'cancel_paid_order',
     ]
-    expect(types.map((type) => BILLING_COMMAND_RPC[type])).toHaveLength(9)
-    expect(new Set(types.map((type) => BILLING_COMMAND_RPC[type])).size).toBe(9)
+    expect(types.map((type) => BILLING_COMMAND_RPC[type])).toHaveLength(12)
+    expect(new Set(types.map((type) => BILLING_COMMAND_RPC[type])).size).toBe(12)
+  })
+
+  it('carries the preparation and unwind payloads through the canonical hash unchanged', async () => {
+    const preparation = { orderId: 'd0000000-0000-4000-a000-000000000001', prepared: true }
+    const unwind = {
+      orderId: 'd0000000-0000-4000-a000-000000000001',
+      billId: 'd1000000-0000-4000-a000-000000000001',
+      reason: 'Wrong tender',
+    }
+    // Canonical form: sorted keys, no insignificant whitespace — the same
+    // bytes PostgreSQL hashes for the same payloads.
+    expect(canonicalBillingJson(preparation)).toBe(
+      '{"orderId":"d0000000-0000-4000-a000-000000000001","prepared":true}',
+    )
+    expect(await billingPayloadHash(unwind)).toBe(
+      await billingPayloadHash({
+        reason: 'Wrong tender',
+        billId: 'd1000000-0000-4000-a000-000000000001',
+        orderId: 'd0000000-0000-4000-a000-000000000001',
+      }),
+    )
   })
 })

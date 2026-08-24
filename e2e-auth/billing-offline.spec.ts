@@ -51,8 +51,14 @@ async function markPaid(page: Page, customerName: string) {
   await page.getByTestId('settle').click()
   const dialog = page.getByRole('dialog', { name: 'Record payment' })
   await dialog.getByRole('button', { name: 'Cash', exact: true }).click()
-  await dialog.getByRole('button', { name: 'Mark Paid', exact: true }).click()
-  await expect(page.getByTestId('bill-total')).toHaveText('₹0')
+  await dialog.getByRole('button', { name: 'Paid', exact: true }).click()
+  // Durable locally: the composer gives way whether or not the backend is
+  // reachable, because acceptance happened at IndexedDB. Offline the money
+  // list itself cannot load — it needs the network — so local acceptance is
+  // read from the composer's giving way and the queue counter.
+  await expect(page.locator('dialog[open]')).toHaveCount(0)
+  await expect(page.getByTestId('bill-total')).toHaveCount(0)
+  await expect(page.getByTestId('settled-confirmation')).toHaveCount(0)
 }
 
 async function managerAccessToken(request: APIRequestContext): Promise<string> {

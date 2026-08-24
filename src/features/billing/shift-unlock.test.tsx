@@ -49,6 +49,12 @@ function renderShift(adapters: DataAdapters = createMockAdapters('biller')) {
 }
 
 async function closeTheOpenShift(adapters: DataAdapters) {
+  // The counter chrome is always subscribed in the app, which is what lets the
+  // seeded pending bill deliver. Mirror that here before closing, exactly as
+  // the offline tests do.
+  const unsubscribe = adapters.billing.subscribeCounter(() => {})
+  await waitFor(() => expect(adapters.billing.getCounterState().sync.pending).toBe(0))
+  unsubscribe()
   const open = adapters.billing.getCounterState().shift
   if (open) await adapters.billing.closeShift(open.id)
 }
@@ -113,6 +119,10 @@ describe('ShiftUnlock', () => {
   it('hands the counter from one biller to another', async () => {
     const user = userEvent.setup()
     const { adapters } = renderShift()
+    // The counter chrome is subscribed in the app; the seeded pending bill
+    // delivers through that subscription before anybody reaches this page.
+    const unsubscribe = adapters.billing.subscribeCounter(() => {})
+    await waitFor(() => expect(adapters.billing.getCounterState().sync.pending).toBe(0))
 
     await user.click(await screen.findByTestId('close-shift'))
     await user.click(screen.getByRole('button', { name: 'Close shift' }))
@@ -127,6 +137,7 @@ describe('ShiftUnlock', () => {
     await waitFor(() => {
       expect(adapters.billing.getCounterState().shift?.billerName).toBe('Demo Morning Biller')
     })
+    unsubscribe()
   })
 
   it('deletes a digit rather than trapping a mis-tap', async () => {

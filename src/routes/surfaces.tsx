@@ -91,7 +91,9 @@ export const roleSurfaceRoutes: RouteObject[] = [
     path: 'open-orders',
     element: (
       <GatedSurface path="open-orders">
-        <OpenOrdersSurface />
+        <div className="mx-auto h-full max-w-3xl p-4">
+          <OpenOrdersSurface />
+        </div>
       </GatedSurface>
     ),
   },

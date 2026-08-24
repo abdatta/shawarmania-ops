@@ -104,6 +104,7 @@ Values the ops portal needs that the marketing site has no equivalent for. They 
 | `--color-on-primary` | `#ffffff` | 5.2:1 on the ember |
 | `--color-accent-text` | `#9a3412` | Brand-coloured *text* on light |
 | `--color-success` | `#15803d` | **Deepened.** `#16a34a` on canvas is 3.1:1 and fails AA for text |
+| `--color-on-success` | `#ffffff` | Ink on a deep success fill |
 | `--color-danger` | `#b91c1c` | |
 | `--color-warning` | `#b45309` | Deep enough to carry white text |
 | `--color-on-warning` | `#ffffff` | |
@@ -124,6 +125,7 @@ Values the ops portal needs that the marketing site has no equivalent for. They 
 | `--color-on-primary` | `#1c1917` | Ink on orange |
 | `--color-accent-text` | `#fdba74` | |
 | `--color-success` | `#4ade80` | |
+| `--color-on-success` | `#1c1917` | Ink on a light success fill |
 | `--color-danger` | `#f87171` | **Lightened.** `#b91c1c` on the dark canvas is ~2.9:1 and fails |
 | `--color-warning` | `#fbbf24` | |
 | `--color-on-warning` | `#1c1917` | Ink on amber, never white |

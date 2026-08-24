@@ -213,7 +213,7 @@ function OpenPaymentDialog({
           }
           onClick={() => onConfirm(payments)}
         >
-          {mode === 'correct' ? 'Save payment' : 'Mark Paid'}
+          {mode === 'correct' ? 'Save payment' : 'Paid'}
         </Button>
       </div>
     </Modal>

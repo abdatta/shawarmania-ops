@@ -1,58 +1,81 @@
-import { Check, Minus, Pencil, Plus, ReceiptText, X } from 'lucide-react'
-import { useCallback, useContext, useEffect, useState } from 'react'
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ReceiptText } from 'lucide-react'
+import type { CSSProperties } from 'react'
 
 import { EmptyState } from '@/components/layout/empty-state'
-import { Button } from '@/components/ui/button'
 import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
-import { DataActionError, type BillingOrder, type PaymentAllocation } from '@/data-access/adapters'
+import {
+  DataActionError,
+  type BillingBill,
+  type BillingOrder,
+  type PaymentAllocation,
+} from '@/data-access/adapters'
 import { SessionContext } from '@/session/context'
 import { CounterDeviceContext } from '@/session/counter-context'
 
 import { CancelOrderDialog } from './cancel-order-dialog'
-import { OpenOrderCardBody } from './open-order-card-body'
+import { captureCardFlight, flyCapturedCardToDestination, useFlip, waitForElement } from './flip'
+import { PipelineCard } from './pipeline-card'
+import { splitPipeline } from './pipeline'
 import { PaymentDialog } from './payment-dialog'
 import { useCounterState } from './use-counter-state'
 
 /**
- * The list's own title, separable from it.
+ * The pipeline, whole-outlet, in two colour-coded bands: **Preparing** (ember)
+ * over a plain hairline over **Unpaid Prepared Orders** (green). There are no
+ * section headings and no action confirmations — the card colours, the divider,
+ * and the section-to-section glide say everything; the counter reads state at a
+ * glance, not by reading words.
  *
- * The combined tablet rail renders this itself so that the card for an order
- * under edit can sit directly beneath it — in the place that order occupied in
- * the list — while still being a child of the rail's scroller. That parentage is
- * what gives the card a sticky range covering the whole column; parented inside
- * the list it would come unstuck as soon as the short list scrolled past.
+ * The old single "Open orders" list answered neither of the two questions the
+ * counter actually asks — is the food made, is it paid — so everything sat in
+ * one undifferentiated pile. The sections are pure derivations of
+ * `prepared_at` × `status` (see pipeline.ts); a paid-but-unprepared order stays
+ * in Preparing wearing its Paid marker because its food is still being made.
+ *
+ * The scope is the **outlet**, matching what live adapters have always served:
+ * another tablet's work is this counter's work too, shown with its creator.
+ *
+ * On the counter (embedded) the two bands share the panel's height instead of
+ * stacking into one long sheet: each grows with its work and scrolls its own
+ * orders once they exceed that share, floored at what one complete card needs.
+ * A rush in one band can no longer push the other off the screen — the board
+ * always shows both questions the counter is answering. The standalone page
+ * keeps the natural document flow it has always had.
  */
 export function OpenOrdersHeading({ embedded }: { embedded: boolean }) {
   return (
     <div>
-      {embedded ? (
-        <h3 id="open-orders-title" className="text-sm font-black text-content">
-          Open orders
-        </h3>
-      ) : (
+      {embedded ? null : (
         <>
           <h1 id="open-orders-title" className="text-2xl font-black text-content">
             Open orders
           </h1>
-          <p className="text-sm text-content-muted">This tablet&rsquo;s unpaid orders.</p>
+          <p className="text-sm text-content-muted">
+            The whole outlet&rsquo;s pipeline — from every tablet at this counter.
+          </p>
         </>
       )}
     </div>
   )
 }
 
+function methodLabelOf(bill: BillingBill): string | null {
+  if (bill.status !== 'settled') return null
+  const methods = [...new Set(bill.payments.map((payment) => payment.method))]
+  if (methods.length === 0) return null
+  return methods.map((method) => (method === 'upi' ? 'UPI' : 'Cash')).join(' + ')
+}
+
 export function OpenOrdersSurface({
   embedded = false,
-  hideHeading = false,
   refreshKey = 0,
   onActivityChanged,
   editingOrderId = null,
   onEditOrder,
 }: {
   embedded?: boolean
-  /** The combined rail renders `OpenOrdersHeading` itself. */
-  hideHeading?: boolean
   refreshKey?: number
   onActivityChanged?: () => void
   editingOrderId?: string | null
@@ -63,40 +86,59 @@ export function OpenOrdersSurface({
   const counterDevice = useContext(CounterDeviceContext)
   const { shift } = useCounterState()
   const [orders, setOrders] = useState<BillingOrder[] | null>(null)
-  const [editing, setEditing] = useState<BillingOrder | null>(null)
+  const [tenders, setTenders] = useState<Map<string, string>>(new Map())
   const [paying, setPaying] = useState<BillingOrder | null>(null)
   const [cancelling, setCancelling] = useState<BillingOrder | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  // Errors only. Success is carried by the motion and the card's new band —
+  // the counter asked for no inserted info bars.
+  const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const outletId = counterDevice?.device.outletId ?? session?.outletId ?? null
 
   const load = useCallback(async () => {
     await Promise.resolve()
-    const outletId = counterDevice?.device.outletId ?? session?.outletId ?? null
-    if (!outletId || !shift) return setOrders([])
-    setOrders(await billing.listOpenOrders(outletId))
+    if (!outletId || !shift) {
+      setTenders(new Map())
+      return setOrders([])
+    }
+    const nextOrders = await billing.listOpenOrders(outletId)
+    setOrders(nextOrders)
+    // Tender facts ride along so an Un-pay can name what it takes back.
+    try {
+      const history = await billing.listShiftHistory(shift.id)
+      const nextTenders = new Map<string, string>()
+      for (const bill of history.bills) {
+        const label = methodLabelOf(bill)
+        if (label) nextTenders.set(bill.id, label)
+      }
+      setTenders(nextTenders)
+    } catch {
+      setTenders(new Map())
+    }
   }, [billing, counterDevice?.device.outletId, session?.outletId, shift])
 
   useEffect(() => {
     void Promise.resolve()
       .then(load)
-      .catch(() => setMessage('Could not load open orders.'))
+      .catch(() => setError('Could not load the pipeline.'))
   }, [load, refreshKey])
 
-  const act = async (operation: () => Promise<unknown>, success: string) => {
+  const act = async (operation: () => Promise<unknown>) => {
     setBusy(true)
-    setMessage(null)
+    setError(null)
     try {
-      await operation()
-      setEditing(null)
+      const result = await operation()
       setPaying(null)
       setCancelling(null)
-      setMessage(success)
       await load()
       onActivityChanged?.()
+      return result
     } catch (cause) {
-      setMessage(
+      setError(
         cause instanceof DataActionError ? cause.message : 'That action could not be completed.',
       )
+      return undefined
     } finally {
       setBusy(false)
     }
@@ -104,188 +146,220 @@ export function OpenOrdersSurface({
 
   function recordPayment(payments: PaymentAllocation[]) {
     if (!paying) return
-    const reference = paying.localReference ?? String(paying.orderNumber)
-    void act(
-      () => billing.payOrder(paying.id, payments),
-      `Order ${reference} recorded as paid. Bill number assigned after delivery.`,
-    )
+    // A settlement replaces an order id with a bill id. Capture the whole
+    // ticket before the refresh removes it, so the visual identity survives
+    // the cross-column handoff instead of leaving a separate amount badge.
+    const source = document.querySelector<HTMLElement>(`[data-flip-id="${paying.id}"]`)
+    const flight = source ? captureCardFlight(source) : null
+    void act(() => billing.payOrder(paying.id, payments)).then((bill) => {
+      if (!bill || typeof bill !== 'object' || !('id' in bill)) return
+      if (!flight) return
+      void waitForElement(`[data-testid="shift-bill-${String(bill.id)}"]`).then((destination) => {
+        if (!destination) return
+        flyCapturedCardToDestination(flight, destination)
+      })
+    })
   }
 
   const listed = orders?.filter((order) => order.id !== editingOrderId) ?? []
+  const { preparing, unpaidPrepared } = splitPipeline(listed)
+
+  // Section-to-section moves glide: the hook measures every surviving card
+  // before and after each commit and plays the difference.
+  const flipRootRef = useRef<HTMLElement | null>(null)
+  useFlip(flipRootRef, [orders])
+
+  // Each band's floor is its own first ticket, measured live: whatever the
+  // viewport or the order's line count, a populated band never starts smaller
+  // than one complete card. Before the first measurement lands, the section's
+  // min-h-[120px] class — the spec's own one-item figure — holds the floor.
+  const [floors, setFloors] = useState<{ preparing: number | null; unpaid: number | null }>({
+    preparing: null,
+    unpaid: null,
+  })
+  const measureFloors = useCallback(() => {
+    const next = {
+      preparing:
+        document.querySelector<HTMLElement>('[data-testid="pipeline-preparing-list"] > li')
+          ?.offsetHeight || null,
+      unpaid:
+        document.querySelector<HTMLElement>('[data-testid="pipeline-unpaid-prepared-list"] > li')
+          ?.offsetHeight || null,
+    }
+    setFloors((current) =>
+      current.preparing === next.preparing && current.unpaid === next.unpaid ? current : next,
+    )
+  }, [])
+  // One frame after commit: layout must exist before it can be measured, and
+  // the compiler rightly objects to a synchronous setState inside an effect.
+  useLayoutEffect(() => {
+    const frame = requestAnimationFrame(measureFloors)
+    return () => cancelAnimationFrame(frame)
+  })
+  useEffect(() => {
+    window.addEventListener('resize', measureFloors)
+    return () => window.removeEventListener('resize', measureFloors)
+  }, [measureFloors])
+
+  /**
+   * A band claims shares of the free panel in proportion to its work, so a
+   * busy Preparing grows while a two-order money band keeps exactly what it
+   * needs — and both keep at least their floor, which is what pins the bottom
+   * band's first card on screen however long the day's list above it gets.
+   */
+  const bandStyle = (count: number, floor: number | null): CSSProperties | undefined =>
+    embedded
+      ? {
+          flexGrow: count,
+          flexShrink: 1,
+          flexBasis: 0,
+          ...(floor !== null && { minHeight: floor + 6 }),
+        }
+      : undefined
 
   if (orders === null) {
+    // The rail's own silhouette: compact ticket cards over a hairline — the
+    // shape this column fills once the pipeline arrives. Reviewed against this
+    // change's height-sharing rework per the standing placeholder rule: what
+    // arrives at rest is still cards over a hairline (the scroll containment
+    // between them is invisible until a band overflows), so the silhouette's
+    // shape stands.
     return (
-      <LoadingRegion label="open orders" className="space-y-2">
-        <Shimmer className="h-5 w-28" />
-        {[1, 2].map((key) => (
-          <Shimmer key={key} className="h-36" />
-        ))}
+      <LoadingRegion label="the pipeline" className="space-y-1">
+        <Shimmer className="h-[92px]" />
+        <Shimmer className="h-[92px]" />
+        <div className="my-1 border-t border-border" />
+        <Shimmer className="h-[92px]" />
       </LoadingRegion>
     )
   }
 
-  return (
-    <section className={embedded ? 'space-y-2' : 'space-y-4'} aria-labelledby="open-orders-title">
-      {!hideHeading && <OpenOrdersHeading embedded={embedded} />}
-
-      {message && (
-        <p
-          role="status"
-          className="rounded-lg border border-border bg-surface p-2 text-sm font-semibold text-content"
+  const renderSection = (
+    label: string,
+    sectionOrders: BillingOrder[],
+    section: 'preparing' | 'unpaid-prepared',
+    emptyText: string,
+    testid: string,
+    band: { floor: number | null },
+  ) => (
+    <section
+      data-testid={testid}
+      aria-label={label}
+      style={bandStyle(sectionOrders.length, band.floor)}
+      /*
+        The 120px class is the pre-measurement floor — the spec's one-ticket
+        figure; a live measurement overrides it through the inline style.
+      */
+      className={embedded ? 'flex min-h-[120px] flex-col' : undefined}
+    >
+      {sectionOrders.length === 0 ? (
+        embedded ? null : (
+          <p className="rounded-lg bg-surface-raised p-2 text-xs text-content-muted">{emptyText}</p>
+        )
+      ) : (
+        <ul
+          data-testid={`${testid}-list`}
+          /*
+            The scroll containment the board promises: this list scrolls its own
+            orders and nothing else, so a full band never moves its neighbour.
+          */
+          className={`min-h-0 flex-1 space-y-1 ${embedded ? 'overflow-y-auto' : ''}`}
         >
-          {message}
+          {sectionOrders.map((order) => (
+            <li key={order.id}>
+              <PipelineCard
+                order={order}
+                section={section}
+                currentBillerId={shift?.billerProfileId ?? null}
+                busy={busy}
+                {...(onEditOrder ? { onEdit: onEditOrder } : {})}
+                tenderLabel={order.billId ? (tenders.get(order.billId) ?? null) : null}
+                onMarkPrepared={(target) =>
+                  void act(() => billing.markOrderPrepared(target.id, true))
+                }
+                onUnprepare={(target) =>
+                  void act(() => billing.markOrderPrepared(target.id, false))
+                }
+                onMarkPaid={(target) => {
+                  setError(null)
+                  setPaying(target)
+                }}
+                onCancel={(target) => {
+                  setError(null)
+                  setCancelling(target)
+                }}
+                onUnpay={(target, reason) =>
+                  void act(() => billing.unpayOrder(target.id, target.billId!, reason))
+                }
+                onCancelAfterPaid={(target, reason) =>
+                  void act(() => billing.cancelPaidOrder(target.id, reason))
+                }
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+
+  return (
+    <section
+      ref={flipRootRef}
+      className={embedded ? 'flex min-h-0 flex-1 flex-col gap-1.5' : 'space-y-4'}
+      aria-labelledby="open-orders-title"
+    >
+      <OpenOrdersHeading embedded={embedded} />
+
+      {error && (
+        <p
+          role="alert"
+          className="shrink-0 rounded-lg border border-border bg-surface p-2 text-sm font-semibold text-danger"
+        >
+          {error}
         </p>
       )}
 
-      {orders.length === 0 ? (
+      {preparing.length === 0 && unpaidPrepared.length === 0 ? (
         embedded ? (
           <p className="rounded-lg bg-surface-raised p-3 text-sm text-content-muted">
-            No open orders on this tablet.
+            No orders in the pipeline right now.
           </p>
         ) : (
-          <EmptyState icon={ReceiptText} title="No open orders on this tablet." />
+          <EmptyState
+            icon={ReceiptText}
+            title="No orders in the pipeline right now. Save one from the counter menu."
+          />
         )
       ) : (
-        /*
-          An order held in the composer is not listed here — the rail renders its
-          card directly above this list, in the place it occupied, so it is never
-          a second card competing with the one being edited. The list can
-          therefore be empty while orders exist, which is why the empty state
-          above keys off `orders` and not what survives this filter, and why
-          nothing needs to be said about the missing row.
-        */
-        <ul className={embedded ? 'space-y-2' : 'grid gap-3 lg:grid-cols-2'}>
-          {listed.map((order) => {
-            const active = editing?.id === order.id ? editing : order
-            const showCreator = order.creatorId !== shift?.billerProfileId
-            const reference = order.localReference ?? String(order.orderNumber)
-            return (
-              <li
-                key={order.id}
-                data-testid={
-                  order.localReference
-                    ? `open-order-local-${order.id}`
-                    : `open-order-${order.orderNumber}`
-                }
-                className="rounded-xl border border-border bg-surface-raised p-3"
-              >
-                <OpenOrderCardBody
-                  orderNumber={order.orderNumber}
-                  {...(order.localReference !== undefined
-                    ? { localReference: order.localReference }
-                    : {})}
-                  orderedAt={order.orderedAt}
-                  customerName={active.customerName}
-                  lines={active.lines}
-                  {...(showCreator ? { creatorName: order.creatorName } : {})}
-                />
-
-                {editing?.id === order.id && (
-                  <div className="mt-2 border-t border-border pt-2">
-                    <ul className="divide-y divide-border">
-                      {active.lines.map((line) => (
-                        <li key={line.menuItemId} className="flex min-h-11 items-center gap-2 py-1">
-                          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-content">
-                            {line.itemName}
-                          </span>
-                          <Button
-                            variant="secondary"
-                            size="phone"
-                            className="w-10 px-0"
-                            aria-label={`One fewer ${line.itemName}`}
-                            onClick={() =>
-                              setEditing({
-                                ...active,
-                                lines: active.lines.flatMap((candidate) =>
-                                  candidate.menuItemId !== line.menuItemId
-                                    ? [candidate]
-                                    : candidate.quantity > 1
-                                      ? [{ ...candidate, quantity: candidate.quantity - 1 }]
-                                      : [],
-                                ),
-                              })
-                            }
-                          >
-                            <Minus aria-hidden size={16} />
-                          </Button>
-                          <span className="w-5 text-center font-bold">{line.quantity}</span>
-                          <Button
-                            variant="secondary"
-                            size="phone"
-                            className="w-10 px-0"
-                            aria-label={`One more ${line.itemName}`}
-                            onClick={() =>
-                              setEditing({
-                                ...active,
-                                lines: active.lines.map((candidate) =>
-                                  candidate.menuItemId === line.menuItemId
-                                    ? { ...candidate, quantity: candidate.quantity + 1 }
-                                    : candidate,
-                                ),
-                              })
-                            }
-                          >
-                            <Plus aria-hidden size={16} />
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="mt-2 flex justify-end gap-2">
-                      <Button variant="secondary" size="phone" onClick={() => setEditing(null)}>
-                        Close
-                      </Button>
-                      <Button
-                        size="phone"
-                        disabled={busy || active.lines.length === 0}
-                        onClick={() =>
-                          void act(
-                            () =>
-                              billing.reviseOrder(order.id, {
-                                lines: active.lines,
-                                customerName: active.customerName,
-                                customerPhone: active.customerPhone,
-                              }),
-                            `Order ${reference} updated.`,
-                          )
-                        }
-                      >
-                        <Check aria-hidden size={17} />
-                        Done
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-3 grid grid-cols-[minmax(0,1fr)_2.75rem_2.75rem] gap-2">
-                  <Button size="phone" disabled={busy} onClick={() => setPaying(order)}>
-                    Mark Paid
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="phone"
-                    className="px-0"
-                    aria-label={`Edit order ${reference}`}
-                    disabled={editingOrderId !== null}
-                    onClick={() =>
-                      onEditOrder ? onEditOrder(order) : setEditing(structuredClone(order))
-                    }
-                  >
-                    <Pencil aria-hidden size={17} />
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="phone"
-                    className="px-0"
-                    aria-label={`Cancel order ${reference}`}
-                    onClick={() => setCancelling(order)}
-                  >
-                    <X aria-hidden size={18} />
-                  </Button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        <>
+          {renderSection(
+            'Preparing',
+            preparing,
+            'preparing',
+            'Nothing waiting to be made.',
+            'pipeline-preparing',
+            { floor: floors.preparing },
+          )}
+          <div
+            className="my-2 flex shrink-0 items-center gap-2"
+            role="separator"
+            aria-label="Prepared, waiting for money"
+          >
+            <span className="h-px flex-1 bg-border" />
+            <span className="text-xs font-bold tracking-wide text-content-muted uppercase">
+              Prepared · awaiting money
+            </span>
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          {renderSection(
+            'Unpaid Prepared Orders',
+            unpaidPrepared,
+            'unpaid-prepared',
+            'No prepared order is waiting for money.',
+            'pipeline-unpaid-prepared',
+            { floor: floors.unpaid },
+          )}
+        </>
       )}
 
       <PaymentDialog
@@ -305,10 +379,7 @@ export function OpenOrdersSurface({
         onClose={() => setCancelling(null)}
         onConfirm={(reason) => {
           if (!cancelling) return
-          void act(
-            () => billing.cancelOrder(cancelling.id, reason),
-            `Order ${cancelling.localReference ?? cancelling.orderNumber} cancelled.`,
-          )
+          void act(() => billing.cancelOrder(cancelling.id, reason))
         }}
       />
     </section>

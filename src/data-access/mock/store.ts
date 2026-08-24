@@ -22,6 +22,7 @@ import {
   DEMO_KANCHRAPARA_BILLER_ID,
   DEMO_KANCHRAPARA_DEVICE_ID,
   DEMO_KANCHRAPARA_SHIFT_ID,
+  DEMO_MORNING_BILLER_ID,
   DEMO_OPEN_SHIFT_ID,
   type BillSeed,
 } from './fixtures/billing'
@@ -86,6 +87,12 @@ export interface DemoStore {
   billItems: Tables<'bill_items'>[]
   /** Exact tender allocation for each bill, including split payments. */
   billPayments: Map<string, PaymentAllocation[]>
+  /**
+   * Tender held against a paid order that has no bill yet — the upfront payer
+   * whose food is still being made. It becomes `billPayments` when preparation
+   * settles the order, and is discarded by an Un-pay.
+   */
+  orderPayments: Map<string, { payments: PaymentAllocation[]; paidAt: string; shiftId: string }>
   /** Owned by the billing adapter; open, paid and cancelled lifecycle records. */
   orders: Tables<'orders'>[]
   /** Immutable snapshots belonging to `orders`. */
@@ -236,6 +243,10 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
   const bills: Tables<'bills'>[] = []
   const billItems: Tables<'bill_items'>[] = []
   const billPayments = new Map<string, PaymentAllocation[]>()
+  const orderPayments = new Map<
+    string,
+    { payments: PaymentAllocation[]; paidAt: string; shiftId: string }
+  >()
   const billNumbers = new Map<string, number>()
   const orders: Tables<'orders'>[] = []
   const orderItems: Tables<'order_items'>[] = []
@@ -299,6 +310,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       discount_paise: totals.discountPaise,
       tax_paise: totals.taxPaise,
       total_paise: totals.totalPaise,
+      void_kind: null,
       void_reason: null,
       voided_at: null,
       voided_by: null,
@@ -349,7 +361,12 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
 
   // Three existing sales become lifecycle examples without inventing extra
   // revenue: paid on handover, aggregator rider collection, and direct pay.
-  // A cancelled and an open order add the two non-revenue states.
+  // A cancelled and an open order add the two non-revenue states. The two paid
+  // orders carry prepared_at — they were fired, made and handed over — while
+  // the open one, 105, is still preparing. 104 was taken by the morning
+  // biller before the handover and has been prepared but never paid: it shows
+  // the Unpaid Prepared section with a creator who is not the current shift
+  // holder, which is exactly the cross-person state the rail must read well.
   const lifecycleBills = bills
     .filter((bill) => bill.outlet_id === DEMO_OUTLET_ID && bill.business_date === today)
     .slice(2, 4)
@@ -357,11 +374,19 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     status: Tables<'orders'>['status']
     bill: Tables<'bills'> | null
     reason?: string
+    createdBy?: string
+    preparedAtTime?: string | null
   }> = [
     { status: 'paid', bill: lifecycleBills[0] ?? null },
     { status: 'paid', bill: lifecycleBills[1] ?? null },
     { status: 'cancelled', bill: null, reason: 'Customer changed their mind' },
-    { status: 'open', bill: null },
+    {
+      status: 'open',
+      bill: null,
+      createdBy: DEMO_MORNING_BILLER_ID,
+      preparedAtTime: '18:45',
+    },
+    { status: 'open', bill: null, preparedAtTime: null },
   ]
   lifecycle.forEach((seed, index) => {
     const number = index + 101
@@ -374,7 +399,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
             (line) => line.bill_id === bills.find((bill) => bill.outlet_id === DEMO_OUTLET_ID)?.id,
           )
           .slice(0, 1)
-    const orderedAt = sourceBill?.ordered_at ?? instantAt(today, index === 2 ? '18:15' : '18:40')
+    const orderedAt =
+      sourceBill?.ordered_at ??
+      instantAt(today, index === 2 ? '18:15' : index === 3 ? '18:40' : '19:10')
     const totals = billTotals(
       sourceLines.map((line) => ({
         unitPricePaise: line.unit_price_paise,
@@ -382,6 +409,12 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       })),
     )
     const cancelled = seed.status === 'cancelled'
+    const preparedAt =
+      seed.preparedAtTime !== undefined
+        ? seed.preparedAtTime === null
+          ? null
+          : instantAt(today, seed.preparedAtTime)
+        : (sourceBill?.paid_at ?? null)
     orders.push({
       id,
       outlet_id: DEMO_OUTLET_ID,
@@ -390,7 +423,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       business_date: today,
       ordered_at: orderedAt,
       created_at: orderedAt,
-      created_by: DEMO_BILLER_ID,
+      created_by: seed.createdBy ?? DEMO_BILLER_ID,
       created_shift_id: DEMO_OPEN_SHIFT_ID,
       changed_at: null,
       changed_by: null,
@@ -403,6 +436,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       discount_paise: 0,
       tax_paise: 0,
       total_paise: totals.totalPaise,
+      prepared_at: preparedAt,
       status: seed.status,
       bill_id: sourceBill?.id ?? null,
       paid_at: sourceBill?.paid_at ?? null,
@@ -427,7 +461,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     )
     if (sourceBill) sourceBill.order_id = id
   })
-  orderNumbers.set(`${DEMO_OUTLET_ID}:${today}`, 104)
+  orderNumbers.set(`${DEMO_OUTLET_ID}:${today}`, 105)
 
   billingCommands.push({
     id: 'e3000000-0000-4000-a000-000000000001',
@@ -865,6 +899,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     bills,
     billItems,
     billPayments,
+    orderPayments,
     orders,
     orderItems,
     orderNumbers,

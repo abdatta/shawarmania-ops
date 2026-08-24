@@ -39,6 +39,11 @@ order's path to its bill.
 - **WHEN** an upfront payer's order is paid before being marked prepared
 - **THEN** the order carries status paid with null `prepared_at`, and marking it prepared afterwards succeeds
 
+#### Scenario: History paid before preparation existed
+
+- **WHEN** an order was paid before the outlet recorded preparation at all
+- **THEN** its stored payment moment stands as its preparation record — the row reads prepared at `paid_at` and appears among settled bills, never as pipeline work still owed
+
 ## MODIFIED Requirements
 
 ### Requirement: An unpaid order is editable until it is paid or cancelled

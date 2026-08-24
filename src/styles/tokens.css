@@ -95,6 +95,9 @@
   --accent-text: var(--brand-ember-deep);
 
   --success: var(--brand-veg-deep);
+  --on-success: var(--brand-white);
+  /* Filled success controls are read against their fill, not the canvas.
+     Their pair therefore intentionally reverses the standalone status tone. */
   --danger: var(--brand-nonveg);
   --warning: var(--brand-amber-deep);
   --on-warning: var(--brand-white);
@@ -139,6 +142,7 @@
   --accent-text: var(--brand-ember-soft);
 
   --success: var(--brand-veg-soft);
+  --on-success: var(--brand-stone-900);
   --danger: var(--brand-nonveg-soft);
   --warning: var(--brand-amber);
   --on-warning: var(--brand-stone-900);

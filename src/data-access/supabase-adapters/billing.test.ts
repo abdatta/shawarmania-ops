@@ -69,6 +69,7 @@ function offlineClient() {
   const query = {
     select: () => query,
     eq: () => query,
+    in: () => query,
     order: () => query,
     maybeSingle: () => Promise.resolve(failed),
     then: (resolve: (value: typeof failed) => unknown) => Promise.resolve(failed).then(resolve),
@@ -303,6 +304,88 @@ describe('the live tablet acceptance boundary', () => {
       'cancel_order',
     ])
     expect(dependencies).toHaveLength(2)
+    database.close()
+  })
+
+  // Spec: preparation commands ride the same outbox as every sibling, unwinds
+  // chain behind the payment they reverse, and reads project all of it before
+  // anything is delivered.
+  it('lands an offline order → prepare → pay → un-pay → prepare sequence exactly once, in chain order', async () => {
+    const billing = createSupabaseBillingAdapter(offlineClient(), session)
+    const orderId = orderInput.clientId
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 2))
+
+    await billing.saveOrder(orderInput)
+    await settle()
+    await billing.markOrderPrepared(orderId, true)
+    await settle()
+    const paid = await billing.payOrder(orderId, [
+      { method: 'cash', amountPaise: draft.lines[0]!.unitPricePaise },
+    ])
+    if (!paid) throw new Error('a prepared order settles into a bill')
+    await settle()
+
+    // Paid *and* prepared has crossed into Bills this shift — it no longer
+    // lists in the rail. The rail keeps only paid-but-still-unprepared work.
+    await expect(billing.listOpenOrders(session.device.outletId)).resolves.toEqual([])
+
+    await billing.unpayOrder(orderId, paid.id, 'Rung the wrong total')
+    await settle()
+    // The unwind reopens the order with its preparation intact.
+    await expect(billing.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
+      { id: orderId, status: 'open', preparedAt: expect.any(String), billId: null },
+    ])
+
+    // Unpaid again, so reprepare is legal — back to Preparing it goes.
+    await billing.markOrderPrepared(orderId, false)
+    await settle()
+    await expect(billing.listOpenOrders(session.device.outletId)).resolves.toMatchObject([
+      { id: orderId, status: 'open', preparedAt: null, billId: null },
+    ])
+
+    const database = new BillingDeliveryDatabase()
+    const envelopes = await database.envelopes.toArray()
+    expect(new Set(envelopes.map((envelope) => envelope.commandId)).size).toBe(envelopes.length)
+
+    // Walk the dependency graph from its root: that ordering, not wall-clock
+    // milliseconds, is what delivery follows.
+    const dependencies = await database.dependencies.toArray()
+    const byId = new Map(envelopes.map((envelope) => [envelope.commandId, envelope]))
+    let cursor = envelopes.find(
+      (envelope) => !dependencies.some((d) => d.commandId === envelope.commandId),
+    )
+    const ordered: NonNullable<typeof cursor>[] = []
+    while (cursor) {
+      ordered.push(cursor)
+      const next = dependencies.find((d) => d.dependsOnCommandId === cursor!.commandId)
+      cursor = next ? byId.get(next.commandId) : undefined
+    }
+    expect(ordered).toHaveLength(envelopes.length)
+    expect(dependencies).toHaveLength(envelopes.length - 1)
+    expect(ordered.map((envelope) => envelope.type)).toEqual([
+      'create_order',
+      'set_order_preparation',
+      'pay_order',
+      'void_order_payment',
+      'set_order_preparation',
+    ])
+    database.close()
+  })
+
+  it('refuses to reprepare a paid order before anything reaches storage', async () => {
+    const rpc = vi.fn()
+    const billing = createSupabaseBillingAdapter(clientWithRpc(rpc), session)
+    await billing.saveOrder(orderInput)
+    await billing.payOrder(orderInput.clientId, [
+      { method: 'cash', amountPaise: draft.lines[0]!.unitPricePaise },
+    ])
+
+    await expect(billing.markOrderPrepared(orderInput.clientId, false)).rejects.toMatchObject({
+      code: 'not_open',
+    })
+    const database = new BillingDeliveryDatabase()
+    const types = (await database.envelopes.toArray()).map((envelope) => envelope.type)
+    expect([...types].sort()).toEqual(['create_order', 'pay_order'])
     database.close()
   })
 
