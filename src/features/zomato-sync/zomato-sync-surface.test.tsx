@@ -207,9 +207,9 @@ describe('the Zomato sync surface', () => {
      */
     await renderSurface(OUTLET_KALYANI_ID)
 
-    const button = await screen.findByTestId('read-now')
+    const button = await screen.findByTestId('zomato-read-now')
     expect(button).toBeDisabled()
-    expect(screen.getByTestId('read-now-why')).toHaveTextContent(/again in \d+h/i)
+    expect(screen.getByTestId('zomato-read-now-why')).toHaveTextContent(/again in \d+h/i)
   })
 
   it('offers Read now after a failure, which is exactly when it is wanted', async () => {
@@ -221,9 +221,9 @@ describe('the Zomato sync surface', () => {
      */
     await renderSurface(OUTLET_KANCHRAPARA_ID)
 
-    const button = await screen.findByTestId('read-now')
+    const button = await screen.findByTestId('zomato-read-now')
     expect(button).toBeEnabled()
-    expect(screen.queryByTestId('read-now-why')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('zomato-read-now-why')).not.toBeInTheDocument()
   })
 
   it('decides the six-hour lockout from the run outcome, not from the clock alone', () => {
@@ -371,15 +371,15 @@ describe('the Zomato sync surface', () => {
   it('takes a statement uploaded by hand and says what it wrote, per outlet', async () => {
     await renderSurface(OUTLET_KALYANI_ID)
 
-    const upload = await screen.findByTestId('upload-statement')
+    const upload = await screen.findByTestId('zomato-upload-statement')
     // The control names the three files it takes, so a person reaching for it
     // under pressure is not guessing which to bring.
     expect(within(upload).getByText(/order history/i)).toBeInTheDocument()
 
     const file = new File(['fake-bytes'], 'order_history_20260817_20260818.zip')
-    await userEvent.upload(screen.getByTestId('upload-input'), file)
+    await userEvent.upload(screen.getByTestId('zomato-upload-input'), file)
 
-    const result = await screen.findByTestId('upload-result')
+    const result = await screen.findByTestId('zomato-upload-result')
     // A per-outlet report rather than a silent refresh: the owner sees the upload
     // did something and where.
     expect(result).toHaveTextContent(/Kalyani/)
@@ -388,15 +388,15 @@ describe('the Zomato sync surface', () => {
 
   it('refuses a file it cannot place, in the file’s own words', async () => {
     await renderSurface(OUTLET_KALYANI_ID)
-    await screen.findByTestId('upload-statement')
+    await screen.findByTestId('zomato-upload-statement')
 
     const file = new File(['nope'], 'holiday-photos.zip')
-    await userEvent.upload(screen.getByTestId('upload-input'), file)
+    await userEvent.upload(screen.getByTestId('zomato-upload-input'), file)
 
     // The specific refusal, not a generic "did not go through": "matches no known
     // shape" tells the owner the file is wrong rather than the connection.
     expect(await screen.findByText(/matches no known statement shape/i)).toBeInTheDocument()
-    expect(screen.queryByTestId('upload-result')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('zomato-upload-result')).not.toBeInTheDocument()
   })
 
   it('says an upload needs a connection rather than pretending to queue it', async () => {
@@ -404,15 +404,15 @@ describe('the Zomato sync surface', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
     try {
       await renderSurface(OUTLET_KALYANI_ID)
-      await screen.findByTestId('upload-statement')
+      await screen.findByTestId('zomato-upload-statement')
 
       const file = new File(['x'], 'order_history_20260817_20260818.zip')
-      await userEvent.upload(screen.getByTestId('upload-input'), file)
+      await userEvent.upload(screen.getByTestId('zomato-upload-input'), file)
 
       // Said outright, and nothing written: a statement is a deliberate recovery,
       // not something to replay later against figures that may have moved.
       expect(await screen.findByText(/needs a connection/i)).toBeInTheDocument()
-      expect(screen.queryByTestId('upload-result')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('zomato-upload-result')).not.toBeInTheDocument()
     } finally {
       if (online) Object.defineProperty(navigator, 'onLine', online)
     }

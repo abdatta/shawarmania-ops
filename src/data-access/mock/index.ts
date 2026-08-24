@@ -183,6 +183,15 @@ export function createMockAdapters(
       DEMO_OUTLET_ID,
       DEMO_SECOND_OUTLET_ID,
     ]),
+    // Swiggy's own instance of the same seam, with its own story: an
+    // independent session and mailbox mean its states are seeded separately,
+    // including Kanchrapara never having been connected at all.
+    swiggySync: createMockAggregatorSyncAdapter(
+      store,
+      role,
+      [DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID],
+      { channel: 'swiggy' },
+    ),
     addressLookup: createMockAddressLookupAdapter(),
   }
 }

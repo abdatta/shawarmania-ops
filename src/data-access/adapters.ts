@@ -2059,6 +2059,14 @@ export interface ManualLedgerDay {
    * original.
    */
   zomatoSettlement: ZomatoSettlement | null
+  /**
+   * Swiggy's measured reading for the date, on the same terms. Where present it
+   * is authoritative over any legacy typed figure in the day's own columns,
+   * because a portal read is evidence and a memory is not; where absent — an
+   * outlet Swiggy does not cover, or a date before its first read — the typed
+   * columns stand exactly as they always did.
+   */
+  swiggySettlement: ChannelSettlement | null
 }
 
 /**
@@ -2097,6 +2105,17 @@ export interface ZomatoSettlement {
   revisedFrom: { revenuePaise: number; commissionPaise: number | null } | null
   revisedAt: string | null
 }
+
+/**
+ * The same shape, on any restaurant channel.
+ *
+ * Swiggy's channel-day rows carry exactly the facts Zomato's do — stated
+ * revenue, commission where determined, the state of the cycle behind them,
+ * what superseded what — because both tables are written by the same ingest
+ * contract. The alias records that the reading is channel-neutral without
+ * renaming a type half the surface already imports.
+ */
+export type ChannelSettlement = ZomatoSettlement
 
 /** Settled counter allocations that replace typed Cash/UPI after go-live. */
 export interface ManualLedgerCounterRevenue {
@@ -2169,23 +2188,41 @@ export interface ManualLedgerExpense {
  * and is frozen, `updated_by` is stamped by the guard and refused from a caller.
  * A form that could name either would be asserting something the database is
  * about to overrule.
+ *
+ * The two Swiggy figures are absent by the same argument that froze Zomato's,
+ * one stage later: Swiggy's measured reading arrives through its channel-day
+ * row, and a form field would invite typing over it. The columns remain on the
+ * table carrying their typed history, so an old month still computes exactly as
+ * it was recorded — they are simply no longer writable from here.
  */
 export type ManualLedgerDayInput = Omit<
   ManualLedgerDay,
-  'recordedBy' | 'updatedBy' | 'zomatoSettlement'
+  | 'recordedBy'
+  | 'updatedBy'
+  | 'zomatoSettlement'
+  | 'swiggySettlement'
+  | 'swiggyRevenuePaise'
+  | 'swiggyCommissionPaise'
 >
 
 /**
- * A day as the reading functions want it: the figures, plus the settlement where
- * one exists. Optional so that a caller holding only what a form can write still
+ * A day as the reading functions want it: the figures, plus the settlements where
+ * they exist. Optional so that a caller holding only what a form can write still
  * type-checks — a form cannot write a settlement, and the database refuses one
- * from any signed-in session whatever the types allow.
+ * from any signed-in session whatever the types allow. The legacy Swiggy figures
+ * are optional for the mirror reason: present only when reading a row that still
+ * carries its typed history.
  */
 export type ManualLedgerDayFigures = ManualLedgerDayInput & {
   zomatoSettlement?: ZomatoSettlement | null
+  swiggySettlement?: ChannelSettlement | null
+  /** Typed history only; never written by this app any more. */
+  swiggyRevenuePaise?: number
+  /** Typed history only; `null` meant undetermined then and still does. */
+  swiggyCommissionPaise?: number | null
   /**
    * False on a day that has aggregator figures but no cash count — the "day nobody
-   * counted", surfaced so its Zomato figures still show and total. Absent means
+   * counted", surfaced so its figures still show and total. Absent means
    * counted, so every existing day and form payload needs no change.
    */
   counted?: boolean
@@ -2301,6 +2338,15 @@ export interface DataAdapters {
   manualLedger: ManualLedgerAdapter
   /** What the Zomato sync has done, and the two things the owner can do about it (#42). */
   aggregatorSync: AggregatorSyncAdapter
+  /**
+   * The same seam, pointed at Swiggy.
+   *
+   * An independent session, mailbox and set of figures, so a Zomato outage can
+   * never be visible on the Swiggy surface or the reverse. The interface is
+   * deliberately shared: runs, reconciliations and channel days answer the same
+   * questions, and two interfaces would drift exactly where they agree.
+   */
+  swiggySync: AggregatorSyncAdapter
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2472,7 +2518,10 @@ export interface AggregatorSyncAdapter {
    * learns they are still signed in. Resolves once the ladder has decided,
    * not when any repair finished.
    */
-  requestReconnect(outletId: string, channel?: 'zomato' | 'hyperpure'): Promise<ReconnectResult>
+  requestReconnect(
+    outletId: string,
+    channel?: 'zomato' | 'swiggy' | 'hyperpure',
+  ): Promise<ReconnectResult>
   /**
    * The code the owner read off their own phone.
    *
@@ -2526,7 +2575,12 @@ export interface StatementUpload {
 
 export interface StatementUploadResult {
   /** What the file turned out to be, once its content was read. */
-  kind: 'zomato-order-history' | 'zomato-settlement' | 'hyperpure-statement'
+  kind:
+    | 'zomato-order-history'
+    | 'zomato-settlement'
+    | 'hyperpure-statement'
+    | 'swiggy-annexure'
+    | 'swiggy-metrics-evidence'
   /** A short, human line per outlet the upload touched. */
   wrote: readonly string[]
 }

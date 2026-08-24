@@ -93,15 +93,14 @@ function clientForLedger(figureRows: unknown[]) {
   }
 }
 
-describe('the day write carries the typed Swiggy fields and no measured column', () => {
-  it('sends swiggy money but never a zomato key', async () => {
+describe('the day write carries no channel figures at all', () => {
+  it('sends neither channel’s money, measured or typed', async () => {
     const { adapter, payload } = clientForLedger([])
     await adapter.upsertDay(DAY_INPUT)
 
     const sent = payload()
     expect(sent).not.toBeNull()
-    expect(sent!['swiggy_revenue_paise']).toBe(123_400)
-    expect(sent!['swiggy_commission_paise']).toBe(12_340)
+    expect(Object.keys(sent!).filter((key) => /swiggy/.test(key))).toEqual([])
     expect(Object.keys(sent!).filter((key) => key.startsWith('zomato'))).toEqual([])
   })
 })
@@ -135,7 +134,10 @@ describe('a measured day with no recorded day still reads its figures', () => {
     })
   })
 
-  it('asks the figures table for exactly one channel over the date window', async () => {
+  it('asks the figures table over the date window without naming a channel', async () => {
+    // One query covers every channel and the stitch partitions the rows in
+    // memory, so a Swiggy-only date joins a month exactly as a Zomato-only
+    // one does — which is why no channel filter may appear here.
     const { adapter, queries } = clientForLedger([])
     await adapter.getDayFigures('o-1', '2026-08-20')
 
@@ -143,11 +145,15 @@ describe('a measured day with no recorded day still reads its figures', () => {
       table: 'aggregator_channel_days',
       filters: expect.arrayContaining([
         'outlet_id=o-1',
-        'channel=zomato',
         'business_date>=2026-08-20',
         'business_date<2026-08-21',
       ]),
     })
+    for (const query of queries) {
+      if (query.table !== 'aggregator_channel_days') continue
+      expect(query.filters).not.toContain('channel=zomato')
+      expect(query.filters).not.toContain('channel=swiggy')
+    }
   })
 
   it('answers nothing when no figure covers the date', async () => {

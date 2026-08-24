@@ -67,10 +67,31 @@ function seedFor(
   healthy: boolean,
   at: (minutesAgo: number) => string,
   day: (daysAgo: number) => string,
+  channel: 'zomato' | 'swiggy',
 ) {
   const events: AggregatorSyncEventRow[] = []
   const push = (minutesAgo: number, event: AggregatorSyncEventRow['event']) => {
     events.push({ id: eventId(), outletId, at: at(minutesAgo), event, resolvedAt: null })
+  }
+
+  if (!healthy && channel === 'swiggy') {
+    // The second Swiggy outlet carries the same trouble the Zomato demo does —
+    // a session that ended and a week that will not reconcile — so the repair
+    // flow is walkable on both pages. What differs is the words: every card and
+    // row names Swiggy, and the repair dispatches Swiggy's login alone.
+    push(20, {
+      kind: 'week-disputed',
+      from: day(28),
+      to: day(22),
+      computedPaise: 1_508_844,
+      statedPayoutPaise: 1_516_759,
+      differencePaise: -7_915,
+    })
+    push(15, {
+      kind: 'session-lapsed',
+      detail: 'Swiggy ended this session. It needs a one time password to get back in.',
+    })
+    return events
   }
 
   if (healthy) {
@@ -84,26 +105,39 @@ function seedFor(
       fromNetPaise: 210_000,
       toNetPaise: 217_915,
     })
-    // Deliberately not an exact match, because a real one rarely is. The owner
-    // typed a round number off the delivery slip on the day they noticed it;
-    // Zomato reports the invoice to the paisa, dated to the purchase. A fixture
-    // where both sides agreed would demonstrate a case that does not happen and
-    // hide the one that does.
-    push(36, {
-      kind: 'possible-duplicate-expense',
-      typed: {
-        businessDate: day(15),
-        amountPaise: 375_000,
-        note: 'Hyperpure, paid online',
-        expenseId: 'demo-expense-typed-hyperpure',
-      },
-      synced: {
-        businessDate: day(16),
-        amountPaise: 374_777,
-        note: 'Hyperpure invoice HP-88213',
-        expenseId: 'demo-expense-synced-hyperpure',
-      },
-    })
+    if (channel === 'zomato') {
+      // Deliberately not an exact match, because a real one rarely is. The owner
+      // typed a round number off the delivery slip on the day they noticed it;
+      // Zomato reports the invoice to the paisa, dated to the purchase. A fixture
+      // where both sides agreed would demonstrate a case that does not happen and
+      // hide the one that does.
+      push(36, {
+        kind: 'possible-duplicate-expense',
+        typed: {
+          businessDate: day(15),
+          amountPaise: 375_000,
+          note: 'Hyperpure, paid online',
+          expenseId: 'demo-expense-typed-hyperpure',
+        },
+        synced: {
+          businessDate: day(16),
+          amountPaise: 374_777,
+          note: 'Hyperpure invoice HP-88213',
+          expenseId: 'demo-expense-synced-hyperpure',
+        },
+      })
+    } else {
+      // Swiggy's own open decision: a cycle whose orders do not add up to the
+      // payout Swiggy says it made. The same gate, the same two actions.
+      push(36, {
+        kind: 'week-disputed',
+        from: day(21),
+        to: day(15),
+        computedPaise: 1_502_310,
+        statedPayoutPaise: 1_516_759,
+        differencePaise: -14_449,
+      })
+    }
   } else {
     push(20, {
       kind: 'week-disputed',
@@ -115,7 +149,10 @@ function seedFor(
     })
     push(15, {
       kind: 'session-lapsed',
-      detail: 'Zomato signed this account out. It needs a one time password to get back in.',
+      detail:
+        channel === 'swiggy'
+          ? 'Swiggy ended this session. It needs a one time password to get back in.'
+          : 'Zomato signed this account out. It needs a one time password to get back in.',
     })
   }
 
@@ -126,6 +163,7 @@ export function createMockAggregatorSyncAdapter(
   store: DemoStore,
   role: Role,
   outletIds: readonly string[],
+  { channel = 'zomato' }: { channel?: 'zomato' | 'swiggy' } = {},
 ): AggregatorSyncAdapter {
   const now = () => new Date()
   const day = (daysAgo: number) => store.businessDate(daysAgo)
@@ -165,7 +203,7 @@ export function createMockAggregatorSyncAdapter(
         awaitingOneTimePassword: null,
         syncedFrom: day(16),
       },
-      events: seedFor(outletId, healthy, at, day),
+      events: seedFor(outletId, healthy, at, day, channel),
       pendingLogin: false,
     })
   }
@@ -311,16 +349,19 @@ export function createMockAggregatorSyncAdapter(
           resolvedAt: null,
           event: { kind: 'days-written', days: 7, from: day(7), to: day(1) },
         })
-        // Model A: one sign-in restores both channels, so the child heals with
-        // the parent instead of staying lapsed behind a healthy Zomato.
-        healHyperpure()
+        // Model A: one sign-in restores both Zomato-side channels, so the child
+        // heals with the parent instead of staying lapsed behind a healthy
+        // Zomato. Swiggy is the exception that named Model A's boundary: its
+        // session is independent, so nothing here touches it.
+        if (channel === 'zomato') healHyperpure()
       })
     },
 
-    async requestReconnect(outletId, channel = 'zomato') {
+    async requestReconnect(outletId, requested) {
       const state = stateFor(outletId)
+      const target = requested ?? channel
 
-      if (channel === 'hyperpure') {
+      if (target === 'hyperpure') {
         // The ladder, as the demo can walk it. The Hyperpure line starts
         // lapsed, so its Reconnect exercises whichever rung this outlet's
         // parent earns: a warm Zomato dispatches the silent capture-only
@@ -341,6 +382,28 @@ export function createMockAggregatorSyncAdapter(
 
         // Full-login rung: the code card appears (the runner opened the mailbox
         // when the login asked for it), and answering it heals both channels.
+        state.pendingLogin = true
+        state.health = { ...state.health, running: true }
+        void wait(1_200).then(() => {
+          state.health = {
+            ...state.health,
+            running: false,
+            awaitingOneTimePassword: {
+              requestedAt: now().toISOString(),
+              expiresAt: new Date(Date.now() + OTP_VALID_MILLISECONDS).toISOString(),
+            },
+          }
+        })
+        return { outcome: 'dispatched' }
+      }
+
+      // Swiggy owns an independent session with an independent mailbox, so its
+      // reconnect asks about Swiggy alone and can only ever run Swiggy's own
+      // repair - never another channel's.
+      if (target === 'swiggy') {
+        if (state.health.lastOutcome !== 'session_lapsed' || state.health.awaitingOneTimePassword) {
+          return { outcome: 'still_signed_in' }
+        }
         state.pendingLogin = true
         state.health = { ...state.health, running: true }
         void wait(1_200).then(() => {
@@ -437,16 +500,18 @@ export function createMockAggregatorSyncAdapter(
       // answers as the real path would, which is what the surface is built
       // against. A file it cannot place is refused with the same message.
       const name = file.filename.toLowerCase()
-      const kind = name.includes('order_history')
-        ? ('zomato-order-history' as const)
-        : name.includes('soa') || name.includes('hyperpure')
-          ? ('hyperpure-statement' as const)
-          : name.includes('settlement')
-            ? ('zomato-settlement' as const)
-            : null
+      const kind = name.includes('annexure')
+        ? ('swiggy-annexure' as const)
+        : name.includes('order_history')
+          ? ('zomato-order-history' as const)
+          : name.includes('soa') || name.includes('hyperpure')
+            ? ('hyperpure-statement' as const)
+            : name.includes('settlement')
+              ? ('zomato-settlement' as const)
+              : null
       if (!kind) {
         throw new Error(
-          'This file matches no known statement shape. Upload a Zomato order history, a Zomato settlement, or a Hyperpure statement.',
+          'This file matches no known statement shape. Upload a Zomato order history, a Zomato settlement, a Hyperpure statement, or a Swiggy payout annexure.',
         )
       }
       return {
@@ -454,7 +519,12 @@ export function createMockAggregatorSyncAdapter(
         wrote:
           kind === 'hyperpure-statement'
             ? ['Kanchrapara · supply costs updated from the statement']
-            : ['Kalyani · figures updated', 'Kanchrapara · figures updated'],
+            : kind === 'swiggy-annexure'
+              ? [
+                  'Kalyani · Swiggy cycle settled from the annexure',
+                  '42 orders written · final payout reconciled to the paisa',
+                ]
+              : ['Kalyani · figures updated', 'Kanchrapara · figures updated'],
       }
     },
   }

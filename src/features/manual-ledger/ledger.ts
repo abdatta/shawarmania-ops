@@ -97,6 +97,43 @@ export function readZomato(day: ManualLedgerDayFigures): ZomatoReading {
   }
 }
 
+/**
+ * A day's Swiggy figures, on exactly Zomato's terms.
+ *
+ * One authority rule, applied per channel: where a measured reading exists it
+ * IS the day's figure, and any legacy typed number in the row's own columns
+ * stands down; where none exists — an outlet Swiggy does not cover, or a date
+ * before its first read — the typed columns stand exactly as they always did,
+ * with no settlement to show for provenance. A negative measured net is a real
+ * answer, not an error: a cycle whose deductions outran its orders had a day
+ * the shop paid to trade, and hiding that would be the flattering kind of
+ * wrong.
+ */
+export function readSwiggy(day: ManualLedgerDayFigures): ZomatoReading {
+  const settlement = day.swiggySettlement ?? null
+  if (settlement) {
+    const grossPaise = assertPaise(settlement.revenuePaise, 'Swiggy revenue')
+    return {
+      grossPaise,
+      commissionPaise:
+        settlement.commissionPaise === null
+          ? null
+          : assertPaise(settlement.commissionPaise, 'Swiggy commission'),
+      netPaise: netAggregatorPaise(grossPaise, settlement.commissionPaise),
+      settlement,
+    }
+  }
+  const grossPaise = assertPaise(day.swiggyRevenuePaise ?? 0, 'Swiggy revenue')
+  const commissionPaise = day.swiggyCommissionPaise ?? null
+  return {
+    grossPaise,
+    commissionPaise:
+      commissionPaise === null ? null : assertPaise(commissionPaise, 'Swiggy commission'),
+    netPaise: netAggregatorPaise(grossPaise, commissionPaise),
+    settlement: null,
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // One day.
 
@@ -132,6 +169,7 @@ export function readDay(
   expenses: readonly ManualLedgerExpense[],
 ): DayReading {
   const zomato = readZomato(day)
+  const swiggy = readSwiggy(day)
   const counting = expenses.filter(isCounted)
   const cashExpensesPaise = sumExpenses(counting.filter((expense) => expense.isCash))
   const nonCashExpensesPaise = sumExpenses(counting.filter((expense) => !expense.isCash))
@@ -159,9 +197,9 @@ export function readDay(
       day.cashRevenuePaise +
       assertPaise(day.upiRevenuePaise, 'UPI revenue') +
       zomato.grossPaise +
-      assertPaise(day.swiggyRevenuePaise, 'Swiggy revenue'),
+      swiggy.grossPaise,
     netZomatoPaise: zomato.netPaise,
-    netSwiggyPaise: netAggregatorPaise(day.swiggyRevenuePaise, day.swiggyCommissionPaise),
+    netSwiggyPaise: swiggy.netPaise,
     zomato,
   }
 }
@@ -334,13 +372,19 @@ export function readMonth(
   for (const day of days) {
     grossCashPaise += assertPaise(day.cashRevenuePaise, 'cash revenue')
     grossUpiPaise += assertPaise(day.upiRevenuePaise, 'UPI revenue')
-    grossSwiggyPaise += assertPaise(day.swiggyRevenuePaise, 'Swiggy revenue')
     // Per day, from that day's own figures — measured where the sync covers the
     // day, derived from that day's own rate where it does not. Moving either out
     // of the loop is the bug this whole per-day design exists to make
     // impossible.
     const zomato = readZomato(day)
-    const swiggyNet = netAggregatorPaise(day.swiggyRevenuePaise, day.swiggyCommissionPaise)
+    const swiggy = readSwiggy(day)
+    grossSwiggyPaise += swiggy.grossPaise
+    // Per day, from that day's own figures — measured where the sync covers the
+    // day, derived from that day's own rate where it does not. Moving either out
+    // of the loop is the bug this whole per-day design exists to make
+    // impossible.
+    const zomatoNet = zomato.netPaise
+    const swiggyNet = swiggy.netPaise
     grossZomatoPaise += zomato.grossPaise
 
     /*
@@ -353,9 +397,9 @@ export function readMonth(
      * says "at most this much arrived", which is true, and the count below is what
      * stops it being read as final.
      */
-    netZomatoPaise += zomato.netPaise ?? zomato.grossPaise
-    netSwiggyPaise += swiggyNet ?? day.swiggyRevenuePaise
-    if (zomato.netPaise === null || swiggyNet === null) undeterminedDays += 1
+    netZomatoPaise += zomatoNet ?? zomato.grossPaise
+    netSwiggyPaise += swiggyNet ?? swiggy.grossPaise
+    if (zomatoNet === null || swiggyNet === null) undeterminedDays += 1
   }
 
   const netRevenuePaise = grossCashPaise + grossUpiPaise + netZomatoPaise + netSwiggyPaise

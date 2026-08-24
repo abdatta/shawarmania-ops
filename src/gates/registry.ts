@@ -47,7 +47,13 @@ export type GateState = 'hidden' | 'demo' | 'live'
  * id, so an id added here without one fails to compile.
  */
 export type AttentionSourceId =
-  'attendance-waiting' | 'counter-request-waiting' | 'zomato-needs-you'
+  | 'attendance-waiting'
+  | 'counter-request-waiting'
+  | 'zomato-needs-you'
+  // Independent of `zomato-needs-you` by construction: Swiggy's waiting work
+  // lives in Swiggy's rows, read through Swiggy's adapter instance, so one
+  // channel's resolution can neither create nor clear the other's badge.
+  | 'swiggy-needs-you'
 
 interface SurfaceDefInput {
   /** Which role's shell mounts this surface. */
@@ -103,25 +109,25 @@ const defs = {
   'owner-people': {
     role: 'super_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 5 },
+    nav: { label: 'People', icon: Users, order: 6 },
     state: 'live',
   },
   'owner-comparison': {
     role: 'super_admin',
     path: 'comparison',
-    nav: { label: 'Compare', icon: BarChart3, order: 6 },
+    nav: { label: 'Compare', icon: BarChart3, order: 7 },
     state: 'demo',
   },
   'owner-alerts': {
     role: 'super_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 7 },
+    nav: { label: 'Alerts', icon: Bell, order: 8 },
     state: 'demo',
   },
   'owner-billing-history': {
     role: 'super_admin',
     path: 'billing-history',
-    nav: { label: 'Billing', icon: ReceiptText, order: 8 },
+    nav: { label: 'Billing', icon: ReceiptText, order: 9 },
     state: 'live',
   },
   /**
@@ -190,6 +196,24 @@ const defs = {
     // including the Reconnect the owner needs when a session lapses, which is the one
     // repair they cannot make anywhere else.
     state: 'live',
+  },
+  /**
+   * What the Swiggy sync did, and what needs you about it (#47).
+   *
+   * `demo` until its readers are scheduled and a real capture has been
+   * rehearsed end to end (tasks 9–10 of swiggy-settlement-sync): the screen is
+   * finished, but a surface whose whole job is reporting on live money should
+   * not go live ahead of the automation it reports on. It carries navigation
+   * for the same reason Zomato's does — a surface has to be findable before
+   * its first failure — and an attention key of its own, because Swiggy's
+   * session is independent of Zomato's and its waiting work can neither be
+   * created nor cleared by anything on the Zomato page.
+   */
+  'owner-swiggy-sync': {
+    role: 'super_admin',
+    path: 'ledger/swiggy',
+    nav: { label: 'Swiggy', icon: UtensilsCrossed, order: 5, attention: 'swiggy-needs-you' },
+    state: 'demo',
   },
   /**
    * The owner's counterpart to `admin-devices`, across every outlet.
