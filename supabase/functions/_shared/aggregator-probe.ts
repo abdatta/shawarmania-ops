@@ -30,16 +30,6 @@ interface StoredCookie {
   domain?: string
 }
 
-function readState(session: string): { cookies: StoredCookie[] } | null {
-  try {
-    const parsed = JSON.parse(session)
-    if (!Array.isArray(parsed?.cookies)) return null
-    return parsed
-  } catch {
-    return null
-  }
-}
-
 function cookiesFor(state: { cookies: StoredCookie[] }, domainIncludes: string): StoredCookie[] {
   return state.cookies.filter((cookie) => String(cookie.domain ?? '').includes(domainIncludes))
 }
@@ -164,6 +154,80 @@ async function probeHyperpure(state: { cookies: StoredCookie[] }): Promise<Probe
   return { alive: null, reason: 'unexpected_status', status: res.status }
 }
 
+/**
+ * The Swiggy access token. Unlike Zomato and Hyperpure it is not a cookie:
+ * the partner SPA keeps it in localStorage, and the composer authenticates by
+ * that header alone — CORS forbids credentialed calls entirely
+ * (`Access-Control-Allow-Origin: *`), so cookies are neither sent nor needed.
+ */
+function swiggyToken(state: {
+  cookies?: StoredCookie[]
+  localStorage?: { name: string; value: string }[]
+}): string | null {
+  const fromStorage = (state.localStorage ?? [])
+    .filter((e) => String(e?.name ?? '') === 'access_token')
+    .map((e) => String(e.value ?? ''))
+    .find((v) => v.length > 0)
+  if (fromStorage) return fromStorage
+  // A capture may have folded the login mutation's token into a cookie-named
+  // entry instead; accept it there too, but never heuristically harvest keys.
+  return state.cookies?.find((c) => c.name === 'access_token')?.value ?? null
+}
+
+async function probeSwiggy(state: {
+  cookies?: StoredCookie[]
+  localStorage?: { name: string; value: string }[]
+}): Promise<ProbeResult> {
+  const token = swiggyToken(state)
+  if (!token) return { alive: false, reason: 'no_token' }
+
+  // The cheapest authenticated read: the owner-finance lookup the finance
+  // pages themselves issue first. Header recipe mirrors
+  // shawarmania-sync/src/sources/swiggy/api.mjs — raw token, never Bearer.
+  let res: Response
+  try {
+    res = await fetch('https://vhc-composer.swiggy.com/query?query=getOwnerFinanceDetailsV2', {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        access_token: token,
+        'user-agent': BROWSER_UA,
+        origin: 'https://partner.swiggy.com',
+        referer: 'https://partner.swiggy.com/',
+      },
+      body: JSON.stringify({
+        query:
+          'query getOwnerFinanceDetailsV2($restaurantIds: [Int64!]!) { getOwnerFinanceDetailsV2(restaurantIds: $restaurantIds) { panData { panNumber } outlets { id } } }',
+        variables: { restaurantIds: ['0'] },
+      }),
+    })
+  } catch {
+    return { alive: null, reason: 'probe_error' }
+  }
+  if (res.ok) {
+    // An auth failure can arrive as HTTP 200 with a GraphQL errors array whose
+    // wording names the session rather than the query.
+    try {
+      const body = await res.json()
+      const errors = body?.errors
+      if (Array.isArray(errors) && errors.length > 0) {
+        const text = JSON.stringify(errors).toLowerCase()
+        if (/token|session|auth|login|expire/.test(text)) {
+          return { alive: false, reason: 'lapsed' }
+        }
+        return { alive: null, reason: 'shape_changed' }
+      }
+      return { alive: true }
+    } catch {
+      return { alive: null, reason: 'unusable_response' }
+    }
+  }
+  if (res.status === 401 || res.status === 403)
+    return { alive: false, reason: 'lapsed', status: res.status }
+  return { alive: null, reason: 'unexpected_status', status: res.status }
+}
+
 /** Probe one channel's stored session with a single real authenticated call. */
 export async function probeChannel(channel: string): Promise<ProbeResult> {
   const service = serviceClient()
@@ -173,7 +237,19 @@ export async function probeChannel(channel: string): Promise<ProbeResult> {
     return { alive: null, reason: 'backend_failure' }
   }
   if (!data) return { alive: false, reason: 'no_session' }
-  const state = readState(data as string)
-  if (!state) return { alive: false, reason: 'unusable_session' }
-  return channel === 'hyperpure' ? probeHyperpure(state) : probeZomato(state)
+  let state: unknown
+  try {
+    state = JSON.parse(data as string)
+  } catch {
+    return { alive: false, reason: 'unusable_session' }
+  }
+  if (!state || typeof state !== 'object') return { alive: false, reason: 'unusable_session' }
+  if (channel === 'hyperpure') return probeHyperpure(state as { cookies: StoredCookie[] })
+  if (channel === 'swiggy')
+    return probeSwiggy(
+      state as { cookies?: StoredCookie[]; localStorage?: { name: string; value: string }[] },
+    )
+  if (channel === 'zomato') return probeZomato(state as { cookies: StoredCookie[] })
+  // Never guess: an unknown channel has no probe, so it cannot be called alive.
+  return { alive: null, reason: 'unknown_channel' }
 }

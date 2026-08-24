@@ -32,6 +32,14 @@ interface OutletRow {
   hyperpure_delivery: boolean | null
 }
 
+/** No operator file this business receives is larger than this. */
+const MAX_FILE_BYTES = 20 * 1024 * 1024
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as ArrayBuffer)
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 function decode(bytes: Uint8Array): DecodedStatement {
   // A zip is the order-history export; anything else is a workbook. Sniffed by
   // the archive's own magic bytes, not the filename, which is often changed.
@@ -112,13 +120,30 @@ async function outletMap(
     .in('id', permitted)
   if (error) throw error
   const rows = (data ?? []) as OutletRow[]
+
+  // Swiggy's restaurant references are mapping-table facts, not outlet columns:
+  // one account holds active and dormant references, and only an enabled one may
+  // book a file. The map is narrowed to the caller's permitted outlets, so a
+  // file can never be booked against an outlet the caller does not hold.
+  const { data: swiggyRows, error: swiggyError } = await service
+    .from('outlet_channel_restaurants')
+    .select('outlet_id, external_ref')
+    .eq('channel', 'swiggy')
+    .eq('enabled', true)
+    .in('outlet_id', permitted)
+  if (swiggyError) throw swiggyError
+
   const zomatoResIds: Record<string, string> = {}
   let hyperpureOutletId = ''
+  const swiggyRefs: Record<string, string> = {}
   for (const row of rows) {
     if (row.zomato_res_id) zomatoResIds[row.zomato_res_id] = row.id
     if (row.hyperpure_delivery) hyperpureOutletId = row.id
   }
-  return { zomatoResIds, hyperpureOutletId }
+  for (const row of (swiggyRows ?? []) as { outlet_id: string; external_ref: string }[]) {
+    swiggyRefs[row.external_ref] = row.outlet_id
+  }
+  return { zomatoResIds, hyperpureOutletId, swiggyRefs }
 }
 
 function secretMatches(offered: string, expected: string): boolean {
@@ -194,6 +219,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
   } catch {
     return json({ error: 'unreadable_file' }, 400)
   }
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_FILE_BYTES) {
+    return json({ error: 'file_size_out_of_range' }, 413)
+  }
+
+  // A PDF is recognised by its own magic and refused by name. A payment advice
+  // proves money moved but carries no order rows, so it cannot settle anything
+  // or invent a day; until its fields are parsed against proved layouts, an
+  // honest named refusal beats a silent zero.
+  if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+    return json(
+      {
+        error: 'pdf_not_actionable',
+        detail:
+          'payment advice or tax invoice recognised; order-level evidence is required to post',
+      },
+      422,
+    )
+  }
 
   let outlets: OutletMap
   try {
@@ -204,8 +247,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   let parsed
+  let digestHex: string
   try {
-    parsed = parseStatement(decode(bytes), outlets)
+    digestHex = await sha256Hex(bytes)
+    parsed = parseStatement(decode(bytes), outlets, { digestHex })
   } catch (cause) {
     if (cause instanceof StatementShapeError) {
       // A file this parser cannot place is the caller's to fix, and the message
@@ -215,6 +260,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
     console.error('parse failed', cause)
     return json({ error: 'parse_failed' }, 500)
   }
+
+  // A Business Metrics Report is calendar-day evidence about the portal's own
+  // numbers. It is answered with what it contained and written nowhere.
+  if (parsed.kind === 'swiggy-metrics-evidence') {
+    return json({ kind: parsed.kind, days: parsed.days.length }, 200)
+  }
+
+  // What a file left behind: its digest, the parser that read it, and the
+  // sanitized candidate - never the bytes, which carry customer rows. The path
+  // is server-generated with the outlet first, exactly the shape the storage
+  // policies grant on, so raw PII-bearing uploads have no reason to exist.
+  const PARSE_VERSION = 'swiggy-annexure@1'
 
   const results: unknown[] = []
   try {
@@ -233,6 +290,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
         })
         if (error) throw error
         results.push(data)
+      }
+      // The annexure's sanitized candidate is retained as evidence: digest and
+      // parser version included, raw bytes never. Same bytes re-uploaded land
+      // on the same path, so retention is idempotent with the ingest.
+      if (parsed.kind === 'swiggy-annexure' && parsed.cycles[0]) {
+        const cycle = parsed.cycles[0]
+        const path = `${cycle.outlet_id}/swiggy/${digestHex.slice(0, 32)}.json`
+        await service.storage
+          .from('operator-statements')
+          .upload(
+            path,
+            JSON.stringify({ parser: PARSE_VERSION, digest: digestHex, candidate: cycle }),
+            { contentType: 'application/json', upsert: true },
+          )
+        results.push({ evidence_path: path })
       }
     }
   } catch (cause) {

@@ -55,7 +55,7 @@ const ACTIONS: readonly Action[] = [
  * ever exercised by Zomato. Widening the guard here does not invent an OTP flow for
  * Hyperpure; it only lets its session be saved, read and forgotten.
  */
-const KNOWN_CHANNELS: readonly string[] = ['zomato', 'hyperpure']
+const KNOWN_CHANNELS: readonly string[] = ['zomato', 'hyperpure', 'swiggy']
 
 /** Zomato rejects a wrong code and offers the field again. Three is enough. */
 const MAX_ATTEMPTS = 3
@@ -304,7 +304,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
      * code's life still cannot deadlock the channel against future reconnects.
      */
     case 'open_code_request': {
-      if (channel !== 'zomato') {
+      if (channel !== 'zomato' && channel !== 'swiggy') {
         // Hyperpure rides the Zomato login and has no one-time password of its
         // own; there is no mailbox to open for it.
         return json({ error: 'no_code_channel' }, 400)

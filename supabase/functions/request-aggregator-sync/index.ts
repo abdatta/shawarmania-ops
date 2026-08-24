@@ -89,16 +89,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const mode: Mode = body['mode'] === 'reconnect' ? 'reconnect' : 'sync'
   const rehearse = body['rehearse'] === true
 
-  // The configured-outlet guard applies where it ever made sense: a zomato sync
-  // needs the outlet's restaurant id, which is exactly what the configuration row
-  // carries. Hyperpure is account-level with no configuration row by design; its
-  // repair does not depend on which outlet's screen the tap came from.
+  if (channel !== 'zomato' && channel !== 'hyperpure' && channel !== 'swiggy') {
+    return json({ error: 'unknown_channel', channel }, 400)
+  }
+
+  // The configured-outlet guard applies where it ever made sense: a restaurant
+  // sync needs the outlet's external identity, which is exactly what the
+  // configuration row carries — each channel checked against ITS OWN row, so a
+  // Swiggy tap can never ride Zomato's switch. Hyperpure is account-level with
+  // no configuration row by design; its repair does not depend on which
+  // outlet's screen the tap came from.
   if (channel !== 'hyperpure') {
     const { data: configured, error: configuredError } = await service
       .from('outlet_channel_sync')
       .select('outlet_id')
       .eq('outlet_id', outletId)
-      .eq('channel', 'zomato')
+      .eq('channel', channel)
       .maybeSingle()
 
     if (configuredError) {
@@ -131,12 +137,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   /*
-   * Probe both channels, then take the ladder's rung. Probes run together; one
-   * that cannot tell answers alive-null and decideRung refuses rather than guess.
+   * Probe, then take the rung. The Zomato/Hyperpure ladder probes both because
+   * one login carries them both. Swiggy owns an independent session, so a
+   * Swiggy reconnect asks about Swiggy alone and can only ever dispatch the
+   * Swiggy login — never another channel's repair.
    */
   let rung: 'still_signed_in' | 'capture_only' | 'full_login' | 'probe_failed'
+  let swiggyReconnect = false
   if (mode === 'sync') {
     rung = 'full_login'
+  } else if (channel === 'swiggy') {
+    swiggyReconnect = true
+    const probe = await probeChannel('swiggy')
+    if (probe.alive === true) {
+      rung = 'still_signed_in'
+    } else if (probe.alive === false) {
+      rung = 'full_login'
+    } else {
+      rung = 'probe_failed'
+    }
   } else {
     const [parentProbe, childProbe] = await Promise.all([
       probeChannel('zomato'),
@@ -146,6 +165,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   if (rung === 'probe_failed') return json({ error: 'probe_failed' }, 503)
+
+  if (mode === 'sync' && channel === 'swiggy') {
+    // The Swiggy reader workflow arrives with the sync-repository half of this
+    // change; until then there is no job whose name could mean "read Swiggy",
+    // and dispatching Zomato's reader would silently read the wrong portal.
+    return json({ error: 'swiggy_reader_not_configured' }, 503)
+  }
 
   // Choose the workflow by WHAT THE RUNG IS, never by trusting the caller's mode
   // string alone: choosing it by mode was exactly the bug that once ran the
@@ -170,11 +196,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // The workflow inputs describe THE JOB, never the button that asked for it:
   // login.yml signs in to Zomato whichever line's Reconnect was tapped (Model
-  // A — one sign-in restores both channels), and its `channel` choice input
-  // admits only zomato. Forwarding the tap's channel here was exactly the 422
-  // that broke the first live Hyperpure reconnect: GitHub refused the whole
-  // dispatch over a label.
-  const workflowChannel = mode === 'sync' || rung === 'full_login' ? 'zomato' : 'hyperpure'
+  // A — one sign-in restores both channels). Swiggy is the one exception: its
+  // reconnect reaches this point only as a full_login rung, so login.yml is
+  // dispatched with channel=swiggy and no other channel's repair ever runs.
+  const workflowChannel =
+    mode === 'sync' || rung === 'full_login' ? (swiggyReconnect ? 'swiggy' : 'zomato') : 'hyperpure'
 
   const dispatch = await fetch(
     `https://api.github.com/repos/${target.owner}/${target.repo}/actions/workflows/${target.workflow}/dispatches`,

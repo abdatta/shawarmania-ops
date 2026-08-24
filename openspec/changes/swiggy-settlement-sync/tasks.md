@@ -2,10 +2,10 @@
 
 - [x] 1.1 Finish and archive #44 `aggregator-reconnect-and-hyperpure-automation`, then re-read its merged `aggregator-channel-sessions` spec and verify this change's delta applies without duplicate or contradictory requirements.
 - [x] 1.2 Pin the current Zomato owner tab, reconnect ladder, event resolution, statement upload and ledger day/month behavior with focused tests before extracting shared code; verify every new characterization test passes against the unchanged implementation.
-- [ ] 1.3 Capture and redact real Swiggy fixtures for live Net Sales, current payout, at least two FINAL cycles (including one non-seven-day boundary), every finance page, pagination and representative error responses; verify fixtures contain no access token, cookie, customer PII, bank reference or live order identifier.
-- [ ] 1.4 Capture and redact real Swiggy Business Metrics XLSX, payout-annexure XLSX, payment-advice PDF and tax-invoice PDF variants; record MIME bytes, sheet/field contracts and which facts each proves, and verify every retained fixture is synthetic/redacted and parses with network disabled.
-- [ ] 1.5 Capture one multi-restaurant Business Metrics report or explicitly record that its row partition remains unsupported; verify the parser fixture proves each restaurant row is mapped independently or rejects the ambiguous shape.
-- [ ] 1.6 Write a short evidence matrix in the change notes or tests mapping portal/API/file fields to normalized gross, order payout, adjustment, cycle finality and bank status; verify Total Customer Paid is excluded from the Net Sales gross basis and no percentage is an input.
+- [x] 1.3 Capture and redact real Swiggy fixtures for live Net Sales, current payout, at least two FINAL cycles (including one non-seven-day boundary), every finance page, pagination and representative error responses; verify fixtures contain no access token, cookie, customer PII, bank reference or live order identifier.
+- [x] 1.4 Capture and redact real Swiggy Business Metrics XLSX, payout-annexure XLSX, payment-advice PDF and tax-invoice PDF variants; record MIME bytes, sheet/field contracts and which facts each proves, and verify every retained fixture is synthetic/redacted and parses with network disabled.
+- [x] 1.5 Capture one multi-restaurant Business Metrics report or explicitly record that its row partition remains unsupported; verify the parser fixture proves each restaurant row is mapped independently or rejects the ambiguous shape.
+- [x] 1.6 Write a short evidence matrix in the change notes or tests mapping portal/API/file fields to normalized gross, order payout, adjustment, cycle finality and bank status; verify Total Customer Paid is excluded from the Net Sales gross basis and no percentage is an input.
 
 ## 2. Channel-aware database foundation
 
@@ -31,40 +31,40 @@
 
 ## 4. Independent Swiggy session boundary
 
-- [ ] 4.1 Extend the Ops reader boundary to read/save/forget Swiggy Vault material and return secret-free health with truthful unknown expiry; verify app clients receive metadata only and no service-role or session material.
-- [ ] 4.2 Add a cheap authenticated Swiggy GraphQL probe with alive/lapsed/access-denied/shape/transport outcomes; verify it never defaults an unknown channel to Zomato and tests cover each classification.
-- [ ] 4.3 Make reconnect dispatch branch explicitly by channel: Swiggy probes and repairs only Swiggy, while the existing Zomato/Hyperpure ladder remains unchanged; verify healthy Swiggy returns `still_signed_in`, lapsed Swiggy dispatches only `login.yml(channel=swiggy)`, and unconfigured Kanchrapara is refused.
-- [ ] 4.4 Extend the OTP mailbox actions and answer function to Swiggy with atomic per-channel claim, sweep and expiry behavior; verify a Swiggy code cannot answer Zomato, duplicate answers are inert/refused and no submitted code is logged or returned.
-- [ ] 4.5 Update every Edge Function declaration/config block affected by the new channel and verify `npm run lint:functions` passes with the intended JWT boundary.
+- [x] 4.1 Extend the Ops reader boundary to read/save/forget Swiggy Vault material and return secret-free health with truthful unknown expiry; verify app clients receive metadata only and no service-role or session material.
+- [x] 4.2 Add a cheap authenticated Swiggy GraphQL probe with alive/lapsed/access-denied/shape/transport outcomes; verify it never defaults an unknown channel to Zomato and tests cover each classification.
+- [x] 4.3 Make reconnect dispatch branch explicitly by channel: Swiggy probes and repairs only Swiggy, while the existing Zomato/Hyperpure ladder remains unchanged; verify healthy Swiggy returns `still_signed_in`, lapsed Swiggy dispatches only `login.yml(channel=swiggy)`, and unconfigured Kanchrapara is refused.
+- [x] 4.4 Extend the OTP mailbox actions and answer function to Swiggy with atomic per-channel claim, sweep and expiry behavior; verify a Swiggy code cannot answer Zomato, duplicate answers are inert/refused and no submitted code is logged or returned.
+- [x] 4.5 Update every Edge Function declaration/config block affected by the new channel and verify `npm run lint:functions` passes with the intended JWT boundary.
 
 ## 5. Browser-free Swiggy readers in the sync repository
 
-- [ ] 5.1 Harden the plain-HTTP Swiggy client around the captured access token, GraphQL errors and bounded 408/429/5xx retry; verify tests distinguish session lapse, access denial, source-shape error and exhausted transport without logging request secrets.
-- [ ] 5.2 Implement cursor-complete finance history, payout detail and order-level payout reads using portal-declared IDs and dates; verify fixtures cover multiple pages, FINAL Pending/Paid/On Hold and shortened cycle boundaries.
-- [ ] 5.3 Implement live/open-cycle reading with captured/as-of time and a bounded lookback including yesterday; verify a second read advances a provisional value idempotently and a multi-date aggregate is never assigned to one date.
-- [ ] 5.4 Investigate and fixture-prove a timestamped same-day source carrying the Net Sales/Net Bill Value basis, including the post-midnight cutover case; verify the reader refuses authoritative same-day ledger output unless it can assign each amount to the 04:00 business window.
-- [ ] 5.5 Build the Swiggy normalized cycle candidate from order gross/net plus dated and cycle-only components; verify real redacted fixtures reproduce the portal's final payout within tolerance without percentage math or pro-rata allocation.
-- [ ] 5.6 Implement mapping-aware Ops configuration loading and candidate posting for every enabled Swiggy restaurant reference; verify dormant Kalyani is skipped, active Kalyani posts to the correct outlet and Kanchrapara produces no run or zero row.
-- [ ] 5.7 Add browser-free no-write rehearsal and write modes to the Swiggy CLI/workflow entry point; verify rehearsal prints only secret-free outcome counts and write mode posts the same normalized candidate bytes.
-- [ ] 5.8 Prove scheduled-reader dependency hygiene by checking the runtime bundle/workflow contains no Playwright/browser/display-server launch path; verify the full reader suite runs in a Node-only CI job.
+- [x] 5.1 Harden the plain-HTTP Swiggy client around the captured access token, GraphQL errors and bounded 408/429/5xx retry; verify tests distinguish session lapse, access denial, source-shape error and exhausted transport without logging request secrets.
+- [x] 5.2 Implement cursor-complete finance history, payout detail and order-level payout reads using portal-declared IDs and dates; verify fixtures cover multiple pages, FINAL Pending/Paid/On Hold and shortened cycle boundaries.
+- [x] 5.3 Implement live/open-cycle reading with captured/as-of time and a bounded lookback including yesterday; verify a second read advances a provisional value idempotently and a multi-date aggregate is never assigned to one date.
+- [x] 5.4 Investigate and fixture-prove a timestamped same-day source carrying the Net Sales/Net Bill Value basis, including the post-midnight cutover case; verify the reader refuses authoritative same-day ledger output unless it can assign each amount to the 04:00 business window.
+- [x] 5.5 Build the Swiggy normalized cycle candidate from order gross/net plus dated and cycle-only components; verify real redacted fixtures reproduce the portal's final payout within tolerance without percentage math or pro-rata allocation.
+- [x] 5.6 Implement mapping-aware Ops configuration loading and candidate posting for every enabled Swiggy restaurant reference; verify dormant Kalyani is skipped, active Kalyani posts to the correct outlet and Kanchrapara produces no run or zero row.
+- [x] 5.7 Add browser-free no-write rehearsal and write modes to the Swiggy CLI/workflow entry point; verify rehearsal prints only secret-free outcome counts and write mode posts the same normalized candidate bytes.
+- [x] 5.8 Prove scheduled-reader dependency hygiene by checking the runtime bundle/workflow contains no Playwright/browser/display-server launch path; verify the full reader suite runs in a Node-only CI job.
 
 ## 6. Headed Swiggy login job
 
-- [ ] 6.1 Implement the Swiggy identifier → OTP → verified-login capture with resilient selectors and one identifier submission/no automatic resend; verify fixture/UI tests open the mailbox only after the genuine OTP screen renders.
-- [ ] 6.2 Capture only the minimum replayable Swiggy session, write it directly to the Ops Vault boundary and destroy local state; verify logs, summaries and failure artifacts contain no token, cookie, storage value, OTP, restaurant money or customer data.
-- [ ] 6.3 Extend the manual `login.yml` dispatch for `channel=swiggy` under headed Playwright/Xvfb with one channel-specific concurrency group and failure-only short-lived structural artifacts; verify Zomato/Hyperpure workflow behavior remains unchanged.
-- [ ] 6.4 After capture, launch a fresh plain-HTTP client from Vault and complete the Swiggy probe/reader before reporting success; verify a capture that cannot replay remains failed and does not mark health live.
-- [ ] 6.5 Measure a real token's expiry/refresh behavior without recording the token, then encode the truthful metadata rule; verify missing evidence displays unknown expiry and is never replaced by an invented timestamp.
+- [x] 6.1 Implement the Swiggy identifier → OTP → verified-login capture with resilient selectors and one identifier submission/no automatic resend; verify fixture/UI tests open the mailbox only after the genuine OTP screen renders.
+- [x] 6.2 Capture only the minimum replayable Swiggy session, write it directly to the Ops Vault boundary and destroy local state; verify logs, summaries and failure artifacts contain no token, cookie, storage value, OTP, restaurant money or customer data.
+- [x] 6.3 Extend the manual `login.yml` dispatch for `channel=swiggy` under headed Playwright/Xvfb with one channel-specific concurrency group and failure-only short-lived structural artifacts; verify Zomato/Hyperpure workflow behavior remains unchanged.
+- [x] 6.4 After capture, launch a fresh plain-HTTP client from Vault and complete the Swiggy probe/reader before reporting success; verify a capture that cannot replay remains failed and does not mark health live.
+- [x] 6.5 Measure a real token's expiry/refresh behavior without recording the token, then encode the truthful metadata rule; verify missing evidence displays unknown expiry and is never replaced by an invented timestamp.
 
 ## 7. Official-file fallback
 
-- [ ] 7.1 Extend byte/MIME/size recognition to XLSX and deterministic PDF shapes without trusting name/extension; verify renamed valid fixtures pass while forged, oversized, encrypted, scanned, malformed and unknown-layout files fail with zero writes.
-- [ ] 7.2 Parse the payout-annexure workbook's Summary, Payout Breakup, Order Level and adjustment sheets into the shared normalized candidate; verify header drift fails closed and the real redacted fixture reconciles the exact final payout across the outlet cutover.
-- [ ] 7.3 Parse the Business Metrics Report's explicit restaurant rows and `Overview=SALES` / `Metric=Net Sales` date columns as portal-calendar evidence; verify unmapped/ambiguous restaurant rows are refused and a 04:00-cutover outlet is not given an authoritative business-date write from calendar totals alone.
-- [ ] 7.4 Parse only fixture-proved payment-advice PDF fields into a cycle-target candidate and treat tax-invoice/other PDFs according to facts they prove; verify a PDF with final payout but insufficient stored order/day evidence cannot settle or invent days.
-- [ ] 7.5 Drop customer identifiers, phone numbers, names and addresses before normalized output, logs or retained evidence, retaining only an opaque/non-reversible replay value when required; verify fixture scans and assertions find no PII.
-- [ ] 7.6 Store a digest, parser/version metadata and sanitized evidence under server-generated outlet/channel isolation rather than raw PII-bearing bytes; verify bucket policies refuse guessed/cross-outlet paths for all client roles.
-- [ ] 7.7 Make upload replay idempotent and settled-period restatement confirmation bind to the digest and structured before/after proposal; verify same upload is inert, a changed file asks, and an altered proposal cannot reuse confirmation.
+- [x] 7.1 Extend byte/MIME/size recognition to XLSX and deterministic PDF shapes without trusting name/extension; verify renamed valid fixtures pass while forged, oversized, encrypted, scanned, malformed and unknown-layout files fail with zero writes.
+- [x] 7.2 Parse the payout-annexure workbook's Summary, Payout Breakup, Order Level and adjustment sheets into the shared normalized candidate; verify header drift fails closed and the real redacted fixture reconciles the exact final payout across the outlet cutover.
+- [x] 7.3 Parse the Business Metrics Report's explicit restaurant rows and `Overview=SALES` / `Metric=Net Sales` date columns as portal-calendar evidence; verify unmapped/ambiguous restaurant rows are refused and a 04:00-cutover outlet is not given an authoritative business-date write from calendar totals alone.
+- [x] 7.4 Parse only fixture-proved payment-advice PDF fields into a cycle-target candidate and treat tax-invoice/other PDFs according to facts they prove; verify a PDF with final payout but insufficient stored order/day evidence cannot settle or invent days.
+- [x] 7.5 Drop customer identifiers, phone numbers, names and addresses before normalized output, logs or retained evidence, retaining only an opaque/non-reversible replay value when required; verify fixture scans and assertions find no PII.
+- [x] 7.6 Store a digest, parser/version metadata and sanitized evidence under server-generated outlet/channel isolation rather than raw PII-bearing bytes; verify bucket policies refuse guessed/cross-outlet paths for all client roles.
+- [x] 7.7 Make upload replay idempotent and settled-period restatement confirmation bind to the digest and structured before/after proposal; verify same upload is inert, a changed file asks, and an altered proposal cannot reuse confirmation.
 
 ## 8. Ops adapters, Swiggy tab and ledger
 
