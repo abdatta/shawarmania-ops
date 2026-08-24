@@ -12,8 +12,8 @@ import { createSupabaseManualLedgerAdapter } from './manual-ledger'
  * typed Swiggy columns and **no Zomato column at all** — the Zomato freeze is
  * "there is nothing to write", and when Swiggy's fields are removed the same
  * must become true of them. Second, a date carrying measured figures but no
- * recorded day row still reads those figures through `getDayFigures`, filtered
- * to one channel — the stitch a channel merge will extend.
+ * recorded day row still reads both channel figures through `getDayFigures` —
+ * the stitch must not let the presence of one channel hide the other.
  */
 
 const DAY_INPUT = {
@@ -120,15 +120,30 @@ describe('a measured day with no recorded day still reads its figures', () => {
     provisional_commission_paise: null,
   }
 
-  it('maps the figures row into the settlement shape', async () => {
-    const { adapter } = clientForLedger([FIGURES_ROW])
-    const settlement = await adapter.getDayFigures('o-1', '2026-08-20')
+  const SWIGGY_FIGURES_ROW = {
+    ...FIGURES_ROW,
+    channel: 'swiggy',
+    revenue_paise: 178_900,
+    commission_paise: null,
+    settlement_state: 'provisional',
+    origin: 'daily_reader',
+  }
 
-    expect(settlement).toMatchObject({
+  it('maps both channel rows into the virtual-day settlement shape', async () => {
+    const { adapter } = clientForLedger([FIGURES_ROW, SWIGGY_FIGURES_ROW])
+    const figures = await adapter.getDayFigures('o-1', '2026-08-20')
+
+    expect(figures?.zomato).toMatchObject({
       revenuePaise: 400_000,
       commissionPaise: 80_000,
       state: 'settled',
       origin: 'settlement',
+    })
+    expect(figures?.swiggy).toMatchObject({
+      revenuePaise: 178_900,
+      commissionPaise: null,
+      state: 'provisional',
+      origin: 'daily_reader',
     })
   })
 

@@ -2,6 +2,7 @@ import {
   isStaffRole,
   ManualLedgerActionError,
   type AppRole,
+  type ChannelSettlement,
   type LedgerActor,
   type ManualLedgerAdapter,
   type ManualLedgerDay,
@@ -26,7 +27,8 @@ import { captureMockCategory } from './expense-categories'
 function uncountedFiguresDay(
   outletId: string,
   businessDate: string,
-  settlement: ZomatoSettlement,
+  zomato: ZomatoSettlement | null,
+  swiggy: ChannelSettlement | null,
 ): ManualLedgerDayFigures {
   return {
     outletId,
@@ -34,15 +36,16 @@ function uncountedFiguresDay(
     openingCashPaise: 0,
     cashRevenuePaise: 0,
     upiRevenuePaise: 0,
-    zomatoRevenuePaise: settlement.revenuePaise,
+    zomatoRevenuePaise: zomato?.revenuePaise ?? 0,
     cashAddedPaise: 0,
     cashAddedReason: null,
     cashRemovedPaise: 0,
     cashRemovedReason: null,
     countedCashPaise: 0,
-    zomatoCommissionPaise: settlement.commissionPaise,
+    zomatoCommissionPaise: zomato?.commissionPaise ?? null,
     note: null,
-    zomatoSettlement: settlement,
+    zomatoSettlement: zomato,
+    swiggySettlement: swiggy,
     counted: false,
   }
 }
@@ -341,8 +344,14 @@ export function createMockManualLedgerAdapter(
 
     async getDayFigures(outletId, businessDate) {
       refuseDay(outletId)
-      const figure = figureFor(outletId, businessDate)
-      return figure ? toZomatoSettlement(figure) : null
+      const zomato = figureFor(outletId, businessDate)
+      const swiggy = swiggyFigureFor(outletId, businessDate)
+      return zomato || swiggy
+        ? {
+            zomato: zomato ? toZomatoSettlement(zomato) : null,
+            swiggy: swiggy ? toZomatoSettlement(swiggy) : null,
+          }
+        : null
     },
 
     async getPreviousDay(outletId, businessDate) {
@@ -545,21 +554,30 @@ export function createMockManualLedgerAdapter(
         )
       const countedDates = new Set(counted.map((day) => day.businessDate))
 
-      // Dates the sync wrote Zomato figures for but nobody counted — surfaced from
-      // the figures table alone, no ledger row invented.
-      const uncounted = store.aggregatorChannelDays
-        .filter(
-          (row) =>
-            row.outlet_id === outletId &&
-            row.channel === 'zomato' &&
-            inMonth(row.business_date) &&
-            !countedDates.has(row.business_date),
+      // Dates the sync wrote either channel's figures for but nobody counted —
+      // surfaced from the figures table alone, no ledger row invented. One
+      // virtual day carries both readings when they land on the same date.
+      const figureDates = new Set(
+        store.aggregatorChannelDays
+          .filter(
+            (row) =>
+              row.outlet_id === outletId &&
+              (row.channel === 'zomato' || row.channel === 'swiggy') &&
+              inMonth(row.business_date) &&
+              !countedDates.has(row.business_date),
+          )
+          .map((row) => row.business_date),
+      )
+      const uncounted = [...figureDates].map((businessDate) => {
+        const zomato = figureFor(outletId, businessDate)
+        const swiggy = swiggyFigureFor(outletId, businessDate)
+        return uncountedFiguresDay(
+          outletId,
+          businessDate,
+          zomato ? toZomatoSettlement(zomato) : null,
+          swiggy ? toZomatoSettlement(swiggy) : null,
         )
-        .map((row) => {
-          const settlement = toZomatoSettlement(row)
-          return settlement ? uncountedFiguresDay(outletId, row.business_date, settlement) : null
-        })
-        .filter((day): day is ManualLedgerDayFigures => day !== null)
+      })
 
       return {
         days: [...counted, ...uncounted].sort((a, b) =>

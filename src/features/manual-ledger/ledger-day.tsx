@@ -11,6 +11,7 @@ import {
   DataActionError,
   type ChannelSettlement,
   type ManualLedgerCounterRevenue,
+  type ManualLedgerChannelFigures,
   type ManualLedgerDay,
   type ManualLedgerDayInput,
   type ManualLedgerExpense,
@@ -206,9 +207,9 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
 
   const [previous, setPrevious] = useState<ManualLedgerDay | null>(null)
   const [recorded, setRecorded] = useState<ManualLedgerDay | null>(null)
-  // The Zomato figures for this date, read on their own so they show even on a
+  // Both channel figures for this date, read on their own so they show even on a
   // day nobody counted — where `recorded` is null and would otherwise hide them.
-  const [dayFigures, setDayFigures] = useState<ZomatoSettlement | null>(null)
+  const [dayFigures, setDayFigures] = useState<ManualLedgerChannelFigures | null>(null)
   const [counterRevenue, setCounterRevenue] = useState<
     ManualLedgerCounterRevenue | null | undefined
   >(undefined)
@@ -447,8 +448,12 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
                 form field that used to sit here invited typing over evidence,
                 which is why it is gone rather than disabled.
               */}
-              <ZomatoReading settlement={recorded?.zomatoSettlement ?? dayFigures} />
-              <SwiggyReading settlement={recorded?.swiggySettlement ?? null} />
+              <ZomatoReading
+                settlement={recorded?.zomatoSettlement ?? dayFigures?.zomato ?? null}
+              />
+              <SwiggyReading
+                settlement={recorded?.swiggySettlement ?? dayFigures?.swiggy ?? null}
+              />
               <p className="px-1 text-xs text-content-muted" data-testid="why-zomato-differs">
                 Both channels&rsquo; figures are read from their portals and cannot be typed.
                 Swiggy&rsquo;s typed history, where this day still carries any, shows below its
@@ -1244,50 +1249,44 @@ function SourceTag({
   channel,
   settlement,
 }: {
-  /** Named in the test id; only Swiggy still wears the typed chip. */
+  /** Named in the test id. */
   channel: 'zomato' | 'swiggy'
   settlement: ZomatoSettlement | null
 }) {
-  // Zomato no longer takes a typed figure — it is read from Zomato or from an
-  // uploaded statement, full stop. So a Zomato day with nothing read is "not read
-  // yet", not "typed", and it wears no chip at all: the row's own words already say
-  // no figures have arrived, and a "Typed" chip beside them would contradict that.
-  // Swiggy is still entered by hand, so its absence of a reading really is typed.
-  if (settlement === null && channel === 'zomato') return null
+  // Neither channel takes a typed figure now. With no source row, the block's
+  // empty state already says no figures arrived, so an extra chip would misstate
+  // provenance. `AggregatorReading` also only mounts this for a real reading.
+  if (settlement === null) return null
+
+  const channelName = channel === 'zomato' ? 'Zomato' : 'Swiggy'
 
   const [label, tone, why] =
-    settlement === null
+    // A statement supplied by hand is named for how it arrived, not for the
+    // week it settles, because that is the fact the reader cares about: the
+    // automation was not running and somebody uploaded the file.
+    settlement.origin === 'supplied_by_hand'
       ? ([
-          'Typed',
-          'border-border text-content-muted',
-          'Entered by hand. Nothing was read from the aggregator for this day.',
+          'Uploaded',
+          'border-primary text-primary',
+          'Read from a statement you uploaded, because the automation was not running. The figures are the statement’s own.',
         ] as const)
-      : // A statement supplied by hand is named for how it arrived, not for the
-        // week it settles, because that is the fact the reader cares about: the
-        // automation was not running and somebody uploaded the file.
-        settlement.origin === 'supplied_by_hand'
+      : settlement.state === 'settled'
         ? ([
-            'Uploaded',
-            'border-primary text-primary',
-            'Read from a statement you uploaded, because the automation was not running. The figures are the statement’s own.',
+            'Settled',
+            'border-success text-success',
+            `Read from ${channelName}'s weekly payout statement, and it adds up to what they paid.`,
           ] as const)
-        : settlement.state === 'settled'
+        : settlement.state === 'disputed'
           ? ([
-              'Settled',
-              'border-success text-success',
-              "Read from Zomato's weekly payout statement, and it adds up to what they paid.",
+              'Disputed',
+              'border-danger text-danger',
+              `${channelName} has paid this week and the figures do not add up to the payment. Nothing was overwritten.`,
             ] as const)
-          : settlement.state === 'disputed'
-            ? ([
-                'Disputed',
-                'border-danger text-danger',
-                'Zomato has paid this week and the figures do not add up to the payment. Nothing was overwritten.',
-              ] as const)
-            : ([
-                'Daily',
-                'border-primary text-primary',
-                'Read from Zomato today. The commission is not stated until the week closes, so this figure firms up on Sunday.',
-              ] as const)
+          : ([
+              'Daily',
+              'border-primary text-primary',
+              `Read from ${channelName} today. The commission is not stated until the week closes, so this figure firms up on Sunday.`,
+            ] as const)
 
   return (
     <span

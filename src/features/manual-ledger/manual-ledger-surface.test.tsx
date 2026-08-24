@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
-import type { DataAdapters } from '@/data-access/adapters'
+import type { ChannelSettlement, DataAdapters } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock/fixtures/outlets'
@@ -115,6 +115,35 @@ describe('the manual ledger surface', () => {
     renderLedger()
     expect(await screen.findByTestId('ledger-day-form')).toBeInTheDocument()
     expect(screen.queryByTestId('ledger-day-waiting')).not.toBeInTheDocument()
+  })
+
+  it('shows a Swiggy daily reading even when nobody recorded the ledger day', async () => {
+    const dailySwiggy: ChannelSettlement = {
+      revenuePaise: 178_900,
+      commissionPaise: null,
+      state: 'provisional',
+      origin: 'daily_reader',
+      supersededTyped: null,
+      revisedFrom: null,
+      revisedAt: null,
+    }
+    const base = createMockAdapters('super_admin')
+    const adapters: DataAdapters = {
+      ...base,
+      manualLedger: {
+        ...base.manualLedger,
+        getDayFigures: async () => ({ zomato: null, swiggy: dailySwiggy }),
+      },
+    }
+
+    renderLedger(adapters)
+    await screen.findByTestId('ledger-day-form')
+
+    expect(screen.getByTestId('swiggy-revenue')).toHaveTextContent(formatPaise(178_900))
+    expect(screen.getByTestId('source-tag-swiggy-daily')).toHaveAttribute(
+      'title',
+      expect.stringContaining('Swiggy today'),
+    )
   })
 
   it('offers the previous recorded day’s close, and offers no commission at all', async () => {

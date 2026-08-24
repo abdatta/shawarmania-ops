@@ -324,15 +324,17 @@ export function createSupabaseManualLedgerAdapter(
     },
 
     async getDayFigures(outletId, businessDate) {
-      // Read the aggregator figures directly, so a date with a Zomato reading but no
-      // cash count still shows the reading rather than "nothing arrived yet".
+      // Read both channel figures directly, so a date with a portal reading but
+      // no cash count still shows it rather than claiming nothing arrived.
       const figures = await readChannelFigures(
         client,
         outletId,
         businessDate,
         nextDate(businessDate),
       )
-      return figures.zomato.get(businessDate) ?? null
+      const zomato = figures.zomato.get(businessDate) ?? null
+      const swiggy = figures.swiggy.get(businessDate) ?? null
+      return zomato || swiggy ? { zomato, swiggy } : null
     },
 
     async getPreviousDay(outletId, businessDate) {

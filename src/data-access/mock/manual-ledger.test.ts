@@ -92,29 +92,39 @@ describe('mock manual ledger adapter', () => {
       expect(read?.swiggySettlement).toBeNull()
     })
 
-    it('surfaces the Zomato figures on a day nobody counted, rather than claiming none arrived', async () => {
+    it('surfaces both channel figures on a day nobody counted, rather than claiming none arrived', async () => {
       const { store, adapter } = over()
-      const template = store.aggregatorChannelDays.find(
+      const zomatoTemplate = store.aggregatorChannelDays.find(
         (row) => row.outlet_id === DEMO_OUTLET_ID && row.channel === 'zomato',
       )
-      if (!template) throw new Error('The demo no longer seeds a Zomato figure to template from.')
+      if (!zomatoTemplate) {
+        throw new Error('The demo no longer seeds a channel figure to template from.')
+      }
 
-      // A date with a Zomato reading but no cash count — the "day nobody counted"
-      // the sync writes to its own table (exactly the prod 19/20 case).
+      // A date with both portal readings but no cash count — the "day nobody
+      // counted" the sync writes to its own table.
       const uncounted = '2026-01-15'
       store.aggregatorChannelDays.push({
-        ...template,
+        ...zomatoTemplate,
         business_date: uncounted,
         revenue_paise: 246_800,
+        commission_paise: null,
+      })
+      store.aggregatorChannelDays.push({
+        ...zomatoTemplate,
+        channel: 'swiggy',
+        business_date: uncounted,
+        revenue_paise: 178_900,
         commission_paise: null,
       })
 
       // No cash was counted, so there is no ledger day...
       expect(await adapter.getDay(DEMO_OUTLET_ID, uncounted)).toBeNull()
-      // ...but the Zomato figures are there, so the day view can show them instead
-      // of "no figures arrived".
+      // ...but both portal figures are there, so the day view can show them
+      // instead of "no figures arrived".
       const figures = await adapter.getDayFigures(DEMO_OUTLET_ID, uncounted)
-      expect(figures?.revenuePaise).toBe(246_800)
+      expect(figures?.zomato?.revenuePaise).toBe(246_800)
+      expect(figures?.swiggy?.revenuePaise).toBe(178_900)
     })
 
     it('does not write a Zomato figure from the form, because the freeze owns it', async () => {
@@ -281,6 +291,42 @@ describe('mock manual ledger adapter', () => {
   })
 
   describe('the month', () => {
+    it('includes a Swiggy-only day nobody counted, carrying its figure and marked uncounted', async () => {
+      const { store, adapter } = over()
+      const template = store.aggregatorChannelDays.find(
+        (row) => row.outlet_id === DEMO_OUTLET_ID && row.channel === 'zomato',
+      )
+      if (!template) throw new Error('The demo no longer seeds a channel figure to template from.')
+
+      const month = store.today.slice(0, 7)
+      const countedThisMonth = new Set(
+        store.manualLedgerDays
+          .filter((d) => d.outlet_id === DEMO_OUTLET_ID && d.business_date.startsWith(`${month}-`))
+          .map((d) => d.business_date),
+      )
+      let uncounted = ''
+      for (let d = 1; d <= 28; d += 1) {
+        const candidate = `${month}-${String(d).padStart(2, '0')}`
+        if (!countedThisMonth.has(candidate)) {
+          uncounted = candidate
+          break
+        }
+      }
+      store.aggregatorChannelDays.push({
+        ...template,
+        channel: 'swiggy',
+        business_date: uncounted,
+        revenue_paise: 178_900,
+        commission_paise: null,
+      })
+
+      const result = await adapter.getMonth(DEMO_OUTLET_ID, month)
+      const day = result.days.find((d) => d.businessDate === uncounted)
+      expect(day?.counted).toBe(false)
+      expect(day?.swiggySettlement?.revenuePaise).toBe(178_900)
+      expect(result.days.some((d) => d.counted !== false)).toBe(true)
+    })
+
     it('includes a day nobody counted, carrying its Zomato figures and marked uncounted', async () => {
       const { store, adapter } = over()
       const template = store.aggregatorChannelDays.find(
