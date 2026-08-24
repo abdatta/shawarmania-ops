@@ -80,7 +80,7 @@
 ## 9. Lossless handover and live rehearsal
 
 - [ ] 9.1 Add the first forward migration that copies every typed Swiggy revenue/rate/commission fact into immutable `legacy_typed` provenance without dropping source columns; verify transactional row counts, non-null fields, values and representative day/month totals match before and after.
-- [ ] 9.2 Run the independent headed login job with an owner-supplied live OTP and verify a new CI job reuses only the Vault-captured session for a browser-free probe, current read and finance read.
+- [x] 9.2 Run the independent headed login job with an owner-supplied live OTP and verify a new CI job reuses only the Vault-captured session for a browser-free probe, current read and finance read.
 - [ ] 9.3 Run production no-write rehearsal for active Kalyani current data and at least two FINAL cycles, including one shortened boundary; verify cutover allocation, Net Sales basis, every payout component, exact final reconciliation, final/bank-status separation and no financial writes.
 - [ ] 9.4 Produce an outlet/date coverage audit comparing every legacy Swiggy date with API/annexure candidates, explain every gap and verify dormant Kalyani and unconfigured Kanchrapara are not counted as missing trade or zero.
 - [ ] 9.5 Backfill accepted Kalyani candidates through the real ingest boundary and verify idempotent replay, authoritative supersession, retained legacy values and unchanged unaffected dates/months.
