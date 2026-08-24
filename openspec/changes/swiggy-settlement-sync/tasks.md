@@ -72,10 +72,10 @@
 - [x] 8.2 Extract the shared sync surface and event presentation, parameterizing channel labels, capabilities and filters; verify Zomato still shows Hyperpure and Swiggy never shows a Hyperpure line/action, with both shimmers matching any changed layout.
 - [x] 8.3 Add `owner-swiggy-sync`, `/ledger/swiggy`, owner navigation and an independent attention key; verify the gate hides the route/nav when off, direct access is refused for non-owners and Zomato attention cannot clear or create Swiggy attention.
 - [x] 8.4 Implement configured, not-connected, quiet, reading, lapsed, awaiting-code, stuck, provisional, final Pending/Paid, revised and disputed Swiggy states with Read again suppression, reconnect, upload, recheck and accept actions; verify focused surface tests cover every state and action.
-- [ ] 8.5 Generalize manual-ledger adapters/domain types to merge Zomato and Swiggy channel rows into one virtual day even without a manual row; verify day/month totals select one highest-authority value per channel/date and include negative net/cycle deductions correctly.
-- [ ] 8.6 Remove Swiggy revenue/rate/commission controls from current forms and payload types behind the staged migration flag, showing source/state/as-of/superseded history instead; verify no app path can directly write a measured or legacy Swiggy amount.
-- [ ] 8.7 Let assigned Franchise Admin ledger reads include both sourced channel-day aggregates while keeping owner sync UI/actions absent; verify role-shell, direct-route and hand-crafted adapter tests align with RLS.
-- [ ] 8.8 Add internally consistent demo fixtures/actions for provisional, settled, revised, disputed, lapsed, upload fallback and Kanchrapara not-connected states; verify the four-role demo makes no live request and both light/dark phone/tablet walkthroughs remain legible.
+- [x] 8.5 Generalize manual-ledger adapters/domain types to merge Zomato and Swiggy channel rows into one virtual day even without a manual row; verify day/month totals select one highest-authority value per channel/date and include negative net/cycle deductions correctly.
+- [x] 8.6 Remove Swiggy revenue/rate/commission controls from current forms and payload types behind the staged migration flag, showing source/state/as-of/superseded history instead; verify no app path can directly write a measured or legacy Swiggy amount.
+- [x] 8.7 Let assigned Franchise Admin ledger reads include both sourced channel-day aggregates while keeping owner sync UI/actions absent; verify role-shell, direct-route and hand-crafted adapter tests align with RLS.
+- [x] 8.8 Add internally consistent demo fixtures/actions for provisional, settled, revised, disputed, lapsed, upload fallback and Kanchrapara not-connected states; verify the four-role demo makes no live request and both light/dark phone/tablet walkthroughs remain legible.
 
 ## 9. Lossless handover and live rehearsal
 
