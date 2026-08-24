@@ -1,6 +1,6 @@
 # Proposal: Aggregator Reconnect And Hyperpure Automation
 
-> **Model**: Opus · **Wave**: D · **Depends on**: #43 (this finishes the automation #43 stood up but could not land end-to-end) · **Gate**: the owner reconnects the aggregator once and Hyperpure's figures resume alongside Zomato's without a second sign-in or code; a reconnect asks for a one-time code only when the login actually requested one, and never asks when the session is still alive; Hyperpure's daily figures arrive on the schedule without a manual statement upload; the Hyperpure health line offers a working Reconnect again; and the four-role demo walkthrough still walks.
+> **Model**: Ox Alpha — **Wave**: D · **Depends on**: #43 (this finishes the automation #43 stood up but could not land end-to-end) · **Gate**: the owner reconnects the aggregator once and Hyperpure's figures resume alongside Zomato's without a second sign-in or code; a reconnect asks for a one-time code only when the login actually requested one, and never asks when the session is still alive; Hyperpure's daily figures arrive on the schedule without a manual statement upload; the Hyperpure health line offers a working Reconnect again; and the four-role demo walkthrough still walks.
 
 **This is a follow-through change, not new capability.** #43 froze the aggregator entry, moved Zomato and Hyperpure to measured figures, and built the plumbing for Hyperpure to read itself. It shipped with three things deliberately deferred rather than rushed. This change lands them.
 
