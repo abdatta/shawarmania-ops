@@ -509,3 +509,70 @@ describe('month naming', () => {
     expect(() => monthRange('nonsense')).toThrow(RangeError)
   })
 })
+
+// ─── Swiggy joins the day ─────────────────────────────────────────────────────
+
+import { readSwiggy } from './ledger'
+import type { ChannelSettlement } from '@/data-access/adapters'
+
+function swiggySettlement(overrides: Partial<ChannelSettlement> = {}): ChannelSettlement {
+  return {
+    revenuePaise: 150_000,
+    commissionPaise: 45_000,
+    state: 'settled',
+    origin: 'settlement',
+    supersededTyped: null,
+    revisedFrom: null,
+    revisedAt: null,
+    ...overrides,
+  }
+}
+
+describe('the Swiggy reading of a day', () => {
+  it('lets a measured settlement stand over a legacy typed figure', () => {
+    const reading = readSwiggy({
+      ...day({ swiggyRevenuePaise: 999_00, swiggyCommissionPaise: 1_00 }),
+      swiggySettlement: swiggySettlement(),
+    })
+
+    // The portal's own numbers, not the memory typed into the row.
+    expect(reading.grossPaise).toBe(150_000)
+    expect(reading.commissionPaise).toBe(45_000)
+    expect(reading.netPaise).toBe(105_000)
+    expect(reading.settlement?.state).toBe('settled')
+  })
+
+  it('falls back to the typed columns where no measurement exists', () => {
+    const reading = readSwiggy(day({ swiggyRevenuePaise: 200_00, swiggyCommissionPaise: 50_00 }))
+
+    expect(reading.grossPaise).toBe(200_00)
+    expect(reading.netPaise).toBe(150_00)
+    expect(reading.settlement).toBeNull()
+  })
+
+  it('keeps a negative measured net rather than flattering it away', () => {
+    const reading = readSwiggy({
+      ...day(),
+      swiggySettlement: swiggySettlement({ revenuePaise: -2_23, commissionPaise: null }),
+    })
+
+    // A cycle whose deductions outran its orders had a day the shop paid to
+    // trade. Zero would be a lie in the direction that flatters the shop.
+    expect(reading.grossPaise).toBe(-2_23)
+    expect(reading.commissionPaise).toBeNull()
+    expect(reading.netPaise).toBeNull()
+  })
+
+  it('totals the month from the measured reading, negative nets included', () => {
+    const measured = {
+      ...day(),
+      swiggySettlement: swiggySettlement({ revenuePaise: -223, commissionPaise: 0 }),
+    }
+    const month = readMonth([measured], [])
+
+    expect(month.grossSwiggyPaise).toBe(-223)
+    // Commission known (nought), so the net is exact and equally negative.
+    expect(month.netSwiggyPaise).toBe(-223)
+    expect(month.undeterminedDays).toBe(0)
+  })
+})

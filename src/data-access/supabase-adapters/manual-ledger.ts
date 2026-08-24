@@ -1,10 +1,11 @@
-import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
+﻿import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import {
   ManualLedgerActionError,
   type LedgerActor,
   type ManualLedgerAdapter,
   type ManualLedgerCounterRevenue,
+  type ChannelSettlement,
   type ManualLedgerDay,
   type ManualLedgerDayFigures,
   type ManualLedgerDayInput,
@@ -18,13 +19,13 @@ import type { Database, Tables } from '../database.types'
 import { toZomatoSettlement } from '../zomato-settlement'
 
 /**
- * The real manual-ledger adapter (#36) — **temporary, and the whole file goes
+ * The real manual-ledger adapter (#36) â€” **temporary, and the whole file goes
  * when the capability does.**
  *
  * Two things it deliberately does not do. It computes nothing: expected cash,
  * the difference, net aggregator revenue and the monthly profit all live in
  * `src/features/manual-ledger/ledger.ts`, so there is exactly one implementation
- * of the rounding rule (design D3). And it never supplies `recorded_by` — the
+ * of the rounding rule (design D3). And it never supplies `recorded_by` â€” the
  * column defaults to `auth.uid()` and the guard freezes it, so attribution is
  * the database's answer rather than a screen's claim.
  */
@@ -34,7 +35,7 @@ import { toZomatoSettlement } from '../zomato-settlement'
  * here and worth the sentence.
  *
  * A column list long enough to need wrapping has to be written as concatenated
- * string fragments, and supabase-js infers row types from the *literal* — so a
+ * string fragments, and supabase-js infers row types from the *literal* â€” so a
  * concatenated list silently degrades every mapper's argument to
  * `GenericStringError` and forces an `as unknown as` cast on each read. These two
  * tables are narrow, owner-only and read a handful of times a day, so the four
@@ -50,7 +51,7 @@ const ALL = '*'
  * A join to `profiles` cannot answer this for the readers this capability adds.
  * That table's select policy resolves through `app_may_see_person`, which needs
  * a **shared outlet assignment** and a caller whose own role is
- * `franchise_admin` or `biller` — so an Employee sees nobody, and nobody at an
+ * `franchise_admin` or `biller` â€” so an Employee sees nobody, and nobody at an
  * outlet sees an owner, whose assignment carries no outlet at all. Since the
  * owner recorded most of the rows already stored, that is the common case.
  *
@@ -68,8 +69,8 @@ async function readPeople(client: SupabaseClient<Database>): Promise<People> {
 /**
  * A null name is a person the caller genuinely cannot resolve rather than a
  * failure, so the surface can say "someone" instead of breaking the list. It
- * should not happen — `manual_ledger_people()` mirrors the row policies and
- * 21_manual_ledger.sql asserts the two agree — which is exactly why this
+ * should not happen â€” `manual_ledger_people()` mirrors the row policies and
+ * 21_manual_ledger.sql asserts the two agree â€” which is exactly why this
  * degrades quietly rather than throwing.
  */
 function actor(id: string, people: People): LedgerActor {
@@ -84,7 +85,8 @@ function toDay(
   row: Tables<'manual_ledger_days'>,
   people: People,
   counterRevenue: ManualLedgerCounterRevenue | null = null,
-  settlement: ZomatoSettlement | null = null,
+  zomato: ZomatoSettlement | null = null,
+  swiggy: ChannelSettlement | null = null,
 ): ManualLedgerDay {
   return {
     outletId: row.outlet_id,
@@ -92,22 +94,23 @@ function toDay(
     openingCashPaise: row.opening_cash_paise,
     cashRevenuePaise: counterRevenue?.cashRevenuePaise ?? row.cash_revenue_paise,
     upiRevenuePaise: counterRevenue?.upiRevenuePaise ?? row.upi_revenue_paise,
-    // Zomato's figures live on their own row now. They reach the day through the
-    // settlement, or they are absent, and absent reads as nought revenue with an
-    // undetermined commission — the same shape a day carried before the sync
-    // ever touched it.
-    zomatoRevenuePaise: settlement?.revenuePaise ?? 0,
-    swiggyRevenuePaise: row.swiggy_revenue_paise,
+    // Each channel's figures live on their own row now. They reach the day
+    // through the settlement, or they are absent â€” and where BOTH exist the
+    // measured reading is authoritative over a legacy typed figure, because a
+    // portal read is evidence. Absent reads as whatever the day itself stores.
+    zomatoRevenuePaise: zomato?.revenuePaise ?? 0,
+    swiggyRevenuePaise: swiggy?.revenuePaise ?? row.swiggy_revenue_paise,
     cashAddedPaise: row.cash_added_paise,
     cashAddedReason: row.cash_added_reason,
     cashRemovedPaise: row.cash_removed_paise,
     cashRemovedReason: row.cash_removed_reason,
     countedCashPaise: row.counted_cash_paise,
-    zomatoCommissionPaise: settlement?.commissionPaise ?? null,
-    swiggyCommissionPaise: row.swiggy_commission_paise,
+    zomatoCommissionPaise: zomato?.commissionPaise ?? null,
+    swiggyCommissionPaise: swiggy?.commissionPaise ?? row.swiggy_commission_paise,
     note: row.note,
     recordedBy: actor(row.recorded_by, people),
-    zomatoSettlement: settlement,
+    zomatoSettlement: zomato,
+    swiggySettlement: swiggy,
     updatedBy: optionalActor(row.updated_by, people),
   }
 }
@@ -115,15 +118,18 @@ function toDay(
 /**
  * A date the sync wrote figures for but nobody counted the cash of.
  *
- * It carries the Zomato reading and nothing else — cash is nil because none was
- * counted, not because the drawer was empty — and `counted: false` so the month
- * knows not to count it as a day the owner recorded. No ledger row exists behind
- * it; this is assembled in memory from the figures table alone.
+ * It carries whichever channels have readings for the date and nothing else â€”
+ * cash is nil because none was counted, not because the drawer was empty â€” and
+ * `counted: false` so the month knows not to count it as a day the owner
+ * recorded. No ledger row exists behind it; this is assembled in memory from
+ * the figures tables alone, and ONE virtual day merges every channel that
+ * reported, so a Zomato-only date and a Swiggy-only date look the same shape.
  */
 function uncountedFiguresDay(
   outletId: string,
   businessDate: string,
-  settlement: ZomatoSettlement,
+  zomato: ZomatoSettlement | null,
+  swiggy: ChannelSettlement | null,
 ): ManualLedgerDayFigures {
   return {
     outletId,
@@ -131,50 +137,58 @@ function uncountedFiguresDay(
     openingCashPaise: 0,
     cashRevenuePaise: 0,
     upiRevenuePaise: 0,
-    zomatoRevenuePaise: settlement.revenuePaise,
-    swiggyRevenuePaise: 0,
+    zomatoRevenuePaise: zomato?.revenuePaise ?? 0,
+    swiggyRevenuePaise: swiggy?.revenuePaise ?? 0,
     cashAddedPaise: 0,
     cashAddedReason: null,
     cashRemovedPaise: 0,
     cashRemovedReason: null,
     countedCashPaise: 0,
-    zomatoCommissionPaise: settlement.commissionPaise,
-    swiggyCommissionPaise: null,
+    zomatoCommissionPaise: zomato?.commissionPaise ?? null,
+    swiggyCommissionPaise: swiggy?.commissionPaise ?? null,
     note: null,
-    zomatoSettlement: settlement,
+    zomatoSettlement: zomato,
+    swiggySettlement: swiggy,
     counted: false,
   }
 }
 
 /**
- * A channel's measured figures for a range, keyed by business date.
+ * Both channels' measured figures for a range, keyed by business date.
  *
  * Read alongside the day rows rather than joined in SQL, because a figure can
  * exist for a date that has no day row, and a join would drop exactly those. The
  * reading model stitches the two by date; a date present here but absent from the
- * days is the "day nobody recorded" the sync now writes.
+ * days is the "day nobody recorded" the sync now writes. One query covers both
+ * channels and the result is partitioned by `channel`, so the two maps are
+ * disjoint by construction and a date can carry either or both.
  */
-async function readAggregatorFigures(
+async function readChannelFigures(
   client: SupabaseClient<Database>,
   outletId: string,
   from: string,
   to: string,
-): Promise<Map<string, ZomatoSettlement>> {
+): Promise<{
+  zomato: Map<string, ZomatoSettlement>
+  swiggy: Map<string, ChannelSettlement>
+}> {
   const { data, error } = await client
     .from('aggregator_channel_days')
     .select('*')
     .eq('outlet_id', outletId)
-    .eq('channel', 'zomato')
     .gte('business_date', from)
     .lt('business_date', to)
   if (error) throw toLedgerError(error)
 
-  const byDate = new Map<string, ZomatoSettlement>()
+  const zomato = new Map<string, ZomatoSettlement>()
+  const swiggy = new Map<string, ChannelSettlement>()
   for (const row of data ?? []) {
     const settlement = toZomatoSettlement(row)
-    if (settlement) byDate.set(row.business_date, settlement)
+    if (!settlement) continue
+    if (row.channel === 'zomato') zomato.set(row.business_date, settlement)
+    if (row.channel === 'swiggy') swiggy.set(row.business_date, settlement)
   }
-  return byDate
+  return { zomato, swiggy }
 }
 
 function nextDate(date: string): string {
@@ -299,24 +313,30 @@ export function createSupabaseManualLedgerAdapter(
           .maybeSingle(),
         readPeople(client),
         readCounterRevenueRange(client, outletId, businessDate, nextDate(businessDate)),
-        readAggregatorFigures(client, outletId, businessDate, nextDate(businessDate)),
+        readChannelFigures(client, outletId, businessDate, nextDate(businessDate)),
       ])
       if (error) throw toLedgerError(error)
       return data
-        ? toDay(data, people, revenueOn(revenue, businessDate), figures.get(businessDate) ?? null)
+        ? toDay(
+            data,
+            people,
+            revenueOn(revenue, businessDate),
+            figures.zomato.get(businessDate) ?? null,
+            figures.swiggy.get(businessDate) ?? null,
+          )
         : null
     },
 
     async getDayFigures(outletId, businessDate) {
       // Read the aggregator figures directly, so a date with a Zomato reading but no
       // cash count still shows the reading rather than "nothing arrived yet".
-      const figures = await readAggregatorFigures(
+      const figures = await readChannelFigures(
         client,
         outletId,
         businessDate,
         nextDate(businessDate),
       )
-      return figures.get(businessDate) ?? null
+      return figures.zomato.get(businessDate) ?? null
     },
 
     async getPreviousDay(outletId, businessDate) {
@@ -337,13 +357,14 @@ export function createSupabaseManualLedgerAdapter(
       if (!data) return null
       const [revenue, figures] = await Promise.all([
         readCounterRevenueRange(client, outletId, data.business_date, nextDate(data.business_date)),
-        readAggregatorFigures(client, outletId, data.business_date, nextDate(data.business_date)),
+        readChannelFigures(client, outletId, data.business_date, nextDate(data.business_date)),
       ])
       return toDay(
         data,
         people,
         revenueOn(revenue, data.business_date),
-        figures.get(data.business_date) ?? null,
+        figures.zomato.get(data.business_date) ?? null,
+        figures.swiggy.get(data.business_date) ?? null,
       )
     },
 
@@ -351,8 +372,8 @@ export function createSupabaseManualLedgerAdapter(
       const counterRevenue = await this.getCounterRevenue(day.outletId, day.businessDate)
 
       // No Zomato figures are sent from here at all now, so the old dance of
-      // reading the settlement state first — to avoid re-sending figures the
-      // guard would refuse — is gone. The columns do not exist on this row; the
+      // reading the settlement state first â€” to avoid re-sending figures the
+      // guard would refuse â€” is gone. The columns do not exist on this row; the
       // freeze is that there is nothing to write, not that a guard turns it away.
       const { data, error } = await client
         .from('manual_ledger_days')
@@ -382,8 +403,8 @@ export function createSupabaseManualLedgerAdapter(
 
       // The measured figures are read back rather than assumed absent: this
       // outlet-date may well carry a synced figure the drawer edit did not touch,
-      // and the returned day must still show it.
-      const figures = await readAggregatorFigures(
+      // and the returned day must still show it — on either channel.
+      const figures = await readChannelFigures(
         client,
         day.outletId,
         day.businessDate,
@@ -393,7 +414,8 @@ export function createSupabaseManualLedgerAdapter(
         data,
         await readPeople(client),
         counterRevenue,
-        figures.get(day.businessDate) ?? null,
+        figures.zomato.get(day.businessDate) ?? null,
+        figures.swiggy.get(day.businessDate) ?? null,
       )
     },
 
@@ -514,7 +536,7 @@ export function createSupabaseManualLedgerAdapter(
           .order('business_date', { ascending: true }),
         readPeople(client),
         readCounterRevenueRange(client, outletId, from, to),
-        readAggregatorFigures(client, outletId, from, to),
+        readChannelFigures(client, outletId, from, to),
       ])
 
       if (days.error) throw toLedgerError(days.error)
@@ -526,14 +548,29 @@ export function createSupabaseManualLedgerAdapter(
           row,
           people,
           revenueOn(revenue, row.business_date),
-          figures.get(row.business_date) ?? null,
+          figures.zomato.get(row.business_date) ?? null,
+          figures.swiggy.get(row.business_date) ?? null,
         ),
       )
       // Dates the sync wrote figures for but nobody counted — added in memory so
-      // their Zomato figures show and total, without inventing a ledger row.
-      const uncounted = [...figures.entries()]
-        .filter(([date]) => !countedDates.has(date))
-        .map(([date, settlement]) => uncountedFiguresDay(outletId, date, settlement))
+      // their figures show and total, without inventing a ledger row. The date set
+      // is the UNION of both channels' readings, and one virtual day carries every
+      // channel that reported, so a Swiggy-only date joins the month on the same
+      // terms as a Zomato-only one.
+      const figureDates = new Set<string>([
+        ...figures.zomato.keys(),
+        ...figures.swiggy.keys(),
+      ])
+      const uncounted = [...figureDates]
+        .filter((date) => !countedDates.has(date))
+        .map((date) =>
+          uncountedFiguresDay(
+            outletId,
+            date,
+            figures.zomato.get(date) ?? null,
+            figures.swiggy.get(date) ?? null,
+          ),
+        )
 
       return {
         days: [...counted, ...uncounted].sort((a, b) =>
@@ -560,7 +597,7 @@ function toLedgerError(error: PostgrestError): ManualLedgerActionError {
     case '23514':
       return new ManualLedgerActionError(
         'impossible_figure',
-        'One of those figures cannot be right — a drawer cannot hold less than nothing, ' +
+        'One of those figures cannot be right â€” a drawer cannot hold less than nothing, ' +
           'a cash movement needs a reason, and an expense needs an amount above zero.',
       )
     case '23502':
@@ -571,20 +608,20 @@ function toLedgerError(error: PostgrestError): ManualLedgerActionError {
     case '42501':
       return new ManualLedgerActionError(
         'not_permitted',
-        'That is not yours to change here. The ledger’s figures belong to the ' +
+        'That is not yours to change here. The ledgerâ€™s figures belong to the ' +
           'manager and the owner; an expense belongs to whoever recorded it.',
       )
     case 'P0001':
       return new ManualLedgerActionError(
         'refused',
-        // The guard raises for several reasons now — a future date, moving a
+        // The guard raises for several reasons now â€” a future date, moving a
         // recorded day, an expense against a day that has closed for staff, an
-        // edit of a withdrawn row, a forged correcting account — and the message
+        // edit of a withdrawn row, a forged correcting account â€” and the message
         // names the two a person actually meets. Naming all five would be a
         // paragraph nobody reads on a phone.
         'This ledger cannot record that. A day cannot be dated ahead of the ' +
-          'outlet’s own trading day, and an entry from a day that has closed is ' +
-          'the manager’s or the owner’s to change.',
+          'outletâ€™s own trading day, and an entry from a day that has closed is ' +
+          'the managerâ€™s or the ownerâ€™s to change.',
       )
     default:
       return new ManualLedgerActionError('failed', 'That did not save. Try again in a moment.')

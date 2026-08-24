@@ -93,8 +93,12 @@ function optionalActor(id: string | null): LedgerActor | null {
 function toDay(
   row: Tables<'manual_ledger_days'>,
   figure: Tables<'aggregator_channel_days'> | null,
+  swiggyFigure: Tables<'aggregator_channel_days'> | null,
 ): ManualLedgerDay {
   const settlement = toZomatoSettlement(figure)
+  // Both channels obey the same authority rule as the real adapter: a measured
+  // reading stands over a legacy typed figure, and absent falls back to the row.
+  const swiggySettlement = toZomatoSettlement(swiggyFigure)
   return {
     outletId: row.outlet_id,
     businessDate: row.business_date,
@@ -102,18 +106,19 @@ function toDay(
     cashRevenuePaise: row.cash_revenue_paise,
     upiRevenuePaise: row.upi_revenue_paise,
     zomatoRevenuePaise: settlement?.revenuePaise ?? 0,
-    swiggyRevenuePaise: row.swiggy_revenue_paise,
+    swiggyRevenuePaise: swiggySettlement?.revenuePaise ?? row.swiggy_revenue_paise,
     cashAddedPaise: row.cash_added_paise,
     cashAddedReason: row.cash_added_reason,
     cashRemovedPaise: row.cash_removed_paise,
     cashRemovedReason: row.cash_removed_reason,
     countedCashPaise: row.counted_cash_paise,
     zomatoCommissionPaise: settlement?.commissionPaise ?? null,
-    swiggyCommissionPaise: row.swiggy_commission_paise,
+    swiggyCommissionPaise: swiggySettlement?.commissionPaise ?? row.swiggy_commission_paise,
     note: row.note,
     recordedBy: actor(row.recorded_by),
     updatedBy: optionalActor(row.updated_by),
     zomatoSettlement: settlement,
+    swiggySettlement: swiggySettlement,
   }
 }
 
@@ -261,18 +266,36 @@ export function createMockManualLedgerAdapter(
   }
 
   /** The measured figure for an outlet-date, or none — its own table now. */
-  function figureFor(
+  /** The shared lookup under any channel's name. */
+  function channelFigureFor(
     outletId: string,
+    channel: 'zomato' | 'swiggy',
     businessDate: string,
   ): Tables<'aggregator_channel_days'> | null {
     return (
       store.aggregatorChannelDays.find(
         (row) =>
           row.outlet_id === outletId &&
-          row.channel === 'zomato' &&
+          row.channel === channel &&
           row.business_date === businessDate,
       ) ?? null
     )
+  }
+
+  /** The measured Zomato figure for an outlet-date, or none — its own table now. */
+  function figureFor(
+    outletId: string,
+    businessDate: string,
+  ): Tables<'aggregator_channel_days'> | null {
+    return channelFigureFor(outletId, 'zomato', businessDate)
+  }
+
+  /** The same lookup for any channel; Swiggy's rows live beside Zomato's. */
+  function swiggyFigureFor(
+    outletId: string,
+    businessDate: string,
+  ): Tables<'aggregator_channel_days'> | null {
+    return channelFigureFor(outletId, 'swiggy', businessDate)
   }
 
   /** The expense record: everyone at the outlet, whoever recorded the row. */
@@ -335,7 +358,7 @@ export function createMockManualLedgerAdapter(
       const row = store.manualLedgerDays.find(
         (day) => day.outlet_id === outletId && day.business_date === businessDate,
       )
-      return row ? toDay(row, figureFor(outletId, businessDate)) : null
+      return row ? toDay(row, figureFor(outletId, businessDate), swiggyFigureFor(outletId, businessDate)) : null
     },
 
     async getDayFigures(outletId, businessDate) {
@@ -351,7 +374,7 @@ export function createMockManualLedgerAdapter(
       const row = store.manualLedgerDays
         .filter((day) => day.outlet_id === outletId && day.business_date < businessDate)
         .sort((a, b) => b.business_date.localeCompare(a.business_date))[0]
-      return row ? toDay(row, figureFor(outletId, row.business_date)) : null
+      return row ? toDay(row, figureFor(outletId, row.business_date), swiggyFigureFor(outletId, row.business_date)) : null
     },
 
     async upsertDay(day: ManualLedgerDayInput) {
@@ -396,7 +419,11 @@ export function createMockManualLedgerAdapter(
       } else {
         store.manualLedgerDays.push(written)
       }
-      return toDay(written, figureFor(day.outletId, day.businessDate))
+      return toDay(
+        written,
+        figureFor(day.outletId, day.businessDate),
+        swiggyFigureFor(day.outletId, day.businessDate),
+      )
     },
 
     async deleteDay(outletId, businessDate) {
@@ -526,7 +553,7 @@ export function createMockManualLedgerAdapter(
 
       const counted = store.manualLedgerDays
         .filter((day) => day.outlet_id === outletId && inMonth(day.business_date))
-        .map((row) => toDay(row, figureFor(outletId, row.business_date)))
+        .map((row) => toDay(row, figureFor(outletId, row.business_date), swiggyFigureFor(outletId, row.business_date)))
       const countedDates = new Set(counted.map((day) => day.businessDate))
 
       // Dates the sync wrote Zomato figures for but nobody counted — surfaced from

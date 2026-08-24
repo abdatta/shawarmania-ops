@@ -2045,21 +2045,29 @@ export interface ManualLedgerDay {
    * differ, so a day the owner recorded and a manager later fixed does not read
    * as though the owner entered the figures now on screen (design D6).
    */
-  recordedBy: LedgerActor
-  updatedBy: LedgerActor | null
-  /**
-   * Where this day's Zomato figures came from, where the sync covers it. Null on
-   * every day recorded before the sync, and on every day at an outlet it does
-   * not cover, which is what keeps a historical month computing exactly as it
-   * was recorded.
-   *
-   * It carries no figures of its own. Since commission became an amount, a synced
-   * day and a typed day store the same two numbers in the same two columns, and
-   * duplicating them here would be inviting the copy to disagree with the
-   * original.
-   */
-  zomatoSettlement: ZomatoSettlement | null
-}
+   recordedBy: LedgerActor
+   updatedBy: LedgerActor | null
+   /**
+    * Where this day's Zomato figures came from, where the sync covers it. Null on
+    * every day recorded before the sync, and on every day at an outlet it does
+    * not cover, which is what keeps a historical month computing exactly as it
+    * was recorded.
+    *
+    * It carries no figures of its own. Since commission became an amount, a synced
+    * day and a typed day store the same two numbers in the same two columns, and
+    * duplicating them here would be inviting the copy to disagree with the
+    * original.
+    */
+   zomatoSettlement: ZomatoSettlement | null
+   /**
+    * Swiggy's measured reading for the date, on the same terms. Where present it
+    * is authoritative over any legacy typed figure in the day's own columns,
+    * because a portal read is evidence and a memory is not; where absent — an
+    * outlet Swiggy does not cover, or a date before its first read — the typed
+    * columns stand exactly as they always did.
+    */
+   swiggySettlement: ChannelSettlement | null
+ }
 
 /**
  * A day's measured Zomato figures, and where they came from.
@@ -2094,9 +2102,20 @@ export interface ZomatoSettlement {
    * What the day read before its week settled, kept only where settling moved
    * it. Present is precisely what "revised" means.
    */
-  revisedFrom: { revenuePaise: number; commissionPaise: number | null } | null
-  revisedAt: string | null
+   revisedFrom: { revenuePaise: number; commissionPaise: number | null } | null
+   revisedAt: string | null
 }
+
+/**
+ * The same shape, on any restaurant channel.
+ *
+ * Swiggy's channel-day rows carry exactly the facts Zomato's do — stated
+ * revenue, commission where determined, the state of the cycle behind them,
+ * what superseded what — because both tables are written by the same ingest
+ * contract. The alias records that the reading is channel-neutral without
+ * renaming a type half the surface already imports.
+ */
+export type ChannelSettlement = ZomatoSettlement
 
 /** Settled counter allocations that replace typed Cash/UPI after go-live. */
 export interface ManualLedgerCounterRevenue {
@@ -2172,20 +2191,21 @@ export interface ManualLedgerExpense {
  */
 export type ManualLedgerDayInput = Omit<
   ManualLedgerDay,
-  'recordedBy' | 'updatedBy' | 'zomatoSettlement'
+  'recordedBy' | 'updatedBy' | 'zomatoSettlement' | 'swiggySettlement'
 >
 
 /**
- * A day as the reading functions want it: the figures, plus the settlement where
- * one exists. Optional so that a caller holding only what a form can write still
+ * A day as the reading functions want it: the figures, plus the settlements where
+ * they exist. Optional so that a caller holding only what a form can write still
  * type-checks — a form cannot write a settlement, and the database refuses one
  * from any signed-in session whatever the types allow.
  */
 export type ManualLedgerDayFigures = ManualLedgerDayInput & {
   zomatoSettlement?: ZomatoSettlement | null
+  swiggySettlement?: ChannelSettlement | null
   /**
    * False on a day that has aggregator figures but no cash count — the "day nobody
-   * counted", surfaced so its Zomato figures still show and total. Absent means
+   * counted", surfaced so its figures still show and total. Absent means
    * counted, so every existing day and form payload needs no change.
    */
   counted?: boolean
