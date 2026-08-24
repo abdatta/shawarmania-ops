@@ -134,9 +134,9 @@ describe('the manual ledger surface', () => {
      * carrying it forward would offer a number that is wrong by construction and
      * looks deliberate, which is worse than an empty field.
      */
-    // Zomato has no field to inherit into any more — it is a reading, frozen.
+    // Neither channel has a field to inherit into any more: both are readings.
     expect(screen.queryByTestId('zomato-commission')).not.toBeInTheDocument()
-    expect(screen.getByTestId('swiggy-commission')).toHaveValue('')
+    expect(screen.queryByTestId('swiggy-commission')).not.toBeInTheDocument()
 
     // Editable, because the figure is stored per day and a day may genuinely have
     // opened elsewhere.
@@ -451,9 +451,9 @@ describe('the manual ledger surface', () => {
       const card = await screen.findByTestId('ledger-day-recorded')
       expect(within(card).getByTestId(`source-tag-zomato-${chip}`)).toBeInTheDocument()
 
-      // Swiggy is never synced, and says so rather than leaving it to be inferred
-      // from an absence.
-      expect(within(card).getByTestId('source-tag-swiggy-typed')).toBeInTheDocument()
+      // Swiggy has no reading on these seeded days, and says so rather than
+      // borrowing another channel's provenance.
+      expect(within(card).queryByTestId('source-tag-swiggy-typed')).not.toBeInTheDocument()
     }
   })
 
@@ -560,13 +560,12 @@ describe('the manual ledger surface', () => {
       expect(screen.queryByLabelText(/^Cash$/)).not.toBeInTheDocument()
       expect(screen.queryByLabelText(/^UPI$/)).not.toBeInTheDocument()
 
-      // Swiggy is the surviving typed aggregator; Zomato is a reading with no
-      // field at all, so the counter takeover leaves the one and cannot touch
-      // the other.
+      // Both aggregators are readings now: there is no field to type into on
+      // either, so the counter takeover cannot touch them at all.
       expect(screen.queryByTestId('zomato-revenue')).not.toBeInTheDocument()
-      await userEvent.type(screen.getByTestId('swiggy-revenue'), '3310')
-      await userEvent.type(screen.getByTestId('swiggy-commission'), '595.80')
-      expect(screen.getByTestId('swiggy-revenue-net')).toHaveTextContent(formatPaise(271_420))
+      expect(screen.queryByTestId('swiggy-revenue')).not.toBeInTheDocument()
+      expect(screen.getByTestId('aggregator-zomato')).toBeInTheDocument()
+      expect(screen.getByTestId('aggregator-swiggy')).toBeInTheDocument()
 
       await userEvent.type(screen.getByTestId('counted-cash'), '9000')
       await userEvent.click(screen.getByTestId('save-day'))
@@ -595,33 +594,27 @@ describe('the manual ledger surface', () => {
       expect(screen.queryByTestId('hint-drawer-panel')).not.toBeInTheDocument()
     })
 
-    it('nets the typed aggregator as it is typed, from that block’s own two figures', async () => {
+    it('shows each channel netted from its own reading, with no field to type into', async () => {
       renderLedger()
       await screen.findByTestId('ledger-day-form')
 
-      // Swiggy is the one aggregator still typed. ₹2,260 stated, ₹474.60 charged.
-      // One subtraction, no rounding rule.
-      await userEvent.type(screen.getByTestId('swiggy-revenue'), '2260')
-      await userEvent.type(screen.getByTestId('swiggy-commission'), '474.60')
-      expect(screen.getByTestId('swiggy-revenue-net')).toHaveTextContent(formatPaise(178_540))
-
-      // Zomato offers no field to type into, so it cannot be netted from typing
-      // and cannot leak into Swiggy's block.
+      // Both channels render their reading blocks; neither offers a field, so
+      // nothing typed here can leak into a figure a portal will state itself.
+      expect(screen.getByTestId('aggregator-zomato')).toBeInTheDocument()
+      expect(screen.getByTestId('aggregator-swiggy')).toBeInTheDocument()
       expect(screen.queryByTestId('zomato-commission')).not.toBeInTheDocument()
-      expect(screen.getByTestId('swiggy-revenue-net')).toHaveTextContent(formatPaise(178_540))
+      expect(screen.queryByTestId('swiggy-revenue')).not.toBeInTheDocument()
     })
 
-    it('computes nothing from a commission nobody has given', async () => {
+    it('offers an empty state where a reading has not arrived', async () => {
       renderLedger()
       await chooseOutlet(OUTLET_KANCHRAPARA_ID)
       await screen.findByTestId('ledger-day-form')
-      await waitFor(() => {
-        expect(screen.getByTestId('swiggy-commission')).toHaveValue('')
-      })
 
-      // ₹0 here would be a figure standing where an unanswered question is.
-      await userEvent.type(screen.getByTestId('swiggy-revenue'), '3310')
-      expect(screen.getByTestId('swiggy-revenue-net')).toHaveTextContent('—')
+      // Neither channel has reached this outlet's day yet. The blocks say so in
+      // words rather than showing fields that would invite invented figures.
+      expect(await screen.findByText(/No Zomato figures have arrived/i)).toBeInTheDocument()
+      expect(screen.getByText(/No Swiggy figures have arrived/i)).toBeInTheDocument()
     })
   })
 
@@ -647,16 +640,16 @@ describe('the manual ledger surface', () => {
       // a form.
       expect(within(card).getByTestId('recorded-upi')).toHaveTextContent(formatPaise(400_000))
       // One line per channel, and no percentage in either label: there is no
-      // stored rate left to name. Swiggy was typed with no sales, so its
-      // commission is nought — known. Zomato has no figure at all for a day the
-      // sync never reached, so its commission is undetermined rather than nought:
-      // the freeze means a day can no longer carry a typed Zomato zero.
+      // stored rate left to name. Neither channel has a reading for this day —
+      // the demo seeds none and nothing can be typed — so both commissions are
+      // undetermined rather than nought: the freeze means a day can no longer
+      // carry a typed zero for either portal.
       expect(within(card).getAllByText(/Less commission/)).toHaveLength(2)
       expect(within(card).getByTestId('recorded-zomato-commission')).toHaveTextContent(
         /not known yet/i,
       )
       expect(within(card).getByTestId('recorded-swiggy-commission')).toHaveTextContent(
-        formatPaise(0),
+        /not known yet/i,
       )
       // The drawer is still worked out, below it.
       expect(screen.getByTestId('day-difference')).toHaveAttribute('data-difference', 'balanced')
@@ -706,36 +699,23 @@ describe('the manual ledger surface', () => {
   })
 
   describe('a retrospective correction', () => {
-    it('moves the month’s profit and never the day’s drawer', async () => {
-      // Swiggy, because it is the aggregator still corrected by hand. Zomato's
-      // figures are frozen and can only be moved by re-uploading a statement, so
-      // the "correct a commission through the form" path this asserts is Swiggy's
-      // now. Recorded on a fresh day so the correction has a known starting point.
+    it('records a day with no aggregator entry at all, on either channel', async () => {
+      // Neither channel can be corrected through this form any more: both are
+      // readings fed by their own syncs. A day is saved with figures for
+      // neither, which the payload type now makes unrepresentable rather than
+      // merely discouraged.
       const { adapters } = renderLedger()
       await screen.findByTestId('ledger-day-form')
       await userEvent.type(screen.getByTestId('cash-revenue'), '12000')
-      await userEvent.type(screen.getByTestId('swiggy-revenue'), '3310')
-      await userEvent.type(screen.getByTestId('swiggy-commission'), '595.80')
       await userEvent.type(screen.getByTestId('counted-cash'), '19950')
       await userEvent.click(screen.getByTestId('save-day'))
 
       await screen.findByTestId('ledger-day-recorded')
       const openedOn = (screen.getByTestId('ledger-day-picker') as HTMLInputElement).value
-      const before = await adapters.manualLedger.getDay(OUTLET_KALYANI_ID, openedOn)
-      const expectedBefore = screen.getByTestId('expected-cash').textContent
-
-      await userEvent.click(screen.getByTestId('edit-day'))
-      await userEvent.clear(screen.getByTestId('swiggy-commission'))
-      // Rupees, not per cent: the field is money on both sides of the block now.
-      await userEvent.type(screen.getByTestId('swiggy-commission'), '30')
-      await userEvent.click(screen.getByTestId('save-day'))
-      await screen.findByTestId('day-saved')
-
-      // The drawer did not move: commission is not cash.
-      expect(screen.getByTestId('expected-cash')).toHaveTextContent(expectedBefore ?? '')
       const saved = await adapters.manualLedger.getDay(OUTLET_KALYANI_ID, openedOn)
-      expect(saved?.swiggyCommissionPaise).toBe(3_000)
-      expect(saved?.countedCashPaise).toBe(before?.countedCashPaise)
+      expect(saved?.swiggyRevenuePaise).toBe(0)
+      expect(saved?.swiggyCommissionPaise).toBeNull()
+      expect(saved?.zomatoCommissionPaise).toBeNull()
     })
 
     it('leaves every later day’s stored figures byte-for-byte where they were', async () => {

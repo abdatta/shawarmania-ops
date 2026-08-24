@@ -187,32 +187,12 @@ function refuseImpossibleDay(day: ManualLedgerDayInput): void {
    * refunded day, whose revenue is negative, is bounded the same way in the other
    * direction. Mirrors the database constraint of the same name.
    *
-   * Only Swiggy is checked. Zomato is sourced and frozen: its figures never
-   * arrive through this input, so validating the nought-and-null the form sends
-   * for it would refuse every save.
+   * Nothing is checked any more, and that is deliberate. Zomato was frozen first;
+   * Swiggy's figures now arrive through its channel-day row too, so the input no
+   * longer carries either channel's commission — there is nothing left to
+   * validate without refusing saves for figures this form never sends.
    */
-  for (const [commission, revenue, label] of [
-    [day.swiggyCommissionPaise, day.swiggyRevenuePaise, 'Swiggy'],
-  ] as const) {
-    // Nothing sold means nothing charged, and that is known rather than pending.
-    if (revenue === 0 && commission !== 0) {
-      throw new ManualLedgerActionError(
-        'impossible_figure',
-        `${label} sold nothing that day, so its commission is nought rather than undetermined.`,
-      )
-    }
-    if (commission === null) continue
-    if (
-      !Number.isInteger(commission) ||
-      commission < Math.min(0, revenue) ||
-      commission > Math.max(0, revenue)
-    ) {
-      throw new ManualLedgerActionError(
-        'impossible_figure',
-        `The ${label} commission has to be an amount between zero and that day's ${label} revenue.`,
-      )
-    }
-  }
+  void day
 }
 
 function refuseImpossibleExpense(expense: { amountPaise: number; category: string }): void {
@@ -385,10 +365,11 @@ export function createMockManualLedgerAdapter(
         (row) => row.outlet_id === day.outletId && row.business_date === day.businessDate,
       )
 
-      // No Zomato figures are written from here. They live on their own table,
-      // which no signed-in session may write, so the day row this form saves
-      // carries only the drawer and the still-typed channels. A figure already
-      // stored for this date is left exactly where it is.
+      // No Zomato figures are written from here — and no Swiggy figures either,
+      // any more: both live on their own table, which no signed-in session may
+      // write, so the day row this form saves carries only the drawer. Swiggy's
+      // typed history is preserved by leaving those columns untouched on a
+      // correction, exactly as the real upsert's omitted columns are.
       const written: Tables<'manual_ledger_days'> = {
         id: existing?.id ?? `dd000000-0000-4000-b000-${String(nextId++).padStart(12, '0')}`,
         outlet_id: day.outletId,
@@ -396,13 +377,13 @@ export function createMockManualLedgerAdapter(
         opening_cash_paise: day.openingCashPaise,
         cash_revenue_paise: day.cashRevenuePaise,
         upi_revenue_paise: day.upiRevenuePaise,
-        swiggy_revenue_paise: day.swiggyRevenuePaise,
+        swiggy_revenue_paise: existing?.swiggy_revenue_paise ?? 0,
         cash_added_paise: day.cashAddedPaise,
         cash_added_reason: trimmed(day.cashAddedReason),
         cash_removed_paise: day.cashRemovedPaise,
         cash_removed_reason: trimmed(day.cashRemovedReason),
         counted_cash_paise: day.countedCashPaise,
-        swiggy_commission_paise: day.swiggyCommissionPaise,
+        swiggy_commission_paise: existing?.swiggy_commission_paise ?? null,
         note: trimmed(day.note),
         // Frozen on a correction, as the guard freezes it: a second owner — or
         // now a manager — may fix a figure without becoming the day's author.

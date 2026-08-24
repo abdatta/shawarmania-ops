@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assignedOutlets,
   ManualLedgerActionError,
-  type ManualLedgerDayInput,
+  type ManualLedgerDayFigures,
   type NewManualLedgerExpense,
 } from '../adapters'
 import { personaFixtures } from './fixtures/personas'
@@ -39,21 +39,21 @@ describe('mock manual ledger adapter', () => {
     const persona = personaFixtures[role]
     const assignedOutletIds = assignedOutlets(persona.assignments)
 
-    const dayInput = (overrides: Partial<ManualLedgerDayInput> = {}): ManualLedgerDayInput => ({
+    const dayInput = (overrides: Partial<ManualLedgerDayFigures> = {}): ManualLedgerDayFigures => ({
       outletId: DEMO_OUTLET_ID,
       businessDate: store.today,
       openingCashPaise: 500_000,
       cashRevenuePaise: 1_200_000,
       upiRevenuePaise: 400_000,
       zomatoRevenuePaise: 300_000,
-      swiggyRevenuePaise: 250_000,
       cashAddedPaise: 0,
       cashAddedReason: null,
       cashRemovedPaise: 0,
       cashRemovedReason: null,
       countedCashPaise: 1_700_000,
+      // Swiggy figures live on the channel table now; typed history is read,
+      // never written.
       zomatoCommissionPaise: 70_200,
-      swiggyCommissionPaise: 52_080,
       note: null,
       ...overrides,
     })
@@ -86,8 +86,11 @@ describe('mock manual ledger adapter', () => {
 
       const read = await adapter.getDay(DEMO_OUTLET_ID, store.today)
       expect(read?.cashRevenuePaise).toBe(1_200_000)
-      // Swiggy is still typed, so its figure round-trips through the form.
-      expect(read?.swiggyCommissionPaise).toBe(52_080)
+      // Swiggy is no longer typed: nothing is written from the form, so an
+      // unmeasured day reads as undetermined rather than carrying a figure
+      // somebody would have had to invent.
+      expect(read?.swiggyRevenuePaise).toBe(0)
+      expect(read?.swiggyCommissionPaise).toBeNull()
     })
 
     it('surfaces the Zomato figures on a day nobody counted, rather than claiming none arrived', async () => {
@@ -213,20 +216,21 @@ describe('mock manual ledger adapter', () => {
       expect(saved.cashRevenuePaise).toBe(-25_000)
     })
 
-    it('refuses a commission larger than the revenue it comes off', async () => {
+    it('leaves Swiggy stored figures untouched whatever the caller sends', async () => {
       const { adapter, dayInput } = over()
-      // The bound is the day's own revenue now that commission is an amount, not a
-      // percentage ceiling. A commission above the takings is not a steep rate, it
-      // is a figure in the wrong box. Asserted against Swiggy: Zomato is frozen and
-      // its figures never pass through this input to be validated at all.
-      await expect(
-        adapter.upsertDay(
-          dayInput({ swiggyRevenuePaise: 312_000, swiggyCommissionPaise: 312_001 }),
-        ),
-      ).rejects.toThrow(/between zero and that day/)
-      await expect(adapter.upsertDay(dayInput({ swiggyCommissionPaise: -1 }))).rejects.toThrow(
-        /between zero and that day/,
-      )
+      await adapter.upsertDay(dayInput())
+
+      // The payload type no longer carries Swiggy's figures, so a sneaky write
+      // can only arrive as extra keys on a cast object — and the mock must
+      // ignore them exactly as the real upsert's omitted columns do.
+      const sneaky = {
+        ...dayInput(),
+        swiggyRevenuePaise: 312_000,
+        swiggyCommissionPaise: -1,
+      } as unknown as Parameters<typeof adapter.upsertDay>[0]
+      const saved = await adapter.upsertDay(sneaky)
+      expect(saved.swiggyRevenuePaise).toBe(0)
+      expect(saved.swiggyCommissionPaise).toBeNull()
     })
 
     it('removes a day typed against the wrong date', async () => {

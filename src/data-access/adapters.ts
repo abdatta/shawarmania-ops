@@ -2188,21 +2188,38 @@ export interface ManualLedgerExpense {
  * and is frozen, `updated_by` is stamped by the guard and refused from a caller.
  * A form that could name either would be asserting something the database is
  * about to overrule.
+ *
+ * The two Swiggy figures are absent by the same argument that froze Zomato's,
+ * one stage later: Swiggy's measured reading arrives through its channel-day
+ * row, and a form field would invite typing over it. The columns remain on the
+ * table carrying their typed history, so an old month still computes exactly as
+ * it was recorded — they are simply no longer writable from here.
  */
 export type ManualLedgerDayInput = Omit<
   ManualLedgerDay,
-  'recordedBy' | 'updatedBy' | 'zomatoSettlement' | 'swiggySettlement'
+  | 'recordedBy'
+  | 'updatedBy'
+  | 'zomatoSettlement'
+  | 'swiggySettlement'
+  | 'swiggyRevenuePaise'
+  | 'swiggyCommissionPaise'
 >
 
 /**
  * A day as the reading functions want it: the figures, plus the settlements where
  * they exist. Optional so that a caller holding only what a form can write still
  * type-checks — a form cannot write a settlement, and the database refuses one
- * from any signed-in session whatever the types allow.
+ * from any signed-in session whatever the types allow. The legacy Swiggy figures
+ * are optional for the mirror reason: present only when reading a row that still
+ * carries its typed history.
  */
 export type ManualLedgerDayFigures = ManualLedgerDayInput & {
   zomatoSettlement?: ZomatoSettlement | null
   swiggySettlement?: ChannelSettlement | null
+  /** Typed history only; never written by this app any more. */
+  swiggyRevenuePaise?: number
+  /** Typed history only; `null` meant undetermined then and still does. */
+  swiggyCommissionPaise?: number | null
   /**
    * False on a day that has aggregator figures but no cash count — the "day nobody
    * counted", surfaced so its figures still show and total. Absent means

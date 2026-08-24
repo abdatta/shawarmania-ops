@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import type {
   ManualLedgerDayFigures,
-  ManualLedgerDayInput,
   ManualLedgerExpense,
 } from '@/data-access/adapters'
 import { NotPaiseError } from '@/domain'
@@ -18,7 +17,7 @@ import {
 
 const OUTLET = '00000000-0000-4000-a000-000000000001'
 
-function day(overrides: Partial<ManualLedgerDayInput> = {}): ManualLedgerDayInput {
+function day(overrides: Partial<ManualLedgerDayFigures> = {}): ManualLedgerDayFigures {
   return {
     outletId: OUTLET,
     businessDate: '2026-08-01',
@@ -254,7 +253,7 @@ describe('the opening-cash chain', () => {
 
 describe('a month read for one outlet', () => {
   /** Three days at visibly different Zomato takes, which is the case that matters. */
-  const days: ManualLedgerDayInput[] = [
+  const days: ManualLedgerDayFigures[] = [
     day({
       businessDate: '2026-08-01',
       cashRevenuePaise: 1_200_000,

@@ -109,25 +109,25 @@ const defs = {
   'owner-people': {
     role: 'super_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 5 },
+    nav: { label: 'People', icon: Users, order: 6 },
     state: 'live',
   },
   'owner-comparison': {
     role: 'super_admin',
     path: 'comparison',
-    nav: { label: 'Compare', icon: BarChart3, order: 6 },
+    nav: { label: 'Compare', icon: BarChart3, order: 7 },
     state: 'demo',
   },
   'owner-alerts': {
     role: 'super_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 7 },
+    nav: { label: 'Alerts', icon: Bell, order: 8 },
     state: 'demo',
   },
   'owner-billing-history': {
     role: 'super_admin',
     path: 'billing-history',
-    nav: { label: 'Billing', icon: ReceiptText, order: 8 },
+    nav: { label: 'Billing', icon: ReceiptText, order: 9 },
     state: 'live',
   },
   /**

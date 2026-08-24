@@ -9,6 +9,7 @@ import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
+  type ChannelSettlement,
   type ManualLedgerCounterRevenue,
   type ManualLedgerDay,
   type ManualLedgerDayInput,
@@ -22,8 +23,8 @@ import { useSession } from '@/session/context'
 import { ExpenseList } from './expense-list'
 import {
   checkOpeningChain,
-  netAggregatorPaise,
   readDay,
+  readSwiggy,
   type ChainSignal,
   type DayReading,
 } from './ledger'
@@ -75,7 +76,6 @@ interface DayDraft {
   cashRevenue: string
   upiRevenue: string
   zomatoRevenue: string
-  swiggyRevenue: string
   cashAdded: string
   cashAddedReason: string
   cashRemoved: string
@@ -83,7 +83,6 @@ interface DayDraft {
   countedCash: string
   /** Per cent, as a person says it: `22.5`. Stored as 2250 basis points. */
   zomatoCommission: string
-  swiggyCommission: string
   note: string
 }
 
@@ -92,14 +91,12 @@ const BLANK_DRAFT: DayDraft = {
   cashRevenue: '',
   upiRevenue: '',
   zomatoRevenue: '',
-  swiggyRevenue: '',
   cashAdded: '',
   cashAddedReason: '',
   cashRemoved: '',
   cashRemovedReason: '',
   countedCash: '',
   zomatoCommission: '',
-  swiggyCommission: '',
   note: '',
 }
 
@@ -117,54 +114,6 @@ function requiredPaise(text: string): number | null {
   return paise(text)
 }
 
-/**
- * What an aggregator's block shows as actually received, from the two fields above
- * it, or null while either is unanswered.
- *
- * Through the shared derivation, never a second rounding rule: a net figure that
- * disagreed with the month's by a paisa would be impossible to explain. Since
- * commission became an amount [owner, 2026-08-17] there is no rounding left to
- * disagree about, and this is one subtraction.
- */
-function netOf(stated: string, commission: string): number | null {
-  const statedPaise = paise(stated)
-  if (statedPaise === null) return null
-  // A blank commission beside real revenue is an unanswered question, not nought.
-  // Showing the stated figure as though all of it arrived would overstate the
-  // takings, which is the one direction this screen must never be wrong in.
-  if (statedPaise !== 0 && commission.trim() === '') return null
-  const commissionPaise = paise(commission)
-  if (commissionPaise === null) return null
-  return netAggregatorPaise(statedPaise, commissionPaise)
-}
-
-/**
- * A channel's commission: an amount, nought, or undetermined.
- *
- * Three states, and the two kinds of "empty" are the whole subtlety:
- *
- *  - A channel that sold nothing was charged nothing. Blank means nought there,
- *    which is KNOWN, and most Swiggy days at these outlets are exactly that.
- *  - A channel that sold something and has a blank commission is **undetermined**
- *    [owner, 2026-08-17]. That is a legitimate saved state, not an unfinished
- *    form: Zomato does not say what it kept until the week closes, so a day
- *    recorded tonight genuinely cannot answer. It is filled in by the weekly
- *    settlement, or by hand later.
- *  - Anything typed that is not a number blocks the save, which is what
- *    `undefined` means below.
- *
- * Returning `null` for the middle case is why this cannot simply use
- * `requiredPaise`: that treats blank as unanswered and would make an ordinary
- * day unsaveable until somebody invented a figure for it.
- */
-function commissionFor(revenue: string, commission: string): number | null | undefined {
-  const revenuePaise = paise(revenue)
-  if (revenuePaise === null) return undefined
-  if (revenuePaise === 0) return paise(commission) === 0 ? 0 : paise(commission)
-  if (commission.trim() === '') return null
-  return paise(commission) ?? undefined
-}
-
 function draftFrom(day: ManualLedgerDay): DayDraft {
   const rupees = (value: number) => String(value / 100)
   return {
@@ -172,7 +121,6 @@ function draftFrom(day: ManualLedgerDay): DayDraft {
     cashRevenue: rupees(day.cashRevenuePaise),
     upiRevenue: rupees(day.upiRevenuePaise),
     zomatoRevenue: rupees(day.zomatoRevenuePaise),
-    swiggyRevenue: rupees(day.swiggyRevenuePaise),
     cashAdded: rupees(day.cashAddedPaise),
     cashAddedReason: day.cashAddedReason ?? '',
     cashRemoved: rupees(day.cashRemovedPaise),
@@ -181,7 +129,6 @@ function draftFrom(day: ManualLedgerDay): DayDraft {
     // An undetermined commission opens as an empty field, which is how it was
     // stored and how it saves again unless somebody types a figure into it.
     zomatoCommission: day.zomatoCommissionPaise === null ? '' : rupees(day.zomatoCommissionPaise),
-    swiggyCommission: day.swiggyCommissionPaise === null ? '' : rupees(day.swiggyCommissionPaise),
     note: day.note ?? '',
   }
 }
@@ -215,10 +162,8 @@ function draftToDay(
 ): ManualLedgerDayInput | null {
   const openingCashPaise = requiredPaise(draft.openingCash)
   const countedCashPaise = requiredPaise(draft.countedCash)
-  const swiggyCommissionPaise = commissionFor(draft.swiggyRevenue, draft.swiggyCommission)
   const cashRevenuePaise = counterRevenue?.cashRevenuePaise ?? paise(draft.cashRevenue)
   const upiRevenuePaise = counterRevenue?.upiRevenuePaise ?? paise(draft.upiRevenue)
-  const swiggyRevenuePaise = paise(draft.swiggyRevenue)
   const cashAddedPaise = paise(draft.cashAdded)
   const cashRemovedPaise = paise(draft.cashRemoved)
 
@@ -227,10 +172,8 @@ function draftToDay(
     countedCashPaise === null ||
     // `undefined` is an unparseable entry and blocks the save; `null` is a
     // deliberate "not known yet" and does not.
-    swiggyCommissionPaise === undefined ||
     cashRevenuePaise === null ||
     upiRevenuePaise === null ||
-    swiggyRevenuePaise === null ||
     cashAddedPaise === null ||
     cashRemovedPaise === null ||
     openingCashPaise < 0 ||
@@ -247,18 +190,18 @@ function draftToDay(
     openingCashPaise,
     cashRevenuePaise,
     upiRevenuePaise,
-    // Zomato is sourced and frozen: the form sends nothing for it, and the write
-    // ignores these two regardless. They are held at the type's shape — nought
-    // revenue, undetermined commission — so a stale value can never travel.
+    // Both aggregators are sourced and frozen: the form sends nothing for
+    // either, and the write ignores their columns regardless. Zomato's two are
+    // held at the type's shape — nought revenue, undetermined commission — so a
+    // stale value can never travel; Swiggy's are gone from the payload type
+    // entirely, which is the stronger freeze.
     zomatoRevenuePaise: 0,
-    swiggyRevenuePaise,
     cashAddedPaise,
     cashAddedReason: draft.cashAddedReason.trim() || null,
     cashRemovedPaise,
     cashRemovedReason: draft.cashRemovedReason.trim() || null,
     countedCashPaise,
     zomatoCommissionPaise: null,
-    swiggyCommissionPaise,
     note: draft.note.trim() || null,
   }
 }
@@ -505,24 +448,17 @@ export function LedgerDay({ outletId, businessDate }: { outletId: string; busine
                 Zomato is a reading, not an entry. Its figures are sourced from
                 the daily read or a settlement statement and no longer live on
                 this row, so there is no field to type into — even while the rest
-                of the day is being edited. Swiggy is not sourced, so it keeps its
-                fields, and the note below says why the two look different rather
-                than leaving the asymmetry to read as a fault.
+                of the day is being edited. Swiggy joined it: its measured
+                reading arrives through the same kind of channel row, and the
+                form field that used to sit here invited typing over evidence,
+                which is why it is gone rather than disabled.
               */}
               <ZomatoReading settlement={recorded?.zomatoSettlement ?? dayFigures} />
-              <Aggregator
-                name="Swiggy"
-                statedId="swiggy-revenue"
-                stated={draft.swiggyRevenue}
-                onStated={(value) => change('swiggyRevenue', value)}
-                commissionId="swiggy-commission"
-                commission={draft.swiggyCommission}
-                onCommission={(value) => change('swiggyCommission', value)}
-                netPaise={netOf(draft.swiggyRevenue, draft.swiggyCommission)}
-              />
+              <SwiggyReading settlement={recorded?.swiggySettlement ?? null} />
               <p className="px-1 text-xs text-content-muted" data-testid="why-zomato-differs">
-                Zomato&rsquo;s figures are read from Zomato and cannot be typed. Swiggy is still
-                entered by hand until its statements are read too.
+                Both channels&rsquo; figures are read from their portals and cannot be typed.
+                Swiggy&rsquo;s typed history, where this day still carries any, shows below its
+                measured reading.
               </p>
             </section>
 
@@ -718,8 +654,10 @@ function RecordedDay({
    */
   const zomatoCommissionPaise =
     reading.netZomatoPaise === null ? null : day.zomatoRevenuePaise - reading.netZomatoPaise
-  const swiggyCommissionPaise =
-    reading.netSwiggyPaise === null ? null : day.swiggyRevenuePaise - reading.netSwiggyPaise
+  // From the channel's own reading, so a measured settlement answers here even
+  // though the payload type no longer carries a typed Swiggy figure at all.
+  const swiggy = readSwiggy(day)
+  const swiggyCommissionPaise = swiggy.commissionPaise
   const netRevenuePaise =
     reading.netZomatoPaise === null || reading.netSwiggyPaise === null
       ? null
@@ -782,11 +720,15 @@ function RecordedDay({
       <div className="space-y-1 border-t border-border pt-2">
         <Row
           label="Swiggy, as stated"
-          paise={day.swiggyRevenuePaise}
+          paise={swiggy.grossPaise}
           testId="recorded-swiggy-gross"
-          // Always typed: Swiggy is not synced, and the chip says so rather than
-          // leaving the reader to infer it from an absence.
-          tag={<SourceTag channel="swiggy" settlement={null} />}
+          // Measured where the sync covers the day, typed history otherwise —
+          // and the chip says which, rather than leaving the reader to infer it.
+          tag={
+            swiggy.settlement ? (
+              <SourceTag channel="swiggy" settlement={swiggy.settlement} />
+            ) : undefined
+          }
         />
         <Row
           label="Less commission"
@@ -818,7 +760,7 @@ function RecordedDay({
               day.cashRevenuePaise +
               day.upiRevenuePaise +
               day.zomatoRevenuePaise +
-              day.swiggyRevenuePaise
+              swiggy.grossPaise
             }
             className="font-bold"
             data-testid="recorded-revenue-net"
@@ -1074,51 +1016,20 @@ function InfoHint({
  * about the block invites the figure to be entered.
  */
 function ZomatoReading({ settlement }: { settlement: ZomatoSettlement | null }) {
-  const netPaise =
-    settlement === null || settlement.commissionPaise === null
-      ? null
-      : settlement.revenuePaise - settlement.commissionPaise
+  return <ChannelReadingBlock label="Zomato" testIdPrefix="zomato" settlement={settlement} />
+}
 
-  return (
-    <div
-      className="space-y-2 rounded-lg border border-border bg-surface-raised/40 p-2.5"
-      data-testid="aggregator-zomato"
-    >
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-bold text-content">Zomato</span>
-        <SourceTag channel="zomato" settlement={settlement} />
-      </div>
-      {settlement === null ? (
-        <p className="px-1 text-xs text-content-muted" data-testid="zomato-none-yet">
-          No Zomato figures have arrived for this day yet.
-        </p>
-      ) : (
-        <>
-          <Row label="As stated" paise={settlement.revenuePaise} testId="zomato-revenue" />
-          <Row
-            label="Commission"
-            paise={settlement.commissionPaise === null ? null : -settlement.commissionPaise}
-            testId="zomato-commission"
-          />
-          <p className="flex items-baseline justify-between gap-2">
-            <span className="text-xs text-content-muted">Actually received</span>
-            {netPaise === null ? (
-              <span className="text-sm text-content-muted" data-testid="zomato-revenue-net">
-                &mdash;
-              </span>
-            ) : (
-              <Money
-                paise={netPaise}
-                className="text-sm font-semibold"
-                data-testid="zomato-revenue-net"
-              />
-            )}
-          </p>
-          <SupersededNote settlement={settlement} />
-        </>
-      )}
-    </div>
-  )
+/**
+ * Swiggy as a reading inside the edit form — Zomato's block, one channel over.
+ *
+ * Where a measured reading exists it shows gross, commission and net with the
+ * same provenance traces; where none does but the row still carries typed
+ * history, the history is shown AS history rather than promoted into an input,
+ * because the whole point of removing the fields was that a figure a portal
+ * will state cannot be pre-empted by a guess.
+ */
+function SwiggyReading({ settlement }: { settlement: ChannelSettlement | null }) {
+  return <ChannelReadingBlock label="Swiggy" testIdPrefix="swiggy" settlement={settlement} />
 }
 
 /**
@@ -1153,66 +1064,61 @@ function SupersededNote({ settlement }: { settlement: ZomatoSettlement | null })
   )
 }
 
-function Aggregator({
-  name,
-  statedId,
-  stated,
-  onStated,
-  commissionId,
-  commission,
-  onCommission,
-  netPaise,
+function ChannelReadingBlock({
+  label,
+  testIdPrefix,
+  settlement,
 }: {
-  name: string
-  statedId: string
-  stated: string
-  onStated: (value: string) => void
-  commissionId: string
-  commission: string
-  onCommission: (value: string) => void
-  netPaise: number | null
+  label: string
+  testIdPrefix: 'zomato' | 'swiggy'
+  settlement: ChannelSettlement | null
 }) {
+  const netPaise =
+    settlement === null || settlement.commissionPaise === null
+      ? null
+      : settlement.revenuePaise - settlement.commissionPaise
+
   return (
-    <fieldset
+    <div
       className="space-y-2 rounded-lg border border-border bg-surface-raised/40 p-2.5"
-      data-testid={`aggregator-${name.toLowerCase()}`}
+      data-testid={`aggregator-${testIdPrefix}`}
     >
-      <legend className="px-1 text-xs font-bold text-content">{name}</legend>
-      <div className="grid grid-cols-2 gap-2">
-        <NumberField
-          id={statedId}
-          label="As stated"
-          srContext={name}
-          value={stated}
-          onChange={onStated}
-          testId={statedId}
-        />
-        <NumberField
-          id={commissionId}
-          label="Commission"
-          srContext={name}
-          value={commission}
-          onChange={onCommission}
-          testId={commissionId}
-        />
+      <div className="flex items-center justify-between px-1">
+        <span className="text-xs font-bold text-content">{label}</span>
+        {/* No reading, no provenance to name: an empty state with a "typed"
+            chip on it would claim a history the freeze has ended. */}
+        {settlement && <SourceTag channel={testIdPrefix} settlement={settlement} />}
       </div>
-      <p className="flex items-baseline justify-between gap-2">
-        <span className="text-xs text-content-muted">Actually received</span>
-        {netPaise === null ? (
-          // Not zero: with the commission unanswered there is nothing to compute,
-          // and ₹0 would be a figure where there is only an open question.
-          <span className="text-sm text-content-muted" data-testid={`${statedId}-net`}>
-            &mdash;
-          </span>
-        ) : (
-          <Money
-            paise={netPaise}
-            className="text-sm font-semibold"
-            data-testid={`${statedId}-net`}
+      {settlement === null ? (
+        <p className="px-1 text-xs text-content-muted" data-testid={`${testIdPrefix}-none-yet`}>
+          No {label} figures have arrived for this day yet.
+        </p>
+      ) : (
+        <>
+          <Row label="As stated" paise={settlement.revenuePaise} testId={`${testIdPrefix}-revenue`} />
+          <Row
+            label="Commission"
+            paise={settlement.commissionPaise === null ? null : -settlement.commissionPaise}
+            testId={`${testIdPrefix}-commission`}
           />
-        )}
-      </p>
-    </fieldset>
+          <p className="flex items-baseline justify-between gap-2">
+            <span className="text-xs text-content-muted">Actually received</span>
+            {netPaise === null ? (
+              <span className="text-sm text-content-muted" data-testid={`${testIdPrefix}-revenue-net`}>
+                &mdash;
+              </span>
+            ) : (
+              <Money
+                paise={netPaise}
+                className="text-sm font-semibold"
+                data-testid={`${testIdPrefix}-revenue-net`}
+              />
+            )}
+          </p>
+          <SupersededNote settlement={settlement} />
+        </>
+      )}
+    </div>
   )
 }
 

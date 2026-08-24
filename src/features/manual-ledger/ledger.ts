@@ -123,8 +123,8 @@ export function readSwiggy(day: ManualLedgerDayFigures): ZomatoReading {
       settlement,
     }
   }
-  const grossPaise = assertPaise(day.swiggyRevenuePaise, 'Swiggy revenue')
-  const commissionPaise = day.swiggyCommissionPaise
+  const grossPaise = assertPaise(day.swiggyRevenuePaise ?? 0, 'Swiggy revenue')
+  const commissionPaise = day.swiggyCommissionPaise ?? null
   return {
     grossPaise,
     commissionPaise:
