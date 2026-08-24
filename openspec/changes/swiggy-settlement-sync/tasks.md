@@ -28,6 +28,7 @@
 - [x] 3.5 Preserve provisional, settled, revised and disputed monotonicity per outlet/channel/date, with bank status independent; verify FINAL Pending can settle, live data cannot downgrade it and a later changed final retains prior values as a revision.
 - [x] 3.6 Generalize rehearse, recheck and accept-difference commands to Swiggy with channel-safe identities; verify rehearsal performs all arithmetic with zero financial writes, recheck cannot conceal a discrepancy and acceptance records the exact difference without changing a day.
 - [x] 3.7 Generalize sync event recording and no-zero failure outcomes for auth lapse, access denial, transport exhaustion, source-shape change, unmapped identity, unattributed order and reconciliation dispute; verify every failure leaves prior money byte-for-byte unchanged.
+- [x] 3.8 Let a timestamped provisional portal read supersede `legacy_typed` history while retaining it as superseded evidence; keep genuine settled/operator-statement days terminal and prove both sides through the ingest/state guard.
 
 ## 4. Independent Swiggy session boundary
 

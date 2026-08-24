@@ -41,12 +41,19 @@ An aggregator cycle becomes eligible to settle when the operator labels that cyc
 
 A settled figure SHALL supersede a provisional one for the same outlet, channel and business date without creating a second row. A settled day SHALL NOT return to provisional. If a later final source changes a settled value, the restatement SHALL retain the earlier settled and provisional values and mark the day revised.
 
+The `legacy_typed` provenance is not an operator settlement. A timestamped portal daily read MAY replace a `legacy_typed` day with a provisional sourced value, retaining the typed gross/reduction and supersession time. This narrowly scoped transition SHALL NOT permit a provisional read to replace a genuine settlement or an operator-supplied statement.
+
 The surface SHALL state provisional, settled, revised or disputed wherever the figure is read and SHALL separately state the payout's bank status when known.
 
 #### Scenario: This week's revenue is marked provisional
 
 - **WHEN** a twice-daily read captures today's open-cycle Swiggy figures
 - **THEN** the day is provisional and shows the as-of time rather than implying the day or payout is complete
+
+#### Scenario: A live day replaces a typed placeholder
+
+- **WHEN** timestamped Swiggy order detail covers a business date carrying `legacy_typed` history
+- **THEN** the sourced provisional gross replaces the typed value, retains the typed value as superseded history, and does not permit the same transition over a genuine settled or supplied statement day
 
 #### Scenario: A cancellation refund appears only on settlement
 

@@ -1265,5 +1265,59 @@ select is(
   0::bigint,
   'and no day of it was written, not even provisional');
 
+-- The live reader is evidence, not another typed estimate. Its provisional
+-- order detail must replace a carried typed zero, while keeping that zero as
+-- history for comparison; the same exception must not reopen an actual payout.
+insert into public.aggregator_channel_days
+  (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
+   settlement_state, origin, source_ref)
+values
+  (:'KAL', 'swiggy', pg_temp.day(1), 0, 0, 0, 'settled', 'legacy_typed', 'manual:typed-zero'),
+  (:'KAL', 'swiggy', pg_temp.day(0), 72_000, 21_600, 50_400,
+   'settled', 'settlement', 'SW-FINAL-LOCKED');
+
+select is(
+  pg_temp.ingest(jsonb_build_object(
+    'contract_version', 1,
+    'outlet_id', :'KAL',
+    'channel', 'swiggy',
+    'restaurant_ref', 'RID-ACTIVE',
+    'operator_cycle_ref', '0',
+    'cycle_start', pg_temp.day(1),
+    'cycle_end', pg_temp.day(0),
+    'cycle_state', 'provisional',
+    'orders', jsonb_build_array(
+      jsonb_build_object('order_id', 'CURRENT-TYPED',
+                         'placed_at', pg_temp.at_ist(pg_temp.day(1), '18:00'),
+                         'gross_paise', 14_900,
+                         'commission_paise', null,
+                         'net_paise', null),
+      jsonb_build_object('order_id', 'CURRENT-LOCKED',
+                         'placed_at', pg_temp.at_ist(pg_temp.day(0), '18:00'),
+                         'gross_paise', 99_999,
+                         'commission_paise', null,
+                         'net_paise', null))
+  )) ->> 'outcome',
+  'ok',
+  'a live Swiggy cycle is accepted when it overlaps typed and settled history');
+
+select results_eq(
+  format($$select revenue_paise, commission_paise, net_paise, settlement_state,
+                  origin, superseded_revenue_paise, superseded_commission_paise
+             from public.aggregator_channel_days
+            where outlet_id = %L and channel = 'swiggy' and business_date = %L$$,
+         :'KAL', pg_temp.day(1)),
+  $$values (14900::bigint, null::bigint, null::bigint, 'provisional',
+            'daily_reader', 0::bigint, 0::bigint)$$,
+  'a provisional portal read supersedes only the carried typed zero and preserves it');
+
+select results_eq(
+  format($$select revenue_paise, commission_paise, net_paise, settlement_state, origin
+             from public.aggregator_channel_days
+            where outlet_id = %L and channel = 'swiggy' and business_date = %L$$,
+         :'KAL', pg_temp.day(0)),
+  $$values (72000::bigint, 21600::bigint, 50400::bigint, 'settled', 'settlement')$$,
+  'the same provisional cycle cannot reopen a real settled Swiggy day');
+
 select * from finish();
 rollback;
