@@ -1,6 +1,7 @@
 import * as XLSX from 'npm:xlsx@0.18.5'
 import { unzipSync } from 'npm:fflate@0.8.2'
 
+import { enabledRestaurantMappings } from '../_shared/restaurant-mappings.ts'
 import { serviceClient } from '../_shared/authority.ts'
 import { json, preflight } from '../_shared/http.ts'
 import {
@@ -125,12 +126,10 @@ async function outletMap(
   // one account holds active and dormant references, and only an enabled one may
   // book a file. The map is narrowed to the caller's permitted outlets, so a
   // file can never be booked against an outlet the caller does not hold.
-  const { data: swiggyRows, error: swiggyError } = await service
-    .from('outlet_channel_restaurants')
-    .select('outlet_id, external_ref')
-    .eq('channel', 'swiggy')
-    .eq('state', 'enabled')
-    .in('outlet_id', permitted)
+  const { data: swiggyRows, error: swiggyError } = await enabledRestaurantMappings(
+    service,
+    'swiggy',
+  ).in('outlet_id', permitted)
   if (swiggyError) throw swiggyError
 
   const zomatoResIds: Record<string, string> = {}

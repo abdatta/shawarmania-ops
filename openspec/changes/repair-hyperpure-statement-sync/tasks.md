@@ -14,3 +14,13 @@
 - [x] 2.2 Run focused Ops and sync tests, then the relevant type/format checks.
 - [x] 2.3 Close the resolved GitHub failure reports, leaving any undeployed
   repair open until production evidence exists.
+
+## 3. Prevent restaurant-mapping schema drift
+
+- [x] 3.1 Record the `state` / `enabled` mapping contract in the living spec and
+  data-model documentation.
+- [x] 3.2 Route every Edge Function restaurant-mapping query through one typed
+  shared helper and pin the no-bypass rule with a source-contract test.
+- [x] 3.3 Add a Deno generated-schema check for that helper to the verify
+  workflow and the documented local suite.
+- [x] 3.4 Run the full relevant suite and record the evidence.

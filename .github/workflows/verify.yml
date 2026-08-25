@@ -27,6 +27,10 @@ jobs:
           node-version: 22
           cache: npm
 
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - run: npm ci
 
       - name: Lint
@@ -37,6 +41,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Edge Function mapping contract typecheck
+        run: npm run functions:typecheck
 
       - name: Unit and component tests
         run: npm test

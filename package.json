@@ -14,6 +14,7 @@
     "lint:todos": "node scripts/check-todos-index.mjs",
     "lint:specs": "node scripts/check-specs-index.mjs",
     "lint:functions": "node scripts/check-edge-functions.mjs",
+    "functions:typecheck": "node scripts/check-edge-function-types.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",

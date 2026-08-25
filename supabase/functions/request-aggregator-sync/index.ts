@@ -1,6 +1,7 @@
 import { callerFrom, isOwner, serviceClient } from '../_shared/authority.ts'
 import { json, preflight, readJson, str } from '../_shared/http.ts'
 import { probeChannel } from '../_shared/aggregator-probe.ts'
+import { enabledRestaurantMappings } from '../_shared/restaurant-mappings.ts'
 import { decideRung } from '../_shared/reconnect-ladder.ts'
 import { reconnectWorkflowDispatch, syncWorkflowDispatch } from '../_shared/sync-dispatch.ts'
 
@@ -119,12 +120,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // workflow then carries only mappings for this same outlet. This keeps an
     // old switch-on row from dispatching a reader that could write elsewhere.
     if (channel === 'swiggy') {
-      const { data: mapping, error: mappingError } = await service
-        .from('outlet_channel_restaurants')
-        .select('external_ref')
+      const { data: mapping, error: mappingError } = await enabledRestaurantMappings(
+        service,
+        'swiggy',
+      )
         .eq('outlet_id', outletId)
-        .eq('channel', 'swiggy')
-        .eq('state', 'enabled')
         .limit(1)
         .maybeSingle()
       if (mappingError) {

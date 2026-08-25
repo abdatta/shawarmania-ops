@@ -624,6 +624,21 @@ at all, and who recorded most of the rows already stored. Its predicates mirror
 the row policies deliberately, and `supabase/tests/21_manual_ledger.sql` asserts
 the two agree rather than trusting that they do.
 
+## Operator restaurant mappings
+
+**`outlet_channel_restaurants`** — `id`, `outlet_id`, `channel`, `external_ref`,
+`state`, and audit timestamps. It maps an operator's restaurant reference to the
+one Shawarmania outlet that owns it. `channel` identifies the operator and
+`external_ref` is the operator-side restaurant identity; an enabled mapping is
+the identity an automated statement reader, owner-triggered sync, or session
+probe may act on.
+
+`state` is an enum-like field with the values `enabled` and `dormant`.
+**There is no boolean `enabled` column.** Dormant rows retain an old or
+decommissioned identity for audit and must not trigger automated work. Edge
+Functions obtain automated mappings through the generated-schema typed shared
+helper, so the column/value distinction is checked before deployment.
+
 ## Alerts
 
 **`alerts`** — `id`, `outlet_id`, `raised_by`, `subject`, `message`, `category` (`inventory` | `equipment` | `cash_mismatch` | `employee` | `supplier` | `other`), `priority` (`low` | `normal` | `high` | `urgent`), `status` (`open` | `acknowledged` | `resolved` | `closed`), `created_at`.

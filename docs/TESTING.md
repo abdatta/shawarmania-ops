@@ -14,6 +14,7 @@ npm run test:db   # pgTAP: isolation + write-contract suites (needs the local st
 npm run test:rls  # REST probes: real sign-ins, hand-crafted cross-outlet requests
 npm run lint      # ESLint + no-hex + backlog/spec indexes + Edge Function config
 npm run typecheck # tsc --noEmit, strict
+npm run functions:typecheck # Deno: generated-schema check for the Edge mapping contract
 npm run contrast  # WCAG validator over the token file, both themes
 
 npm run db:start  # bring up the local Supabase stack (Docker)
@@ -69,6 +70,15 @@ function name and the JSON keys it actually receives. Omission is valid only for
 a parameter whose final database signature declares a default.
 
 **`npm run lint` also gates Edge Function configuration.** Every directory under `supabase/functions/` except `_shared` must carry a `[functions.<name>]` block in `supabase/config.toml`. A function with no block does not fail — it silently receives `verify_jwt = true`, and the gateway then refuses every unauthenticated request before the function's own code runs. That is correct for three of the five functions and fatal for the two that exist to answer a caller holding no token, where it surfaces as a rejected invite code or a rejected tablet setup code, blaming the one thing that was not at fault. The check asserts the judgement was made, never which way it went; whether the platform honoured it needs a live probe, which `docs/OPERATIONS.md` carries in the first-deploy runbook.
+
+**`npm run functions:typecheck` gates the typed restaurant-mapping contract.**
+The app's `tsc` project deliberately excludes Edge Functions, so it cannot see a
+wrong database column in one. Deno compiles
+`supabase/functions/_shared/restaurant-mappings.ts` against generated database
+types instead. Every automated mapping lookup uses that helper: `state` is the
+stored enum field and `enabled` is one of its values; there is no `enabled`
+boolean. Install Deno 2.x locally before running it; CI installs the same major
+version.
 
 **`scripts/check-release-order.test.mjs` gates the shape of a release.** A release is the schema, then the Edge Functions that call it, then the bundle that calls those — an order held entirely in `needs:` edges that GitHub evaluates silently. Reverse or drop one and nothing errors; the workflow goes green and publishes a bundle before the thing it calls exists. That is not hypothetical: Edge Functions had no edge at all until 2026-08-11, and two of them sat undeployed for two days behind a live bundle that called them.
 

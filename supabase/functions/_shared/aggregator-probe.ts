@@ -1,4 +1,5 @@
 import { serviceClient } from './authority.ts'
+import { enabledRestaurantMappings } from './restaurant-mappings.ts'
 
 /**
  * Is a channel's stored session actually alive?
@@ -254,12 +255,10 @@ export async function probeChannel(channel: string): Promise<ProbeResult> {
     // The probe needs a REAL restaurant reference: the composer rejects a
     // placeholder with an auth-worded error that reads like a lapse. The
     // enabled mapping rows are exactly where the real ones live.
-    const { data: refs, error: refsError } = await service
-      .from('outlet_channel_restaurants')
-      .select('external_ref')
-      .eq('channel', 'swiggy')
-      .eq('enabled', true)
-      .limit(5)
+    const { data: refs, error: refsError } = await enabledRestaurantMappings(
+      service,
+      'swiggy',
+    ).limit(5)
     if (refsError) {
       console.error('probe could not read swiggy mappings', refsError.code)
       return { alive: null, reason: 'backend_failure' }
