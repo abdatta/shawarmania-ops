@@ -4,15 +4,17 @@
 
 The scheduled Hyperpure reader can download a valid supplier statement but the
 shared statement parser asks the restaurant-mapping table for a column that does
-not exist, so neither the reader nor the manual upload fallback can finish.
+not exist, so neither the reader nor the manual upload fallback can finish. The
+new Swiggy Read now dispatch guard repeated that query, which would refuse every
+configured Swiggy request before its workflow can start.
 Separately, the reader sends supply-run health to the restaurant-settlement
 endpoint, which correctly refuses the `hyperpure` channel even though the
 dedicated health tables admit it.
 
 ## What changes
 
-- Make the shared statement parser select enabled restaurant mappings through
-  their actual `state` field.
+- Make the shared statement parser and Swiggy dispatch guard select enabled
+  restaurant mappings through their actual `state` field.
 - Let the reader's existing secret-scoped bridge record a Hyperpure run only for
   an allowlisted outlet and a known health outcome; keep Hyperpure out of the
   payout-cycle ingest boundary.

@@ -124,7 +124,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .select('external_ref')
         .eq('outlet_id', outletId)
         .eq('channel', 'swiggy')
-        .eq('enabled', true)
+        .eq('state', 'enabled')
         .limit(1)
         .maybeSingle()
       if (mappingError) {
