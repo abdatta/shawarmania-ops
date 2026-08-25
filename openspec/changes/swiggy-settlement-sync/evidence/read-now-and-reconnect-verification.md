@@ -42,3 +42,26 @@ Sync repository:
   — YAML syntax valid.
 
 No live reader, OTP, session deletion or GitHub workflow dispatch was run.
+
+## Live repair and replay acceptance (2026-08-25)
+
+The owner then completed the intended live acceptance sequence. A session-only
+deletion left the login identifier intact; production immediately offered
+**Reconnect Swiggy** for Kalyani. The owner supplied an OTP to GitHub Actions
+run `32832375375`, whose headed `login` job completed successfully.
+
+The independent `verify-swiggy-session` job then loaded only the newly captured
+Vault session into a temporary runner file, completed the authenticated finance
+probe, and read five payout cycles with 143 order payouts. It removed that
+temporary file at job completion. The portal's optional calendar-day telemetry
+reported a handled shape change; it is intentionally non-blocking because the
+ledger's settlement-grade daily amounts come from timestamped order and
+annexure facts.
+
+Production acceptance after the run found Kalyani's live Swiggy page quiet,
+with the scheduled reader timestamp, a settled Swiggy day in the ledger and
+the corresponding month total. Kanchrapara explicitly remained **Not switched
+on here yet**, never zero trade. A read-only phone/tablet walk in both themes
+also kept the Zomato, Swiggy and ledger screens usable; the focused demo
+Playwright matrix passed all 32 checks across four roles, two themes and two
+viewports, with its network tripwire allowing no request outside the app origin.
