@@ -1,7 +1,12 @@
-# aggregator-settlement-sync Specification
+# Aggregator Settlement Sync
 
 ## Purpose
-TBD - created by archiving change zomato-settlement-sync. Update Purpose after archive.
+
+Defines how channel-scoped restaurant mappings, timestamped daily figures,
+portal-declared payout cycles and official statement evidence become authoritative
+ledger records. It preserves truthful provisional, settled, revised and disputed
+states; makes browser-free daily reads safe to retry; and never invents a zero,
+misattributes an order across an outlet cutover, or hides a payout discrepancy.
 ## Requirements
 ### Requirement: Automated restaurant identity uses the stateful mapping contract
 
@@ -36,26 +41,58 @@ external reference.
 
 ### Requirement: A synced day states gross, commission and net as three stored figures
 
-For every outlet and business date the sync covers, the ledger SHALL store the aggregator's gross order value, the commission and fees deducted from it, and the net actually receivable, each as its own integer-paise value read from the aggregator rather than derived from a stored rate.
+For every outlet, channel and business date the sync covers, the ledger SHALL
+store the aggregator's gross order value, the commission-and-fee reduction from
+that gross, and the net order payout, each as its own integer-paise value
+normalized from the aggregator rather than from a stored percentage.
 
-The net SHALL NOT be recomputed from gross and a percentage at read time, and no percentage SHALL be stored anywhere [owner, 2026-08-17]. The effective rate moves between roughly 24% and 35% across days, so a single stored rate misstates every day it was not measured on. The net SHALL be revenue less the commission actually charged, which is exact and therefore needs no rounding rule.
+For Swiggy, gross SHALL use the timestamped order-detail basis `Total Customer
+Paid - GST Collected`, which fixture reconciliation proves equals the
+payout-annexure `Net Bill Value (before taxes)` at paisa precision. It SHALL
+NOT use Total Customer Paid including GST, `customerPaidAmount` from
+`getOrderLevelPayoutsV2`, or the calendar-day Business Metrics Net Sales card as
+ledger gross. The net order payout SHALL use the order-level amount payable to
+the restaurant after order-level fees and taxes. The reduction SHALL be gross
+minus net, so net plus reduction equals gross even when a cancelled order has
+zero gross and a negative net payout.
 
-A day's effective rate MAY be presented, computed from the stored gross and net for display only.
+An undated cycle-level ad investment, refund, recovery, outstanding amount or
+other adjustment SHALL NOT be forced into a daily reduction; it remains a cycle
+deduction used to reconcile the exact final payout. No percentage SHALL be
+stored or used to calculate a synced net. An effective rate MAY be presented
+from stored values for display only.
 
 #### Scenario: A day arrives with all three figures
 
-- **WHEN** the sync writes an outlet's business date
-- **THEN** gross, commission and net are each stored as integer paise, and net plus commission equals gross for that day
+- **WHEN** the sync writes an outlet's Swiggy business date from order rows
+- **THEN** gross, reduction and net order payout are stored as integer paise,
+  and net plus reduction equals gross
+
+#### Scenario: GST-inclusive Total Customer Paid is not ledger gross
+
+- **WHEN** a Swiggy order includes GST collected from the customer
+- **THEN** ledger gross subtracts the order-detail `GST Collected` amount from
+  `Total Customer Paid`, and does not include that GST merely because the
+  customer paid it
+
+#### Scenario: A cycle-only deduction remains cycle-only
+
+- **WHEN** a final payout includes an ad or recovery with no supported service
+  date
+- **THEN** it participates in cycle reconciliation but is not allocated across
+  daily gross, reduction or net
 
 #### Scenario: The rate is a reading, not an input
 
 - **WHEN** a synced day is read
-- **THEN** any rate shown is computed from the stored gross and net, and no stored percentage participates in computing that day's net revenue
+- **THEN** any rate shown is computed from stored money and no configured
+  percentage participates in net revenue
 
 #### Scenario: A day recorded before the sync is untouched
 
-- **WHEN** a business date recorded by hand before this capability existed is read
-- **THEN** its net is still its stored revenue less its stored commission, and its stored values are byte-for-byte unchanged
+- **WHEN** a business date carries only a migrated typed Swiggy value
+- **THEN** its preserved historical money remains the ledger value until an
+  authoritative source covers that date
 
 ### Requirement: An order belongs to the trading day its placement time falls in
 
@@ -82,33 +119,79 @@ An order whose placement timestamp cannot be established SHALL NOT be attributed
 
 ### Requirement: An unpaid week reads as provisional and a paid week replaces it
 
-Each synced day SHALL carry a settlement state. A day belonging to a payout cycle the aggregator has not yet paid SHALL be stored as **provisional**. Once that cycle is paid, its days SHALL be rewritten from the settlement record and stored as **settled**.
+Each synced day SHALL carry a settlement state. A day sourced from a live/open
+payout cycle SHALL be **provisional**, with the capture time and the portal time
+through which it was current. Swiggy's open-cycle Current Payout MAY be
+displayed as a provisional cycle estimate but SHALL NOT be presented as money
+finally payable.
 
-A settled figure SHALL supersede a provisional one for the same outlet and business date without creating a second row. A settled day SHALL NOT be returned to provisional by a later run.
+An aggregator cycle becomes eligible to settle when the operator labels that
+cycle final and supplies the exact final payout and sufficient component evidence
+to reconcile it. Bank status such as Pending, On Hold or Paid SHALL be stored
+separately from settlement state; Swiggy's final Pending payout can therefore
+settle the accounting record before the bank transfer, while a merely open
+Current Payout cannot.
 
-Where settlement changes a day's figures, the provisional figures SHALL be retained alongside the settled ones and the day SHALL read as **revised**, stating what the figures changed from. A day whose figures settle unchanged SHALL NOT be marked revised. The two sources disagree by design: the live dashboard omits refunds paid to the restaurant when an order is cancelled after preparation, so a provisional day can understate what is eventually paid, and a figure moving upward days later is expected rather than alarming. It is recorded so that a figure never moves without a trace of what it moved from.
+A settled figure SHALL supersede a provisional one for the same outlet, channel
+and business date without creating a second row. A settled day SHALL NOT return
+to provisional. If a later final source changes a settled value, the restatement
+SHALL retain the earlier settled and provisional values and mark the day revised.
 
-The surface SHALL state which state a figure is in wherever that figure is read.
+The `legacy_typed` provenance is not an operator settlement. A timestamped
+portal daily read MAY replace a `legacy_typed` day with a provisional sourced
+value, retaining the typed gross/reduction and supersession time. This narrowly
+scoped transition SHALL NOT permit a provisional read to replace a genuine
+settlement or an operator-supplied statement.
+
+The surface SHALL state provisional, settled, revised or disputed wherever the
+figure is read and SHALL separately state the payout's bank status when known.
 
 #### Scenario: This week's revenue is marked provisional
 
-- **WHEN** the sync writes a business date inside a payout cycle that has not been paid
-- **THEN** the day is stored as provisional and reads on screen as provisional
+- **WHEN** a twice-daily read captures today's open-cycle Swiggy figures
+- **THEN** the day is provisional and shows the as-of time rather than implying
+  the day or payout is complete
+
+#### Scenario: A live day replaces a typed placeholder
+
+- **WHEN** timestamped Swiggy order detail covers a business date carrying
+  `legacy_typed` history
+- **THEN** the sourced provisional gross replaces the typed value, retains the
+  typed value as superseded history, and does not permit the same transition
+  over a genuine settled or supplied statement day
 
 #### Scenario: Settlement replaces the estimate in place
 
-- **WHEN** a cycle that was previously written as provisional becomes paid, and the sync runs
-- **THEN** each of that cycle's days is rewritten from the settlement record, marked settled, and remains one row per outlet per business date
+- **WHEN** a previously provisional cycle becomes final and reconciles
+- **THEN** each covered day is rewritten from authoritative order/cycle facts,
+  remains one row per outlet/channel/date and retains the prior provisional
+  values
 
 #### Scenario: A cancellation refund appears only on settlement
 
-- **WHEN** a cycle contains an order rejected after preparation, for which the aggregator refunded the restaurant a share
-- **THEN** the settled figures include that refund even though the provisional figures did not, the day's net increases when the cycle settles, and the day reads as revised
+- **WHEN** a cycle contains a cancellation or preparation refund absent from the
+  live provisional source but present in final order facts
+- **THEN** final settlement includes it, retains the earlier values and marks
+  the affected day revised when its figures change
+
+#### Scenario: Final pending can settle before payment
+
+- **WHEN** Swiggy labels a closed cycle FINAL with bank status Pending and the
+  cycle reconciles
+- **THEN** its days become settled, the cycle retains Pending as bank status,
+  and the owner is not told that the transfer has arrived
+
+#### Scenario: Current payout cannot masquerade as final
+
+- **WHEN** Swiggy supplies a Current Payout for an open cycle
+- **THEN** it remains provisional even if every displayed component currently
+  adds to the estimate
 
 #### Scenario: A revised day says what it was
 
-- **WHEN** the owner reads a day whose settled figures differ from the provisional ones it carried
-- **THEN** the retained provisional figures are shown beside the settled ones, so the owner can see what the figure changed from and by how much
+- **WHEN** final or later-restated figures differ from earlier figures
+- **THEN** the earlier values and source are shown beside the current ones and
+  the day reads revised
 
 #### Scenario: An unchanged day is not marked revised
 
@@ -117,43 +200,68 @@ The surface SHALL state which state a figure is in wherever that figure is read.
 
 #### Scenario: A settled day is not downgraded
 
-- **WHEN** a later run reads the live dashboard for a date already stored as settled
-- **THEN** the stored settled figures are unchanged
+- **WHEN** a later run reads live dashboard data for an already settled date
+- **THEN** the settled values and state remain unchanged
 
 ### Requirement: A settled week is written only if it reconciles against the payout actually made
 
-Before writing a settled cycle, the sync SHALL verify that the sum of that cycle's per-order payouts, less that cycle's deductions, equals the payout amount the aggregator states it paid.
+Before writing a settled cycle, the sync SHALL verify that the sum of its
+order-level restaurant payouts, plus or minus its separately represented dated
+and cycle-level deductions, taxes, ads, complaints, cancellations, refunds and
+adjustments, equals the exact final payout stated by the aggregator.
 
-Where the two agree within a tolerance of one rupee, the cycle SHALL be written; a discrepancy inside that tolerance arises from the aggregator rendering every figure to two decimal places. Where they disagree by more than that tolerance, the cycle SHALL NOT be written, and the discrepancy SHALL be reported with the outlet, the cycle, both figures and their difference.
+The cycle identity and start/end dates SHALL come from the portal. The system
+SHALL NOT infer a Monday-to-Sunday, Sunday-to-Saturday, seven-day or
+calendar-month cadence; shortened month-boundary cycles are valid.
 
-A cycle refused for this reason SHALL leave any previously stored figures for its dates untouched, and its business dates SHALL read as **disputed** rather than continuing to read as provisional.
+Where computed and stated payout agree within one rupee, the cycle SHALL be
+written atomically. Where they differ by more than one rupee, no day, deduction
+or reconciliation record from that candidate SHALL be written or altered, the
+prior values SHALL remain, and the cycle SHALL read disputed with outlet,
+channel, portal cycle, both totals and the difference.
 
-A disputed week has already been paid, so it will never settle of its own accord, which is what separates it from a week still awaiting payment. Left reading as provisional it would be indistinguishable from the current week and would sit unresolved without anyone noticing. It SHALL remain disputed until either a later run reconciles it, whereupon it becomes settled, or the owner resolves it through the actions the sync's own surface offers.
+A disputed final cycle SHALL remain disputed until a later source reconciles it
+or the Super Admin uses the existing recheck/accept-difference controls. Payment
+status changes alone SHALL NOT conceal or resolve a discrepancy.
 
 #### Scenario: A reconciling cycle is written
 
-- **WHEN** a settled cycle's per-order payouts less its deductions equal the stated payout to within one rupee
-- **THEN** its days are written as settled
+- **WHEN** order payouts and represented adjustments equal Swiggy's final net
+  payout within one rupee
+- **THEN** all daily, deduction and reconciliation changes commit together as
+  settled
+
+#### Scenario: Portal dates define a shortened cycle
+
+- **WHEN** Swiggy declares a final cycle covering a month-boundary range shorter
+  than seven days
+- **THEN** reconciliation uses those exact dates and does not expand or merge
+  the range
 
 #### Scenario: A discrepancy stops the write
 
-- **WHEN** a settled cycle's computed total differs from the stated payout by more than one rupee
-- **THEN** no day of that cycle is written, the previously stored figures for those dates are unchanged, and the discrepancy is reported naming the outlet, the cycle, both totals and the difference
+- **WHEN** a final cycle differs from the computed payout by more than one rupee
+- **THEN** no candidate day, deduction or cycle value is committed, prior
+  records remain unchanged and the named cycle becomes disputed
 
 #### Scenario: A disputed week is not mistaken for the current week
 
-- **WHEN** a paid cycle has been refused for failing to reconcile
-- **THEN** its business dates read as disputed rather than provisional, distinguishable from a week that is merely awaiting payment
+- **WHEN** a FINAL cycle has been refused for failing to reconcile
+- **THEN** its candidate dates read disputed rather than provisional,
+  distinguishable from an open cycle still awaiting finality
 
 #### Scenario: A later run resolves a dispute
 
-- **WHEN** a cycle previously refused reconciles on a later run, because the aggregator's own figures have since changed
-- **THEN** its days are written as settled and no longer read as disputed
+- **WHEN** a previously disputed cycle reconciles from a later authoritative read
+  or confirmed upload
+- **THEN** its candidate facts commit atomically and the cycle becomes settled
+  or revised as appropriate
 
 #### Scenario: Rounding noise does not raise an alarm
 
-- **WHEN** a cycle's computed total differs from the stated payout by a few paise
-- **THEN** it is treated as reconciled and written, and no discrepancy is reported
+- **WHEN** computed payout differs from the exact stated payout only within the
+  one-rupee tolerance
+- **THEN** the cycle is treated as reconciled and no discrepancy is reported
 
 ### Requirement: Aggregator deductions are recorded as expenses dated to when the spend happened
 
@@ -208,19 +316,47 @@ The aggregator emits these, such as tax deducted at source, through the same cha
 
 ### Requirement: A synced figure supersedes a typed one while preserving what was typed
 
-Where the sync produces a figure for an outlet and business date on which the owner had already entered one, the synced figure SHALL become the day's value and the entered figure SHALL be retained and readable alongside it, with the moment it was superseded.
+Where an authoritative sync or upload covers an outlet, channel and business date
+that already has a typed legacy figure, the sourced figure SHALL become the
+ledger value and the entered values SHALL be retained with legacy-typed
+provenance and the moment they were superseded.
 
-The retained figure SHALL NOT participate in any revenue or profit computation. It exists so the owner can see how far the manual estimates ran from the settled truth.
+Before the writable Swiggy fields are removed, migration SHALL prove that every
+non-null typed revenue, rate and commission fact has been carried and that
+day/month totals remain identical. A partial carry SHALL fail atomically. After
+removal, a date awaiting authoritative coverage SHALL read its carried legacy
+values as read-only history; failure of a later read SHALL not delete them,
+replace them with zero or reopen typing.
+
+The retained figure SHALL NOT participate in revenue or profit computation once
+superseded. It exists so the owner can compare prior estimates with measured
+truth.
+
+#### Scenario: Typed Swiggy is carried before fields are removed
+
+- **WHEN** the handover migration runs
+- **THEN** every existing typed Swiggy value is retained with legacy provenance,
+  totals are unchanged and the migration refuses a partial carry
 
 #### Scenario: A typed day is taken over
 
-- **WHEN** the sync writes a business date that already carries an owner-entered aggregator figure
-- **THEN** the synced figure becomes the day's value, the entered figure is retained with the time it was superseded, and the month computes from the synced figure only
+- **WHEN** an authoritative Swiggy source covers a business date carrying a
+  legacy value
+- **THEN** the sourced figure becomes the day's value, the legacy figure is
+  marked superseded and totals include only the sourced figure
 
 #### Scenario: The owner can see what they had guessed
 
-- **WHEN** the owner reads a day whose typed figure was superseded
-- **THEN** both the synced figure and the retained typed figure are shown, distinguishable from one another
+- **WHEN** the owner reads a date whose typed Swiggy figure was superseded
+- **THEN** the legacy and authoritative figures remain distinguishable, with the
+  legacy value excluded from totals
+
+#### Scenario: A failed reader preserves legacy history
+
+- **WHEN** the reader fails before authoritative Swiggy data covers a legacy
+  date
+- **THEN** the legacy value remains readable and unchanged, no zero is written
+  and no manual money field returns
 
 ### Requirement: The owner has one surface listing what the sync changed, in which a row is an event rather than a run
 
@@ -307,17 +443,43 @@ The sync SHALL re-read recent history on every run rather than only the newest d
 
 ### Requirement: Synced records are readable only by those who may already read the outlet
 
-Every table this capability introduces SHALL carry Row-Level Security policies enforcing outlet isolation in the database, matching the reach the ledger already grants: the owner across outlets, and no Franchise Admin, Biller or Employee reaching another outlet's rows or these financial rows at all.
+Every outlet-scoped table this capability uses SHALL carry Row-Level Security. A
+Super Admin SHALL read daily figures and settlement internals across outlets. A
+Franchise Admin SHALL read daily aggregate channel figures only for outlets
+named by a live assignment, matching the full ledger already granted there, but
+SHALL read no cycle reconciliation, deduction, run, credential or auth-request
+record. A Biller and Employee SHALL read none of these financial rows.
+
+No application client role SHALL insert, update or delete sourced figures, cycle
+records, deductions, sync runs, mappings, credentials or auth requests through
+direct table access. Privileged commands SHALL re-derive authority from the
+caller token or authenticate the reader boundary itself; they SHALL NOT trust an
+outlet, role or channel claim supplied by a client.
+
+#### Scenario: A manager reads assigned daily aggregates only
+
+- **WHEN** a Franchise Admin requests channel-day rows for an assigned outlet
+- **THEN** those daily aggregate rows are readable but settlement cycles,
+  deductions, sync internals and credentials are not
+
+#### Scenario: A manager cannot cross outlets
+
+- **WHEN** a Franchise Admin hand-crafts a daily-figure or settlement request
+  for another outlet
+- **THEN** the database returns no rows and accepts no write
 
 #### Scenario: A Franchise Admin cannot reach settlement records
 
-- **WHEN** a Franchise Admin issues a hand-crafted request for another outlet's settlement or deduction records
-- **THEN** the database refuses it
+- **WHEN** a Franchise Admin hand-crafts a request for any outlet's cycle
+  reconciliation, deduction, run, credential or auth-request record
+- **THEN** the database returns no row, including at an outlet assigned to that
+  manager
 
 #### Scenario: A Biller and an Employee are refused outright
 
-- **WHEN** a Biller or an Employee issues a hand-crafted request for any settlement or deduction record, including their own outlet's
-- **THEN** the database refuses it
+- **WHEN** a Biller or Employee requests any sourced daily, settlement,
+  deduction, sync or credential record
+- **THEN** the database returns no rows and accepts no write
 
 
 
@@ -370,3 +532,179 @@ separately.
 
 - **WHEN** a reconnect completes with both channels stored
 - **THEN** each line independently reports its own channel as signed in
+
+### Requirement: Swiggy daily sales respect evidence time and the outlet cutover
+
+A Swiggy daily write SHALL use order placement timestamps converted through the
+outlet's business-day cutover whenever it asserts an authoritative business
+date. For every non-annexure order it SHALL obtain the detail `payoutSummary`,
+require exactly one parseable `Total Customer Paid` header and exactly one
+parseable `GST Collected` sub-header, and use their difference as gross. The
+sole exception is an order detail whose own status explicitly says cancelled and
+omits GST Collected: it SHALL record zero gross because the final annexure's Net
+Bill Value is zero for that state, even if the detail carries customer-payment
+components. A non-cancelled omission SHALL fail as a source-shape change. Portal
+dashboard/report dates are Asia/Kolkata calendar days and SHALL NOT silently
+become business dates for an outlet whose cutover is not midnight.
+
+The live Net Sales metric MAY be stored as provisional only for a range that is
+proved to correspond exactly to one business-date window. If the API cannot
+provide order timestamps or a cutover-aligned range, the metric SHALL remain
+health/cross-check telemetry rather than an authoritative ledger write. A
+multi-date aggregate SHALL never be assigned to its last date.
+
+Each provisional row SHALL retain its capture/as-of time. A later same-day read
+MAY replace it idempotently; a failed or partial read SHALL preserve the last
+successful row.
+
+#### Scenario: A post-midnight order stays with the trading shift
+
+- **WHEN** a Swiggy order is placed at 00:30 at an outlet whose cutover is 04:00
+- **THEN** it contributes to the previous business date even if the portal
+  dashboard labels it with the new calendar date
+
+#### Scenario: A daily order reproduces the settlement gross
+
+- **WHEN** a live Swiggy order detail shows `Total Customer Paid` and `GST Collected`
+- **THEN** its provisional gross is their integer-paise difference and matches
+  that order's later payout-annexure Net Bill Value when the cycle settles
+
+#### Scenario: Missing detail cannot become GST-inclusive gross
+
+- **WHEN** the order-detail response omits, duplicates or cannot parse either
+  required money label
+- **THEN** the candidate fails as a source-shape change, no daily amount is
+  written, and the reader does not fall back to `customerPaidAmount` or a
+  calendar aggregate
+
+#### Scenario: A calendar aggregate cannot prove a business date
+
+- **WHEN** the API returns only midnight-to-midnight Net Sales and cannot
+  provide cutover-aligned data or order timestamps
+- **THEN** it does not overwrite the authoritative ledger day and the run
+  reports the limited source shape
+
+#### Scenario: Same-day data advances without becoming final
+
+- **WHEN** the second daily run sees more valid orders for today's open cycle
+- **THEN** it replaces the provisional row with a later as-of value and retains
+  provisional state
+
+#### Scenario: A multi-date total is not placed on one date
+
+- **WHEN** a Swiggy response aggregates several portal dates into one total
+- **THEN** no business date receives that total unless source rows can be
+  separated and attributed by the cutover contract
+
+### Requirement: Swiggy reads run twice daily without login side effects
+
+One serialized Swiggy workflow SHALL be scheduled exactly twice per
+Asia/Kolkata business day at documented UTC cron times. Each run SHALL attempt
+the current/open cycle and a bounded lookback that includes at least yesterday
+and the two most recent portal-declared closed cycles. This is one twice-daily
+discovery cadence, not a separate assumed weekly cron.
+
+The run SHALL use only the stored Swiggy API session. It SHALL paginate until
+source exhaustion, retry bounded transient 408, 429 and 5xx failures, classify
+authentication lapse separately from source-shape and transport failures, and
+emit one event per meaningful outcome. It SHALL NOT launch a browser,
+request/resend an OTP, or create an auth request.
+
+A failed, partial, lapsed or shape-changed read SHALL write no synthetic zero
+and SHALL not alter a prior successful figure. A session lapse SHALL update
+health and direct the owner to reconnect.
+
+#### Scenario: Both daily schedules inspect sales and payouts
+
+- **WHEN** either scheduled Swiggy run starts
+- **THEN** it refreshes eligible current data and checks at least the two most
+  recent closed portal cycles for final or revised payout facts
+
+#### Scenario: Pagination is complete before ingest
+
+- **WHEN** a Swiggy order or payout response has another cursor
+- **THEN** the run continues until exhaustion before claiming the candidate
+  cycle is complete
+
+#### Scenario: A session lapse does not log in
+
+- **WHEN** a scheduled API call reports that the Swiggy session has lapsed
+- **THEN** the run writes no financial value, marks health as needing reconnect
+  and exits without browser or OTP activity
+
+#### Scenario: A shape change cannot erase money
+
+- **WHEN** a required Swiggy field or metric label is absent or incompatible
+- **THEN** the run records a source-shape failure and leaves every prior
+  financial row unchanged
+
+### Requirement: Restaurant identities are explicit and channel-scoped
+
+An operator restaurant reference SHALL map to exactly one Ops outlet within its
+channel, while one outlet MAY have multiple references for the same channel with
+independent enabled/dormant status. Automation and uploads SHALL use the same
+mapping and SHALL reject an unmapped or ambiguously mapped reference before
+writing money.
+
+An outlet with no enabled Swiggy reference SHALL read **Not connected for this
+outlet**. It SHALL have no Swiggy sync boundary, no read/reconnect action for a
+fabricated identity, no run row caused by scheduling and no zero-valued channel
+day. Mapping SHALL never be inferred from a fuzzy name or approximate ledger
+total.
+
+#### Scenario: Two Kalyani references remain explicit
+
+- **WHEN** the Swiggy account exposes an active and dormant restaurant reference
+  that both belong to Kalyani
+- **THEN** both can map to Kalyani with explicit statuses and neither creates a
+  duplicate outlet or ambiguous write
+
+#### Scenario: Kanchrapara is unserved
+
+- **WHEN** Kanchrapara has no verified enabled Swiggy reference
+- **THEN** its Swiggy tab state says not connected and schedules write no run,
+  figure or synthetic zero for it
+
+#### Scenario: An unknown report row is refused
+
+- **WHEN** automation or an uploaded report carries a restaurant reference
+  absent from the mapping
+- **THEN** the affected ingest is refused with that reference identified and no
+  guessed outlet assignment
+
+### Requirement: Swiggy has a parity owner surface without Hyperpure
+
+The Super Admin SHALL have a Swiggy tab parallel to Zomato. For each configured
+outlet it SHALL show credential and reader health, last successful read and
+as-of time, Read again with duplicate suppression, reconnect, a code field only
+during an open Swiggy challenge, provisional/final bank status, sync events,
+upload outcome, disputes, recheck and accept-difference actions.
+
+The tab SHALL show events rather than raw workflow runs, SHALL identify the
+affected outlet and period, and SHALL use the same state language as the ledger.
+It SHALL contain no Hyperpure health, capture, upload or reconnect function.
+Unconfigured outlets SHALL show the not-connected state defined by the mapping
+contract.
+
+The surface SHALL depend on the typed adapter interface and SHALL have an
+internally consistent demo covering provisional, settled, revised, disputed,
+lapsed-session, upload and unconfigured states. The owner-only gate, route and
+attention badge SHALL be independent from Zomato.
+
+#### Scenario: The owner sees the same recovery controls
+
+- **WHEN** a configured outlet's Swiggy reader needs attention
+- **THEN** its Swiggy tab names the health problem and offers the relevant Read
+  again, reconnect, OTP, upload, recheck or accept action
+
+#### Scenario: Swiggy has no Hyperpure child line
+
+- **WHEN** the owner opens the Swiggy tab
+- **THEN** no Hyperpure state or action is shown and changing Swiggy health
+  cannot alter the Zomato tab's Hyperpure line
+
+#### Scenario: Demo mode remains self-contained
+
+- **WHEN** the Swiggy surface is opened in demo mode
+- **THEN** its states and actions use typed mock data, issue no live request and
+  preserve the non-dismissible demo boundary
