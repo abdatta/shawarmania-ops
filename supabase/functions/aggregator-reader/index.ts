@@ -1,6 +1,7 @@
 import { serviceClient } from '../_shared/authority.ts'
 import { json, preflight, readJson, str } from '../_shared/http.ts'
 import { probeChannel } from '../_shared/aggregator-probe.ts'
+import { parseHyperpureRunRecord } from '../_shared/hyperpure-run-record.ts'
 
 /**
  * The reader's own door: its session, and the code it is waiting for.
@@ -30,6 +31,7 @@ type Action =
   | 'load_session'
   | 'save_session'
   | 'forget_session'
+  | 'record_hyperpure_run'
   | 'open_code_request'
   | 'await_code'
   | 'reject_code'
@@ -40,6 +42,7 @@ const ACTIONS: readonly Action[] = [
   'load_session',
   'save_session',
   'forget_session',
+  'record_hyperpure_run',
   'open_code_request',
   'await_code',
   'reject_code',
@@ -70,6 +73,13 @@ function secretMatches(offered: string, expected: string): boolean {
     difference |= offered.charCodeAt(i) ^ expected.charCodeAt(i)
   }
   return difference === 0
+}
+
+function permittedOutlets(): string[] {
+  return (Deno.env.get('AGGREGATOR_SYNC_OUTLETS') ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -174,6 +184,32 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return json({ error: 'backend_failure' }, 503)
       }
       return json({ outcome: 'forgotten' })
+    }
+
+    /*
+     * Hyperpure has health rows and credentials but no payout cycles. Keep its
+     * run record on this smaller credential bridge rather than widening
+     * `ingest-aggregator-cycle`: a supply statement must never look like
+     * restaurant revenue merely because both need a health line.
+     */
+    case 'record_hyperpure_run': {
+      if (channel !== 'hyperpure') return json({ error: 'run_channel_not_supported' }, 400)
+      const parsed = parseHyperpureRunRecord(body, permittedOutlets())
+      if ('error' in parsed) return json({ error: parsed.error }, 400)
+
+      const { error } = await service.rpc('record_aggregator_sync_run', {
+        p_outlet_id: parsed.value.outletId,
+        p_channel: 'hyperpure',
+        p_started_at: parsed.value.startedAt,
+        p_outcome: parsed.value.outcome,
+        p_detail: parsed.value.detail,
+        p_rehearsal: false,
+      })
+      if (error) {
+        console.error('could not record the Hyperpure run', { code: error.code })
+        return json({ error: 'backend_failure' }, 503)
+      }
+      return json({ outcome: 'recorded' })
     }
 
     /*

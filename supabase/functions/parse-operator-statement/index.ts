@@ -129,7 +129,7 @@ async function outletMap(
     .from('outlet_channel_restaurants')
     .select('outlet_id, external_ref')
     .eq('channel', 'swiggy')
-    .eq('enabled', true)
+    .eq('state', 'enabled')
     .in('outlet_id', permitted)
   if (swiggyError) throw swiggyError
 
