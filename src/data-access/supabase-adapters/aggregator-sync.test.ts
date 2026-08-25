@@ -551,6 +551,7 @@ describe('what health says', () => {
 
     expect(health.running).toBe(true)
     expect(health.lastOutcome).toBe('ok')
+    expect(health.hasSession).toBe(false)
     expect(health.syncedFrom).toBe('2026-08-01')
     expect(queries).toContainEqual({
       table: 'aggregator_sync_runs',
@@ -589,6 +590,7 @@ describe('what health says', () => {
 
   it('carries the open code window while a code is being waited for', async () => {
     const { adapter } = clientWithCredential({
+      has_session: true,
       awaiting_code_since: '2026-08-23T06:00:00.000Z',
       awaiting_code_expires_at: '2026-08-23T06:05:00.000Z',
     })
@@ -601,10 +603,11 @@ describe('what health says', () => {
   })
 
   it('waits on nothing when no code window is open', async () => {
-    const { adapter } = clientWithCredential({ awaiting_code_since: null })
+    const { adapter } = clientWithCredential({ has_session: false, awaiting_code_since: null })
     const health = await adapter.getHealth('o-1')
 
     expect(health.awaitingOneTimePassword).toBeNull()
+    expect(health.hasSession).toBe(false)
   })
 })
 

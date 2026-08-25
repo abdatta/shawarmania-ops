@@ -76,6 +76,7 @@ describe('the Swiggy sync surface', () => {
             lastOutcome: null,
             running: false,
             awaitingOneTimePassword: null,
+            hasSession: false,
             syncedFrom: null,
           }
         },
@@ -88,6 +89,36 @@ describe('the Swiggy sync surface', () => {
 
     expect(await screen.findByText('Never run')).toBeInTheDocument()
     expect(screen.getByText(/Not switched on here yet/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('needs-reconnect-swiggy')).not.toBeInTheDocument()
+  })
+
+  it('offers Reconnect when a configured Swiggy session was deleted before a run records the lapse', async () => {
+    const real = createMockAdapters('super_admin')
+    const sessionDeleted = {
+      ...real,
+      swiggySync: {
+        ...real.swiggySync,
+        async getHealth(outletId: string) {
+          return {
+            outletId,
+            lastRunAt: '2026-08-25T08:00:00.000Z',
+            lastOutcome: 'ok' as const,
+            running: false,
+            awaitingOneTimePassword: null,
+            hasSession: false,
+            syncedFrom: '2026-08-01',
+          }
+        },
+        async listEvents() {
+          return []
+        },
+      },
+    }
+
+    await renderSurface(OUTLET_KALYANI_ID, sessionDeleted)
+
+    expect(await screen.findByTestId('needs-reconnect-swiggy')).toBeInTheDocument()
+    expect(screen.getByText('Swiggy ended the session')).toBeInTheDocument()
   })
 
   it('carries the paid, revised and disputed history at the connected outlet', async () => {

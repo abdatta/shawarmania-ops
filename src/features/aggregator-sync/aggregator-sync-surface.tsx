@@ -299,7 +299,14 @@ export function AggregatorSyncSurface({ config }: { config: AggregatorChannelCon
    * own login, and no code typed for Swiggy can ever close another channel's
    * request or the reverse.
    */
+  const missingConfiguredSwiggySession =
+    config.channel === 'swiggy' &&
+    health !== null &&
+    !health.running &&
+    health.syncedFrom !== null &&
+    !health.hasSession
   const channelLapsed =
+    missingConfiguredSwiggySession ||
     health?.lastOutcome === 'session_lapsed' ||
     (actionable.some((row) => row.event.kind === 'session-lapsed') ?? false)
   const hyperpureLapsed =

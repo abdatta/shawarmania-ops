@@ -174,12 +174,17 @@ function swiggyToken(state: {
   return state.cookies?.find((c) => c.name === 'access_token')?.value ?? null
 }
 
-async function probeSwiggy(state: {
-  cookies?: StoredCookie[]
-  localStorage?: { name: string; value: string }[]
-}): Promise<ProbeResult> {
+async function probeSwiggy(
+  state: {
+    cookies?: StoredCookie[]
+    localStorage?: { name: string; value: string }[]
+  },
+  restaurantIds: number[],
+): Promise<ProbeResult> {
   const token = swiggyToken(state)
   if (!token) return { alive: false, reason: 'no_token' }
+  const restaurantId = restaurantIds.find(Number.isSafeInteger)
+  if (restaurantId === undefined) return { alive: null, reason: 'unmapped' }
 
   // The cheapest authenticated read: the owner-finance lookup the finance
   // pages themselves issue first. Header recipe mirrors
@@ -199,7 +204,7 @@ async function probeSwiggy(state: {
       body: JSON.stringify({
         query:
           'query getOwnerFinanceDetailsV2($restaurantIds: [Int64!]!) { getOwnerFinanceDetailsV2(restaurantIds: $restaurantIds) { panData { panNumber } outlets { id } } }',
-        variables: { restaurantIds: ['0'] },
+        variables: { restaurantIds: [restaurantId] },
       }),
     })
   } catch {

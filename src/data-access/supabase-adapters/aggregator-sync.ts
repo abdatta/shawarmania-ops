@@ -126,6 +126,7 @@ export function createSupabaseAggregatorSyncAdapter(
       // two cannot disagree about whether something is happening.
       running: run.data !== null && run.data.finished_at === null,
       awaitingOneTimePassword: waiting,
+      hasSession: credential.data?.has_session ?? false,
       syncedFrom: configured.data?.synced_from ?? null,
     }
   }

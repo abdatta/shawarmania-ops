@@ -2435,6 +2435,8 @@ export interface AggregatorSyncHealth {
   running: boolean
   /** Present while the job is blocked on a one-time password for this outlet. */
   awaitingOneTimePassword: { requestedAt: string; expiresAt: string } | null
+  /** Whether the configured channel still has captured session material, never the material itself. */
+  hasSession: boolean
   /** Null until an outlet is switched on; the surface says so rather than showing nil. */
   syncedFrom: string | null
 }

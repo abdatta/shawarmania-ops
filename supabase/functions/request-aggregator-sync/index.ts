@@ -2,6 +2,7 @@ import { callerFrom, isOwner, serviceClient } from '../_shared/authority.ts'
 import { json, preflight, readJson, str } from '../_shared/http.ts'
 import { probeChannel } from '../_shared/aggregator-probe.ts'
 import { decideRung } from '../_shared/reconnect-ladder.ts'
+import { reconnectWorkflowDispatch, syncWorkflowDispatch } from '../_shared/sync-dispatch.ts'
 
 /**
  * "Read now", and "Reconnect", from the owner's phone.
@@ -112,6 +113,26 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json({ error: 'backend_failure' }, 503)
     }
     if (!outletId || !configured) return json({ error: 'channel_not_configured' }, 409)
+
+    // Swiggy's outlet switch alone is not an identity. A Read now request must
+    // have at least one enabled portal reference before it can leave Ops; the
+    // workflow then carries only mappings for this same outlet. This keeps an
+    // old switch-on row from dispatching a reader that could write elsewhere.
+    if (channel === 'swiggy') {
+      const { data: mapping, error: mappingError } = await service
+        .from('outlet_channel_restaurants')
+        .select('external_ref')
+        .eq('outlet_id', outletId)
+        .eq('channel', 'swiggy')
+        .eq('enabled', true)
+        .limit(1)
+        .maybeSingle()
+      if (mappingError) {
+        console.error('could not read the Swiggy mapping check', mappingError)
+        return json({ error: 'backend_failure' }, 503)
+      }
+      if (!mapping) return json({ error: 'channel_not_configured' }, 409)
+    }
   }
 
   // Nothing may be started while something is running. A dead run that never
@@ -166,41 +187,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   if (rung === 'probe_failed') return json({ error: 'probe_failed' }, 503)
 
-  if (mode === 'sync' && channel === 'swiggy') {
-    // The Swiggy reader workflow arrives with the sync-repository half of this
-    // change; until then there is no job whose name could mean "read Swiggy",
-    // and dispatching Zomato's reader would silently read the wrong portal.
-    return json({ error: 'swiggy_reader_not_configured' }, 503)
-  }
-
   // Choose the workflow by WHAT THE RUNG IS, never by trusting the caller's mode
   // string alone: choosing it by mode was exactly the bug that once ran the
   // figures-reader on a reconnect and never asked for a code.
   let target: DispatchTarget | null = null
+  let workflowInputs: Record<string, string> | null = null
   if (mode === 'sync') {
-    target = targetFor('AGGREGATOR_SYNC_WORKFLOW', 'sync.yml')
-  } else if (rung === 'capture_only') {
-    target = targetFor('AGGREGATOR_CAPTURE_WORKFLOW', 'capture-hyperpure.yml')
-  } else if (rung === 'full_login') {
-    target = targetFor('AGGREGATOR_RECONNECT_WORKFLOW', 'login.yml')
+    const syncDispatch = syncWorkflowDispatch(channel, outletId, rehearse)
+    target = targetFor(syncDispatch.workflowEnvName, syncDispatch.fallbackWorkflow)
+    workflowInputs = syncDispatch.inputs
+  } else if (rung === 'capture_only' || rung === 'full_login') {
+    const reconnectDispatch = reconnectWorkflowDispatch(rung, swiggyReconnect, outletId, rehearse)
+    target = targetFor(reconnectDispatch.workflowEnvName, reconnectDispatch.fallbackWorkflow)
+    workflowInputs = reconnectDispatch.inputs
   } else if (rung === 'still_signed_in') {
     // Nothing to repair. Say so and stop: no runner boots, no request opens,
     // and the surface tells the owner they are already signed in.
     return json({ outcome: 'still_signed_in', mode, rehearsal: rehearse }, 200)
   }
 
-  if (!target) {
+  if (!target || !workflowInputs) {
     console.error('the reader dispatch is not configured; refusing every caller')
     return json({ error: 'not_configured' }, 503)
   }
-
-  // The workflow inputs describe THE JOB, never the button that asked for it:
-  // login.yml signs in to Zomato whichever line's Reconnect was tapped (Model
-  // A — one sign-in restores both channels). Swiggy is the one exception: its
-  // reconnect reaches this point only as a full_login rung, so login.yml is
-  // dispatched with channel=swiggy and no other channel's repair ever runs.
-  const workflowChannel =
-    mode === 'sync' || rung === 'full_login' ? (swiggyReconnect ? 'swiggy' : 'zomato') : 'hyperpure'
 
   const dispatch = await fetch(
     `https://api.github.com/repos/${target.owner}/${target.repo}/actions/workflows/${target.workflow}/dispatches`,
@@ -215,12 +224,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       },
       body: JSON.stringify({
         ref: target.ref,
-        inputs: {
-          channel: workflowChannel,
-          outlet_id: outletId,
-          mode,
-          rehearse: rehearse ? 'true' : 'false',
-        },
+        inputs: workflowInputs,
       }),
     },
   )

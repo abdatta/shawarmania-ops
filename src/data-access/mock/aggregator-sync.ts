@@ -201,6 +201,7 @@ export function createMockAggregatorSyncAdapter(
         lastOutcome: healthy ? 'ok' : 'session_lapsed',
         running: false,
         awaitingOneTimePassword: null,
+        hasSession: healthy,
         syncedFrom: day(16),
       },
       events: seedFor(outletId, healthy, at, day, channel),

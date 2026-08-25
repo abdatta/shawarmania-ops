@@ -240,6 +240,7 @@ describe('the Zomato sync surface', () => {
         lastOutcome: outcome,
         running: false,
         awaitingOneTimePassword: null,
+        hasSession: true,
         syncedFrom: '2026-08-01',
       }) satisfies AggregatorSyncHealth
 
