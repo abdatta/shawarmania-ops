@@ -19,7 +19,7 @@
 - [ ] Keep the existing `orderCache` behaviour on a failed server read, which is
       the offline fallback and is unrelated to this defect.
 
-## 3. Refuse a duplicate payment on the tablet
+## 3. Refuse an already-taken action on the tablet
 
 - [ ] Have `payOrder` project the order through the task 1 function instead of
       trusting `readOrder`'s unoverlaid server row.
@@ -27,6 +27,10 @@
       naming which, through the existing `BillingActionError` vocabulary.
 - [ ] Confirm the refusal never fires after an accepted `void_order_payment`,
       because the projection is `open` again by then.
+- [ ] Do the same for `set_order_preparation`: production refused one on
+      2026-08-26 at 20:05 IST because order 24 had been marked prepared five
+      seconds earlier and was already paid. Same torn read, the preparation fact
+      rather than the payment fact, so the guard must cover it too.
 
 ## 4. Pin it
 
