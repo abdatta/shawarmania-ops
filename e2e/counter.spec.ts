@@ -695,7 +695,7 @@ test.describe('manager billing history', () => {
     await expect(bills.nth(1)).toContainText('Cancelled')
     await expect(page.getByText(/Bill \d+ was cancelled/)).toHaveCount(0)
 
-    await page.getByRole('tab', { name: 'Status' }).click()
+    await page.getByRole('tab', { name: /^Status/ }).click()
     await expect(page.getByRole('heading', { name: 'Payment totals' })).toBeVisible()
     await expect(page.getByTestId('billing-total-cash')).toBeVisible()
     await expect(page.getByTestId('billing-total-upi')).toBeVisible()
@@ -717,7 +717,7 @@ test.describe('manager billing history', () => {
     await expect(openOrder).toHaveCount(0)
     await expect(page.getByText(/Nothing was transferred/)).toHaveCount(0)
 
-    await page.getByRole('tab', { name: 'Status' }).click()
+    await page.getByRole('tab', { name: /^Status/ }).click()
     await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
     await expect(page.getByText(/recent sync problem/i)).toBeVisible()
     await expect(page.getByText(/Reference [0-9a-f]+/)).toBeHidden()
