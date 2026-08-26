@@ -7,8 +7,28 @@ the change that would perform it. That obligation then grew twice:
 `the-ledger-opens-to-the-outlet` added attribution, void state and the
 recorded-from-away marker. All of it is owed here.
 
-Two facts discovered while planning this change change what the carry-over
-should be, and both were verified against the codebase rather than assumed:
+**The production baseline, read on 2026-08-26**, which is what the migration's
+assertions are written against:
+
+| | Kalyani | Kanchrapara |
+|---|---|---|
+| `manual_ledger_days` | 19 rows, 2026-08-01 to 08-23 | 19 rows, 2026-08-01 to 08-22 |
+| Of those, carrying a count | 15 | 15 |
+| Of those, carrying cash removed | 13 | 11 |
+| Of those, carrying cash added | 1 | 1 |
+| Days with no bills at that date | 12 | 13 |
+| `manual_ledger_expenses` | 42 rows | 65 rows |
+| Of those, voided | 1 | 9 |
+| Of those, recorded from away | 27 | 47 |
+| Of those, corrected by another account | 0 | 0 |
+| Of those, cash | 31 | 24 |
+| Distinct categories | 21 | 19 |
+
+`public.expenses`, `daily_cash_records` and `cash_withdrawals` each hold zero
+rows.
+
+Three facts shape what the carry-over should be, and each was verified rather
+than assumed:
 
 - **The app writes `manual_ledger_expenses` everywhere.** `public.expenses` is
   referenced once, in `src/data-access/supabase-adapters/expense-categories.ts`,
@@ -44,6 +64,37 @@ and a count has to become an observation with an instant it never recorded.
 
 ## Decisions
 
+### 0. The notebook counts the drawer AFTER the collection; this model counts it before
+
+**This is the carry-over's one real trap, and it was found by reading production
+rather than the schema.** `manual_ledger_days.counted_cash_paise` is compared
+against an expected figure that has already subtracted `cash_removed_paise`
+(`src/features/manual-ledger/ledger.ts:171`). So the notebook's counted figure is
+the **float left behind**, not the amount seen in the drawer.
+
+`cash-is-counted-not-closed` defines `counted_total` the other way: what was in
+the drawer at the moment of counting, with the collection applied afterwards to
+give the carry-forward. The two are the same event described from opposite sides
+of the collection.
+
+So the carry-over must convert, not copy:
+
+```
+observation.counted_total = counted_cash_paise + cash_removed_paise
+cash_out.amount           = cash_removed_paise
+next opening              = counted_cash_paise
+```
+
+A copy would understate every carried August observation by that day's
+collection. At Kalyani those collections run from ₹1,000 to ₹4,000 a day, so the
+error would be large, systematic, and invisible against a table that had been
+archived. A migration assertion checks the identity above per row.
+
+**Rejected: redefine `counted_total` to mean the float left, so the copy is
+direct.** It would make every future count ask the collector for a figure they
+produce last instead of the one they produce first, and it would put the
+difference on the wrong side of the collection.
+
 ### 1. A carried day becomes an observation with an explicitly imprecise instant
 
 Each `manual_ledger_days` row holds an opening, a counted amount, cash added and
@@ -58,11 +109,16 @@ without a tolerance figure, since a rupee tolerance derived from a fabricated
 instant would be worse than none.
 
 Cash removed becomes a `drawer_cash_out` of kind `spend` where it carries a
-reason and `collection` where it does not, at the same instant. Cash added has
-no counterpart in the new model, which admits only receipts, expenses and
-removals; a carried row with cash added is recorded as an adjustment against the
-observation carrying the original reason, so the arithmetic closes and the
-explanation survives.
+reason and `collection` where it does not, at the same instant, with the amount
+conversion from decision 0.
+
+Cash added has no counterpart in the new model, which admits only receipts,
+expenses and removals. **Production has exactly two such rows, one per outlet**
+(checked 2026-08-26), so this is not worth machinery: each is carried as an
+adjustment against its observation retaining the original reason, and if that
+proves awkward for either row, carrying it as a note on the observation is an
+acceptable second choice. Do not build a general inbound-cash concept for two
+rows.
 
 **Rejected: invent a plausible evening time.** It would make legacy rows
 indistinguishable from real ones and would silently claim precision that was
@@ -186,10 +242,9 @@ days and the owner says so.
    snapshot, or withdraw the consumption basis until the word is typed. Needs the
    owner's answer on whether a consumption basis is still wanted at all now that
    inventory is shelved.
-2. **How many August day rows carry cash added**, and whether the adjustment
-   modelling in decision 1 is worth its complexity for that count, or whether
-   those rows are better carried as an observation whose difference absorbs it
-   with a note. Answer from the data before writing the migration.
+2. ~~**How many August day rows carry cash added**~~ **Answered 2026-08-26:
+   two, one per outlet.** Decision 1 now says to carry each as an adjustment and
+   to build nothing general for them.
 3. **Whether the archived day table keeps its RLS or is moved out of `public`
    entirely.** Keeping it in place with no grant is simpler; moving it to a
    schema nothing else reads is a stronger statement that it is not a source.

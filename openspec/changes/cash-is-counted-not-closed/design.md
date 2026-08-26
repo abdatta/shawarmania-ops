@@ -12,8 +12,23 @@ at the end of a business day. It is counted in the middle of one, at a time the
 collector picks, sometimes after skipping a day or two, and sometimes entered an
 hour later from somewhere else. The proposal states the owner's own account.
 
-Three facts about the current codebase shape what is possible here, and each was
-verified rather than assumed:
+**Everything below was verified against the production database on 2026-08-26**,
+by read-only query, rather than inferred from the repo. The figures are the
+baseline this change is sized against.
+
+| | Kalyani | Kanchrapara |
+|---|---|---|
+| Settled bills, first business date | 364, from 2026-08-12 | 320, from 2026-08-14 |
+| Of those, Cash | 88 | 106 |
+| `manual_ledger_days` rows | 19, 2026-08-01 to 08-23 | 19, 2026-08-01 to 08-22 |
+| Of those, carrying a count | 15 | 15 |
+| `manual_ledger_expenses` rows | 42 | 65 |
+| Live Franchise Admin assignments | **0** | **0** |
+
+`daily_cash_records`, `cash_withdrawals` and `public.expenses` each hold
+**zero rows**. `billing_live_from` is null at both outlets.
+
+Four facts about the current codebase and its data shape what is possible here:
 
 - **A payment instant already exists.** `bills.paid_at` is a `timestamptz`, and
   `bill_payments.created_at` carries the per-allocation instant. `pay_billing_order`
@@ -26,14 +41,30 @@ verified rather than assumed:
   `created_at`. A date cannot be placed on one side of a 22:00 boundary.
 - **`billing_live_from` does not gate any of this.** It controls one thing:
   whether the *manual ledger form* asks for typed Cash and UPI at that outlet.
-  Bills are rung and stored either way, at both outlets, today. A derived reader
-  over `bills` needs no handover to have been performed. The
-  `ledger-handover-per-outlet` todo, written 12 Aug, describes a state that has
-  since moved on; the flag is dead once the form it serves is gone, and #12
-  drops it.
+  Bills are rung and stored either way. A derived reader over `bills` needs no
+  handover to have been performed. The `ledger-handover-per-outlet` todo, written
+  12 Aug, is stale in two ways: it records that Kanchrapara has no tablet, and
+  that outlet has been ringing real bills since 2026-08-14. The flag is dead once
+  the form it serves is gone, and #12 drops it.
+- **Device clock skew is sub-second, so a mid-day boundary is safe.** Across all
+  684 settled bills, `synced_at - paid_at` has a median of 1.2 to 1.3 seconds and
+  a 95th percentile of 2.4 to 3.2 seconds. Twenty-eight bills carry a device clock
+  marginally ahead of the server, by at most 0.9 seconds. The worst lag, 14.9
+  hours at Kanchrapara, is delivery rather than skew: an offline queue draining
+  later, which is the reconciliation-exception case in decision 10 and which has
+  therefore **already happened in production**.
 
 The only genuine history gap is dates before an outlet's tablet was ringing
-bills. Those live in `manual_ledger_days` and are carried across by #12.
+bills: twelve such days at Kalyani and thirteen at Kanchrapara. Those live in
+`manual_ledger_days` and are carried across by #12.
+
+One more thing the production data settles, and it is worth knowing before
+writing decision 4. **The notebook's opening-cash chain is already broken in
+places.** At Kalyani, 2026-08-12 opens at ₹340 where the previous day counted
+₹490, and 2026-08-14 opens at ₹510 where the previous day counted ₹310. Days
+2026-08-18 to 08-20 are simply missing. So "report the break and repair nothing"
+is not a hypothetical safeguard: it is what the surface will do on the first day
+it renders real history.
 
 ## Goals / Non-Goals
 
@@ -625,12 +656,12 @@ view that says how much the numbers can be trusted.
 
 ## Risks / Trade-offs
 
-- **A mid-day boundary is more sensitive to device clock skew than 04:00 was.**
-  `paid_at` is device-claimed, checked only against the same device's own
-  command time within 300 seconds. A skewed tablet could place a payment on the
-  wrong side of a 22:00 line. It is the same skew already tolerated for
-  assigning a business date, so it is not new risk, but it is newly consequential
-  and belongs in `docs/LIMITATIONS.md`.
+- **A mid-day boundary is more sensitive to device clock skew than 04:00 was**,
+  in principle. `paid_at` is device-claimed, checked only against the same
+  device's own command time within 300 seconds, so a badly skewed tablet could
+  place a payment on the wrong side of a 22:00 line. **Measured, the exposure is
+  negligible today**: sub-second in production across 684 bills. It belongs in
+  `docs/LIMITATIONS.md` as a stated bound rather than as a guard to build.
 - **A long interval blurs attribution.** Three days in one observation means a
   ₹200 variance cannot be pinned to a night. The surface says so rather than
   implying precision it does not have.
@@ -673,7 +704,9 @@ Revert at any point before step 5 is a one-line registry edit and a deploy.
 3. **Derived month performance**, measured against a real August rather than
    estimated. If it does not hold, the answer is a materialised read model, never
    a stored day row that can disagree with its sources.
-4. **Does `paid_at` skew need an additional guard now?** Options are none (state
-   the limitation), a server-side sanity bound at insert, or surfacing on the
-   count sheet that a device's clock is adrift. Decide with evidence from
-   production `paid_at` versus `synced_at` spreads.
+4. ~~**Does `paid_at` skew need an additional guard now?**~~ **Answered
+   2026-08-26 from production: no.** Median skew is 1.2 to 1.3 seconds, the 95th
+   percentile 2.4 to 3.2, and the worst device clock lead 0.9 seconds. A boundary
+   placed to the minute is far outside that. State the limitation in
+   `docs/LIMITATIONS.md` and add no guard; revisit only if a future device shows
+   minute-scale drift.

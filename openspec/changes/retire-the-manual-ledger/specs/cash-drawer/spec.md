@@ -12,6 +12,13 @@ carry a rupee tolerance, because the instant it is placed at is a boundary chose
 by the carry-over rather than a moment anybody observed. Its marker SHALL state
 plainly, on the record, that the hour was never captured.
 
+**The counted figure SHALL be converted, not copied.** The historical record
+counted the drawer after the collection was taken, while an observation counts it
+before, so a carried observation's counted total SHALL be the source row's
+counted cash plus its cash removed, the removal SHALL be recorded separately, and
+the following opening SHALL be the source row's counted cash. A migration SHALL
+assert this identity per row.
+
 The source row's cash removed SHALL become cash out of kind `spend` where it
 carried a reason and `collection` where it did not, at the same instant. A source
 row's cash added SHALL be carried as an adjustment against the observation,
@@ -27,6 +34,11 @@ survives.
 
 - **WHEN** the observation after a legacy one is recorded
 - **THEN** its opening is the legacy observation's counted total less that observation's own cash out, by the ordinary rule
+
+#### Scenario: The counted figure is converted across the collection
+
+- **WHEN** a historical row recorded ₹490 counted with ₹2,500 removed
+- **THEN** the carried observation's counted total is ₹2,990, its cash out is ₹2,500, and the next opening is ₹490
 
 #### Scenario: A carried removal keeps its reason
 

@@ -37,6 +37,11 @@ cannot finish while an outlet is still writing them by hand.
 - **Kanchrapara** — no tablet yet. Nothing to hand over until its hardware
   arrives and it repeats the same setup and parallel run.
 
+  **Out of date as of 26 Aug 2026**: Kanchrapara has been ringing real bills
+  since 14 Aug 2026, 320 settled bills by 26 Aug. Both outlets have working
+  tablets, which is part of why the act this page tracks is dissolving rather
+  than waiting.
+
 ## Before setting the date, at either outlet
 
 - The hand-written bills and the tablet's bills agree for the days traded.

@@ -162,7 +162,10 @@ fallback is a tab, not a flag: **no runtime toggle is introduced**, so
 - **New domain module** for the interval arithmetic, in integer paise, throwing
   on non-integer input, mirroring the database constraints.
 - **New surfaces** in `src/gates/registry.ts`, promoted `live` by this change.
-- **No production data is moved, renamed or deleted.**
+- **No production data is moved, renamed or deleted.** Verified 2026-08-26 that
+  the tables this change leaves dead in place hold nothing:
+  `daily_cash_records` 0 rows, `cash_withdrawals` 0 rows, `public.expenses` 0
+  rows.
 
 ## Inherited obligations
 
