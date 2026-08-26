@@ -28,3 +28,43 @@ than being sent for the server to refuse.
 
 - **WHEN** an operator unwinds a payment inside its edit window and takes payment again
 - **THEN** the second payment is accepted, because the refusal follows the order's projected state rather than its command history
+
+## MODIFIED Requirements
+
+### Requirement: Delivery outcomes are explicit and idempotent
+
+An accepted response or an exact replay SHALL resolve one local command to the
+same server result. Retryable failures SHALL stay unsent. A permanent refusal
+SHALL move to needs attention, and SHALL be classified as correctable or
+terminal by whether resending the same payload could ever succeed.
+
+A correctable refusal SHALL offer correction, and a correction SHALL use a new
+UUID linked to the refused command. A **terminal** refusal SHALL offer discard
+alone: the system SHALL NOT offer to resend a payload whose refusal cannot
+change, and SHALL refuse such a correction if one is attempted. A refusal
+SHALL name the order it concerned wherever the refusing operation identified
+one, so the item can be read without correlating timestamps.
+
+A discard SHALL retain actor, time and a non-blank reason. Correction and
+discard SHALL be available only on the originating tablet to an operator
+holding its live shift, and both SHALL retain the refused trace.
+
+#### Scenario: The response is lost after the server commits
+
+- **WHEN** the server commits a command, the response is lost, and the same UUID and payload are retried
+- **THEN** the exact replay returns the original result and the local command resolves with no duplicate bill
+
+#### Scenario: A UUID is reused with different content
+
+- **WHEN** a retry uses an existing command UUID with a different canonical payload
+- **THEN** the system moves it to needs attention as an identity conflict and does not treat it as delivered
+
+#### Scenario: A refusal that cannot change offers no correction
+
+- **WHEN** a payment is refused because its order is no longer open
+- **THEN** the item offers discard and not correction, and an attempted correction is refused rather than resent
+
+#### Scenario: A refusal says which order it was about
+
+- **WHEN** an operator or a manager reads a refused command whose operation identified an order
+- **THEN** the order is named on the item, without any payload or customer detail

@@ -32,7 +32,31 @@
       seconds earlier and was already paid. Same torn read, the preparation fact
       rather than the payment fact, so the guard must cover it too.
 
-## 4. Pin it
+## 4. Offer correction only where a retry could succeed
+
+- [ ] Classify refusals into correctable and terminal, in one place both the
+      tablet's attention surface and any future reader can use. Terminal:
+      `order_not_open`, `payment_edit_expired`, `removed_tablet`,
+      `malformed_payload`, `arithmetic_invalid`, `unsupported_schema`,
+      `unresolved_operations`, `authorization_refused`.
+- [ ] Withhold the correct action for terminal refusals on the tablet, keeping
+      discard, the refused trace and the tombstone exactly as they are.
+- [ ] Have `correctAttention` refuse a terminal refusal at the store boundary
+      too, so the rule does not live only in a button's disabled state.
+- [ ] Reword the manager panel's advice so it names discard for terminal
+      refusals instead of recommending an action that cannot work.
+
+## 5. Name the order in the refusal
+
+- [ ] Add `orderNumber` and `orderId` to the refusal results of the command
+      functions that already hold the order row, in a `create or replace`
+      migration that changes no guard's verdict.
+- [ ] Widen `RefusedBillingCommandResult` with the two optional fields and
+      confirm `parseBillingCommandResult` still accepts every existing shape.
+- [ ] Render the order on the tablet's attention item and in the manager's
+      Status panel, so a refusal reads as the order it was about.
+
+## 6. Pin it
 
 - [ ] A race test in `src/data-access/supabase-adapters/billing.test.ts` that
       lands the accept between the two reads and asserts the paid order does not
@@ -43,11 +67,20 @@
       is refused locally, before any command is minted.
 - [ ] A test that a command created during an in-flight read appears on the next
       read, pinning D2's accepted mirror gap as bounded rather than permanent.
+- [ ] A test that a terminal refusal offers no correction and that
+      `correctAttention` rejects one, so the two presses that happened on
+      2026-08-26 cannot happen again.
+- [ ] A test that a correctable refusal still corrects, so the split does not
+      quietly disable the feature.
+- [ ] A database test that a refused command reports its order number, and that
+      every guard still refuses and accepts exactly what it did before.
 
-## 5. Gate
+## 7. Gate
 
 - [ ] `npm run typecheck`, `npm run lint`, `npm run format:check`.
 - [ ] The touched vitest files, then the full unit suite.
+- [ ] `npm run test:db` and `npm run test:rls`, which this change now needs
+      outright: it carries a migration.
 - [ ] The full local gate set including the Docker-backed database jobs, read
       off the CI workflow rather than a checklist, because this change is on the
       offline and outbox path.

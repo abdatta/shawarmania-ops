@@ -120,3 +120,57 @@ drives the adapter against a real Dexie over fake-indexeddb. The accept is
 landed inside the gap by resolving the server read and then draining before the
 outbox read is issued, which is deterministic rather than timing-dependent, and
 it fails on the tree today.
+
+## D7 — Correction is for refusals a retry could change, and this one cannot
+
+`correctAttention` builds its replacement by copying the refused command and
+swapping only the id, deliberately preserving `createdAt` so historical-shift
+authorisation still holds. That is right for the refusals it was written for: a
+`stale_revision` or an `identity_conflict` can succeed on a second attempt
+because the world moved, not the payload.
+
+It is wrong for `order_not_open` against an order that is paid or cancelled.
+That order will never be open again, so the identical payload is refused for the
+identical reason, forever. Production ran the experiment: two presses, two
+refusals, two new permanent rows, all three sharing payload hash
+`f69d8173…` and `client_created_at 2026-08-25T15:05:13.570Z`.
+
+Worse than useless, it is self-amplifying, and the panel prescribes it: *"Check
+the originating tablet for the correction or discard action."* The count grows
+each time somebody does as they are told.
+
+The split is already in the spec, which says a **correctable** permanent refusal
+moves to needs attention. Nothing ever defined correctable, so the code treated
+the whole permanent class that way. Defining it:
+
+| Refusal | Retry could succeed? | Offer |
+|---|---|---|
+| `stale_revision`, `identity_conflict` | yes, the payload can be rebuilt | correct or discard |
+| `retryable_failure` | never reaches attention | — |
+| `order_not_open`, `payment_edit_expired`, `removed_tablet` | no, the world is closed | **discard only** |
+| `malformed_payload`, `arithmetic_invalid`, `unsupported_schema`, `unresolved_operations`, `authorization_refused` | not by resending the same bytes | **discard only** |
+
+Terminal refusals keep discard, keep their trace, and keep their tombstone. Only
+the button that cannot work goes away, and the copy stops recommending it.
+
+## D8 — A refusal names its order, because the function already knows it
+
+Every refusal path is inside a command function that has already selected the
+order into `v_order`. The accepted path returns `orderId` and `orderNumber`; the
+refusal path returns `orderStatus` and stops. So the one field that makes the
+row actionable is discarded at the moment it is most cheaply available, and the
+order numbers in this proposal had to be recovered by correlating command
+timestamps against `orders`, which no biller can do at a counter.
+
+The refusal result gains the order's number and id wherever the function holds
+the row. This is additive to a jsonb result: `parseBillingCommandResult` accepts
+unknown members and `RefusedBillingCommandResult` gains two optional fields, so
+no client needs to change to keep working, and no guard's verdict moves.
+
+It stays inside the diagnostics privacy requirement, which permits "counts, age,
+command type, non-identifying references and result categories". A daily order
+number is a non-identifying reference, and the scenario asks for *actionable*
+metadata, which is precisely what is missing today. No payload, no customer.
+
+This is the change's only migration, and it is a `create or replace` of existing
+functions that alters what they report and nothing about what they decide.
