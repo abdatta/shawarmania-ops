@@ -7,10 +7,14 @@ import { createMockExpensesAdapter } from './expenses'
 import { createDemoStore, DEMO_OUTLET_ID, type DemoStore } from './store'
 
 /**
- * The three clauses of `daily-cash-reconciliation` that this mock has to honour,
- * because #12 will have to honour them in Postgres: the figures are computed
- * rather than supplied, only cash moves them, and a closed day is a snapshot
- * that a late bill cannot rewrite.
+ * The three clauses of `daily-cash-reconciliation` that this mock honours: the
+ * figures are computed rather than supplied, only cash moves them, and a closed
+ * day is a snapshot that a late bill cannot rewrite.
+ *
+ * NOTE: `cash-is-counted-not-closed` (#11) removes the day-close model this
+ * describes. The first two clauses survive as interval rules over drawer
+ * observations; the third survives as "the app never changes a person's
+ * observation on its own". This file goes with the demo surface it covers.
  */
 describe('mock daily cash adapter', () => {
   const over = (): { store: DemoStore; adapter: ReturnType<typeof createMockDailyCashAdapter> } => {

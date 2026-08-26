@@ -130,7 +130,9 @@ export interface DemoStore {
   alerts: Tables<'alerts'>[]
   /** Owned by the alerts adapter. Append-only: a response is never edited. */
   alertResponses: Tables<'alert_responses'>[]
-  /** What was in the drawer when the day started. #12 makes this configurable. */
+  /** What was in the drawer when the day started. `cash-is-counted-not-closed`
+   *  (#11) replaces this with a per-outlet opening anchor, after which every
+   *  opening is the previous observation's carry-forward. */
   readonly openingCashPaise: number
   /**
    * Owned by the manual-ledger adapter (#36), and **temporary**: both slices go

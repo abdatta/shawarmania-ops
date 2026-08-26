@@ -26,14 +26,19 @@ which is a visible, recorded act.
 
 The bound survived the owner gaining every outlet's manager screens without an
 assignment (#28): they reach the cash screen at any outlet, read the whole day
-there, and are offered neither of the two writes. Whether an outlet with no
-dedicated manager should hand its drawer to the owner is an open design question
-in `daily-cash-live` (#12).
+there, and are offered neither of the two writes. **This is superseded by
+`cash-is-counted-not-closed` (#11), which settles the question the other way**: a
+Super Admin reaches every outlet's drawer without an assignment, and what that
+costs is that each record carries whether they were inside the outlet's geofence,
+with a reason stored where they were not. Nothing is refused for being
+elsewhere.
 
 ## The manual ledger is a stopgap with a stated exit
 
-Billing now records Cash and UPI at each promoted counter, but expenses and
-inventory (#11) and daily cash (#12) still do not own the nightly record. The
+Billing records Cash and UPI at each counter, and `cash-is-counted-not-closed`
+(#11) gives the drawer a live record, but until `retire-the-manual-ledger` (#12)
+lands, the notebook still holds the trading period before each outlet's tablet
+existed. The
 **Ledger** surface (#36) therefore remains the place for aggregator trade,
 expenses and drawer facts. Each outlet changes over on an explicit future-only
 `billing_live_from`: from that day its Cash and UPI values are read from settled
@@ -66,8 +71,8 @@ Seven bounds worth knowing, because each is a decision:
   are taken as zero on hand at the start of tracking, by owner decision.
 - **It grants the owner no authority that survives it.** They may type cash
   figures into this notebook only because no real drawer record exists yet to
-  corrupt. The bound in the section above is untouched, and #12 must not inherit
-  this permission — it decides its own boundary on its own merits. That an outlet
+  corrupt. #11 decided its own boundary on its own merits, and decided it the
+  other way, so nothing here became precedent — it decides its own boundary on its own merits. That an outlet
   staff role may record a drawer expense here is likewise no precedent for the
   live expense record, whose grants are `outlet-expenses`' own to decide.
 - **A worked shift's own takings are not treated as confidential; history and
@@ -107,9 +112,10 @@ Seven bounds worth knowing, because each is a decision:
   names a person who confirmed it from their own phone rather than one whose name
   was picked off a grid at the counter.
 
-**Its exit belongs to #12**, and is recorded in that change's proposal as
-inherited scope: the change that removes this capability must first carry every
-recorded day and expense row into the live cash and expense records. The rows are
+**Its exit belongs to `retire-the-manual-ledger` (#12)**, and is that change's
+whole purpose: it must first carry every recorded day and expense row into the
+live records, asserting inside the migration that the carried data reproduces
+totals established before it ran. The rows are
 the value here; the surface is not. Dropping the tables without the carry-over
 does not satisfy the removal, and the `manual-ledger` capability spec says so as
 a testable requirement.

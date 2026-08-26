@@ -56,4 +56,12 @@ past a bug.
 
 Zomato and Swiggy revenue, both commission rates, cash in and out, expenses and
 the counted drawer stay hand-entered at every outlet on every date, before and
-after. #12 and #13 own their retirement.
+after. `retire-the-manual-ledger` (#12) owns their retirement.
+
+**Update, 26 Aug 2026: this act is being dissolved rather than performed.**
+`billing_live_from` controls exactly one thing, whether the manual ledger form
+asks for typed Cash and UPI at that outlet. Bills are rung and stored either way,
+at both outlets, today. The derived statement built by
+`cash-is-counted-not-closed` (#11) reads `bills` directly and consults the flag
+nowhere, and #12 drops the column with the form it served. Nothing above needs to
+be done at either outlet; this page closes when #12 lands.

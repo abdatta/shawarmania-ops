@@ -150,16 +150,17 @@ const defs = {
   /**
    * The manual ledger (#36) — **`live`, and designed to be deleted**.
    *
-   * A stopgap with a known end date: billing (#10), expenses (#11) and daily cash
-   * (#12) are not live while August 2026 is trading, and the month cannot be
-   * reconstructed from memory in September. `live` rather than `demo` because a
+   * A stopgap with a known end date: nothing else recorded August 2026 while the
+   * counter was trading, and the month cannot be reconstructed from memory
+   * afterwards. `live` rather than `demo` because a
    * surface whose entire purpose is to capture real figures is useless gated to a
    * demo, and the notebook it replaces would otherwise be a spreadsheet.
    *
    * It carries navigation because the owner opens it nightly; that is the whole
-   * job. It goes when #12 carries its rows into the live cash and expense
-   * records — never before, because the rows are the value here and the surface
-   * is not.
+   * job. `cash-is-counted-not-closed` (#11) takes that navigation entry and
+   * leaves this route live as the fallback, then `retire-the-manual-ledger` (#12)
+   * carries its rows into the live records and removes it. Never before, because
+   * the rows are the value here and the surface is not.
    */
   'owner-manual-ledger': {
     role: 'super_admin',
@@ -428,8 +429,10 @@ const defs = {
    * The day record is deliberately NOT reachable from here or anywhere in this
    * shell: outlet staff hold no policy branch on it at all. The path sits under
    * `ledger/` for two reasons — `admin-expenses` already owns `expenses` and is
-   * a different thing (#11's live expense record), and everything this stopgap
-   * owns should disappear in one sweep when #12 retires it.
+   * a different thing, and everything this stopgap owns should disappear in one
+   * sweep when `retire-the-manual-ledger` (#12) retires it. Note that #12
+   * promotes this stopgap's expense table to be the real one, by rename, because
+   * it is the richer of the two.
    */
   'counter-expenses': {
     role: 'biller',

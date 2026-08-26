@@ -189,8 +189,11 @@ would be a pattern of nothing.
 granted only by a live Franchise Admin assignment at that outlet, so the owner
 reaching an outlet's cash surface still gets the figures and neither write; the
 screen says whose they are rather than leaving it to be discovered by refusal.
-Whether that should change where an outlet has no dedicated manager is an open
-design question in `daily-cash-live` (#12), which builds the drawer.
+**`cash-is-counted-not-closed` (#11) settles this for the drawer**: a Super Admin
+records observations, collections, spends and adjustments at every outlet, and
+each record carries whether they were inside that outlet's geofence, with a
+reason required and stored where they were not. A drawer write is never refused
+for distance.
 
 **The manual ledger's two tables answer differently, and the difference is the
 point.** The **day record** reaches owners and managers and stops: no outlet
@@ -231,7 +234,8 @@ withdrawal trace, not the count.
 allowed only because no real cash record exists yet to corrupt, and the bound in
 the paragraph above is untouched by it. See
 [Limitations](LIMITATIONS.md#the-manual-ledger-is-a-stopgap-with-a-stated-exit)
-for the capability's stated exit, which belongs to #12.
+for the capability's stated exit, which belongs to `retire-the-manual-ledger`
+(#12).
 
 Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to a set-up tablet and a live shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it.
 

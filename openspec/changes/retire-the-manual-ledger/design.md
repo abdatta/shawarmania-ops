@@ -1,0 +1,195 @@
+## Context
+
+`manual-ledger-stopgap` (#36) landed two tables on 2026-08-03 with an explicit
+exit written into the capability spec, `docs/LIMITATIONS.md` and the proposal of
+the change that would perform it. That obligation then grew twice:
+`expense-categories-grow-from-use` made both sides free text, and
+`the-ledger-opens-to-the-outlet` added attribution, void state and the
+recorded-from-away marker. All of it is owed here.
+
+Two facts discovered while planning this change change what the carry-over
+should be, and both were verified against the codebase rather than assumed:
+
+- **The app writes `manual_ledger_expenses` everywhere.** `public.expenses` is
+  referenced once, in `src/data-access/supabase-adapters/expense-categories.ts`,
+  and holds no rows. The stopgap table is the real one.
+- **The stopgap has the better schema.** `public.expenses` carries an enum
+  category and no void. `manual_ledger_expenses` carries a free-text category
+  snapshot, `voided_at`/`voided_by`/`voided_reason`, `updated_by` and
+  `recorded_away`. Migrating rows from the richer table into the poorer one
+  would lose exactly the things the obligation says must survive.
+
+So the carry-over for expenses is a **rename**, not a data migration. That is
+both less work and less lossy, and it is the opposite of what the original #12
+proposal assumed.
+
+The day rows are a genuine transformation, because a stored day with an opening
+and a count has to become an observation with an instant it never recorded.
+
+## Goals / Non-Goals
+
+**Goals**
+
+- Make every date the business has traded readable from one derived surface.
+- Preserve every attribution, void and marker the notebook accumulated.
+- Remove the second writable record of a trading day.
+- Remove the dead day-close code and the flag that outlived its reader.
+- Keep the rows.
+
+**Non-Goals**
+
+- Deleting anything that is the only record of a period.
+- Touching the drawer model settled in #11.
+- Re-homing the billing-readiness gate.
+
+## Decisions
+
+### 1. A carried day becomes an observation with an explicitly imprecise instant
+
+Each `manual_ledger_days` row holds an opening, a counted amount, cash added and
+cash removed with reasons, for a business date, with no time of day anywhere.
+
+It becomes a `drawer_observation` whose counted instant is placed at that
+outlet's cutover boundary for that date and which is flagged **legacy
+imprecise**: a distinct marker, not the ordinary approximate flag, because
+approximate means "within fifteen minutes" and this means "the hour was never
+recorded". The surface renders a legacy observation without a time of day and
+without a tolerance figure, since a rupee tolerance derived from a fabricated
+instant would be worse than none.
+
+Cash removed becomes a `drawer_cash_out` of kind `spend` where it carries a
+reason and `collection` where it does not, at the same instant. Cash added has
+no counterpart in the new model, which admits only receipts, expenses and
+removals; a carried row with cash added is recorded as an adjustment against the
+observation carrying the original reason, so the arithmetic closes and the
+explanation survives.
+
+**Rejected: invent a plausible evening time.** It would make legacy rows
+indistinguishable from real ones and would silently claim precision that was
+never captured. This repo's own precedent for a retroactive record is to use a
+distinct legacy shape rather than a convincing fake.
+
+**Rejected: leave the days unmigrated and let the ledger read two sources.** It
+is less work now and it means the derived reading has a permanent branch on
+"before the notebook ended", which is the sort of seam that is still there in
+three years.
+
+### 2. Expenses are promoted by rename, and the empty table is dropped
+
+`manual_ledger_expenses` becomes `expenses`, taking its policies, indexes,
+triggers and constraints with it. The unused `public.expenses` is dropped first
+so the name is free.
+
+`docs/DATA_MODEL.md`'s note that the consumption basis matches the literal word
+`raw_materials`, a value of the closed category list that nothing types any
+more, is settled here rather than left: the basis is either matched against the
+category snapshot the promoted table actually holds, or the consumption basis is
+withdrawn until something types that word. Whichever, it stops being a matcher
+that silently matches nothing.
+
+**Rejected: migrate rows into `public.expenses`.** It loses void state,
+attribution, the last corrector, the recorded-from-away marker and the free-text
+category, all of which the removal obligation names.
+
+### 3. Archive the day rows rather than dropping them
+
+`manual_ledger_days` is renamed to an archive name, kept read-only with no client
+grant, and read by nothing. The surface, the write path and the capability are
+gone, which is what retirement means; the sixty-odd rows stay because they are
+the only record of August and storage is not the constraint.
+
+**Rejected: drop the table after the carry-over.** The carried observations are
+a transformation, and a transformation can be wrong in a way nobody notices for
+a month. Keeping the source costs nothing and is the only thing that makes the
+transformation checkable afterwards.
+
+### 4. Drop the day-close code rather than re-homing any of it
+
+`daily_cash_records` has never held a production row. `close_business_day()`
+summed cash expenses from the empty `public.expenses`, so it would have produced
+a wrong figure the first time anybody ran it. `billing_assert_day_ready()` has
+one caller, which is `close_business_day()`, and
+`counter_shift_closed_day_guard()` refuses a shift on a date that has a closed
+record, which cannot happen once no record can be written.
+
+All four go together. The billing-readiness question is real and is not being
+answered by anything that remains; if a day-level seal is wanted it is its own
+change, with a reason that is not "we already had a function".
+
+### 5. Drop `billing_live_from` and close its todo
+
+The column's only reader is the manual ledger form's decision to ask for typed
+Cash and UPI. `openspec/todos/ledger-handover-per-outlet.md` treats setting it as
+an outstanding operational act at both outlets.
+
+That act is not performed here; it becomes unnecessary. The todo closes with that
+stated, because a future reader finding a closed todo needs to know whether the
+work was done or dissolved.
+
+### 6. The order of operations is chosen so a failure leaves a working system
+
+The migration runs in one transaction, and its order is deliberate:
+
+1. Dump both notebook tables to a file outside the repo.
+2. Carry expenses by rename, after dropping the empty `public.expenses`.
+3. Carry day rows into observations, cash out and adjustments.
+4. Assert the reconciliation described in decision 7 **inside the transaction**,
+   and raise if it fails.
+5. Archive `manual_ledger_days`.
+6. Drop the day-close code and `billing_live_from`.
+
+Step 4 is what makes the rest safe: a carry-over that does not reproduce the
+known totals aborts the whole thing rather than leaving the estate half moved.
+
+### 7. The carry-over asserts against figures already known
+
+The rehearsal from #11 established each August month total from the notebook.
+This change asserts the same totals from the carried rows, inside the migration,
+before anything is archived or dropped:
+
+- Each outlet's monthly cash expense total, cash and non-cash, matching the
+  notebook's.
+- Each outlet's count of expense rows including voided ones, matching.
+- Each carried observation's counted total equal to its source row's counted
+  cash.
+- Every carried row carrying a recorder; every corrected row carrying a
+  corrector; every voided row carrying its reason.
+
+This mirrors the discipline `freeze-aggregator-and-supply-entry` used, whose gate
+named the exact figure its restatement had to reproduce.
+
+## Risks / Trade-offs
+
+- **This change cannot be reverted by hiding a surface.** It is the reason the
+  pair is split, and the mitigation is the dump in task 1.1 plus a written and
+  tested down-migration that nobody expects to run.
+- **A rename touches every generated type and every adapter reference.** It is
+  mechanical and the compiler finds it, but it is a wide diff and it lands on a
+  table holding live production rows.
+- **Legacy observations will look odd next to real ones**, deliberately. A
+  reader who does not know why should find the answer on the row rather than in
+  a document, so the marker carries a plain sentence.
+- **Cash added has no clean counterpart**, and modelling it as an adjustment is
+  the least-bad fit rather than a natural one. It affects only the handful of
+  August rows that carry one.
+
+## Migration Plan
+
+Sequenced as decision 6, gated by decision 7, with the dump before anything and
+the archive before any drop. The change lands as one release, weeks after #11,
+once the derived statement has been read against the notebook for real trading
+days and the owner says so.
+
+## Open Questions
+
+1. **The `raw_materials` matcher** (decision 2): match against the real category
+   snapshot, or withdraw the consumption basis until the word is typed. Needs the
+   owner's answer on whether a consumption basis is still wanted at all now that
+   inventory is shelved.
+2. **How many August day rows carry cash added**, and whether the adjustment
+   modelling in decision 1 is worth its complexity for that count, or whether
+   those rows are better carried as an observation whose difference absorbs it
+   with a note. Answer from the data before writing the migration.
+3. **Whether the archived day table keeps its RLS or is moved out of `public`
+   entirely.** Keeping it in place with no grant is simpler; moving it to a
+   schema nothing else reads is a stronger statement that it is not a source.

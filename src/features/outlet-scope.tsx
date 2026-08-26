@@ -89,9 +89,9 @@ export function useOutletScope(
    * every outlet's manager surfaces holding no assignment, and this stays a
    * question about assignments, because the database's answer did not move:
    * `cash_withdrawals_insert` and `close_business_day` carry no owner branch at
-   * all. Whether that should change is a design question in `daily-cash-live`
-   * (#12), and until it does, widening this would only produce a control the
-   * database refuses.
+   * all. `cash-is-counted-not-closed` (#11) changes that: the owner reaches every
+   * outlet's drawer and the record carries where they stood. Until #11 lands,
+   * widening this would only produce a control the database refuses.
    */
   managed: boolean
   /** Render this in the surface's header. Null when there is nothing to choose. */

@@ -18,11 +18,15 @@ import { monthOf } from './ledger'
  * The manual ledger (#36) — **a stopgap with a known end date, and the whole
  * folder goes when it ends.**
  *
- * Billing (#10), expenses (#11) and daily cash (#12) are not live while August
- * 2026 is trading, and nobody can reconstruct a month from memory in September.
- * This is where the owner writes it down until those surfaces land, so that two
- * questions stay answerable: did the drawer balance today, and did this month's
- * trading cover its costs.
+ * Nothing else recorded August 2026 while the counter was trading, and nobody
+ * can reconstruct a month from memory afterwards. This is where the owner writes
+ * it down, so that two questions stay answerable: did the drawer balance today,
+ * and did this month's trading cover its costs.
+ *
+ * `cash-is-counted-not-closed` (#11) takes this surface's navigation entry with a
+ * derived statement that has no inputs, leaving this form live at its own route
+ * as the fallback. `retire-the-manual-ledger` (#12) then carries the rows across
+ * and deletes the folder.
  *
  * It is a **notebook, not a workflow**. No day sign-off, no approval, no
  * correction history, no badge. A wrong figure is retyped, because there is
@@ -30,10 +34,10 @@ import { monthOf } from './ledger'
  * the month of data it protected (design D6).
  *
  * **It grants no authority that survives it.** The owner may type cash figures
- * here because no drawer record exists yet to corrupt. The live boundary in
- * `docs/LIMITATIONS.md` is untouched: a Super Admin still cannot record a cash
- * expense, take cash out, or close a day at an outlet remotely, and #12 must not
- * inherit this permission when it carries these rows across.
+ * here because no drawer record exists yet to corrupt. #11 decided the live
+ * boundary on its own merits and decided it the other way: a Super Admin reaches
+ * every outlet's drawer, and each record carries whether they were inside the
+ * outlet's geofence. Nothing here was inherited as precedent.
  */
 
 /**

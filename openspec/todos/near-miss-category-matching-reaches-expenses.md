@@ -55,6 +55,13 @@ design.
 
 ## Trigger to promote
 
-`expenses-and-inventory-live` (#11), which puts the first real expense rows
-behind the month's breakdown. Doing it there is cheap; doing it after means the
-first duplicate spellings already exist and someone is merging them.
+**Re-pointed on 26 Aug 2026**: the change this named no longer exists, and its
+premise that real expense rows are still to come is out of date. They arrived
+with #36 and #38.
+
+The trigger is now the first duplicate spelling that actually costs somebody
+something, which is the honest signal this was always waiting for. It is
+deliberately not attached to `retire-the-manual-ledger` (#12): that change
+renames the table and must not also change how its categories match, because a
+promotion and a behaviour change landing together is exactly the pair nobody can
+bisect afterwards.

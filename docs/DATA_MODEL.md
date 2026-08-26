@@ -479,7 +479,8 @@ Two tables that exist because billing, expenses and daily cash were not live
 while August 2026 was trading. Billing now replaces their Cash/UPI inputs one
 outlet/date at a time; aggregator trade, expenses and drawer facts remain here.
 **Both are designed to be dropped**, by
-the change that first carries their rows into the live records (#12 — see
+`retire-the-manual-ledger` (#12), which first carries their rows into the live
+records (see
 [Limitations](LIMITATIONS.md#the-manual-ledger-is-a-stopgap-with-a-stated-exit)).
 The `manual_ledger_` prefix is what makes that removal, and any accidental
 reference from a live surface, greppable.
@@ -653,7 +654,7 @@ Alerts are the one place a Franchise Admin deliberately writes data the Super Ad
 
 Raw materials appear **twice** in the natural reading of this schema: once as an `expenses` row when stock is bought, and again as inventory `used`/`wasted` movements valued at purchase cost. Summing "all expenses" *and* "food cost" double-counts.
 
-**The consumption basis cannot currently tell which expenses were stock.** It matches the exact word `raw_materials`, which was a value of the closed category list before `expense-categories-grow-from-use` made categories free text. Nothing a person types matches it, so only the demo fixtures still do. This is invisible while the live expense record is empty and the P&L is demo-gated, and it must be settled before `expenses-and-inventory-live` (#11) — see [the backlog note](../openspec/todos/raw-materials-is-identified-by-a-word-nobody-types.md).
+**The consumption basis is withdrawn, and this section describes a mode that is going away.** It matched the exact word `raw_materials`, a value of the closed category list that `expense-categories-grow-from-use` replaced with free text, so nothing a person types has matched it since. Rather than fix a matcher for a basis nobody can compute, `retire-the-manual-ledger` (#12) withdraws the consumption basis entirely, because inventory is shelved (`openspec/todos/inventory-is-shelved.md`) and there are no movements to count. The double-count this section guards against cannot occur without them. Both return together or not at all.
 
 The P&L therefore has two explicit modes, and the UI must always say which one it is showing:
 

@@ -55,6 +55,13 @@ the ledger's model, not whether the bill enum can be trimmed further.
 
 ## Trigger to promote
 
-`expenses-and-inventory-live` (#11), which is the change that makes this column
-reachable by a real user for the first time. Handling it there costs one migration
-on an empty table; handling it afterwards costs a data migration.
+**Re-pointed on 26 Aug 2026**, because the change this named no longer exists and
+its premise no longer holds. The column is already reachable by real users: the
+notebook's expense table has been the live one since #36, and `expenses` was
+never filled. So the cheap window this note assumed has already closed, and a fix
+is a data migration whenever it happens.
+
+The natural home is now `retire-the-manual-ledger` (#12), which renames the real
+expense table and is already touching its schema and its generated types. Doing
+it there costs one more statement in a migration that is running anyway. Doing it
+later means a migration of its own against live rows.

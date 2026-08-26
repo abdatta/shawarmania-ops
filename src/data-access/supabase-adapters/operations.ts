@@ -13,9 +13,11 @@ import {
  * connected yet**.
  *
  * `DataAdapters` is total, so the real tree has to supply all three today. The
- * surfaces are `demo`-gated and never mount against them;
- * `expenses-and-inventory-live` (#11) and `daily-cash-live` (#12) replace this
- * file with real queries and the `close_business_day` call.
+ * surfaces are `demo`-gated and never mount against them.
+ * `cash-is-counted-not-closed` (#11) replaces the daily-cash stub with real
+ * drawer queries and deletes the inventory one, because stock is shelved
+ * (openspec/todos/inventory-is-shelved.md). There is no `close_business_day`
+ * call to write: that function is removed rather than wired up.
  *
  * Writing those queries now would ship code no gate in this change can exercise,
  * which is how a `*-live` change discovers its adapter was wrong. So the reads

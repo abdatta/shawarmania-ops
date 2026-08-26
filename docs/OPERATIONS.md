@@ -391,12 +391,14 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    keeps that outlet preselected. Later assignment changes keep the same
    account. A pending link is replaced transactionally; an activated person
    gets no code unless an admin explicitly chooses **New code**.
-8. **Set the opening cash float** for the first business day. *(Not built — #12.
-   Meanwhile the float is typed as the first day's opening cash in the manual
-   ledger, step 10.)*
+8. **Set the opening cash float** for the first business day. *(Not built —
+   `cash-is-counted-not-closed` (#11), which takes it once per outlet as the
+   anchor for that outlet's first drawer observation; every later opening is the
+   previous observation's carry-forward. Meanwhile the float is typed as the
+   first day's opening cash in the manual ledger, step 10.)*
 9. **Verify isolation before going live** — sign in as the new Franchise Admin and confirm no other outlet is visible anywhere. This is a real step, not a formality: it is the last point at which a misconfiguration is cheap to fix.
 10. **Start the manual ledger for the outlet** (Super Admin → Ledger). *(Temporary
-   — #36, and this step disappears when #12 lands.)* This remains the record of
+   — #36, and this step disappears when `retire-the-manual-ledger` (#12) lands.)* This remains the record of
    aggregator trade, expenses and drawer facts, so it is a step rather than a
    suggestion. On the first day, count the
    drawer and type that as **opening cash**, and type both aggregator commission

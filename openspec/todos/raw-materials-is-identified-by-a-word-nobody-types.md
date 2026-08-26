@@ -44,7 +44,13 @@ which asks nobody but is wrong for a category used both ways.
 
 ## Trigger to promote
 
-`expenses-and-inventory-live` (#11), which is the change that first puts real
-rows in the record the consumption basis reads. Until then the only honest
-alternative is to stop offering the consumption basis, which costs more than
-waiting.
+**Dissolved on 26 Aug 2026, not fixed.** Inventory is shelved
+(`openspec/todos/inventory-is-shelved.md`), so there are no movements to count
+and the consumption basis cannot be computed at all.
+`retire-the-manual-ledger` (#12) therefore withdraws the basis rather than
+repairing a matcher that feeds it, which is the alternative this note called more
+expensive than waiting and which shelving has made free.
+
+Nothing here needs doing. If inventory ever returns, this note returns with it,
+and the fix is part of that change: match against the free-text category snapshot
+the promoted expense table actually holds.

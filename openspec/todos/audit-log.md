@@ -20,7 +20,7 @@ What is missing is everything else and one property:
 
 The current billing roadmap deliberately does not wait for a general audit log.
 `billing-transaction-contract` (#33), `billing-live` (#10), and
-`daily-cash-live` (#12) own the trail needed for money integrity:
+`cash-is-counted-not-closed` (#11) own the trail needed for money integrity:
 
 - immutable order events for create, revise, cancel, pay, transfer, and recovery;
 - compact command receipts for exact replay and idempotency conflicts;
@@ -57,4 +57,4 @@ An audit log generalises these. It does not replace them, and it should not be t
 
 The first franchise dispute, or headcount where "a small trusted team" stops being an accurate description of who has access.
 
-**Dependencies when seeded**: none structural. Most valuable after `billing-live` (#10) and `expenses-and-inventory-live` (#11), when the actions worth auditing are real rather than mocked.
+**Dependencies when seeded**: none structural. Most valuable after `billing-live` (#10) and `cash-is-counted-not-closed` (#11), when the actions worth auditing are real rather than mocked.

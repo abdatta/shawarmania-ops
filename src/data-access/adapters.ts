@@ -2004,14 +2004,14 @@ export interface InsightsAdapter {
 // **This section is designed to be deleted**, along with
 // `src/features/manual-ledger/`, `mock/manual-ledger.ts`,
 // `supabase-adapters/manual-ledger.ts`, one registry entry, one route and two
-// tables. It exists because billing (#10), expenses (#11) and daily cash (#12)
-// are not live while August 2026 is trading, and the month cannot be
-// reconstructed from memory afterwards.
+// tables. It exists because nothing else recorded August 2026 while the counter
+// was trading, and the month cannot be reconstructed from memory afterwards.
 //
 // It is deliberately NOT a partial `ExpensesAdapter` or `DailyCashAdapter`.
-// Those belong to #11 and #12, whose tables have not been designed; writing
-// into them now would either constrain those changes or collapse the authority
-// boundary `docs/LIMITATIONS.md` draws around the drawer.
+// `cash-is-counted-not-closed` (#11) replaces the drawer model outright rather
+// than filling those in, and `retire-the-manual-ledger` (#12) carries these rows
+// across and deletes this section. Writing into the old shapes now would build
+// against a model that is being removed.
 
 /** One trading day at one outlet, exactly as stored. Nothing here is derived. */
 export interface ManualLedgerDay {
@@ -2338,7 +2338,8 @@ export interface DataAdapters {
   alerts: AlertsAdapter
   insights: InsightsAdapter
   addressLookup: AddressLookupAdapter
-  /** Temporary (#36). Removed with the capability once #12 carries its rows. */
+  /** Temporary (#36). Removed by `retire-the-manual-ledger` (#12), which carries
+   *  these rows into the live records and archives the day table. */
   manualLedger: ManualLedgerAdapter
   /** What the Zomato sync has done, and the two things the owner can do about it (#42). */
   aggregatorSync: AggregatorSyncAdapter

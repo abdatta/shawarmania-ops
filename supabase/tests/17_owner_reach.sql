@@ -151,8 +151,10 @@ select is(
 -- 2. Where the reach stops: the drawer.
 --
 -- The boundary the UI reads through `managed` and states on the screen rather
--- than discovering by refusal. Whether it should move is a design question in
--- `daily-cash-live` (#12); until it does, this is what the database says.
+-- than discovering by refusal. `cash-is-counted-not-closed` (#11) moves it: the
+-- owner will reach every outlet's drawer, with geofence evidence on each record
+-- instead of a refusal. Until #11 lands, this is what the database says, and
+-- these assertions are expected to be rewritten by it rather than deleted.
 
 select throws_ok(
   format($q$

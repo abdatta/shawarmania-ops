@@ -909,8 +909,8 @@ carried legacy value, marked as such, but SHALL not become writable again.
 A sourced channel with no successful figure for a date SHALL read as not yet
 measured, not as zero, and SHALL offer Read again or the statement fallback only
 to the Super Admin. Every other part of the ledger SHALL keep working by hand
-until #12 and #13 retire it: cash in and out, expenses the sync does not source
-and the counted drawer.
+until `retire-the-manual-ledger` (#12) retires it: cash in and out, expenses the
+sync does not source and the counted drawer.
 
 Sourcing an aggregator channel SHALL NOT leave a day computing a net from a
 rate and no stated revenue: a measured row uses its exact stored gross,

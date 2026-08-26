@@ -46,9 +46,10 @@ export const PROFIT_BASIS_DESCRIPTIONS: Record<ProfitBasis, string> = {
  * arrives as `Chicken` or a supplier's name and never matches here. Only the
  * demo fixtures still carry it, which is why the demo reads correctly and
  * proves nothing. The consumption basis needs a different way to recognise a
- * stock purchase before `expenses-and-inventory-live` (#11) puts real rows in
- * front of it — see
- * `openspec/todos/raw-materials-is-identified-by-a-word-nobody-types.md`.
+ * stock purchase, and it will not get one: inventory is shelved
+ * (`openspec/todos/inventory-is-shelved.md`), so `retire-the-manual-ledger`
+ * (#12) withdraws the consumption basis entirely rather than repairing a matcher
+ * that feeds a mode nobody can compute. Both return together or not at all.
  */
 export const RAW_MATERIALS_CATEGORY = 'raw_materials'
 
