@@ -23,7 +23,7 @@ import { useSession } from '@/session/context'
 
 import { averageBillPaise, combinedTakingsPaise, paymentTotalPaise } from './day-totals'
 import { ManagerBillDetail } from './manager-bill-detail'
-import { ManagerSyncStatus } from './manager-sync-status'
+import { countSyncProblems, ManagerSyncStatus } from './manager-sync-status'
 import { PaymentTotalCards } from './payment-total-cards'
 import { splitPipeline } from './pipeline'
 
@@ -141,6 +141,13 @@ export function ManagerBillingHistory() {
     totalPaise: paymentTotalPaise(paidBills, paymentMethod),
   }))
   const takingsPaise = combinedTakingsPaise(methodTotals)
+  // The refusals waiting behind the Status tab, named on the tab itself. Its two
+  // neighbours already carry their counts, so a tab that says nothing reads as a
+  // tab with nothing in it — which is how the first production refusal went
+  // unread. Counted from the same function the panel lists, and shown only when
+  // it is non-zero: this tab always has contents, so a zero would say the one
+  // thing that is not true of it.
+  const syncProblemCount = countSyncProblems(diagnostics)
 
   useEffect(
     () => () => {
@@ -331,7 +338,7 @@ export function ManagerBillingHistory() {
             // The count is the whole board — both bands — under the plain name
             // this page has always used; the band names live in the sections.
             ['orders', `Open orders (${orders.length})`],
-            ['status', 'Status'],
+            ['status', syncProblemCount > 0 ? `Status (${syncProblemCount})` : 'Status'],
           ] as const
         ).map(([id, label]) => (
           <Button

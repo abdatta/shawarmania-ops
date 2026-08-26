@@ -32,8 +32,29 @@ function isSyncProblem(item: BillingDeliveryDiagnostic) {
   return !ROUTINE_RESULTS.has(item.resultCategory)
 }
 
+/**
+ * The refusals, as the panel lists them and as its tab counts them.
+ *
+ * One function rather than a predicate each side reapplies, because the tab's
+ * number is only worth trusting if it is the length of exactly what opening the
+ * tab shows. Derived apart, the two agree until somebody edits one of them.
+ *
+ * Deliberately not an attention badge: that spec reserves those for
+ * work the reader can act on, and a manager cannot clear a refusal from this
+ * screen.
+ */
+export function syncProblems(
+  diagnostics: readonly BillingDeliveryDiagnostic[],
+): BillingDeliveryDiagnostic[] {
+  return diagnostics.filter(isSyncProblem)
+}
+
+export function countSyncProblems(diagnostics: readonly BillingDeliveryDiagnostic[]): number {
+  return syncProblems(diagnostics).length
+}
+
 export function ManagerSyncStatus({ diagnostics }: { diagnostics: BillingDeliveryDiagnostic[] }) {
-  const problems = diagnostics.filter(isSyncProblem)
+  const problems = syncProblems(diagnostics)
   const successful = diagnostics.filter((item) => !isSyncProblem(item))
   const activityCounts = [
     ...successful.reduce((counts, item) => {

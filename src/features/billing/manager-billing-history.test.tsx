@@ -103,7 +103,7 @@ describe('manager billing history status', () => {
       </MemoryRouter>,
     )
 
-    const statusTab = await screen.findByRole('tab', { name: 'Status' })
+    const statusTab = await screen.findByRole('tab', { name: /^Status/ })
     expect(screen.queryByRole('heading', { name: 'Payment totals' })).not.toBeInTheDocument()
 
     await user.click(statusTab)
@@ -134,7 +134,7 @@ describe('manager billing history status', () => {
     const bills = within(list).getAllByRole('button', { name: /^Bill \d+Paid/ })
     expect(bills.length).toBeGreaterThan(0)
 
-    await user.click(screen.getByRole('tab', { name: 'Status' }))
+    await user.click(screen.getByRole('tab', { name: /^Status/ }))
 
     // ₹3,711 cash and ₹1,772 UPI, so the total is their sum and cannot drift
     // from the two cards beside it.
@@ -148,6 +148,74 @@ describe('manager billing history status', () => {
     expect(within(average).getByText('Average bill')).toBeVisible()
     expect(
       within(average).getByText(formatPaise(averageBillPaise(548_300, bills.length))),
+    ).toBeVisible()
+  })
+})
+
+describe('the Status tab carries its own problem count', () => {
+  /**
+   * The count belongs on the tab because a refusal is otherwise invisible until
+   * somebody opens the tab that holds it, and nobody opens a tab that looks
+   * quiet. It reads the way its two neighbours already read, in the page's own
+   * parentheses, rather than as an attention badge: a manager cannot clear a
+   * refusal from here, and `attention-badges` reserves badges for work the
+   * reader can act on.
+   */
+  it('names the waiting refusal on the closed tab', async () => {
+    renderHistory()
+
+    await screen.findByTestId('manager-bill-list')
+
+    // One refused command in the demo outlet, and the tab says so while the
+    // panel behind it is still shut.
+    expect(await screen.findByRole('tab', { name: 'Status (1)' })).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Tablet sync status' })).not.toBeInTheDocument()
+  })
+
+  it('stays a plain name when nothing was refused', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+
+    // Delivered activity, and nothing needing a person. A count of zero would
+    // say the tab is empty, which is false: the payment totals live there too.
+    renderHistory({
+      ...adapters,
+      billing: {
+        ...adapters.billing,
+        listDeliveryDiagnostics: async () => [
+          {
+            reference: 'c0000000-0000-4000-a000-000000000001',
+            commandType: 'pay_now',
+            resultCategory: 'accepted',
+            receivedAt: new Date().toISOString(),
+            ageMs: 0,
+          },
+        ],
+      },
+    })
+
+    await screen.findByTestId('manager-bill-list')
+
+    expect(await screen.findByRole('tab', { name: 'Status' })).toBeVisible()
+    expect(screen.queryByRole('tab', { name: /^Status \(/ })).not.toBeInTheDocument()
+  })
+
+  it('counts exactly what the panel behind it lists', async () => {
+    const user = userEvent.setup()
+    renderHistory()
+
+    await screen.findByTestId('manager-bill-list')
+
+    // The tab's number and the panel's heading are the same predicate over the
+    // same array, so this fails the moment they are derived apart.
+    const tab = await screen.findByRole('tab', { name: /^Status/ })
+    const counted = /Status \((\d+)\)/.exec(tab.textContent ?? '')?.[1] ?? '0'
+
+    await user.click(tab)
+
+    expect(
+      screen.getByText(
+        counted === '1' ? '1 recent sync problem' : `${counted} recent sync problems`,
+      ),
     ).toBeVisible()
   })
 })
