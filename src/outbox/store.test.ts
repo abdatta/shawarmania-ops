@@ -281,3 +281,88 @@ describe('BillingDeliveryStore', () => {
     database.close()
   })
 })
+
+describe('a refusal is corrected only where a resend could change the answer', () => {
+  it('refuses to resend a terminal refusal, and keeps discard available', async () => {
+    const database = new BillingDeliveryDatabase(databaseName())
+    const store = new BillingDeliveryStore(database)
+    const refused = command()
+    const replacement = command(crypto.randomUUID(), 'c'.repeat(64))
+    await store.accept(acceptedInput(refused))
+    await store.recordResult(
+      refused.commandId,
+      // The exact refusal Kalyani saw. An order that is paid will not become
+      // open, so the identical payload is refused for the identical reason and
+      // each attempt writes one more permanent diagnostics row.
+      { status: 'order_not_open', commandId: refused.commandId, orderStatus: 'paid' },
+      NOW + 1,
+    )
+
+    await expect(
+      store.correctAttention(
+        {
+          commandId: refused.commandId,
+          tabletId: 'tablet-1',
+          shiftId: 'shift-1',
+          actorId: 'person-1',
+          nowMs: NOW + 2,
+        },
+        { ...acceptedInput(replacement), eligibleAtMs: NOW },
+      ),
+    ).rejects.toMatchObject({ code: 'not_correctable' })
+
+    // Nothing was minted and nothing was resolved, so the item is still there
+    // to be discarded rather than silently dropped.
+    expect(await database.envelopes.get(replacement.commandId)).toBeUndefined()
+    expect(await database.envelopes.get(refused.commandId)).toMatchObject({
+      state: 'needs_attention',
+    })
+    expect(await database.tombstones.get(refused.commandId)).toBeUndefined()
+
+    await store.discardAttention(
+      {
+        commandId: refused.commandId,
+        tabletId: 'tablet-1',
+        shiftId: 'shift-1',
+        actorId: 'person-1',
+        nowMs: NOW + 3,
+      },
+      'Already paid, bill 324',
+    )
+    expect(await database.tombstones.get(refused.commandId)).toMatchObject({
+      resolution: 'discarded',
+      reason: 'Already paid, bill 324',
+    })
+  })
+
+  it('still corrects a refusal the world could have moved past', async () => {
+    const database = new BillingDeliveryDatabase(databaseName())
+    const store = new BillingDeliveryStore(database)
+    const refused = command()
+    const replacement = command(crypto.randomUUID(), 'd'.repeat(64))
+    await store.accept(acceptedInput(refused))
+    await store.recordResult(
+      refused.commandId,
+      { status: 'stale_revision', commandId: refused.commandId },
+      NOW + 1,
+    )
+
+    // The split must not quietly disable the feature it is narrowing.
+    await store.correctAttention(
+      {
+        commandId: refused.commandId,
+        tabletId: 'tablet-1',
+        shiftId: 'shift-1',
+        actorId: 'person-1',
+        nowMs: NOW + 2,
+      },
+      { ...acceptedInput(replacement), eligibleAtMs: NOW },
+    )
+
+    expect(await database.envelopes.get(replacement.commandId)).toBeDefined()
+    expect(await database.tombstones.get(refused.commandId)).toMatchObject({
+      resolution: 'corrected',
+      replacementCommandId: replacement.commandId,
+    })
+  })
+})

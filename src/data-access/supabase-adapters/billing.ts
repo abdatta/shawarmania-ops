@@ -37,11 +37,23 @@ import {
   BillingDeliveryStoreError,
   BillingDrainCoordinator,
   BillingUnsentReporter,
+  type BillingDeliveryEnvelopeRecord,
   type BillingLockManager,
 } from '@/outbox'
 import type { CounterDeviceSession } from '@/session/counter-session'
 
 import { createSupabaseBillingCommandAdapter } from './billing-command'
+
+/**
+ * The order number a refusal names, if it names one. Rows written before the
+ * naming migration carry none, so this is a widening read and never a schema
+ * assumption.
+ */
+function refusedOrderNumber(result: unknown): number | null {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return null
+  const named = (result as { orderNumber?: unknown }).orderNumber
+  return typeof named === 'number' && Number.isFinite(named) ? named : null
+}
 
 type OrderReadRow = Tables<'orders'> & {
   order_items: Tables<'order_items'>[]
@@ -365,7 +377,181 @@ export function createSupabaseBillingAdapter(
     return order.status === 'open' || (order.status === 'paid' && order.preparedAt === null)
   }
 
+  /**
+   * What this tablet believes about its orders: the server's rows with every
+   * locally accepted-but-not-yet-delivered command replayed over them.
+   *
+   * Named, and taking both sides as arguments, because the payment guard has to
+   * reach the same verdict as the screen. While this lived inside `readOrders`,
+   * `payOrder` validated against a bare server row instead, and two readers of
+   * the same order believing different things is what let a paid order be paid
+   * again.
+   */
+  function projectOrders(
+    serverOrders: readonly BillingOrder[],
+    envelopes: readonly BillingDeliveryEnvelopeRecord[],
+  ): BillingOrder[] {
+    const overlaid = new Map(serverOrders.map((order) => [order.id, order]))
+    for (const envelope of envelopes) {
+      switch (envelope.command.type) {
+        case 'create_order': {
+          const payload = envelope.command.payload
+          overlaid.set(payload.orderId, {
+            id: payload.orderId,
+            outletId: envelope.outletId,
+            deviceId: envelope.tabletId,
+            orderNumber: 0,
+            localReference: `Local · ${provisionalToken(envelope.commandId)}`,
+            businessDate: payload.businessDate,
+            orderedAt: envelope.command.createdAt,
+            preparedAt: null,
+            status: 'open',
+            creatorId: counterSession?.shift?.personId ?? '',
+            creatorName: 'Counter operator',
+            customerName: payload.customerName,
+            customerPhone: payload.customerPhone,
+            lines: payload.lines.map((line) => ({
+              menuItemId: line.menuItemId ?? '',
+              itemName: line.itemName,
+              unitPricePaise: line.unitPricePaise,
+              quantity: line.quantity,
+            })),
+            totalPaise: payload.totalPaise,
+            cancelReason: null,
+            cancelledAt: null,
+            cancelledByName: null,
+            paidAt: null,
+            billId: null,
+          })
+          break
+        }
+        case 'revise_order': {
+          const payload = envelope.command.payload
+          const current = overlaid.get(payload.orderId)
+          if (current) {
+            overlaid.set(payload.orderId, {
+              ...current,
+              customerName: payload.customerName,
+              customerPhone: payload.customerPhone,
+              lines: payload.lines.map((line) => ({
+                menuItemId: line.menuItemId ?? '',
+                itemName: line.itemName,
+                unitPricePaise: line.unitPricePaise,
+                quantity: line.quantity,
+              })),
+              totalPaise: payload.totalPaise,
+            })
+          }
+          break
+        }
+        case 'set_order_preparation': {
+          const current = overlaid.get(envelope.command.payload.orderId)
+          if (current) {
+            overlaid.set(envelope.command.payload.orderId, {
+              ...current,
+              preparedAt: envelope.command.payload.prepared ? envelope.command.createdAt : null,
+            })
+          }
+          break
+        }
+        case 'pay_order': {
+          // Paid locally: the card leaves Unpaid Prepared Orders, but a paid
+          // and still-unprepared order stays in Preparing under its PAID
+          // marker rather than vanishing from the rail.
+          const current = overlaid.get(envelope.command.payload.orderId)
+          if (current) {
+            overlaid.set(envelope.command.payload.orderId, {
+              ...current,
+              status: 'paid',
+              paidAt: envelope.command.payload.paidAt,
+              billId: envelope.command.payload.billId,
+            })
+          }
+          break
+        }
+        case 'void_order_payment': {
+          // The unwind reopens the order before the server has seen either
+          // half, so a read between them shows one open order — not a paid
+          // ghost and an open double.
+          const current = overlaid.get(envelope.command.payload.orderId)
+          if (current) {
+            overlaid.set(envelope.command.payload.orderId, {
+              ...current,
+              status: 'open',
+              paidAt: null,
+              billId: null,
+              cancelReason: null,
+              cancelledAt: null,
+              cancelledByName: null,
+            })
+          }
+          break
+        }
+        case 'cancel_paid_order': {
+          const current = overlaid.get(envelope.command.payload.orderId)
+          if (current) {
+            overlaid.set(envelope.command.payload.orderId, {
+              ...current,
+              status: 'cancelled',
+              billId: null,
+            })
+          }
+          break
+        }
+        case 'cancel_order':
+          overlaid.delete(envelope.command.payload.orderId)
+          break
+        default:
+          break
+      }
+    }
+    return [...overlaid.values()]
+  }
+
+  /**
+   * The envelopes a projection replays, oldest first. `needs_attention` stays
+   * excluded: a refused command did not happen.
+   */
+  async function projectableEnvelopes(
+    outletId: string,
+  ): Promise<BillingDeliveryEnvelopeRecord[] | null> {
+    if (!database || !counterSession) return null
+    return (await database.envelopes.where('outletId').equals(outletId).toArray())
+      .filter((envelope) => envelope.state !== 'needs_attention')
+      .sort((left, right) => left.createdAtMs - right.createdAtMs)
+  }
+
+  /** A name for an order in a refusal, before the server has numbered it. */
+  function orderLabel(order: BillingOrder): string {
+    return order.orderNumber > 0 ? `Order ${order.orderNumber}` : 'That order'
+  }
+
+  /**
+   * One order as this tablet believes it, not as the server last wrote it.
+   *
+   * `readOrder` returns the bare row. Guards built on it disagreed with the
+   * screen beside them, which is how an order the counter had already paid
+   * could be paid a second time. Envelopes are read first here for the same
+   * reason `readOrders` reads them first.
+   */
+  async function projectOrder(orderId: string): Promise<BillingOrder | null> {
+    const local = counterSession ? await projectableEnvelopes(counterSession.device.outletId) : null
+    const base = orderCache.get(orderId) ?? (await readOrder(orderId))
+    if (!base) return null
+    if (!local) return base
+    return projectOrders([base], local).find((order) => order.id === orderId) ?? null
+  }
+
   async function readOrders(outletId: string, pipelineOnly: boolean): Promise<BillingOrder[]> {
+    // The outbox is read BEFORE the server snapshot, and the order is the whole
+    // point. Acceptance writes the server row and then deletes the envelope, so
+    // reading the envelopes first means at least one of the two always holds a
+    // just-accepted fact. Read the server first, as this did, and a command
+    // accepted between the two reads is in neither: the snapshot predates it
+    // and the envelope is already gone. That is how a paid order came back onto
+    // the counter wearing a Pay button.
+    const local = await projectableEnvelopes(outletId)
+
     let query = client
       .from('orders')
       .select(
@@ -390,126 +576,7 @@ export function createSupabaseBillingAdapter(
       for (const order of orders) orderCache.set(order.id, order)
     }
 
-    if (database && counterSession) {
-      const local = (await database.envelopes.where('outletId').equals(outletId).toArray())
-        .filter((envelope) => envelope.state !== 'needs_attention')
-        .sort((left, right) => left.createdAtMs - right.createdAtMs)
-      const overlaid = new Map(orders.map((order) => [order.id, order]))
-      for (const envelope of local) {
-        switch (envelope.command.type) {
-          case 'create_order': {
-            const payload = envelope.command.payload
-            overlaid.set(payload.orderId, {
-              id: payload.orderId,
-              outletId: envelope.outletId,
-              deviceId: envelope.tabletId,
-              orderNumber: 0,
-              localReference: `Local · ${provisionalToken(envelope.commandId)}`,
-              businessDate: payload.businessDate,
-              orderedAt: envelope.command.createdAt,
-              preparedAt: null,
-              status: 'open',
-              creatorId: counterSession.shift?.personId ?? '',
-              creatorName: 'Counter operator',
-              customerName: payload.customerName,
-              customerPhone: payload.customerPhone,
-              lines: payload.lines.map((line) => ({
-                menuItemId: line.menuItemId ?? '',
-                itemName: line.itemName,
-                unitPricePaise: line.unitPricePaise,
-                quantity: line.quantity,
-              })),
-              totalPaise: payload.totalPaise,
-              cancelReason: null,
-              cancelledAt: null,
-              cancelledByName: null,
-              paidAt: null,
-              billId: null,
-            })
-            break
-          }
-          case 'revise_order': {
-            const payload = envelope.command.payload
-            const current = overlaid.get(payload.orderId)
-            if (current) {
-              overlaid.set(payload.orderId, {
-                ...current,
-                customerName: payload.customerName,
-                customerPhone: payload.customerPhone,
-                lines: payload.lines.map((line) => ({
-                  menuItemId: line.menuItemId ?? '',
-                  itemName: line.itemName,
-                  unitPricePaise: line.unitPricePaise,
-                  quantity: line.quantity,
-                })),
-                totalPaise: payload.totalPaise,
-              })
-            }
-            break
-          }
-          case 'set_order_preparation': {
-            const current = overlaid.get(envelope.command.payload.orderId)
-            if (current) {
-              overlaid.set(envelope.command.payload.orderId, {
-                ...current,
-                preparedAt: envelope.command.payload.prepared ? envelope.command.createdAt : null,
-              })
-            }
-            break
-          }
-          case 'pay_order': {
-            // Paid locally: the card leaves Unpaid Prepared Orders, but a paid
-            // and still-unprepared order stays in Preparing under its PAID
-            // marker rather than vanishing from the rail.
-            const current = overlaid.get(envelope.command.payload.orderId)
-            if (current) {
-              overlaid.set(envelope.command.payload.orderId, {
-                ...current,
-                status: 'paid',
-                paidAt: envelope.command.payload.paidAt,
-                billId: envelope.command.payload.billId,
-              })
-            }
-            break
-          }
-          case 'void_order_payment': {
-            // The unwind reopens the order before the server has seen either
-            // half, so a read between them shows one open order — not a paid
-            // ghost and an open double.
-            const current = overlaid.get(envelope.command.payload.orderId)
-            if (current) {
-              overlaid.set(envelope.command.payload.orderId, {
-                ...current,
-                status: 'open',
-                paidAt: null,
-                billId: null,
-                cancelReason: null,
-                cancelledAt: null,
-                cancelledByName: null,
-              })
-            }
-            break
-          }
-          case 'cancel_paid_order': {
-            const current = overlaid.get(envelope.command.payload.orderId)
-            if (current) {
-              overlaid.set(envelope.command.payload.orderId, {
-                ...current,
-                status: 'cancelled',
-                billId: null,
-              })
-            }
-            break
-          }
-          case 'cancel_order':
-            overlaid.delete(envelope.command.payload.orderId)
-            break
-          default:
-            break
-        }
-      }
-      orders = [...overlaid.values()]
-    }
+    if (local) orders = projectOrders(orders, local)
 
     for (const order of orders) orderCache.set(order.id, order)
     return orders.filter((order) => !pipelineOnly || inPipeline(order))
@@ -597,19 +664,38 @@ export function createSupabaseBillingAdapter(
     return serverBills
   }
 
-  /** Rebuild locally effective bills from the durable command log after reloads. */
-  async function overlayDurableBills(
-    shiftId: string,
-    serverBills: readonly BillingBill[],
-  ): Promise<BillingBill[]> {
-    const bills = new Map(serverBills.map((bill) => [bill.id, bill]))
-    if (!database || !counterSession) return [...bills.values()]
-
-    const envelopes = (
+  /**
+   * The envelopes a shift's bill projection replays, oldest first. Keyed by
+   * tablet rather than outlet because a shift belongs to one device.
+   */
+  async function shiftEnvelopes(shiftId: string): Promise<BillingDeliveryEnvelopeRecord[] | null> {
+    if (!database || !counterSession) return null
+    return (
       await database.envelopes.where('tabletId').equals(counterSession.device.deviceId).toArray()
     )
       .filter((envelope) => envelope.shiftId === shiftId && envelope.state !== 'needs_attention')
       .sort((left, right) => left.createdAtMs - right.createdAtMs)
+  }
+
+  /**
+   * Rebuild locally effective bills from the durable command log after reloads.
+   *
+   * `known` lets a caller hand in envelopes it read *before* its server bills,
+   * which is the same ordering `readOrders` depends on: acceptance writes the
+   * server row and then deletes the envelope, so a reader that takes the server
+   * side first can land in the gap where a just-settled bill is in neither.
+   * Callers that pass nothing read them here, which is safe for the two that
+   * have no server read to race.
+   */
+  async function overlayDurableBills(
+    shiftId: string,
+    serverBills: readonly BillingBill[],
+    known?: readonly BillingDeliveryEnvelopeRecord[] | null,
+  ): Promise<BillingBill[]> {
+    const bills = new Map(serverBills.map((bill) => [bill.id, bill]))
+    if (!database || !counterSession) return [...bills.values()]
+
+    const envelopes = known ?? (await shiftEnvelopes(shiftId)) ?? []
     const orderSnapshots = new Map<string, BillingOrder>()
 
     for (const envelope of envelopes) {
@@ -1106,8 +1192,22 @@ export function createSupabaseBillingAdapter(
 
     async payOrder(orderId, payments): Promise<BillingBill | null> {
       const { session, shift } = requireTablet()
-      const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
+      const existing = await projectOrder(orderId)
       if (!existing) throw new BillingActionError('not_found', 'That order is no longer open.')
+      // The same refusal the database would give, given in place and before a
+      // command exists. Keyed on the projected state and never on whether this
+      // order has been paid before: taking a payment back reopens an order
+      // precisely so it can be paid again, and a history-keyed guard would
+      // break that while every test stayed green.
+      if (existing.status === 'paid') {
+        throw new BillingActionError(
+          'already_paid',
+          `${orderLabel(existing)} is already paid. Refresh the pipeline if it is still showing.`,
+        )
+      }
+      if (existing.status === 'cancelled') {
+        throw new BillingActionError('not_open', `${orderLabel(existing)} was cancelled.`)
+      }
       const command = await createBillingCommand({
         commandId: newUuid(),
         tabletId: session.device.deviceId,
@@ -1189,9 +1289,18 @@ export function createSupabaseBillingAdapter(
 
     async markOrderPrepared(orderId, prepared): Promise<BillingOrder> {
       const { session, shift } = requireTablet()
-      const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
+      const existing = await projectOrder(orderId)
       if (!existing)
         throw new BillingActionError('not_found', 'That order is no longer on the pipeline.')
+      // Paid and already prepared is the one shape the database refuses on the
+      // marking side, and it is reachable from the screen whenever a refresh
+      // loses an accepted preparation. Refuse it here instead.
+      if (prepared && existing.status === 'paid' && existing.preparedAt !== null) {
+        throw new BillingActionError(
+          'already_prepared',
+          `${orderLabel(existing)} is already paid and prepared.`,
+        )
+      }
       // Mirrors the database's guard so a deterministic refusal never has to
       // travel: only an open order moves, and a paid order may still be marked
       // prepared — but never reprepared, because the bills border is terminal
@@ -1294,6 +1403,8 @@ export function createSupabaseBillingAdapter(
     },
 
     async listShiftHistory(shiftId) {
+      // Envelopes first, server bills second. See `overlayDurableBills`.
+      const known = await shiftEnvelopes(shiftId)
       let serverBills: BillingBill[]
       try {
         serverBills = await readBills({ counterShiftId: shiftId })
@@ -1304,7 +1415,7 @@ export function createSupabaseBillingAdapter(
         if (typeof navigator === 'undefined' || navigator.onLine) throw cause
         serverBills = []
       }
-      const bills = (await overlayDurableBills(shiftId, serverBills)).sort((a, b) =>
+      const bills = (await overlayDurableBills(shiftId, serverBills, known)).sort((a, b) =>
         b.paidAt.localeCompare(a.paidAt),
       )
       return {
@@ -1391,6 +1502,7 @@ export function createSupabaseBillingAdapter(
             commandType: envelope.type,
             resultCategory: result.result.status,
             receivedAt: new Date(result.recordedAtMs).toISOString(),
+            orderNumber: refusedOrderNumber(result.result),
             ageMs: Math.max(0, Date.now() - result.recordedAtMs),
             deviceId: envelope.tabletId,
             refusedTrace: result.refusedTrace,
@@ -1439,6 +1551,7 @@ export function createSupabaseBillingAdapter(
         reference,
         commandType: envelope.type,
         resultCategory: 'corrected',
+        orderNumber: null,
         receivedAt: new Date(envelope.createdAtMs).toISOString(),
         ageMs: Math.max(0, Date.now() - envelope.createdAtMs),
         deviceId: envelope.tabletId,
@@ -1470,6 +1583,7 @@ export function createSupabaseBillingAdapter(
         reference,
         commandType: envelope.type,
         resultCategory: result?.result.status ?? 'discarded',
+        orderNumber: null,
         receivedAt: new Date(envelope.createdAtMs).toISOString(),
         ageMs: Math.max(0, Date.now() - envelope.createdAtMs),
         deviceId: envelope.tabletId,
@@ -1485,7 +1599,7 @@ export function createSupabaseBillingAdapter(
     async listDeliveryDiagnostics(outletId): Promise<BillingDeliveryDiagnostic[]> {
       const { data, error } = await client
         .from('billing_commands')
-        .select('id, command_type, result_category, received_at')
+        .select('id, command_type, result_category, received_at, result')
         .eq('outlet_id', outletId)
         .order('received_at', { ascending: false })
         .limit(100)
@@ -1496,6 +1610,7 @@ export function createSupabaseBillingAdapter(
         resultCategory: row.result_category,
         receivedAt: row.received_at,
         ageMs: Math.max(0, Date.now() - Date.parse(row.received_at)),
+        orderNumber: refusedOrderNumber(row.result),
       }))
     },
   }

@@ -117,6 +117,13 @@ export interface MockBillingContext {
   outletIds: readonly string[]
 }
 
+/** Mirrors the live adapter: a refusal names its order, or it does not. */
+function mockRefusedOrderNumber(result: unknown): number | null {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return null
+  const named = (result as { orderNumber?: unknown }).orderNumber
+  return typeof named === 'number' && Number.isFinite(named) ? named : null
+}
+
 export function createMockBillingAdapter(
   store: DemoStore,
   context: MockBillingContext = {
@@ -978,6 +985,9 @@ export function createMockBillingAdapter(
           receivedAt: command.received_at,
           ageMs: Math.max(0, Date.now() - new Date(command.received_at).getTime()),
           deviceId: command.device_id!,
+          // `pay_now` settles a walk-up without ever creating an order, so null
+          // here is the truthful answer rather than a gap in the demo.
+          orderNumber: mockRefusedOrderNumber(command.result),
           refusedTrace:
             'The server refused this payment. Check the details, then correct or discard it.',
           state: 'needs_attention' as const,
@@ -1744,6 +1754,7 @@ export function createMockBillingAdapter(
           resultCategory: command.result_category,
           receivedAt: command.received_at,
           ageMs: Math.max(0, Date.now() - new Date(command.received_at).getTime()),
+          orderNumber: mockRefusedOrderNumber(command.result),
         }))
     },
   }

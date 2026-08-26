@@ -1190,6 +1190,11 @@ export interface BillingDeliveryDiagnostic {
   resultCategory: Tables<'billing_commands'>['result_category']
   receivedAt: Tables<'billing_commands'>['received_at']
   ageMs: number
+  /**
+   * The order the refusal named, or null. A daily order number is a
+   * non-identifying reference, which is what makes it showable here.
+   */
+  orderNumber: number | null
 }
 
 /** The richer local trace that never leaves the originating tablet surface. */

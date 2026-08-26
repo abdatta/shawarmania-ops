@@ -12,6 +12,7 @@ export {
   billReference,
   billTotals,
   classifySync,
+  isCorrectableRefusal,
   lineTotalPaise,
   provisionalReference,
   provisionalToken,

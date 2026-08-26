@@ -405,7 +405,9 @@ test.describe('the counter', () => {
     await expect(rail.getByText('Order 104', { exact: true })).toHaveCount(0)
   })
 
-  test('shows current-shift totals and exposes originating-tablet correction', async ({ page }) => {
+  test('shows current-shift totals and offers only the resolution that can work', async ({
+    page,
+  }) => {
     // Money history lives in the middle column now; the rail is the pipeline.
     const billsColumn = page.getByTestId('bill-column')
     await expect(billsColumn.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
@@ -414,8 +416,17 @@ test.describe('the counter', () => {
     await expect(page.getByTestId('shift-total-swiggy')).toHaveCount(0)
     await expect(page.getByTestId('shift-total-zomato')).toHaveCount(0)
     await expect(billsColumn.getByText('Payment needs attention')).toBeVisible()
-    await billsColumn.getByRole('button', { name: 'Correct with new copy' }).click()
-    await expect(page.getByText(/linked correction was created/)).toBeVisible()
+
+    // The demo's refusal is permanent, and a correction resends the identical
+    // payload, so correcting it could only produce the same refusal again plus
+    // another permanent row in the manager's diagnostics. Discard is the only
+    // resolution offered, and it is the one that works.
+    await expect(billsColumn.getByRole('button', { name: 'Correct with new copy' })).toHaveCount(0)
+    await expect(billsColumn.getByText(/Sending this again cannot change the answer/)).toBeVisible()
+
+    await billsColumn.getByLabel('Discard reason').fill('Already paid on the counter')
+    await billsColumn.getByRole('button', { name: 'Discard' }).click()
+    await expect(page.getByText(/discarded with its reason and trace retained/)).toBeVisible()
   })
 
   test('removes unsupported methods and keeps dedicated activity routes on narrower screens', async ({

@@ -13,6 +13,9 @@ import {
 } from '@/outbox'
 import type { CounterDeviceSession } from '@/session/counter-session'
 
+import { createBillingCommand } from '../../../shared/billing-command'
+import { splitPipeline } from '@/features/billing/pipeline'
+
 import { createSupabaseBillingAdapter } from './billing'
 import { createSupabaseBillingCommandAdapter } from './billing-command'
 
@@ -531,5 +534,211 @@ describe('the server command seam', () => {
     await expect(
       createSupabaseBillingCommandAdapter(clientWithRpc(rpc)).execute(command),
     ).rejects.toBe(error)
+  })
+})
+
+const PREPARED_ORDER_ID = '10000000-0000-4000-a000-0000000000a1'
+
+function openPreparedRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: PREPARED_ORDER_ID,
+    outlet_id: 'outlet-1',
+    device_id: session.device.deviceId,
+    order_number: 26,
+    business_date: '2026-08-11',
+    ordered_at: '2026-08-11T12:00:00.000Z',
+    // Prepared and open is the payable band, which is exactly the shape that
+    // came back onto the counter wearing a Pay button.
+    prepared_at: '2026-08-11T12:02:00.000Z',
+    status: 'open',
+    created_by: 'person-1',
+    creator: { full_name: 'Counter operator' },
+    canceller: null,
+    customer_name: null,
+    customer_phone: null,
+    order_items: [
+      {
+        id: 'oi-1',
+        menu_item_id: 'item-1',
+        item_name: 'Classic Chicken Shawarma',
+        unit_price_paise: 48_000,
+        quantity: 1,
+        line_total_paise: 48_000,
+      },
+    ],
+    total_paise: 48_000,
+    discount_paise: 0,
+    tax_paise: 0,
+    subtotal_paise: 48_000,
+    cancel_reason: null,
+    cancelled_at: null,
+    paid_at: null,
+    bill_id: null,
+    ...overrides,
+  }
+}
+
+/**
+ * A server whose `orders` read lands the acceptance *while it is in flight*.
+ *
+ * `duringRead` runs when the query is awaited, which is the gap the defect
+ * lived in: the server row is fetched before the accept, and the envelope is
+ * deleted by it. Reading the outbox first survives that; reading it second does
+ * not, so this fails on the tree before the fix rather than by timing luck.
+ */
+function raceOrdersClient(row: unknown, duringRead: () => Promise<void>) {
+  const from = vi.fn((table: string) => {
+    if (table === 'orders') {
+      const query: Record<string, unknown> = {
+        select: () => query,
+        eq: () => query,
+        in: () => query,
+        order: () => query,
+        maybeSingle: () => duringRead().then(() => ({ data: row, error: null })),
+        then: (resolve: (value: unknown) => unknown) =>
+          duringRead()
+            .then(() => ({ data: [row], error: null }))
+            .then(resolve),
+      }
+      return query
+    }
+    const other: Record<string, unknown> = {
+      select: () => other,
+      eq: () => other,
+      in: () => Promise.resolve({ data: [], error: null }),
+      limit: () => other,
+      order: () => other,
+      maybeSingle: () => Promise.resolve({ data: null, error: null }),
+      then: (resolve: (value: unknown) => unknown) =>
+        Promise.resolve({ data: [], error: null }).then(resolve),
+    }
+    return other
+  })
+  return { rpc: vi.fn(), from } as unknown as SupabaseClient<Database>
+}
+
+async function queuePayment(orderId: string, commandId: string) {
+  const database = new BillingDeliveryDatabase()
+  const store = new BillingDeliveryStore(database)
+  const command = await createBillingCommand({
+    commandId,
+    tabletId: session.device.deviceId,
+    shiftId: session.shift!.id,
+    type: 'pay_order',
+    createdAt: '2026-08-11T12:05:00.000Z',
+    payload: {
+      billId: '10000000-0000-4000-a000-0000000000b1',
+      orderId,
+      payments: [{ method: 'upi' as PaymentMethod, amountPaise: 48_000 }],
+      paidAt: '2026-08-11T12:05:00.000Z',
+      paymentBusinessDate: '2026-08-11',
+    },
+  })
+  await store.accept({
+    command,
+    tabletId: session.device.deviceId,
+    outletId: 'outlet-1',
+    businessDate: '2026-08-11',
+    chainId: orderId,
+    eligibleAtMs: 0,
+    nowMs: 0,
+  })
+  return { database, store, command }
+}
+
+describe('the delivery handoff cannot lose accepted work', () => {
+  it('keeps a payment accepted mid-refresh off the payable band', async () => {
+    const commandId = '10000000-0000-4000-a000-0000000000c1'
+    const { database, store } = await queuePayment(PREPARED_ORDER_ID, commandId)
+
+    // The drain lands inside the server read: the row is already fetched and
+    // still says open, and the envelope is gone by the time anyone looks.
+    const client = raceOrdersClient(openPreparedRow(), async () => {
+      await store.recordResult(commandId, { status: 'accepted', commandId }, 1)
+    })
+    const billing = createSupabaseBillingAdapter(client, session)
+
+    const orders = await billing.listOpenOrders('outlet-1')
+
+    // The envelope really is gone, so the projection had only the stale server
+    // row to work from. Paid and prepared is finished work: it belongs among the
+    // bills, not on the pipeline, and above all not in the payable band.
+    expect(await database.envelopes.get(commandId)).toBeUndefined()
+    expect(orders.some((order) => order.id === PREPARED_ORDER_ID)).toBe(false)
+    expect(splitPipeline(orders).unpaidPrepared).toHaveLength(0)
+  })
+
+  it('refuses a second payment for an order it already holds as paid', async () => {
+    const commandId = '10000000-0000-4000-a000-0000000000c2'
+    await queuePayment(PREPARED_ORDER_ID, commandId)
+    const client = raceOrdersClient(openPreparedRow(), async () => undefined)
+    const billing = createSupabaseBillingAdapter(client, session)
+
+    await expect(
+      billing.payOrder(PREPARED_ORDER_ID, [
+        { method: 'upi' as PaymentMethod, amountPaise: 48_000 },
+      ]),
+    ).rejects.toMatchObject({ code: 'already_paid' })
+
+    // Refused in place: no second command was ever minted.
+    const database = new BillingDeliveryDatabase()
+    const payments = (await database.envelopes.toArray()).filter(
+      (envelope) => envelope.type === 'pay_order',
+    )
+    expect(payments).toHaveLength(1)
+  })
+
+  it('lets a payment be taken back and taken again', async () => {
+    const paidId = '10000000-0000-4000-a000-0000000000c3'
+    const { store } = await queuePayment(PREPARED_ORDER_ID, paidId)
+    const unwind = await createBillingCommand({
+      commandId: '10000000-0000-4000-a000-0000000000c4',
+      tabletId: session.device.deviceId,
+      shiftId: session.shift!.id,
+      type: 'void_order_payment',
+      createdAt: '2026-08-11T12:06:00.000Z',
+      payload: {
+        orderId: PREPARED_ORDER_ID,
+        billId: '10000000-0000-4000-a000-0000000000b1',
+        reason: 'Wrong tender',
+      },
+    })
+    await store.accept({
+      command: unwind,
+      tabletId: session.device.deviceId,
+      outletId: 'outlet-1',
+      businessDate: '2026-08-11',
+      chainId: PREPARED_ORDER_ID,
+      eligibleAtMs: 0,
+      nowMs: 1,
+    })
+
+    const client = raceOrdersClient(openPreparedRow(), async () => undefined)
+    const billing = createSupabaseBillingAdapter(client, session)
+
+    // The guard reads projected state, not history. An order that has been paid
+    // and unwound is open again, so this must succeed. A history-keyed guard
+    // would break repay at the counter with every other test still green.
+    await expect(
+      billing.payOrder(PREPARED_ORDER_ID, [
+        { method: 'cash' as PaymentMethod, amountPaise: 48_000 },
+      ]),
+    ).resolves.toMatchObject({ totalPaise: 48_000 })
+  })
+
+  it('shows a command created during an in-flight read on the next read', async () => {
+    const commandId = '10000000-0000-4000-a000-0000000000c5'
+    const client = raceOrdersClient(openPreparedRow(), async () => undefined)
+    const billing = createSupabaseBillingAdapter(client, session)
+
+    const before = await billing.listOpenOrders('outlet-1')
+    expect(splitPipeline(before).unpaidPrepared).toHaveLength(1)
+
+    await queuePayment(PREPARED_ORDER_ID, commandId)
+
+    // The mirror gap D2 accepts is bounded, not permanent: whatever a read in
+    // flight missed, the read after it carries.
+    const after = await billing.listOpenOrders('outlet-1')
+    expect(splitPipeline(after).unpaidPrepared).toHaveLength(0)
   })
 })

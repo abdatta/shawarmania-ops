@@ -188,6 +188,7 @@ describe('the Status tab carries its own problem count', () => {
             resultCategory: 'accepted',
             receivedAt: new Date().toISOString(),
             ageMs: 0,
+            orderNumber: null,
           },
         ],
       },

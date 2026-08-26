@@ -1,5 +1,5 @@
 import type { BillingCommand } from '../../shared/billing-command'
-import type { BillingCommandResult } from '@/domain'
+import { isCorrectableRefusal, type BillingCommandResult } from '@/domain'
 import {
   BillingDeliveryDatabase,
   dependencyRecordId,
@@ -9,7 +9,12 @@ import {
 export class BillingDeliveryStoreError extends Error {
   constructor(
     readonly code:
-      'identity_conflict' | 'not_attention' | 'not_permitted' | 'blank_reason' | 'storage_failed',
+      | 'identity_conflict'
+      | 'not_attention'
+      | 'not_correctable'
+      | 'not_permitted'
+      | 'blank_reason'
+      | 'storage_failed',
     message: string,
     options?: ErrorOptions,
   ) {
@@ -175,6 +180,18 @@ export class BillingDeliveryStore {
         this.database.tombstones,
         async () => {
           await this.requireAttentionAuthority(authority)
+          // A correction resends the same payload under a new identity, so it
+          // can only help where the refusal was about the world rather than the
+          // bytes. Enforced here and not only in a disabled button, because a
+          // resend that is certain to be refused writes a permanent diagnostics
+          // row every time it is attempted.
+          const refusal = await this.database.results.get(authority.commandId)
+          if (refusal && !isCorrectableRefusal(refusal.result.status)) {
+            throw new BillingDeliveryStoreError(
+              'not_correctable',
+              'Sending this again cannot change the answer. Discard it with a reason instead.',
+            )
+          }
           await this.acceptInTransaction(replacement)
 
           const dependants = await this.database.dependencies

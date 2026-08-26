@@ -12,7 +12,7 @@ import {
   type BillingBill,
   type ShiftBillingHistory,
 } from '@/data-access/adapters'
-import { formatDateTime } from '@/domain'
+import { formatDateTime, isCorrectableRefusal } from '@/domain'
 import { newUuid } from '@/lib/uuid'
 
 import { ShiftBillList } from './shift-bill-list'
@@ -173,7 +173,11 @@ export function MyShiftSurface({
             <div className="flex gap-2">
               <AlertTriangle aria-hidden className="shrink-0 text-danger" />
               <div className="min-w-0">
-                <h2 className="font-bold text-content">Payment needs attention</h2>
+                <h2 className="font-bold text-content">
+                  {item.orderNumber === null
+                    ? 'Payment needs attention'
+                    : `Order ${item.orderNumber} needs attention`}
+                </h2>
                 <p className="text-sm text-content-muted">{item.refusedTrace}</p>
                 <p className="mt-1 text-xs text-content-muted">
                   Reference {item.reference.slice(0, 8)} · {formatDateTime(item.receivedAt)}
@@ -181,17 +185,31 @@ export function MyShiftSurface({
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button
-                size="phone"
-                onClick={() =>
-                  void resolve(
-                    () => billing.correctAttention(item.reference, newUuid()),
-                    'A linked correction was created with a new identity. The refused trace remains here.',
-                  )
-                }
-              >
-                Correct with new copy
-              </Button>
+              {/*
+                Correction resends the same payload under a new identity, so it
+                is offered only where a resend could land differently. For a
+                terminal refusal — an order already paid, an edit window closed —
+                it is certain to be refused again and each attempt leaves another
+                permanent row in the manager's diagnostics, so discard is the
+                only action shown.
+              */}
+              {isCorrectableRefusal(item.resultCategory) ? (
+                <Button
+                  size="phone"
+                  onClick={() =>
+                    void resolve(
+                      () => billing.correctAttention(item.reference, newUuid()),
+                      'A linked correction was created with a new identity. The refused trace remains here.',
+                    )
+                  }
+                >
+                  Correct with new copy
+                </Button>
+              ) : (
+                <p className="w-full text-sm text-content-muted">
+                  Sending this again cannot change the answer. Discard it with a reason.
+                </p>
+              )}
               <Input
                 className="min-w-48 flex-1"
                 aria-label="Discard reason"

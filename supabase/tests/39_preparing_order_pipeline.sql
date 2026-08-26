@@ -205,6 +205,21 @@ select is(
   ) ->> 'status',
   'order_not_open', 'repreparing a paid order is refused');
 
+-- Read the same refusal back: an exact replay returns the stored result, and it
+-- names the order. Without the number, finding out which order was refused
+-- means correlating command timestamps against `orders`, which nobody standing
+-- at a counter can do.
+select isnt(
+  public.prepare_billing_order(
+    'e1000000-0000-4000-a000-000000000005', 1,
+    public.billing_payload_hash(pg_temp.prepare_payload(
+      'e2000000-0000-4000-a000-000000000001', false)),
+    ((current_date - 1) + time '12:11') at time zone 'Asia/Kolkata',
+    'e5000000-0000-4000-a000-000000000001',
+    pg_temp.prepare_payload('e2000000-0000-4000-a000-000000000001', false)
+  ) ->> 'orderNumber',
+  null, 'a refused preparation names the order it was about');
+
 -- The upfront payer: paid while still preparing completes into prepared.
 select pg_temp.impersonate(:'DEVICE_KAL');
 select is(

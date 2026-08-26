@@ -1,7 +1,7 @@
 import { AlertTriangle, CheckCircle2, ChevronDown, Server } from 'lucide-react'
 
 import type { BillingDeliveryDiagnostic } from '@/data-access/adapters'
-import { formatDayTime } from '@/domain'
+import { formatDayTime, isCorrectableRefusal } from '@/domain'
 
 const ROUTINE_RESULTS = new Set(['accepted', 'replay', 'applied', 'corrected', 'discarded'])
 
@@ -103,7 +103,7 @@ export function ManagerSyncStatus({ diagnostics }: { diagnostics: BillingDeliver
             </p>
             <p className="mt-1 text-sm text-content-muted">
               {problems.length > 0
-                ? 'Check the originating tablet for the correction or discard action.'
+                ? 'The originating tablet can discard these, or correct the few a resend could fix.'
                 : 'The recent tablet activity shown below reached the server.'}
             </p>
           </div>
@@ -119,10 +119,14 @@ export function ManagerSyncStatus({ diagnostics }: { diagnostics: BillingDeliver
             >
               <p className="font-bold text-content">
                 {actionLabel(item.commandType)} needs attention
+                {item.orderNumber === null ? '' : ` · Order ${item.orderNumber}`}
               </p>
               <p className="mt-1 text-sm text-content-muted">
                 The server reported {plainWords(item.resultCategory)}{' '}
                 {formatDayTime(item.receivedAt)}.
+                {isCorrectableRefusal(item.resultCategory)
+                  ? ''
+                  : ' Resending it cannot change the answer, so the tablet should discard it.'}
               </p>
             </article>
           ))}
@@ -171,7 +175,8 @@ export function ManagerSyncStatus({ diagnostics }: { diagnostics: BillingDeliver
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-content-muted">
-                    Reference {item.reference.slice(0, 8)} · received{' '}
+                    Reference {item.reference.slice(0, 8)}
+                    {item.orderNumber === null ? '' : ` · order ${item.orderNumber}`} · received{' '}
                     {formatDayTime(item.receivedAt)}
                   </p>
                 </li>

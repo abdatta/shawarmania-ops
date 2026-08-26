@@ -28,6 +28,30 @@ export type BillingCommandRefusal =
   | 'stale_revision'
   | 'payment_edit_expired'
 
+/**
+ * Which refusals a corrected resend could still satisfy.
+ *
+ * `correctAttention` rebuilds a refused command with a new identity and the
+ * *same* payload. That can only help where the refusal was about the world
+ * having moved rather than about the payload itself: a revision that went
+ * stale, an identity that collided. Everything else is terminal — an order that
+ * is paid will not become open, an edit window will not reopen, a malformed
+ * payload is still malformed on the second send — and resending it produces the
+ * identical refusal plus one more permanent row in the manager's diagnostics.
+ *
+ * Production ran that experiment on 2026-08-26: two corrections of one
+ * `order_not_open`, both refused, three rows where there had been one.
+ *
+ * Unknown statuses are treated as terminal. Withholding a correction still
+ * leaves discard, whereas offering one that cannot work is the failure this
+ * exists to prevent.
+ */
+const CORRECTABLE_REFUSALS = new Set<string>(['stale_revision', 'identity_conflict'])
+
+export function isCorrectableRefusal(status: string): boolean {
+  return CORRECTABLE_REFUSALS.has(status)
+}
+
 export interface AcceptedBillingCommandResult {
   readonly status: 'accepted' | 'replay'
   readonly commandId: string
@@ -45,6 +69,13 @@ export interface RefusedBillingCommandResult {
   readonly status: BillingCommandRefusal
   readonly commandId?: string
   readonly orderStatus?: 'paid' | 'cancelled'
+  /**
+   * The order the refusal was about, where the refusing operation had one.
+   * Optional because several refusals happen before any order is identified,
+   * and because rows written before the naming migration carry neither.
+   */
+  readonly orderId?: string
+  readonly orderNumber?: number
 }
 
 export type BillingCommandResult = AcceptedBillingCommandResult | RefusedBillingCommandResult
