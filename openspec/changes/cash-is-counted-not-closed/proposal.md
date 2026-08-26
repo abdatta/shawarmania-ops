@@ -76,7 +76,10 @@ they walk in: **what should be in the drawer right now.** Not a date picker.
   receipts and cash expenses since, each with its own count of contributing rows.
 - **Count the drawer**, the primary action: when it was counted, what was in it,
   and how much is being collected. Three inputs, four taps on an ordinary night.
-- **Collect cash**, for taking money without counting.
+- **Collect cash**, for taking money without counting. A **negative amount is
+  cash added** rather than taken, which is what happens when a thin drawer gets
+  topped up at the count. There is no second control for it: the field announces
+  what a minus means as it is typed.
 - **Record a cash spend**, rare, reason required, for drawer cash that buys
   something and must not enter the month's operating expenses.
 - **Adjust a count**, for correcting an observation a later one has anchored on.

@@ -21,9 +21,9 @@ assert this identity per row.
 
 The source row's cash removed SHALL become cash out of kind `spend` where it
 carried a reason and `collection` where it did not, at the same instant. A source
-row's cash added SHALL be carried as an adjustment against the observation,
-retaining its original reason, so the arithmetic closes and the explanation
-survives.
+row's cash added SHALL become a **negative** cash out of kind `collection` at the
+same instant, retaining its original reason, so the arithmetic closes and the
+explanation survives without a bespoke shape.
 
 #### Scenario: A carried day renders without a time
 
@@ -39,6 +39,11 @@ survives.
 
 - **WHEN** a historical row recorded ₹490 counted with ₹2,500 removed
 - **THEN** the carried observation's counted total is ₹2,990, its cash out is ₹2,500, and the next opening is ₹490
+
+#### Scenario: A carried row that added cash
+
+- **WHEN** a historical row recorded cash added with a reason
+- **THEN** it is carried as a negative collection at the observation's instant, keeping that reason, and the drawer balance rises by it
 
 #### Scenario: A carried removal keeps its reason
 

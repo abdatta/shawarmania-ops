@@ -229,14 +229,24 @@ has unsynced work, because the person counting is holding the cash.
 
 ### Requirement: Cash leaving the drawer is one record carrying its kind
 
-Every removal of cash from the drawer SHALL be recorded as a single kind of
-record carrying an amount, an occurrence instant, an attributed account and a
-kind of either **collection** or **spend**.
+Every movement of cash into or out of the drawer that is not a sale or an expense
+SHALL be recorded as a single kind of record carrying a **signed non-zero
+amount**, an occurrence instant, an attributed account and a kind of either
+**collection** or **spend**.
+
+A positive amount SHALL mean cash leaving the drawer and a negative amount SHALL
+mean cash added to it. There SHALL be no separate record, table, kind or surface
+for cash added. The interval arithmetic SHALL subtract this term whatever its
+sign, so that a negative increases the expected total and increases the following
+opening without a separate branch.
+
+A `spend` SHALL carry a positive amount only.
 
 A collection SHALL require neither a reason nor a separate actor: the account
-recording it is the account collecting. A spend SHALL require a reason, and
-SHALL NOT be recorded as an expense, so that drawer cash spent on capital leaves
-the day reconciling while the month's operating figure stays clean.
+recording it is the account collecting, and that holds for a negative collection
+too. A spend SHALL require a reason, and SHALL NOT be recorded as an expense, so
+that drawer cash spent on capital leaves the day reconciling while the month's
+operating figure stays clean.
 
 A collection recorded as part of an observation SHALL be written in the same
 transaction, SHALL NOT be included in that observation's counted total, and
@@ -246,6 +256,21 @@ SHALL NOT be subtracted from that observation's expected total.
 
 - **WHEN** a collection is recorded with an amount and an instant
 - **THEN** it is accepted with no reason and no actor supplied, attributed to the recording account
+
+#### Scenario: Cash added at the count
+
+- **WHEN** a drawer counted at ₹450 is topped up by ₹1,000 recorded as an amount of −1,000
+- **THEN** the record is accepted, the amount left is ₹1,450, and the next observation's opening is ₹1,450
+
+#### Scenario: A negative is refused for a spend
+
+- **WHEN** a spend is submitted with a negative amount
+- **THEN** it is refused
+
+#### Scenario: Zero is not a movement
+
+- **WHEN** an amount of zero is submitted
+- **THEN** it is refused
 
 #### Scenario: A spend requires its reason
 
@@ -261,6 +286,32 @@ SHALL NOT be subtracted from that observation's expected total.
 
 - **WHEN** drawer cash buys equipment and is recorded as a spend
 - **THEN** the drawer reconciles and the month's operating expenses are unchanged
+
+### Requirement: A negative amount announces that it means money added, as it is typed
+
+Wherever a cash movement amount is entered, the surface SHALL state that a
+negative means money added to the drawer rather than taken out, **from the
+keystroke that makes it negative and before anything is submitted**. The stated
+action, the resulting balance and the confirming control SHALL all agree with the
+sign.
+
+This warning SHALL NOT be deferred to submission or to a confirmation step,
+because its purpose is to catch a minus nobody meant to type.
+
+#### Scenario: A minus is typed
+
+- **WHEN** an amount becomes negative in the entry field
+- **THEN** the surface says a negative means money added rather than taken out, without waiting for submission
+
+#### Scenario: The surface agrees with the sign
+
+- **WHEN** the amount is negative
+- **THEN** the stated action reads as adding, the balance preview rises, and the confirming control names adding rather than collecting
+
+#### Scenario: A positive is unremarkable
+
+- **WHEN** the amount is positive
+- **THEN** no warning is shown and the surface reads as collecting
 
 ### Requirement: The difference appears the moment the counted amount is entered
 

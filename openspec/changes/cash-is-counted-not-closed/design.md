@@ -170,13 +170,52 @@ without anybody deciding it should.
 
 - **`collection`** is the nightly act. Amount and instant only. **No reason and
   no actor field**: the person is the session, and asking why the owner took the
-  day's takings collects a column of the word "collection".
+  day's takings collects a column of the word "collection". A negative collection
+  is cash added, see below.
 - **`spend`** is rare, requires a reason, and exists for drawer cash that buys
   something. It must not become an expense, because `docs/DATA_MODEL.md` records
   that there is deliberately no capital marker and the month is a cash-basis
   **operating** estimate: a ₹40,000 fridge routed through expenses would move
   the drawer correctly and wreck the month. The escape hatch has to survive, and
   it survives as a small link well away from the primary action.
+
+**A negative amount is cash going in, and there is no separate concept for it.**
+`amount_paise` is non-zero and signed: positive is cash leaving the drawer,
+negative is cash added to it. The scenario is real and the owner named it: a day
+with weak sales or heavy cash expenses leaves too little in the till, so the
+collector puts some of their own back at the moment of counting.
+
+The arithmetic needs no new term, which is the whole argument for the sign:
+
+```
+expected     = opening + receipts - expenses - cash out in interval
+next opening = counted_total - this observation's own cash out
+```
+
+Subtracting a negative adds. A ₹1,000 top-up recorded against a ₹450 count leaves
+₹1,450, by the existing formula, with no branch anywhere.
+
+Two constraints keep it honest. `kind = 'spend'` requires a positive amount,
+because drawer cash cannot un-buy a fridge. And **the surface must state what a
+negative means at the moment it is typed**, not on submit: the verb flips from
+collecting to adding, the balance preview flips direction, and a plain line says
+that a negative is money put in rather than taken out. That alert is the entire
+protection against a mistyped minus, and it is required rather than advisory.
+
+A negative requires no reason, because the owner asked for no extra fields and
+the alert carries the meaning. Carried historical rows may still hold one, and
+the column stays nullable so their reason survives.
+
+**Rejected: a third kind, or a separate cash-in table.** It is the shape I first
+proposed and the owner cut it. It doubles the write paths, adds a term to the
+arithmetic, and asks a person standing at a till to choose between two buttons
+that differ only in sign.
+
+**Rejected: renaming the table to `drawer_cash_movements` for the signed
+values.** More accurate in the abstract, but the arithmetic subtracts this term
+and the owner's own words are "negative cash withdrawn". A name that matches both
+the formula and how the business talks is worth more than one that matches the
+sign domain.
 
 `cash_withdrawals` is not extended into this role and is **not touched at all**.
 It was only ever written by the day-close path, which never ran, so it should be
@@ -483,6 +522,32 @@ the header says so before the count is taken.
 │              [    Save count    ]            │
 └──────────────────────────────────────────────┘
 ```
+
+### Step 3 with a negative, which is cash going in
+
+The counted drawer was thin, so the collector puts ₹1,000 back rather than taking
+anything out. Same field, same record, no second control:
+
+```
+│  2 · What was in the drawer?                 │
+│     ₹ [ 450 ]                                │
+│     ✓ Matches ₹450                           │
+│                                              │
+│  3 · Collecting any?                         │
+│     ₹ [ -1000 ]                              │
+│                                              │
+│     ⚠  A minus means you are ADDING money    │
+│        to the drawer, not taking it out.     │
+│                                              │
+│     Leaving ₹1,450 in the drawer             │
+│                                              │
+│              [   Save count   ]              │
+```
+
+The alert appears on the keystroke, not on submit. The verb, the preview and the
+button all agree with the sign, so a mistyped minus is visible before it is
+saved. The same treatment applies to the standalone sheet below, where the title
+becomes `ADD TO DRAWER` and the balance preview runs upward.
 
 Three inputs. The difference appears the moment the amount is typed, before
 anything is saved, with its direction in words as well as by sign, because a

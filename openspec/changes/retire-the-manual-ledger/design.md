@@ -112,13 +112,15 @@ Cash removed becomes a `drawer_cash_out` of kind `spend` where it carries a
 reason and `collection` where it does not, at the same instant, with the amount
 conversion from decision 0.
 
-Cash added has no counterpart in the new model, which admits only receipts,
-expenses and removals. **Production has exactly two such rows, one per outlet**
-(checked 2026-08-26), so this is not worth machinery: each is carried as an
-adjustment against its observation retaining the original reason, and if that
-proves awkward for either row, carrying it as a note on the observation is an
-acceptable second choice. Do not build a general inbound-cash concept for two
-rows.
+**Cash added carries across as a negative cash out**, at the same instant, of
+kind `collection`, retaining `cash_added_reason` in the nullable reason column.
+#11's amounts are signed precisely so that cash entering the drawer needs no
+separate concept, and the notebook's `cash_added_paise` is that case exactly.
+
+This replaces an earlier plan to carry cash added as an adjustment against the
+observation, which was a fudge around a model that could not express inbound
+cash. It no longer has to be. Production has two such rows, one per outlet
+(checked 2026-08-26), and both are now an ordinary movement with a minus sign.
 
 **Rejected: invent a plausible evening time.** It would make legacy rows
 indistinguishable from real ones and would silently claim precision that was
@@ -242,9 +244,10 @@ days and the owner says so.
    snapshot, or withdraw the consumption basis until the word is typed. Needs the
    owner's answer on whether a consumption basis is still wanted at all now that
    inventory is shelved.
-2. ~~**How many August day rows carry cash added**~~ **Answered 2026-08-26:
-   two, one per outlet.** Decision 1 now says to carry each as an adjustment and
-   to build nothing general for them.
+2. ~~**How many August day rows carry cash added**~~ **Closed.** The count is
+   two, one per outlet, read 2026-08-26, and the modelling question dissolved
+   when #11 made cash-out amounts signed: cash added is a negative movement, so
+   there is nothing bespoke to decide.
 3. **Whether the archived day table keeps its RLS or is moved out of `public`
    entirely.** Keeping it in place with no grant is simpler; moving it to a
    schema nothing else reads is a stronger statement that it is not a source.
