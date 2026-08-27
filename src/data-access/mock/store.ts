@@ -212,6 +212,20 @@ function instantAt(businessDate: string, time: string): string {
   return new Date(`${businessDate}T${time}:00+05:30`).toISOString()
 }
 
+/**
+ * The same instant, or now, whichever is earlier.
+ *
+ * The seeds describe a whole trading day whatever time the demo is opened, so a
+ * row on today's business date can carry a time that has not arrived. Readers
+ * that filter by `business_date` never noticed; the drawer reads by instant and
+ * correctly ignores money not yet taken, and the two then disagree about the same
+ * cash. Production cannot produce a future instant at all.
+ */
+function notLaterThanNow(instant: string): string {
+  const now = new Date().toISOString()
+  return instant > now ? now : instant
+}
+
 export function createDemoStore(options: { billingLifecycle?: boolean } = {}): DemoStore {
   const tradingOutletIds = [OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID]
 
@@ -357,6 +371,50 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
   ;[...billSeeds]
     .sort((a, b) => b.daysAgo - a.daysAgo || a.time.localeCompare(b.time))
     .forEach(materialise)
+
+  /**
+   * **Nothing in the demo may claim to have happened later than now.**
+   *
+   * The seeds describe a whole trading evening on today's business date — bills
+   * out to 20:40 — and the fixture stamps them at those times whatever the clock
+   * says. That was invisible while every reader filtered by `business_date`:
+   * Billing history counted all nine of today's bills either way.
+   *
+   * The drawer reads by **instant**, and it was right to exclude a bill stamped
+   * two hours from now, because cash that has not been taken is not in the
+   * drawer. So the two surfaces disagreed by ₹2,130 — Billing showing ₹3,711 of
+   * cash today against the drawer's ₹1,899 since the last count — and the drawer
+   * was the honest one.
+   *
+   * Production cannot produce this: `pay_billing_order` bounds `paid_at` to
+   * within 300 seconds of the command's own `created_at`. So the fixture is what
+   * is wrong, and this is where it stops being wrong.
+   *
+   * Rows already in the past are untouched. A row from the future is pulled back
+   * to just before now, keeping seed order and staying distinct, so a bill still
+   * follows the bill before it.
+   */
+  const clampFutureInstants = () => {
+    const nowMs = Date.now()
+    const future = bills
+      .filter((bill) => Date.parse(bill.paid_at ?? bill.created_at) > nowMs)
+      .sort((a, b) => (a.paid_at ?? a.created_at).localeCompare(b.paid_at ?? b.created_at))
+
+    // Latest first, so the last seeded bill lands closest to now and the order
+    // the seeds describe survives the move.
+    future.reverse().forEach((bill, offset) => {
+      const at = new Date(nowMs - (offset + 1) * 60_000).toISOString()
+      const syncedLater = bill.synced_at > (bill.paid_at ?? bill.created_at)
+      bill.created_at = at
+      bill.ordered_at = at
+      bill.paid_at = at
+      // A bill that arrived late keeps its own arrival instant; every other one
+      // landed when it was rung, and `synced_at` before `paid_at` would be a
+      // bill delivered before it existed.
+      if (!syncedLater) bill.synced_at = at
+    })
+  }
+  clampFutureInstants()
 
   /**
    * Every outlet numbers its own bills from one, without a gap. The real
@@ -571,11 +629,16 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     amount_paise: seed.amountPaise,
     payment_method: seed.paymentMethod,
     description: seed.description ?? null,
-    created_at: instantAt(businessDate(seed.daysAgo), seed.time),
+    created_at: notLaterThanNow(instantAt(businessDate(seed.daysAgo), seed.time)),
     // The fixture knows the time, so it states it. That is what puts a demo
     // expense on one side or the other of a mid-day count rather than leaving
     // the drawer to fall back on when the row was written (#11).
-    occurred_at: instantAt(businessDate(seed.daysAgo), seed.time),
+    //
+    // Clamped for the reason the bills are: an expense stamped later this evening
+    // is counted by every reader that filters on `business_date` and correctly
+    // ignored by the drawer, which reads by instant — and two surfaces
+    // disagreeing about the same money is how a demo stops being believed.
+    occurred_at: notLaterThanNow(instantAt(businessDate(seed.daysAgo), seed.time)),
     recorded_by: MANAGER_ID,
   }))
 
