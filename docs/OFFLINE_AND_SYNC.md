@@ -46,6 +46,8 @@ that IndexedDB transaction commits; a storage failure leaves every field intact.
             ├─ accepted / exact replay ─► retain result, show server number
             ├─ retryable / no response ─► bounded backoff, entry stays queued
             └─ permanent refusal ───────► needs attention on this tablet
+                                          correctable → correct or discard
+                                          terminal    → discard only
 ```
 
 The queue survives page reload, app close, compatible application upgrades and
@@ -59,7 +61,37 @@ tender and shift totals change only after that correction's IndexedDB transactio
 commits. On restart the adapter rebuilds the paid bill and correction chain from
 those durable envelopes before delivery resumes.
 
+**A correction is only offered where a resend could land differently.** It
+rebuilds the refused command under a new identity with the *same* payload, so it
+can only help where the refusal was about the world having moved: a stale
+revision, a colliding identity. Everything else is terminal. An order that is
+paid will not become open, a closed edit window will not reopen, and a malformed
+payload is still malformed the second time, so the resend earns the identical
+refusal and leaves one more permanent row in the manager's diagnostics. The
+tablet offers discard alone for those, and the store refuses a terminal
+correction even if something tries to make one anyway.
+
 ## Rules that make this safe
+
+**Local reads consult the outbox before the server.** Acceptance writes the
+server's row and then deletes the envelope, so those two sources hand the fact
+between them. A reader that takes the server snapshot first and the outbox
+second can land in the gap where a just-accepted command is in neither: the
+snapshot predates it and the envelope is already gone. Taking the outbox first
+means at least one side always holds it, whatever the timing. The cost is a
+smaller gap in the other direction — a command created *between* the two reads
+is missed until the next read — which is accepted deliberately, because showing
+less than the truth for one frame is not the same kind of wrong as showing a
+paid order as unpaid.
+
+**A guard reads the same projection the screen does.** Whatever the counter
+believes about an order is built once, from the server's row plus the local
+command log, and both the pipeline and the actions consult it. A guard reading
+the bare server row would reach a different verdict from the card beside it, and
+two readers disagreeing about one order is how a settled payment came to be
+offered for payment again. Those guards key on projected state and never on
+command history, because taking a payment back reopens an order precisely so it
+can be paid a second time.
 
 **Client-generated UUIDs.** Every counter record gets its ID on the device, before it is ever sent. The client can therefore reference its own rows immediately, and a retry carries the same identity as the original.
 
@@ -126,6 +158,8 @@ re-close, or automatic recovery path.
 | Clock skew on the tablet | Both client and server timestamps are stored. Material disagreement is a signal worth surfacing, not something to paper over |
 | Two tablets at one outlet | Deferred to `multiple-billing-devices` (#35). The command and number allocators are concurrency-safe, but launch setup permits one active tablet per outlet |
 | Tablet removed while holding a queue | Draining stops and envelopes remain on that tablet. The removal confirmation names what it last reported unsent, so the admin is told before rather than after |
+| A command is accepted while the pipeline is refreshing | The read consults the outbox before the server, so the acceptance is never lost between them and the order does not return to the counter as unpaid |
+| A refusal a resend cannot fix | Discard is the only resolution offered. Correcting it would earn the same refusal and add another permanent diagnostics row |
 
 There is deliberately no order transfer and no privileged recovery upload.
 Open orders are short-lived kitchen tickets: a manager cancels a stranded one
@@ -139,6 +173,10 @@ Almost nothing, which is the point.
 - A small persistent indicator: synced, or *N pending*.
 - No spinner, no blocking dialog, no error toast on a failed sync — the queue handles it.
 - One honest exception: if the backlog grows past a threshold or an entry has failed repeatedly, the indicator escalates to a visible warning, because at that point someone genuinely does need to know.
+- An action the counter has already taken is refused in place, naming the order,
+  rather than being sent for the server to refuse. A refusal that does reach the
+  server names its order too, so neither the biller nor the manager has to work
+  out which one it was about.
 
 **Finish day** is the explicit online boundary. The tablet waits out the last
 five-minute payment-edit window, drains the date, refuses while any local

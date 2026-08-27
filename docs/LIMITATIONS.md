@@ -381,6 +381,41 @@ location lookup or network path can make receipt later than the gesture. The
 manager manual-entry and correction paths remain the deliberate attestation
 escape hatch when that distinction matters.
 
+### A brand-new order can be missing from one refresh
+
+The counter builds each pipeline read from two sources taken a moment apart: the
+tablet's outbox, then the server. That ordering is deliberate and it is what
+stops a just-accepted payment falling between them, but it leaves a smaller gap
+the other way. A command created *after* the outbox is read and *before* the
+server answers is in neither, so a brand-new order can be absent from that one
+render.
+
+Three things keep this tolerable. The operator's own action is never in the gap,
+because a command is written to the outbox before the refresh that follows it is
+started; only a second tab on the same tablet can produce one. It heals on the
+next read, and every mutation triggers one. And the two failures are not
+equivalent: missing a new order for one frame shows less than the truth, while
+the ordering it replaced showed a paid order as unpaid, which is false, and
+actionable, and cost a customer a second payment on 2026-08-25.
+
+Closing it properly means not deleting an accepted envelope until the server
+read is known to carry it, which is an outbox schema change with a pruning
+policy attached rather than a correction.
+
+### A diagnostics row cannot be cleared, only outgrown
+
+A refused command is a permanent row in the manager's Status view. Resolving it
+on the originating tablet — correcting it, or discarding it with a reason —
+writes a tombstone in that tablet's own storage and sends nothing, so the
+manager's view has no way to learn it was handled. The row leaves only by
+falling out of the hundred most recent commands for that outlet, which at
+current volume is about one trading day.
+
+The consequence is that the count is a record of what happened rather than a
+list of what is outstanding, and it cannot be acknowledged. Giving refusals a
+resolution the manager can see means an acknowledgement the server records,
+which is a migration and a policy, not a display change.
+
 ### A badge is not a notification, and its count can be stale
 
 The count on the Attendance tab reaches only somebody already holding the app. Nothing pushes: a manager who does not open it does not find out, and the person whose day it is finds out when they query their pay. Reaching somebody who is not looking needs a service-worker subscription, a server to hold it and a key pair to sign with, none of which exists; it is tracked in `openspec/todos/pending-approval-notification.md`.
