@@ -18,7 +18,12 @@ open, and SHALL NOT repeat them inside the Status view. That row SHALL hold a
 silhouette of its own height until the outlet's day has resolved, so choosing a
 view does not move under the reader. Its fourth card SHALL be labelled `AOV`.
 Both scopes SHALL use the same total-card component, the manager's in its dense
-four-column presentation.
+four-column presentation. A card SHALL keep the same padding, label size, left
+alignment and height in either presentation. In the four-column row each figure
+SHALL be sized to its own card: the display face wherever it fits, shrunk only as
+far as that card's content box requires and no further, and never below the size
+of the label above it. The row SHALL NOT scroll horizontally, nor wrap to a second
+line, at a 360px viewport.
 
 Combined takings SHALL be the sum of the Cash and UPI figures shown beside it,
 never a separately derived number, so that the cards always reconcile. The
