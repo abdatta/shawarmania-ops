@@ -546,6 +546,16 @@ This is also better than a switch. A switch shows one surface at a time; two
 entries let the owner open both and compare a day, which is the two-day
 acceptance test they asked for with no engineering behind it.
 
+**"Leaves the primary navigation" means it stops being the entry labelled
+`Ledger`. It does not mean it loses its entry.** Recorded 2026-08-27 because the
+looser wording was read the other way during apply, and task 9.2 said so
+outright: the manual form was left resolving at its route with nothing pointing
+at it. A fallback you have to remember a URL to reach is not a tab, and is not a
+fallback anybody uses at 22:00 when the new surface is behaving oddly. It sits
+after the derived statement, under its own name — **Notebook** — so the reader
+lands on the new reading and the old one is one tap away. The Risks section
+already priced this: two ledger entries on a crowded shell, temporary until #12.
+
 ### 18. An outlet's first observation is an anchor, and an anchor has no arithmetic
 
 Settled with the owner 2026-08-27, closing open question 1 before the table was

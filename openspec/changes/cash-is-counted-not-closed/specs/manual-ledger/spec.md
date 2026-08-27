@@ -57,7 +57,14 @@ business date in each and compare them.
 #### Scenario: The reader lands on the derived statement
 
 - **WHEN** a Super Admin or an assigned Franchise Admin opens the ledger from the navigation
-- **THEN** the derived statement is shown and the manual form has no navigation entry
+- **THEN** the derived statement is shown, and the manual form keeps a navigation
+  entry of its own under a different name so both can be open at once
+
+#### Scenario: The fallback is reachable without remembering a route
+
+- **WHEN** the navigation is inspected during the overlap
+- **THEN** it offers both readings as separate entries, because a fallback that
+  needs a typed URL is not one
 
 #### Scenario: The manual form is still reachable
 

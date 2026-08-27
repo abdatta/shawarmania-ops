@@ -2,8 +2,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Clock,
   MapPinOff,
   Minus,
@@ -18,6 +16,7 @@ import { Card } from '@/components/ui/card'
 import { Chip, ChipRow } from '@/components/ui/chip'
 import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
+import { DayField, PeriodBar } from '@/components/ui/period-bar'
 import { Why } from '@/components/ui/why'
 import { useAdapters } from '@/data-access'
 import {
@@ -25,14 +24,11 @@ import {
   type LedgerDrawerEvent,
   type LedgerStatementDay,
 } from '@/data-access/adapters'
-import {
-  formatBusinessDate,
-  formatDateTime,
-  formatTime,
-  resolveBusinessDate,
-  shiftBusinessDate,
-} from '@/domain'
+import { formatDateTime, formatTime, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
+
+/** How far back the calendar opens. Generous: reading an old month is ordinary. */
+const MONTHS_OFFERED = 12
 
 /**
  * The Ledger, as a statement that writes itself.
@@ -66,6 +62,14 @@ export function LedgerStatementSurface() {
   const { outletId, selector: outletSelector } = useOutletScope()
 
   const [businessDate, setBusinessDate] = useState<string | null>(null)
+  /**
+   * The outlet's own today, through its own cutover.
+   *
+   * Held separately from the date being read because it is what the control
+   * refuses to go past: the database will not accept a future business date, and
+   * a stepper that offers one is offering a failure.
+   */
+  const [today, setToday] = useState<string | null>(null)
   const [day, setDay] = useState<LedgerStatementDay | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -77,7 +81,9 @@ export function LedgerStatementSurface() {
       .getOutlet(outletId)
       .then((outlet) => {
         if (!active || !outlet) return
-        setBusinessDate(resolveBusinessDate(new Date(), outlet.business_day_cutover))
+        const resolved = resolveBusinessDate(new Date(), outlet.business_day_cutover)
+        setToday(resolved)
+        setBusinessDate(resolved)
       })
       .catch(() => {
         if (active) setError('Could not work out which day this is.')
@@ -130,29 +136,35 @@ export function LedgerStatementSurface() {
     <div className="mx-auto max-w-2xl">
       <PageHeader scope={outletSelector} title="Ledger" />
 
-      {businessDate && (
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <Button
-            size="phone"
-            variant="secondary"
-            aria-label="Previous day"
-            onClick={() => setBusinessDate(shiftBusinessDate(businessDate, -1))}
-            data-testid="day-back"
+      {/*
+        The shared bar, not a hand-rolled pair of chevrons.
+        `src/components/ui/period-bar.tsx` already answers all three things a day
+        control on this app owes: it writes **Today** rather than the date when
+        that is what the date is, it **cannot be stepped or picked into the
+        future** because the database refuses a future business date and a control
+        that offers one is offering a failure, and its middle is a **button onto
+        the platform calendar** so any earlier day is one tap rather than N steps.
+
+        The first version of this surface reimplemented the bar and lost all
+        three. Surfaces that ask "which day" should look like each other, because
+        they are asking the same question.
+      */}
+      {businessDate && today && (
+        <div className="mb-3">
+          <PeriodBar
+            label="Day"
+            testIdPrefix="statement"
+            onStep={(by) => setBusinessDate(shiftBusinessDate(businessDate, by))}
+            canStepForward={businessDate < today}
           >
-            <ChevronLeft aria-hidden size={16} />
-          </Button>
-          <span className="text-sm font-semibold text-content" data-testid="day-label">
-            {formatBusinessDate(businessDate)}
-          </span>
-          <Button
-            size="phone"
-            variant="secondary"
-            aria-label="Next day"
-            onClick={() => setBusinessDate(shiftBusinessDate(businessDate, 1))}
-            data-testid="day-forward"
-          >
-            <ChevronRight aria-hidden size={16} />
-          </Button>
+            <DayField
+              businessDate={businessDate}
+              today={today}
+              earliest={monthsBackFrom(today, MONTHS_OFFERED)}
+              testIdPrefix="statement"
+              onChange={setBusinessDate}
+            />
+          </PeriodBar>
         </div>
       )}
 
@@ -546,6 +558,23 @@ function TimelineRow({ event, index }: { event: LedgerDrawerEvent; index: number
       </p>
     </div>
   )
+}
+
+/**
+ * The first day of the month `months` back from a business date.
+ *
+ * Computed here rather than imported from `features/manual-ledger`, whose whole
+ * folder goes when `retire-the-manual-ledger` (#12) lands. A surface that
+ * outlives it must not make that deletion a breakage somewhere else — the same
+ * reasoning that moved `PeriodBar` into `components/ui` in the first place.
+ */
+function monthsBackFrom(businessDate: string, months: number): string {
+  const [year, month] = businessDate.split('-').map(Number)
+  if (!year || !month) return businessDate
+  const zeroBased = year * 12 + (month - 1) - months
+  const floorYear = Math.floor(zeroBased / 12)
+  const floorMonth = (zeroBased % 12) + 1
+  return `${String(floorYear).padStart(4, '0')}-${String(floorMonth).padStart(2, '0')}-01`
 }
 
 /** A figure with its label and its chips. */

@@ -47,15 +47,21 @@ function renderLedger(adapters: DataAdapters = createMockAdapters('franchise_adm
 }
 
 describe('the reading carries no editable figure', () => {
-  it('renders no text input, number input or select anywhere', async () => {
-    const { container } = renderLedger()
+  it('renders no input, textarea or select inside any reading section', async () => {
+    renderLedger()
     await waitFor(() => expect(screen.getByTestId('ledger-revenue')).toBeInTheDocument())
 
-    // Enumerated, not sampled.
-    expect(container.querySelectorAll('input')).toHaveLength(0)
-    expect(container.querySelectorAll('textarea')).toHaveLength(0)
-    expect(container.querySelectorAll('select')).toHaveLength(0)
-    expect(container.querySelectorAll('[contenteditable="true"]')).toHaveLength(0)
+    // Enumerated, not sampled — and scoped to the sections that carry figures.
+    // The day control's hidden native `<input type="date">` sits outside them: it
+    // is the platform calendar, which is a control, not a figure. The claim is
+    // that no REVENUE, DRAWER or EXPENSE figure can be typed.
+    for (const section of ['ledger-revenue', 'ledger-drawer', 'ledger-expenses'] as const) {
+      const card = screen.getByTestId(section)
+      expect(card.querySelectorAll('input')).toHaveLength(0)
+      expect(card.querySelectorAll('textarea')).toHaveLength(0)
+      expect(card.querySelectorAll('select')).toHaveLength(0)
+      expect(card.querySelectorAll('[contenteditable="true"]')).toHaveLength(0)
+    }
   })
 
   it('offers only the date stepper, verification and explanations as controls', async () => {
@@ -73,7 +79,7 @@ describe('the reading carries no editable figure', () => {
     // which reveal prose and change nothing.
     expect(buttons.length).toBeGreaterThan(0)
     for (const label of buttons) {
-      expect(label).toMatch(/^(previous day|next day|verify this day|wh(y|at) .+)$/i)
+      expect(label).toMatch(/^(previous day|next day|verify this day|day — .+|wh(y|at) .+)$/i)
     }
   })
 })
@@ -86,7 +92,7 @@ describe('the day renders in full even when nothing was recorded', () => {
 
     // Step back well past the demo fixture's observations.
     for (let step = 0; step < 12; step += 1) {
-      await user.click(screen.getByTestId('day-back'))
+      await user.click(screen.getByTestId('statement-step-back'))
     }
 
     await waitFor(() => expect(screen.getByTestId('ledger-revenue')).toBeInTheDocument())
@@ -106,7 +112,7 @@ describe('the drawer names its float and its closing balance differently', () =>
     // Step back to a date that was actually counted. `left ≠ next opening` is a
     // fact about a count, so on a `carried` date it is deliberately absent —
     // there is no float left to distinguish from anything.
-    await user.click(screen.getByTestId('day-back'))
+    await user.click(screen.getByTestId('statement-step-back'))
     await waitFor(() => expect(screen.queryByTestId('drawer-carried')).not.toBeInTheDocument())
 
     // No word boundaries, deliberately: a retired term should not survive inside
@@ -169,5 +175,50 @@ describe('verification is an acknowledgement', () => {
     expect(screen.queryByText(/verify all/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/select a range/i)).not.toBeInTheDocument()
     expect(screen.getAllByTestId('verify-day')).toHaveLength(1)
+  })
+})
+
+/**
+ * The day control, which #11 got wrong once.
+ *
+ * The first version of this surface hand-rolled a pair of chevrons and lost all
+ * three things `src/components/ui/period-bar.tsx` already does: **Today** in
+ * words, a hard stop at the outlet's own today, and a calendar so any earlier
+ * day is one tap rather than N steps. Surfaces that ask "which day" should look
+ * like each other, so this asserts it uses the shared bar rather than a second
+ * idiom for the same question.
+ */
+describe('the day control is the shared one, and refuses the future', () => {
+  it('writes Today in words rather than the date', async () => {
+    renderLedger()
+    const open = await screen.findByTestId('statement-day-open')
+    expect(open.textContent?.trim()).toBe('Today')
+  })
+
+  it('cannot be stepped past the outlet’s own today', async () => {
+    renderLedger()
+    // On today, forward is refused — the database will not take a future
+    // business date, so a control offering one is offering a failure.
+    await waitFor(() => expect(screen.getByTestId('statement-step-forward')).toBeDisabled())
+
+    const user = userEvent.setup()
+    await user.click(screen.getByTestId('statement-step-back'))
+    // One day back, forward opens again.
+    await waitFor(() => expect(screen.getByTestId('statement-step-forward')).toBeEnabled())
+  })
+
+  it('offers a calendar bounded at today, so any earlier day is one tap', async () => {
+    renderLedger()
+    const picker = await screen.findByTestId('statement-day-picker')
+    const today = picker.getAttribute('value')
+
+    expect(picker).toHaveAttribute('type', 'date')
+    // The ceiling is the outlet's today, and the floor is far enough back that
+    // reading an old month is ordinary rather than blocked.
+    expect(picker.getAttribute('max')).toBe(today)
+    expect(picker.getAttribute('min')).toMatch(/^\d{4}-\d{2}-01$/)
+    // ISO dates sort lexicographically, which is why the whole app compares them
+    // as strings rather than parsing first.
+    expect((picker.getAttribute('min') ?? '') < (today ?? '')).toBe(true)
   })
 })

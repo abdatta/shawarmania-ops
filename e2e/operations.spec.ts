@@ -129,7 +129,7 @@ test.describe('the operations surfaces', () => {
     // The float left and the closing balance are never one word. On a `carried`
     // date the chip is deliberately absent — there was no count, so there is no
     // float left to distinguish from anything — so step back to a counted one.
-    await page.getByTestId('day-back').click()
+    await page.getByTestId('statement-step-back').click()
     await expect(page.getByTestId('left-is-not-opening')).toContainText('left')
 
     // The manual form still resolves at its own route — the fallback is a tab,

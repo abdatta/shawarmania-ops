@@ -158,3 +158,92 @@ describe('gate registry', () => {
     )
   })
 })
+
+/**
+ * The door #11 took away and had to give back.
+ *
+ * Both the owner and the manager recorded expenses through the manual Ledger
+ * surface. That surface left the primary navigation when the derived statement
+ * took its place, and the derived statement deliberately carries no editable
+ * figure — so for the two roles that read the Ledger nightly, recording an
+ * expense became unreachable in the real app. Nothing caught it: every gate
+ * tested what the new surfaces do, and none asked what stopped being reachable.
+ */
+describe('recording an expense stays reachable for every role that spends', () => {
+  const EXPENSE_PATH = 'ledger/expenses'
+
+  it.each(['super_admin', 'franchise_admin', 'biller', 'employee'] as const)(
+    '%s reaches the expense surface, live',
+    (role) => {
+      const entry = surfaces.find(
+        (surface) => surface.role === role && surface.path === EXPENSE_PATH,
+      )
+      expect(entry, `${role} has no route to ${EXPENSE_PATH}`).toBeDefined()
+      expect(entry?.state).toBe('live')
+    },
+  )
+
+  it.each(['super_admin', 'franchise_admin', 'biller', 'employee'] as const)(
+    '%s is offered it in navigation in real mode, exactly once',
+    (role) => {
+      const expenses = visibleSurfaces([role], 'real').filter(
+        (surface) => surface.nav?.label === 'Expenses',
+      )
+      expect(expenses).toHaveLength(1)
+      expect(expenses[0]?.path).toBe(EXPENSE_PATH)
+    },
+  )
+
+  it('offers the owner exactly one Expenses tab in demo mode too', () => {
+    // The owner reaches the manager's surfaces as well, and `admin-expenses` is
+    // the `demo`-gated screen from the change #11 absorbed. Two tabs with one
+    // word on them is a question nobody should have to answer.
+    const expenses = visibleSurfaces(['super_admin', 'franchise_admin'], 'demo').filter(
+      (surface) => surface.nav?.label === 'Expenses',
+    )
+    expect(expenses).toHaveLength(1)
+  })
+})
+
+/**
+ * The fallback, which is the whole revert story of #11.
+ *
+ * Decision 17 and the Risks section both call for **two ledger entries** during
+ * the overlap, so one business date can be opened in each and compared. Task 9.2
+ * said to remove the manual ledger's entry, was followed literally, and left a
+ * fallback reachable only by typing a URL.
+ */
+describe('both ledger readings are reachable during the overlap', () => {
+  it.each(['super_admin', 'franchise_admin'] as const)(
+    '%s is offered the derived statement and the notebook, as separate entries',
+    (role) => {
+      const nav = visibleSurfaces([role], 'real')
+      const derived = nav.find((surface) => surface.path === 'statement')
+      const notebook = nav.find((surface) => surface.path === 'ledger')
+
+      expect(derived, 'the derived statement has no navigation entry').toBeDefined()
+      expect(
+        notebook,
+        'the fallback has no navigation entry — a typed URL is not a tab',
+      ).toBeDefined()
+
+      // The derived reading is the one called `Ledger`: that is what "leaves the
+      // primary navigation" means, and all it means.
+      expect(derived?.nav?.label).toBe('Ledger')
+      expect(notebook?.nav?.label).not.toBe('Ledger')
+
+      // And the reader lands on the new one first.
+      expect(derived?.nav?.order ?? 0).toBeLessThan(notebook?.nav?.order ?? 0)
+    },
+  )
+
+  it.each(['super_admin', 'franchise_admin'] as const)(
+    '%s keeps the manual ledger live at its own route, so a revert is one edit',
+    (role) => {
+      const notebook = surfaces.find(
+        (surface) => surface.role === role && surface.path === 'ledger',
+      )
+      expect(notebook?.state).toBe('live')
+    },
+  )
+})

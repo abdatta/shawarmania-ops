@@ -109,25 +109,25 @@ const defs = {
   'owner-people': {
     role: 'super_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 7 },
+    nav: { label: 'People', icon: Users, order: 9 },
     state: 'live',
   },
   'owner-comparison': {
     role: 'super_admin',
     path: 'comparison',
-    nav: { label: 'Compare', icon: BarChart3, order: 8 },
+    nav: { label: 'Compare', icon: BarChart3, order: 10 },
     state: 'demo',
   },
   'owner-alerts': {
     role: 'super_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 9 },
+    nav: { label: 'Alerts', icon: Bell, order: 11 },
     state: 'demo',
   },
   'owner-billing-history': {
     role: 'super_admin',
     path: 'billing-history',
-    nav: { label: 'Billing', icon: ReceiptText, order: 10 },
+    nav: { label: 'Billing', icon: ReceiptText, order: 12 },
     state: 'live',
   },
   /**
@@ -200,18 +200,52 @@ const defs = {
     state: 'live',
   },
   /**
-   * The manual ledger (#36) — **still `live`, and now without a navigation
-   * entry.**
+   * What this outlet spent — the same surface the people who spend the money
+   * use, reached from the owner's shell.
    *
-   * Its route resolves in full and its rows are untouched. It is the fallback for
-   * the derived statement above and the only reader of pre-tablet history until
-   * `retire-the-manual-ledger` (#12) carries those rows across. A revert is
-   * therefore this file: put the entry back, take the other two out, deploy. No
-   * data to recover.
+   * **It exists because #11 took the door away and had to give it back.** Both
+   * the owner and the manager recorded expenses through the manual Ledger
+   * surface; that surface left the navigation when the derived statement took
+   * its place, and the derived statement deliberately has no editable figure.
+   * Expenses became unreachable in the real app for exactly the two roles that
+   * read the Ledger nightly.
+   *
+   * Directly after the Ledger, because the Ledger is where somebody notices an
+   * expense is missing. The path is `ledger/expenses` — the same route the
+   * Biller and the Employee already reach, the same component, the same rows,
+   * and no change to how an expense is recorded. #12 re-homes all of it when it
+   * promotes the notebook's expense table to be the real one.
+   */
+  'owner-expenses': {
+    role: 'super_admin',
+    path: 'ledger/expenses',
+    nav: { label: 'Expenses', icon: Wallet, order: 5 },
+    state: 'live',
+  },
+  /**
+   * The manual ledger (#36) — **still `live`, and it keeps a navigation entry.**
+   *
+   * **Two ledger entries during the overlap is the design, not an oversight.**
+   * Decision 17: *"two entries let the owner open both and compare a day, which
+   * is the two-day acceptance test they asked for with no engineering behind
+   * it"*, and the Risks section names the crowding on an already-busy shell as
+   * the accepted cost, temporary until #12.
+   *
+   * `cash-is-counted-not-closed` task 9.2 said to remove this entry, which
+   * contradicts both of those and was followed once. **The fallback is a tab**,
+   * and a tab you have to type a URL to reach is not one: a fallback that is only
+   * reachable by somebody who remembers the route is a fallback nobody uses at
+   * 22:00 when the new surface is behaving oddly.
+   *
+   * What "leaves the primary navigation" means, and all it means: this is no
+   * longer the entry labelled `Ledger`. It sits after the derived statement,
+   * under its own name, so the reader lands on the new reading and the old one is
+   * still one tap away.
    */
   'owner-manual-ledger': {
     role: 'super_admin',
     path: 'ledger',
+    nav: { label: 'Notebook', icon: NotepadText, order: 6 },
     state: 'live',
   },
   'owner-expense-categories': {
@@ -234,7 +268,7 @@ const defs = {
   'owner-zomato-sync': {
     role: 'super_admin',
     path: 'ledger/zomato',
-    nav: { label: 'Zomato', icon: Bike, order: 5, attention: 'zomato-needs-you' },
+    nav: { label: 'Zomato', icon: Bike, order: 7, attention: 'zomato-needs-you' },
     // Live [owner, 2026-08-18]. The ledger already fills itself from Zomato; this is
     // the page that says when it last ran, what moved, and what wants a decision —
     // including the Reconnect the owner needs when a session lapses, which is the one
@@ -254,7 +288,7 @@ const defs = {
   'owner-swiggy-sync': {
     role: 'super_admin',
     path: 'ledger/swiggy',
-    nav: { label: 'Swiggy', icon: UtensilsCrossed, order: 6, attention: 'swiggy-needs-you' },
+    nav: { label: 'Swiggy', icon: UtensilsCrossed, order: 8, attention: 'swiggy-needs-you' },
     state: 'live',
   },
   /**
@@ -384,22 +418,44 @@ const defs = {
     nav: { label: 'Ledger', icon: NotepadText, order: 8 },
     state: 'live',
   },
-  /** Live at its route, out of the navigation. See `owner-manual-ledger`. */
+  /**
+   * The manager's counterpart to `owner-expenses`, and the same component again.
+   *
+   * **The order matters and is not arbitrary.** `admin-expenses` below is the
+   * `demo`-gated expense screen from the change #11 absorbed, and it carries the
+   * same `Expenses` label at order 5. `visibleSurfaces` deduplicates by label
+   * and takes the lower order first, so in **demo** mode the walkthrough keeps
+   * the screen it has always shown, and in **real** mode that entry is not
+   * renderable and this one is the door. Both modes end up with exactly one
+   * Expenses tab, pointing at the surface that actually works there.
+   */
+  'admin-ledger-expenses': {
+    role: 'franchise_admin',
+    path: 'ledger/expenses',
+    nav: { label: 'Expenses', icon: Wallet, order: 9 },
+    state: 'live',
+  },
+  /**
+   * The manager's fallback, and it keeps its entry for the reason
+   * `owner-manual-ledger` gives: the fallback is a tab, and two entries are what
+   * let one business date be opened in each and compared.
+   */
   'admin-manual-ledger': {
     role: 'franchise_admin',
     path: 'ledger',
+    nav: { label: 'Notebook', icon: NotepadText, order: 10 },
     state: 'live',
   },
   'admin-pnl': {
     role: 'franchise_admin',
     path: 'pnl',
-    nav: { label: 'P&L', icon: TrendingUp, order: 10 },
+    nav: { label: 'P&L', icon: TrendingUp, order: 12 },
     state: 'demo',
   },
   'admin-alerts': {
     role: 'franchise_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 11 },
+    nav: { label: 'Alerts', icon: Bell, order: 13 },
     state: 'demo',
   },
   /**
@@ -415,7 +471,7 @@ const defs = {
   'admin-devices': {
     role: 'franchise_admin',
     path: 'devices',
-    nav: { label: 'Tablets', icon: TabletSmartphone, order: 12 },
+    nav: { label: 'Tablets', icon: TabletSmartphone, order: 14 },
     state: 'live',
   },
   /**
@@ -426,7 +482,7 @@ const defs = {
   'admin-people': {
     role: 'franchise_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 9 },
+    nav: { label: 'People', icon: Users, order: 11 },
     state: 'live',
   },
 
