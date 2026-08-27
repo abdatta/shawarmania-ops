@@ -31,6 +31,10 @@ before any tab is chosen. Nothing new is read, and no arithmetic moves.
 - Rename the fourth card from `Average bill` to `AOV`. The full name does not
   fit a quarter of a phone row, and average order value is what the owner calls
   it.
+- Correct `docs/SCREENS.md`, which still described a fourth `Totals` view and a
+  four-control filter grid. Neither has existed since the totals moved into
+  Status and the status and payment pickers were removed; the page is the one
+  this change is obliged to leave true.
 
 ## Non-goals
 

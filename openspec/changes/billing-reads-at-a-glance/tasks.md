@@ -18,7 +18,10 @@
 - [x] 1.5 Rename the fourth card to `AOV`.
 - [x] 1.6 Update `manager-billing-history.test.tsx` and `e2e/counter.spec.ts` to
       assert the figures on every tab rather than behind Status.
-- [x] 1.7 Gate: `npm run typecheck`, `npm run lint`, `npm run format:check`,
+- [x] 1.7 Correct the two stale passages in `docs/SCREENS.md`: the `Totals`
+      view that is now a row above the tabs, and the filter grid that is now two
+      controls.
+- [x] 1.8 Gate: `npm run typecheck`, `npm run lint`, `npm run format:check`,
       `npm run contrast`, `npm test`, and the browser check at 360/375/431/768/
       1280 in both themes, with the new assertions proved to fail on the tree
       before the fix.
