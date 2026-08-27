@@ -195,7 +195,12 @@ const defs = {
    */
   'owner-ledger-statement': {
     role: 'super_admin',
-    path: 'statement',
+    // `ledger`, because this IS the Ledger now. The sidebar nests a `ledger/*`
+    // entry under the `ledger` entry, so whichever surface holds this path
+    // becomes the parent of Expenses, Zomato, Swiggy and the notebook. Leaving it
+    // on the notebook rendered three live surfaces as children of the one being
+    // retired.
+    path: 'ledger',
     nav: { label: 'Ledger', icon: NotepadText, order: 4 },
     state: 'live',
   },
@@ -244,7 +249,11 @@ const defs = {
    */
   'owner-manual-ledger': {
     role: 'super_admin',
-    path: 'ledger',
+    // Moved from `ledger` to a child of it. The route changes and that is the
+    // point: this is one reading inside the ledger group now, not the group
+    // itself. An old `…/ledger` bookmark lands on the derived Ledger, which is
+    // the more useful landing place, and this is one tap from there.
+    path: 'ledger/notebook',
     nav: { label: 'Notebook', icon: NotepadText, order: 6 },
     state: 'live',
   },
@@ -337,6 +346,24 @@ const defs = {
     nav: { label: 'Stock', icon: Package, order: 4 },
     state: 'demo',
   },
+  /**
+   * The `demo`-gated Expenses screen from the change #11 absorbed — **left exactly
+   * as it was.**
+   *
+   * It demonstrates a design that will never exist: the expense half of
+   * `expenses-and-inventory-live` was already delivered by #36 and #38 against
+   * `manual_ledger_expenses`. So `hidden` is arguably where it belongs, and #11
+   * briefly put it there.
+   *
+   * **Reverted deliberately.** #11's brief was to make expenses *reachable*, not
+   * to change what the walkthrough shows, and this screen is what the walkthrough
+   * has always shown — `src/demo/demo-reset.test.tsx` uses it as the cheapest
+   * write to make and to see. It also carries the label `Expenses` at a lower
+   * order than the live list, and `visibleSurfaces` dedupes by label taking the
+   * lower order: so demo mode keeps this screen and real mode, where it does not
+   * render, gets the live one. One Expenses tab in each, pointing at the surface
+   * that works there. #12 removes this with the rest.
+   */
   'admin-expenses': {
     role: 'franchise_admin',
     path: 'expenses',
@@ -414,7 +441,7 @@ const defs = {
   },
   'admin-ledger-statement': {
     role: 'franchise_admin',
-    path: 'statement',
+    path: 'ledger',
     nav: { label: 'Ledger', icon: NotepadText, order: 8 },
     state: 'live',
   },
@@ -442,7 +469,7 @@ const defs = {
    */
   'admin-manual-ledger': {
     role: 'franchise_admin',
-    path: 'ledger',
+    path: 'ledger/notebook',
     nav: { label: 'Notebook', icon: NotepadText, order: 10 },
     state: 'live',
   },

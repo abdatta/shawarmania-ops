@@ -199,7 +199,22 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
       <Card className="space-y-2" data-testid="month-expenses">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-bold text-content">Expenses breakdown</h2>
-          <Link to="categories" className={buttonVariants({ variant: 'secondary', size: 'phone' })}>
+          {/*
+            `../categories` rather than `categories`: #11 moved this surface from
+            `ledger` to `ledger/notebook`, so a link relative to the current route
+            would now resolve to `ledger/notebook/categories`. The categories
+            screen stayed where it was, at `ledger/categories`, beside this one.
+          */}
+          <Link
+            to="../categories"
+            // `relative="path"` is load-bearing. Without it React Router resolves
+            // `..` against the ROUTE hierarchy, and this surface's route is the
+            // single pattern `ledger/notebook`, so `..` pops both segments and
+            // lands on `/demo/:role/categories`, which resolves to nothing. With
+            // it, `..` pops one URL segment and gives `ledger/categories`.
+            relative="path"
+            className={buttonVariants({ variant: 'secondary', size: 'phone' })}
+          >
             <Settings2 aria-hidden size={15} />
             Manage categories
           </Link>

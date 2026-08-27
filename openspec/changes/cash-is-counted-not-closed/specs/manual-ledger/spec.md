@@ -43,7 +43,8 @@ here.**
 ### Requirement: The manual ledger leaves the navigation while remaining reachable
 
 While the derived ledger statement is being proved, the manual ledger SHALL
-remain a live surface at its own route and SHALL be removed from the primary
+remain a live surface with a reachable route and its own navigation entry, and
+SHALL be removed from the primary
 navigation, so that the derived statement is the one a reader lands on and the
 manual form remains available for comparison and as the fallback.
 

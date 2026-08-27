@@ -185,24 +185,23 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
-    // The derived Ledger (#11). It takes the navigation label the manual form
-    // had; that form keeps this app's `ledger` route below, so both readings are
-    // open at once and the fallback is a tab rather than a runtime toggle.
-    path: 'statement',
+    // The derived Ledger (#11) owns `ledger`, because it is the Ledger. The
+    // manual form is a child of it at `ledger/notebook`, which is what makes the
+    // sidebar's nesting true: Expenses, Zomato, Swiggy and the notebook are all
+    // readings inside one group rather than children of a deprecated form.
+    path: 'ledger',
     element: (
-      <GatedSurface path="statement">
+      <GatedSurface path="ledger">
         <LedgerStatementSurface />
       </GatedSurface>
     ),
   },
   {
-    // The manual ledger (#36) — temporary. This entry goes with the capability,
-    // and it is one line precisely because the gate is what decides who reaches
-    // it: only `owner-manual-ledger` declares this path, so no other role's shell
-    // resolves it and a direct URL renders nothing.
-    path: 'ledger',
+    // The manual ledger (#36) — temporary, and the fallback for the reading
+    // above until `retire-the-manual-ledger` (#12) carries its rows across.
+    path: 'ledger/notebook',
     element: (
-      <GatedSurface path="ledger">
+      <GatedSurface path="ledger/notebook">
         <ManualLedgerSurface />
       </GatedSurface>
     ),

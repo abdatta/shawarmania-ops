@@ -109,7 +109,7 @@ test.describe('the operations surfaces', () => {
     // The counterpart of the drawer: #11 replaced the manual Ledger form in the
     // navigation with a statement derived on read. The assertion that matters is
     // the negative one.
-    await page.goto('demo/admin/statement')
+    await page.goto('demo/admin/ledger')
     await expect(page.getByTestId('ledger-revenue')).toBeVisible()
     await expect(page.getByTestId('ledger-drawer')).toBeVisible()
     await expect(page.getByTestId('ledger-expenses')).toBeVisible()
@@ -132,12 +132,28 @@ test.describe('the operations surfaces', () => {
     await page.getByTestId('statement-step-back').click()
     await expect(page.getByTestId('left-is-not-opening')).toContainText('left')
 
-    // The manual form still resolves at its own route — the fallback is a tab,
-    // not a runtime toggle — while having no navigation entry.
-    await expect(
-      page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Ledger' }),
-    ).toHaveAttribute('href', /statement$/)
-    await page.goto('demo/admin/ledger')
+    // **Both readings are reachable as entries** — decision 17's "two entries let
+    // the owner open both and compare a day". The derived one is the entry called
+    // `Ledger`; the notebook keeps its own, nested under it.
+    const nav = page.getByRole('navigation', { name: 'Primary' }).first()
+    await expect(nav.getByRole('link', { name: 'Ledger', exact: true })).toHaveAttribute(
+      'href',
+      /\/ledger$/,
+    )
+    await expect(nav.getByRole('link', { name: 'Notebook' })).toHaveAttribute(
+      'href',
+      /\/ledger\/notebook$/,
+    )
+    // And recording an expense is reachable, which #11 briefly took away.
+    //
+    // In DEMO mode this is the `demo`-gated screen the walkthrough has always
+    // shown; in real mode that entry does not render and the live expense list
+    // takes the tab. Either way there is exactly one, and it points at a surface
+    // that works in the mode it is offered in. `src/gates/registry.test.ts`
+    // asserts both halves.
+    await expect(nav.getByRole('link', { name: 'Expenses' })).toHaveCount(1)
+
+    await page.goto('demo/admin/ledger/notebook')
     await expect(page.getByTestId('ledger-view')).toBeVisible()
   })
 
@@ -209,7 +225,7 @@ for (const viewport of VIEWPORTS) {
         // `cash` was here until #11 made the day-close screen `hidden`. Both of
         // its replacements are walked instead, in both themes on both viewports.
         ['drawer', 'drawer-balance'],
-        ['statement', 'ledger-revenue'],
+        ['ledger', 'ledger-revenue'],
       ] as const) {
         await page.goto(`demo/admin/${path}`)
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme)

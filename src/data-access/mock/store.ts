@@ -916,46 +916,158 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
 
   // -- The drawer (#11) -----------------------------------------------------
   //
-  // Four observations at the demo outlet, each earning its place by being a
-  // state the surface renders differently. Built here rather than in a fixture
-  // file because every instant is relative to `today`: a drawer whose counts sit
-  // at fixed dates stops demonstrating a running balance the day after it is
-  // written.
+  // **Every derived figure here is computed from this store's own bills,
+  // expenses and cash movements, exactly as the adapter computes them.** The
+  // first version hardcoded round numbers from `design.md`'s worked example and
+  // three of the four observations disagreed with the bills the same demo shows
+  // in Billing and in the Ledger — one by ₹45,366. It also reported an
+  // opening-chain break of ₹354 that nobody had designed: an artefact of every
+  // observation storing the same opening instead of chaining from the count
+  // before it.
+  //
+  // So only two things are chosen by hand: **when** each count happened, and
+  // **how far out** it was. Everything else is derived, which is what makes the
+  // figures on this page agree with the figures two screens away. The drift check
+  // below re-derives them and throws if they ever stop agreeing.
 
   const drawerObs = (n: number) => `dc000000-0000-4000-a000-${String(n).padStart(12, '0')}`
   const drawerOut = (n: number) => `dd000000-0000-4000-a000-${String(n).padStart(12, '0')}`
 
-  const observation = (
-    n: number,
-    fields: {
-      daysAgo: number
-      time: string
-      recordedTime?: string
-      anchor?: boolean
-      openingPaise?: number
-      expectedPaise?: number
-      countedPaise: number
-      note?: string
-      onSite?: boolean
-      awayReason?: string
+  /** Cash actually received in `(from, to]`, from the latest effective allocations. */
+  const drawerCashIn = (from: string | null, to: string): number => {
+    let total = 0
+    for (const bill of bills) {
+      if (bill.outlet_id !== DEMO_OUTLET_ID || bill.status !== 'settled') continue
+      const at = bill.paid_at ?? bill.created_at
+      // Half-open at the start, closed at the end (design D2).
+      if ((from !== null && at <= from) || at > to) continue
+      total += (billPayments.get(bill.id) ?? [])
+        .filter((allocation) => allocation.method === 'cash')
+        .reduce((sum, allocation) => sum + allocation.amountPaise, 0)
+    }
+    return total
+  }
+
+  /** Cash expenses in `(from, to]`, by occurrence instant. */
+  const drawerCashExpenses = (from: string | null, to: string): number =>
+    expenses
+      .filter((row) => row.outlet_id === DEMO_OUTLET_ID && row.payment_method === 'cash')
+      .filter((row) => {
+        const at = row.occurred_at ?? row.created_at
+        return (from === null || at > from) && at <= to
+      })
+      .reduce((sum, row) => sum + row.amount_paise, 0)
+
+  const drawerObservations: Tables<'drawer_observations'>[] = []
+  const drawerCashOut: Tables<'drawer_cash_out'>[] = []
+
+  /**
+   * The counts, as *decisions* rather than as figures.
+   *
+   * `outBy` is how far the drawer was from what the arithmetic expected, so the
+   * state each row demonstrates survives any change to the bills around it:
+   * nought matches, a negative is short, a positive is over.
+   */
+  const countPlan = [
+    // The anchor. No opening, no expected total, no difference — the drawer
+    // begins at what was counted, and every earlier date reads `not tracked yet`.
+    { daysAgo: 4, time: '22:30', anchor: true, countedPaise: 145000, collectPaise: 0 },
+    // An ordinary night that balanced, with a collection leaving a small float.
+    { daysAgo: 3, time: '22:20', outBy: 0, collectPaise: 50000 },
+    // Counted at 22:15 and typed at 23:04 — approximate, recorded away, and
+    // genuinely short. Nothing explains it, which is the case the surface must
+    // refuse to explain away.
+    {
+      daysAgo: 2,
+      time: '22:15',
+      recordedTime: '23:04',
+      outBy: -50000,
+      collectPaise: 40000,
+      onSite: false,
+      awayReason: 'counted at the counter, entered after getting home',
     },
-  ): Tables<'drawer_observations'> => {
-    const countedAt = instantAt(businessDate(fields.daysAgo), fields.time)
-    const recordedAt = instantAt(businessDate(fields.daysAgo), fields.recordedTime ?? fields.time)
-    const anchor = fields.anchor ?? false
-    const expected = anchor ? null : (fields.expectedPaise ?? 0)
-    return {
-      id: drawerObs(n),
+    // A thin drawer topped up: the collection is NEGATIVE, which is cash added.
+    // Same table, same kind, no reason — the sign is the whole difference.
+    { daysAgo: 1, time: '22:00', outBy: -20000, collectPaise: -100000 },
+  ] as const
+
+  // A spend, well before the first count so it sits in no settled interval's
+  // arithmetic and demonstrates only what it is for: drawer cash that bought
+  // something and stays out of the month's operating figure.
+  drawerCashOut.push({
+    id: drawerOut(90),
+    outlet_id: DEMO_OUTLET_ID,
+    kind: 'spend',
+    amount_paise: 4000000,
+    occurred_at: instantAt(businessDate(5), '18:40'),
+    recorded_by: MANAGER_ID,
+    observation_id: null,
+    reason: 'Chest freezer for the prep counter',
+    recorded_lat: null,
+    recorded_lng: null,
+    recorded_accuracy_m: null,
+    recorded_distance_m: null,
+    recorded_on_site: true,
+    away_reason: null,
+    created_at: instantAt(businessDate(5), '18:40'),
+  })
+
+  countPlan.forEach((plan, index) => {
+    const countedAt = instantAt(businessDate(plan.daysAgo), plan.time)
+    const recordedTime = 'recordedTime' in plan ? plan.recordedTime : undefined
+    const recordedAt = instantAt(businessDate(plan.daysAgo), recordedTime ?? plan.time)
+    const previous = drawerObservations.at(-1) ?? null
+    const anchor = 'anchor' in plan && plan.anchor === true
+
+    let openingPaise: number | null = null
+    let expectedPaise: number | null = null
+    let countedPaise: number
+
+    if (anchor || previous === null) {
+      countedPaise = 'countedPaise' in plan ? plan.countedPaise : 0
+    } else {
+      // `next opening = counted − that observation's OWN cash out` (design D3),
+      // read from the link rather than a time window.
+      openingPaise =
+        previous.counted_total_paise -
+        drawerCashOut
+          .filter((movement) => movement.observation_id === previous.id)
+          .reduce((sum, movement) => sum + movement.amount_paise, 0)
+
+      // The previous observation's own cash out is already inside `openingPaise`,
+      // and this observation's own collection does not exist yet — which is the
+      // same rule the drift check below has to state explicitly: an observation's
+      // own cash out is in neither its expected total nor its counted total.
+      const cashOutInInterval = drawerCashOut
+        .filter((movement) => movement.observation_id !== previous.id)
+        .filter(
+          (movement) =>
+            movement.occurred_at > previous.counted_at && movement.occurred_at <= countedAt,
+        )
+        .reduce((sum, movement) => sum + movement.amount_paise, 0)
+
+      expectedPaise =
+        openingPaise +
+        drawerCashIn(previous.counted_at, countedAt) -
+        drawerCashExpenses(previous.counted_at, countedAt) -
+        cashOutInInterval
+
+      countedPaise = expectedPaise + ('outBy' in plan ? plan.outBy : 0)
+    }
+
+    const id = drawerObs(index + 1)
+    drawerObservations.push({
+      id,
       outlet_id: DEMO_OUTLET_ID,
       counted_at: countedAt,
       recorded_at: recordedAt,
       is_anchor: anchor,
       // All three null together on the anchor, which has no interval at all.
-      opening_paise: anchor ? null : (fields.openingPaise ?? 0),
-      expected_paise: expected,
-      difference_paise: expected === null ? null : fields.countedPaise - expected,
-      counted_total_paise: fields.countedPaise,
-      is_approximate: fields.recordedTime !== undefined,
+      opening_paise: openingPaise,
+      expected_paise: expectedPaise,
+      difference_paise: expectedPaise === null ? null : countedPaise - expectedPaise,
+      counted_total_paise: countedPaise,
+      is_approximate: recordedTime !== undefined,
       tolerance_minutes: 15,
       recorded_by: MANAGER_ID,
       corrected_by: null,
@@ -963,121 +1075,93 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       recorded_lng: null,
       recorded_accuracy_m: null,
       recorded_distance_m: null,
-      recorded_on_site: fields.onSite ?? true,
-      away_reason: fields.awayReason ?? null,
-      note: fields.note ?? null,
+      recorded_on_site: 'onSite' in plan ? plan.onSite : true,
+      away_reason: 'awayReason' in plan ? plan.awayReason : null,
+      note: anchor ? 'the books open here' : null,
       created_at: recordedAt,
       updated_at: recordedAt,
+    })
+
+    if (plan.collectPaise !== 0) {
+      drawerCashOut.push({
+        id: drawerOut(index + 1),
+        outlet_id: DEMO_OUTLET_ID,
+        kind: 'collection',
+        amount_paise: plan.collectPaise,
+        occurred_at: countedAt,
+        recorded_by: MANAGER_ID,
+        observation_id: id,
+        reason: null,
+        recorded_lat: null,
+        recorded_lng: null,
+        recorded_accuracy_m: null,
+        recorded_distance_m: null,
+        recorded_on_site: 'onSite' in plan ? plan.onSite : true,
+        away_reason: 'awayReason' in plan ? plan.awayReason : null,
+        created_at: countedAt,
+      })
     }
-  }
-
-  const drawerObservations: Tables<'drawer_observations'>[] = [
-    // 1. The anchor. No opening, no expected total, no difference — the drawer
-    //    begins at what was counted, and the ledger marks every earlier date
-    //    `not tracked yet` rather than inventing a balance for it.
-    observation(1, {
-      daysAgo: 4,
-      time: '22:30',
-      anchor: true,
-      countedPaise: 145000,
-      note: 'the books open here',
-    }),
-    // 2. An ordinary night that balanced, with a collection.
-    observation(2, {
-      daysAgo: 3,
-      time: '22:20',
-      openingPaise: 145000,
-      expectedPaise: 895000,
-      countedPaise: 895000,
-    }),
-    // 3. Counted at 22:15, typed at 23:04 — approximate, and 854 rupees short,
-    //    which is exactly the three cash bills between 22:04 and 22:12. The
-    //    surface reports that coincidence as a fact and proposes no instant.
-    observation(3, {
-      daysAgo: 2,
-      time: '22:15',
-      recordedTime: '23:04',
-      openingPaise: 145000,
-      expectedPaise: 895000,
-      countedPaise: 809600,
-      onSite: false,
-      awayReason: 'counted at the counter, entered after getting home',
-    }),
-    // 4. A genuine 500 rupee shortfall, matching no run of bills. The surface
-    //    says so and offers nothing.
-    observation(4, {
-      daysAgo: 1,
-      time: '22:00',
-      openingPaise: 145000,
-      expectedPaise: 900000,
-      countedPaise: 850000,
-    }),
-  ]
-
-  const cashOutRow = (
-    n: number,
-    fields: {
-      daysAgo: number
-      time: string
-      kind: 'collection' | 'spend'
-      amountPaise: number
-      observation?: number
-      reason?: string
-    },
-  ): Tables<'drawer_cash_out'> => ({
-    id: drawerOut(n),
-    outlet_id: DEMO_OUTLET_ID,
-    kind: fields.kind,
-    amount_paise: fields.amountPaise,
-    occurred_at: instantAt(businessDate(fields.daysAgo), fields.time),
-    recorded_by: MANAGER_ID,
-    observation_id: fields.observation ? drawerObs(fields.observation) : null,
-    reason: fields.reason ?? null,
-    recorded_lat: null,
-    recorded_lng: null,
-    recorded_accuracy_m: null,
-    recorded_distance_m: null,
-    recorded_on_site: true,
-    away_reason: null,
-    created_at: instantAt(businessDate(fields.daysAgo), fields.time),
   })
 
-  const drawerCashOut: Tables<'drawer_cash_out'>[] = [
-    cashOutRow(1, {
-      daysAgo: 3,
-      time: '22:20',
-      kind: 'collection',
-      amountPaise: 750000,
-      observation: 2,
-    }),
-    cashOutRow(2, {
-      daysAgo: 2,
-      time: '22:15',
-      kind: 'collection',
-      amountPaise: 700000,
-      observation: 3,
-    }),
-    // A NEGATIVE collection: the drawer was thin, so the collector put 1,000
-    // rupees back rather than taking anything out. Same table, same kind, no
-    // reason — the sign is the whole difference (design D5).
-    cashOutRow(3, {
-      daysAgo: 1,
-      time: '22:00',
-      kind: 'collection',
-      amountPaise: -100000,
-      observation: 4,
-    }),
-    // A spend: drawer cash that bought something. It moves the drawer and stays
-    // out of the month's operating expenses, which is the entire reason it is not
-    // an expense row.
-    cashOutRow(4, {
-      daysAgo: 2,
-      time: '18:40',
-      kind: 'spend',
-      amountPaise: 4000000,
-      reason: 'Chest freezer for the prep counter',
-    }),
-  ]
+  /**
+   * The drift check, mirroring the manual ledger's.
+   *
+   * The figures above are derived, so this can only fail if somebody edits a
+   * derived column by hand or changes a bill without re-deriving. That is
+   * precisely the failure worth catching loudly: a demo whose drawer disagrees
+   * with its own bills is a demo that stops being believed, and a silent ₹45,366
+   * is how that happens.
+   */
+  drawerObservations.forEach((row, index) => {
+    const previous = drawerObservations[index - 1]
+    if (row.is_anchor || !previous) {
+      if (row.opening_paise !== null || row.expected_paise !== null) {
+        throw new Error('Demo fixture drift: an anchor observation carries arithmetic.')
+      }
+      return
+    }
+
+    const ownOfPrevious = drawerCashOut
+      .filter((movement) => movement.observation_id === previous.id)
+      .reduce((sum, movement) => sum + movement.amount_paise, 0)
+    const opening = previous.counted_total_paise - ownOfPrevious
+    if (opening !== row.opening_paise) {
+      throw new Error(
+        `Demo fixture drift: ${row.counted_at} opens at ${row.opening_paise} but ` +
+          `${previous.counted_at} carries ${opening}. Fix the fixture, not this check.`,
+      )
+    }
+
+    // **Neither observation's own cash out belongs in this term.** The previous
+    // one's is already in the opening, and THIS one's is in neither its expected
+    // total nor its counted total — it reduces the next opening instead. Missing
+    // the second exclusion is what made this check disagree with the generation
+    // above by exactly one collection.
+    const cashOutInInterval = drawerCashOut
+      .filter(
+        (movement) => movement.observation_id !== previous.id && movement.observation_id !== row.id,
+      )
+      .filter(
+        (movement) =>
+          movement.occurred_at > previous.counted_at && movement.occurred_at <= row.counted_at,
+      )
+      .reduce((sum, movement) => sum + movement.amount_paise, 0)
+    const expected =
+      opening +
+      drawerCashIn(previous.counted_at, row.counted_at) -
+      drawerCashExpenses(previous.counted_at, row.counted_at) -
+      cashOutInInterval
+
+    if (expected !== row.expected_paise) {
+      throw new Error(
+        `Demo fixture drift: ${row.counted_at} expects ${row.expected_paise} but the store's ` +
+          `own bills, expenses and cash movements come to ${expected}.`,
+      )
+    }
+    if (row.difference_paise !== row.counted_total_paise - expected) {
+      throw new Error(`Demo fixture drift: ${row.counted_at} difference is not counted − expected.`)
+    }
+  })
 
   const ledgerDayVerifications: Tables<'ledger_day_verifications'>[] = [
     {

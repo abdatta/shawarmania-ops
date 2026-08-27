@@ -218,8 +218,8 @@ describe('both ledger readings are reachable during the overlap', () => {
     '%s is offered the derived statement and the notebook, as separate entries',
     (role) => {
       const nav = visibleSurfaces([role], 'real')
-      const derived = nav.find((surface) => surface.path === 'statement')
-      const notebook = nav.find((surface) => surface.path === 'ledger')
+      const derived = nav.find((surface) => surface.path === 'ledger')
+      const notebook = nav.find((surface) => surface.path === 'ledger/notebook')
 
       expect(derived, 'the derived statement has no navigation entry').toBeDefined()
       expect(
@@ -241,7 +241,7 @@ describe('both ledger readings are reachable during the overlap', () => {
     '%s keeps the manual ledger live at its own route, so a revert is one edit',
     (role) => {
       const notebook = surfaces.find(
-        (surface) => surface.role === role && surface.path === 'ledger',
+        (surface) => surface.role === role && surface.path === 'ledger/notebook',
       )
       expect(notebook?.state).toBe('live')
     },

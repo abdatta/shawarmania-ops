@@ -158,9 +158,16 @@ export function createMockLedgerStatementAdapter(
         // nobody has stated is not a commission of zero, and the month is a
         // ceiling while any day is in that state.
         commissionPaise: row.commission_paise,
+        // **Net is null whenever commission is**, which is the notebook's own
+        // rule. `net_paise` is preferred only once the commission is known: a
+        // provisional row can carry a net the sync computed while the charge is
+        // still unstated, and rendering that beside "Less commission — Not known
+        // yet" invites the reader to subtract the two and discover the commission
+        // the page has just said nobody knows.
         netPaise:
-          row.net_paise ??
-          (row.commission_paise === null ? null : row.revenue_paise - row.commission_paise),
+          row.commission_paise === null
+            ? null
+            : (row.net_paise ?? row.revenue_paise - row.commission_paise),
         settlementState: row.settlement_state,
       }))
 

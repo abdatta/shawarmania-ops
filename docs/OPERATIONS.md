@@ -480,8 +480,8 @@ you either accept it or count again.
 ## Recording a trading day by hand *(temporary — #36)*
 
 The notebook, for the trading period before each outlet's tablet existed. **It has
-left the navigation** and lives at its own route as the fallback for the derived
-Ledger; `retire-the-manual-ledger` (#12) carries its rows across and removes it.
+left the primary navigation** and lives at `Ledger → Notebook` as the fallback
+for the derived Ledger, one tap from it; `retire-the-manual-ledger` (#12) carries its rows across and removes it.
 Two or three minutes per outlet, from a phone.
 
 1. **Super Admin → Ledger**, pick the outlet, leave it on **One day** and today.

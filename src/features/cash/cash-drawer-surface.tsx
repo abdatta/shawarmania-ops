@@ -610,6 +610,11 @@ export function CashDrawerSurface() {
                     <Chip
                       tone="bad"
                       icon={advice.direction === 'short' ? ArrowDownRight : ArrowUpRight}
+                      // Its own handle, because the block around it also contains
+                      // the `Why` button's screen-reader label — "what short and
+                      // over mean here" — which carries both words and makes any
+                      // direction test over the whole block read `short` always.
+                      data-testid="count-direction"
                     >
                       <Money paise={Math.abs(advice.differencePaise)} />{' '}
                       {advice.direction === 'short' ? 'short' : 'over'}

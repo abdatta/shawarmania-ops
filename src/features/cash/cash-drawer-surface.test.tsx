@@ -124,14 +124,27 @@ describe('the difference appears as the amount is typed', () => {
     await user.type(screen.getByTestId('counted-input'), '1')
 
     // **The direction is a word, not only a sign.** A minus is the first thing a
-    // small screen loses, which is why `short` sits on the chip beside the figure.
-    const difference = await screen.findByTestId('count-difference')
-    expect(difference.textContent).toMatch(/short/i)
-    expect(difference.textContent).toMatch(/₹/)
+    // small screen loses, which is why the word sits on the chip beside the figure.
+    //
+    // The direction itself is not hardcoded: the demo's expected total is derived
+    // from its own bills and expenses, so which way ₹1 falls depends on the day's
+    // real trade. What must always hold is the PAIRING — the chip and the
+    // explanation behind it name the same direction.
+    await screen.findByTestId('count-difference')
+    // Read the CHIP, not the block: the block also contains the `Why` button's
+    // screen-reader label, which names both directions and so matches either.
+    const chip = screen.getByTestId('count-direction')
+    const direction = /short/i.test(chip.textContent ?? '') ? 'short' : 'over'
+    expect(chip.textContent).toMatch(new RegExp(direction, 'i'))
+    expect(chip.textContent).toMatch(/₹/)
 
     // The longer explanation is one tap away rather than always on screen.
     await user.click(screen.getByRole('button', { name: /what short and over mean here/i }))
-    expect(screen.getByText(/missing from the drawer/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        direction === 'short' ? /missing from the drawer/i : /more than expected was counted/i,
+      ),
+    ).toBeInTheDocument()
   })
 })
 
