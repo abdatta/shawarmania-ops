@@ -28,6 +28,33 @@ baseline this change is sized against.
 `daily_cash_records`, `cash_withdrawals` and `public.expenses` each hold
 **zero rows**. `billing_live_from` is null at both outlets.
 
+**Re-read 2026-08-27, immediately before the migration was written (task 1.2).**
+Every figure decision 16 depends on still holds: the three tables hold zero rows,
+`billing_live_from` is null at both outlets, and no live Franchise Admin
+assignment exists anywhere — the live rows are two business-wide Super Admins
+plus one Biller and two Employees per outlet, which is what makes decision 11 the
+only path that works on day one. Bill counts and dates are unchanged; the last
+settled date has moved on to 2026-08-26 as trade continued.
+
+**One row of the table above is measured on the wrong basis, and the correct
+figure is larger.** "Of those, Cash" counted `bills.payment_method = 'cash'`,
+which is the nullable *single-tender summary* column — it is null on a
+split-tender bill, so a bill settled part cash and part UPI was not counted at
+all. This change's own receipt basis is the latest accepted effective Cash
+allocation (decision 2), and on that basis the figures are **93 at Kalyani and
+125 at Kanchrapara**: 88 and 106 single-tender, plus 6 and 18 split-tender bills,
+adjusted by the two tender corrections below. The original numbers are left above
+as the dated record of what was read; this paragraph is what the change is sized
+against.
+
+**Production already contains a correction in each direction**, which is a
+better fixture for task 3.2 than anything a test could invent: on 2026-08-19 a
+Kalyani bill moved `cash:20000` to `upi:20000`, removing a cash allocation
+entirely, and on 2026-08-20 a Kanchrapara bill moved `upi:20000` to
+`upi:15000, cash:5000`, creating one. A receipts term reading `bill_payments`
+rather than `effective_bill_payments` gets both of those wrong today, not
+hypothetically.
+
 Four facts about the current codebase and its data shape what is possible here:
 
 - **A payment instant already exists.** `bills.paid_at` is a `timestamptz`, and
@@ -65,6 +92,58 @@ places.** At Kalyani, 2026-08-12 opens at ₹340 where the previous day counted
 2026-08-18 to 08-20 are simply missing. So "report the break and repair nothing"
 is not a hypothetical safeguard: it is what the surface will do on the first day
 it renders real history.
+
+**The rehearsal ran on 2026-08-27 and found eleven breaks, not three**
+(`scripts/rehearse-august-drawer.mjs`). The three above are real; the dates
+attached to two of them name the day whose *count* is involved rather than the
+day whose stored *opening* disagrees, which is the day after, and the missing run
+is 08-19 to 08-21 rather than 08-18 to 08-20. The dates the surface will actually
+mark, verified against the raw rows:
+
+| Outlet | Date | Break |
+|---|---|---|
+| Kalyani | 2026-08-11 | 2026-08-10 absent; the chain has nothing to join to |
+| Kalyani | 2026-08-12 | opens ₹340 where 08-11 counted ₹440 (−₹100) |
+| Kalyani | 2026-08-13 | opens ₹340 where 08-12 counted ₹490 (−₹150) |
+| Kalyani | 2026-08-15 | opens ₹510 where 08-14 counted ₹310 (+₹200) |
+| Kalyani | 2026-08-22 | 08-19 to 08-21 absent |
+| Kalyani | 2026-08-22 | opens ₹550 where 08-18 counted ₹350 (+₹200) |
+| Kanchrapara | 2026-08-15 | 2026-08-14 absent |
+| Kanchrapara | 2026-08-17 | opens ₹160 where 08-16 counted ₹300 (−₹140) |
+| Kanchrapara | 2026-08-20 | 2026-08-19 absent |
+| Kanchrapara | 2026-08-20 | opens ₹140 where 08-18 counted ₹470 (−₹330) |
+| Kanchrapara | 2026-08-22 | 2026-08-21 absent |
+
+The rehearsal **asserts these rather than describing them**: a run that finds no
+breaks exits non-zero and says so, because a clean result would mean the chain
+check does not work rather than that the data is sound.
+
+**Three further findings, each of which sizes something in this change.**
+
+- **The mid-day boundary is worth ₹4,640 in one month, measured.** Placing a
+  22:00 count on every real trading date and splitting that date's cash by
+  payment instant, ₹740 at Kalyani (4 bills, 3 dates) and ₹3,900 at Kanchrapara
+  (21 bills, 8 dates) was rung *after* the count. `close_business_day()` would
+  have reported every paisa of that as a shortfall on a drawer that was never
+  short. The proposal argues this is fiction on every ordinary night; this is the
+  figure. Kanchrapara trades past 22:00 on 8 of its 13 cash dates, so it is the
+  ordinary case there rather than an edge.
+- **The notebook and the counter already disagree on the dates both cover.**
+  From each outlet's first tablet day, 5 of 9 Kalyani dates and 1 of 6
+  Kanchrapara dates disagree on typed versus derived cash revenue, and the
+  notebook has **no row at all** for 3 Kalyani and 7 Kanchrapara dates the
+  tablet billed. Kalyani's month differs by ₹10,150. Two causes are visible and
+  both belong to #12 rather than here: 2026-08-12 is a go-live day part typed and
+  part billed — exactly the double-count `billing_live_from` exists to prevent,
+  and it is null at both outlets — and the notebook simply stopped being kept
+  after 08-23 while the counter kept trading. **This is a finding for #12's
+  carry-over, not a defect in the derived reader**, and it is why the reader is
+  not asked to reconcile the two.
+- **A negative cash-out already occurs in production**, once at each outlet
+  (Kalyani 2026-08-23, Kanchrapara 2026-08-22) as a non-zero `cash_added_paise`.
+  Decision 5's claim that this needs no concept of its own is therefore replayed
+  against real rows rather than invented ones: `removed − added` produced the
+  right expected figure on every date, with no branch.
 
 ## Goals / Non-Goals
 
@@ -467,6 +546,83 @@ This is also better than a switch. A switch shows one surface at a time; two
 entries let the owner open both and compare a day, which is the two-day
 acceptance test they asked for with no engineering behind it.
 
+### 18. An outlet's first observation is an anchor, and an anchor has no arithmetic
+
+Settled with the owner 2026-08-27, closing open question 1 before the table was
+created.
+
+**The first observation at an outlet is a pure anchor. It carries no opening, no
+expected total and no difference — not a fabricated opening, and not a zero.**
+The drawer begins at what was counted, and from the second observation onward
+every rule above applies unchanged.
+
+The reasoning, because the alternatives are each wrong in a different way:
+
+- **Zero with the first difference absorbing the float** is the candidate that
+  looks cheapest and does the most damage. Kalyani has been trading since
+  2026-08-01 and its drawer is not empty, so the first count would record a
+  variance of roughly the entire float — around ₹8,950 — as an *excess*. That is
+  not a display problem. Decision 3's entire safety property is that a recorded
+  variance means something happened; a first-day variance of the whole float,
+  permanent on the record, teaches every later reader to skip the column. A
+  number nobody believes is worse than no number.
+- **An owner-supplied books-opening figure carried from the notebook** is
+  **forbidden by this change's own spec delta**, not merely undesirable.
+  `manual-ledger`'s modified requirement carries the scenario *"WHEN the cash
+  drawer or the derived ledger statement is rendered THEN neither queries a
+  manual-ledger table."* Seeding the live drawer from `manual_ledger_days`
+  would be the live surface reading the notebook, on day one, in the one place
+  the arithmetic depends on it. #12 carries that history across; this change
+  does not reach for it early.
+- **A once-per-outlet figure typed by the owner from nothing** is honest but
+  answers a question with a question. The owner does not know what the drawer
+  held before the first count either, and the figure they would type is the
+  count they are about to take.
+
+**The shape: an explicit `is_anchor` flag, not bare nullable columns.** Both
+express it, and the flag reads better in the constraint for two concrete
+reasons rather than as a matter of taste:
+
+- The arithmetic constraint survives **verbatim** behind one guard word, so the
+  sentence the spec states and the sentence the database enforces stay the same
+  sentence:
+
+  ```sql
+  constraint drawer_observations_difference_arithmetic check (
+    is_anchor or difference_paise = counted_total_paise - expected_paise
+  )
+  ```
+
+- **One anchor per outlet becomes a partial unique index** — `on
+  (outlet_id) where is_anchor` — which has nowhere to hang without the flag.
+  Written against nullness instead (`where expected_paise is null`) the same
+  index restates the anchor definition in a second place, and two places is
+  where a definition drifts.
+
+Bare nulls would also make "is this the anchor?" an inference every reader
+re-derives, and a SQL null carries two meanings — *not applicable* and *not yet
+known*. Here it is permanently the first. The flag says so once.
+
+**`opening_paise` is null on the anchor too**, which extends the owner's
+instruction from two columns to three, deliberately. An anchor has no interval,
+so it has no opening: decision 4 defines the stored opening as *the previous
+observation's counted total less its own cash out*, and there is no previous
+observation to read. Storing `0` there would be exactly the fabricated figure
+this decision rejects one paragraph above, with the added defect that nothing
+would ever check it. All three derived columns are null together, and a
+constraint ties them to the flag in both directions so a half-anchor cannot
+exist.
+
+**The derived ledger needs a third word, and this is where it comes from.**
+Business dates before an outlet's anchor have real bills and real expenses but
+no drawer belief at all, and Kalyani will have fifteen such dates on day one
+(2026-08-12 to 08-26). Those days render in full — revenue, expenses,
+everything — with the drawer marked **`not tracked yet`**, naming the anchor
+that begins the record. That is a different claim from `carried`, which means
+*the app's belief, unchecked*, and the two must not share a word: before the
+anchor there is no belief to leave unchecked. Decision 14's retirement of
+"Kept" was the same mistake caught one surface earlier.
+
 ## The surfaces
 
 Layout conventions in these sketches: `[ 8950 ]` is typed, `( chip )` is tapped,
@@ -756,11 +912,13 @@ Revert at any point before step 5 is a one-line registry edit and a deploy.
 
 ## Open Questions
 
-1. **Does an outlet need an explicit books-opening anchor for its very first
-   observation?** Today the first observation has no previous one, so its
-   `opening_paise` has to come from somewhere. The candidates are an
-   owner-supplied figure once per outlet, or zero with the first difference
-   absorbing the float. Settle before writing the table.
+1. ~~**Does an outlet need an explicit books-opening anchor for its very first
+   observation?**~~ **Answered 2026-08-27 with the owner: neither candidate.**
+   The first observation is a pure anchor carrying no opening, no expected total
+   and no difference, marked by an explicit `is_anchor` flag; dates before it
+   read `not tracked yet` rather than `carried`. Both original candidates are
+   rejected, and the notebook-seeded one is forbidden by this change's own
+   `manual-ledger` delta. Full reasoning in decision 18.
 2. **Should a `spend` be visible anywhere other than its ledger day?** It is
    deliberately outside the month's operating figure, which means a ₹40,000
    fridge is currently findable only by remembering the date. A short

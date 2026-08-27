@@ -1955,6 +1955,234 @@ export type Database = {
           },
         ]
       }
+      drawer_cash_out: {
+        Row: {
+          amount_paise: number
+          away_reason: string | null
+          created_at: string
+          id: string
+          kind: string
+          observation_id: string | null
+          occurred_at: string
+          outlet_id: string
+          reason: string | null
+          recorded_accuracy_m: number | null
+          recorded_by: string
+          recorded_distance_m: number | null
+          recorded_lat: number | null
+          recorded_lng: number | null
+          recorded_on_site: boolean
+        }
+        Insert: {
+          amount_paise: number
+          away_reason?: string | null
+          created_at?: string
+          id?: string
+          kind: string
+          observation_id?: string | null
+          occurred_at: string
+          outlet_id: string
+          reason?: string | null
+          recorded_accuracy_m?: number | null
+          recorded_by: string
+          recorded_distance_m?: number | null
+          recorded_lat?: number | null
+          recorded_lng?: number | null
+          recorded_on_site?: boolean
+        }
+        Update: {
+          amount_paise?: number
+          away_reason?: string | null
+          created_at?: string
+          id?: string
+          kind?: string
+          observation_id?: string | null
+          occurred_at?: string
+          outlet_id?: string
+          reason?: string | null
+          recorded_accuracy_m?: number | null
+          recorded_by?: string
+          recorded_distance_m?: number | null
+          recorded_lat?: number | null
+          recorded_lng?: number | null
+          recorded_on_site?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drawer_cash_out_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "drawer_observations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drawer_cash_out_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drawer_cash_out_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drawer_observation_adjustments: {
+        Row: {
+          adjusted_at: string
+          adjusted_by: string
+          corrected_counted_total_paise: number
+          id: string
+          observation_id: string
+          original_counted_total_paise: number
+          outlet_id: string
+          reason: string
+        }
+        Insert: {
+          adjusted_at?: string
+          adjusted_by: string
+          corrected_counted_total_paise: number
+          id?: string
+          observation_id: string
+          original_counted_total_paise: number
+          outlet_id: string
+          reason: string
+        }
+        Update: {
+          adjusted_at?: string
+          adjusted_by?: string
+          corrected_counted_total_paise?: number
+          id?: string
+          observation_id?: string
+          original_counted_total_paise?: number
+          outlet_id?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drawer_observation_adjustments_adjusted_by_fkey"
+            columns: ["adjusted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drawer_observation_adjustments_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "drawer_observations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drawer_observation_adjustments_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drawer_observations: {
+        Row: {
+          away_reason: string | null
+          corrected_by: string | null
+          counted_at: string
+          counted_total_paise: number
+          created_at: string
+          difference_paise: number | null
+          expected_paise: number | null
+          id: string
+          is_anchor: boolean
+          is_approximate: boolean
+          note: string | null
+          opening_paise: number | null
+          outlet_id: string
+          recorded_accuracy_m: number | null
+          recorded_at: string
+          recorded_by: string
+          recorded_distance_m: number | null
+          recorded_lat: number | null
+          recorded_lng: number | null
+          recorded_on_site: boolean
+          tolerance_minutes: number
+          updated_at: string
+        }
+        Insert: {
+          away_reason?: string | null
+          corrected_by?: string | null
+          counted_at: string
+          counted_total_paise: number
+          created_at?: string
+          difference_paise?: number | null
+          expected_paise?: number | null
+          id?: string
+          is_anchor?: boolean
+          is_approximate: boolean
+          note?: string | null
+          opening_paise?: number | null
+          outlet_id: string
+          recorded_accuracy_m?: number | null
+          recorded_at?: string
+          recorded_by: string
+          recorded_distance_m?: number | null
+          recorded_lat?: number | null
+          recorded_lng?: number | null
+          recorded_on_site?: boolean
+          tolerance_minutes?: number
+          updated_at?: string
+        }
+        Update: {
+          away_reason?: string | null
+          corrected_by?: string | null
+          counted_at?: string
+          counted_total_paise?: number
+          created_at?: string
+          difference_paise?: number | null
+          expected_paise?: number | null
+          id?: string
+          is_anchor?: boolean
+          is_approximate?: boolean
+          note?: string | null
+          opening_paise?: number | null
+          outlet_id?: string
+          recorded_accuracy_m?: number | null
+          recorded_at?: string
+          recorded_by?: string
+          recorded_distance_m?: number | null
+          recorded_lat?: number | null
+          recorded_lng?: number | null
+          recorded_on_site?: boolean
+          tolerance_minutes?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drawer_observations_corrected_by_fkey"
+            columns: ["corrected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drawer_observations_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drawer_observations_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_sign_in_attempts: {
         Row: {
           attempted_at: string
@@ -2054,6 +2282,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          occurred_at: string | null
           outlet_id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
           recorded_by: string
@@ -2065,6 +2294,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          occurred_at?: string | null
           outlet_id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
           recorded_by: string
@@ -2076,6 +2306,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          occurred_at?: string | null
           outlet_id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
           recorded_by?: string
@@ -2220,6 +2451,48 @@ export type Database = {
         }
         Relationships: []
       }
+      ledger_day_verifications: {
+        Row: {
+          business_date: string
+          id: string
+          note: string | null
+          outlet_id: string
+          verified_at: string
+          verified_by: string
+        }
+        Insert: {
+          business_date: string
+          id?: string
+          note?: string | null
+          outlet_id: string
+          verified_at?: string
+          verified_by: string
+        }
+        Update: {
+          business_date?: string
+          id?: string
+          note?: string | null
+          outlet_id?: string
+          verified_at?: string
+          verified_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_day_verifications_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_day_verifications_verified_by_fkey"
+            columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       manual_ledger_days: {
         Row: {
           business_date: string
@@ -2308,6 +2581,7 @@ export type Database = {
           description: string | null
           id: string
           is_cash: boolean
+          occurred_at: string | null
           outlet_id: string
           recorded_away: boolean
           recorded_by: string | null
@@ -2328,6 +2602,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_cash: boolean
+          occurred_at?: string | null
           outlet_id: string
           recorded_away?: boolean
           recorded_by?: string | null
@@ -2348,6 +2623,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_cash?: boolean
+          occurred_at?: string | null
           outlet_id?: string
           recorded_away?: boolean
           recorded_by?: string | null
@@ -3021,6 +3297,29 @@ export type Database = {
         Args: { p_profile_id: string }
         Returns: string
       }
+      adjust_drawer_observation: {
+        Args: {
+          p_corrected_counted_total_paise: number
+          p_observation_id: string
+          p_reason: string
+        }
+        Returns: {
+          adjusted_at: string
+          adjusted_by: string
+          corrected_counted_total_paise: number
+          id: string
+          observation_id: string
+          original_counted_total_paise: number
+          outlet_id: string
+          reason: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "drawer_observation_adjustments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       aggregator_credential_health: {
         Args: { p_channel: string }
         Returns: {
@@ -3066,6 +3365,7 @@ export type Database = {
       }
       app_may_look_up_customer: { Args: never; Returns: boolean }
       app_may_manage_person: { Args: { person: string }; Returns: boolean }
+      app_may_reach_drawer: { Args: { outlet: string }; Returns: boolean }
       app_may_see_person: { Args: { person: string }; Returns: boolean }
       app_next_cutover: {
         Args: { cutover: string; ts: string }
@@ -3548,6 +3848,27 @@ export type Database = {
         }
         Returns: boolean
       }
+      drawer_cash_expenses_paise: {
+        Args: { p_from: string; p_outlet_id: string; p_to: string }
+        Returns: number
+      }
+      drawer_cash_out_paise: {
+        Args: {
+          p_exclude_observation?: string
+          p_from: string
+          p_outlet_id: string
+          p_to: string
+        }
+        Returns: number
+      }
+      drawer_cash_receipts_paise: {
+        Args: { p_from: string; p_outlet_id: string; p_to: string }
+        Returns: number
+      }
+      drawer_earliest_activity: {
+        Args: { p_outlet_id: string }
+        Returns: string
+      }
       edit_account_assignment_set: {
         Args: {
           p_account_email: string
@@ -3569,6 +3890,43 @@ export type Database = {
           profile_id: string
           state_fingerprint: string
         }[]
+      }
+      edit_drawer_observation: {
+        Args: {
+          p_counted_total_paise: number
+          p_note?: string
+          p_observation_id: string
+        }
+        Returns: {
+          away_reason: string | null
+          corrected_by: string | null
+          counted_at: string
+          counted_total_paise: number
+          created_at: string
+          difference_paise: number | null
+          expected_paise: number | null
+          id: string
+          is_anchor: boolean
+          is_approximate: boolean
+          note: string | null
+          opening_paise: number | null
+          outlet_id: string
+          recorded_accuracy_m: number | null
+          recorded_at: string
+          recorded_by: string
+          recorded_distance_m: number | null
+          recorded_lat: number | null
+          recorded_lng: number | null
+          recorded_on_site: boolean
+          tolerance_minutes: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "drawer_observations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       end_assignment_with_invite: {
         Args: {
@@ -3806,6 +4164,89 @@ export type Database = {
         Args: { p_caller: string; p_window?: string }
         Returns: undefined
       }
+      record_drawer_cash_out: {
+        Args: {
+          p_accuracy_m?: number
+          p_amount_paise: number
+          p_away_reason?: string
+          p_kind?: string
+          p_lat?: number
+          p_lng?: number
+          p_occurred_at?: string
+          p_outlet_id: string
+          p_reason?: string
+        }
+        Returns: {
+          amount_paise: number
+          away_reason: string | null
+          created_at: string
+          id: string
+          kind: string
+          observation_id: string | null
+          occurred_at: string
+          outlet_id: string
+          reason: string | null
+          recorded_accuracy_m: number | null
+          recorded_by: string
+          recorded_distance_m: number | null
+          recorded_lat: number | null
+          recorded_lng: number | null
+          recorded_on_site: boolean
+        }
+        SetofOptions: {
+          from: "*"
+          to: "drawer_cash_out"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      record_drawer_observation: {
+        Args: {
+          p_accuracy_m?: number
+          p_away_reason?: string
+          p_cash_out_kind?: string
+          p_cash_out_paise?: number
+          p_cash_out_reason?: string
+          p_certain?: boolean
+          p_counted_at: string
+          p_counted_total_paise: number
+          p_lat?: number
+          p_lng?: number
+          p_note?: string
+          p_outlet_id: string
+          p_tolerance_minutes?: number
+        }
+        Returns: {
+          away_reason: string | null
+          corrected_by: string | null
+          counted_at: string
+          counted_total_paise: number
+          created_at: string
+          difference_paise: number | null
+          expected_paise: number | null
+          id: string
+          is_anchor: boolean
+          is_approximate: boolean
+          note: string | null
+          opening_paise: number | null
+          outlet_id: string
+          recorded_accuracy_m: number | null
+          recorded_at: string
+          recorded_by: string
+          recorded_distance_m: number | null
+          recorded_lat: number | null
+          recorded_lng: number | null
+          recorded_on_site: boolean
+          tolerance_minutes: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "drawer_observations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       record_invite_failure: {
         Args: { p_ip_hash: string; p_window?: string }
         Returns: undefined
@@ -3943,6 +4384,23 @@ export type Database = {
         }
       }
       username_rollout_ready: { Args: never; Returns: boolean }
+      verify_ledger_day: {
+        Args: { p_business_date: string; p_note?: string; p_outlet_id: string }
+        Returns: {
+          business_date: string
+          id: string
+          note: string | null
+          outlet_id: string
+          verified_at: string
+          verified_by: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "ledger_day_verifications"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       void_billing_bill: {
         Args: {
           p_command_id?: string

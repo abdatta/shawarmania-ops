@@ -555,6 +555,10 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     payment_method: seed.paymentMethod,
     description: seed.description ?? null,
     created_at: instantAt(businessDate(seed.daysAgo), seed.time),
+    // The fixture knows the time, so it states it. That is what puts a demo
+    // expense on one side or the other of a mid-day count rather than leaving
+    // the drawer to fall back on when the row was written (#11).
+    occurred_at: instantAt(businessDate(seed.daysAgo), seed.time),
     recorded_by: MANAGER_ID,
   }))
 
@@ -698,6 +702,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       // production owner manages nothing.
       recorded_away: seed.recordedAway ?? false,
       created_at: instantAt(businessDate(seed.daysAgo), seed.time),
+      occurred_at: instantAt(businessDate(seed.daysAgo), seed.time),
       updated_at: instantAt(businessDate(seed.daysAgo), seed.time),
       updated_by: null,
       voided_at: seed.voidedAtTime

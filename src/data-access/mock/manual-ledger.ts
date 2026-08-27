@@ -467,6 +467,9 @@ export function createMockManualLedgerAdapter(
         is_cash: expense.isCash,
         amount_paise: expense.amountPaise,
         description: trimmed(expense.note),
+        // Present so #12 can carry these rows across without inventing an
+        // instant for them. Null means `created_at` is the best answer there is.
+        occurred_at: null,
         recorded_by: userId,
         // A row a person entered has no external source, which is exactly what
         // the possible-duplicate signal compares against.

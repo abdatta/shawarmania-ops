@@ -64,6 +64,12 @@ export function createMockExpensesAdapter(store: DemoStore): ExpensesAdapter {
         payment_method: expense.paymentMethod,
         description: expense.description?.trim() || null,
         created_at: new Date().toISOString(),
+        // An expense recorded without an explicit instant is treated as having
+        // occurred when it was recorded (outlet-expenses). Null rather than a
+        // copy of `created_at`, because the drawer reads
+        // `coalesce(occurred_at, created_at)` and a copy would claim the person
+        // stated a time they never gave.
+        occurred_at: null,
         recorded_by: RECORDED_BY,
       }
       store.expenses.push(created)

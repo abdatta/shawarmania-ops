@@ -32,6 +32,26 @@ export {
   type CashDayInputs,
   type DifferenceKind,
 } from './cash'
+/**
+ * The drawer as a continuous balance (#11). Deliberately duplicates two
+ * two-line functions from `./cash` rather than importing them: `cash.ts` and
+ * `daily_cash_records` are left dead in place by decision 16 and dropped by
+ * #12, and the live drawer must survive that without an edit.
+ */
+export {
+  APPROXIMATE_WINDOW_MINUTES,
+  describeDrawerDifference,
+  drawerDifferencePaise,
+  exactCoincidence,
+  expectedTotalPaise,
+  isInInterval,
+  nextOpeningPaise,
+  toleranceThroughputPaise,
+  type BillRunCoincidence,
+  type DrawerDifferenceKind,
+  type DrawerIntervalInputs,
+  type NearbyCashBill,
+} from './drawer'
 export {
   formatDelta,
   formatQuantity,

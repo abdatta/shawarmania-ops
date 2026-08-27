@@ -16,6 +16,10 @@ export default defineConfig({
     exclude: [
       'supabase/tests/rest/counter-handshake.test.ts',
       'supabase/tests/rest/zz-billing-command-races.test.ts',
+      // Makes real drawer writes and cleans up after itself with the
+      // service-role key, so it runs in its own phase — see
+      // vitest.drawer-writes.config.ts.
+      'supabase/tests/rest/zz-cash-drawer-writes.test.ts',
     ],
     testTimeout: 30_000,
     hookTimeout: 30_000,
