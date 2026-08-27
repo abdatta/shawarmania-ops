@@ -706,15 +706,32 @@ test.describe('manager billing history', () => {
     await expect(bills.nth(1)).toContainText('Cancelled')
     await expect(page.getByText(/Bill \d+ was cancelled/)).toHaveCount(0)
 
+    // The day's four figures are above the tabs, so they are still on screen
+    // after a cancellation without a tab being chosen — and, at 390px, still on
+    // one row that does not scroll sideways.
+    const totals = page.getByRole('region', { name: 'Payment totals' })
+    await expect(totals.getByTestId('billing-total-cash')).toBeVisible()
+    await expect(totals.getByTestId('billing-total-upi')).toBeVisible()
+    await expect(totals.getByTestId('billing-total-combined')).toBeVisible()
+    await expect(totals.getByTestId('billing-total-average')).toContainText('AOV')
+    await expect(totals).toHaveJSProperty(
+      'scrollWidth',
+      await totals.evaluate((node) => node.clientWidth),
+    )
+    const cardTops = await totals
+      .getByTestId(/^billing-total-/)
+      .evaluateAll((cards) => cards.map((card) => card.getBoundingClientRect().top))
+    expect(cardTops).toHaveLength(4)
+    expect(Math.max(...cardTops) - Math.min(...cardTops)).toBeLessThan(1)
+
     await page.getByRole('tab', { name: /^Status/ }).click()
-    await expect(page.getByRole('heading', { name: 'Payment totals' })).toBeVisible()
-    await expect(page.getByTestId('billing-total-cash')).toBeVisible()
-    await expect(page.getByTestId('billing-total-upi')).toBeVisible()
-    await expect(page.getByTestId('billing-total-combined')).toBeVisible()
-    await expect(page.getByTestId('billing-total-average')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Tablet sync status' })).toBeVisible()
+    // Status is the sync panel and nothing else now; the figures stay above it.
+    await expect(page.getByRole('heading', { name: 'Payment totals' })).toHaveCount(0)
+    await expect(page.getByTestId('billing-total-cash')).toHaveCount(1)
 
     await page.getByRole('tab', { name: /Open orders/ }).click()
+    await expect(page.getByTestId('billing-total-cash')).toBeVisible()
     const openOrder = page.getByTestId('manager-open-order-104')
     await expect(openOrder).toContainText('Order items')
     await expect(openOrder).toContainText('Customer details')

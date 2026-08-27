@@ -85,6 +85,16 @@ describe('gate registry', () => {
     }
   })
 
+  it('puts the owner’s Billing directly above Drawer', () => {
+    // The owner opens Billing to read what the outlet took, which is asked far
+    // more often than People, Compare or Alerts — the three it used to sit
+    // behind at order 12. Adjacency to Drawer is the point rather than a
+    // particular number: the two are read together, a day's takings and what
+    // should be in the drawer against them.
+    const nav = visibleSurfaces(['super_admin'], 'real').map((surface) => surface.nav?.label)
+    expect(nav.indexOf('Billing')).toBe(nav.indexOf('Drawer') - 1)
+  })
+
   it('gives a reachable role its surfaces but not its home', () => {
     // The owner reaches the manager surfaces without holding a manager
     // assignment (owner-reaches-every-outlet, design D1). `admin-dashboard` is

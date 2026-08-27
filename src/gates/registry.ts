@@ -109,25 +109,33 @@ const defs = {
   'owner-people': {
     role: 'super_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 9 },
+    nav: { label: 'People', icon: Users, order: 10 },
     state: 'live',
   },
   'owner-comparison': {
     role: 'super_admin',
     path: 'comparison',
-    nav: { label: 'Compare', icon: BarChart3, order: 10 },
+    nav: { label: 'Compare', icon: BarChart3, order: 11 },
     state: 'demo',
   },
   'owner-alerts': {
     role: 'super_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 11 },
+    nav: { label: 'Alerts', icon: Bell, order: 12 },
     state: 'demo',
   },
+  /**
+   * What the outlet took, **directly above what should be in its drawer**.
+   *
+   * This sat at order 12 — behind People, Compare and Alerts — and none of those
+   * is reached as often as the day's money. The adjacency is the point rather
+   * than the number: takings and drawer are read in one sitting, one against the
+   * other, and a tab between them is a tab the reader scrolls past twice.
+   */
   'owner-billing-history': {
     role: 'super_admin',
     path: 'billing-history',
-    nav: { label: 'Billing', icon: ReceiptText, order: 12 },
+    nav: { label: 'Billing', icon: ReceiptText, order: 3 },
     state: 'live',
   },
   /**
@@ -180,7 +188,7 @@ const defs = {
   'owner-cash-drawer': {
     role: 'super_admin',
     path: 'drawer',
-    nav: { label: 'Drawer', icon: Banknote, order: 3 },
+    nav: { label: 'Drawer', icon: Banknote, order: 4 },
     state: 'live',
   },
   /**
@@ -201,7 +209,7 @@ const defs = {
     // on the notebook rendered three live surfaces as children of the one being
     // retired.
     path: 'ledger',
-    nav: { label: 'Ledger', icon: NotepadText, order: 4 },
+    nav: { label: 'Ledger', icon: NotepadText, order: 5 },
     state: 'live',
   },
   /**
@@ -224,7 +232,7 @@ const defs = {
   'owner-expenses': {
     role: 'super_admin',
     path: 'ledger/expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 5 },
+    nav: { label: 'Expenses', icon: Wallet, order: 6 },
     state: 'live',
   },
   /**
@@ -254,7 +262,7 @@ const defs = {
     // itself. An old `…/ledger` bookmark lands on the derived Ledger, which is
     // the more useful landing place, and this is one tap from there.
     path: 'ledger/notebook',
-    nav: { label: 'Notebook', icon: NotepadText, order: 6 },
+    nav: { label: 'Notebook', icon: NotepadText, order: 7 },
     state: 'live',
   },
   'owner-expense-categories': {
@@ -277,7 +285,7 @@ const defs = {
   'owner-zomato-sync': {
     role: 'super_admin',
     path: 'ledger/zomato',
-    nav: { label: 'Zomato', icon: Bike, order: 7, attention: 'zomato-needs-you' },
+    nav: { label: 'Zomato', icon: Bike, order: 8, attention: 'zomato-needs-you' },
     // Live [owner, 2026-08-18]. The ledger already fills itself from Zomato; this is
     // the page that says when it last ran, what moved, and what wants a decision —
     // including the Reconnect the owner needs when a session lapses, which is the one
@@ -297,7 +305,7 @@ const defs = {
   'owner-swiggy-sync': {
     role: 'super_admin',
     path: 'ledger/swiggy',
-    nav: { label: 'Swiggy', icon: UtensilsCrossed, order: 8, attention: 'swiggy-needs-you' },
+    nav: { label: 'Swiggy', icon: UtensilsCrossed, order: 9, attention: 'swiggy-needs-you' },
     state: 'live',
   },
   /**

@@ -17,7 +17,7 @@ import {
   type BillingDeliveryDiagnostic,
   type BillingOrder,
 } from '@/data-access/adapters'
-import { formatBusinessDate, formatDayTime, resolveBusinessDate, shiftBusinessDate } from '@/domain'
+import { formatDayTime, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
 
@@ -331,6 +331,53 @@ export function ManagerBillingHistory() {
         </PeriodBar>
       )}
 
+      {/*
+        What the outlet took, above the tabs rather than inside one.
+
+        The surface is opened to answer one question — what did this day take —
+        and the answer used to be two taps away, behind a tab named after tablet
+        sync. It is the same four figures over the same paid bills; only their
+        address changed. Four across rather than two by two because a wrapped
+        row makes the reader work out which card belongs to which line, and
+        because a strip this size can sit above the tabs without pushing the
+        list off a phone.
+
+        `loading` rather than `today === ''`: the figures are derived from bills,
+        so they are only true once the day's read has landed, and rendering the
+        cards a moment early would show a real ₹0 that is about to change. The
+        silhouette is the strip's own height, so the tabs do not move under a
+        finger already on its way to them.
+      */}
+      {loading ? (
+        <LoadingRegion label="the day’s totals">
+          <div className="grid grid-cols-4 gap-2">
+            {[0, 1, 2, 3].map((card) => (
+              <Shimmer key={card} className="h-[4.5rem] w-full rounded-xl" />
+            ))}
+          </div>
+        </LoadingRegion>
+      ) : (
+        <section aria-label="Payment totals">
+          <PaymentTotalCards
+            totals={methodTotals}
+            testIdPrefix="billing-total"
+            dense
+            // The two questions the tender split stops one short of: what the
+            // day took altogether, and what an average order came to. `AOV`
+            // rather than `Average bill` because the full name does not fit a
+            // quarter of a phone row, and it is what the owner calls it.
+            further={[
+              { label: 'Total', paise: takingsPaise, testId: 'billing-total-combined' },
+              {
+                label: 'AOV',
+                paise: averageBillPaise(takingsPaise, paidBills.length),
+                testId: 'billing-total-average',
+              },
+            ]}
+          />
+        </section>
+      )}
+
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Billing history views">
         {(
           [
@@ -445,34 +492,10 @@ export function ManagerBillingHistory() {
           </ul>
         )
       ) : view === 'status' ? (
-        <div className="space-y-6">
-          <section aria-labelledby="billing-payment-totals-title">
-            <h2 id="billing-payment-totals-title" className="text-lg font-black text-content">
-              Payment totals
-            </h2>
-            <p className="mt-1 text-sm text-content-muted">
-              Paid bills for this outlet{' '}
-              {businessDate === today ? 'today' : `on ${formatBusinessDate(businessDate)}`}.
-            </p>
-            <div className="mt-3">
-              <PaymentTotalCards
-                totals={methodTotals}
-                testIdPrefix="billing-total"
-                // The two questions the tender split stops one short of: what
-                // the day took altogether, and what an average bill came to.
-                further={[
-                  { label: 'Total', paise: takingsPaise, testId: 'billing-total-combined' },
-                  {
-                    label: 'Average bill',
-                    paise: averageBillPaise(takingsPaise, paidBills.length),
-                    testId: 'billing-total-average',
-                  },
-                ]}
-              />
-            </div>
-          </section>
-          <ManagerSyncStatus diagnostics={diagnostics} />
-        </div>
+        // The tablet sync activity this view is named for, and nothing else. The
+        // day's figures used to sit above it and now sit above the tabs, where
+        // they are read without choosing a view.
+        <ManagerSyncStatus diagnostics={diagnostics} />
       ) : view === 'orders' ? (
         orders.length === 0 ? (
           <EmptyState icon={ReceiptText} title="No open orders at this outlet." />
