@@ -9,7 +9,9 @@ import { ManagerBillingHistory } from '@/features/billing/manager-billing-histor
 import { MyShiftSurface } from '@/features/billing/my-shift-surface'
 import { OpenOrdersSurface } from '@/features/billing/open-orders-surface'
 import { ShiftUnlock } from '@/features/billing/shift-unlock'
+import { CashDrawerSurface } from '@/features/cash/cash-drawer-surface'
 import { DailyCashSurface } from '@/features/cash/daily-cash-surface'
+import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface'
 import { DevicesSurface } from '@/features/counter/devices-surface'
 import { ExpenseCategoriesSurface } from '@/features/expense-categories/expense-categories-surface'
 import { ExpensesSurface } from '@/features/expenses/expenses-surface'
@@ -161,10 +163,35 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
+    // The old day-close screen. Its gate is `hidden` from #11, so this resolves
+    // for nobody — and the route stays because that change drops and renames
+    // nothing. `retire-the-manual-ledger` (#12) removes both.
     path: 'cash',
     element: (
       <GatedSurface path="cash">
         <DailyCashSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // The drawer as a continuous balance (#11). One path, two roles: what
+    // differs between a Super Admin and an assigned Franchise Admin is decided
+    // by `app_may_reach_drawer()` in the database, not by this screen.
+    path: 'drawer',
+    element: (
+      <GatedSurface path="drawer">
+        <CashDrawerSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // The derived Ledger (#11). It takes the navigation label the manual form
+    // had; that form keeps this app's `ledger` route below, so both readings are
+    // open at once and the fallback is a tab rather than a runtime toggle.
+    path: 'statement',
+    element: (
+      <GatedSurface path="statement">
+        <LedgerStatementSurface />
       </GatedSurface>
     ),
   },

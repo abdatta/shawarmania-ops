@@ -32,60 +32,60 @@
 
 ## 4. Approximate times and what may be said about them
 
-- [ ] 4.1 Mark an observation approximate whenever its counted and recorded instants differ, with a plus-or-minus fifteen minute window and a control asserting certainty; verify the flag and window are stored, not recomputed on read.
-- [ ] 4.2 Compute the rupee tolerance from cash throughput inside the window; verify a ₹50 difference against ₹914 of nearby cash and a ₹3,100 difference against the same ₹914 render differently.
-- [ ] 4.3 Detect an exact coincidence between the difference and a contiguous run of adjacent cash bills, and report it naming those bills and their instants; verify the ₹854 case from `design.md` is reported and that a ₹500 difference against the same bill set is not.
-- [ ] 4.4 Assert the refusal directly: verify that for a difference with no exact match the surface emits no alternative instant, no ranked boundary and no balancing hint, in the rendered output and in whatever the component returns.
-- [ ] 4.5 Build the movable count boundary over nearby cash bills; verify dragging it updates the expected total and the difference live, and that the position is a stated instant rather than a chosen bill identity.
-- [ ] 4.6 Show both instants and the lag on every observation; verify the recorded instant is the server's and cannot be supplied by a client.
+- [x] 4.1 Mark an observation approximate whenever its counted and recorded instants differ, with a plus-or-minus fifteen minute window and a control asserting certainty; verify the flag and window are stored, not recomputed on read.
+- [x] 4.2 Compute the rupee tolerance from cash throughput inside the window; verify a ₹50 difference against ₹914 of nearby cash and a ₹3,100 difference against the same ₹914 render differently.
+- [x] 4.3 Detect an exact coincidence between the difference and a contiguous run of adjacent cash bills, and report it naming those bills and their instants; verify the ₹854 case from `design.md` is reported and that a ₹500 difference against the same bill set is not.
+- [x] 4.4 Assert the refusal directly: verify that for a difference with no exact match the surface emits no alternative instant, no ranked boundary and no balancing hint, in the rendered output and in whatever the component returns.
+- [x] 4.5 Build the movable count boundary over nearby cash bills; verify dragging it updates the expected total and the difference live, and that the position is a stated instant rather than a chosen bill identity.
+- [x] 4.6 Show both instants and the lag on every observation; verify the recorded instant is the server's and cannot be supplied by a client.
 
 ## 5. Corrections, exceptions and late arrivals
 
-- [ ] 5.1 Allow full edit of the most recent observation at an outlet with no reason and no trail on the row; verify the edit recomputes expected and difference and that an edit to any earlier observation is refused.
-- [ ] 5.2 Implement adjustments with a required reason; verify both the original and corrected figures, both accounts and the reason remain readable, and that the next observation's stored opening does not move.
-- [ ] 5.3 Record and surface reconciliation exceptions for cash whose payment or occurrence instant falls inside an already-observed interval; verify the exception names the rows, amounts, occurrence and arrival instants, and the difference that would have resulted.
-- [ ] 5.4 Handle the explaining case: verify a late arrival equal to a recorded excess leaves the recorded excess in place and marks it explained with its date.
-- [ ] 5.5 Implement acknowledge-with-a-note and record-a-fresh-observation as the two resolutions; verify neither alters a stored observation figure.
+- [x] 5.1 Allow full edit of the most recent observation at an outlet with no reason and no trail on the row; verify the edit recomputes expected and difference and that an edit to any earlier observation is refused.
+- [x] 5.2 Implement adjustments with a required reason; verify both the original and corrected figures, both accounts and the reason remain readable, and that the next observation's stored opening does not move.
+- [x] 5.3 Record and surface reconciliation exceptions for cash whose payment or occurrence instant falls inside an already-observed interval; verify the exception names the rows, amounts, occurrence and arrival instants, and the difference that would have resulted.
+- [x] 5.4 Handle the explaining case: verify a late arrival equal to a recorded excess leaves the recorded excess in place and marks it explained with its date.
+- [x] 5.5 Implement acknowledge-with-a-note and record-a-fresh-observation as the two resolutions; verify neither alters a stored observation figure.
 - [ ] 5.6 Surface unsynced devices as an advisory on the count sheet, naming how many and since when, marking the expected figure possibly understated; verify a count is still accepted while a device is behind.
-- [ ] 5.7 Prove the whole-system rule: verify no code path recomputes a stored observation figure in response to a bill, an expense, a settlement or a sync.
+- [x] 5.7 Prove the whole-system rule: verify no code path recomputes a stored observation figure in response to a bill, an expense, a settlement or a sync.
 
 ## 6. The Cash drawer surface
 
-- [ ] 6.1 Build the surface opening on the running balance, with the last observation, what was left, and cash receipts and cash expenses since with their row counts; verify it opens on a balance and offers no date picker, and that it states how many days the pending interval covers once it exceeds one.
-- [ ] 6.2 Build the count sheet with its three inputs; verify the difference appears on entry of the counted amount before submission, states direction in words as well as by sign, and that a shortfall reads as negative.
-- [ ] 6.3 Build the time step with a `Just now` default and relative chips; verify choosing an earlier instant recomputes the expected figure live and states the cash excluded by that choice.
-- [ ] 6.4 Build the collection step inside the count sheet, showing what will be left as it is typed; verify no actor picker and no reason field are presented.
-- [ ] 6.5 Build standalone `Collect cash` with two fields; verify it records no reason and no actor, states the balance before and after, and says on its face that nothing is being verified.
-- [ ] 6.5a Make a negative amount announce itself on the keystroke that creates it, in both the count sheet's collection step and the standalone sheet; verify the warning appears before submission and not at it, that the stated action, the balance preview and the confirming control all flip to adding, and that a positive amount shows no warning. Verify by typing a minus into each surface, not only by unit-testing the helper.
-- [ ] 6.6 Build `Record a cash spend` as a secondary link with a required reason; verify it states that it will not enter the month's operating expenses, and that it is not reachable as prominently as a collection.
-- [ ] 6.7 Build the adjustment sheet for a locked observation; verify it names why the observation is locked, requires a reason, and states that the following observation re-anchors the balance so nothing after it moves.
-- [ ] 6.8 Build the exception card with its two resolutions; verify it names the arriving rows and what the difference would have been.
+- [x] 6.1 Build the surface opening on the running balance, with the last observation, what was left, and cash receipts and cash expenses since with their row counts; verify it opens on a balance and offers no date picker, and that it states how many days the pending interval covers once it exceeds one.
+- [x] 6.2 Build the count sheet with its three inputs; verify the difference appears on entry of the counted amount before submission, states direction in words as well as by sign, and that a shortfall reads as negative.
+- [x] 6.3 Build the time step with a `Just now` default and relative chips; verify choosing an earlier instant recomputes the expected figure live and states the cash excluded by that choice.
+- [x] 6.4 Build the collection step inside the count sheet, showing what will be left as it is typed; verify no actor picker and no reason field are presented.
+- [x] 6.5 Build standalone `Collect cash` with two fields; verify it records no reason and no actor, states the balance before and after, and says on its face that nothing is being verified.
+- [x] 6.5a Make a negative amount announce itself on the keystroke that creates it, in both the count sheet's collection step and the standalone sheet; verify the warning appears before submission and not at it, that the stated action, the balance preview and the confirming control all flip to adding, and that a positive amount shows no warning. Verify by typing a minus into each surface, not only by unit-testing the helper.
+- [x] 6.6 Build `Record a cash spend` as a secondary link with a required reason; verify it states that it will not enter the month's operating expenses, and that it is not reachable as prominently as a collection.
+- [x] 6.7 Build the adjustment sheet for a locked observation; verify it names why the observation is locked, requires a reason, and states that the following observation re-anchors the balance so nothing after it moves.
+- [x] 6.8 Build the exception card with its two resolutions; verify it names the arriving rows and what the difference would have been.
 - [ ] 6.9 Walk the surface on a phone and a tablet in light and dark themes; verify no layout reflow, that money never truncates, and that `npm run contrast` passes.
 
 ## 7. The derived ledger statement
 
-- [ ] 7.1 Build the derived day reading from bills, expenses, `aggregator_channel_days`, cash out and observations, with no stored row; verify a business date with nothing recorded still renders in full.
-- [ ] 7.2 Render the revenue section with Cash and UPI from allocations and each aggregator's gross, commission, net and settlement state; verify an undetermined commission reads as not known yet rather than nought, and that the month is presented as a ceiling while any day's commission is undetermined.
-- [ ] 7.3 Render the drawer section ordered by instant; verify an expense before an observation appears above its block and one after appears below it, and that a day with two observations shows two blocks.
-- [ ] 7.4 Render an unexplained variance as its own line inside the observation block; verify the section still adds to the closing balance with the variance present.
-- [ ] 7.5 Name the float left and the closing balance separately and never with one word; verify the worked example renders ₹1,450 left and ₹3,504 closing, and that the surface states the float is not the next day's opening. Verify the word "Kept" appears nowhere in the surface, its tests or the docs it updates.
-- [ ] 7.6 Mark a day with no observation as `carried` on both balances, naming when the drawer was last confirmed; verify the month view carries the same marker per row.
-- [ ] 7.7 Assert the surface has no editable figure; verify a test enumerates the rendered controls and finds only the date stepper, row expansion and verification.
+- [x] 7.1 Build the derived day reading from bills, expenses, `aggregator_channel_days`, cash out and observations, with no stored row; verify a business date with nothing recorded still renders in full.
+- [x] 7.2 Render the revenue section with Cash and UPI from allocations and each aggregator's gross, commission, net and settlement state; verify an undetermined commission reads as not known yet rather than nought, and that the month is presented as a ceiling while any day's commission is undetermined.
+- [x] 7.3 Render the drawer section ordered by instant; verify an expense before an observation appears above its block and one after appears below it, and that a day with two observations shows two blocks.
+- [x] 7.4 Render an unexplained variance as its own line inside the observation block; verify the section still adds to the closing balance with the variance present.
+- [x] 7.5 Name the float left and the closing balance separately and never with one word; verify the worked example renders ₹1,450 left and ₹3,504 closing, and that the surface states the float is not the next day's opening. Verify the word "Kept" appears nowhere in the surface, its tests or the docs it updates.
+- [x] 7.6 Mark a day with no observation as `carried` on both balances, naming when the drawer was last confirmed; verify the month view carries the same marker per row.
+- [x] 7.7 Assert the surface has no editable figure; verify a test enumerates the rendered controls and finds only the date stepper, row expansion and verification.
 - [ ] 7.8 Measure the derived month against a real August at both outlets; verify the timing is recorded against open question 3, and that if it does not hold the remedy taken is a read model rather than a stored day row.
 
 ## 8. Verification
 
-- [ ] 8.1 Implement day verification recording account, instant and optional note; verify it freezes nothing and that a day computes and renders identically before and after.
-- [ ] 8.2 Detect and surface a change to a verified day's inputs; verify the day is marked changed since verified and names the figure that moved, including the case of an aggregator cycle settling afterwards.
-- [ ] 8.3 Verify each day joins a verification by its own action; verify no control verifies more than one day and that none exists for selecting a range.
+- [x] 8.1 Implement day verification recording account, instant and optional note; verify it freezes nothing and that a day computes and renders identically before and after.
+- [x] 8.2 Detect and surface a change to a verified day's inputs; verify the day is marked changed since verified and names the figure that moved, including the case of an aggregator cycle settling afterwards.
+- [x] 8.3 Verify each day joins a verification by its own action; verify no control verifies more than one day and that none exists for selecting a range.
 
 ## 9. Gates, navigation and the overlap
 
-- [ ] 9.1 Add `cash-drawer` and `ledger-statement` to `src/gates/registry.ts` as `live` for Super Admin and Franchise Admin shells; verify Biller and Employee shells mount neither and that no route resolves for them.
-- [ ] 9.2 Remove the manual ledger's navigation entry while leaving its gate `live` and its route resolving; verify the route renders in full and that both readings can be open at once.
-- [ ] 9.3 Set the demo-gated Daily cash surface to `hidden` and delete its mock adapter usage from the navigation; verify the four-role demo walkthrough no longer offers a day close and still walks.
-- [ ] 9.4 Confirm no runtime toggle was introduced; verify a search of configuration, storage and the interface finds no control selecting between the two ledger readings, and that `docs/DEMO_MODE.md`'s build-time rule still holds.
-- [ ] 9.5 Update the demo fixtures so the mocked outlet carries observations, a collection, a spend, an approximate count with an exact coincidence, a genuine shortfall and a late-arrival exception; verify the demo walkthrough reaches every one of those states.
+- [x] 9.1 Add `cash-drawer` and `ledger-statement` to `src/gates/registry.ts` as `live` for Super Admin and Franchise Admin shells; verify Biller and Employee shells mount neither and that no route resolves for them.
+- [x] 9.2 Remove the manual ledger's navigation entry while leaving its gate `live` and its route resolving; verify the route renders in full and that both readings can be open at once.
+- [x] 9.3 Set the demo-gated Daily cash surface to `hidden` and delete its mock adapter usage from the navigation; verify the four-role demo walkthrough no longer offers a day close and still walks.
+- [x] 9.4 Confirm no runtime toggle was introduced; verify a search of configuration, storage and the interface finds no control selecting between the two ledger readings, and that `docs/DEMO_MODE.md`'s build-time rule still holds.
+- [x] 9.5 Update the demo fixtures so the mocked outlet carries observations, a collection, a spend, an approximate count with an exact coincidence, a genuine shortfall and a late-arrival exception; verify the demo walkthrough reaches every one of those states.
 
 ## 10. Docs, roadmap and gates
 

@@ -102,12 +102,15 @@ describe('the drawer migration is additive, which is the whole revert story', ()
   })
 })
 
-describe('the four new tables each ship their own Row-Level Security', () => {
+describe('every new table ships its own Row-Level Security', () => {
   const tables = [
     'drawer_observations',
     'drawer_cash_out',
     'drawer_observation_adjustments',
     'ledger_day_verifications',
+    // The exception itself is derived from instants the schema already holds;
+    // this table stores only the human act of having looked at one.
+    'drawer_reconciliation_acknowledgements',
   ]
 
   it.each(tables)('%s is created, RLS-enabled and has a select policy', (table) => {
@@ -117,8 +120,13 @@ describe('the four new tables each ship their own Row-Level Security', () => {
   })
 
   it.each(tables)('%s grants no client write, so a derived figure cannot be supplied', (table) => {
+    // `\s+` rather than literal spaces: a long table name wraps the statement
+    // across two lines, and a test failing on formatting would be read as a
+    // missing revoke by whoever hit it.
     expect(source).toMatch(
-      new RegExp(`revoke insert, update, delete on public\\.${table} from authenticated, anon`),
+      new RegExp(
+        `revoke insert, update, delete on\\s+public\\.${table}\\s+from authenticated, anon`,
+      ),
     )
     // The absence of a write policy is the refusal. If one is ever added, this
     // fails and the change that added it has to say why.

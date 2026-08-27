@@ -8,9 +8,11 @@ import {
 import { createSupabaseAccountsAdapter } from './accounts'
 import { createSupabaseAttendanceAdapter } from './attendance'
 import { createSupabaseBillingAdapter } from './billing'
+import { createSupabaseCashDrawerAdapter } from './cash-drawer'
 import { createSupabaseCounterAdapter } from './counter'
 import { createSupabaseCustomersAdapter } from './customers'
 import { createSupabaseExpenseCategoriesAdapter } from './expense-categories'
+import { createSupabaseLedgerStatementAdapter } from './ledger-statement'
 import { createSupabaseManualLedgerAdapter } from './manual-ledger'
 import { createSupabaseMenuAdapter } from './menu'
 import {
@@ -68,6 +70,17 @@ export function createSupabaseAdapters(
     // stub would defeat the point. It goes when `retire-the-manual-ledger` (#12)
     // carries its rows across.
     manualLedger: createSupabaseManualLedgerAdapter(client),
+    // Real from the day they ship, and both `live` in the registry (#11). The
+    // drawer never had a live surface to be a stub for: `daily_cash_records` has
+    // never held a production row, so there is no previous behaviour to preserve
+    // and nothing to gate a stub behind.
+    //
+    // Neither adapter computes a figure the database computes. Every drawer write
+    // is a `security definer` command, because the opening, the expected total
+    // and the difference are derived inside the writing transaction and a client
+    // must not be able to supply them.
+    cashDrawer: createSupabaseCashDrawerAdapter(client),
+    ledgerStatement: createSupabaseLedgerStatementAdapter(client),
     // Takes no client: it holds no credential and reaches no Supabase service.
     // It is here because this is the layer permitted to do I/O, and a screen
     // fetching for itself is exactly what the seam exists to prevent.

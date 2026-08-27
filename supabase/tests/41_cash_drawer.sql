@@ -101,6 +101,8 @@ select has_table('public', 'drawer_cash_out', 'drawer_cash_out exists');
 select has_table('public', 'drawer_observation_adjustments',
   'drawer_observation_adjustments exists');
 select has_table('public', 'ledger_day_verifications', 'ledger_day_verifications exists');
+select has_table('public', 'drawer_reconciliation_acknowledgements',
+  'drawer_reconciliation_acknowledgements exists');
 
 -- Every outlet-scoped table ships its policy in the same change that creates it.
 select ok(
@@ -115,6 +117,10 @@ select ok(
 select ok(
   (select relrowsecurity from pg_class where oid = 'public.ledger_day_verifications'::regclass),
   'ledger_day_verifications has row level security enabled');
+select ok(
+  (select relrowsecurity from pg_class
+    where oid = 'public.drawer_reconciliation_acknowledgements'::regclass),
+  'drawer_reconciliation_acknowledgements has row level security enabled');
 
 -- Money is integer paise, never a float. `0.1 + 0.2` in a cash-reconciliation
 -- app is not a rounding question, it is a wrong answer.
@@ -811,6 +817,70 @@ select throws_ok(
   $q$, :'KAL'),
   null, null,
   'an adjustment cannot be updated by anybody, superuser included');
+
+-- ===========================================================================
+-- 10b. Late-arriving work is reported BESIDE an observation, never inside it.
+
+select pg_temp.impersonate(:'OWNER');
+
+-- A real settled bill at this outlet stands in for the late arrival. What makes
+-- it an exception is derived — its payment instant falls inside an interval an
+-- observation already covered, and it arrived after that observation was
+-- recorded — so nothing about the exception itself is written here.
+create temporary table pg_temp_late as
+select b.id as bill_id,
+       (select id from public.drawer_observations
+         where outlet_id = :'KAL' and not is_anchor
+         order by counted_at asc limit 1) as observation_id,
+       (select counted_total_paise from public.drawer_observations
+         where outlet_id = :'KAL' and not is_anchor
+         order by counted_at asc limit 1) as counted_before
+  from public.bills b
+ where b.outlet_id = :'KAL' and b.status = 'settled'
+ order by b.paid_at desc limit 1;
+grant select on pg_temp_late to authenticated;
+
+select lives_ok(
+  format($q$
+    select public.acknowledge_drawer_exception(
+      (select observation_id from pg_temp_late), 'bill',
+      (select bill_id from pg_temp_late),
+      'the tablet was offline; this is the ₹740 we were over by')
+  $q$),
+  'a late arrival is acknowledged with a note against the observation it fell inside');
+
+select throws_like(
+  format($q$
+    select public.acknowledge_drawer_exception(
+      (select observation_id from pg_temp_late), 'bill',
+      (select bill_id from pg_temp_late), 'again')
+  $q$),
+  '%already been acknowledged%',
+  'and acknowledging the same arrival twice is refused: a second reader is not a second event');
+
+-- **The requirement, asserted directly.** Acknowledging changed no stored figure.
+select is(
+  (select counted_total_paise from public.drawer_observations
+    where id = (select observation_id from pg_temp_late)),
+  (select counted_before from pg_temp_late),
+  'the observation''s counted total is untouched by the acknowledgement');
+
+select is(
+  (select count(*) from public.drawer_reconciliation_acknowledgements
+    where outlet_id = :'KAL'),
+  1::bigint,
+  'the acknowledgement is its own row, beside the observation rather than inside it');
+
+select isnt(
+  (select note from public.drawer_reconciliation_acknowledgements where outlet_id = :'KAL'),
+  null::text,
+  'carrying the note and, by its own instant, the date the excess was explained');
+
+select pg_temp.impersonate(:'BILLER_KAL');
+select is(
+  (select count(*) from public.drawer_reconciliation_acknowledgements),
+  0::bigint,
+  'and a Biller reads no acknowledgement anywhere either');
 
 -- ===========================================================================
 -- 11. Verification is an acknowledgement, not a freeze.

@@ -109,25 +109,25 @@ const defs = {
   'owner-people': {
     role: 'super_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 6 },
+    nav: { label: 'People', icon: Users, order: 7 },
     state: 'live',
   },
   'owner-comparison': {
     role: 'super_admin',
     path: 'comparison',
-    nav: { label: 'Compare', icon: BarChart3, order: 7 },
+    nav: { label: 'Compare', icon: BarChart3, order: 8 },
     state: 'demo',
   },
   'owner-alerts': {
     role: 'super_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 8 },
+    nav: { label: 'Alerts', icon: Bell, order: 9 },
     state: 'demo',
   },
   'owner-billing-history': {
     role: 'super_admin',
     path: 'billing-history',
-    nav: { label: 'Billing', icon: ReceiptText, order: 9 },
+    nav: { label: 'Billing', icon: ReceiptText, order: 10 },
     state: 'live',
   },
   /**
@@ -162,13 +162,56 @@ const defs = {
    * carries its rows into the live records and removes it. Never before, because
    * the rows are the value here and the surface is not.
    */
+  /**
+   * The drawer as a continuous balance (#11).
+   *
+   * **It opens on a balance, not a date picker**, because that is the question
+   * the collector has when they walk in: what should be in the drawer right now.
+   *
+   * `live` from this change rather than `demo`, and the reason is unusual enough
+   * to state: there is no previous behaviour to protect. `daily_cash_records` has
+   * never held a production row, so the surface being replaced never ran against
+   * real data, and a `demo` gate would mean two trading counters with no way to
+   * record a count at all.
+   *
+   * Ahead of the Ledger it feeds, because a count is taken nightly and a
+   * statement is read afterwards.
+   */
+  'owner-cash-drawer': {
+    role: 'super_admin',
+    path: 'drawer',
+    nav: { label: 'Drawer', icon: Banknote, order: 3 },
+    state: 'live',
+  },
+  /**
+   * The Ledger, derived on read with **no editable figure on it** (#11).
+   *
+   * This entry takes the navigation label the manual ledger had. That form keeps
+   * working at its own route and simply leaves the primary navigation, which is
+   * decision 17: **the fallback is a tab, not a runtime toggle.** Both are `live`
+   * here, honestly — both genuinely work — and the owner can open one business
+   * date in each and compare them, which is the two-day acceptance test they
+   * asked for with no engineering behind it.
+   */
+  'owner-ledger-statement': {
+    role: 'super_admin',
+    path: 'statement',
+    nav: { label: 'Ledger', icon: NotepadText, order: 4 },
+    state: 'live',
+  },
+  /**
+   * The manual ledger (#36) — **still `live`, and now without a navigation
+   * entry.**
+   *
+   * Its route resolves in full and its rows are untouched. It is the fallback for
+   * the derived statement above and the only reader of pre-tablet history until
+   * `retire-the-manual-ledger` (#12) carries those rows across. A revert is
+   * therefore this file: put the entry back, take the other two out, deploy. No
+   * data to recover.
+   */
   'owner-manual-ledger': {
     role: 'super_admin',
     path: 'ledger',
-    // Ahead of People: this is opened every night, and People is opened when
-    // somebody joins or leaves. Nav order follows how often a tab is reached for,
-    // and the nightly job should not sit behind the occasional one.
-    nav: { label: 'Ledger', icon: NotepadText, order: 3 },
     state: 'live',
   },
   'owner-expense-categories': {
@@ -191,7 +234,7 @@ const defs = {
   'owner-zomato-sync': {
     role: 'super_admin',
     path: 'ledger/zomato',
-    nav: { label: 'Zomato', icon: Bike, order: 4, attention: 'zomato-needs-you' },
+    nav: { label: 'Zomato', icon: Bike, order: 5, attention: 'zomato-needs-you' },
     // Live [owner, 2026-08-18]. The ledger already fills itself from Zomato; this is
     // the page that says when it last ran, what moved, and what wants a decision —
     // including the Reconnect the owner needs when a session lapses, which is the one
@@ -211,7 +254,7 @@ const defs = {
   'owner-swiggy-sync': {
     role: 'super_admin',
     path: 'ledger/swiggy',
-    nav: { label: 'Swiggy', icon: UtensilsCrossed, order: 5, attention: 'swiggy-needs-you' },
+    nav: { label: 'Swiggy', icon: UtensilsCrossed, order: 6, attention: 'swiggy-needs-you' },
     state: 'live',
   },
   /**
@@ -266,11 +309,22 @@ const defs = {
     nav: { label: 'Expenses', icon: Wallet, order: 5 },
     state: 'demo',
   },
+  /**
+   * The old Daily cash surface — **`hidden`, which is how a day close stops
+   * being a thing that happens.**
+   *
+   * Not deleted, deliberately. `cash-is-counted-not-closed` (#11) drops and
+   * renames nothing (decision 16), so `daily_cash_records`,
+   * `close_business_day()` and this screen are all left in place, dead, and
+   * `retire-the-manual-ledger` (#12) removes them. `hidden` rather than `demo`
+   * because the four-role walkthrough must no longer offer a day close: the model
+   * it demonstrates does not exist any more, and a demo of it would be teaching
+   * the wrong thing to the one audience that has not seen the new surface.
+   */
   'admin-daily-cash': {
     role: 'franchise_admin',
     path: 'cash',
-    nav: { label: 'Cash', icon: Banknote, order: 6 },
-    state: 'demo',
+    state: 'hidden',
   },
   /**
    * The surface the badge mechanism was built for: an arrival nobody approves
@@ -308,10 +362,32 @@ const defs = {
    * entry gives: nav order follows how often a tab is reached for, and this is
    * opened every night while People is opened when somebody joins or leaves.
    */
+  /**
+   * The manager's counterpart to `owner-cash-drawer`, scoped by assignment.
+   *
+   * A surface belongs to exactly one role's shell here, so the drawer needs two
+   * entries reaching one component — the same reason `owner-devices` and
+   * `admin-devices` are separate. What differs between them is nothing the
+   * screen can see: `app_may_reach_drawer()` grants a Super Admin every outlet
+   * and a Franchise Admin the ones their live assignment names, and the database
+   * is where that is decided.
+   */
+  'admin-cash-drawer': {
+    role: 'franchise_admin',
+    path: 'drawer',
+    nav: { label: 'Drawer', icon: Banknote, order: 6 },
+    state: 'live',
+  },
+  'admin-ledger-statement': {
+    role: 'franchise_admin',
+    path: 'statement',
+    nav: { label: 'Ledger', icon: NotepadText, order: 8 },
+    state: 'live',
+  },
+  /** Live at its route, out of the navigation. See `owner-manual-ledger`. */
   'admin-manual-ledger': {
     role: 'franchise_admin',
     path: 'ledger',
-    nav: { label: 'Ledger', icon: NotepadText, order: 8 },
     state: 'live',
   },
   'admin-pnl': {

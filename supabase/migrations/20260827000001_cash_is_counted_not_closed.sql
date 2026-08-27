@@ -406,6 +406,64 @@ comment on table public.ledger_day_verifications is
   'the day afterwards — the day is then marked changed since it was verified.';
 
 -- ===========================================================================
+-- 5b. drawer_reconciliation_acknowledgements — late work is reported BESIDE an
+--     observation, never inside it.
+--
+-- **The exception itself is derived, not stored, and that is deliberate.** A
+-- cash allocation raises one when its payment instant falls inside an interval
+-- some observation has already covered AND it arrived after that observation was
+-- recorded. Both halves are already facts on rows this schema holds
+-- (`bills.paid_at`, `bills.synced_at`, an observation's two instants), so a
+-- stored exception row could only ever disagree with them — the same reason the
+-- ledger day is derived (decision 14).
+--
+-- What cannot be derived is the human act of having looked at one. That is what
+-- this table holds: who acknowledged which arrival against which observation,
+-- when, and what they said about it.
+--
+-- Note what is absent: any column that could alter the observation. Resolution
+-- is acknowledge-with-a-note or record a fresh observation, and neither touches
+-- a stored figure. Where the arrival turns out to EXPLAIN a recorded variance —
+-- an over that was an unsynced tablet's cash all along — the recorded figure
+-- stays and the explanation sits beside it with its date, which is this row's
+-- date.
+
+create table public.drawer_reconciliation_acknowledgements (
+  id uuid primary key default gen_random_uuid(),
+  outlet_id uuid not null references public.outlets (id),
+  observation_id uuid not null references public.drawer_observations (id),
+
+  -- What arrived late. A bill or an expense, by the same code path: a backdated
+  -- cash expense landing inside an observed interval is the same event as a
+  -- late-syncing cash bill, and giving each its own table would give each its
+  -- own bugs.
+  source_kind text not null check (source_kind in ('bill', 'expense')),
+  source_id uuid not null,
+
+  acknowledged_by uuid not null references public.profiles (id),
+  acknowledged_at timestamptz not null default now(),
+  note text null check (note is null or length(btrim(note)) > 0),
+
+  -- One acknowledgement per arrival per observation. A second reader looking at
+  -- the same exception is not a second event.
+  constraint drawer_reconciliation_acknowledgements_once
+    unique (observation_id, source_kind, source_id)
+);
+
+create index drawer_reconciliation_acknowledgements_outlet_idx
+  on public.drawer_reconciliation_acknowledgements (outlet_id, acknowledged_at desc);
+create index drawer_reconciliation_acknowledgements_observation_idx
+  on public.drawer_reconciliation_acknowledgements (observation_id);
+
+alter table public.drawer_reconciliation_acknowledgements enable row level security;
+
+comment on table public.drawer_reconciliation_acknowledgements is
+  'Somebody looked at a late arrival against an observation and said so. The '
+  'exception itself is derived from the bill''s and the observation''s own '
+  'instants; only the human act is stored here. Nothing on this table can alter '
+  'an observation.';
+
+-- ===========================================================================
 -- 6. Who reaches a drawer.
 --
 -- Settled with the owner in this change (D11), reopening the question #28
@@ -456,16 +514,20 @@ grant select on public.drawer_observations to authenticated;
 grant select on public.drawer_cash_out to authenticated;
 grant select on public.drawer_observation_adjustments to authenticated;
 grant select on public.ledger_day_verifications to authenticated;
+grant select on public.drawer_reconciliation_acknowledgements to authenticated;
 
 grant all on public.drawer_observations to service_role;
 grant all on public.drawer_cash_out to service_role;
 grant all on public.drawer_observation_adjustments to service_role;
 grant all on public.ledger_day_verifications to service_role;
+grant all on public.drawer_reconciliation_acknowledgements to service_role;
 
 revoke insert, update, delete on public.drawer_observations from authenticated, anon;
 revoke insert, update, delete on public.drawer_cash_out from authenticated, anon;
 revoke insert, update, delete on public.drawer_observation_adjustments from authenticated, anon;
 revoke insert, update, delete on public.ledger_day_verifications from authenticated, anon;
+revoke insert, update, delete on public.drawer_reconciliation_acknowledgements
+  from authenticated, anon;
 
 -- ---------------------------------------------------------------------------
 -- Policies. Reads only, deliberately: there is no write policy on any of these
@@ -484,6 +546,11 @@ create policy drawer_observation_adjustments_select on public.drawer_observation
   using (public.app_may_reach_drawer(outlet_id));
 
 create policy ledger_day_verifications_select on public.ledger_day_verifications
+  for select to authenticated
+  using (public.app_may_reach_drawer(outlet_id));
+
+create policy drawer_reconciliation_acknowledgements_select
+  on public.drawer_reconciliation_acknowledgements
   for select to authenticated
   using (public.app_may_reach_drawer(outlet_id));
 
@@ -1109,3 +1176,65 @@ $$;
 
 revoke execute on function public.verify_ledger_day(uuid, date, text) from public, anon;
 grant execute on function public.verify_ledger_day(uuid, date, text) to authenticated;
+
+-- ===========================================================================
+-- 14. acknowledge_drawer_exception() — the first of the two resolutions.
+--
+-- The second resolution is recording a fresh observation, which needs no code of
+-- its own: it is `record_drawer_observation()`, and the exception stops being
+-- raised because a later observation now covers the interval the arrival fell
+-- in. That is the whole point of having only one write path for a count.
+
+create or replace function public.acknowledge_drawer_exception(
+  p_observation_id uuid,
+  p_source_kind text,
+  p_source_id uuid,
+  p_note text default null
+)
+returns public.drawer_reconciliation_acknowledgements
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_observation public.drawer_observations%rowtype;
+  v_row public.drawer_reconciliation_acknowledgements%rowtype;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+
+  select * into v_observation
+    from public.drawer_observations where id = p_observation_id;
+  if not found then
+    raise exception 'no such observation';
+  end if;
+
+  if not public.app_may_reach_drawer(v_observation.outlet_id) then
+    raise exception 'you may not act on this outlet''s drawer' using errcode = '42501';
+  end if;
+
+  begin
+    insert into public.drawer_reconciliation_acknowledgements (
+      outlet_id, observation_id, source_kind, source_id, acknowledged_by, note
+    ) values (
+      v_observation.outlet_id, p_observation_id, p_source_kind, p_source_id, auth.uid(),
+      case when length(btrim(coalesce(p_note, ''))) = 0 then null else btrim(p_note) end
+    )
+    returning * into v_row;
+  exception
+    when unique_violation then
+      raise exception 'this arrival has already been acknowledged against that count';
+  end;
+
+  -- **Nothing else happens, and that is the requirement.** No stored counted
+  -- amount, counted instant or difference is touched: the app never changes a
+  -- person's observation on its own.
+  return v_row;
+end;
+$$;
+
+revoke execute on function public.acknowledge_drawer_exception(uuid, text, uuid, text)
+  from public, anon;
+grant execute on function public.acknowledge_drawer_exception(uuid, text, uuid, text)
+  to authenticated;

@@ -2183,6 +2183,61 @@ export type Database = {
           },
         ]
       }
+      drawer_reconciliation_acknowledgements: {
+        Row: {
+          acknowledged_at: string
+          acknowledged_by: string
+          id: string
+          note: string | null
+          observation_id: string
+          outlet_id: string
+          source_id: string
+          source_kind: string
+        }
+        Insert: {
+          acknowledged_at?: string
+          acknowledged_by: string
+          id?: string
+          note?: string | null
+          observation_id: string
+          outlet_id: string
+          source_id: string
+          source_kind: string
+        }
+        Update: {
+          acknowledged_at?: string
+          acknowledged_by?: string
+          id?: string
+          note?: string | null
+          observation_id?: string
+          outlet_id?: string
+          source_id?: string
+          source_kind?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drawer_reconciliation_acknowledgements_acknowledged_by_fkey"
+            columns: ["acknowledged_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drawer_reconciliation_acknowledgements_observation_id_fkey"
+            columns: ["observation_id"]
+            isOneToOne: false
+            referencedRelation: "drawer_observations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drawer_reconciliation_acknowledgements_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_sign_in_attempts: {
         Row: {
           attempted_at: string
@@ -3296,6 +3351,30 @@ export type Database = {
       account_state_fingerprint: {
         Args: { p_profile_id: string }
         Returns: string
+      }
+      acknowledge_drawer_exception: {
+        Args: {
+          p_note?: string
+          p_observation_id: string
+          p_source_id: string
+          p_source_kind: string
+        }
+        Returns: {
+          acknowledged_at: string
+          acknowledged_by: string
+          id: string
+          note: string | null
+          observation_id: string
+          outlet_id: string
+          source_id: string
+          source_kind: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "drawer_reconciliation_acknowledgements"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       adjust_drawer_observation: {
         Args: {
