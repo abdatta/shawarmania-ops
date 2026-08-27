@@ -183,3 +183,38 @@ five-minute payment-edit window, drains the date, refuses while any local
 envelope or server open order remains, then ends the shift and records one
 end-of-day confirmation atomically.
 It never treats a browser's `online` flag as proof that the server was reached.
+
+## Cash that arrives after the drawer was counted (#11)
+
+A drawer count is a claim about a moment, so work delivered after it cannot be
+folded into it — and the rule that governs this is one sentence:
+
+> **The app never changes a person's observation on its own.**
+
+A cash allocation whose payment instant falls inside an interval some observation
+has already covered, and which arrived after that observation was recorded, raises
+a **reconciliation exception** against it. The exception names the bill, its
+amount, when it was rung, when it landed, and **what the difference would have
+been** had it been present. It changes no stored figure.
+
+Two resolutions, and neither writes to the observation: an attributed
+acknowledgement with an optional note, or recording a fresh count. A backdated
+cash *expense* landing in an observed interval takes the same path, by the same
+code.
+
+**A late arrival may explain a recorded variance rather than create one** — an
+over that turns out to have been an unsynced tablet's cash all along. The recorded
+figure stays exactly as it is and the explanation sits beside it with its date,
+because the figure is what somebody saw and the explanation is what was learned
+afterwards.
+
+**The exception itself is derived, never stored.** Both halves of what makes it one
+— the payment instant inside the interval, and the arrival after the observation —
+are already facts on rows the schema holds, so a stored exception row could only
+disagree with them. Only the human act of having looked at one is written down.
+
+**Unsynced devices advise and never block a count.** The count surface names how
+many tablets are holding undelivered work and since when, and marks the expected
+figure as possibly understated. It does not refuse the count: the person is
+standing at the counter holding the cash, and a count that does not get recorded
+is worse than one recorded against an understated expectation.

@@ -11,7 +11,7 @@ The project exists because Shawarmania has outgrown running two counters on memo
 - **Inventory** — stock added, used, wasted, corrected, with low-stock warnings.
 - **Expenses** — categorised outlet spending with payment method and who recorded it.
 - **People and attendance** — staff as app accounts; an arrival recorded from the person's own phone with its location evidence, counted only once a manager approves it and records where they were themselves; a per-outlet arrival deadline producing late and absent readings; manager-entered attendance when a phone cannot; and attendance readable by day or by person over a range.
-- **Daily cash** — opening float, cash sales, cash expenses, withdrawals, expected vs actual closing, and the difference.
+- **Cash drawer** — the drawer as a running balance, observed whenever somebody counts it. What should be in it now, what has moved since, and the difference between what was expected and what was found. Counted mid-shift rather than at the end of a day, because that is when it is actually counted.
 - **Profit and loss** — basic outlet-level operational estimates, and cross-outlet comparison for the owner.
 - **Alerts** — outlet managers raise issues to the owner and get responses.
 
@@ -46,7 +46,7 @@ The app is built **UI-first**: every screen is built and made demonstrable with 
 2. **Attendance goes live** — auth, then attendance. Ends with **real staff checking in on their own phones in production**: the first genuine business value, deliberately pulled ahead of everything else because the business wants it immediately.
 3. **The full experience, demo-gated** — billing, menu, inventory, expenses, cash, owner console, alerts. Ends with a **deployed walkthrough of the entire four-role experience** on coherent mock data.
 4. **The counter takes money** — device trust and the offline outbox, then billing.
-5. **Operations and insight go live** — expenses, inventory, daily cash, then the owner's cross-outlet view.
+5. **Operations and insight go live** — expenses, the cash drawer and its derived ledger, then the owner's cross-outlet view.
 6. **Growth** — a repeatable path to onboard a new franchise outlet.
 
 The build order, its dependencies, and the gate for each step are in [`openspec/changes/ROADMAP.md`](../openspec/changes/ROADMAP.md) — which is deliberately kept small and **expected to grow** as real work surfaces.

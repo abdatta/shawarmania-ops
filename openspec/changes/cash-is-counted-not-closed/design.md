@@ -924,9 +924,36 @@ Revert at any point before step 5 is a one-line registry edit and a deploy.
    fridge is currently findable only by remembering the date. A short
    "cash out, not in operating costs" block on the month view would answer
    "where did it go" without touching the P&L, and adds no surface.
-3. **Derived month performance**, measured against a real August rather than
-   estimated. If it does not hold, the answer is a materialised read model, never
-   a stored day row that can disagree with its sources.
+3. ~~**Derived month performance**, measured against a real August rather than
+   estimated.~~ **Answered 2026-08-27: it holds comfortably, and no read model is
+   needed.** Measured through the real adapter against a seeded August on the
+   local stack (`supabase/tests/rest/zz-ledger-month-timing.test.ts`, which now
+   runs as its own `test:rls` phase so the answer keeps being true):
+
+   | | one day | whole month (31 days) | per day |
+   |---|---|---|---|
+   | Kalyani | 87 ms | 389 ms | 13 ms |
+   | Kanchrapara | 51 ms | 285 ms | 9 ms |
+
+   The committed test asserts a deliberately generous 20-second ceiling rather
+   than a tight bound: it runs on a laptop Docker stack, and a tight bound would
+   fail for reasons that have nothing to do with the query. What it guards is an
+   order of magnitude — a month that started taking thirty seconds would be a
+   different design decision, and this is what would say so. **The remedy if it
+   ever stops holding is still a materialised read model, never a stored day row
+   that can disagree with its sources.**
+
+   **The measurement earned its place twice over**, because writing it found a
+   bug nothing else would have. Both real adapters were reading bill allocations
+   as a PostgREST embed — `bills(..., effective_bill_payments(...))` — and
+   `effective_bill_payments` is a **view with no declared foreign key**, so
+   PostgREST refuses the nesting outright: *"Could not find a relationship
+   between 'bills' and 'effective_bill_payments' in the schema cache"*. The pgTAP
+   suite passed, because it tests the SQL functions. The mock passed, because it
+   is not PostgREST. The component tests passed, because they use the mock. **The
+   surfaces would have failed on their first real read**, and the only gate that
+   touched the real adapter over HTTP was this one. Both now read the view as its
+   own select and join by bill id, which is what `billing.ts` already did.
 4. ~~**Does `paid_at` skew need an additional guard now?**~~ **Answered
    2026-08-26 from production: no.** Median skew is 1.2 to 1.3 seconds, the 95th
    percentile 2.4 to 3.2, and the worst device clock lead 0.9 seconds. A boundary

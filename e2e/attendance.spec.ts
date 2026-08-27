@@ -865,7 +865,7 @@ test('the owner settles a day at an outlet they are not assigned to', async ({ p
     'aria-pressed',
     'true',
   )
-  await page.goto('demo/owner/cash')
+  await page.goto('demo/owner/drawer')
   // The same chip, on a surface that reads one outlet rather than several: the
   // switcher is one control in two modes, so the remembered choice reads the same
   // way on both.
@@ -874,8 +874,18 @@ test('the owner settles a day at an outlet they are not assigned to', async ({ p
     'true',
   )
 
-  // Reaching the surface is not managing the outlet: the drawer stays the
-  // manager's, and the screen says so rather than offering a refused control.
-  await expect(page.getByTestId('drawer-not-yours')).toBeVisible()
-  await expect(page.getByTestId('close-day-button')).toHaveCount(0)
+  // **And here the rule reverses, deliberately.** This test used to assert that
+  // reaching the surface conferred nothing — that the drawer stayed the
+  // manager's and the owner was offered no control.
+  // `cash-is-counted-not-closed` (#11) settled that question the other way: the
+  // person who counts the cash at these outlets IS the owner, and both Super
+  // Admins had their Franchise Admin rows deleted on 2026-08-01, so the old rule
+  // left nobody able to count a drawer anywhere.
+  //
+  // What it costs is evidence rather than prohibition: the count asks where they
+  // were standing, and stores the answer.
+  await expect(page.getByTestId('open-count')).toBeVisible()
+  await page.getByTestId('open-count').click()
+  await expect(page.getByTestId('away-reason')).toBeVisible()
+  await expect(page.getByText(/nothing is refused for being elsewhere/i)).toBeVisible()
 })

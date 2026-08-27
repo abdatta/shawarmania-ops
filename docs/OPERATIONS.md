@@ -441,10 +441,48 @@ and closed without performing it, so no automated gate asserts it happened;
 [`openspec/todos/ledger-handover-per-outlet.md`](../openspec/todos/ledger-handover-per-outlet.md)
 tracks where each outlet stands.
 
+## Counting the drawer *(the live nightly job — #11)*
+
+**Under a minute, from a phone, standing at the counter.** The drawer opens on a
+balance rather than a date, because that is the question you have when you walk
+in.
+
+1. **Drawer**, pick the outlet if you manage more than one. Read *Should be in the
+   drawer now*.
+2. **Count the drawer.** Three inputs: when you counted it, what was in it, how
+   much you are taking.
+   - *When* defaults to **Just now**. If you counted earlier and are typing it up
+     now, pick a relative chip — the count is then marked approximate, and the
+     screen states in rupees how much cash moved near that time.
+   - *What was in it* shows the difference as you type, in words as well as by
+     sign.
+   - *How much you are taking* — **a minus means you are putting money IN**, which
+     is what happens when a thin drawer gets topped up. The screen says so on the
+     keystroke.
+3. **If the screen names an exact run of bills**, that is a fact about your timing,
+   not a suggestion. Move the boundary if you recognise those bills; leave it if
+   you do not. **It will never propose a time for you**, deliberately.
+4. **If you are entering this from home**, put a line in the reason field. Nothing
+   is refused for being elsewhere; the record just says where you were.
+5. **Collecting without counting?** Use *collect cash without counting*. It states
+   that nothing is verified, which is the point.
+6. **Bought something out of the till?** Use *record a cash spend*, with a reason.
+   It moves the drawer and stays out of the month's operating costs.
+
+**A skipped day needs nothing special.** Come back two days later and count; the
+screen says how many days the count covers before you take it, and the arithmetic
+sums all of them by the same path as a single evening.
+
+**Nothing here is a "close".** There is no seal, no signature, and no day that
+stops accepting work. A bill that lands after a count is reported beside it, and
+you either accept it or count again.
+
 ## Recording a trading day by hand *(temporary — #36)*
 
-The nightly job while expenses and daily cash are not live. Two or three minutes
-per outlet, from a phone, and the figures build the month by themselves.
+The notebook, for the trading period before each outlet's tablet existed. **It has
+left the navigation** and lives at its own route as the fallback for the derived
+Ledger; `retire-the-manual-ledger` (#12) carries its rows across and removes it.
+Two or three minutes per outlet, from a phone.
 
 1. **Super Admin → Ledger**, pick the outlet, leave it on **One day** and today.
 2. **Check the opening cash it offers.** It is the previous recorded day's count.

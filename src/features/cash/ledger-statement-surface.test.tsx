@@ -58,17 +58,22 @@ describe('the reading carries no editable figure', () => {
     expect(container.querySelectorAll('[contenteditable="true"]')).toHaveLength(0)
   })
 
-  it('offers only the date stepper and verification as controls', async () => {
+  it('offers only the date stepper, verification and explanations as controls', async () => {
     renderLedger()
     await waitFor(() => expect(screen.getByTestId('ledger-revenue')).toBeInTheDocument())
 
-    const buttons = screen.getAllByRole('button').map((button) => {
-      return (button.getAttribute('aria-label') ?? button.textContent ?? '').trim()
-    })
+    // The accessible name, not the text: the date stepper is icon-only and names
+    // itself with `aria-label`, while a `Why` names itself with `sr-only` text.
+    const buttons = screen
+      .getAllByRole('button')
+      .map((button) => (button.getAttribute('aria-label') ?? button.textContent ?? '').trim())
 
-    // Every control accounted for. A new one has to be added here deliberately.
+    // Every control accounted for, and note what the allowed set does NOT
+    // contain: anything that writes a figure. The rest are `Why` disclosures,
+    // which reveal prose and change nothing.
+    expect(buttons.length).toBeGreaterThan(0)
     for (const label of buttons) {
-      expect(label).toMatch(/previous day|next day|verify this day/i)
+      expect(label).toMatch(/^(previous day|next day|verify this day|wh(y|at) .+)$/i)
     }
   })
 })
@@ -94,16 +99,26 @@ describe('the day renders in full even when nothing was recorded', () => {
 
 describe('the drawer names its float and its closing balance differently', () => {
   it('never uses one word for both, and says the float is not the next opening', async () => {
+    const user = userEvent.setup()
     renderLedger()
     await waitFor(() => expect(screen.getByTestId('ledger-drawer')).toBeInTheDocument())
 
-    const drawer = screen.getByTestId('ledger-drawer').textContent ?? ''
+    // Step back to a date that was actually counted. `left ≠ next opening` is a
+    // fact about a count, so on a `carried` date it is deliberately absent —
+    // there is no float left to distinguish from anything.
+    await user.click(screen.getByTestId('day-back'))
+    await waitFor(() => expect(screen.queryByTestId('drawer-carried')).not.toBeInTheDocument())
 
-    // The retired word must appear nowhere.
-    expect(drawer).not.toMatch(/\bkept\b/i)
-    expect(screen.getByTestId('left-is-not-opening').textContent).toMatch(
-      /not the next day.s opening/i,
+    // No word boundaries, deliberately: a retired term should not survive inside
+    // a longer word either.
+    expect(screen.getByTestId('ledger-drawer').textContent ?? '').not.toMatch(/kept/i)
+
+    // `left ≠ next opening` states it; the sentence behind it explains it.
+    expect(screen.getByTestId('left-is-not-opening').textContent).toMatch(/left.*opening/i)
+    await user.click(
+      screen.getByRole('button', { name: /why what was left is not the next opening/i }),
     )
+    expect(screen.getByText(/not the next day.s opening/i)).toBeInTheDocument()
   })
 })
 
@@ -113,15 +128,15 @@ describe('an uncounted day says its balances are unchecked', () => {
     renderLedger()
     await waitFor(() => expect(screen.getByTestId('ledger-drawer')).toBeInTheDocument())
 
-    // Today, in the demo fixture, has no observation — the newest is yesterday.
-    const carried = screen.queryByTestId('drawer-carried')
-    if (carried) {
-      expect(carried.textContent).toMatch(/what the app believes rather than what anybody checked/i)
-    } else {
-      // If today happens to carry one, step forward to a date that cannot.
-      await user.click(screen.getByTestId('day-forward'))
-      await waitFor(() => expect(screen.getByTestId('ledger-drawer')).toBeInTheDocument())
-    }
+    // `carried` is the only word on this surface that says how much the numbers
+    // can be trusted, so it is a chip rather than a buried sentence.
+    const carried = await screen.findByTestId('drawer-carried')
+    expect(carried.textContent).toMatch(/carried/i)
+
+    await user.click(screen.getByRole('button', { name: /what carried means/i }))
+    expect(
+      screen.getByText(/what the app believes rather than what anybody checked/i),
+    ).toBeInTheDocument()
   })
 })
 
@@ -137,7 +152,7 @@ describe('verification is an acknowledgement', () => {
     await user.click(screen.getByTestId('verify-day'))
 
     await waitFor(() => {
-      expect(screen.getByTestId('ledger-verify').textContent).toMatch(/verified by/i)
+      expect(screen.getAllByTestId(/^verification-/).length).toBeGreaterThan(0)
     })
 
     // Froze nothing: every figure is what it was.

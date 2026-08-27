@@ -15,23 +15,34 @@ Somebody assigned to **one** outlet is unaffected: their row is written with no
 coordinates, the fence declines to judge it, and a manager clears it — which is
 what has always happened.
 
-## The owner's remote entries are non-cash, and that is a bound not a warning
+## The owner reaches every drawer, and where they stood is recorded
 
-The Super Admin can record a non-cash expense and a stock correction at any
-outlet. They cannot record a cash expense, a withdrawal or a day close there,
-and the refusal is the database's rather than a form's — so nothing recorded
-remotely can move a drawer somebody else is responsible for counting. An owner
-who genuinely needs the cash path takes an assignment as that outlet's manager,
-which is a visible, recorded act.
+**This section previously recorded the opposite bound, and
+`cash-is-counted-not-closed` (#11) settled the question the other way.** The
+history is kept because the reasoning is the point.
 
-The bound survived the owner gaining every outlet's manager screens without an
-assignment (#28): they reach the cash screen at any outlet, read the whole day
-there, and are offered neither of the two writes. **This is superseded by
-`cash-is-counted-not-closed` (#11), which settles the question the other way**: a
-Super Admin reaches every outlet's drawer without an assignment, and what that
-costs is that each record carries whether they were inside the outlet's geofence,
-with a reason stored where they were not. Nothing is refused for being
-elsewhere.
+The old rule refused a Super Admin the cash path at an outlet they held no
+assignment at, on the premise that a cash count is a claim by whoever counted the
+cash. That premise is intact; **the inference was wrong.** The person who counts
+the cash at these outlets *is* the owner, and requiring them to hold a Franchise
+Admin assignment to record what they counted described paperwork rather than
+accountability. Both Super Admins additionally had their Franchise Admin rows
+*deleted* rather than ended on 2026-08-01, so the old rule left no account able to
+count a drawer at either outlet — verified against production on 2026-08-26 and
+again on 2026-08-27.
+
+So a Super Admin now records a count, a collection, a spend and an adjustment at
+**any** outlet, and a Franchise Admin at the outlets their live assignment names.
+A Biller and an Employee are refused every drawer read and write at every outlet,
+including their own, by the absence of a policy branch.
+
+**What that costs, and it is a real cost:** every drawer record carries whether
+the account was inside that outlet's geofence, evaluated by the same distance rule
+attendance uses, with a reason required and stored where it was not. **Nothing is
+refused for being elsewhere.** A collector who enters every count from home shows
+up as a column of reasons, which is oversight a refusal would not have
+produced — and which the refusal would have converted into a phone call nobody
+records.
 
 ## The manual ledger is a stopgap with a stated exit
 
@@ -580,3 +591,38 @@ All outlets share one project. Fine for West Bengal. A backup and restore proced
 - Supplier and purchase-order workflows
 - Multi-currency or multi-language (₹ and English only; revisit if franchises want Bengali)
 - Native mobile apps — the PWA is the delivery mechanism
+
+## A drawer boundary is only as good as a tablet's clock (#11)
+
+The drawer's intervals are bounded by payment instants rather than business dates,
+so `bills.paid_at` — a **device-claimed** timestamp — decides which side of a
+22:00 count a bill falls on. It is checked only against the same device's own
+command time, within 300 seconds, so a badly skewed tablet could in principle
+place a payment on the wrong side of that line. A 04:00 boundary was less exposed
+to this, because almost nothing is rung near it.
+
+**Measured, the exposure is negligible.** Across all 684 settled bills in
+production (2026-08-27): median `synced_at − paid_at` of 1.2 to 1.3 seconds, 95th
+percentile 2.4 to 3.2 seconds, and 28 bills whose device clock ran *ahead* of the
+server by at most 0.9 seconds. A boundary placed to the minute is far outside
+that.
+
+This is therefore **a stated bound rather than a guard to build**. The worst
+observed lag, 14.9 hours at Kanchrapara, is delivery rather than skew — an offline
+queue draining later — and that case is already handled: it raises a
+reconciliation exception against the observation whose interval it fell in.
+Revisit only if a future device shows minute-scale drift.
+
+## The derived ledger month is measured, not assumed (#11)
+
+A month view assembles thirty-one days from five sources with no stored row, which
+is deliberate: a stored day row can disagree with its sources, and this one cannot.
+The read cost is the trade, and it is **measured rather than assumed**: a whole
+month reads in 285 to 389 ms, and a single day in 51 to 87 ms, through the real
+adapter against a seeded August.
+`supabase/tests/rest/zz-ledger-month-timing.test.ts` runs as its own `test:rls`
+phase so that stays true.
+
+If it ever stops holding, **the remedy is a materialised read model, never a
+stored day row.** The whole point of the derived reading is that it cannot be
+wrong about itself.

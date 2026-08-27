@@ -120,6 +120,47 @@ function toAdjustment(
   }
 }
 
+/**
+ * Cash allocations for a set of bills, read as their own select.
+ *
+ * **Not a PostgREST embed, and that is not a style choice.**
+ * `effective_bill_payments` is a VIEW with no declared foreign key, so
+ * `bills(..., effective_bill_payments(...))` fails outright with
+ * *"Could not find a relationship between 'bills' and 'effective_bill_payments'
+ * in the schema cache"*. The first version of these adapters used the embed; the
+ * pgTAP suite passed (it tests SQL functions), the mock passed (it is not
+ * PostgREST), and the surfaces would have failed on their first real read. The
+ * derived-month measurement is what caught it.
+ *
+ * `src/data-access/supabase-adapters/billing.ts` already reads the view this
+ * way, which is the convention this follows rather than reinvents.
+ *
+ * `amount_paise` is nullable on the view in the generated types, so it is
+ * coalesced rather than asserted.
+ */
+async function cashByBill(
+  client: Client,
+  billIds: readonly string[],
+): Promise<Map<string, number>> {
+  const cash = new Map<string, number>()
+  if (billIds.length === 0) return cash
+
+  const { data, error } = await client
+    .from('effective_bill_payments')
+    .select('bill_id, method, amount_paise')
+    .in('bill_id', [...billIds])
+  if (error) refuse(error)
+
+  for (const allocation of data ?? []) {
+    if (allocation.method !== 'cash' || !allocation.bill_id) continue
+    cash.set(
+      allocation.bill_id,
+      (cash.get(allocation.bill_id) ?? 0) + (allocation.amount_paise ?? 0),
+    )
+  }
+  return cash
+}
+
 export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapter {
   /** Names for attribution. Read once per load rather than joined per row. */
   async function namesFor(ids: readonly (string | null)[]): Promise<Map<string, string>> {
@@ -278,27 +319,25 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
       // report. Deliberately the bills themselves and never a candidate instant.
       const nearbyResult = await client
         .from('bills')
-        .select('id, bill_number, paid_at, status, effective_bill_payments(method, amount_paise)')
+        .select('id, bill_number, paid_at')
         .eq('outlet_id', outletId)
         .eq('status', 'settled')
         .order('paid_at', { ascending: false })
         .limit(40)
+      if (nearbyResult.error) refuse(nearbyResult.error)
 
-      const nearbyCashBills: NearbyCashBillRecord[] = (
-        (nearbyResult.data ?? []) as unknown as Array<{
-          id: string
-          bill_number: number
-          paid_at: string | null
-          effective_bill_payments: Array<{ method: string; amount_paise: number }> | null
-        }>
+      const nearbyBills = nearbyResult.data ?? []
+      const nearbyCash = await cashByBill(
+        client,
+        nearbyBills.map((bill) => bill.id),
       )
+
+      const nearbyCashBills: NearbyCashBillRecord[] = nearbyBills
         .map((bill) => ({
           billId: bill.id,
           billNumber: bill.bill_number,
           paidAt: bill.paid_at ?? '',
-          cashPaise: (bill.effective_bill_payments ?? [])
-            .filter((allocation) => allocation.method === 'cash')
-            .reduce((sum, allocation) => sum + allocation.amount_paise, 0),
+          cashPaise: nearbyCash.get(bill.id) ?? 0,
         }))
         .filter((bill) => bill.cashPaise > 0 && bill.paidAt !== '')
         .slice(0, 12)
@@ -315,28 +354,25 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
 
       const lateResult = await client
         .from('bills')
-        .select(
-          'id, bill_number, paid_at, synced_at, effective_bill_payments(method, amount_paise)',
-        )
+        .select('id, bill_number, paid_at, synced_at')
         .eq('outlet_id', outletId)
         .eq('status', 'settled')
         .gt('synced_at', observations.at(-1)?.recorded_at ?? now)
         .order('paid_at', { ascending: false })
         .limit(40)
+      if (lateResult.error) refuse(lateResult.error)
+
+      const lateBills = lateResult.data ?? []
+      const lateCash = await cashByBill(
+        client,
+        lateBills.map((bill) => bill.id),
+      )
 
       const exceptions: DrawerExceptionRecord[] = []
-      for (const bill of (lateResult.data ?? []) as unknown as Array<{
-        id: string
-        bill_number: number
-        paid_at: string | null
-        synced_at: string
-        effective_bill_payments: Array<{ method: string; amount_paise: number }> | null
-      }>) {
+      for (const bill of lateBills) {
         const paidAt = bill.paid_at
         if (!paidAt) continue
-        const cash = (bill.effective_bill_payments ?? [])
-          .filter((allocation) => allocation.method === 'cash')
-          .reduce((sum, allocation) => sum + allocation.amount_paise, 0)
+        const cash = lateCash.get(bill.id) ?? 0
         if (cash === 0) continue
 
         // Which observation's interval does this fall in? The earliest one whose

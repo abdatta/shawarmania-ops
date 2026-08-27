@@ -51,6 +51,24 @@ A `hidden` surface is **absent**, not greyed out. A half-visible product looks u
 
 Promoting a surface from `demo` to `live` is the visible outcome of every `*-live` change. The roadmap is done when no surface is left in `demo`.
 
+**`hidden` also means "was here and is not any more", and that matters for revert
+stories.** `cash-is-counted-not-closed` (#11) set `admin-daily-cash` to `hidden`
+rather than deleting it: that change drops and renames nothing, so the old
+day-close screen and its tables stay in place, dead, and a revert is one edit to
+this file plus a deploy. `hidden` rather than `demo`, because the four-role
+walkthrough must no longer offer a day close — the model it demonstrated does not
+exist any more, and a demo of it would teach the wrong thing to the one audience
+that has not seen the new surface.
+
+**Two `live` surfaces may deliberately answer the same question at once.** During
+#11's overlap the derived **Ledger** (`owner-ledger-statement`) and the manual
+**Ledger** form (`owner-manual-ledger`) are both `live` and both genuinely work —
+the manual one simply has no navigation entry. That is honest, and it is better
+than a switch: **the fallback is a tab, not a runtime toggle**, so the owner can
+open one business date in each and compare them, which is the two-day acceptance
+test they asked for with no engineering behind it. `retire-the-manual-ledger`
+(#12) removes the second entry.
+
 The owner Swiggy sync tab is live because its browser-free production reader
 has completed a no-write rehearsal and a successful scheduled write from the
 captured session. A money-reporting surface does not become visible merely

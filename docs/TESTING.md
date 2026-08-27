@@ -105,7 +105,21 @@ The last two rows are worth stating explicitly. They enforce rules that would ot
 Pure functions over integer paise, so they are trivially testable and there is no excuse for gaps.
 
 - Bill totals: `total = subtotal − discount + tax`, across quantities and rounding edges.
-- Expected closing cash: `opening + cash_sales − cash_expenses − cash_withdrawn`, including the cases that produce a negative expected balance.
+- **The drawer's interval arithmetic** (#11), in `src/domain/drawer.test.ts`:
+  `expected = opening + receipts − expenses − cash out`, `difference = counted −
+  expected`, and `next opening = counted − own cash out`. Including the cases that
+  produce a negative expected balance, and the signed cash-out term where a
+  negative *raises* the expected total with no branch.
+- **The carry-forward, proved as a non-propagation.** Two three-observation runs
+  identical but for a ₹500 shortfall in the middle one land on the same third
+  opening. That is decision 3, and it is the property the whole design rests on.
+- **The refusal**, in `src/features/cash/drawer-arithmetic.test.ts`. An exact
+  bill-run coincidence is reported; a nearby instant is never suggested. Asserted
+  by sweeping 4,000 differences and checking the advice carries no instant at all,
+  and again in the rendered output — because the helper can be right while the
+  component quietly renders something else.
+- The legacy day-close arithmetic in `src/domain/cash.test.ts` is left in place
+  and still passes. `daily_cash_records` is written by nothing and #12 drops both.
 - Cash difference sign convention — short is negative, over is positive. Assert it explicitly; it is exactly the kind of thing that silently inverts.
 - P&L in both modes, with an explicit test that the two do **not** double-count raw materials.
 - Formatting: paise → Indian-grouped rupees (`₹1,23,456`), including zero and negative values.
@@ -369,3 +383,37 @@ Three habits follow, and they generalise past attendance:
 ## Honesty
 
 If a gate was not run, say so. A change reported as verified when the offline path was never exercised is worse than one reported as unverified — it spends trust that has to be repaid later, usually at a counter with a customer waiting.
+
+## The August rehearsal (#11)
+
+`scripts/rehearse-august-drawer.mjs` replays a real month of production data
+through the **real** `src/domain/drawer.ts` — not a copy of it — and reports what
+it finds. It runs offline against a JSON snapshot kept **outside the repo**,
+because a production dump does not belong in git:
+
+```bash
+node --import ./scripts/lib/resolve-ts.mjs scripts/rehearse-august-drawer.mjs --snapshot <path.json>
+```
+
+**It reports and never repairs, and a clean run is a failure.** The production
+notebook's opening-cash chain is already broken in eleven places, and the script
+*asserts* three of them by date. A run that found none would mean the chain check
+had regressed — not that the data was sound — so it exits non-zero and says so.
+
+What it establishes, and each figure is measured rather than estimated:
+
+- **The mid-day boundary is worth ₹4,640 of fiction in one month.** Placing a
+  22:00 count on every real trading date, ₹740 at Kalyani (4 bills, 3 dates) and
+  ₹3,900 at Kanchrapara (21 bills, 8 dates) was rung *after* the count.
+  `close_business_day()` would have called all of it a shortfall on drawers that
+  were never short.
+- **The notebook and the counter already disagree** on the dates both cover, by
+  ₹10,150 at Kalyani, and the notebook has no row at all for ten dates the tablet
+  billed. That belongs to #12's carry-over, and it is why the derived reader is not
+  asked to reconcile the two.
+- **A negative cash-out already occurs in production**, once at each outlet — so
+  decision 5's claim that it needs no concept of its own is replayed against real
+  rows rather than invented ones.
+
+Re-run it before any change to the interval arithmetic. It costs nothing to get
+wrong at a desk and a great deal to get wrong at a counter.

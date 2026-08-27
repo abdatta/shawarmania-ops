@@ -46,7 +46,7 @@
 - [x] 5.3 Record and surface reconciliation exceptions for cash whose payment or occurrence instant falls inside an already-observed interval; verify the exception names the rows, amounts, occurrence and arrival instants, and the difference that would have resulted.
 - [x] 5.4 Handle the explaining case: verify a late arrival equal to a recorded excess leaves the recorded excess in place and marks it explained with its date.
 - [x] 5.5 Implement acknowledge-with-a-note and record-a-fresh-observation as the two resolutions; verify neither alters a stored observation figure.
-- [ ] 5.6 Surface unsynced devices as an advisory on the count sheet, naming how many and since when, marking the expected figure possibly understated; verify a count is still accepted while a device is behind.
+- [x] 5.6 Surface unsynced devices as an advisory on the count sheet, naming how many and since when, marking the expected figure possibly understated; verify a count is still accepted while a device is behind.
 - [x] 5.7 Prove the whole-system rule: verify no code path recomputes a stored observation figure in response to a bill, an expense, a settlement or a sync.
 
 ## 6. The Cash drawer surface
@@ -60,7 +60,7 @@
 - [x] 6.6 Build `Record a cash spend` as a secondary link with a required reason; verify it states that it will not enter the month's operating expenses, and that it is not reachable as prominently as a collection.
 - [x] 6.7 Build the adjustment sheet for a locked observation; verify it names why the observation is locked, requires a reason, and states that the following observation re-anchors the balance so nothing after it moves.
 - [x] 6.8 Build the exception card with its two resolutions; verify it names the arriving rows and what the difference would have been.
-- [ ] 6.9 Walk the surface on a phone and a tablet in light and dark themes; verify no layout reflow, that money never truncates, and that `npm run contrast` passes.
+- [x] 6.9 Walk the surface on a phone and a tablet in light and dark themes; verify no layout reflow, that money never truncates, and that `npm run contrast` passes.
 
 ## 7. The derived ledger statement
 
@@ -71,7 +71,7 @@
 - [x] 7.5 Name the float left and the closing balance separately and never with one word; verify the worked example renders ₹1,450 left and ₹3,504 closing, and that the surface states the float is not the next day's opening. Verify the word "Kept" appears nowhere in the surface, its tests or the docs it updates.
 - [x] 7.6 Mark a day with no observation as `carried` on both balances, naming when the drawer was last confirmed; verify the month view carries the same marker per row.
 - [x] 7.7 Assert the surface has no editable figure; verify a test enumerates the rendered controls and finds only the date stepper, row expansion and verification.
-- [ ] 7.8 Measure the derived month against a real August at both outlets; verify the timing is recorded against open question 3, and that if it does not hold the remedy taken is a read model rather than a stored day row.
+- [x] 7.8 Measure the derived month against a real August at both outlets; verify the timing is recorded against open question 3, and that if it does not hold the remedy taken is a read model rather than a stored day row.
 
 ## 8. Verification
 
@@ -89,9 +89,9 @@
 
 ## 10. Docs, roadmap and gates
 
-- [ ] 10.1 Update `docs/SCREENS.md`, `docs/DATA_MODEL.md`, `docs/GLOSSARY.md`, `docs/ROLES_AND_PERMISSIONS.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/LIMITATIONS.md`, `docs/DEMO_MODE.md`, `docs/OPERATIONS.md` and `docs/TESTING.md`; verify the glossary no longer defines a closing figure, that "Business date" is unchanged, that the `paid_at` skew limitation is recorded, and that no page still describes a day close as a thing that happens.
-- [ ] 10.2 Sweep every stale reference to `daily-cash-live` and `expenses-and-inventory-live` outside `openspec/changes/archive/`; verify each now points at this change or at #12, and that archived changes are left as the dated record they are.
-- [ ] 10.3 Amend the #11 and #12 rows, the dependency graph and the Wave E narrative in `openspec/changes/ROADMAP.md`; run `npm run roadmap:sync` and verify no hand-stamped status drift.
+- [x] 10.1 Update `docs/SCREENS.md`, `docs/DATA_MODEL.md`, `docs/GLOSSARY.md`, `docs/ROLES_AND_PERMISSIONS.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/LIMITATIONS.md`, `docs/DEMO_MODE.md`, `docs/OPERATIONS.md` and `docs/TESTING.md`; verify the glossary no longer defines a closing figure, that "Business date" is unchanged, that the `paid_at` skew limitation is recorded, and that no page still describes a day close as a thing that happens.
+- [x] 10.2 Sweep every stale reference to `daily-cash-live` and `expenses-and-inventory-live` outside `openspec/changes/archive/`; verify each now points at this change or at #12, and that archived changes are left as the dated record they are.
+- [x] 10.3 Amend the #11 and #12 rows, the dependency graph and the Wave E narrative in `openspec/changes/ROADMAP.md`; run `npm run roadmap:sync` and verify no hand-stamped status drift.
 - [ ] 10.4 Read `.github/workflows/` and run every job it runs, not a remembered list; verify the non-Docker gates and the Docker-backed gates each pass with recorded evidence.
-- [ ] 10.5 Walk all four demo roles and both real shells on a phone and a tablet in both themes; verify no regression in billing, attendance or the aggregator surfaces.
+- [x] 10.5 Walk all four demo roles and both real shells on a phone and a tablet in both themes; verify no regression in billing, attendance or the aggregator surfaces.
 - [ ] 10.6 PHASE GATE — Cash is counted, not closed: a count taken at 22:00 mid-service is measured against cash received up to 22:00 and no further, and the cash rung afterwards opens the next interval; the same path records a count after two skipped days and states that it covers three; a count entered an hour later with an approximate time reports how much the timing could explain, names an exact bill-run coincidence as a fact, and proposes no instant when none matches, proved by a test asserting the absence; a collection takes an amount and an instant with no reason and no actor, a negative amount is cash added to a thin drawer and says so on the keystroke that makes it negative rather than at submission, and drawer cash spent on equipment takes a reason and leaves the month's operating expenses unchanged; a shortfall is recorded once and does not reach the next interval; an observation is editable until the next one anchors on it and only adjustable afterwards, with both figures readable; cash syncing into an observed interval reports beside the observation and never inside it, including the case where it explains a recorded excess; a Super Admin with no assignment counts at both outlets and the record says where they stood, while a Biller and an Employee are refused every drawer read and write by the database, proved by a hand-crafted request; the Ledger renders every day with no typed field, orders the drawer by instant, names the float left and the closing balance differently, and marks an uncounted day `carried`; the migration contains no drop and no rename, so the previous surface still works at its route; and the four-role demo walkthrough still walks.

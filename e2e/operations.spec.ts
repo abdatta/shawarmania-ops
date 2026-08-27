@@ -24,7 +24,7 @@ async function setTheme(page: Page, theme: 'light' | 'dark') {
 }
 
 test.describe('the operations surfaces', () => {
-  test('walks menu, stock, expenses and a full day-close', async ({ page, baseURL }) => {
+  test('walks menu, stock, expenses and a drawer count', async ({ page, baseURL }) => {
     const origin = new URL(baseURL ?? E2E_ORIGIN).origin
     const violations: string[] = []
     page.on('request', (request) => {
@@ -58,56 +58,87 @@ test.describe('the operations surfaces', () => {
     await expect(page.locator('[data-testid^="cash-"]').first()).toContainText('Cash')
     await expect(page.getByTestId('expense-cash-total')).toBeVisible()
 
-    // ── Daily cash, and a deliberate mismatch on the way out ────────────────
-    await page.getByRole('link', { name: 'Cash' }).click()
-    await expect(page.getByTestId('cash-figures')).toBeVisible()
+    // ── The drawer, and a deliberate mismatch on the way out ────────────────
+    //
+    // This leg used to walk a day close. `cash-is-counted-not-closed` (#11)
+    // removed that: the drawer is a running balance counted mid-shift, so the
+    // surface opens on a figure rather than on a date, and there is no seal.
+    await page.getByRole('link', { name: 'Drawer' }).click()
+    await expect(page.getByTestId('drawer-balance')).toBeVisible()
 
-    const expected = (await page.getByTestId('expected-closing').textContent()) ?? ''
-    const expectedRupees = Number(expected.replace(/[₹,]/g, ''))
-    await page.getByLabel(/Count the drawer/).fill(String(expectedRupees - 240))
+    // It opens on a balance, not a date picker. That is the whole shape change.
+    await expect(page.getByTestId('expected-now')).toBeVisible()
+    await expect(page.getByTestId('cash-day')).toHaveCount(0)
 
-    const live = page.getByTestId('live-difference')
-    await expect(live).toHaveAttribute('data-difference', 'short')
-    await expect(live).toContainText('-₹240')
-    await expect(live).toContainText('missing from the drawer')
+    await page.getByTestId('open-count').click()
 
-    await page.getByTestId('close-day-button').click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Close the day' }).click()
+    // **The direction, not a predicted figure.** An earlier version of this test
+    // computed the exact shortfall from the rendered balance, which coupled it to
+    // the demo fixture's arithmetic and read the wrong sign the moment that moved.
+    // What this leg is for is that the difference appears at all, immediately, and
+    // says which way it goes; the arithmetic itself is proved in
+    // `src/features/cash/drawer-arithmetic.test.ts` against known inputs.
+    const difference = page.getByTestId('count-difference')
 
-    const closed = page.getByTestId('closed-day')
-    await expect(closed).toBeVisible()
-    await expect(closed.getByTestId('closed-difference')).toHaveAttribute(
-      'data-difference',
-      'short',
-    )
-    // Closed for good: no way to do it again.
-    await expect(page.getByTestId('close-day-button')).toHaveCount(0)
+    await page.getByTestId('counted-input').fill('1')
+    await expect(difference).toContainText('short')
+
+    await page.getByTestId('counted-input').fill('99999999')
+    await expect(difference).toContainText('over')
+
+    // A minus in the collection field means money going IN, and it says so
+    // immediately rather than at submission.
+    await page.getByTestId('collecting-input').fill('-1000')
+    await expect(page.getByTestId('negative-warning')).toContainText('ADDING money to the drawer')
+
+    // Back to an ordinary collection, and save.
+    await page.getByTestId('collecting-input').fill('500')
+    await expect(page.getByTestId('negative-warning')).toHaveCount(0)
+    await page.getByTestId('away-reason').fill('walked through on the tablet')
+    await page.getByTestId('save-count').click()
+
+    // No seal, and nothing froze: the primary action is still there afterwards,
+    // because a drawer can be counted again whenever somebody counts it.
+    await expect(page.getByTestId('open-count')).toBeVisible()
+    await expect(page.getByTestId('recent-counts')).toBeVisible()
 
     expect(violations).toEqual([])
   })
 
-  test('reports a bill that arrived after yesterday was closed', async ({ page }) => {
-    await page.goto('demo/admin/cash')
-    await expect(page.getByTestId('cash-figures')).toBeVisible()
+  test('the Ledger reads a day with nothing to type into it', async ({ page }) => {
+    // The counterpart of the drawer: #11 replaced the manual Ledger form in the
+    // navigation with a statement derived on read. The assertion that matters is
+    // the negative one.
+    await page.goto('demo/admin/statement')
+    await expect(page.getByTestId('ledger-revenue')).toBeVisible()
+    await expect(page.getByTestId('ledger-drawer')).toBeVisible()
+    await expect(page.getByTestId('ledger-expenses')).toBeVisible()
 
-    // Yesterday is the second option — today is the first.
-    const options = page.getByTestId('cash-day').locator('option')
-    await page
-      .getByTestId('cash-day')
-      .selectOption((await options.nth(1).getAttribute('value')) ?? '')
+    // Zero editable figures, enumerated rather than sampled — and scoped to the
+    // reading itself. The shell's outlet selector is a `select`, and it is chrome
+    // rather than a figure: the claim is that no REVENUE, DRAWER or EXPENSE figure
+    // on this surface is an input.
+    for (const section of ['ledger-revenue', 'ledger-drawer', 'ledger-expenses'] as const) {
+      const card = page.getByTestId(section)
+      await expect(card.locator('input')).toHaveCount(0)
+      await expect(card.locator('textarea')).toHaveCount(0)
+      await expect(card.locator('select')).toHaveCount(0)
+      await expect(card.locator('[contenteditable="true"]')).toHaveCount(0)
+    }
 
-    const exception = page.getByTestId('reconciliation-exception')
-    await expect(exception).toBeVisible()
-    await expect(exception).toContainText('arrived after this day was closed')
-    await expect(exception).toContainText('have not been changed')
+    // The float left and the closing balance are never one word. On a `carried`
+    // date the chip is deliberately absent — there was no count, so there is no
+    // float left to distinguish from anything — so step back to a counted one.
+    await page.getByTestId('day-back').click()
+    await expect(page.getByTestId('left-is-not-opening')).toContainText('left')
 
-    // Yesterday is closed, and closed with a real shortfall.
-    const closed = page.getByTestId('closed-day')
-    await expect(closed.getByTestId('closed-difference')).toHaveAttribute(
-      'data-difference',
-      'short',
-    )
-    await expect(page.getByTestId('close-day-button')).toHaveCount(0)
+    // The manual form still resolves at its own route — the fallback is a tab,
+    // not a runtime toggle — while having no navigation entry.
+    await expect(
+      page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Ledger' }),
+    ).toHaveAttribute('href', /statement$/)
+    await page.goto('demo/admin/ledger')
+    await expect(page.getByTestId('ledger-view')).toBeVisible()
   })
 
   test('records a movement and a stock item’s figure follows its ledger', async ({ page }) => {
@@ -175,7 +206,10 @@ for (const viewport of VIEWPORTS) {
         ['menu', 'menu-list'],
         ['inventory', 'stock-list'],
         ['expenses', 'expense-list'],
-        ['cash', 'cash-figures'],
+        // `cash` was here until #11 made the day-close screen `hidden`. Both of
+        // its replacements are walked instead, in both themes on both viewports.
+        ['drawer', 'drawer-balance'],
+        ['statement', 'ledger-revenue'],
       ] as const) {
         await page.goto(`demo/admin/${path}`)
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme)

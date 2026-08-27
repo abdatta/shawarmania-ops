@@ -50,14 +50,6 @@ function dayBounds(businessDate: string): { from: string; to: string } {
   }
 }
 
-interface BillWithAllocations {
-  id: string
-  bill_number: number
-  business_date: string
-  paid_at: string | null
-  effective_bill_payments: Array<{ method: string; amount_paise: number }> | null
-}
-
 export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStatementAdapter {
   async function namesFor(ids: readonly (string | null)[]): Promise<Map<string, string>> {
     const wanted = [...new Set(ids.filter((id): id is string => id !== null))]
@@ -132,11 +124,12 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       anchorResult,
       verificationsResult,
     ] = await Promise.all([
+      // No embed of `effective_bill_payments`: it is a VIEW with no declared
+      // foreign key, so PostgREST refuses the nesting outright. The allocations
+      // are read as their own select below and joined by bill id.
       client
         .from('bills')
-        .select(
-          'id, bill_number, business_date, paid_at, effective_bill_payments(method, amount_paise)',
-        )
+        .select('id, bill_number, business_date, paid_at')
         .eq('outlet_id', outletId)
         .eq('business_date', businessDate)
         .eq('status', 'settled'),
@@ -179,26 +172,44 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
     if (billsResult.error) refuse(billsResult.error)
     if (expensesResult.error) refuse(expensesResult.error)
 
-    const bills = (billsResult.data ?? []) as unknown as BillWithAllocations[]
+    const bills = billsResult.data ?? []
+
+    // One select for every allocation on the day's bills, joined by id below.
+    // See `cashByBill` for why this is not an embed.
     let cashPaise = 0
     let cashBills = 0
     let upiPaise = 0
     let upiBills = 0
-    for (const bill of bills) {
-      const allocations = bill.effective_bill_payments ?? []
-      const cash = allocations
-        .filter((allocation) => allocation.method === 'cash')
-        .reduce((sum, allocation) => sum + allocation.amount_paise, 0)
-      const upi = allocations
-        .filter((allocation) => allocation.method === 'upi')
-        .reduce((sum, allocation) => sum + allocation.amount_paise, 0)
-      if (cash > 0) {
-        cashPaise += cash
-        cashBills += 1
+
+    if (bills.length > 0) {
+      const allocationsResult = await client
+        .from('effective_bill_payments')
+        .select('bill_id, method, amount_paise')
+        .in(
+          'bill_id',
+          bills.map((bill) => bill.id),
+        )
+      if (allocationsResult.error) refuse(allocationsResult.error)
+
+      const perBill = new Map<string, { cash: number; upi: number }>()
+      for (const allocation of allocationsResult.data ?? []) {
+        if (!allocation.bill_id) continue
+        const entry = perBill.get(allocation.bill_id) ?? { cash: 0, upi: 0 }
+        // Nullable on the view in the generated types, so coalesced.
+        if (allocation.method === 'cash') entry.cash += allocation.amount_paise ?? 0
+        if (allocation.method === 'upi') entry.upi += allocation.amount_paise ?? 0
+        perBill.set(allocation.bill_id, entry)
       }
-      if (upi > 0) {
-        upiPaise += upi
-        upiBills += 1
+
+      for (const entry of perBill.values()) {
+        if (entry.cash > 0) {
+          cashPaise += entry.cash
+          cashBills += 1
+        }
+        if (entry.upi > 0) {
+          upiPaise += entry.upi
+          upiBills += 1
+        }
       }
     }
 

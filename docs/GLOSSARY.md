@@ -96,29 +96,111 @@ The four digits the tablet displays while it waits. Its only job is to prove the
 
 ### Cash sales
 
-The sum of settled cash bills by `payment_business_date`. **The only sales
-figure that affects the cash drawer.** Revenue uses the order business date;
-UPI, Swiggy and Zomato never move the drawer.
+The sum of the **latest accepted effective Cash allocations** of settled bills.
+**The only sales figure that affects the cash drawer.** Revenue uses the order
+business date; UPI, Swiggy and Zomato never move the drawer.
 
-### Expected closing cash
+For revenue and reporting, cash sales are grouped by `payment_business_date`. For
+the **drawer**, they are grouped by payment *instant* into a
+[drawer interval](#drawer-interval) rather than by date, because a date cannot
+express 22:00 and the drawer is counted mid-shift.
+
+### Drawer observation
+
+**A named person saw a stated amount in one outlet's drawer at a stated instant.**
+The unit of cash truth, and it has no container: there is no limit of one per
+business date, and no requirement that one fall at or near a cutover. An
+observation covering three days is recorded by the same path as one covering a
+single evening.
+
+It carries two clocks. `counted_at` is human-supplied, because people count at
+22:00 and type it at 23:04; `recorded_at` is the server's, so the lag between
+them can never be understated.
+
+### Drawer interval
+
+The span `(previous observation's counted_at, this observation's counted_at]` —
+half-open at the start, closed at the end. A payment at exactly the previous
+count's instant belonged to that count; one at exactly this instant belongs to
+this one.
+
+### Expected total
 
 ```
-opening_cash + cash_sales − cash_expenses − cash_withdrawn
+opening + cash receipts in the interval − cash expenses in the interval − cash out in the interval
 ```
 
-What should be in the drawer at close, computed by the system.
+What should have been in the drawer at the moment it was counted, computed by the
+database inside the transaction that writes the observation. Never supplied by a
+client.
 
-### Actual closing cash
+### Counted total
 
-What the manager counted. Entered by a human at close.
+What the person counted. The one figure a human supplies, and the one the whole
+surface exists to compare something against.
 
 ### Cash difference
 
-`actual_closing − expected_closing`. Negative means short, positive means over. Both are worth investigating; a consistently non-zero difference is a signal, which is why it is stored rather than just displayed.
+`counted_total − expected_total`. Negative means short, positive means over. Both
+are worth investigating; a consistently non-zero difference is a signal, which is
+why it is stored rather than just displayed.
 
-### Cash withdrawal
+**A difference is recorded once, on the observation that found it, and reaches
+nothing after it.** The next observation opens on the *counted* figure, never the
+expected one, so a variance cannot ripple through a month.
 
-Money removed from the drawer during or at the end of a day — banked, handed to the owner, or taken for a purchase. Reduces expected closing cash. Distinct from an expense: a withdrawal moves cash, an expense consumes it.
+### Anchor
+
+**An outlet's first drawer observation, which carries no arithmetic at all** — no
+opening, no expected total and no difference. The drawer simply begins at what was
+counted. Not a fabricated opening and not a zero: an outlet already trading has a
+float, so a zero would record a variance of roughly that float as an excess,
+permanently, on the first row anybody reads.
+
+### Carried
+
+**A balance the app believes but nobody checked.** The word on a business date
+with no observation in it, and the only word on the month view that says how much
+the numbers can be trusted.
+
+Distinct from **not tracked yet**, which is a business date before the outlet's
+anchor. `carried` means a belief left unchecked; before the anchor there is no
+belief to leave unchecked.
+
+### Cash out
+
+Money into or out of the drawer that is not a sale or an expense, as one record
+carrying a **signed non-zero amount** and a kind:
+
+- a **collection** is the nightly act — an amount and an instant, with no reason
+  and no separate actor, because the person is the session;
+- a **spend** is rare, requires a reason, and exists for drawer cash that buys
+  something. It must be positive, and it is deliberately **not** an expense: the
+  month is a cash-basis operating estimate, so a fridge routed through expenses
+  would move the drawer correctly and wreck the month.
+
+**A negative amount is cash added to the drawer**, and there is no separate
+concept, table or kind for it. The arithmetic subtracts this term whatever the
+sign, so a top-up needs no branch.
+
+A collection recorded as part of an observation is in neither that observation's
+counted total nor its expected total. It reduces the *next* opening instead.
+
+### Float left
+
+What the collector walked away from: `counted_total` less that observation's own
+cash out. **Not the next day's opening balance**, because the counter goes on
+trading afterwards — which is why the reading names the two separately. The term
+that used to cover both figures at once is retired; it was doing the work of two
+words and neither reader could tell which.
+
+### Verification
+
+An attributed acknowledgement that somebody read a business date. It **freezes
+nothing and gates nothing**, because aggregator settlement legitimately restates a
+day's figures days later and a verification that forbade that would be one nobody
+could use. A day whose inputs move afterwards is marked as changed since it was
+verified, naming what moved.
 
 ### Stock movement
 

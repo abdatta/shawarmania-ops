@@ -43,25 +43,29 @@ test('the owner console shows both outlets, each with its own figures', async ({
   expect(first).not.toBe(second)
 })
 
-test('the console’s cash difference is the one the manager signed off', async ({ page }) => {
+test('the console’s cash difference is the one the drawer recorded', async ({ page }) => {
   await openDemo(page, 'demo/owner')
 
   // The owner's route to the number: an attention chip on the console, derived
-  // by the insights adapter from yesterday's closed record.
+  // by the insights adapter.
+  //
+  // That derivation used to read `daily_cash_records`, and
+  // `cash-is-counted-not-closed` (#11) stopped anything writing that table. It
+  // now reads the drawer observation inside the date — which is what keeps the
+  // claim this test makes true: there is exactly one place the figure comes from.
   const attention = page.locator('[data-testid^="attention-"]').first()
   await expect(attention).toContainText('short')
   const fromConsole = paiseFrom(await attention.innerText())
 
-  // The manager's route to the same number: the cash screen's own closed-day
-  // snapshot, through the daily-cash adapter.
-  await openDemo(page, 'demo/admin/cash')
-  const dayPicker = page.getByTestId('cash-day')
-  const yesterday = await dayPicker.locator('option').nth(1).getAttribute('value')
-  await dayPicker.selectOption(yesterday ?? '')
+  // The manager's route to the same number: the drawer's own recent counts.
+  await openDemo(page, 'demo/admin/drawer')
+  await expect(page.getByTestId('recent-counts')).toBeVisible()
 
-  const closed = page.getByTestId('closed-difference')
-  await expect(closed).toBeVisible()
-  expect(Math.abs(paiseFrom(await closed.innerText()))).toBe(Math.abs(fromConsole))
+  const counts = await page.getByTestId('recent-counts').innerText()
+  expect(counts).toContain(
+    // The chip's rupees, formatted the same way the surface formats them.
+    new Intl.NumberFormat('en-IN').format(Math.abs(fromConsole) / 100),
+  )
 })
 
 test('the console’s low-stock count is the stock the manager can see', async ({ page }) => {
