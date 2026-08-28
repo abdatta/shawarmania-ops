@@ -937,6 +937,120 @@ count is measured against. A caller without reach gets **nought rather than an
 exception**, which is what a reader with no reach should learn — the same answer
 an RLS-filtered select would give them.
 
+### 27. The count is a tally, and neither editable field carries a placeholder
+
+The sheet asked two questions in two labelled boxes and computed a third figure
+into a chip underneath. The owner read it back on 2026-08-29 and the complaint
+was structural: the arithmetic already has a shape, and the form was not it.
+
+So the four figures sit in one column, as a tally:
+
+```
+Cash expected                        ₹2,733
+Cash counted                    [          ]
+Cash collected                  [          ]
+Cash left                              ₹833
+```
+
+- **`Cash expected` is stated, and it was not before.** The sheet computed it
+  and then only ever mentioned it inside the difference chip, which is the one
+  place it appears *after* the reader has already typed. Showing it first is what
+  makes the other three read as arithmetic rather than as three separate
+  questions, and it is the figure the collector is checking against.
+- **`Cash left` replaces the *leaving* chip.** Same number, but it is the line
+  the tally produces rather than an aside about one of the fields.
+- **Neither editable row carries a placeholder.** A greyed `8950` in an empty
+  money field is read as a value at a glance, which is the one misreading this
+  surface cannot afford; and the collection field's pre-filled `0` was a figure
+  somebody had to clear before they could type. **Leaving the collection empty
+  already means nothing was collected**, so nothing is lost by saying it with
+  emptiness instead of a nought.
+- Labels are `text-base` and the fields are `w-44`, because the first cut set
+  both small and left a corridor of dead space down the middle of the sheet.
+  Stated figures carry `pr-3` so they land on the same right edge as a typed one
+  sitting inside its field's padding; without it the column is a few pixels out
+  and stops reading as a column.
+
+The difference — `₹400 short`, `matches ₹2,733` — stays exactly where it was, on
+the keystroke, immediately under the counted row. It is the one thing on this
+sheet that may never move behind anything.
+
+### 28. A stated instant is picked, never typed
+
+The fourth time option was a full-width `datetime-local` field under the three
+relative buttons, editable by keyboard. Two things wrong with it: it took a row
+of its own while the button row had space to spare, and **a half-typed date is
+still a date.** This field decides which cash a count is measured against, so a
+caret in it is a way to be silently wrong.
+
+Now it is a fourth button, **Other**, beside `Now`, `15 min` and `30 min`. It
+opens the platform's own picker through `showPicker()`. The input survives —
+that is what carries the value and what `showPicker()` acts on — but it is
+`aria-hidden`, `tabIndex={-1}` and `pointer-events-none`, so it is never
+somewhere a person puts a caret. Keyboard users reach the picker through the
+button, which is labelled *Pick another date and time*, and the picker itself is
+keyboard-navigable. Where `showPicker()` is missing, focusing and clicking the
+field is what older browsers open it on.
+
+The four labels are short — `Now`, `15 min`, `30 min`, `Other` — because four
+options must share one row on a 375px phone, and `15 min ago` cannot. **The
+instant they produce is spelled out in full directly beneath**, so the button
+carries the gesture and the line below carries the meaning. The spoken label
+keeps the whole phrase for a reader who does not get the line.
+
+**That line is text, not chips.** It reads `Today, 12:39 am · give or take 15
+min` at `text-sm`, as the value of *Collection time*. A chip states a fact
+*about* a thing; this **is** the thing, and at chip size the one number the
+reader was choosing was the smallest text in the sheet. The `~ ±15 min`
+shorthand becomes words for the same reason.
+
+### 29. Nought is not a direction
+
+Amends decision 23, which said the signs are shown rather than implied and left
+it there. The rule needed one more clause, from the owner: **a figure of nought
+carries neither a sign nor a colour.** `+₹0` in green says a direction about a
+term that has none.
+
+So one function decides both, for every term in the running balance:
+
+```
+0   → no prefix, no tone
+> 0 → "+", success
+< 0 → the minus formatPaise already renders, danger
+```
+
+**Cash Expenses goes through the same function, negated.** That is the whole of
+the difference between the two figures, and it buys a case nobody wrote a rule
+for: a *negative* expense is a refund, so it comes out green with a plus,
+correctly, without a branch of its own. Two functions that agreed today would be
+two functions to keep agreeing.
+
+### 30. The newest count can finally be fixed
+
+Decision 8 settled the boundary — an observation is editable until the next one
+anchors on it, and only adjustable afterwards — and `edit_drawer_observation`
+has enforced it in the database since the migration shipped. **No control ever
+called it.** The one count most likely to need a quick correction, the one taken
+two minutes ago, was the only count with no correction control at all.
+
+The practical cost, which is why this is worth more than its size: a typo caught
+immediately could not be fixed at all. The recorder had to wait until they took
+another count, at which point the row locked and the only remaining path was an
+adjustment — which demands a reason and leaves *"was ₹9,850, now ₹8,950"*
+permanently on the record. A two-minute slip ended up wearing the costume of a
+correction somebody had to justify, which is precisely the signal that treatment
+exists to reserve for figures other figures were built on.
+
+So the disclosure body now offers **Fix this count** on the newest observation
+and **Adjust this count** on every other, never both. The fix takes an amount
+and nothing else: no reason, no trail, no adjustment row. The sheet says *no
+reason needed* on its face, with the reason for that behind a `Why`, because a
+correction that asks for nothing is surprising enough to explain once.
+
+The database remains the boundary rather than the screen: `edit_drawer_observation`
+refuses the moment a later count reads this one as its opening, and the surface
+stops offering it at the same instant, from the same fact.
+
 ## The surfaces
 
 Layout conventions in these sketches: `[ 8950 ]` is typed, `( chip )` is tapped,

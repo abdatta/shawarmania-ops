@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DataAdapters, DrawerObservationRecord } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
+import { OUTLET_KALYANI_ID } from '@/data-access/mock/fixtures/outlets'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
@@ -555,19 +556,50 @@ describe('every count time is approximate', () => {
 
     await user.click(screen.getByTestId('open-count'))
 
-    // Now, 15 min ago, 30 min ago — and the window is stated for all of them.
+    // Now, 15 min ago, 30 min ago, Other time — and the window is stated for
+    // all of them, as the value of the field rather than as a chip.
     expect(screen.getByTestId('when-0').textContent).toMatch(/now/i)
-    expect(screen.getByTestId('when-15').textContent).toMatch(/15 min ago/i)
-    expect(screen.getByTestId('when-30').textContent).toMatch(/30 min ago/i)
-    expect(screen.getByTestId('tolerance-window').textContent).toMatch(/±15 min/)
+    expect(screen.getByTestId('when-15').textContent).toMatch(/15 min/i)
+    expect(screen.getByTestId('when-30').textContent).toMatch(/30 min/i)
+    expect(screen.getByTestId('when-other').textContent).toMatch(/other/i)
+
+    // The labels are short so four options share one row on a 375px phone. The
+    // whole phrase survives as the accessible name, for a reader who does not
+    // get the line beneath spelling the instant out.
+    expect(screen.getByTestId('when-15')).toHaveAccessibleName('Counted 15 minutes ago')
+    expect(screen.getByTestId('when-other')).toHaveAccessibleName('Pick another date and time')
+    expect(screen.getByTestId('tolerance-window').textContent).toMatch(/give or take 15 min/i)
 
     // The control that used to take the window back is gone, for good.
     expect(screen.queryByTestId('assert-certain')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /i.m sure/i })).not.toBeInTheDocument()
 
     await user.click(screen.getByTestId('when-30'))
-    expect(screen.getByTestId('tolerance-window').textContent).toMatch(/±15 min/)
+    expect(screen.getByTestId('tolerance-window').textContent).toMatch(/give or take 15 min/i)
     expect(screen.queryByRole('button', { name: /i.m sure/i })).not.toBeInTheDocument()
+  })
+
+  it('reaches a stated instant through the platform picker, not by typing', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await waitFor(() => expect(screen.getByTestId('open-count')).toBeInTheDocument())
+
+    await user.click(screen.getByTestId('open-count'))
+
+    // The field exists and is bound, because that is what carries the value and
+    // what `showPicker()` acts on — but it is not somewhere a caret goes. A
+    // half-typed date is a date, and this one decides which cash the count is
+    // measured against.
+    const field = screen.getByTestId('counted-at-picker')
+    expect(field).toHaveAttribute('tabindex', '-1')
+    expect(field).toHaveAttribute('aria-hidden', 'true')
+    expect(field.className).toMatch(/pointer-events-none/)
+
+    // Pressing the button asks the platform to open its own picker.
+    const showPicker = vi.fn()
+    Object.defineProperty(field, 'showPicker', { configurable: true, value: showPicker })
+    await user.click(screen.getByTestId('when-other'))
+    expect(showPicker).toHaveBeenCalled()
   })
 
   it('takes an explicit date and time, and refuses one in the future itself', async () => {
@@ -697,5 +729,181 @@ describe('the count history is a paged list of disclosures', () => {
     // And the end of the list says it is the end rather than going quiet.
     expect(await screen.findByTestId('counts-exhausted')).toBeInTheDocument()
     expect(screen.queryByTestId('load-older-counts')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * The count as a tally, which is the shape the arithmetic already has: what
+ * should be there, what was there, what is being taken, what stays.
+ */
+describe('the count reads as a tally', () => {
+  it('shows what is expected, and works out what is left as the two are typed', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await waitFor(() => expect(screen.getByTestId('open-count')).toBeInTheDocument())
+
+    await user.click(screen.getByTestId('open-count'))
+
+    // Neither editable field is pre-filled. A greyed number in an empty money
+    // field reads as a value at a glance, and a pre-filled nought is a figure
+    // somebody has to clear before typing.
+    expect(screen.getByTestId('counted-input')).toHaveValue('')
+    expect(screen.getByTestId('collecting-input')).toHaveValue('')
+    expect(screen.getByTestId('counted-input')).not.toHaveAttribute('placeholder')
+    expect(screen.getByTestId('collecting-input')).not.toHaveAttribute('placeholder')
+
+    // What should be in the drawer at the stated instant, uneditable.
+    expect(screen.getByTestId('expected-at-instant')).toBeInTheDocument()
+
+    const sheet = screen.getByTestId('counted-input').closest('form')!
+    expect(sheet.textContent).toMatch(/Cash expected/i)
+    expect(sheet.textContent).toMatch(/Cash counted/i)
+    expect(sheet.textContent).toMatch(/Cash collected/i)
+    expect(sheet.textContent).toMatch(/Cash left/i)
+
+    // Left is derived, and moves with both fields above it.
+    await user.type(screen.getByTestId('counted-input'), '8950')
+    expect(screen.getByTestId('leaving-preview').textContent).toMatch(/8,950/)
+
+    await user.type(screen.getByTestId('collecting-input'), '7500')
+    expect(screen.getByTestId('leaving-preview').textContent).toMatch(/1,450/)
+  })
+
+  it('leaving an empty collection means nothing was collected', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await waitFor(() => expect(screen.getByTestId('open-count')).toBeInTheDocument())
+
+    await user.click(screen.getByTestId('open-count'))
+    await user.type(screen.getByTestId('counted-input'), '8950')
+
+    // Untouched, so the whole count stays in the drawer and the save is allowed.
+    expect(screen.getByTestId('collecting-input')).toHaveValue('')
+    expect(screen.getByTestId('leaving-preview').textContent).toMatch(/8,950/)
+    expect(screen.getByTestId('save-count')).not.toBeDisabled()
+  })
+})
+
+/**
+ * The two ways to correct a count, and the line between them (design D8).
+ *
+ * The distinction is the point: a figure nobody has read yet is simply replaced,
+ * and a figure a later count opened at is adjusted with a reason that stays on
+ * the record. Until now only the second was reachable, so a typo caught two
+ * minutes later had to wait for the next count and then wear a permanent
+ * correction — which is the treatment reserved for a figure somebody relied on.
+ */
+describe('correcting a count', () => {
+  it('offers a plain fix on the newest count, with no reason asked', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+
+    const rows = screen.getAllByRole('button', { name: /show the detail/i })
+    await user.click(rows[0]!)
+
+    // The newest row offers the edit, and never the adjustment.
+    const fix = screen.getAllByTestId(/^edit-/)
+    expect(fix).toHaveLength(1)
+    expect(screen.queryAllByTestId(/^adjust-/)).toHaveLength(0)
+
+    await user.click(fix[0]!)
+
+    expect(await screen.findByTestId('edited-amount')).toBeInTheDocument()
+    // No reason field at all, and the control says so on its face.
+    expect(screen.queryByTestId('adjust-reason')).not.toBeInTheDocument()
+    expect(screen.getByTestId('edit-leaves-no-trail').textContent).toMatch(/no reason needed/i)
+
+    // Refused while empty, accepted once a figure is given.
+    expect(screen.getByTestId('save-edit')).toBeDisabled()
+    await user.type(screen.getByTestId('edited-amount'), '8950')
+    expect(screen.getByTestId('save-edit')).not.toBeDisabled()
+  })
+
+  it('writes the corrected figure with no adjustment beside it', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    renderDrawer(adapters)
+    await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+
+    const before = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const newest = before.recentObservations[0]!
+
+    const rows = screen.getAllByRole('button', { name: /show the detail/i })
+    await user.click(rows[0]!)
+    await user.click(screen.getAllByTestId(/^edit-/)[0]!)
+    await user.type(await screen.findByTestId('edited-amount'), '4321')
+    await user.click(screen.getByTestId('save-edit'))
+
+    await waitFor(async () => {
+      const after = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+      const corrected = after.recentObservations.find((row) => row.id === newest.id)!
+      expect(corrected.countedTotalPaise).toBe(432_100)
+      // An edit replaces; only an adjustment leaves a correction on the record.
+      expect(corrected.adjustments).toHaveLength(0)
+    })
+  })
+
+  it('offers the adjustment, not the fix, once a later count has anchored on it', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+
+    // The second row: a later count opened at this figure.
+    const rows = screen.getAllByRole('button', { name: /show the detail/i })
+    await user.click(rows[1]!)
+
+    expect(screen.getAllByTestId(/^adjust-/).length).toBeGreaterThan(0)
+    expect(screen.queryAllByTestId(/^edit-/)).toHaveLength(0)
+  })
+})
+
+/**
+ * One sign rule for every term in the running balance (the owner, 2026-08-29).
+ *
+ * Nought is not a direction, so it carries neither sign nor colour. Expenses go
+ * through the same function negated, which is the whole of the difference
+ * between the two figures — so a negative expense, which is a refund, comes out
+ * green with a plus without needing a rule of its own.
+ */
+describe('the strip signs its figures by one rule', () => {
+  it('marks a positive receipt and a negative expense, and leaves nought alone', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const base = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+
+    const patched = (receipts: number, expenses: number): DataAdapters => ({
+      ...adapters,
+      cashDrawer: {
+        ...adapters.cashDrawer,
+        getState: async () => ({
+          ...base,
+          cashReceiptsSincePaise: receipts,
+          cashExpensesSincePaise: expenses,
+        }),
+      },
+    })
+
+    const ordinary = renderDrawer(patched(402_900, 305_000))
+    await waitFor(() => expect(screen.getByTestId('receipts-since')).toBeInTheDocument())
+    expect(screen.getByTestId('receipts-since').textContent).toMatch(/^\+/)
+    expect(screen.getByTestId('receipts-since').className).toMatch(/text-success/)
+    expect(screen.getByTestId('expenses-since').textContent).toMatch(/^-|^−/)
+    expect(screen.getByTestId('expenses-since').className).toMatch(/text-danger/)
+    ordinary.unmount()
+
+    // Nought is not a direction.
+    const empty = renderDrawer(patched(0, 0))
+    await waitFor(() => expect(screen.getByTestId('receipts-since')).toBeInTheDocument())
+    expect(screen.getByTestId('receipts-since').textContent).not.toMatch(/^\+/)
+    expect(screen.getByTestId('receipts-since').className).not.toMatch(/text-success|text-danger/)
+    expect(screen.getByTestId('expenses-since').textContent).not.toMatch(/^\+/)
+    expect(screen.getByTestId('expenses-since').className).not.toMatch(/text-success|text-danger/)
+    empty.unmount()
+
+    // A refunded expense is cash coming back, so the same rule turns it green.
+    renderDrawer(patched(0, -50_000))
+    await waitFor(() => expect(screen.getByTestId('expenses-since')).toBeInTheDocument())
+    expect(screen.getByTestId('expenses-since').textContent).toMatch(/^\+/)
+    expect(screen.getByTestId('expenses-since').className).toMatch(/text-success/)
   })
 })

@@ -136,3 +136,20 @@ hard rule in `AGENTS.md`.
 - [x] 12.8 Correct the `manual-ledger` spec delta scenario that forbade this outright; verify it now refuses a drawer *belief* taken from a notebook day row, which is decision 18 unchanged, and requires the notebook's *expenses* to be counted until #12 carries them across.
 - [x] 12.9 Move Expenses ahead of the Ledger in the owner and manager shells, so the nightly walk reads Billing, Drawer, Expenses, Ledger, Notebook; verify the demo-gated Expenses entry still wins the label dedupe in demo mode and the live one in the real app, and that the Biller and Employee shells are untouched.
 - [x] 12.10 Re-run every job `.github/workflows/verify.yml` defines, on a database reset from scratch; verify the drawer-writes phase resolves `@/` now that it drives the real adapter, and that `db:types` is clean but for the new view.
+
+## 13. The count sheet reads as a tally, 2026-08-29
+
+The owner's reading of the sheet itself, plus the control decision 8 promised
+and never built. See `design.md` decisions 27 to 30; 29 amends 23 and 30
+completes 8.
+
+- [x] 13.1 Lay the four figures out as one tally — expected, counted, collected, left — with the two stated figures uneditable; verify `Cash expected` is shown before anything is typed rather than only inside the difference chip, and that `Cash left` moves with both fields above it.
+- [x] 13.2 Remove the placeholder from both editable rows and stop pre-filling the collection with `0`; verify an untouched collection still saves as nothing collected, and that neither field renders a `placeholder` attribute at all.
+- [x] 13.3 Size the tally for a phone: `text-base` labels, `w-44` fields, and `pr-3` on stated figures so they land on the same right edge as typed ones; verify no corridor of dead space down the middle and that the four values read as one column.
+- [x] 13.4 Replace the full-width date field with a fourth **Other** button opening `showPicker()`; verify the input is `aria-hidden`, `tabIndex={-1}` and `pointer-events-none` so no caret reaches it, that the button carries a spoken label naming what it does, and that a browser without `showPicker` still falls through to focusing and clicking the field.
+- [x] 13.5 Shorten the relative labels so all four options share one row at 375px, keeping the full phrase as each button's accessible name; verify the chosen instant is spelled out in full beneath the row.
+- [x] 13.6 Render the chosen instant and its window as text rather than chips, as the value of `Collection time`; verify the window reads in words and that no `~ ±` shorthand survives.
+- [x] 13.7 Reduce the sign and tone of every term in the running balance to one function (decision 29); verify nought carries neither sign nor colour, that a positive reads `+` in success and a negative reads its own minus in danger, and that Cash Expenses passes through the same function negated so a refunded expense comes out positive without a branch of its own.
+- [x] 13.8 Wire `editObservation`, which shipped with no caller: offer **Fix this count** on the newest observation and **Adjust this count** on every other, never both; verify the fix asks for no reason, writes no adjustment row, and that the database still refuses it the moment a later count anchors on the row.
+- [x] 13.9 Do not claim a fix that is not one: an `autoFocus` added to pin the sheet's first focus was **removed after measuring**, because React applies it imperatively and `showModal()` re-focuses afterwards, so the attribute never reached the dialog. Verified the natural target is the sheet's Close control, which is what every other sheet in this app already does.
+- [x] 13.10 Re-run every job `.github/workflows/verify.yml` defines and walk the sheet on a phone viewport in both themes; verify the count, the fix and the adjustment all still write through the mock and the demo walkthrough still walks.
