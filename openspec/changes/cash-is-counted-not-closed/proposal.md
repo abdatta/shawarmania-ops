@@ -74,17 +74,48 @@ they walk in: **what should be in the drawer right now.** Not a date picker.
 
 - The running balance, with the last observation, what was left, and the cash
   receipts and cash expenses since, each with its own count of contributing rows.
-- **Count the drawer**, the primary action: when it was counted, what was in it,
+- **Count & Collect**, the primary action: when it was counted, what was in it,
   and how much is being collected. Three inputs, four taps on an ordinary night.
-- **Collect cash**, for taking money without counting. A **negative amount is
+  The count and the collection are one physical act, so they are one control.
+- **Only Collect**, for taking money without counting. A **negative amount is
   cash added** rather than taken, which is what happens when a thin drawer gets
   topped up at the count. There is no second control for it: the field announces
   what a minus means as it is typed.
-- **Record a cash spend**, rare, reason required, for drawer cash that buys
-  something and must not enter the month's operating expenses.
+- **Other Spend**, rare, reason required, for drawer cash that buys something and
+  must not enter the month's operating expenses.
 - **Adjust a count**, for correcting an observation a later one has anchored on.
 - Reconciliation exceptions for work that arrives after an observation was
   recorded.
+- Past counts as a paged list of disclosures: the instant, the amount and the
+  verdict on the closed row, everything else behind it.
+
+### A second pass over that surface, 2026-08-28
+
+Everything above was built and walked before the owner read the surface end to
+end. Five things came back, and each is recorded as its own decision (19 to 23
+in `design.md`) rather than folded in silently, because two of them reverse
+earlier decisions in this same change:
+
+- **Every count time is approximate, and the *I'm sure* control is gone.**
+  Counting a drawer takes minutes while the counter keeps trading, so no instant
+  a person supplies is exact — *now* included. Decision 6 is reversed on the
+  owner's own reasoning; decision 19 records it. The relative options become
+  Now, 15 min ago and 30 min ago, plus an explicit date and time for a count
+  recalled days later.
+- **Where the recorder stood is detected rather than typed**, the way attendance
+  already does it, and the reason field appears only when the fence says it must
+  — where it is then required. **This fixes a live defect**: the surface sent no
+  position, so every record was off-site, and the database's own constraint
+  would have refused a count whose optional reason box was left empty.
+- **A recent count is a disclosure and the list is paged.** The Supabase adapter
+  capped the history at twelve rows with no way past it; two outlets counted
+  daily reach that in a fortnight.
+- **The three actions are renamed for what distinguishes them** — Count &
+  Collect, Only Collect, Other Spend — and Other Spend stops being rendered as
+  bare text nobody recognised as a control.
+- **The balance card is re-laid out and its three figures are named and
+  signed**: Last Left, Cash from Bills with a leading `+`, Cash Expenses
+  negative and in the danger colour.
 
 ### The Ledger becomes a derived statement
 
@@ -165,6 +196,14 @@ fallback is a tab, not a flag: **no runtime toggle is introduced**, so
 - **New domain module** for the interval arithmetic, in integer paise, throwing
   on non-integer input, mirroring the database constraints.
 - **New surfaces** in `src/gates/registry.ts`, promoted `live` by this change.
+- **A cursored `listObservations` on the drawer adapter**, so the count history
+  is paged rather than capped at one read. No schema change: it is a second
+  query against a table and index this change already creates.
+- **The drawer becomes a fourth caller of `src/lib/geolocation.ts`**, alongside
+  check-in, approval and outlet capture. One reading, taken when a sheet opens,
+  no watch and nothing in the background — recorded in
+  `docs/SECURITY_AND_PRIVACY.md` and in that module's own header, both of which
+  currently enumerate the three callers as an exhaustive list.
 - **No production data is moved, renamed or deleted.** Verified 2026-08-26 that
   the tables this change leaves dead in place hold nothing:
   `daily_cash_records` 0 rows, `cash_withdrawals` 0 rows, `public.expenses` 0
@@ -214,7 +253,9 @@ Daily cash screen's removal), `docs/DATA_MODEL.md` (the new tables, and the
 daily-cash section), `docs/GLOSSARY.md` ("Cash sales", "Expected closing cash"
 and "Actual closing cash" all describe a close and must be rewritten; "Business
 date" stays; the word "Kept" must not enter it), `docs/ROLES_AND_PERMISSIONS.md`
-(the drawer rows of the capability matrix), `docs/OFFLINE_AND_SYNC.md` (the
+(the drawer rows of the capability matrix), `docs/SECURITY_AND_PRIVACY.md` (the
+drawer joins the enumerated list of actions that read a location, and it is an
+exhaustive list), `docs/OFFLINE_AND_SYNC.md` (the
 late-arrival rule against an observation), `docs/LIMITATIONS.md` (the manual
 ledger's exit now belongs to #12, and the `paid_at` skew note), `docs/DEMO_MODE.md`
 (the new gates), `docs/OPERATIONS.md` (step 8 of bringing an outlet online no

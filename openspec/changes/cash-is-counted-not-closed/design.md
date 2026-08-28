@@ -633,6 +633,199 @@ that begins the record. That is a different claim from `carried`, which means
 anchor there is no belief to leave unchecked. Decision 14's retirement of
 "Kept" was the same mistake caught one surface earlier.
 
+### 19. Every count time is approximate, and there is no control asserting certainty
+
+Settled with the owner 2026-08-28, on the second reading of the count sheet.
+**It reverses half of decision 6**, and the reversal is the owner's, in their
+own words: *"it's always approximate, we do not need the I'm sure button ever.
+Even now can be approx right, cuz there could be minor time mismatches (while
+he was counting an order came in)."*
+
+Decision 6 reasoned that a count taken *now* has nothing to be approximate
+about, so it marked only a recalled time approximate and offered **I'm sure** to
+take that back. Both halves were wrong about the same physical act. Counting a
+drawer is not instantaneous: it takes a minute or two with a queue in front of
+it, the counter keeps trading while it happens, and a bill rung during the count
+lands on one side of a boundary nobody was watching. The instant a person
+supplies is the *middle* of an act, never its edge — whichever button they
+pressed.
+
+So:
+
+- **`certain` is `false` on every observation the surface records**, for all four
+  time options including *Now*. Every count carries the ±15 minute window, and
+  the surface always states what the timing alone could account for.
+- **The I'm sure control is removed.** Nothing on the surface asserts an exact
+  instant, so nothing has to be un-asserted.
+- **The `~ approx` chip is removed from the sheet and from the recent-count
+  rows.** A marker every row carries distinguishes nothing; it was information
+  only while some counts were exact. The window is stated once, beside the time,
+  where it is read.
+
+**One window, not a graduated one.** The tempting refinement is a tighter
+tolerance for *Now* than for a time picked out of the air. It is rejected: the
+uncertainty this window models is the duration of the count and the trade during
+it, which does not shrink because the recorder pressed the button sooner. A
+window that varied by button would also make two counts of the same drawer
+incomparable for a reason that has nothing to do with the drawer.
+
+**`p_certain` survives in the database, unused by this surface.** The parameter,
+its default of `false`, and `v_approximate`'s dependence on it are left exactly
+as the migration shipped them. Editing an applied migration to delete a
+parameter nobody passes buys nothing and costs the one property decision 16 was
+written for: this change drops and renames nothing. The constraint
+`drawer_observations_approximate_needs_a_gap` continues to hold, because a
+counted instant captured when the sheet opens is always strictly earlier than
+the server instant that records it.
+
+### 20. Where the recorder stood is detected, and the reason field appears only when it has to
+
+The spec has said since it was written that a record made outside the fence
+*"SHALL require a reason first"*. The surface never implemented it. It read no
+position, showed an always-optional **Not at the outlet? Say why** box, and sent
+`position: null` on every write.
+
+**That is not a cosmetic gap, it is a live defect.** `drawer_position_guard()`
+recomputes `recorded_on_site` from the coordinates on the row, and no
+coordinates reads as *not on site* — deliberately, because a missing fix and a
+fix from home are the same claim as far as the record is concerned. So every
+observation the surface writes is off-site, and
+`drawer_observations_away_needs_a_reason` then requires the reason the box said
+was optional. **A count saved with that box empty is refused by Postgres**, with
+a constraint message, at 22:00, by somebody holding cash. The standalone
+collection and spend sheets avoid the refusal in a worse way: they send the
+literal string `'recorded from the app'`, which satisfies the constraint by
+writing a sentence that is true of every row and evidence about none.
+
+The fix is the one attendance already ships:
+
+- The sheet reads one position when it **opens**, through `readPosition()` in
+  `src/lib/geolocation.ts` — the only module that touches
+  `navigator.geolocation`, and still the only one after this change. It is read
+  in direct response to a person opening a sheet to record something, which is
+  the same class of event as pressing **Check in**. There is no watch and
+  nothing samples in the background.
+- The read **never blocks the form**. Every field is usable while it resolves,
+  and the save button is not gated on it. A collector standing at the counter
+  with the drawer in their hands does not wait for GPS.
+- Three outcomes, and only one of them asks a question:
+  - **inside the fence** — a quiet *at the outlet* chip, no reason field at all;
+  - **outside the fence** — the distance said plainly, and the reason field,
+    **required**;
+  - **no fix at all** (denied, unavailable, timed out, unsupported, or an outlet
+    with no captured position) — the reason field, **required**, because nothing
+    on the row can show the person was there.
+- The position travels with the write, so `recorded_distance_m` and
+  `recorded_on_site` are the database's own verdict on coordinates it was given,
+  not a claim the client made.
+
+**Nothing is refused for being elsewhere**, which is decision 11 unchanged. What
+changes is that the reason is now asked exactly when it is evidence, and never
+when it is noise — and that the hardcoded `'recorded from the app'` string is
+deleted rather than made conditional.
+
+**An unsurveyed outlet reads as away, and says so specifically.** Kalyani and
+Kanchrapara both carry positions today, but an outlet onboarded without one
+would otherwise present its collector with a permanent unexplained demand for a
+reason. The copy names the cause: the outlet's position has not been captured,
+so nothing can be measured.
+
+### 21. A recent count is a disclosure, and the history is paged
+
+Two problems in one list. It rendered every chip a count could carry on one
+row — the verdict, the collection, the approximate marker, the away marker, the
+opening break, the recorder, the reason, every adjustment — which on a phone is
+five lines per count and a wall by the fourth. And it read whatever `getState()`
+returned, which the Supabase adapter capped at `limit(12)` with no way to reach
+the thirteenth. Two outlets counted daily produce that cap in a fortnight.
+
+- **A row is a disclosure**, built the way `sync-event-row.tsx` already builds
+  one: a full-width header button carrying `aria-expanded`, a chevron that
+  rotates, and a body that is unmounted while closed. That component is the
+  house pattern for exactly this, and reproducing its behaviour with different
+  markup would be a second pattern to keep in step.
+- **Closed, a row carries what the reader is scanning for, on one line**: the
+  instant, the verdict beside it — `matched`, `₹200 short`, `₹40 over`, or
+  `first count` — then the amount and the chevron held at the right edge, plus
+  the opening-break warning, which is the one condition that wants a second
+  look. **The verdict is shown even when it is `matched`**, settled with the
+  owner 2026-08-28: a clean night reading blank is indistinguishable from a row
+  that has not finished loading.
+
+  The verdict began on a second line under the date, which spent a line per
+  count on a chip that fits beside it — four counts were eight lines. It now
+  **wraps rather than truncates**, and the direction of the give is deliberate:
+  the amount and the chevron never shrink, so the rare row that cannot fit — a
+  long date carrying both a shortfall and a broken opening — pushes its chips
+  onto a second line instead of clipping money, which is `ChipRow`'s own rule
+  and the one thing on the row that must never be cut off.
+- **Open, it carries the rest**, and that is where the **Adjust** control now
+  lives, as an ordinary `Button` — `size="phone"`, `variant="secondary"` — which
+  is what every other disclosure in this app puts in its body. The underlined
+  eleven-pixel text it replaces was not recognisable as a control at all.
+- **The history is paged**, through a new `listObservations(outletId, {before,
+  limit})` on the adapter, cursored on `counted_at` rather than on an offset so
+  a count recorded while somebody scrolls cannot duplicate or skip a row.
+  `getState()` keeps returning the first page, so the surface still renders from
+  one read. More arrives when a sentinel below the list comes into view, and **a
+  button does the same job for anybody the observer does not serve** — a
+  keyboard walking the list, or a browser without `IntersectionObserver`. The
+  end of the list says it is the end rather than going quiet.
+
+**Not a virtual list.** The rows are a few dozen at a time and each is two lines
+closed; windowing them would add a scroll container, a measurement pass and a
+focus-restoration problem to a list that fits in the page's own scroll.
+
+### 22. The primary action is named for both halves of the act it performs
+
+The button said **Count the drawer** and the sheet it opened asked for the
+collection too. The proposal's own sentence for this surface is *"the count and
+the collection are one physical act"* — the button was the one place that still
+described half of it. It reads **Count & Collect**, and the sheet takes the same
+name.
+
+The two secondary controls are then named by what makes them different from it,
+not by what they do: **Only Collect** (take money without counting) and **Other
+Spend** (drawer cash that bought something). Read as a set, the three now say
+which one a person wants.
+
+**Other Spend stops being a ghost.** Decision 5 put the escape hatch *"well away
+from the primary action"*, and it stays where it was put — in the quieter second
+row, after Only Collect. But it was rendered `variant="ghost"`, which on this
+card is text with no boundary, and the owner could not tell it was a control.
+Distance from the primary action is the separation that decision asked for;
+invisibility is not. Both secondary controls are now `variant="secondary"`, and
+the sheet behind Other Spend still says on its own face that it will not enter
+the month's operating expenses.
+
+### 23. The balance card puts the figure where a figure goes, and signs the three below it
+
+Small, and all four parts are the same complaint: the card made the reader work
+out what it was telling them.
+
+- **The balance sits at the right end of its own label's line**, where every
+  other money figure in this app sits, instead of below the label at the left
+  margin. Nothing else on the surface is left-aligned money. The label is set
+  heavier and a shade larger than the section headings under it — 15px at 800,
+  measured on the device rather than picked off the type scale — because it is
+  the card's headline and the only label sharing a line with a display figure:
+  at the section-heading weight the two read as a number with a caption above
+  it rather than as one statement.
+- **The chips move up, directly beneath that line** — when it was counted, how
+  many days are uncounted, how many tablets are behind. They qualify the figure,
+  so they belong against it rather than below a divider that separates it from
+  its own conditions.
+- **The three figures are named for what they are**: **Last Left** (what the last
+  count left behind), **Cash from Bills**, **Cash Expenses**. `Left`, `Bills`
+  and `Expenses` each named a different kind of thing — a balance, a document, a
+  category — and left the reader to infer that the middle one meant cash and the
+  last one meant since the count.
+- **The signs are shown, not implied.** Cash from Bills carries a leading `+`,
+  Cash Expenses is negative **and** `--danger`. The direction of a term in a
+  running balance is the whole content of that term, and it was carried only by
+  a green tint that a colour-blind reader of this card cannot use. The `+` and
+  the `−` are words in this context, not decoration.
+
 ## The surfaces
 
 Layout conventions in these sketches: `[ 8950 ]` is typed, `( chip )` is tapped,
@@ -644,62 +837,114 @@ a bare `₹8,950` is computed and static, and `✓`/`⚠` are computed markers.
 ┌──────────────────────────────────────────────┐
 │  CASH DRAWER · Kalyani            [switch]   │
 │                                              │
-│  Should be in the drawer now       ₹8,950    │
+│  IN THE DRAWER NOW                 ₹8,950    │
+│  ( yesterday 22:20 )  ( ⚠ 2 days uncounted ) │
+│  ────────────────────────────────────────    │
+│   LAST LEFT    CASH FROM BILLS  CASH EXPENSES│
+│    ₹1,450         + ₹8,400          − ₹900   │
+│                    51 bills         1 entry  │
 │                                              │
-│  Last counted   yesterday 22:20              │
-│  Left in drawer                    ₹1,450    │
-│  Cash bills since                + ₹8,400    │
-│                                    51 bills  │
-│  Cash expenses since               − ₹900    │
-│                                    1 entry   │
-│                                              │
-│         [    Count the drawer    ]           │
-│         collect cash without counting        │
+│         [    Count & Collect     ]           │
+│    [  Only Collect  ]  [  Other Spend  ]     │
 │                                              │
 │  RECENT COUNTS                               │
-│  Sun 23:02   7,120   matched    took 6,000   │
-│  Fri 22:40   6,880   ₹40 over   took 5,500   │
+│  Sun 23:02  ( ✓ matched )     ₹7,120     ⌄   │
+│  Fri 22:40  ( ↑ ₹40 over )    ₹6,880     ⌄   │
+│  Wed 22:15  ( ↓ ₹500 short )  ₹6,010     ⌃   │
+│    − ₹5,500 out · Demo Manager               │
+│    counted at the counter, typed at home     │
+│               [ Adjust this count ]          │
+│  ────────────────────────────────────────    │
+│              [ Show older counts ]           │
 └──────────────────────────────────────────────┘
 ```
 
 It opens on a balance, not a date picker, because that is the question the
-collector has when they walk in. Where an observation covers more than one day
-the header says so before the count is taken.
+collector has when they walk in. The figure sits at the right end of its own
+label's line and the chips qualifying it sit directly beneath (decision 23).
+Where an observation covers more than one day the chips say so before the count
+is taken.
 
-### Count the drawer
+A recent count is a disclosure: closed it carries when, how much and the
+verdict; open it carries the collection, the recorder, the reason they were
+away, any adjustments, and the **Adjust** control (decision 21). The list is
+paged — older counts arrive as the end of it comes into view, and the button
+does the same for a reader the observer does not serve.
+
+### Count & Collect
 
 ```
 ┌──────────────────────────────────────────────┐
-│  COUNT THE DRAWER                        ✕   │
+│  COUNT & COLLECT                         ✕   │
 │                                              │
-│  1 · When did you count it?                  │
-│     [ ● Just now ]  22:02                    │
-│     ( 30 min ago )  ( 1 hr ago )             │
-│     ( pick a time )                          │
+│  Collection time                             │
+│     [ ● Now ]  ( 15 min ago )  ( 30 min ago )│
+│     ( 25 Aug, 10:20 pm ▾ )                   │
+│     ( 22:02 )  ( ~ ±15 min )                 │
 │                                              │
-│  2 · What was in the drawer?                 │
+│  Cash counted before collection              │
 │     ₹ [ 8950 ]                               │
 │     ✓ Matches ₹8,950                         │
 │                                              │
-│  3 · Collecting any?                         │
-│     ₹ [ 7500 ]                               │
-│     Leaving ₹1,450 in the drawer             │
+│  Cash collected, if any                      │
+│     ₹ [ 0 ]                                  │
+│     Leaving ₹8,950 in the drawer             │
+│                                              │
+│  ( ✓ at the outlet )                         │
 │                                              │
 │              [    Save count    ]            │
 └──────────────────────────────────────────────┘
 ```
 
-### Step 3 with a negative, which is cash going in
+No numbered steps. They were scaffolding for a form of three fields that reads
+top to bottom on its own, and a person reading *3 · Collecting any?* has been
+told the count of the questions rather than the answer to one.
 
-The counted drawer was thin, so the collector puts ₹1,000 back rather than taking
-anything out. Same field, same record, no second control:
+**Every time option is approximate** (decision 19), *Now* included, so the
+window is stated once beside the chosen instant and no control asserts
+certainty. The fourth option is a real date and time, for a count recalled long
+enough after the fact that *30 min ago* is a fiction — the day the collector
+skipped, entered when they return.
+
+**Collection defaults to `0`**, so the common night is three taps and one
+number: the drawer is counted, nothing is collected, and the leaving preview is
+correct before anything is typed into it.
+
+**The location chip is the whole of the away question when the answer is
+nothing** (decision 20). Inside the fence it is one chip and no field.
+
+### The same sheet, recorded away from the outlet
 
 ```
-│  2 · What was in the drawer?                 │
+│  Cash collected, if any                      │
+│     ₹ [ 7500 ]                               │
+│     Leaving ₹1,450 in the drawer             │
+│                                              │
+│  ( ⚠ 3.4 km from Kalyani )                   │
+│  Why are you recording this from elsewhere?  │
+│     [ counted at the counter, typed at home ]│
+│  Nothing is refused for being elsewhere. The │
+│  record just says where you were.            │
+│                                              │
+│              [    Save count    ]            │
+```
+
+The field appears because the fence said so, and the save is refused without it
+— by the sheet, in a sentence, rather than by a Postgres constraint message.
+The same panel appears with *Could not tell where you are* when no fix arrives
+at all, for the same reason: nothing on the row would show the person was there.
+
+### Collecting a negative, which is cash going in
+
+The counted drawer was thin, so the collector puts ₹1,000 back rather than
+taking anything out. Same field, same record, no second control:
+
+```
+│  Cash counted before collection              │
 │     ₹ [ 450 ]                                │
 │     ✓ Matches ₹450                           │
 │                                              │
-│  3 · Collecting any?                         │
+│  Cash collected, if any                      │
 │     ₹ [ -1000 ]                              │
 │                                              │
 │     ⚠  A minus means you are ADDING money    │
@@ -720,13 +965,13 @@ anything is saved, with its direction in words as well as by sign, because a
 minus is the first thing a small screen loses and *"₹240 short"* is not a
 sentence anyone misreads.
 
-### The same sheet with an approximate time and an exact coincidence
+### The same sheet with an exact coincidence
 
 ```
-│  1 · When did you count it?                  │
-│     [ ● 22:15 ]           entering 23:04     │
+│  Collection time                             │
+│     ( 22:15 )  ( ~ ±15 min )   entering 23:04│
 │                                              │
-│  2 · What was in the drawer?                 │
+│  Cash counted before collection              │
 │     ₹ [ 8950 ]                               │
 │                                              │
 │     ⚠  ₹854 SHORT                            │
@@ -756,37 +1001,35 @@ coincidence; the person moved the line.
 │        Your time is approximate (±15 min).   │
 │        ₹914 of cash moved near it, so        │
 │        timing could account for part.        │
-│                                              │
-│        [ I'm sure of the time ]              │
 ```
 
 No exact match, so no proposal of any kind. The collector saves it short or goes
-and looks.
+and looks. There is no **I'm sure** control to escape the window with: every
+count carries it (decision 19).
 
-### Collect cash, and the rare spend
+### Only Collect, and the rare Other Spend
 
 ```
 ┌──────────────────────────────────────────────┐
 │  COLLECT CASH                            ✕   │
-│                                              │
-│  When?    [ ● Just now ]  16:20              │
-│           ( pick a time )                    │
 │                                              │
 │  How much?    ₹ [ 5000 ]                     │
 │                                              │
 │  Drawer goes ₹12,400 → ₹7,400                │
 │  You are not counting. Nothing is verified.  │
 │                                              │
-│              [    Collect    ]               │
+│  ( ✓ at the outlet )                         │
 │                                              │
-│  spent it on something? record a cash spend  │
+│              [    Collect    ]               │
 └──────────────────────────────────────────────┘
 ```
 
-Two fields on the common path. No actor picker: the actor is the session. No
-reason: collection is the routine act. The trailing link opens the `spend`
-variant, which asks for a reason and says on its face that it will not enter the
-month's expenses.
+One field on the common path. No actor picker: the actor is the session. No
+reason: collection is the routine act. **Other Spend** is its own control on the
+surface rather than a trailing link, asks for a reason, and says on its face
+that it will not enter the month's expenses. Both sheets detect the position the
+same way the count sheet does, and both ask for a reason on exactly the same
+condition (decision 20).
 
 ### Adjust a locked count
 

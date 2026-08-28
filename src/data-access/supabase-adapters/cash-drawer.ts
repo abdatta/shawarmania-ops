@@ -9,12 +9,15 @@ import {
 
 import {
   CashDrawerActionError,
+  DRAWER_HISTORY_PAGE,
   type CashDrawerAdapter,
   type DrawerAdjustmentRecord,
   type DrawerCashOutRecord,
   type DrawerExceptionRecord,
   type DrawerObservationRecord,
   type NearbyCashBillRecord,
+  type ObservationPage,
+  type ObservationPageQuery,
   type RecordCashOutInput,
   type RecordObservationInput,
 } from '../adapters'
@@ -121,6 +124,65 @@ function toAdjustment(
 }
 
 /**
+ * One observation, assembled from the rows that describe it.
+ *
+ * Module level rather than a closure inside `getState`, because the paged
+ * history reader needs the identical mapping and a second copy of the
+ * opening-break rule is a second place for it to drift.
+ *
+ * `previous` is the observation immediately BEFORE this one in time, which is
+ * what the break is measured against. A caller reading a page has to supply the
+ * predecessor of its oldest row even though that row belongs to the next page,
+ * or exactly one row per page silently loses its marker.
+ */
+function toObservationRecord(
+  row: Tables<'drawer_observations'>,
+  previous: Tables<'drawer_observations'> | null,
+  movements: readonly Tables<'drawer_cash_out'>[],
+  adjustments: readonly Tables<'drawer_observation_adjustments'>[],
+  names: Map<string, string>,
+): DrawerObservationRecord {
+  const ownOf = (observationId: string) =>
+    movements.filter((movement) => movement.observation_id === observationId)
+
+  // Reported, never repaired (design D4).
+  let openingBreakPaise: number | null = null
+  if (!row.is_anchor && previous && row.opening_paise !== null) {
+    const carried = nextOpeningPaise(
+      previous.counted_total_paise,
+      ownOf(previous.id).reduce((sum, movement) => sum + movement.amount_paise, 0),
+    )
+    if (carried !== row.opening_paise) openingBreakPaise = row.opening_paise - carried
+  }
+
+  return {
+    id: row.id,
+    outletId: row.outlet_id,
+    countedAt: row.counted_at,
+    recordedAt: row.recorded_at,
+    isAnchor: row.is_anchor,
+    openingPaise: row.opening_paise,
+    expectedPaise: row.expected_paise,
+    differencePaise: row.difference_paise,
+    countedTotalPaise: row.counted_total_paise,
+    isApproximate: row.is_approximate,
+    toleranceMinutes: row.tolerance_minutes,
+    recordedBy: row.recorded_by,
+    recordedByName: names.get(row.recorded_by) ?? null,
+    correctedBy: row.corrected_by,
+    correctedByName: row.corrected_by ? (names.get(row.corrected_by) ?? null) : null,
+    onSite: row.recorded_on_site,
+    awayReason: row.away_reason,
+    note: row.note,
+    ownCashOut: ownOf(row.id).map((movement) => toCashOut(movement, names)),
+    adjustments: adjustments
+      .filter((adjustment) => adjustment.observation_id === row.id)
+      .map((adjustment) => toAdjustment(adjustment, names)),
+    openingBreakPaise,
+  }
+}
+
+/**
  * Cash allocations for a set of bills, read as their own select.
  *
  * **Not a PostgREST embed, and that is not a style choice.**
@@ -172,12 +234,14 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
 
   return {
     async getState(outletId) {
+      // One row beyond the page: it is the predecessor the oldest row on the
+      // page is measured against, and it is dropped before the page is returned.
       const observationsResult = await client
         .from('drawer_observations')
         .select('*')
         .eq('outlet_id', outletId)
         .order('counted_at', { ascending: false })
-        .limit(12)
+        .limit(DRAWER_HISTORY_PAGE + 1)
       if (observationsResult.error) refuse(observationsResult.error)
 
       const observations = observationsResult.data ?? []
@@ -256,52 +320,20 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
       const ownOf = (observationId: string) =>
         movements.filter((row) => row.observation_id === observationId)
 
-      const toObservation = (
-        row: Tables<'drawer_observations'>,
-        previous: Tables<'drawer_observations'> | null,
-      ): DrawerObservationRecord => {
-        // Reported, never repaired (design D4).
-        let openingBreakPaise: number | null = null
-        if (!row.is_anchor && previous && row.opening_paise !== null) {
-          const carried = nextOpeningPaise(
-            previous.counted_total_paise,
-            ownOf(previous.id).reduce((sum, movement) => sum + movement.amount_paise, 0),
-          )
-          if (carried !== row.opening_paise) openingBreakPaise = row.opening_paise - carried
-        }
-
-        return {
-          id: row.id,
-          outletId: row.outlet_id,
-          countedAt: row.counted_at,
-          recordedAt: row.recorded_at,
-          isAnchor: row.is_anchor,
-          openingPaise: row.opening_paise,
-          expectedPaise: row.expected_paise,
-          differencePaise: row.difference_paise,
-          countedTotalPaise: row.counted_total_paise,
-          isApproximate: row.is_approximate,
-          toleranceMinutes: row.tolerance_minutes,
-          recordedBy: row.recorded_by,
-          recordedByName: names.get(row.recorded_by) ?? null,
-          correctedBy: row.corrected_by,
-          correctedByName: row.corrected_by ? (names.get(row.corrected_by) ?? null) : null,
-          onSite: row.recorded_on_site,
-          awayReason: row.away_reason,
-          note: row.note,
-          ownCashOut: ownOf(row.id).map((movement) => toCashOut(movement, names)),
-          adjustments: (adjustments.data ?? [])
-            .filter((adjustment) => adjustment.observation_id === row.id)
-            .map((adjustment) => toAdjustment(adjustment, names)),
-          openingBreakPaise,
-        }
-      }
-
       // `observations` is newest-first, so the row AFTER an index is its
-      // predecessor in time.
-      const recent = observations.map((row, index) =>
-        toObservation(row, observations[index + 1] ?? null),
-      )
+      // predecessor in time. One row beyond the page was read for exactly this,
+      // and it is dropped from the page itself below.
+      const recent = observations
+        .slice(0, DRAWER_HISTORY_PAGE)
+        .map((row, index) =>
+          toObservationRecord(
+            row,
+            observations[index + 1] ?? null,
+            movements,
+            adjustments.data ?? [],
+            names,
+          ),
+        )
 
       const left = nextOpeningPaise(
         last.counted_total_paise,
@@ -436,6 +468,77 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
         unsyncedDevices: { count: 0, since: null },
         exceptions,
       }
+    },
+
+    /**
+     * A page of past counts, older than `before`, newest first.
+     *
+     * Its own three reads rather than a slice of `getState`: this runs while
+     * somebody scrolls, and re-reading the interval aggregates, the nearby bills
+     * and the late arrivals to render ten more rows would be four round trips
+     * for a list that has not changed.
+     */
+    async listObservations(outletId, query: ObservationPageQuery = {}) {
+      const limit = query.limit ?? DRAWER_HISTORY_PAGE
+
+      // `limit + 1` rows, which answers both questions at once: whether there is
+      // another page, and what the oldest row on THIS page carries forward from.
+      let select = client
+        .from('drawer_observations')
+        .select('*')
+        .eq('outlet_id', outletId)
+        .order('counted_at', { ascending: false })
+        .limit(limit + 1)
+      // Exclusive, so a page continues from the oldest row already on screen and
+      // a count sharing that instant cannot be shown twice. The database keeps
+      // counted instants strictly increasing per outlet, so this is a total order.
+      if (query.before) select = select.lt('counted_at', query.before)
+
+      const rows = await select
+      if (rows.error) refuse(rows.error)
+
+      const observations = rows.data ?? []
+      const page = observations.slice(0, limit)
+      if (page.length === 0) return { observations: [], hasMore: false } satisfies ObservationPage
+
+      // The page's own rows AND the predecessor read beyond it. The break on the
+      // oldest row is measured against the predecessor's counted total less that
+      // observation's OWN cash out, so leaving its movements out would compute a
+      // carry-forward of the wrong figure and report a break that is not there.
+      const movementIds = observations.map((row) => row.id)
+      const adjustmentIds = page.map((row) => row.id)
+
+      const [movementRows, adjustmentRows] = await Promise.all([
+        client
+          .from('drawer_cash_out')
+          .select('*')
+          .eq('outlet_id', outletId)
+          .in('observation_id', movementIds),
+        client
+          .from('drawer_observation_adjustments')
+          .select('*')
+          .eq('outlet_id', outletId)
+          .in('observation_id', adjustmentIds),
+      ])
+      if (movementRows.error) refuse(movementRows.error)
+      if (adjustmentRows.error) refuse(adjustmentRows.error)
+
+      const movements = movementRows.data ?? []
+      const adjustments = adjustmentRows.data ?? []
+
+      const names = await namesFor([
+        ...page.map((row) => row.recorded_by),
+        ...page.map((row) => row.corrected_by),
+        ...movements.map((row) => row.recorded_by),
+        ...adjustments.map((row) => row.adjusted_by),
+      ])
+
+      return {
+        observations: page.map((row, index) =>
+          toObservationRecord(row, observations[index + 1] ?? null, movements, adjustments, names),
+        ),
+        hasMore: observations.length > limit,
+      } satisfies ObservationPage
     },
 
     async recordObservation(input: RecordObservationInput) {

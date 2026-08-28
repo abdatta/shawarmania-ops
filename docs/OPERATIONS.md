@@ -447,27 +447,37 @@ tracks where each outlet stands.
 balance rather than a date, because that is the question you have when you walk
 in.
 
-1. **Drawer**, pick the outlet if you manage more than one. Read *Should be in the
-   drawer now*.
-2. **Count the drawer.** Three inputs: when you counted it, what was in it, how
-   much you are taking.
-   - *When* defaults to **Just now**. If you counted earlier and are typing it up
-     now, pick a relative chip — the count is then marked approximate, and the
-     screen states in rupees how much cash moved near that time.
-   - *What was in it* shows the difference as you type, in words as well as by
-     sign.
-   - *How much you are taking* — **a minus means you are putting money IN**, which
+1. **Drawer**, pick the outlet if you manage more than one. Read *In the drawer
+   now*, at the top right of the card, with the last count and anything worth
+   knowing about it on the chips beneath.
+2. **Count & Collect.** Three inputs: when you counted it, what was in it, how
+   much you are taking. The count and the collection are one act, so they are
+   one button.
+   - *Collection time* defaults to **Now**, with **15 min ago** and **30 min
+     ago** beside it and a date and time field for a count you are catching up
+     on days later. **Every count is approximate**, whichever you pick, because
+     counting takes a few minutes and the counter keeps selling while you do it.
+     The screen states in rupees how much cash moved near your time.
+   - *Cash counted before collection* shows the difference as you type, in words
+     as well as by sign.
+   - *Cash collected, if any* starts at **0**, so a night you collect nothing is
+     three taps and one number. **A minus means you are putting money IN**, which
      is what happens when a thin drawer gets topped up. The screen says so on the
      keystroke.
 3. **If the screen names an exact run of bills**, that is a fact about your timing,
    not a suggestion. Move the boundary if you recognise those bills; leave it if
    you do not. **It will never propose a time for you**, deliberately.
-4. **If you are entering this from home**, put a line in the reason field. Nothing
-   is refused for being elsewhere; the record just says where you were.
-5. **Collecting without counting?** Use *collect cash without counting*. It states
-   that nothing is verified, which is the point.
-6. **Bought something out of the till?** Use *record a cash spend*, with a reason.
+4. **Where you are is read, not typed.** Standing at the outlet, the sheet says
+   *at the outlet* and asks nothing. Anywhere else — or if your phone cannot get
+   a fix at all — it asks why, and it wants an answer before it will save.
+   Nothing is refused for being elsewhere; the record just says where you were.
+5. **Collecting without counting?** Use **Only Collect**. It states that nothing
+   is verified, which is the point.
+6. **Bought something out of the till?** Use **Other Spend**, with a reason.
    It moves the drawer and stays out of the month's operating costs.
+7. **Past counts** are underneath, newest first: tap one to see who recorded it,
+   what they took, why they were away, and the control to adjust it. Older ones
+   load as you reach the bottom of the list.
 
 **A skipped day needs nothing special.** Come back two days later and count; the
 screen says how many days the count covers before you take it, and the arithmetic

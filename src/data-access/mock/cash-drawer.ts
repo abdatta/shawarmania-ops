@@ -7,12 +7,15 @@ import {
 
 import {
   CashDrawerActionError,
+  DRAWER_HISTORY_PAGE,
   type CashDrawerAdapter,
   type DrawerAdjustmentRecord,
   type DrawerCashOutRecord,
   type DrawerExceptionRecord,
   type DrawerObservationRecord,
   type DrawerState,
+  type ObservationPage,
+  type ObservationPageQuery,
   type RecordCashOutInput,
   type RecordObservationInput,
 } from '../adapters'
@@ -385,18 +388,43 @@ export function createMockCashDrawerAdapter(
       cashOutSincePaise: out.paise,
       cashOutSinceCount: out.rows,
       daysCovered,
-      recentObservations: observations
-        .map((row, index) => toObservation(store, row, observations[index - 1] ?? null))
-        .reverse(),
+      recentObservations: pageOf(outletId, {}).observations,
       nearbyCashBills: nearby,
       unsyncedDevices: { count: 0, since: null },
       exceptions: exceptionsFor(store, outletId),
     }
   }
 
+  /**
+   * One page of counts, newest first, cursored on the counted instant.
+   *
+   * The whole outlet is mapped and then sliced rather than sliced and then
+   * mapped, because an observation's opening break is computed against its
+   * PREDECESSOR — and the predecessor of the first row on a page lives on the
+   * previous page. Slicing first would silently drop the break marker from
+   * exactly one row per page.
+   */
+  function pageOf(outletId: string, query: ObservationPageQuery): ObservationPage {
+    const observations = sortedObservations(store, outletId)
+    const newestFirst = observations
+      .map((row, index) => toObservation(store, row, observations[index - 1] ?? null))
+      .reverse()
+
+    const before = query.before ?? null
+    const after =
+      before === null ? newestFirst : newestFirst.filter((row) => row.countedAt < before)
+    const limit = query.limit ?? DRAWER_HISTORY_PAGE
+
+    return { observations: after.slice(0, limit), hasMore: after.length > limit }
+  }
+
   return {
     async getState(outletId) {
       return stateFor(outletId)
+    },
+
+    async listObservations(outletId, query = {}) {
+      return pageOf(outletId, query)
     },
 
     async recordObservation(input: RecordObservationInput) {

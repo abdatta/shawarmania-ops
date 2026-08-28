@@ -5,9 +5,16 @@
  * typed failure, which is what makes a blocked check-in testable without a
  * browser permission prompt. And the rule that this system never tracks anyone
  * in the background is then enforceable by reading one file: position is read
- * in direct response to a check-in, an approval, or an outlet capture, and
- * nowhere else. Adding a background watch would need a deliberate decision in
- * its own proposal (AGENTS.md, docs/SECURITY_AND_PRIVACY.md).
+ * in direct response to a check-in, an approval, an outlet capture, or the
+ * opening of one of the Cash drawer's recording sheets, and nowhere else.
+ * Adding a background watch would need a deliberate decision in its own
+ * proposal (AGENTS.md, docs/SECURITY_AND_PRIVACY.md).
+ *
+ * **That list is exhaustive and is meant to stay short.** The drawer joined it
+ * in `cash-is-counted-not-closed` (design D20), where the reading is what
+ * decides whether the recorder is asked why they were elsewhere; it takes one
+ * reading when a sheet is opened to record something, and none while the
+ * surface merely sits on screen.
  */
 
 export interface PositionReading {

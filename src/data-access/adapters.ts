@@ -2792,6 +2792,12 @@ export interface DrawerState {
    * blurs attribution and the screen should not imply precision it lacks.
    */
   daysCovered: number
+  /**
+   * The FIRST page of the count history, newest first, so the surface renders
+   * from one read. Older pages arrive through `listObservations` — the list is
+   * paged rather than capped, because two outlets counted daily outgrow any cap
+   * in a fortnight (design D21).
+   */
   recentObservations: DrawerObservationRecord[]
   /** For the movable boundary and the exact-coincidence report. */
   nearbyCashBills: NearbyCashBillRecord[]
@@ -2844,8 +2850,42 @@ export class CashDrawerActionError extends DataActionError {
   }
 }
 
+/**
+ * One page of an outlet's count history.
+ *
+ * **Cursored on the counted instant, never on an offset.** A count recorded
+ * while somebody is reading shifts every offset below it by one, which either
+ * repeats a row or hides one — and the row it hides is a count nobody asked to
+ * hide. `before` is exclusive, so a page continues from the oldest row already
+ * on screen. The counted instant is strictly increasing per outlet, enforced by
+ * `record_drawer_observation`, so it is a total order and a safe cursor.
+ */
+/**
+ * How many counts a page holds. One number, shared by `getState`'s first page,
+ * both adapters and the surface, so "is there another page?" is never answered
+ * by two different sizes disagreeing.
+ */
+export const DRAWER_HISTORY_PAGE = 10
+
+export interface ObservationPageQuery {
+  /** Exclusive upper bound: the `countedAt` of the oldest row already shown. */
+  before?: string | null
+  limit?: number
+}
+
+export interface ObservationPage {
+  observations: DrawerObservationRecord[]
+  /** False once the oldest count has been reached, so the list can say so. */
+  hasMore: boolean
+}
+
 export interface CashDrawerAdapter {
   getState(outletId: string): Promise<DrawerState>
+  /**
+   * A page of past counts, newest first. `getState` returns the first page; this
+   * returns the ones after it (design D21).
+   */
+  listObservations(outletId: string, query?: ObservationPageQuery): Promise<ObservationPage>
   /**
    * The primary action. Refused for an instant in the future, one not later than
    * the previous observation's, or one before the outlet's earliest drawer
