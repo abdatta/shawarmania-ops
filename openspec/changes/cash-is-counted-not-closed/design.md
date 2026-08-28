@@ -973,7 +973,10 @@ Cash left                              ₹833
 
 The difference — `₹400 short`, `matches ₹2,733` — stays exactly where it was, on
 the keystroke, immediately under the counted row. It is the one thing on this
-sheet that may never move behind anything.
+sheet that may never move behind anything. **It sits against the right edge**,
+under the field it is about: at the left margin it read as a new paragraph
+interrupting the tally, and the eye lost the column of figures it was
+following.
 
 ### 28. A stated instant is picked, never typed
 

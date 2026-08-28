@@ -1074,15 +1074,20 @@ export function CashDrawerSurface() {
 
             {advice && (
               // On the keystroke, before anything is saved. Never behind a tap.
-              <div className="space-y-1" data-testid="count-difference">
+              //
+              // Right-aligned, because it belongs to the field above it rather
+              // than to the sheet: against the left margin it read as a new
+              // paragraph interrupting the tally, and the eye lost the column of
+              // figures it was following.
+              <div className="space-y-1 text-right" data-testid="count-difference">
                 {advice.direction === 'balanced' ? (
-                  <ChipRow>
+                  <ChipRow className="justify-end">
                     <Chip tone="good" icon={Check}>
                       matches <Money paise={advice.expectedPaise} />
                     </Chip>
                   </ChipRow>
                 ) : (
-                  <ChipRow>
+                  <ChipRow className="justify-end">
                     <Chip
                       tone="bad"
                       icon={advice.direction === 'short' ? ArrowDownRight : ArrowUpRight}
@@ -1115,7 +1120,7 @@ export function CashDrawerSurface() {
                 )}
 
                 {!advice.coincidence && advice.direction !== 'balanced' && (
-                  <ChipRow data-testid="no-coincidence">
+                  <ChipRow className="justify-end" data-testid="no-coincidence">
                     <Chip tone="neutral">no run of bills matches</Chip>
                     {advice.timingCouldExplainPaise !== null &&
                       advice.timingCouldExplainPaise > 0 && (

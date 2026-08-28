@@ -157,6 +157,11 @@ describe('the difference appears as the amount is typed', () => {
     // Before anything is submitted.
     const difference = await screen.findByTestId('count-difference')
     expect(difference.textContent).toMatch(/short|over|balances/i)
+
+    // And against the right edge, under the field it is about. At the left
+    // margin it reads as a new paragraph interrupting the tally, and the eye
+    // loses the column of figures it was following.
+    expect(difference.className).toMatch(/text-right/)
     expect(screen.queryByTestId('drawer-error')).not.toBeInTheDocument()
   })
 
