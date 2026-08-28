@@ -3342,6 +3342,22 @@ export type Database = {
         }
         Relationships: []
       }
+      effective_expenses: {
+        Row: {
+          amount_paise: number | null
+          business_date: string | null
+          category: string | null
+          created_at: string | null
+          description: string | null
+          id: string | null
+          is_cash: boolean | null
+          occurred_at: string | null
+          outlet_id: string | null
+          recorded_by: string | null
+          source_table: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       account_actor_may_replace_set: {

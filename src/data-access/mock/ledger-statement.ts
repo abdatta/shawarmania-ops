@@ -9,6 +9,7 @@ import {
 } from '../adapters'
 import type { Tables } from '../database.types'
 
+import { cashExpensesIn, effectiveExpenses } from './effective-expenses'
 import { accountFixtures } from './fixtures/accounts'
 import type { DemoStore } from './store'
 
@@ -97,11 +98,10 @@ function balanceAt(store: DemoStore, outletId: string, instant: string): number 
       .reduce((sum, allocation) => sum + allocation.amountPaise, 0)
   }
 
-  for (const expense of store.expenses) {
-    if (expense.outlet_id !== outletId || expense.payment_method !== 'cash') continue
-    const at = expense.occurred_at ?? expense.created_at
-    if (at <= previous.counted_at || at > instant) continue
-    balance -= expense.amount_paise
+  // Both expense sources, as `public.effective_expenses` reads them. Reading
+  // `store.expenses` alone was this mock's copy of the production defect.
+  for (const expense of cashExpensesIn(store, outletId, previous.counted_at, instant)) {
+    balance -= expense.amountPaise
   }
 
   for (const movement of store.drawerCashOut) {
@@ -178,16 +178,17 @@ export function createMockLedgerStatementAdapter(
       channels.reduce((sum, channel) => sum + (channel.netPaise ?? channel.grossPaise), 0)
 
     // ── Expenses ───────────────────────────────────────────────────────────
-    const expenseRows = store.expenses
-      .filter((row) => row.outlet_id === outletId && row.business_date === businessDate)
+    const expenseRows = effectiveExpenses(store)
+      .filter((row) => row.outletId === outletId && row.businessDate === businessDate)
       .map((row) => ({
         id: row.id,
         label: row.description ?? row.category,
-        paise: row.amount_paise,
-        isCash: row.payment_method === 'cash',
-        instant: row.occurred_at ?? row.created_at,
-        recordedByName: nameOf(row.recorded_by),
+        paise: row.amountPaise,
+        isCash: row.isCash,
+        instant: row.instant,
+        recordedByName: nameOf(row.recordedBy),
       }))
+      .sort((a, b) => a.instant.localeCompare(b.instant))
 
     // ── The drawer, ordered by instant ─────────────────────────────────────
     const observations = observationsAt(store, outletId)

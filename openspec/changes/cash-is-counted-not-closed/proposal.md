@@ -157,6 +157,35 @@ route. It leaves the navigation and the new derived Ledger takes its place. The
 fallback is a tab, not a flag: **no runtime toggle is introduced**, so
 `docs/DEMO_MODE.md`'s build-time gate rule (D3) is upheld.
 
+### Expenses read where they are written, 2026-08-28
+
+Deployed at 22:44 IST; the owner opened the Ledger and found the Expenses card
+reading **Nothing recorded** on a day with real expenses. The premise was wrong
+rather than the code: `public.expenses` is what both new surfaces read and
+**nothing has ever written it** — expenses went live in #36/#38 against
+`manual_ledger_expenses`, 0 rows against 118 measured the same evening.
+
+- The visible half was the smaller half. `drawer_cash_expenses_paise()` read the
+  same empty table, so the drawer's expected balance was overstated by every cash
+  expense since the last count and **the next count would have read short by
+  exactly that** — a manufactured shortfall, which is the fiction this change
+  exists to remove. Both outlets held only their anchor, which carries no
+  difference, so no figure was produced wrong; the first real count would have
+  been.
+- `public.effective_expenses` now names the live expense record wherever it
+  lives, and both callers point at that name for good. #12 collapses it.
+- **The demo could not have caught it** and now can: the mock store holds the
+  same two arrays and the seed fills both, so the walkthrough was self-consistent
+  while production was not. The mock mirrors the view, and the regression records
+  through the door a person uses rather than against the store.
+- **A tenancy defect found beside it**: the three drawer interval readers are
+  `security definer`, granted to `authenticated`, and took the outlet from the
+  caller while checking nothing. A Biller read ₹1,005 of an outlet's receipts
+  through a valid session. They now carry the same predicate their tables' own
+  policies carry.
+- Expenses moves ahead of the Ledger in both admin shells, so the tabs follow the
+  nightly walk: Billing, Drawer, Expenses, Ledger, Notebook.
+
 ## Capabilities
 
 ### New Capabilities

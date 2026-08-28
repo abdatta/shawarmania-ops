@@ -289,11 +289,31 @@ retiring a suggestion must not invalidate the rows that used it.
 `performed_by`, `performed_at`. One immutable row explains each owner rename or
 merge and records how much history moved in each expense table.
 
-Only expenses with `payment_method = 'cash'` affect any drawer figure. A cash
-expense belongs to a drawer interval by `coalesce(occurred_at, created_at)`,
-so a spend before a count and one after it land on opposite sides of that
-count. `occurred_at` is nullable and is never a required field: it defaults to
-nothing, and interval membership falls back to when the row was written.
+**`effective_expenses`** — a view, and **the only relation a live surface should
+read for expenses**. It unions `expenses` with the un-voided rows of
+`manual_ledger_expenses`, normalising `payment_method = 'cash'` and `is_cash` to
+one `is_cash` boolean and carrying a `source_table` so the second branch can be
+watched emptying out.
+
+It exists because `expenses` has never held a row and nothing writes it: expenses
+went live in #36 and #38 against the notebook table, which is what every live
+Expenses surface still writes. The derived Ledger and the drawer both read
+`expenses` directly when they shipped, so the Ledger reported *"Nothing
+recorded"* on days with real expenses and **the drawer's expected balance was
+overstated by every cash expense since the last count**, which would have
+surfaced as a shortfall at the next count. `retire-the-manual-ledger` (#12)
+carries the rows across, after which the second branch is empty and the view may
+be deleted without touching a caller.
+
+It is a `security_invoker` view, like `effective_bill_payments`. Without that it
+would run as its owner, RLS on the base tables would be bypassed, and any
+authenticated session could read every outlet's expenses through it.
+
+Only cash expenses affect any drawer figure. A cash expense belongs to a drawer
+interval by `coalesce(occurred_at, created_at)`, so a spend before a count and
+one after it land on opposite sides of that count. `occurred_at` is nullable and
+is never a required field: it defaults to nothing, and interval membership falls
+back to when the row was written.
 
 ## Staff facts and attendance
 
@@ -505,6 +525,16 @@ expected     = opening
 difference   = counted_total − expected
 next opening = counted_total − this observation's own cash out
 ```
+
+The three terms are read by `drawer_cash_receipts_paise()`,
+`drawer_cash_expenses_paise()` and `drawer_cash_out_paise()`. All three are
+`security definer`, because they are the database's half of this arithmetic and
+must see rows a caller's own policies would filter — and all three therefore
+carry `app_may_reach_drawer()` themselves. That is the same predicate every
+drawer table's policy uses, so the two cannot drift; they shipped without it,
+which let any authenticated session read any outlet's cash totals as an
+aggregate. A caller with no reach gets nought rather than an exception, which is
+the answer an RLS-filtered select would have given them.
 
 Intervals are bounded by **timestamps, not business dates** — half-open at the
 start and closed at the end, so a payment at exactly the previous count's instant

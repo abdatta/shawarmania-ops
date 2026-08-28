@@ -209,7 +209,7 @@ const defs = {
     // on the notebook rendered three live surfaces as children of the one being
     // retired.
     path: 'ledger',
-    nav: { label: 'Ledger', icon: NotepadText, order: 5 },
+    nav: { label: 'Ledger', icon: NotepadText, order: 6 },
     state: 'live',
   },
   /**
@@ -223,8 +223,13 @@ const defs = {
    * Expenses became unreachable in the real app for exactly the two roles that
    * read the Ledger nightly.
    *
-   * Directly after the Ledger, because the Ledger is where somebody notices an
-   * expense is missing. The path is `ledger/expenses` — the same route the
+   * Directly **before** the Ledger, which reverses where it first sat. The
+   * original reasoning was that the Ledger is where somebody notices an expense
+   * is missing, so the door should be the next tab along. In use it reads the
+   * other way round: the nightly walk is count the drawer, record what was
+   * spent, then read the statement those two produce — so Expenses belongs
+   * between the Drawer and the Ledger, and the Ledger stays the thing you end
+   * on. The path is `ledger/expenses` — the same route the
    * Biller and the Employee already reach, the same component, the same rows,
    * and no change to how an expense is recorded. #12 re-homes all of it when it
    * promotes the notebook's expense table to be the real one.
@@ -232,7 +237,7 @@ const defs = {
   'owner-expenses': {
     role: 'super_admin',
     path: 'ledger/expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 6 },
+    nav: { label: 'Expenses', icon: Wallet, order: 5 },
     state: 'live',
   },
   /**
@@ -450,7 +455,7 @@ const defs = {
   'admin-ledger-statement': {
     role: 'franchise_admin',
     path: 'ledger',
-    nav: { label: 'Ledger', icon: NotepadText, order: 8 },
+    nav: { label: 'Ledger', icon: NotepadText, order: 9 },
     state: 'live',
   },
   /**
@@ -467,7 +472,7 @@ const defs = {
   'admin-ledger-expenses': {
     role: 'franchise_admin',
     path: 'ledger/expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 9 },
+    nav: { label: 'Expenses', icon: Wallet, order: 8 },
     state: 'live',
   },
   /**

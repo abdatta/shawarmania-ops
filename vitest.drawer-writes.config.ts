@@ -46,4 +46,11 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 30_000,
   },
+  // The `effective_expenses` probe drives the REAL ledger adapter rather than
+  // hand-rolling its select, because the defect it guards was the adapter
+  // reading the wrong relation — and an assertion that queries the right one
+  // itself would pass while the app stayed broken. That adapter resolves
+  // `@/domain`, so this phase needs the alias, exactly as
+  // `vitest.ledger-timing.config.ts` does for the same reason.
+  resolve: { alias: { '@': new URL('./src', import.meta.url).pathname } },
 })
