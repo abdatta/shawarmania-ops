@@ -92,8 +92,12 @@ describe('formatDayTime', () => {
     expect(formatDayTime('2026-08-09T23:50:00+05:30', NOW)).toBe('Yesterday, 11:50 pm')
   })
 
-  it('keeps the full date once it is neither', () => {
-    expect(formatDayTime('2026-08-08T13:05:00+05:30', NOW)).toMatch(/^08 Aug 2026, 01:05/)
+  it('drops the year for an older date in the current year', () => {
+    expect(formatDayTime('2026-08-08T13:05:00+05:30', NOW)).toBe('8 Aug, 01:05 pm')
+  })
+
+  it('keeps the year once the date is from an older year', () => {
+    expect(formatDayTime('2025-08-08T13:05:00+05:30', NOW)).toMatch(/^08 Aug 2025, 01:05/)
   })
 
   it('reads the day in IST, not UTC — a late bill is still today at the counter', () => {

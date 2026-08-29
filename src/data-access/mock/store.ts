@@ -1174,6 +1174,36 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     }
   })
 
+  // The newest observation demonstrates the light-touch correction path: a
+  // manager entered it, then the owner fixed the figure before anything later
+  // could anchor on it. There is deliberately no old-value trail for this
+  // path; the corrected_by attribution is the only durable evidence that a
+  // different account last touched the row.
+  const newestDrawerObservation = drawerObservations.at(-1)
+  if (!newestDrawerObservation) throw new Error('Demo fixture drift: no drawer observation exists.')
+  newestDrawerObservation.corrected_by = OWNER_ID
+  newestDrawerObservation.updated_at = instantAt(businessDate(1), '22:12')
+
+  // An older observation demonstrates the load-bearing correction path. The
+  // observation remains unchanged so later openings keep their original
+  // anchor; the separate row is what the surface reads as correction history.
+  const adjustedDrawerObservation = drawerObservations.find((row) => row.id === drawerObs(2))
+  if (!adjustedDrawerObservation) {
+    throw new Error('Demo fixture drift: adjustment target observation is missing.')
+  }
+  const drawerObservationAdjustments: Tables<'drawer_observation_adjustments'>[] = [
+    {
+      id: 'de000000-0000-4000-a000-000000000001',
+      observation_id: adjustedDrawerObservation.id,
+      outlet_id: DEMO_OUTLET_ID,
+      original_counted_total_paise: adjustedDrawerObservation.counted_total_paise,
+      corrected_counted_total_paise: adjustedDrawerObservation.counted_total_paise + 20_000,
+      reason: 'Recounted after finding a ₹200 note',
+      adjusted_by: OWNER_ID,
+      adjusted_at: instantAt(businessDate(2), '09:20'),
+    },
+  ]
+
   /**
    * The drift check, mirroring the manual ledger's.
    *
@@ -1278,7 +1308,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     aggregatorChannelDays,
     drawerObservations,
     drawerCashOut,
-    drawerObservationAdjustments: [],
+    drawerObservationAdjustments,
     ledgerDayVerifications,
     drawerAcknowledgements: [],
   }

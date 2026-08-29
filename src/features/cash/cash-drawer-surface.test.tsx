@@ -8,6 +8,7 @@ import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock/fixtures/outlets'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
+import { formatPaise } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
@@ -882,6 +883,107 @@ describe('the count history is a paged list of disclosures', () => {
     await user.click(rows[0]!)
     expect(rows[0]).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getAllByTestId(/^observation-detail-/).length).toBe(1)
+  })
+
+  it('shows counted, collected and left in the closed Billing-style summary', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const state = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const countedWithCollection = state.recentObservations.find((observation) =>
+      observation.ownCashOut.some((movement) => movement.amountPaise > 0),
+    )!
+    const collected = countedWithCollection.ownCashOut.reduce(
+      (sum, movement) => sum + movement.amountPaise,
+      0,
+    )
+    const left = countedWithCollection.countedTotalPaise - collected
+
+    renderDrawer(adapters)
+    await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+
+    const row = screen.getByTestId(`observation-${countedWithCollection.id}`)
+    const summary = within(row).getByRole('button', { name: /show the detail/i })
+
+    expect(summary).toHaveTextContent(/Counted:\s*₹/i)
+    expect(summary).toHaveTextContent(/Collected/i)
+    expect(summary).toHaveTextContent(/Left/i)
+    expect(summary).toHaveTextContent(formatPaise(countedWithCollection.countedTotalPaise))
+    expect(summary).toHaveTextContent(formatPaise(collected))
+    expect(summary).toHaveTextContent(formatPaise(left))
+    expect(summary).toHaveTextContent(/over|short|matched/i)
+    expect(summary).toHaveTextContent(/by Demo Manager/i)
+  })
+
+  it('gives the section heading and each count their own layout boundary', async () => {
+    renderDrawer()
+    await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+
+    const section = screen.getByTestId('recent-counts')
+    const heading = within(section).getByRole('heading', { name: /recent counts/i })
+    const rows = Array.from(section.children).filter((child) =>
+      child.getAttribute('data-testid')?.startsWith('observation-'),
+    )
+
+    expect(heading.parentElement).toBe(section)
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows.every((row) => row.parentElement === section)).toBe(true)
+    for (const row of rows) expect(row).toHaveClass('rounded-xl')
+  })
+
+  it('does not repeat summary facts inside an expanded count card', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const state = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const withMovement = state.recentObservations.find(
+      (observation) =>
+        observation.ownCashOut.reduce((sum, movement) => sum + movement.amountPaise, 0) !== 0,
+    )!
+    const collected = withMovement.ownCashOut.reduce(
+      (sum, movement) => sum + movement.amountPaise,
+      0,
+    )
+    const direction = collected < 0 ? 'in' : 'out'
+
+    renderDrawer(adapters)
+    await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+
+    const row = screen.getByTestId(`observation-${withMovement.id}`)
+    await user.click(within(row).getByRole('button', { name: /show the detail/i }))
+
+    const detail = screen.getByTestId(`observation-detail-${withMovement.id}`)
+    expect(detail).toHaveTextContent(/Expected at count/i)
+    expect(detail).toHaveTextContent(/Recorded from/i)
+    expect(detail).not.toHaveTextContent(`${formatPaise(Math.abs(collected))} ${direction}`)
+    expect(detail).not.toHaveTextContent(/Demo Manager/i)
+  })
+
+  it('shows seeded fix and adjustment details without repeating the closed summary', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const state = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const newest = state.recentObservations[0]!
+    const adjusted = state.recentObservations.find(
+      (observation) => observation.adjustments.length > 0,
+    )!
+    const adjustment = adjusted.adjustments[0]!
+
+    renderDrawer(adapters)
+    await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+
+    const newestRow = screen.getByTestId(`observation-${newest.id}`)
+    await user.click(within(newestRow).getByRole('button', { name: /show the detail/i }))
+    expect(screen.getByTestId(`observation-detail-${newest.id}`)).toHaveTextContent(
+      /Last fixed by/i,
+    )
+
+    const adjustedRow = screen.getByTestId(`observation-${adjusted.id}`)
+    await user.click(within(adjustedRow).getByRole('button', { name: /show the detail/i }))
+    const detail = screen.getByTestId(`observation-detail-${adjusted.id}`)
+    const history = screen.getByTestId(`observation-adjustment-${adjustment.id}`)
+    expect(detail).toHaveTextContent(/Adjusted to/i)
+    expect(detail).toHaveTextContent(formatPaise(adjustment.correctedCountedTotalPaise))
+    expect(detail).toHaveTextContent(adjustment.reason)
+    expect(history).not.toHaveTextContent(/Previously counted/i)
+    expect(history).not.toHaveTextContent(formatPaise(adjustment.originalCountedTotalPaise))
   })
 
   it('loads older counts on demand and says when there are no more', async () => {

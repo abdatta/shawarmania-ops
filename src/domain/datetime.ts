@@ -45,6 +45,11 @@ const dayMonthTimeFormat = new Intl.DateTimeFormat('en-IN', {
   hour12: true,
 })
 
+const yearFormat = new Intl.DateTimeFormat('en-IN', {
+  timeZone: OUTLET_TIME_ZONE,
+  year: 'numeric',
+})
+
 /**
  * How fresh a measured figure is: `11:00 pm` today, otherwise `2 Aug, 11:00 pm`.
  *
@@ -85,7 +90,7 @@ export function formatDateTime(instant: Date | string): string {
 
 /**
  * `Today, 08:00 pm` for a calendar day the reader is standing in, otherwise the
- * full `25 Jul 2026, 08:00 pm`.
+ * date and time. Current-year dates omit the repeated year; older years keep it.
  *
  * For lists of closed work — a shift's bills — where the whole list is nearly
  * always the same day and repeating that day down every row spends the reader's
@@ -106,6 +111,10 @@ export function formatDayTime(instant: Date | string, now: Date | string = new D
 
   const yesterday = new Date(toDate(now).getTime() - 24 * 60 * 60 * 1000)
   if (formatDate(at) === formatDate(yesterday)) return `Yesterday, ${formatTime(at)}`
+
+  if (yearFormat.format(at) === yearFormat.format(toDate(now))) {
+    return dayMonthTimeFormat.format(at)
+  }
 
   return formatDateTime(at)
 }

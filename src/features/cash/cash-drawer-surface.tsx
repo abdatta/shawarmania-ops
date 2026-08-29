@@ -11,7 +11,6 @@ import {
   MapPinOff,
   Minus,
   Pencil,
-  Plus,
   Receipt,
   TriangleAlert,
 } from 'lucide-react'
@@ -31,7 +30,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Chip, ChipRow } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
-import { LoadingFigures } from '@/components/ui/loading'
+import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Explain } from '@/components/ui/why'
 import { useAdapters, type Tables } from '@/data-access'
@@ -49,6 +48,7 @@ import {
   formatMetres,
   formatPaise,
   formatTime,
+  nextOpeningPaise,
   rupeesToPaise,
 } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
@@ -161,6 +161,47 @@ function toLocalInput(at: Date): string {
   return (
     `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}` +
     `T${pad(at.getHours())}:${pad(at.getMinutes())}`
+  )
+}
+
+/** The drawer's loading silhouette, including the metric-bearing count rows. */
+function DrawerLoading() {
+  return (
+    <LoadingRegion label="the drawer" className="space-y-3" data-testid="drawer-loading">
+      {[4, 4].map((rowCount, card) => (
+        <div key={card} className="rounded-xl border border-border bg-surface p-4 shadow-sm">
+          <div className="space-y-2">
+            {Array.from({ length: rowCount }, (_, index) => (
+              <Shimmer key={index} className="h-6" />
+            ))}
+          </div>
+        </div>
+      ))}
+      <div className="px-1">
+        <Shimmer className="h-4 w-28" />
+      </div>
+      {[0, 1, 2].map((row) => (
+        <Card key={row} className="overflow-hidden p-0">
+          <div className="grid min-h-20 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3">
+            <div className="space-y-2">
+              <Shimmer className="h-4 w-40 max-w-full" />
+              <Shimmer className="h-3 w-48 max-w-full" />
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                {[0, 1].map((metric) => (
+                  <div key={metric} className="space-y-1">
+                    <Shimmer className="ml-auto h-3 w-14" />
+                    <Shimmer className="ml-auto h-5 w-12" />
+                  </div>
+                ))}
+              </div>
+              <Shimmer className="h-5 w-4" />
+            </div>
+          </div>
+        </Card>
+      ))}
+    </LoadingRegion>
   )
 }
 
@@ -695,7 +736,7 @@ export function CashDrawerSurface() {
       )}
 
       {state === null ? (
-        <LoadingFigures label="the drawer" rows={[4, 4]} data-testid="drawer-loading" />
+        <DrawerLoading />
       ) : (
         <div className="space-y-3">
           {state.exceptions.length > 0 && (
@@ -944,8 +985,8 @@ export function CashDrawerSurface() {
 
           {/* ── Recent counts ───────────────────────────────────────────── */}
           {observations.length > 0 && (
-            <Card className="space-y-2" data-testid="recent-counts">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-content-muted">
+            <section className="space-y-3" data-testid="recent-counts">
+              <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-content-muted">
                 Recent counts
               </h2>
               {observations.map((observation) => (
@@ -994,7 +1035,7 @@ export function CashDrawerSurface() {
                   That is every count at this outlet.
                 </p>
               )}
-            </Card>
+            </section>
           )}
         </div>
       )}
@@ -1801,7 +1842,7 @@ function verdictOf(observation: DrawerObservationRecord): {
 }
 
 /**
- * One recent count, as a disclosure.
+ * One recent count, as a Billing-style disclosure.
  *
  * Built the way `sync-event-row.tsx` builds one, because that is this app's
  * pattern for exactly this shape and a second implementation is a second thing
@@ -1809,14 +1850,15 @@ function verdictOf(observation: DrawerObservationRecord): {
  * chevron that rotates, and a body that is **unmounted** while closed rather
  * than hidden — so find-in-page cannot lead a reader to text that is not there.
  *
- * **Closed, it carries what somebody is scanning for**: when, how much, and the
- * verdict, including `matched`, because a clean night reading blank is
- * indistinguishable from a row that has not loaded. The opening break rides
- * along, being the one condition that wants a second look.
+ * **Closed, it carries what somebody is scanning for**: what was counted, what
+ * was collected, what was left and the verdict, including `matched`, because a
+ * clean night reading blank is indistinguishable from a row that has not
+ * loaded. The opening break rides along, being the one condition that wants a
+ * second look.
  *
- * Everything else — the collection, the recorder, why they were away, the
- * adjustments and the control to adjust — is inside. Rendered together they were
- * five lines per count and a wall by the fourth (design D21).
+ * Everything else — why they were away, the adjustments and the control to
+ * adjust — is inside. Facts already visible in the closed summary are not
+ * repeated in the detail.
  */
 function ObservationRow({
   observation,
@@ -1831,148 +1873,236 @@ function ObservationRow({
 }) {
   const [open, setOpen] = useState(false)
   const collected = observation.ownCashOut.reduce((sum, movement) => sum + movement.amountPaise, 0)
+  const left = nextOpeningPaise(observation.countedTotalPaise, collected)
   const verdict = verdictOf(observation)
+  const movementNotes = observation.ownCashOut.flatMap((movement) =>
+    movement.reason ? [movement.reason] : [],
+  )
+  const wasRecordedLater =
+    formatDayTime(observation.recordedAt) !== formatDayTime(observation.countedAt)
 
   return (
-    <div
-      className="border-t border-border first:border-t-0"
-      data-testid={`observation-${observation.id}`}
-    >
+    <Card className="overflow-hidden p-0" data-testid={`observation-${observation.id}`}>
       <button
         type="button"
         onClick={() => setOpen((was) => !was)}
         aria-expanded={open}
-        // Named explicitly: read from its own content this announces as a date,
-        // a figure and a chip running into one another.
-        aria-label={`Count of ${formatPaise(observation.countedTotalPaise)} at ${formatDayTime(
+        // Named explicitly: read from its own content this announces the three
+        // amounts and the verdict as one summary, just as the visible row does.
+        aria-label={`Counted ${formatPaise(observation.countedTotalPaise)} at ${formatDayTime(
           observation.countedAt,
-        )}, ${verdict.spoken}. ${open ? 'Hide' : 'Show'} the detail.`}
-        className="flex w-full items-center gap-2 py-2 text-left focus-visible:focus-ring"
+        )}, ${verdict.spoken}. Collected ${formatPaise(collected)}. Left ${formatPaise(
+          left,
+        )}. ${open ? 'Hide' : 'Show'} the detail.`}
+        className="grid min-h-20 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3 text-left focus-visible:focus-ring"
       >
         {/*
-          One line: the instant, the verdict beside it, then the amount and the
-          chevron held at the right edge. The verdict was a second line under
-          the date, which cost a line per count for a chip that fits next to it.
+          The Billing-history hierarchy: the counted figure and verdict lead on
+          the left, while the two amounts that explain where that cash went sit
+          together at the right with the disclosure chevron.
 
           It WRAPS rather than truncating, and the direction of the give is
-          deliberate. The amount and the chevron are `shrink-0`, so a long date
-          against two chips — a short count that also broke its opening — pushes
-          the chips onto a second line instead of clipping money. `ChipRow`'s own
-          rule, and the one thing on this row that must never be cut off.
+          deliberate. The right-hand figures are `shrink-0`, so a long summary
+          pushes the counted line instead of clipping money.
         */}
-        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="whitespace-nowrap text-xs text-content-muted">
-            {formatDayTime(observation.countedAt)}
+        <span className="min-w-0">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-base font-black text-content">
+              Counted:{' '}
+              <Money
+                paise={observation.countedTotalPaise}
+                data-testid={`observation-counted-${observation.id}`}
+              />
+            </span>
+            {verdict.chip}
+            {observation.openingBreakPaise !== null && (
+              <Chip tone="warn" icon={TriangleAlert} data-testid={`break-${observation.id}`}>
+                break <Money paise={observation.openingBreakPaise} />
+              </Chip>
+            )}
           </span>
-          {verdict.chip}
-          {observation.openingBreakPaise !== null && (
-            <Chip tone="warn" icon={TriangleAlert} data-testid={`break-${observation.id}`}>
-              break <Money paise={observation.openingBreakPaise} />
-            </Chip>
-          )}
+          <span className="mt-1 block text-sm font-normal text-content-muted">
+            {formatDayTime(observation.countedAt)}
+            {observation.recordedByName && ` · by ${observation.recordedByName}`}
+          </span>
         </span>
-        <Money
-          paise={observation.countedTotalPaise}
-          className="shrink-0 whitespace-nowrap text-sm font-semibold"
-        />
-        <ChevronDown
-          aria-hidden
-          size={16}
-          className={cn('shrink-0 text-content-muted transition-transform', open && 'rotate-180')}
-        />
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="grid grid-cols-2 gap-x-2 text-right leading-tight">
+            <span>
+              <span className="block text-[0.6875rem] text-content-muted">Collected</span>
+              <Money
+                paise={collected}
+                className="text-base font-black text-content"
+                data-testid={`observation-collected-${observation.id}`}
+              />
+            </span>
+            <span>
+              <span className="block text-[0.6875rem] text-content-muted">Left</span>
+              <Money
+                paise={left}
+                className="text-base font-black text-content"
+                data-testid={`observation-left-${observation.id}`}
+              />
+            </span>
+          </span>
+          <ChevronDown
+            aria-hidden
+            size={18}
+            className={cn('shrink-0 text-content-muted transition-transform', open && 'rotate-180')}
+          />
+        </span>
       </button>
 
       {open && (
-        <div className="space-y-2 pb-2" data-testid={`observation-detail-${observation.id}`}>
-          <ChipRow>
-            {collected !== 0 && (
-              <Chip tone="neutral" icon={collected < 0 ? Plus : Minus}>
-                <Money paise={Math.abs(collected)} /> {collected < 0 ? 'in' : 'out'}
-              </Chip>
+        <div
+          className="space-y-3 border-t border-border px-3 pb-3 pt-3"
+          data-testid={`observation-detail-${observation.id}`}
+        >
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            {observation.expectedPaise !== null && (
+              <div>
+                <dt className="text-xs text-content-muted">Expected at count</dt>
+                <dd className="mt-0.5 font-bold text-content">
+                  <Money paise={observation.expectedPaise} />
+                </dd>
+              </div>
             )}
-            {!observation.onSite && (
-              <Chip tone="neutral" icon={MapPinOff}>
-                away
-              </Chip>
+            <div>
+              <dt className="text-xs text-content-muted">Recorded from</dt>
+              <dd className="mt-0.5 flex items-center gap-1 font-semibold text-content">
+                {observation.onSite ? (
+                  <MapPin aria-hidden size={14} />
+                ) : (
+                  <MapPinOff aria-hidden size={14} />
+                )}
+                {observation.onSite ? 'At the outlet' : 'Away from the outlet'}
+              </dd>
+            </div>
+            {wasRecordedLater && (
+              <div>
+                <dt className="text-xs text-content-muted">Saved</dt>
+                <dd className="mt-0.5 font-semibold text-content">
+                  {formatDayTime(observation.recordedAt)}
+                </dd>
+              </div>
             )}
-            {/*
-              These explain chips that sit in the row's HEADER, which is itself
-              the disclosure button — so they cannot wrap those chips without
-              nesting one button inside another. They are their own short
-              triggers here in the body instead.
-            */}
-            {observation.isAnchor && (
-              <Explain
-                label="what a first count means"
-                className="text-[0.6875rem] text-content-muted"
-                explanation={
-                  <>
-                    The drawer began here — there is nothing before it to compare against, so this
-                    count records no difference at all.
-                  </>
-                }
-              >
-                why no difference?
-              </Explain>
+            {observation.awayReason && (
+              <div className="col-span-2 border-t border-border pt-3">
+                <dt className="text-xs text-content-muted">Why away</dt>
+                <dd className="mt-0.5 text-content">{observation.awayReason}</dd>
+              </div>
             )}
-            {observation.openingBreakPaise !== null && (
-              <Explain
-                label="why the break is not repaired"
-                className="text-[0.6875rem] text-content-muted"
-                explanation={
-                  <>
-                    This count opened at a figure the previous one does not carry to. It is reported
-                    and not repaired: a figure somebody&rsquo;s count produced is evidence, and a
-                    recomputed one is not.
-                  </>
-                }
-              >
-                why is the break left alone?
-              </Explain>
+            {observation.note && (
+              <div className="col-span-2 border-t border-border pt-3">
+                <dt className="text-xs text-content-muted">Note</dt>
+                <dd className="mt-0.5 text-content">{observation.note}</dd>
+              </div>
             )}
-          </ChipRow>
+            {observation.adjustments.length === 0 && observation.correctedByName && (
+              <div>
+                <dt className="text-xs text-content-muted">Last fixed by</dt>
+                <dd className="mt-0.5 font-semibold text-content">{observation.correctedByName}</dd>
+              </div>
+            )}
+            {movementNotes.length > 0 && (
+              <div className="col-span-2 border-t border-border pt-3">
+                <dt className="text-xs text-content-muted">Cash movement note</dt>
+                <dd className="mt-0.5 space-y-1 text-content">
+                  {movementNotes.map((note, index) => (
+                    <p key={`${note}-${index}`}>{note}</p>
+                  ))}
+                </dd>
+              </div>
+            )}
+          </dl>
 
-          {(observation.recordedByName || observation.awayReason) && (
-            <p className="text-[0.6875rem] text-content-muted">
-              {observation.recordedByName}
-              {observation.correctedByName &&
-                observation.correctedByName !== observation.recordedByName &&
-                ` · corrected by ${observation.correctedByName}`}
-              {observation.awayReason && ` · ${observation.awayReason}`}
-            </p>
+          {(observation.isAnchor || observation.openingBreakPaise !== null) && (
+            <div className="border-t border-border pt-3">
+              <ChipRow>
+                {/*
+                  These explain triggers sit in the body because the row header
+                  is already a disclosure button and cannot contain another
+                  interactive control.
+                */}
+                {observation.isAnchor && (
+                  <Explain
+                    label="what a first count means"
+                    className="text-[0.6875rem] text-content-muted"
+                    explanation={
+                      <>
+                        The drawer began here — there is nothing before it to compare against, so
+                        this count records no difference at all.
+                      </>
+                    }
+                  >
+                    why no difference?
+                  </Explain>
+                )}
+                {observation.openingBreakPaise !== null && (
+                  <Explain
+                    label="why the break is not repaired"
+                    className="text-[0.6875rem] text-content-muted"
+                    explanation={
+                      <>
+                        This count opened at a figure the previous one does not carry to. It is
+                        reported and not repaired: a figure somebody&rsquo;s count produced is
+                        evidence, and a recomputed one is not.
+                      </>
+                    }
+                  >
+                    why is the break left alone?
+                  </Explain>
+                )}
+              </ChipRow>
+            </div>
           )}
 
-          {observation.adjustments.map((adjustment) => (
-            <p key={adjustment.id} className="text-[0.6875rem] text-content-muted">
-              → <Money paise={adjustment.correctedCountedTotalPaise} /> (was{' '}
-              <Money paise={adjustment.originalCountedTotalPaise} />) · {adjustment.reason}
-            </p>
-          ))}
-
-          {locked ? (
-            <Button
-              size="phone"
-              variant="secondary"
-              onClick={onAdjust}
-              data-testid={`adjust-${observation.id}`}
-            >
-              <Lock aria-hidden size={14} /> Adjust this count
-            </Button>
-          ) : (
-            // Nothing has anchored on this one yet, so correcting it is an edit
-            // rather than an adjustment: no reason, no trail, no correction on
-            // the record for a figure nobody has read.
-            <Button
-              size="phone"
-              variant="secondary"
-              onClick={onEdit}
-              data-testid={`edit-${observation.id}`}
-            >
-              <Pencil aria-hidden size={14} /> Fix this count
-            </Button>
+          {observation.adjustments.length > 0 && (
+            <div className="border-t border-border pt-3">
+              <p className="text-xs text-content-muted">Correction history</p>
+              <div className="mt-1 space-y-1 text-sm text-content">
+                {observation.adjustments.map((adjustment) => (
+                  <div key={adjustment.id} data-testid={`observation-adjustment-${adjustment.id}`}>
+                    <p>
+                      Adjusted to <Money paise={adjustment.correctedCountedTotalPaise} />
+                    </p>
+                    <p className="text-xs text-content-muted">
+                      {adjustment.reason}
+                      {adjustment.adjustedByName && ` · by ${adjustment.adjustedByName}`}
+                      {` · ${formatDayTime(adjustment.adjustedAt)}`}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
+
+          <div className="border-t border-border pt-3">
+            {locked ? (
+              <Button
+                size="phone"
+                variant="secondary"
+                onClick={onAdjust}
+                data-testid={`adjust-${observation.id}`}
+              >
+                <Lock aria-hidden size={14} /> Adjust this count
+              </Button>
+            ) : (
+              // Nothing has anchored on this one yet, so correcting it is an edit
+              // rather than an adjustment: no reason, no trail, no correction on
+              // the record for a figure nobody has read.
+              <Button
+                size="phone"
+                variant="secondary"
+                onClick={onEdit}
+                data-testid={`edit-${observation.id}`}
+              >
+                <Pencil aria-hidden size={14} /> Fix this count
+              </Button>
+            )}
+          </div>
         </div>
       )}
-    </div>
+    </Card>
   )
 }
