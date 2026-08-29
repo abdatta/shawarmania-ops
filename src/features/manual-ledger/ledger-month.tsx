@@ -8,7 +8,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
-import { formatBusinessDate, PROFIT_BASIS_LABELS } from '@/domain'
+import { formatBusinessDate, formatDayTime, PROFIT_BASIS_LABELS } from '@/domain'
 
 import { readMonth, type MonthReading } from './ledger'
 
@@ -139,6 +139,7 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
             testId="month-zomato-net"
             bold
           />
+          <AsOfNote at={reading.zomatoAsOfAt} testId="month-zomato-as-of" />
         </div>
 
         <div className="border-t border-border pt-2">
@@ -158,6 +159,7 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
             testId="month-swiggy-net"
             bold
           />
+          <AsOfNote at={reading.swiggyAsOfAt} testId="month-swiggy-as-of" />
         </div>
 
         <div className="flex items-baseline justify-between border-t border-border pt-2">
@@ -305,6 +307,26 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
         </p>
       </Card>
     </div>
+  )
+}
+
+/**
+ * When this channel's figures were last confirmed, once for the month.
+ *
+ * One stamp per channel rather than one per day: a run re-reads a trailing
+ * window of days at once, so forty stamped cells would repeat two facts forty
+ * times. And one per channel rather than one for the card, because Zomato and
+ * Swiggy hold independent sessions — a shared stamp would let a fresh Zomato
+ * read speak for a Swiggy session that lapsed days ago, which is the mistake
+ * the stamp exists to prevent.
+ */
+function AsOfNote({ at, testId }: { at: string | null; testId: string }) {
+  if (at === null) return null
+
+  return (
+    <p className="pt-1 text-xs text-content-muted" data-testid={testId}>
+      As of {formatDayTime(at)}
+    </p>
   )
 }
 

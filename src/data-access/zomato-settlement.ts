@@ -53,5 +53,11 @@ export function toZomatoSettlement(
             commissionPaise: row.provisional_commission_paise,
           },
     revisedAt: row.revised_at,
+
+    // Dropped here until 2026-08-29, which left every screen showing a measured
+    // figure as a bare number: a day read at 11 pm and superseded by the 4 am
+    // run looked exactly like one read a minute ago. `aggregator-figures` asks
+    // a reading to name its as-of time, and this is the column that holds it.
+    asOfAt: row.as_of_at,
   }
 }

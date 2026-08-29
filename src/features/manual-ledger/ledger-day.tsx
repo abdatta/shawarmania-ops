@@ -17,7 +17,7 @@ import {
   type ManualLedgerExpense,
   type ZomatoSettlement,
 } from '@/data-access/adapters'
-import { formatBusinessDate, rupeesToPaise } from '@/domain'
+import { formatBusinessDate, formatDayTime, rupeesToPaise } from '@/domain'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
 
@@ -714,6 +714,7 @@ function RecordedDay({
           testId="recorded-zomato-net"
         />
         <SupersededNote settlement={reading.zomato.settlement} />
+        <AsOfNote settlement={reading.zomato.settlement} testId="recorded-zomato-as-of" />
       </div>
 
       <div className="space-y-1 border-t border-border pt-2">
@@ -739,6 +740,7 @@ function RecordedDay({
           paise={reading.netSwiggyPaise}
           testId="recorded-swiggy-net"
         />
+        <AsOfNote settlement={swiggy.settlement} testId="recorded-swiggy-as-of" />
       </div>
 
       <div className="flex items-baseline justify-between border-t border-border pt-2">
@@ -1122,9 +1124,38 @@ function ChannelReadingBlock({
             )}
           </p>
           <SupersededNote settlement={settlement} />
+          <AsOfNote settlement={settlement} testId={`${testIdPrefix}-as-of`} />
         </>
       )}
     </div>
+  )
+}
+
+/**
+ * When these figures were last confirmed.
+ *
+ * Without it the block is a bare number, and a bare number reads as a live one:
+ * a day read at 11 pm and superseded by the 4 am run looked exactly like a day
+ * read a minute ago. It says *confirmed* rather than *changed* on purpose — a
+ * re-read that found the day unchanged still moves it, because "checked again
+ * and it held" is the reassurance the stamp exists to give. Where the figure
+ * did move, `SupersededNote` above already tells that story.
+ *
+ * Silent on a null, which is a row written before sources carried their time.
+ */
+function AsOfNote({
+  settlement,
+  testId,
+}: {
+  settlement: ChannelSettlement | null
+  testId: string
+}) {
+  if (!settlement || settlement.asOfAt === null) return null
+
+  return (
+    <p className="px-1 text-xs text-content-muted" data-testid={testId}>
+      As of {formatDayTime(settlement.asOfAt)}
+    </p>
   )
 }
 

@@ -2109,6 +2109,18 @@ export interface ZomatoSettlement {
    */
   revisedFrom: { revenuePaise: number; commissionPaise: number | null } | null
   revisedAt: string | null
+  /**
+   * The moment the source was current, which is when the figures were last
+   * **confirmed** rather than when they last **moved**.
+   *
+   * A run that re-read the day and found it unchanged still advances this, and
+   * that is the point: "checked again at 4 am and it held" is the reassurance a
+   * static number cannot give on its own. Where a figure did move, `revisedFrom`
+   * beside it already tells that story and this does not retell it.
+   *
+   * `null` on rows written before sources were named.
+   */
+  asOfAt: string | null
 }
 
 /**

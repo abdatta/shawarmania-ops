@@ -311,6 +311,47 @@ describe('a month read for one outlet', () => {
     expect(month.netSwiggyPaise).toBe(105_000 + 158_000)
   })
 
+  /**
+   * One stamp per channel for the month, not one per day and not one shared.
+   *
+   * The shared version is the tempting one and it is the wrong one: the two
+   * channels hold independent sessions, so a Zomato read taken an hour ago
+   * would vouch for a Swiggy session that lapsed days back. Stated as an
+   * inequality so combining them cannot be reintroduced silently.
+   */
+  it('reports each channel’s latest confirmation separately', () => {
+    const stamped: ManualLedgerDayFigures[] = [
+      day({
+        businessDate: '2026-08-01',
+        zomatoRevenuePaise: 300_000,
+        zomatoCommissionPaise: 67_500,
+        zomatoSettlement: swiggySettlement({ asOfAt: '2026-08-28T17:53:00.000Z' }),
+        swiggySettlement: swiggySettlement({ asOfAt: '2026-08-24T04:10:00.000Z' }),
+      }),
+      day({
+        businessDate: '2026-08-02',
+        zomatoRevenuePaise: 400_000,
+        zomatoCommissionPaise: 72_000,
+        // An older Zomato reading, so the month must take the later of the two
+        // rather than the last one it happened to walk.
+        zomatoSettlement: swiggySettlement({ asOfAt: '2026-08-26T17:53:00.000Z' }),
+        swiggySettlement: swiggySettlement({ asOfAt: '2026-08-22T04:10:00.000Z' }),
+      }),
+    ]
+    const month = readMonth(stamped, [])
+
+    expect(month.zomatoAsOfAt).toBe('2026-08-28T17:53:00.000Z')
+    expect(month.swiggyAsOfAt).toBe('2026-08-24T04:10:00.000Z')
+    expect(month.swiggyAsOfAt).not.toBe(month.zomatoAsOfAt)
+  })
+
+  it('names no confirmation for a month nothing was measured in', () => {
+    const month = readMonth([day({ businessDate: '2026-08-01' })], [])
+
+    expect(month.zomatoAsOfAt).toBeNull()
+    expect(month.swiggyAsOfAt).toBeNull()
+  })
+
   it('would report a different figure if one rate were applied to the month total', () => {
     const month = readMonth(days, expenses)
 
@@ -513,6 +554,7 @@ function swiggySettlement(overrides: Partial<ChannelSettlement> = {}): ChannelSe
     supersededTyped: null,
     revisedFrom: null,
     revisedAt: null,
+    asOfAt: '2026-08-28T17:53:00.000Z',
     ...overrides,
   }
 }

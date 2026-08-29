@@ -85,6 +85,19 @@ export interface ZomatoReading {
  * turning the sync on, or off again, cannot reach backwards and change a figure
  * that was already recorded.
  */
+/**
+ * The later of two as-of moments, either of which may be absent.
+ *
+ * Compared as strings: both are ISO-8601 in UTC, which sorts lexicographically
+ * in the same order it sorts chronologically, so a month of days costs no Date
+ * construction to reduce.
+ */
+function later(left: string | null, right: string | null): string | null {
+  if (left === null) return right
+  if (right === null) return left
+  return right > left ? right : left
+}
+
 export function readZomato(day: ManualLedgerDayFigures): ZomatoReading {
   const grossPaise = assertPaise(day.zomatoRevenuePaise, 'Zomato revenue')
   const commissionPaise = day.zomatoCommissionPaise
@@ -317,6 +330,19 @@ export interface MonthReading {
    * is the failure this whole capability was built to remove.
    */
   undeterminedDays: number
+  /**
+   * The latest moment each channel's figures were confirmed, across the days in
+   * the month, or `null` where the month holds no measured reading for it.
+   *
+   * **Per channel, deliberately.** A single stamp taking the later of the two
+   * would let a Zomato read from an hour ago vouch for a Swiggy session that
+   * lapsed days back — the two have independent sessions and independent repair
+   * paths, which is why `aggregator-channel-sessions` carries a ladder for one
+   * without the other. Per day would be forty repetitions of these two facts,
+   * since a run re-reads a trailing window of days at once.
+   */
+  zomatoAsOfAt: string | null
+  swiggyAsOfAt: string | null
   /** Cash + UPI + both aggregators net of their own commission. */
   netRevenuePaise: number
   expensesByCategory: MonthCategoryTotal[]
@@ -362,6 +388,8 @@ export function readMonth(
   let netZomatoPaise = 0
   let netSwiggyPaise = 0
   let undeterminedDays = 0
+  let zomatoAsOfAt: string | null = null
+  let swiggyAsOfAt: string | null = null
 
   for (const day of days) {
     grossCashPaise += assertPaise(day.cashRevenuePaise, 'cash revenue')
@@ -394,6 +422,11 @@ export function readMonth(
     netZomatoPaise += zomatoNet ?? zomato.grossPaise
     netSwiggyPaise += swiggyNet ?? swiggy.grossPaise
     if (zomatoNet === null || swiggyNet === null) undeterminedDays += 1
+
+    // ISO-8601 UTC sorts lexicographically, so the later string is the later
+    // moment and no Date is constructed to compare two of them.
+    zomatoAsOfAt = later(zomatoAsOfAt, zomato.settlement?.asOfAt ?? null)
+    swiggyAsOfAt = later(swiggyAsOfAt, swiggy.settlement?.asOfAt ?? null)
   }
 
   const netRevenuePaise = grossCashPaise + grossUpiPaise + netZomatoPaise + netSwiggyPaise
@@ -416,6 +449,8 @@ export function readMonth(
     zomatoCommissionPaise: grossZomatoPaise - netZomatoPaise,
     swiggyCommissionPaise: grossSwiggyPaise - netSwiggyPaise,
     undeterminedDays,
+    zomatoAsOfAt,
+    swiggyAsOfAt,
     netRevenuePaise,
     expensesByCategory,
     totalExpensesPaise: sumExpenses(expenses),

@@ -126,6 +126,7 @@ describe('the manual ledger surface', () => {
       supersededTyped: null,
       revisedFrom: null,
       revisedAt: null,
+      asOfAt: '2026-08-28T17:53:00.000Z',
     }
     const base = createMockAdapters('super_admin')
     const adapters: DataAdapters = {
@@ -144,6 +145,72 @@ describe('the manual ledger surface', () => {
       'title',
       expect.stringContaining('Swiggy today'),
     )
+  })
+
+  /**
+   * A measured figure that does not say when it was read is a figure that reads
+   * as live. `aggregator-figures` asks a reading to name its as-of time; until
+   * 2026-08-29 `toZomatoSettlement` dropped the column, so no screen could.
+   *
+   * The month assertion is the one that matters most: it is what stops the two
+   * channels sharing a stamp, which would let a fresh Zomato read vouch for a
+   * Swiggy session that lapsed days ago.
+   */
+  it('says when each channel’s figures were last confirmed, and never lets one speak for the other', async () => {
+    const freshZomato: ChannelSettlement = {
+      revenuePaise: 941_000,
+      commissionPaise: 200_000,
+      state: 'provisional',
+      origin: 'daily_reader',
+      supersededTyped: null,
+      revisedFrom: null,
+      revisedAt: null,
+      asOfAt: '2026-08-28T17:53:00.000Z',
+    }
+    const staleSwiggy: ChannelSettlement = {
+      ...freshZomato,
+      asOfAt: '2026-08-24T04:10:00.000Z',
+    }
+    const base = createMockAdapters('super_admin')
+    const adapters: DataAdapters = {
+      ...base,
+      manualLedger: {
+        ...base.manualLedger,
+        getDayFigures: async () => ({ zomato: freshZomato, swiggy: staleSwiggy }),
+      },
+    }
+
+    renderLedger(adapters)
+    await screen.findByTestId('ledger-day-form')
+
+    // Matched by suffix: the day has two renderings — the entry block and the
+    // recorded reading — and the claim is that the stamp is on the Zomato and
+    // Swiggy blocks, not that one of the two layouts is on screen.
+    const zomatoStamp = screen.getByTestId(/zomato-as-of$/)
+    const swiggyStamp = screen.getByTestId(/swiggy-as-of$/)
+    expect(zomatoStamp).toHaveTextContent(/^As of /)
+    // The stale channel keeps its own older moment rather than borrowing the
+    // fresher one beside it.
+    expect(swiggyStamp.textContent).not.toEqual(zomatoStamp.textContent)
+  })
+
+  it('shows no as-of stamp on a day nothing was read for', async () => {
+    const base = createMockAdapters('super_admin')
+    const adapters: DataAdapters = {
+      ...base,
+      manualLedger: {
+        ...base.manualLedger,
+        getDayFigures: async () => ({ zomato: null, swiggy: null }),
+      },
+    }
+
+    renderLedger(adapters)
+    await screen.findByTestId('ledger-day-form')
+
+    // Nothing was read, so there is no moment to name. A stamp here would be
+    // claiming a reading that never happened.
+    expect(screen.queryByTestId(/zomato-as-of$/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId(/swiggy-as-of$/)).not.toBeInTheDocument()
   })
 
   it('offers the previous recorded day’s close, and offers no commission at all', async () => {
