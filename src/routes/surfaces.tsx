@@ -15,7 +15,7 @@ import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface
 import { DevicesSurface } from '@/features/counter/devices-surface'
 import { ExpenseCategoriesSurface } from '@/features/expense-categories/expense-categories-surface'
 import { ExpensesSurface } from '@/features/expenses/expenses-surface'
-import { StaffExpensesSurface } from '@/features/expenses/staff-expenses-surface'
+import { OutletExpensesSurface } from '@/features/expenses/outlet-expenses-surface'
 import { ComparisonSurface } from '@/features/insights/comparison-surface'
 import { OutletDayView } from '@/features/insights/outlet-day-view'
 import { PnlSurface } from '@/features/insights/pnl-surface'
@@ -214,7 +214,7 @@ export const roleSurfaceRoutes: RouteObject[] = [
     path: 'ledger/expenses',
     element: (
       <GatedSurface path="ledger/expenses">
-        <StaffExpensesSurface />
+        <OutletExpensesSurface />
       </GatedSurface>
     ),
   },

@@ -64,6 +64,7 @@ export {
 } from './inventory'
 export {
   describeCutover,
+  earliestOffered,
   formatBusinessDate,
   formatDate,
   formatDateTime,

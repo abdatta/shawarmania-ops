@@ -360,6 +360,16 @@ export function shiftBusinessDate(businessDate: string, days: number): string {
   return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`
 }
 
+/**
+ * How far back a platform calendar reaches: a year before the outlet's today,
+ * to the first of that month. Steps may still reach further one day at a time —
+ * this is a floor on the picker, which needs one, not on the history.
+ */
+export function earliestOffered(today: string): string {
+  const [year, month] = today.split('-')
+  return `${Number(year) - 1}-${month}-01`
+}
+
 function toDate(instant: Date | string): Date {
   const date = instant instanceof Date ? instant : new Date(instant)
   if (Number.isNaN(date.getTime())) {

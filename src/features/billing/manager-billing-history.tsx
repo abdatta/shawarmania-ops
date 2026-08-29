@@ -17,7 +17,7 @@ import {
   type BillingDeliveryDiagnostic,
   type BillingOrder,
 } from '@/data-access/adapters'
-import { formatDayTime, resolveBusinessDate, shiftBusinessDate } from '@/domain'
+import { earliestOffered, formatDayTime, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
 
@@ -59,16 +59,6 @@ function BillDetailTransition({ open, children }: { open: boolean; children: Rea
 
 function methodLabel(method: BillingBill['paymentMethod']) {
   return method === 'upi' ? 'UPI' : method[0]!.toUpperCase() + method.slice(1)
-}
-
-/**
- * How far back the platform calendar reaches: a year before the outlet's today,
- * to the first of that month. The steps still reach further one day at a time —
- * this is a floor on the picker, which needs one, not on the history.
- */
-function earliestOffered(today: string): string {
-  const [year, month] = today.split('-')
-  return `${Number(year) - 1}-${month}-01`
 }
 
 function BillingHistoryShimmer() {
