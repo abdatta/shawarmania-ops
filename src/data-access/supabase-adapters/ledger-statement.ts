@@ -133,8 +133,13 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
         .eq('outlet_id', outletId)
         .eq('business_date', businessDate)
         .eq('status', 'settled'),
+      // `effective_expenses`, not `expenses`. The latter has never held a row:
+      // every live Expenses surface writes `manual_ledger_expenses`, so this
+      // card reported "Nothing recorded" on days with real expenses. The view
+      // names the live record wherever it lives and collapses to one branch when
+      // #12 carries the notebook across.
       client
-        .from('expenses')
+        .from('effective_expenses')
         .select('*')
         .eq('outlet_id', outletId)
         .eq('business_date', businessDate),
@@ -243,12 +248,16 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
 
     const expenseRows = expenseRowsRaw
       .map((row) => ({
-        id: row.id,
-        label: row.description ?? row.category,
-        paise: row.amount_paise,
-        isCash: row.payment_method === 'cash',
-        instant: row.occurred_at ?? row.created_at,
-        recordedByName: names.get(row.recorded_by) ?? null,
+        id: row.id ?? '',
+        label: row.description ?? row.category ?? 'Expense',
+        paise: row.amount_paise ?? 0,
+        // The view normalises the two shapes: `payment_method = 'cash'` on one
+        // side, `is_cash` on the other, one boolean out.
+        isCash: row.is_cash ?? false,
+        instant: row.occurred_at ?? row.created_at ?? '',
+        // Nullable through the view, because a notebook row carried over from
+        // before accounts existed has no recorder.
+        recordedByName: row.recorded_by ? (names.get(row.recorded_by) ?? null) : null,
       }))
       .sort((a, b) => a.instant.localeCompare(b.instant))
 

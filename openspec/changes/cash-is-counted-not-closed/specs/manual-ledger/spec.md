@@ -28,10 +28,15 @@ here.**
 - **WHEN** a manual-ledger day or expense row is written, corrected or voided
 - **THEN** no attendance, bill, live expense, drawer observation or live report figure changes
 
-#### Scenario: No live surface reads the notebook
+#### Scenario: No live surface takes a drawer belief from the notebook
 
 - **WHEN** the cash drawer or the derived ledger statement is rendered
-- **THEN** neither queries a manual-ledger table
+- **THEN** neither takes an opening, a closing or any drawer balance from a manual-ledger day row, and an outlet with no observation reads as not tracked rather than seeded from one
+
+#### Scenario: The notebook's expenses are the live expense record until they are carried across
+
+- **WHEN** an expense is recorded through any live Expenses surface
+- **THEN** the derived ledger statement and the drawer's interval arithmetic both count it, whichever table currently holds it, reading through one relation that names the live record
 
 #### Scenario: Retirement carries the attribution, not only the amounts
 

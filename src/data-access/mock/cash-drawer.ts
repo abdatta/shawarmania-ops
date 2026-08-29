@@ -21,6 +21,7 @@ import {
 } from '../adapters'
 import type { Tables } from '../database.types'
 
+import { cashExpensesIn } from './effective-expenses'
 import { accountFixtures } from './fixtures/accounts'
 import type { DemoStore } from './store'
 
@@ -80,28 +81,26 @@ function cashReceipts(
   return { paise: total, bills }
 }
 
-/** Cash expenses in `(from, to]`, by occurrence instant. */
+/**
+ * Cash expenses in `(from, to]`, by occurrence instant.
+ *
+ * Through `cashExpensesIn`, which reads both expense sources exactly as
+ * `public.effective_expenses` does. Reading `store.expenses` alone was this
+ * mock's copy of the production defect: the live surfaces read a table nothing
+ * writes, so the drawer's expected balance was overstated by every cash expense
+ * and the next count would have read short by it.
+ */
 function cashExpenses(
   store: DemoStore,
   outletId: string,
   from: string | null,
   to: string,
 ): { paise: number; rows: number } {
-  let total = 0
-  let rows = 0
-
-  for (const expense of store.expenses) {
-    if (expense.outlet_id !== outletId || expense.payment_method !== 'cash') continue
-    // `coalesce(occurred_at, created_at)` — the same fallback the database uses,
-    // so a row with no stated instant still lands somewhere sensible.
-    const instant = expense.occurred_at ?? expense.created_at
-    if (from !== null && instant <= from) continue
-    if (instant > to) continue
-    total += expense.amount_paise
-    rows += 1
+  const matching = cashExpensesIn(store, outletId, from, to)
+  return {
+    paise: matching.reduce((sum, expense) => sum + expense.amountPaise, 0),
+    rows: matching.length,
   }
-
-  return { paise: total, rows }
 }
 
 /**

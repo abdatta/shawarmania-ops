@@ -233,9 +233,16 @@ values (:'KAL', 'collection', 50000, pg_temp.t(4.5), :'OWNER', :KAL_LAT, :KAL_LN
 
 -- What the seed's own bills contribute to this interval. Measured, not assumed:
 -- the first version of this file assumed nought and was wrong by ₹1,861.
+--
+-- **Measured as the owner**, not in the unimpersonated window the inserts above
+-- use. Since design D26 the three interval readers carry
+-- `app_may_reach_drawer()` themselves, so a reader with no session gets nought —
+-- which is the point of that guard and would silently zero this baseline.
+select pg_temp.impersonate(:'OWNER');
 create temporary table pg_temp_receipts as
 select public.drawer_cash_receipts_paise(:'KAL', pg_temp.t(5), pg_temp.t(3)) as second_interval,
        public.drawer_cash_receipts_paise(:'KAL', pg_temp.t(3), pg_temp.t(1)) as third_interval;
+select pg_temp.unimpersonate();
 grant select on pg_temp_receipts to authenticated;
 
 select pg_temp.impersonate(:'OWNER');
@@ -309,12 +316,14 @@ insert into public.drawer_cash_out
 values (:'KAL', 'collection', 70000, pg_temp.t(5), :'OWNER', :KAL_LAT, :KAL_LNG),
        (:'KAL', 'collection', 30000, pg_temp.t(3), :'OWNER', :KAL_LAT, :KAL_LNG);
 
+-- Back inside a session before reading: the reader answers nought to a caller
+-- who may not reach the drawer, which since D26 includes no caller at all.
+select pg_temp.impersonate(:'OWNER');
+
 select is(
   public.drawer_cash_out_paise(:'KAL', pg_temp.t(5), pg_temp.t(3), null),
   280000::bigint,
   'a movement AT the previous instant is excluded and one AT this instant is included');
-
-select pg_temp.impersonate(:'OWNER');
 
 -- ===========================================================================
 -- 4. The carry-forward anchors to the COUNTED figure (decision 3).
@@ -556,8 +565,10 @@ select pg_temp.unimpersonate();
 -- rows go in. The same lesson as the receipts term: the seed's own expenses are
 -- not this file's to assume, and hardcoding ₹800 here was wrong by the ₹100 the
 -- seed happens to hold.
+select pg_temp.impersonate(:'OWNER');
 create temporary table pg_temp_kpa_before as
 select public.drawer_cash_expenses_paise(:'KPA', pg_temp.t(40), pg_temp.t(0)) as expenses;
+select pg_temp.unimpersonate();
 grant select on pg_temp_kpa_before to authenticated;
 
 -- One cash expense on each side of the intervening cutovers, so the sum has to
@@ -571,11 +582,13 @@ values
   (:'KPA', public.app_business_date(pg_temp.t(10), time '04:00'), 'utilities',
    'Gas, two evenings later', 20000, 'cash', :'OWNER', pg_temp.t(10));
 
+select pg_temp.impersonate(:'OWNER');
 create temporary table pg_temp_kpa as
 select public.drawer_cash_receipts_paise(:'KPA', pg_temp.t(40), pg_temp.t(0)) as receipts,
        public.drawer_cash_expenses_paise(:'KPA', pg_temp.t(40), pg_temp.t(0)) as expenses,
        public.app_business_date(pg_temp.t(40), time '04:00') as from_date,
        public.app_business_date(pg_temp.t(0), time '04:00') as to_date;
+select pg_temp.unimpersonate();
 grant select on pg_temp_kpa to authenticated;
 
 select ok(

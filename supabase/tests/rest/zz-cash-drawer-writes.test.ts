@@ -37,6 +37,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, describe, expect, it } from 'vitest'
 
 import type { Database } from '../../../src/data-access/database.types'
+import { createSupabaseLedgerStatementAdapter } from '../../../src/data-access/supabase-adapters/ledger-statement'
 
 const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
 const SUPABASE_ANON_KEY =
@@ -105,6 +106,11 @@ afterAll(async () => {
   const service = serviceClient()
   const outlets = [OUTLETS.kalyani, OUTLETS.kanchrapara]
 
+  // The notebook expense the effective_expenses probe writes. Deleted by its
+  // own category rather than by outlet: the seed may carry notebook rows of its
+  // own one day, and a cleanup that emptied the table would hide that.
+  await service.from('manual_ledger_expenses').delete().eq('category', PROBE_EXPENSE)
+
   await service.from('drawer_observation_adjustments').delete().in('outlet_id', outlets)
   await service.from('drawer_cash_out').delete().in('outlet_id', outlets)
   await service.from('drawer_observations').delete().in('outlet_id', outlets)
@@ -126,6 +132,9 @@ afterAll(async () => {
     }
   }
 })
+
+/** The category this file's notebook expense carries, so cleanup can find it. */
+const PROBE_EXPENSE = 'Probe · gas cylinder'
 
 /** A count instant guaranteed to be after any this file has already used. */
 let instantCursor = 0
@@ -376,5 +385,99 @@ describe('no client supplies a derived figure', () => {
     } as never)
 
     expect(error).not.toBeNull()
+  })
+})
+
+/**
+ * The defect the owner found on 2026-08-28, over HTTP, through the real adapter.
+ *
+ * The Ledger's Expenses card said "Nothing recorded" on days with real expenses,
+ * because both live surfaces read `public.expenses` — a table nothing has ever
+ * written. Every live Expenses surface writes `manual_ledger_expenses`.
+ *
+ * **It has to be tested here rather than as a component test.** The mock store
+ * writes and reads one `expenses` array, so demo mode is self-consistent by
+ * construction and can never reproduce this. Only production had two tables, one
+ * written and the other read — and only a real round trip proves PostgREST
+ * exposes the view the fix introduced, which is the same class of failure the
+ * `effective_bill_payments` embed comment in the drawer adapter warns about.
+ */
+describe('expenses are read where they are written', () => {
+  it('carries a notebook cash expense onto the Ledger day and into the drawer interval', async () => {
+    const owner = await signIn(EMAILS.superAdmin)
+    const businessDate = new Date().toISOString().slice(0, 10)
+    const occurredAt = new Date(Date.now() - 45 * 60_000).toISOString()
+
+    // Written the way the live Expenses surface writes one, with the caller's
+    // own session rather than the service role, so the insert policy is
+    // exercised too.
+    const { data: profile } = await owner.auth.getUser()
+    const { error: writeError } = await owner.from('manual_ledger_expenses').insert({
+      outlet_id: OUTLETS.kalyani,
+      business_date: businessDate,
+      category: PROBE_EXPENSE,
+      amount_paise: 90000,
+      is_cash: true,
+      occurred_at: occurredAt,
+      recorded_by: profile.user?.id ?? null,
+    })
+    expect(writeError).toBeNull()
+
+    // 1. The view exposes it over PostgREST at all.
+    const { data: viaView, error: viewError } = await owner
+      .from('effective_expenses')
+      .select('*')
+      .eq('outlet_id', OUTLETS.kalyani)
+      .eq('category', PROBE_EXPENSE)
+    expect(viewError).toBeNull()
+    expect(viaView).toHaveLength(1)
+    expect(viaView?.[0]?.is_cash).toBe(true)
+    expect(viaView?.[0]?.source_table).toBe('manual_ledger_expenses')
+
+    // 2. The Ledger day carries it. This is the card that read "Nothing
+    //    recorded" — the assertion the owner's screenshot is of.
+    const ledger = createSupabaseLedgerStatementAdapter(owner)
+    const day = await ledger.getDay(OUTLETS.kalyani, businessDate)
+    expect(day.expenses.totalPaise).toBeGreaterThanOrEqual(90000)
+    expect(day.expenses.rows.map((row) => row.label)).toContain(PROBE_EXPENSE)
+    expect(day.expenses.rows.find((row) => row.label === PROBE_EXPENSE)?.isCash).toBe(true)
+
+    // 3. And the drawer's own arithmetic counts it, which is the half that
+    //    would otherwise manufacture a shortfall at the next count.
+    const { data: interval, error: intervalError } = await owner.rpc('drawer_cash_expenses_paise', {
+      p_outlet_id: OUTLETS.kalyani,
+      p_from: new Date(Date.now() - 90 * 60_000).toISOString(),
+      p_to: new Date().toISOString(),
+    })
+    expect(intervalError).toBeNull()
+    expect(Number(interval)).toBeGreaterThanOrEqual(90000)
+  })
+
+  it('refuses the interval readers to a Biller, at their own outlet', async () => {
+    // These three are `security definer` and granted to `authenticated`, so they
+    // are the one path around every drawer policy. They shipped taking the
+    // outlet from the caller and checking nothing: a Biller read ₹1,005 of
+    // Kalyani's receipts through them, measured on 2026-08-28.
+    const biller = await signIn(EMAILS.billerKalyani)
+
+    for (const rpc of ['drawer_cash_receipts_paise', 'drawer_cash_expenses_paise'] as const) {
+      const { data, error } = await biller.rpc(rpc, {
+        p_outlet_id: OUTLETS.kalyani,
+        // An explicit early bound rather than null: the generated signature
+        // types this as a timestamp, and the window is not what is under test.
+        p_from: '2020-01-01T00:00:00.000Z',
+        p_to: new Date().toISOString(),
+      })
+      expect(error).toBeNull()
+      expect(Number(data)).toBe(0)
+    }
+
+    const { data: cashOut, error: cashOutError } = await biller.rpc('drawer_cash_out_paise', {
+      p_outlet_id: OUTLETS.kalyani,
+      p_from: '2020-01-01T00:00:00.000Z',
+      p_to: new Date().toISOString(),
+    })
+    expect(cashOutError).toBeNull()
+    expect(Number(cashOut)).toBe(0)
   })
 })

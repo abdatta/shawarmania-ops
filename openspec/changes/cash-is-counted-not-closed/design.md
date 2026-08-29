@@ -826,6 +826,117 @@ out what it was telling them.
   a green tint that a colour-blind reader of this card cannot use. The `+` and
   the `−` are words in this context, not decoration.
 
+### 24. Expenses are read where they are written, not where they ought to live
+
+Found in production by the owner on 2026-08-28, hours after this change
+deployed: the Ledger's Expenses card read **Nothing recorded** on a day with
+real expenses.
+
+**The premise was wrong, not the code.** Everything above assumed
+`public.expenses` is where a live expense lands. It is not, and never has been:
+expenses went live in #36 and #38 against `manual_ledger_expenses`, which is
+what the Expenses tab writes today, for every role, at both outlets. Measured
+against production the same evening: `public.expenses` **0 rows**;
+`manual_ledger_expenses` **118 rows, 65 of them cash**, spanning 2026-08-01 to
+2026-08-28. The proposal's own Impact section recorded the 0 and read it as
+*"nothing to migrate"* rather than as *"nothing writes this"*.
+
+The comment that shipped beside the defect is the tell:
+*"`public.expenses` only. The notebook is never read by a live surface."* That
+sentence is a good rule about **`manual_ledger_days`** — decision 18 refuses to
+seed the drawer's opening from the notebook's day-close figures, and that
+refusal stands unchanged. It was applied to the wrong table. A notebook *day
+row* is a superseded belief about a closing balance; a notebook *expense row* is
+the live record of money that left the drawer, written by the app, twenty
+minutes ago.
+
+**The visible half was the smaller half.** The Expenses card read nought, which
+is wrong and obvious. `drawer_cash_expenses_paise()` also read nought, which is
+wrong and invisible: the drawer's expected balance was overstated by every cash
+expense since the last count — ₹290 at Kalyani on the day it was found — so the
+**next count would have read short by exactly that.** A manufactured shortfall in
+a cash-reconciliation app is the specific fiction this whole change exists to
+remove, and it would have been read as a missing note. Both outlets held only
+their anchor, which carries no difference, so no figure was actually produced
+wrong; the first real count would have been.
+
+**The fix names the live expense record wherever it currently lives.**
+`public.effective_expenses` unions `public.expenses` with the un-voided rows of
+`manual_ledger_expenses`, normalising the two payment-method shapes to one
+`is_cash` boolean. Both callers point at that name for good: when #12 carries the
+rows across, the view collapses to its first branch and not one caller changes.
+`effective_bill_payments` is the same pattern, in the same schema, for the same
+reason.
+
+`security_invoker = true` is load-bearing rather than decoration. Without it the
+view runs as its owner, RLS on the base tables is bypassed, and any authenticated
+session reads every outlet's expenses through it — the precise tenancy failure
+the base policies exist to prevent.
+
+**Rejected: teach the Expenses surface to write `public.expenses`.** The correct
+end state and #12's actual job. Done here it is a new write path, a category
+mapping, a row migration and a void semantics decision, shipped at speed against
+a live counter to fix a read. The view is smaller, reversible, and does not
+prejudge how #12 carries the rows.
+
+**Rejected: read `manual_ledger_expenses` directly in both callers.** Two call
+sites to change again at #12 instead of one view to delete, and it spreads the
+stopgap's name into the surfaces that are meant to outlive it.
+
+### 25. The demo hid it, so the mock now reads the union too
+
+Worth its own entry, because the failure is about this repo's central seam rather
+than about expenses.
+
+**The mock store holds the same two arrays and the seed fills both.** So every
+mock reader could take `store.expenses` alone and the demo still showed a
+populated Ledger: self-consistent by construction, and therefore silent about a
+system that is not. The walkthrough, the component tests and the four-role demo
+all passed while production read an empty table.
+
+That is the seam failing at the one thing it is for. `AGENTS.md` says a fixture
+the database could not serve must fail to compile; the shape here is worse,
+because the fixture was one the database *could* serve and the two halves simply
+answered different questions. So `src/data-access/mock/effective-expenses.ts`
+mirrors the view — both sources, un-voided only, one normalised shape — and both
+mock readers go through it.
+
+The regression test that pins it does not assert against the store. It **records
+an expense through the door a person uses** — `manualLedger.createExpense`, which
+is what the Expenses tab calls — and then asks the Ledger and the drawer whether
+they can see it. Three of its four cases fail against the mocks as they shipped.
+An assertion written against the right array would have passed while the app
+stayed broken, which is how this defect survived the first time.
+
+### 26. The drawer's three interval readers ask who is calling
+
+Found while fixing decision 24, in the function being edited, and fixed in the
+same migration because it is a live violation of this repo's first hard rule.
+
+`drawer_cash_receipts_paise()`, `drawer_cash_expenses_paise()` and
+`drawer_cash_out_paise()` are `security definer` — correctly, since they are the
+database's half of the drawer arithmetic and must see rows the caller's policies
+would filter. All three are granted to `authenticated`. **All three took
+`p_outlet_id` from the caller and checked nothing.**
+
+Every drawer *table* carries `app_may_reach_drawer()` in its policy. These three
+functions are the one path around those policies, and they were the one place the
+predicate was not applied. Measured on a local stack on 2026-08-28: a Biller,
+for whom `app_may_reach_drawer('Kalyani')` returns **false**, read
+`drawer_cash_receipts_paise('Kalyani') = 100500` — ₹1,005 of an outlet's cash
+receipts, through a valid session, with one HTTP request.
+
+`AGENTS.md` states the rule they break in the first person: *"A Franchise Admin,
+Biller, or Employee MUST NOT be able to read or write another outlet's rows —
+including via a hand-crafted API request with a valid session."*
+
+The guard is the same predicate the policies use, so the two cannot drift.
+Nothing legitimate changes: `record_drawer_observation()` checks it before
+calling all three, so a caller who may record a count may read the terms that
+count is measured against. A caller without reach gets **nought rather than an
+exception**, which is what a reader with no reach should learn — the same answer
+an RLS-filtered select would give them.
+
 ## The surfaces
 
 Layout conventions in these sketches: `[ 8950 ]` is typed, `( chip )` is tapped,
