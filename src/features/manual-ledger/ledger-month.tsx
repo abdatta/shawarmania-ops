@@ -1,5 +1,5 @@
 import { NotepadText, Settings2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 
 import { EmptyState } from '@/components/layout/empty-state'
@@ -8,7 +8,9 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
-import { formatBusinessDate, formatDayTime, PROFIT_BASIS_LABELS } from '@/domain'
+import { formatBusinessDate, formatFreshness, PROFIT_BASIS_LABELS } from '@/domain'
+
+import { cn } from '@/lib/cn'
 
 import { readMonth, type MonthReading } from './ledger'
 
@@ -127,6 +129,7 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
             label="Zomato, as stated"
             paise={reading.grossZomatoPaise}
             testId="month-zomato-gross"
+            tag={<AsOfChip at={reading.zomatoAsOfAt} testId="month-zomato-as-of" />}
           />
           <Row
             label={pending ? 'Less Zomato commission, so far' : 'Less Zomato commission'}
@@ -139,7 +142,6 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
             testId="month-zomato-net"
             bold
           />
-          <AsOfNote at={reading.zomatoAsOfAt} testId="month-zomato-as-of" />
         </div>
 
         <div className="border-t border-border pt-2">
@@ -147,6 +149,7 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
             label="Swiggy, as stated"
             paise={reading.grossSwiggyPaise}
             testId="month-swiggy-gross"
+            tag={<AsOfChip at={reading.swiggyAsOfAt} testId="month-swiggy-as-of" />}
           />
           <Row
             label={pending ? 'Less Swiggy commission, so far' : 'Less Swiggy commission'}
@@ -159,7 +162,6 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
             testId="month-swiggy-net"
             bold
           />
-          <AsOfNote at={reading.swiggyAsOfAt} testId="month-swiggy-as-of" />
         </div>
 
         <div className="flex items-baseline justify-between border-t border-border pt-2">
@@ -313,20 +315,27 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
 /**
  * When this channel's figures were last confirmed, once for the month.
  *
- * One stamp per channel rather than one per day: a run re-reads a trailing
+ * One chip per channel rather than one per day: a run re-reads a trailing
  * window of days at once, so forty stamped cells would repeat two facts forty
  * times. And one per channel rather than one for the card, because Zomato and
  * Swiggy hold independent sessions — a shared stamp would let a fresh Zomato
  * read speak for a Swiggy session that lapsed days ago, which is the mistake
  * the stamp exists to prevent.
+ *
+ * Rendered exactly as the day view renders it, beside the same `as stated` row,
+ * so one screen does not teach a reading the next one contradicts.
  */
-function AsOfNote({ at, testId }: { at: string | null; testId: string }) {
+function AsOfChip({ at, testId }: { at: string | null; testId: string }) {
   if (at === null) return null
 
   return (
-    <p className="pt-1 text-xs text-content-muted" data-testid={testId}>
-      As of {formatDayTime(at)}
-    </p>
+    <span
+      data-testid={testId}
+      className="inline-flex items-center rounded-full border border-border px-1.5 py-0.5 text-[11px] font-semibold text-content-muted"
+      title={`Last confirmed: ${formatFreshness(at)}. The latest read covering any day this month, for this channel alone.`}
+    >
+      {formatFreshness(at)}
+    </span>
   )
 }
 
@@ -335,16 +344,25 @@ function Row({
   paise: amount,
   testId,
   bold = false,
+  tag,
 }: {
   label: string
   paise: number
   testId: string
   bold?: boolean
+  /** A small chip beside the label, on the day view's terms. */
+  tag?: ReactNode
 }) {
   return (
-    <div className="flex items-baseline justify-between">
-      <span className={bold ? 'text-sm font-semibold text-content' : 'text-sm text-content-muted'}>
+    <div className="flex items-baseline justify-between gap-2">
+      <span
+        className={cn(
+          'inline-flex flex-wrap items-baseline gap-1.5',
+          bold ? 'text-sm font-semibold text-content' : 'text-sm text-content-muted',
+        )}
+      >
         {label}
+        {tag}
       </span>
       <Money paise={amount} data-testid={testId} className={bold ? 'font-semibold' : undefined} />
     </div>

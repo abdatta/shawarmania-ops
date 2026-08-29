@@ -5,8 +5,9 @@
 
 ## 2. Print it where a figure could be mistaken for a live one
 
-- [x] 2.1 Day view: print the stamp beneath each channel's reading block, via the existing `formatDayTime`. Omit it where there is no measured figure or `asOfAt` is null.
-- [x] 2.2 Month view: carry the latest `asOfAt` per channel through `MonthReading`, and print one stamp beneath each channel's rows. Not one per day, and not one shared across both channels.
+- [x] 2.1 Day view: render the stamp as a chip beside the source chip, on both of the day's renderings (the entry block and the recorded reading). Omit it where there is no measured figure or `asOfAt` is null.
+- [x] 2.1a Add `formatFreshness` to `src/domain/datetime.ts` — bare time today, `28 Aug, 11:00 pm` older, no `Yesterday`, no year — and pin all four cases.
+- [x] 2.2 Month view: carry the latest `asOfAt` per channel through `MonthReading`, and render the same chip beside each channel's `as stated` row. Not one per day, and not one shared across both channels.
 
 ## 3. Pin it
 

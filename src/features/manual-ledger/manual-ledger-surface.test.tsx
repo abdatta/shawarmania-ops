@@ -188,7 +188,10 @@ describe('the manual ledger surface', () => {
     // Swiggy blocks, not that one of the two layouts is on screen.
     const zomatoStamp = screen.getByTestId(/zomato-as-of$/)
     const swiggyStamp = screen.getByTestId(/swiggy-as-of$/)
-    expect(zomatoStamp).toHaveTextContent(/^As of /)
+    // A bare time means today; anything older carries its date. Never
+    // "Yesterday" — a freshness stamp is read as "how stale is this", and a day
+    // word has to be converted back into a date before it answers that.
+    expect(zomatoStamp).toHaveTextContent(/^(\d{1,2} \w{3}, )?\d{2}:\d{2} [ap]m$/)
     // The stale channel keeps its own older moment rather than borrowing the
     // fresher one beside it.
     expect(swiggyStamp.textContent).not.toEqual(zomatoStamp.textContent)

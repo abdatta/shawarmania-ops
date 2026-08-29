@@ -68,6 +68,7 @@ export {
   formatDate,
   formatDateTime,
   formatDayTime,
+  formatFreshness,
   formatRecentAge,
   formatTime,
   instantOnBusinessDay,

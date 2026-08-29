@@ -6,6 +6,7 @@ import {
   formatDate,
   formatDateTime,
   formatDayTime,
+  formatFreshness,
   formatRecentAge,
   formatTime,
   QUIET_HOURS_FROM,
@@ -52,6 +53,31 @@ describe('formatDateTime', () => {
   it('renders date and time together in IST', () => {
     expect(formatDateTime(AFTERNOON_UTC)).toMatch(/^25 Jul 2026/)
     expect(formatDateTime(AFTERNOON_UTC)).toMatch(/08:00/)
+  })
+})
+
+describe('formatFreshness', () => {
+  const NOW = '2026-08-10T22:00:00+05:30'
+
+  it('drops the day entirely for a reading taken today', () => {
+    // A bare time means today, which is how somebody says it out loud, and the
+    // absence of a date is itself the signal that none is needed.
+    expect(formatFreshness('2026-08-10T20:40:00+05:30', NOW)).toBe('08:40 pm')
+  })
+
+  it('says yesterday’s date rather than the word', () => {
+    // The one that separates this from `formatDayTime`. A freshness stamp is
+    // read as "how stale is this", and `Yesterday` has to be converted back
+    // into a date before it answers.
+    expect(formatFreshness('2026-08-09T23:50:00+05:30', NOW)).toBe('9 Aug, 11:50 pm')
+  })
+
+  it('carries no year, because a reading that old has a bigger problem', () => {
+    expect(formatFreshness('2025-12-31T13:05:00+05:30', NOW)).toBe('31 Dec, 01:05 pm')
+  })
+
+  it('reads the day in IST, so a late-night read is still today at the counter', () => {
+    expect(formatFreshness(LATE_NIGHT_UTC, '2026-07-26T00:30:00+05:30')).toBe('12:20 am')
   })
 })
 

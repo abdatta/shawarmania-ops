@@ -17,7 +17,7 @@ import {
   type ManualLedgerExpense,
   type ZomatoSettlement,
 } from '@/data-access/adapters'
-import { formatBusinessDate, formatDayTime, rupeesToPaise } from '@/domain'
+import { formatBusinessDate, formatFreshness, rupeesToPaise } from '@/domain'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
 
@@ -701,7 +701,12 @@ function RecordedDay({
           label="Zomato, as stated"
           paise={day.zomatoRevenuePaise}
           testId="recorded-zomato-gross"
-          tag={<SourceTag channel="zomato" settlement={reading.zomato.settlement} />}
+          tag={
+            <>
+              <SourceTag channel="zomato" settlement={reading.zomato.settlement} />
+              <AsOfChip settlement={reading.zomato.settlement} testId="recorded-zomato-as-of" />
+            </>
+          }
         />
         <Row
           label="Less commission"
@@ -714,7 +719,6 @@ function RecordedDay({
           testId="recorded-zomato-net"
         />
         <SupersededNote settlement={reading.zomato.settlement} />
-        <AsOfNote settlement={reading.zomato.settlement} testId="recorded-zomato-as-of" />
       </div>
 
       <div className="space-y-1 border-t border-border pt-2">
@@ -726,7 +730,10 @@ function RecordedDay({
           // and the chip says which, rather than leaving the reader to infer it.
           tag={
             swiggy.settlement ? (
-              <SourceTag channel="swiggy" settlement={swiggy.settlement} />
+              <>
+                <SourceTag channel="swiggy" settlement={swiggy.settlement} />
+                <AsOfChip settlement={swiggy.settlement} testId="recorded-swiggy-as-of" />
+              </>
             ) : undefined
           }
         />
@@ -740,7 +747,6 @@ function RecordedDay({
           paise={reading.netSwiggyPaise}
           testId="recorded-swiggy-net"
         />
-        <AsOfNote settlement={swiggy.settlement} testId="recorded-swiggy-as-of" />
       </div>
 
       <div className="flex items-baseline justify-between border-t border-border pt-2">
@@ -1088,7 +1094,12 @@ function ChannelReadingBlock({
         <span className="text-xs font-bold text-content">{label}</span>
         {/* No reading, no provenance to name: an empty state with a "typed"
             chip on it would claim a history the freeze has ended. */}
-        {settlement && <SourceTag channel={testIdPrefix} settlement={settlement} />}
+        {settlement && (
+          <span className="inline-flex flex-wrap items-baseline gap-1.5">
+            <SourceTag channel={testIdPrefix} settlement={settlement} />
+            <AsOfChip settlement={settlement} testId={`${testIdPrefix}-as-of`} />
+          </span>
+        )}
       </div>
       {settlement === null ? (
         <p className="px-1 text-xs text-content-muted" data-testid={`${testIdPrefix}-none-yet`}>
@@ -1124,7 +1135,6 @@ function ChannelReadingBlock({
             )}
           </p>
           <SupersededNote settlement={settlement} />
-          <AsOfNote settlement={settlement} testId={`${testIdPrefix}-as-of`} />
         </>
       )}
     </div>
@@ -1143,7 +1153,7 @@ function ChannelReadingBlock({
  *
  * Silent on a null, which is a row written before sources carried their time.
  */
-function AsOfNote({
+function AsOfChip({
   settlement,
   testId,
 }: {
@@ -1153,9 +1163,13 @@ function AsOfNote({
   if (!settlement || settlement.asOfAt === null) return null
 
   return (
-    <p className="px-1 text-xs text-content-muted" data-testid={testId}>
-      As of {formatDayTime(settlement.asOfAt)}
-    </p>
+    <span
+      data-testid={testId}
+      className="inline-flex items-center rounded-full border border-border px-1.5 py-0.5 text-[11px] font-semibold text-content-muted"
+      title={`Last confirmed: ${formatFreshness(settlement.asOfAt)}. A read that found these figures unchanged still counts, so this is when they were last checked rather than when they last moved.`}
+    >
+      {formatFreshness(settlement.asOfAt)}
+    </span>
   )
 }
 

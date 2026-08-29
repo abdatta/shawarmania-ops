@@ -36,6 +36,38 @@ const dateTimeFormat = new Intl.DateTimeFormat('en-IN', {
   hour12: true,
 })
 
+const dayMonthTimeFormat = new Intl.DateTimeFormat('en-IN', {
+  timeZone: OUTLET_TIME_ZONE,
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: true,
+})
+
+/**
+ * How fresh a measured figure is: `11:00 pm` today, otherwise `2 Aug, 11:00 pm`.
+ *
+ * **A bare time means today**, which is how somebody says it out loud, and the
+ * absence of a date is itself the signal that none is needed [owner,
+ * 2026-08-29]. Anything older carries its date and cannot be mistaken for it.
+ *
+ * No `Yesterday`. `formatDayTime` beside this one offers it, and is right to —
+ * it labels a list of a shift's own bills, where the reader is standing inside
+ * that day. A freshness stamp is read the other way round: the question is
+ * *how stale is this*, and a day word has to be converted back into a date
+ * before it answers.
+ *
+ * The year is dropped for the same reason a receipt drops it: a reading old
+ * enough for the year to matter is a problem the year would not be the first
+ * sign of.
+ */
+export function formatFreshness(instant: Date | string, now: Date | string = new Date()): string {
+  const at = toDate(instant)
+  if (formatDate(at) === formatDate(now)) return formatTime(at)
+  return dayMonthTimeFormat.format(at)
+}
+
 /** `2026-07-25T14:30:00Z` -> `25 Jul 2026` (in Asia/Kolkata). */
 export function formatDate(instant: Date | string): string {
   return dateFormat.format(toDate(instant))

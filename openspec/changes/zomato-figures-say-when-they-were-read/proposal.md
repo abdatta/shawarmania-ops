@@ -25,10 +25,20 @@ looking at.
 - `toZomatoSettlement` carries `as_of_at` onto `ZomatoSettlement` as `asOfAt`.
   One mapper serves both the mock and the Supabase adapter, so both sides of the
   demo seam gain it together and cannot disagree.
-- The day view prints it beneath each channel's reading block, through the
-  existing `formatDayTime` helper that already renders `Today, 11:23 pm` /
-  `Yesterday, 11:23 pm` / a full date in Asia/Kolkata. No new formatter.
-- The month view prints one stamp **per channel**, beneath that channel's rows.
+- Both views render it as a **chip beside the source chip** on the channel's
+  `as stated` row, in the shape `Daily` already has [owner, 2026-08-29] — a line
+  under the block read as a footnote to figures it was meant to qualify.
+- A new `formatFreshness` in `src/domain/datetime.ts`: `11:00 pm` for a read
+  taken today, `28 Aug, 11:00 pm` for anything older. **A bare time means
+  today**, which is how somebody says it out loud, and the missing date is
+  itself the signal. No `Yesterday` and no year.
+
+  *Why not `formatDayTime`, which exists and is close.* It offers `Yesterday`,
+  and is right to: it labels a list of a shift's own bills, where the reader is
+  standing inside that day. A freshness stamp is read the other way round — the
+  question is *how stale is this*, and a day word has to be converted back into
+  a date before it answers. Two readings, two functions, both tested.
+- The month view carries the same chip **per channel**, once for the month.
 
 **Why per channel rather than one stamp for the month.** The instruction was one
 stamp rather than forty, and forty was the thing to avoid: a run re-reads a
