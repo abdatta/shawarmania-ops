@@ -111,7 +111,11 @@ drawer.
 
 The surface SHALL offer, alongside its relative time options, a control for
 stating an explicit date and time, so a count recalled days later can be placed
-where it happened.
+where it happened. That instant SHALL be **chosen through the platform's own
+date and time picker and SHALL NOT be typed as text**, because a partially typed
+instant is still a valid instant and this one decides which cash the count is
+measured against. The chosen instant SHALL be shown in full, as the value of the
+field rather than as an aside about it.
 
 Both instants SHALL be stored and both SHALL be shown, with the lag between them
 legible. The recorded instant SHALL be the server's clock.
@@ -188,6 +192,29 @@ identified account.
 
 - **WHEN** a cash allocation whose payment instant falls inside an observed interval arrives afterwards
 - **THEN** the observation's stored figures are unchanged
+
+### Requirement: The surface offers exactly one way to correct a given count
+
+A count that no later observation has anchored on SHALL be correctable by
+replacing its figure, asking for no reason and leaving no adjustment on the
+record. A count a later observation has anchored on SHALL be correctable only by
+an adjustment, which requires a reason and stays on the record.
+
+The surface SHALL offer exactly one of these on any given count, chosen by which
+of the two states that count is in, and SHALL NOT offer both. Offering neither
+is a defect: it leaves a recorder who has just mistyped a figure with no way to
+correct it until they take another count, at which point only the heavier path
+remains and an immediate slip is recorded as a justified correction.
+
+#### Scenario: The newest count is simply replaced
+
+- **WHEN** the most recent count at an outlet is corrected
+- **THEN** the figure is replaced, no reason is asked for, and no adjustment is written beside it
+
+#### Scenario: An anchored count is adjusted instead
+
+- **WHEN** a count a later one has anchored on is corrected
+- **THEN** the surface offers only the adjustment, which requires a reason
 
 ### Requirement: An observation is editable until the next one anchors on it
 

@@ -937,6 +937,254 @@ count is measured against. A caller without reach gets **nought rather than an
 exception**, which is what a reader with no reach should learn — the same answer
 an RLS-filtered select would give them.
 
+### 27. The count is a tally, and neither editable field carries a placeholder
+
+The sheet asked two questions in two labelled boxes and computed a third figure
+into a chip underneath. The owner read it back on 2026-08-29 and the complaint
+was structural: the arithmetic already has a shape, and the form was not it.
+
+So the four figures sit in one column, as a tally:
+
+```
+Cash expected                        ₹2,733
+Cash counted                    [          ]
+Cash collected                  [          ]
+Cash left                              ₹833
+```
+
+- **`Cash expected` is stated, and it was not before.** The sheet computed it
+  and then only ever mentioned it inside the difference chip, which is the one
+  place it appears *after* the reader has already typed. Showing it first is what
+  makes the other three read as arithmetic rather than as three separate
+  questions, and it is the figure the collector is checking against.
+- **`Cash left` replaces the *leaving* chip.** Same number, but it is the line
+  the tally produces rather than an aside about one of the fields.
+- **Neither editable row carries a placeholder.** A greyed `8950` in an empty
+  money field is read as a value at a glance, which is the one misreading this
+  surface cannot afford; and the collection field's pre-filled `0` was a figure
+  somebody had to clear before they could type. **Leaving the collection empty
+  already means nothing was collected**, so nothing is lost by saying it with
+  emptiness instead of a nought.
+- Labels are `text-base` and the fields are `w-44`, because the first cut set
+  both small and left a corridor of dead space down the middle of the sheet.
+  Stated figures carry `pr-3` so they land on the same right edge as a typed one
+  sitting inside its field's padding; without it the column is a few pixels out
+  and stops reading as a column.
+
+The difference — `₹400 short`, `matches ₹2,733` — stays exactly where it was, on
+the keystroke, immediately under the counted row. It is the one thing on this
+sheet that may never move behind anything. **It sits against the right edge**,
+under the field it is about: at the left margin it read as a new paragraph
+interrupting the tally, and the eye lost the column of figures it was
+following.
+
+### 28. A stated instant is picked, never typed
+
+The fourth time option was a full-width `datetime-local` field under the three
+relative buttons, editable by keyboard. Two things wrong with it: it took a row
+of its own while the button row had space to spare, and **a half-typed date is
+still a date.** This field decides which cash a count is measured against, so a
+caret in it is a way to be silently wrong.
+
+Now it is a fourth button, **Other**, beside `Now`, `15 min` and `30 min`. It
+opens the platform's own picker through `showPicker()`. The input survives —
+that is what carries the value and what `showPicker()` acts on — but it is
+`aria-hidden`, `tabIndex={-1}` and `pointer-events-none`, so it is never
+somewhere a person puts a caret. Keyboard users reach the picker through the
+button, which is labelled *Pick another date and time*, and the picker itself is
+keyboard-navigable. Where `showPicker()` is missing, focusing and clicking the
+field is what older browsers open it on.
+
+The four labels are short — `Now`, `15 min`, `30 min`, `Other` — because four
+options must share one row on a 375px phone, and `15 min ago` cannot. **The
+instant they produce is spelled out in full directly beneath**, so the button
+carries the gesture and the line below carries the meaning. The spoken label
+keeps the whole phrase for a reader who does not get the line.
+
+**That line is text, not chips.** It reads `Today, 12:39 am · give or take 15
+min` at `text-sm`, as the value of *Collection time*. A chip states a fact
+*about* a thing; this **is** the thing, and at chip size the one number the
+reader was choosing was the smallest text in the sheet. The `~ ±15 min`
+shorthand becomes words for the same reason.
+
+### 29. Nought is not a direction
+
+Amends decision 23, which said the signs are shown rather than implied and left
+it there. The rule needed one more clause, from the owner: **a figure of nought
+carries neither a sign nor a colour.** `+₹0` in green says a direction about a
+term that has none.
+
+So one function decides both, for every term in the running balance:
+
+```
+0   → no prefix, no tone
+> 0 → "+", success
+< 0 → the minus formatPaise already renders, danger
+```
+
+**Cash Expenses goes through the same function, negated.** That is the whole of
+the difference between the two figures, and it buys a case nobody wrote a rule
+for: a *negative* expense is a refund, so it comes out green with a plus,
+correctly, without a branch of its own. Two functions that agreed today would be
+two functions to keep agreeing.
+
+### 30. The newest count can finally be fixed
+
+Decision 8 settled the boundary — an observation is editable until the next one
+anchors on it, and only adjustable afterwards — and `edit_drawer_observation`
+has enforced it in the database since the migration shipped. **No control ever
+called it.** The one count most likely to need a quick correction, the one taken
+two minutes ago, was the only count with no correction control at all.
+
+The practical cost, which is why this is worth more than its size: a typo caught
+immediately could not be fixed at all. The recorder had to wait until they took
+another count, at which point the row locked and the only remaining path was an
+adjustment — which demands a reason and leaves *"was ₹9,850, now ₹8,950"*
+permanently on the record. A two-minute slip ended up wearing the costume of a
+correction somebody had to justify, which is precisely the signal that treatment
+exists to reserve for figures other figures were built on.
+
+So the disclosure body now offers **Fix this count** on the newest observation
+and **Adjust this count** on every other, never both. The fix takes an amount
+and nothing else: no reason, no trail, no adjustment row. The sheet says *no
+reason needed* on its face, with the reason for that behind a `Why`, because a
+correction that asks for nothing is surprising enough to explain once.
+
+The database remains the boundary rather than the screen: `edit_drawer_observation`
+refuses the moment a later count reads this one as its opening, and the surface
+stops offering it at the same instant, from the same fact.
+
+### 31. The chip is the explanation's button, and the explanation is a modal
+
+The owner's words on 2026-08-29: *"The info icons beside each chip and how they
+expand to reveal more info is bad UI."* Both halves of that are right, and they
+are separate faults.
+
+**The icon.** Every explainable chip trailed its own ⓘ. On the balance card that
+is three little glyphs in a row of five chips, and a row of icons reads as
+clutter rather than as an offer. The chip and its explanation were also two
+controls for one idea, so a reader who wanted to know what *2 days uncounted*
+meant had to notice and hit a 20px target beside it.
+
+**The expansion.** It opened a paragraph **in place**, which pushed everything
+below it down the screen. On a card whose whole purpose is four figures, asking
+a question moved the figures. That is the opposite of what a disclosure is for.
+
+So: **the chip is the button**, and the explanation opens as a small modal over
+the surface. Nothing reflows, and the top layer means no ancestor's `overflow`
+can clip it — which matters, because these live inside a sheet that scrolls.
+Escape, focus containment and backdrop dismissal come from `<dialog>` rather
+than from code.
+
+**The affordance is a dotted underline** plus `cursor-help`, the convention an
+abbreviation has carried for thirty years. A chip that explains itself has to
+look different from one that does not, or the offer is a secret — and the icon,
+whatever else was wrong with it, was at least visible.
+
+**The accessible name is the fact first, the offer second**: `2 days uncounted,
+explain: what counting after several days means`. An `aria-label` would have
+replaced the fact with the offer, which is the wrong way round — the chip's
+content is what the reader came for. The separator is a comma rather than a
+space because the accessible-name algorithm trims each node before joining them,
+so a leading space is dropped and the two run together.
+
+**Three things this shape cost, all found by building it rather than by
+reasoning about it:**
+
+- **The modal is portalled to the body.** Several triggers sit inside a `<p>`,
+  which may not contain a `<dialog>`. Rendered in place the first version
+  produced invalid nesting. The dialog is in the top layer once open either way,
+  so where it lives in the DOM costs nothing.
+- **`Modal` now stops the `close` event.** A `close` event does not bubble in
+  the DOM, but React's synthetic system propagates it up the **React** tree — and
+  a portalled modal's React parent is a component inside another modal. So
+  dismissing an explanation opened over the count sheet closed the count sheet
+  with it, **losing everything typed into it**. A dialog closing is its own
+  business; no ancestor needs telling. This is a defect the pattern created and
+  the pattern's own test caught.
+- **It was not centred.** The first version pinned `inset-x-4` and translated on
+  `top`, which centres nothing: with both `left` and `right` set, a box narrower
+  than the gap between them stays at `left`. On a phone it sat hard against the
+  left edge, which is where the owner found it. `inset-0` with `m-auto` is the
+  one centring a dialog gets right in both directions without arithmetic, and
+  `h-fit` keeps the box the height of its own words rather than the height of the
+  viewport. Measured at 375 and 1280 wide: equal gaps on all four sides, once the
+  scrollbar is taken out of the reckoning — `window.innerWidth` counts it and the
+  layout viewport does not, which is worth knowing before concluding a box is off
+  by fifteen pixels.
+
+Where a trigger cannot wrap its subject, it becomes a short question of its own:
+`why no difference?` in a count's disclosure body, whose chip lives in the row
+header that is already a button, and `what does this do?` beside Verify. A
+button inside a button is invalid, and inventing a way around it would be worse
+than asking the question in words.
+
+### 32. Uncounted days exclude the day that was counted, and one day is not worth saying
+
+The owner, on a drawer counted at 23:16 the previous night, reading it at nine
+the next morning: *"Why does it alert 2 days uncounted? I just counted
+yesterday, and today has barely started."*
+
+`daysCovered` is the **inclusive span** of the pending interval, which always
+includes the business date the last count belongs to. That date was counted. So
+the chip was reporting the counted day as uncounted, and would do so every
+single morning at every outlet.
+
+Two corrections, and the second matters more than the first:
+
+- **The figure is `daysCovered - 1`**: business dates that have passed *since*
+  the one the last count belongs to.
+- **The chip appears from two upward.** At one there is nothing worth saying:
+  the only uncounted day is today, it has barely started, and nobody counts a
+  drawer at nine in the morning. A warning that fires every day is a warning
+  nobody reads, and this one has real work to do at two — where a whole business
+  date has passed with no count at all, and the next difference genuinely stops
+  being attributable to one night.
+
+`daysCovered` itself is left alone. It is a factual quantity the ledger's
+`observationCoversDays` also uses, where the inclusive span is the right answer:
+a recorded count really did cover that many days of trading. Only the drawer's
+warning changes, because only the warning was making a claim about days nobody
+counted.
+
+**Correcting it silently emptied the demo, and that had to be paid for.** The
+walkthrough's drawer opens on Kalyani, whose only explainable chip *was* this
+one — wrongly labelled, but present, and the thing a reader would tap to see
+what an explanation looks like. Getting the arithmetic right took it away, so
+the demo's first screen had nothing to try. Task 9.5 had asked the walkthrough
+to reach these states; a correction that quietly un-reaches one is half a
+change.
+
+Kalyani's demo tablet now reports **one unsent bill**, which restores an
+explainable chip to the first screen and is the state production was actually in
+when this was reported. The degrees still differ from Kanchrapara's three, which
+is the contrast the tablet management surface exists for.
+
+**Rejected: shifting the demo's whole count plan back a day.** It was tried, and
+it worked — the newest count landing two days back put the uncounted-days chip
+straight back on the first screen, which is the more on-point demonstration.
+It also broke the owner console, the insights fixtures and two browser specs,
+because the demo's calendar is load-bearing in more places than a chip is worth.
+Thrown away rather than propped up.
+
+### 33. The rupee sits inside the field
+
+A tally of four money figures where two are typed and two are stated: the stated
+ones carry `₹` and the typed ones carried nothing, so the column read as two
+kinds of thing.
+
+The mark is **inside the box, pinned left**, with the number still right-aligned
+and the field padded so the two never collide. Outside the box it would sit
+between the label and the field and read as part of the label. Hugging the
+number would need the caret's own text metrics and would drift as digits are
+typed.
+
+Left mark, right number is what a bank's amount field does, and it is what keeps
+this column a column: the typed figures land on the same right edge as the
+stated ones above and below them. The mark is `aria-hidden` — the field already
+says *in rupees* in its accessible name, so a reader who cannot see it loses
+nothing.
+
 ## The surfaces
 
 Layout conventions in these sketches: `[ 8950 ]` is typed, `( chip )` is tapped,

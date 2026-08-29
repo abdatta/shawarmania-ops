@@ -45,7 +45,16 @@ export function Modal({ open, onClose, children, className, ...props }: ModalPro
   return (
     <dialog
       ref={ref}
-      onClose={() => onClose()}
+      // **Stopped, not merely forwarded.** A `close` event does not bubble in
+      // the DOM, but React's synthetic system propagates it up the REACT tree —
+      // and a portalled modal's React parent may be a component sitting inside
+      // another modal. Without this, dismissing an explanation opened over the
+      // count sheet closed the count sheet with it, losing everything typed.
+      // A dialog closing is its own business; no ancestor needs telling.
+      onClose={(event) => {
+        event.stopPropagation()
+        onClose()
+      }}
       className={cn(
         'border border-border bg-surface text-content shadow-lg backdrop:bg-content/40',
         className,

@@ -10,6 +10,7 @@ import {
   MapPin,
   MapPinOff,
   Minus,
+  Pencil,
   Plus,
   Receipt,
   TriangleAlert,
@@ -32,7 +33,7 @@ import { Chip, ChipRow } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
-import { Why } from '@/components/ui/why'
+import { Explain } from '@/components/ui/why'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
@@ -102,7 +103,7 @@ import { countAdvice, expectedAtInstant } from './drawer-arithmetic'
  *     outlets counted daily outgrow in a fortnight.
  */
 
-type Sheet = 'none' | 'count' | 'collect' | 'spend' | 'adjust'
+type Sheet = 'none' | 'count' | 'collect' | 'spend' | 'adjust' | 'edit'
 
 /**
  * Where the recorder is standing, as far as the sheet can tell.
@@ -136,6 +137,20 @@ function readingOf(where: Whereabouts | null): PositionReading | null {
   if (!where) return null
   return where.kind === 'locating' || where.kind === 'unlocatable' ? null : where.reading
 }
+
+/**
+ * The relative options, and the only ones. Anything else is a stated instant,
+ * reached through the platform's own picker.
+ */
+const RELATIVE_TIMES = [
+  // Short enough that all four options share one row on a 375px phone. The
+  // instant they produce is spelled out in full directly beneath them, so the
+  // button carries the gesture and the line below carries the meaning; the
+  // spoken label keeps the whole phrase for a reader who gets no line.
+  { label: 'Now', spoken: 'Counted just now', minutes: 0 },
+  { label: '15 min', spoken: 'Counted 15 minutes ago', minutes: 15 },
+  { label: '30 min', spoken: 'Counted 30 minutes ago', minutes: 30 },
+] as const
 
 /** `datetime-local` speaks local wall-clock with no zone. Both directions here. */
 function toLocalInput(at: Date): string {
@@ -171,8 +186,11 @@ export function CashDrawerSurface() {
 
   // The count sheet.
   const [counted, setCounted] = useState('')
-  const [collecting, setCollecting] = useState('0')
+  // Empty, not '0'. A pre-filled nought is a figure somebody has to clear
+  // before typing, and leaving it alone already means nothing was collected.
+  const [collecting, setCollecting] = useState('')
   const [countedAt, setCountedAt] = useState<Date>(() => new Date())
+  const timePicker = useRef<HTMLInputElement | null>(null)
   const [sheetOpenedAt, setSheetOpenedAt] = useState<number>(() => Date.now())
   /**
    * A reference instant for the "not in the future" check, ticking while the
@@ -422,6 +440,57 @@ export function CashDrawerSurface() {
     return null
   }, [clock, countedAt, state])
 
+  /**
+   * Which of the three relative options the stated instant currently is, or null
+   * for a time picked out of the air. Drives which button reads as chosen.
+   */
+  const relativeChoice = useMemo(() => {
+    const match = RELATIVE_TIMES.find(
+      (option) =>
+        Math.abs(countedAt.getTime() - (sheetOpenedAt - option.minutes * 60_000)) < 30_000,
+    )
+    return match?.minutes ?? null
+  }, [countedAt, sheetOpenedAt])
+
+  /**
+   * Business dates that have passed **since the one the last count belongs to**,
+   * and so have never been counted.
+   *
+   * `daysCovered` is the inclusive span of the pending interval, which always
+   * includes the last count's own business date — and that date was counted. So
+   * a count at 23:16 last night read as "2 days uncounted" by nine the next
+   * morning, which is wrong twice over: the night before was counted, and today
+   * has barely started.
+   *
+   * The chip appears from **two** upward, so a day still in progress never nags.
+   * At one there is nothing to say: nobody counts at nine in the morning, and a
+   * warning that fires every single day is a warning nobody reads. At two, a
+   * whole business date has passed with no count at all, which is the point the
+   * next difference stops being attributable to one night.
+   */
+  const uncountedDays = Math.max(0, (state?.daysCovered ?? 0) - 1)
+
+  /** What the drawer should hold at the stated instant. Null before the anchor. */
+  const expectedPaise = boundary && state?.lastObservation ? boundary.expectedPaise : null
+
+  function openTimePicker() {
+    const field = timePicker.current
+    if (!field) return
+    // `showPicker()` is the supported way to open a date control from another
+    // element. Where it is missing, focusing and clicking the field is what
+    // older browsers open it on, and the field is still bound either way.
+    if (typeof field.showPicker === 'function') {
+      try {
+        field.showPicker()
+        return
+      } catch {
+        // A browser that refuses is one that falls through to the same fallback.
+      }
+    }
+    field.focus()
+    field.click()
+  }
+
   const collectingRupees = Number(collecting.trim())
   const collectingUsable = collecting.trim() !== '' && Number.isFinite(collectingRupees)
   const collectingPaise = collectingUsable ? rupeesToPaise(collectingRupees) : 0
@@ -440,7 +509,7 @@ export function CashDrawerSurface() {
   function closeSheets() {
     setSheet('none')
     setCounted('')
-    setCollecting('0')
+    setCollecting('')
     setAwayReason('')
     setMovementAmount('')
     setMovementReason('')
@@ -495,7 +564,7 @@ export function CashDrawerSurface() {
     setCounted('')
     // Zero, not blank: the common night collects nothing, and the leaving
     // preview should be right before anybody types into this field.
-    setCollecting('0')
+    setCollecting('')
     setAwayReason('')
     setSheet('count')
     void locate()
@@ -548,6 +617,31 @@ export function CashDrawerSurface() {
     if (ok) closeSheets()
   }
 
+  /**
+   * The quick correction, for a count nothing has anchored on yet.
+   *
+   * **No reason, and no trail** — that is the whole distinction from an
+   * adjustment, and it is deliberate (design D8). Nobody has relied on this
+   * figure, so a typo caught two minutes later should not have to wear a
+   * permanent correction with a justification attached. The database is what
+   * enforces the boundary: `edit_drawer_observation` refuses the moment a later
+   * count reads this one as its opening, and the surface stops offering it at
+   * the same instant for the same reason.
+   */
+  async function submitEdit(event: FormEvent) {
+    event.preventDefault()
+    if (!adjustingId) return
+    const rupees = Number(adjustedAmount.trim())
+    if (!Number.isFinite(rupees) || rupees < 0) {
+      setError('Enter what the count should have been, in rupees.')
+      return
+    }
+    const ok = await run(async () => {
+      await adapter.editObservation(adjustingId, rupeesToPaise(rupees))
+    })
+    if (ok) closeSheets()
+  }
+
   async function submitAdjustment(event: FormEvent) {
     event.preventDefault()
     if (!adjustingId) return
@@ -588,14 +682,20 @@ export function CashDrawerSurface() {
           {state.exceptions.length > 0 && (
             <Card className="space-y-2" data-testid="drawer-exception">
               <ChipRow>
-                <Chip tone="warn" icon={TriangleAlert}>
-                  Needs a look
-                </Chip>
-                <Why label="why a late arrival is not folded in">
-                  A count is what somebody saw. Work landing afterwards is reported here rather than
-                  folded in, because rewriting a recorded figure is the failure this whole chain
-                  exists to prevent.
-                </Why>
+                <Explain
+                  label="why a late arrival is not folded in"
+                  explanation={
+                    <>
+                      A count is what somebody saw. Work landing afterwards is reported here rather
+                      than folded in, because rewriting a recorded figure is the failure this whole
+                      chain exists to prevent.
+                    </>
+                  }
+                >
+                  <Chip tone="warn" icon={TriangleAlert}>
+                    Needs a look
+                  </Chip>
+                </Explain>
               </ChipRow>
 
               {state.exceptions.map((exception) => (
@@ -670,12 +770,18 @@ export function CashDrawerSurface() {
                   This drawer has never been counted.
                 </p>
                 <ChipRow>
-                  <Chip tone="neutral">not tracked yet</Chip>
-                  <Why label="what not tracked yet means">
-                    Count it once and the record begins there. Earlier days keep their revenue and
-                    expenses and say the drawer was not being followed, rather than showing a
-                    balance nobody checked.
-                  </Why>
+                  <Explain
+                    label="what not tracked yet means"
+                    explanation={
+                      <>
+                        Count it once and the record begins there. Earlier days keep their revenue
+                        and expenses and say the drawer was not being followed, rather than showing
+                        a balance nobody checked.
+                      </>
+                    }
+                  >
+                    <Chip tone="neutral">not tracked yet</Chip>
+                  </Explain>
                 </ChipRow>
               </div>
             ) : (
@@ -705,48 +811,63 @@ export function CashDrawerSurface() {
                       away
                     </Chip>
                   )}
-                  {state.daysCovered > 1 && (
+                  {uncountedDays >= 2 && (
                     <>
-                      <Chip tone="warn" icon={TriangleAlert} data-testid="days-covered">
-                        {state.daysCovered} days uncounted
-                      </Chip>
-                      <Why label="what counting after several days means">
-                        The next count covers all of them, so a difference cannot be pinned to one
-                        night.
-                      </Why>
+                      <Explain
+                        label="what counting after several days means"
+                        explanation={
+                          <>
+                            The next count covers all of them, so a difference cannot be pinned to
+                            one night.
+                          </>
+                        }
+                      >
+                        <Chip tone="warn" icon={TriangleAlert} data-testid="days-covered">
+                          {uncountedDays} days uncounted
+                        </Chip>
+                      </Explain>
                     </>
                   )}
                   {unsynced.count > 0 && (
                     <>
-                      <Chip tone="warn" icon={TriangleAlert} data-testid="unsynced-chip">
-                        {unsynced.count} tablet{unsynced.count === 1 ? '' : 's'} behind
-                      </Chip>
-                      <Why label="what an unsent tablet means for this figure">
-                        The figure above may be understated by bills a tablet has not sent
-                        {unsynced.since
-                          ? `, last heard from ${formatDateTime(unsynced.since)}`
-                          : ''}
-                        . Count anyway — you are the one holding the cash.
-                      </Why>
+                      <Explain
+                        label="what an unsent tablet means for this figure"
+                        explanation={
+                          <>
+                            The figure above may be understated by bills a tablet has not sent
+                            {unsynced.since
+                              ? `, last heard from ${formatDateTime(unsynced.since)}`
+                              : ''}
+                            . Count anyway — you are the one holding the cash.
+                          </>
+                        }
+                      >
+                        <Chip tone="warn" icon={TriangleAlert} data-testid="unsynced-chip">
+                          {unsynced.count} tablet{unsynced.count === 1 ? '' : 's'} behind
+                        </Chip>
+                      </Explain>
                     </>
                   )}
                 </ChipRow>
 
                 <div className="grid grid-cols-3 gap-2 border-t border-border pt-2 text-center">
                   <Figure label="Last Left" paise={state.leftInDrawerPaise ?? 0} testId="left" />
+                  {/* Both through the same rule, so the two cannot disagree
+                      about what a sign means. Expenses are negated on the way
+                      in, which is the whole of the difference between them. */}
                   <Figure
                     label="Cash from Bills"
                     paise={state.cashReceiptsSincePaise}
                     rows={state.cashReceiptsSinceCount}
                     testId="receipts-since"
-                    direction="in"
+                    signed
                   />
                   <Figure
                     label="Cash Expenses"
                     paise={-state.cashExpensesSincePaise}
                     rows={state.cashExpensesSinceCount}
                     testId="expenses-since"
-                    direction="out"
+                    signed
                   />
                 </div>
               </>
@@ -800,6 +921,12 @@ export function CashDrawerSurface() {
                     setAdjustedAmount('')
                     setAdjustReason('')
                     setSheet('adjust')
+                  }}
+                  onEdit={() => {
+                    setAdjustingId(observation.id)
+                    setAdjustedAmount('')
+                    setAdjustReason('')
+                    setSheet('edit')
                   }}
                 />
               ))}
@@ -856,20 +983,17 @@ export function CashDrawerSurface() {
         <form id="count-form" onSubmit={submitCount} className="space-y-4">
           <fieldset className="space-y-2">
             <legend className="text-sm font-bold text-content">Collection time</legend>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { label: 'Now', minutes: 0 },
-                { label: '15 min ago', minutes: 15 },
-                { label: '30 min ago', minutes: 30 },
-              ].map((option) => {
+            <div className="grid grid-cols-4 gap-2">
+              {RELATIVE_TIMES.map((option) => {
                 const candidate = new Date(sheetOpenedAt - option.minutes * 60_000)
-                const chosen = Math.abs(countedAt.getTime() - candidate.getTime()) < 30_000
                 return (
                   <Button
                     key={option.label}
                     type="button"
                     size="phone"
-                    variant={chosen ? 'primary' : 'secondary'}
+                    className="px-0"
+                    aria-label={option.spoken}
+                    variant={relativeChoice === option.minutes ? 'primary' : 'secondary'}
                     onClick={() => setCountedAt(candidate)}
                     data-testid={`when-${option.minutes}`}
                   >
@@ -877,38 +1001,82 @@ export function CashDrawerSurface() {
                   </Button>
                 )
               })}
+              {/*
+                The fourth option, in the space beside the other three, for a
+                count being caught up on days later — which has no relative name.
+
+                **It opens the platform's own picker and takes no typing.** The
+                input is present and bound, because that is what `showPicker()`
+                acts on and what carries the value, but it is not somewhere a
+                person puts a caret: a half-typed date is a date, and this field
+                decides which cash a count is measured against.
+              */}
+              <div className="relative">
+                <Button
+                  type="button"
+                  size="phone"
+                  className="w-full px-0"
+                  aria-label="Pick another date and time"
+                  variant={relativeChoice === null ? 'primary' : 'secondary'}
+                  onClick={openTimePicker}
+                  data-testid="when-other"
+                >
+                  Other
+                </Button>
+                <input
+                  ref={timePicker}
+                  type="datetime-local"
+                  value={toLocalInput(countedAt)}
+                  onChange={(event) => {
+                    const picked = new Date(event.target.value)
+                    if (!Number.isNaN(picked.getTime())) setCountedAt(picked)
+                  }}
+                  // Reachable through the button above, which is the labelled
+                  // control; a second tab stop for the same value is one control
+                  // too many, and the picker itself is keyboard-navigable.
+                  tabIndex={-1}
+                  aria-hidden
+                  // Rendered rather than `display:none`, so the picker has
+                  // somewhere to anchor, and inert to the pointer so a stray tap
+                  // lands on the button.
+                  className="pointer-events-none absolute inset-0 size-full opacity-0"
+                  data-testid="counted-at-picker"
+                />
+              </div>
             </div>
-            {/* The fourth option, and the display of whichever was chosen: a
-                count recalled two days later has no relative name. */}
-            <Input
-              type="datetime-local"
-              value={toLocalInput(countedAt)}
-              onChange={(event) => {
-                const picked = new Date(event.target.value)
-                if (!Number.isNaN(picked.getTime())) setCountedAt(picked)
-              }}
-              aria-label="Date and time the drawer was counted"
-              data-testid="counted-at-picker"
-            />
-            <ChipRow>
-              <Chip icon={Clock} data-testid="counted-at-echo">
-                {formatTime(countedAt.toISOString())}
-              </Chip>
+            {/*
+              The chosen instant, as the value of the field above rather than as
+              a chip. Chips are for facts ABOUT a thing; this IS the thing, and
+              at chip size the one number the reader is choosing was the smallest
+              text in the sheet.
+            */}
+            <p className="flex flex-wrap items-center gap-x-2 text-sm text-content">
+              <span className="font-semibold" data-testid="counted-at-echo">
+                {formatDayTime(countedAt.toISOString())}
+              </span>
               {/* Every count carries this window, so it is stated rather than
                   used to mark some counts out from others (design D19). */}
-              <Chip tone="neutral" data-testid="tolerance-window">
-                ~ ±{APPROXIMATE_WINDOW_MINUTES} min
-              </Chip>
-              <Why label="why every count time is approximate">
-                Counting takes a few minutes and the counter keeps selling while you do it, so no
-                stated time is exact. The window is the same whichever option you pick.
-              </Why>
-              {boundary && boundary.excludedBills > 0 && (
+              <Explain
+                label="why every count time is approximate"
+                explanation={
+                  <>
+                    Counting takes a few minutes and the counter keeps selling while you do it, so
+                    no stated time is exact. The window is the same whichever option you pick.
+                  </>
+                }
+              >
+                <span className="text-content-muted" data-testid="tolerance-window">
+                  give or take {APPROXIMATE_WINDOW_MINUTES} min
+                </span>
+              </Explain>
+            </p>
+            {boundary && boundary.excludedBills > 0 && (
+              <ChipRow>
                 <Chip tone="neutral" data-testid="excluded-by-time">
                   leaves out <Money paise={boundary.excludedPaise} /> · {boundary.excludedBills}
                 </Chip>
-              )}
-            </ChipRow>
+              </ChipRow>
+            )}
             {timeProblem && (
               <p
                 role="alert"
@@ -920,46 +1088,77 @@ export function CashDrawerSurface() {
             )}
           </fieldset>
 
+          {/*
+            The four figures as a tally, which is the shape the arithmetic
+            already has: what should be there, what was there, what is being
+            taken, what stays. Two labelled boxes made the reader hold the sum in
+            their head while typing into the middle of it.
+
+            The two editable rows carry NO placeholder. A greyed `8950` in an
+            empty money field is read as a value at a glance, and an empty
+            collection field already means nought without saying so.
+          */}
           <fieldset className="space-y-2">
-            <legend className="text-sm font-bold text-content">
-              Cash counted before collection
-            </legend>
-            <Input
-              inputMode="decimal"
-              value={counted}
-              onChange={(event) => setCounted(event.target.value)}
-              placeholder="8950"
-              aria-label="Cash counted before collection, in rupees"
-              data-testid="counted-input"
+            <legend className="sr-only">The count</legend>
+
+            {expectedPaise !== null && (
+              <TallyRow
+                label="Cash expected"
+                value={<Money paise={expectedPaise} data-testid="expected-at-instant" />}
+              />
+            )}
+
+            <TallyRow
+              label="Cash counted"
+              input={
+                <TallyInput
+                  value={counted}
+                  onChange={setCounted}
+                  ariaLabel="Cash counted, in rupees"
+                  testId="counted-input"
+                />
+              }
             />
+
             {advice && (
               // On the keystroke, before anything is saved. Never behind a tap.
-              <div className="space-y-1" data-testid="count-difference">
+              //
+              // Right-aligned, because it belongs to the field above it rather
+              // than to the sheet: against the left margin it read as a new
+              // paragraph interrupting the tally, and the eye lost the column of
+              // figures it was following.
+              <div className="space-y-1 text-right" data-testid="count-difference">
                 {advice.direction === 'balanced' ? (
-                  <ChipRow>
+                  <ChipRow className="justify-end">
                     <Chip tone="good" icon={Check}>
                       matches <Money paise={advice.expectedPaise} />
                     </Chip>
                   </ChipRow>
                 ) : (
-                  <ChipRow>
-                    <Chip
-                      tone="bad"
-                      icon={advice.direction === 'short' ? ArrowDownRight : ArrowUpRight}
-                      // Its own handle, because the block around it also contains
-                      // the `Why` button's screen-reader label — "what short and
-                      // over mean here" — which carries both words and makes any
-                      // direction test over the whole block read `short` always.
-                      data-testid="count-direction"
+                  <ChipRow className="justify-end">
+                    <Explain
+                      label="what short and over mean here"
+                      explanation={
+                        <>
+                          {advice.direction === 'short'
+                            ? 'This much is missing from the drawer against what was expected.'
+                            : 'This much more than expected was counted.'}
+                        </>
+                      }
                     >
-                      <Money paise={Math.abs(advice.differencePaise)} />{' '}
-                      {advice.direction === 'short' ? 'short' : 'over'}
-                    </Chip>
-                    <Why label="what short and over mean here">
-                      {advice.direction === 'short'
-                        ? 'This much is missing from the drawer against what was expected.'
-                        : 'This much more than expected was counted.'}
-                    </Why>
+                      <Chip
+                        tone="bad"
+                        icon={advice.direction === 'short' ? ArrowDownRight : ArrowUpRight}
+                        // Its own handle, because the block around it also contains
+                        // the `Why` button's screen-reader label — "what short and
+                        // over mean here" — which carries both words and makes any
+                        // direction test over the whole block read `short` always.
+                        data-testid="count-direction"
+                      >
+                        <Money paise={Math.abs(advice.differencePaise)} />{' '}
+                        {advice.direction === 'short' ? 'short' : 'over'}
+                      </Chip>
+                    </Explain>
                   </ChipRow>
                 )}
 
@@ -975,37 +1174,44 @@ export function CashDrawerSurface() {
                 )}
 
                 {!advice.coincidence && advice.direction !== 'balanced' && (
-                  <ChipRow data-testid="no-coincidence">
+                  <ChipRow className="justify-end" data-testid="no-coincidence">
                     <Chip tone="neutral">no run of bills matches</Chip>
                     {advice.timingCouldExplainPaise !== null &&
                       advice.timingCouldExplainPaise > 0 && (
                         <>
-                          <Chip tone="neutral">
-                            <Money paise={advice.timingCouldExplainPaise} /> moved nearby
-                          </Chip>
-                          <Why label="what nearby cash means for this difference">
-                            Your time is approximate, so the timing could account for part of the
-                            difference. Nothing here proposes a time — move the count time only if
-                            you recognise the bills.
-                          </Why>
+                          <Explain
+                            label="what nearby cash means for this difference"
+                            explanation={
+                              <>
+                                Your time is approximate, so the timing could account for part of
+                                the difference. Nothing here proposes a time — move the count time
+                                only if you recognise the bills.
+                              </>
+                            }
+                          >
+                            <Chip tone="neutral">
+                              <Money paise={advice.timingCouldExplainPaise} /> moved nearby
+                            </Chip>
+                          </Explain>
                         </>
                       )}
                   </ChipRow>
                 )}
               </div>
             )}
-          </fieldset>
 
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-bold text-content">Cash collected, if any</legend>
-            <Input
-              inputMode="decimal"
-              value={collecting}
-              onChange={(event) => setCollecting(event.target.value)}
-              placeholder="0"
-              aria-label="Amount collected in rupees"
-              data-testid="collecting-input"
+            <TallyRow
+              label="Cash collected"
+              input={
+                <TallyInput
+                  value={collecting}
+                  onChange={setCollecting}
+                  ariaLabel="Cash collected, in rupees"
+                  testId="collecting-input"
+                />
+              }
             />
+
             {collectingIsAdding && (
               // **On the keystroke, not at submission, and never behind a tap.**
               // This alert is the whole protection against a mistyped minus.
@@ -1017,17 +1223,20 @@ export function CashDrawerSurface() {
                 A minus means you are ADDING money to the drawer, not taking it out.
               </p>
             )}
-            {leavingPaise !== null && (
-              <ChipRow>
-                <Chip
-                  tone="neutral"
-                  icon={collectingIsAdding ? Plus : Minus}
-                  data-testid="leaving-preview"
-                >
-                  leaving <Money paise={leavingPaise} />
-                </Chip>
-              </ChipRow>
-            )}
+
+            {/* The line the tally exists to produce, and the only one that
+                moves with both fields above it. */}
+            <TallyRow
+              label="Cash left"
+              emphasis
+              value={
+                leavingPaise === null ? (
+                  <span className="text-content-muted">not counted yet</span>
+                ) : (
+                  <Money paise={leavingPaise} data-testid="leaving-preview" />
+                )
+              }
+            />
           </fieldset>
 
           <WhereaboutsPanel
@@ -1108,24 +1317,36 @@ export function CashDrawerSurface() {
                 data-testid="movement-reason"
               />
               <ChipRow>
-                <Chip tone="neutral" data-testid="spend-not-an-expense">
-                  not in the month&rsquo;s expenses
-                </Chip>
-                <Why label="why a spend is not an expense">
-                  The drawer is genuinely lighter, but a fridge is not a running cost. Putting it
-                  through expenses would move the drawer correctly and wreck the month.
-                </Why>
+                <Explain
+                  label="why a spend is not an expense"
+                  explanation={
+                    <>
+                      The drawer is genuinely lighter, but a fridge is not a running cost. Putting
+                      it through expenses would move the drawer correctly and wreck the month.
+                    </>
+                  }
+                >
+                  <Chip tone="neutral" data-testid="spend-not-an-expense">
+                    not in the month&rsquo;s expenses
+                  </Chip>
+                </Explain>
               </ChipRow>
             </div>
           ) : (
             <ChipRow>
-              <Chip tone="neutral" data-testid="collect-not-verified">
-                nothing verified
-              </Chip>
-              <Why label="what collecting without counting does not do">
-                You are not counting, so no difference is recorded and nothing is checked against
-                the drawer.
-              </Why>
+              <Explain
+                label="what collecting without counting does not do"
+                explanation={
+                  <>
+                    You are not counting, so no difference is recorded and nothing is checked
+                    against the drawer.
+                  </>
+                }
+              >
+                <Chip tone="neutral" data-testid="collect-not-verified">
+                  nothing verified
+                </Chip>
+              </Explain>
             </ChipRow>
           )}
 
@@ -1135,6 +1356,67 @@ export function CashDrawerSurface() {
             reason={awayReason}
             onReason={setAwayReason}
           />
+        </form>
+      </FormSheet>
+
+      {/* ── Fix the newest count, which nothing has anchored on ────────── */}
+      <FormSheet
+        open={sheet === 'edit'}
+        onClose={closeSheets}
+        title="Fix this count"
+        error={error}
+        footer={
+          <Button
+            type="submit"
+            form="edit-form"
+            className="w-full"
+            disabled={busy || adjustedAmount.trim() === ''}
+            data-testid="save-edit"
+          >
+            Save the figure
+          </Button>
+        }
+      >
+        <form id="edit-form" onSubmit={submitEdit} className="space-y-4">
+          {adjusting && (
+            <>
+              <TallyRow
+                label={formatDayTime(adjusting.countedAt)}
+                value={<Money paise={adjusting.countedTotalPaise} />}
+              />
+
+              <div className="space-y-1">
+                <label htmlFor="edited-amount" className="text-sm font-bold text-content">
+                  What was actually counted?
+                </label>
+                <Input
+                  id="edited-amount"
+                  inputMode="decimal"
+                  value={adjustedAmount}
+                  onChange={(event) => setAdjustedAmount(event.target.value)}
+                  data-testid="edited-amount"
+                />
+              </div>
+
+              <ChipRow>
+                <Explain
+                  label="why this one takes no reason"
+                  explanation={
+                    <>
+                      Nothing has been counted since, so no later figure was worked out from this
+                      one and nobody has read it as settled. Correcting it now simply replaces it.
+                      Once a later count opens at this figure the offer changes to an adjustment,
+                      which does ask why and does stay on the record.
+                    </>
+                  }
+                >
+                  <Chip tone="good" icon={Check} data-testid="edit-leaves-no-trail">
+                    no reason needed
+                  </Chip>
+                </Explain>
+              </ChipRow>
+            </>
+          )}
         </form>
       </FormSheet>
 
@@ -1167,14 +1449,21 @@ export function CashDrawerSurface() {
                   <Money paise={adjusting.countedTotalPaise} className="font-semibold" />
                 </p>
                 <ChipRow>
-                  <Chip tone="neutral" icon={Lock}>
-                    locked
-                  </Chip>
-                  <Why label="why this count is locked">
-                    A later count read this figure as its own opening, which is the moment it became
-                    load-bearing. Both figures stay on the record, and the later count re-anchors
-                    the balance on what was physically there — so nothing after it moves.
-                  </Why>
+                  <Explain
+                    label="why this count is locked"
+                    explanation={
+                      <>
+                        A later count read this figure as its own opening, which is the moment it
+                        became load-bearing. Both figures stay on the record, and the later count
+                        re-anchors the balance on what was physically there — so nothing after it
+                        moves.
+                      </>
+                    }
+                  >
+                    <Chip tone="neutral" icon={Lock}>
+                      locked
+                    </Chip>
+                  </Explain>
                 </ChipRow>
               </div>
 
@@ -1295,6 +1584,110 @@ function WhereaboutsPanel({
 }
 
 /**
+ * One line of the count tally: a label on the left, a figure or a field on the
+ * right, aligned down one column so the four read as arithmetic.
+ */
+function TallyRow({
+  label,
+  value,
+  input,
+  emphasis = false,
+}: {
+  label: string
+  value?: ReactNode
+  input?: ReactNode
+  /** The line the others add up to. */
+  emphasis?: boolean
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className={cn('text-base text-content-muted', emphasis && 'font-bold text-content')}>
+        {label}
+      </span>
+      {input ?? (
+        // `pr-3` so a stated figure lands on the same right edge as a typed one,
+        // which sits inside its field's own padding. Without it the column is a
+        // few pixels out and the tally stops reading as a column.
+        <span
+          className={cn(
+            'shrink-0 whitespace-nowrap pr-3 text-base text-content',
+            emphasis && 'font-bold',
+          )}
+        >
+          {value}
+        </span>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The editable half of a tally line.
+ *
+ * Right-aligned and fixed-width so it sits in the same column as the figures it
+ * is being added to, and **carries no placeholder**: a greyed number in an empty
+ * money field reads as a value at a glance, which is the one mistake this
+ * surface cannot afford.
+ */
+function TallyInput({
+  value,
+  onChange,
+  ariaLabel,
+  testId,
+}: {
+  value: string
+  onChange: (next: string) => void
+  ariaLabel: string
+  testId: string
+}) {
+  return (
+    // The rupee sits INSIDE the field, pinned left, while the number stays
+    // right-aligned. Outside it, the mark would sit between the label and the
+    // box and read as part of the label; hugging the number would need the
+    // caret's own text metrics and would drift as digits are typed.
+    //
+    // Left mark, right number is what a bank's amount field does, and it is
+    // what keeps this column a column: the typed figures land on the same right
+    // edge as the stated ones above and below them.
+    <span className="relative inline-block w-44 shrink-0">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-base text-content-muted"
+      >
+        ₹
+      </span>
+      <Input
+        inputMode="decimal"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        // The mark is decorative, so the field still says what it wants in
+        // words: a reader who cannot see it is told "in rupees" either way.
+        aria-label={ariaLabel}
+        data-testid={testId}
+        className="h-[var(--size-control-phone)] w-full pl-7 text-right text-base"
+      />
+    </span>
+  )
+}
+
+/**
+ * How a signed figure reads: the sign it needs, and the tone that agrees.
+ *
+ * **One rule, applied to every term in the running balance.** Nought is not a
+ * direction, so it carries neither a sign nor a colour; a positive adds to the
+ * drawer, a negative takes from it, and the tone follows the sign rather than
+ * the label. Cash expenses go through this function negated, so the ordinary
+ * case is red with a minus — and a *negative* expense, which is a refund,
+ * comes out green with a plus without needing a rule of its own.
+ */
+function signOf(paise: number): { prefix: string; tone: string | undefined } {
+  if (paise === 0) return { prefix: '', tone: undefined }
+  if (paise > 0) return { prefix: '+', tone: 'text-success' }
+  // `formatPaise` already renders the minus, so the prefix stays empty.
+  return { prefix: '', tone: 'text-danger' }
+}
+
+/**
  * One figure in the three-up strip.
  *
  * **The sign is shown, not implied** (design D23). The direction of a term in a
@@ -1306,23 +1699,21 @@ function Figure({
   paise,
   rows,
   testId,
-  direction,
+  signed = false,
 }: {
   label: string
   paise: number
   rows?: number
   testId: string
-  /** `in` adds to the drawer and carries a `+`; `out` is already negative. */
-  direction?: 'in' | 'out'
+  /** Read this figure as a movement, so its sign and tone follow its value. */
+  signed?: boolean
 }) {
+  const { prefix, tone } = signed ? signOf(paise) : { prefix: '', tone: undefined }
   return (
     <div>
       <p className="text-[0.6875rem] uppercase tracking-wide text-content-muted">{label}</p>
-      <p
-        data-testid={testId}
-        className={cn(direction === 'in' && 'text-success', direction === 'out' && 'text-danger')}
-      >
-        {direction === 'in' && '+'}
+      <p data-testid={testId} className={tone}>
+        {prefix}
         <Money paise={paise} />
       </p>
       {rows !== undefined && <p className="text-[0.6875rem] text-content-muted">{rows}</p>}
@@ -1388,10 +1779,12 @@ function ObservationRow({
   observation,
   locked,
   onAdjust,
+  onEdit,
 }: {
   observation: DrawerObservationRecord
   locked: boolean
   onAdjust: () => void
+  onEdit: () => void
 }) {
   const [open, setOpen] = useState(false)
   const collected = observation.ownCashOut.reduce((sum, movement) => sum + movement.amountPaise, 0)
@@ -1459,18 +1852,40 @@ function ObservationRow({
                 away
               </Chip>
             )}
+            {/*
+              These explain chips that sit in the row's HEADER, which is itself
+              the disclosure button — so they cannot wrap those chips without
+              nesting one button inside another. They are their own short
+              triggers here in the body instead.
+            */}
             {observation.isAnchor && (
-              <Why label="what a first count means">
-                The drawer began here — there is nothing before it to compare against, so this count
-                records no difference at all.
-              </Why>
+              <Explain
+                label="what a first count means"
+                className="text-[0.6875rem] text-content-muted"
+                explanation={
+                  <>
+                    The drawer began here — there is nothing before it to compare against, so this
+                    count records no difference at all.
+                  </>
+                }
+              >
+                why no difference?
+              </Explain>
             )}
             {observation.openingBreakPaise !== null && (
-              <Why label="why the break is not repaired">
-                This count opened at a figure the previous one does not carry to. It is reported and
-                not repaired: a figure somebody&rsquo;s count produced is evidence, and a recomputed
-                one is not.
-              </Why>
+              <Explain
+                label="why the break is not repaired"
+                className="text-[0.6875rem] text-content-muted"
+                explanation={
+                  <>
+                    This count opened at a figure the previous one does not carry to. It is reported
+                    and not repaired: a figure somebody&rsquo;s count produced is evidence, and a
+                    recomputed one is not.
+                  </>
+                }
+              >
+                why is the break left alone?
+              </Explain>
             )}
           </ChipRow>
 
@@ -1491,7 +1906,7 @@ function ObservationRow({
             </p>
           ))}
 
-          {locked && (
+          {locked ? (
             <Button
               size="phone"
               variant="secondary"
@@ -1499,6 +1914,18 @@ function ObservationRow({
               data-testid={`adjust-${observation.id}`}
             >
               <Lock aria-hidden size={14} /> Adjust this count
+            </Button>
+          ) : (
+            // Nothing has anchored on this one yet, so correcting it is an edit
+            // rather than an adjustment: no reason, no trail, no correction on
+            // the record for a figure nobody has read.
+            <Button
+              size="phone"
+              variant="secondary"
+              onClick={onEdit}
+              data-testid={`edit-${observation.id}`}
+            >
+              <Pencil aria-hidden size={14} /> Fix this count
             </Button>
           )}
         </div>
