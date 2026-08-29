@@ -9,8 +9,7 @@ when present and is required for every Super Admin, accounts are created and
 reset by an admin handing over a single-use one-time link with no external
 messaging service involved, and an account that is deactivated or reassigned
 stops working immediately rather than at token expiry.
-## Requirements
-### Requirement: Usernames are canonical and unique across the business
+## Requirements### Requirement: Usernames are canonical and unique across the business
 
 Every human account SHALL have one canonical username shared by all of that
 person's roles and outlet assignments. Input SHALL be trimmed and lowercased
@@ -1288,20 +1287,34 @@ A Franchise Admin SHALL be able to switch Employee and Biller and add, transfer,
 
 ### Requirement: The owner records non-cash entries at any outlet, and never cash
 
-A Super Admin SHALL be able to record a non-cash expense and an inventory
-correction at any outlet without being assigned to it. Every such row SHALL
-carry the owner as the recording person and SHALL be shown as the owner's
+**Superseded in part.** A Super Admin SHALL be able to record entries at any
+outlet without being assigned to it, **cash included**, and every such row SHALL
+carry the owner as the recording account and SHALL be shown as the owner's
 wherever it is read.
 
-The database SHALL refuse a cash expense, a cash withdrawal, and a day close
-from this path, so that nothing touching a drawer can be recorded remotely. The
-drawer SHALL remain the responsibility of the person assigned as that outlet's
-Franchise Admin.
+The refusal this requirement previously imposed on cash is withdrawn
+deliberately, and the reasoning is recorded rather than left implied. The
+boundary existed so that a drawer was the responsibility of the person assigned
+to that outlet, on the premise that a cash count is a claim by whoever counted
+the cash. That premise is intact; the inference was wrong. The person who counts
+the cash at these outlets **is** the owner, and requiring them to hold a
+Franchise Admin assignment to record what they counted described paperwork
+rather than accountability. Both Super Admins additionally had their Franchise
+Admin rows deleted on 2026-08-01, so the previous rule left no account able to
+count a drawer at either outlet.
+
+What replaces the refusal is evidence rather than prohibition. Every cash entry
+recorded by an account holding no assignment at that outlet SHALL be marked as
+recorded from away, and every drawer record SHALL carry whether the account was
+inside that outlet's geofence, with a reason required and stored where it was
+not. **No cash entry SHALL be refused for being recorded remotely.** The full
+drawer authority, its geofence evidence and its refusals for Biller and Employee
+are specified in the `cash-drawer` capability.
 
 A Super Admin who additionally holds a Franchise Admin assignment at an outlet
-SHALL be able to perform that outlet's full operational writes there — cash
-included — and at no other outlet, because that authority comes from the
-assignment rather than from being the owner.
+SHALL be able to perform that outlet's full operational writes there, as before.
+That authority now adds nothing to the drawer that the Super Admin assignment
+does not already carry.
 
 #### Scenario: The owner records a non-cash expense remotely
 
@@ -1310,26 +1323,31 @@ assignment rather than from being the owner.
 - **THEN** the expense is recorded, attributed to them, and reads as the
   owner's entry on that outlet's expenses surface
 
-#### Scenario: The owner records a stock correction remotely
+#### Scenario: The owner records a cash expense remotely
 
-- **WHEN** a Super Admin records an inventory correction with a note at an
-  outlet they hold no assignment at
-- **THEN** the movement is recorded, attributed to them, and the item's
-  quantity moves by exactly that correction
+- **WHEN** a Super Admin records a cash expense at an outlet they hold no
+  assignment at
+- **THEN** the expense is recorded, moves that outlet's drawer, and is marked
+  recorded from away so whoever counts next knows why the expected cash moved
 
-#### Scenario: Cash from the remote path is refused by the database
+#### Scenario: The owner counts a drawer at an outlet they do not manage
 
-- **WHEN** a Super Admin holding no assignment at an outlet attempts, by any
-  path including a hand-crafted request, to record a cash expense, a cash
-  withdrawal, or a day close at that outlet
-- **THEN** the database refuses the write
+- **WHEN** a Super Admin holding no assignment at an outlet records a drawer
+  observation and a collection there
+- **THEN** both are accepted and carry their account, their position, and a
+  reason where they were outside the fence
 
-#### Scenario: The owner assigned as a manager runs that outlet
+#### Scenario: A drawer write is never refused for distance
 
-- **WHEN** a Super Admin who also holds a Franchise Admin assignment at one
-  outlet closes that outlet's business day
-- **THEN** the close succeeds, and the same close attempted at an outlet they
-  hold no assignment at is refused
+- **WHEN** a permitted account records a drawer entry from away and supplies a
+  reason
+- **THEN** the write succeeds and the reason is stored on the record
+
+#### Scenario: Outlet staff remain refused
+
+- **WHEN** a Biller or an Employee attempts a drawer read or write at any
+  outlet, including one they are assigned to
+- **THEN** the database refuses it
 
 ### Requirement: Biller is an Employee-capable assignment without becoming a second role
 

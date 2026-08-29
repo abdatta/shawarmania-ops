@@ -5,7 +5,6 @@
 What an outlet spent, against an explicit business date, in integer paise. The rule that gives this capability its weight is the one connecting it to the drawer: **only a cash expense reduces the cash a manager counts at close**, and one paid by UPI or card is real money that never left the till. Everything else here — the four fields, the day at a time, the cash marker — exists to keep that distinction legible at the moment somebody is reconciling.
 
 ## Requirements
-
 ### Requirement: The expenses surface shows one business day at a time
 
 The expenses surface SHALL list the expenses recorded against a single
@@ -44,62 +43,59 @@ expenses alone reduce the drawer that is counted at close.
 
 ### Requirement: Recording an expense takes four fields and no more
 
-Adding an expense SHALL ask for a category, an amount, a payment method and an
-optional description, and nothing else. The amount SHALL be entered in rupees
-and converted to integer paise at the boundary. The application and database
-SHALL accept Cash or UPI for an expense and SHALL NOT accept Card or Other.
+Recording an expense SHALL ask for a category, an amount, a payment method and
+an optional note, and no more. Every expense SHALL additionally carry an
+**occurrence instant**, which SHALL be supplied by the system rather than typed:
+it defaults to the moment of recording and is exposed for correction only where
+the person chooses to say the spend happened earlier. It SHALL NOT become a
+required fifth field.
 
-The category SHALL be free text drawn from the business-wide growing list
-defined by `expense-categories`, rather than chosen from a fixed set of values.
-It SHALL be offered as suggestions the moment the field is focused, SHALL filter
-as it is typed, and SHALL accept a word not yet in the list, which joins the
-suggestions from the next entry onward. It SHALL be required and SHALL be refused
-when blank or whitespace-only, by the database and not only by the form.
+An expense recorded without an explicit occurrence instant SHALL be treated as
+having occurred when it was recorded.
 
-#### Scenario: Recording a cash expense
+#### Scenario: An ordinary expense
 
-- **WHEN** a Franchise Admin records an expense with a category, an amount in rupees and the cash method
-- **THEN** the expense is added to the day's list, and the amount passed to the data layer is integer paise
+- **WHEN** a person records a category, an amount and a method
+- **THEN** the expense is accepted and its occurrence instant is the moment of recording
 
-#### Scenario: Unsupported payment methods are not accepted
+#### Scenario: An expense that happened earlier
 
-- **WHEN** any role opens the expense payment-method control or submits a handcrafted Card or Other expense
-- **THEN** Cash and UPI are accepted while Card and Other are absent or refused
+- **WHEN** a person states that a cash spend happened earlier in the evening
+- **THEN** the stated instant is stored and the recording instant is retained alongside it
 
-#### Scenario: An expense with no amount
+#### Scenario: The form is not lengthened
 
-- **WHEN** an expense is submitted with a blank or non-numeric amount
-- **THEN** the write is refused with a sentence naming the amount, and nothing is recorded
+- **WHEN** the expense form is rendered
+- **THEN** it presents four fields, with the occurrence instant reachable rather than demanded
 
-#### Scenario: The category field suggests before it is typed into
-
-- **WHEN** the category field is focused
-- **THEN** existing categories are offered as suggestions, and typing filters them
-
-#### Scenario: A category not yet in the list is accepted
-
-- **WHEN** an expense is recorded with a category that does not yet exist
-- **THEN** the expense is stored with it and it is offered as a suggestion from the next entry onward
-
-#### Scenario: An expense with no category
-
-- **WHEN** an expense is submitted with a blank or whitespace-only category, including by a hand-crafted request
-- **THEN** the database refuses the write and nothing is recorded
 ### Requirement: Only cash expenses move the day's cash position
 
-An expense's effect on the day's cash figures SHALL depend on its payment
-method: an expense paid in cash SHALL reduce the day's cash position, and an
-expense paid by any other method SHALL NOT.
+Only an expense whose payment method is cash SHALL affect any drawer figure. A
+non-cash expense SHALL count toward the day's and the month's expense totals and
+SHALL move no drawer balance.
 
-#### Scenario: A UPI expense
+A cash expense SHALL belong to a drawer interval by its occurrence instant,
+falling back to its recording instant where none was stated, so that a spend
+before a count and a spend after one land on opposite sides of that count.
 
-- **WHEN** an expense paid by UPI is recorded for a business date
-- **THEN** the day's cash expenses figure is unchanged
+A cash expense whose occurrence instant falls inside an interval that has already
+been observed SHALL raise the drawer's reconciliation exception rather than
+altering the observation.
 
-#### Scenario: A cash expense
+#### Scenario: A UPI expense leaves the drawer alone
 
-- **WHEN** an expense paid in cash is recorded for a business date
-- **THEN** the day's cash expenses figure increases by exactly that amount
+- **WHEN** a UPI expense is recorded
+- **THEN** the expenses total rises and no drawer balance changes
+
+#### Scenario: A cash expense before and after a count
+
+- **WHEN** one cash expense occurs at 18:10 and another at 23:00, with a count at 22:00
+- **THEN** the first is inside that count's interval and the second is not
+
+#### Scenario: A cash expense backdated into an observed interval
+
+- **WHEN** a cash expense is recorded with an occurrence instant before the most recent observation
+- **THEN** the observation is unchanged and an exception reports the expense against it
 
 ### Requirement: An owner-recorded expense is visibly the owner's, and never cash
 
