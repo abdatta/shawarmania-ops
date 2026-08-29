@@ -186,6 +186,38 @@ rather than the code: `public.expenses` is what both new surfaces read and
 - Expenses moves ahead of the Ledger in both admin shells, so the tabs follow the
   nightly walk: Billing, Drawer, Expenses, Ledger, Notebook.
 
+### Tablet telemetry says when it was observed, 2026-08-29
+
+Production exposed a second way for the expected drawer figure to sound more
+certain than it is. Kalyani's counter reported one unresolved local command at
+23:19:33 on 28 August, immediately after the server had accepted its last
+payment command. The value remained `1` after the shift expired and was still
+being rendered as **1 tablet behind** more than ten hours later. No command
+reached the server after that report. The server cannot inspect the tablet's
+IndexedDB, so it cannot tell whether the acknowledgement was lost, the browser
+closed between the accepted response and the local delete, or work genuinely
+remains. The only truthful statement is what the tablet last observed and when.
+
+This change therefore completes its existing unsynced-device obligation rather
+than deferring a known failure into a new roadmap item:
+
+- The counter publishes a real heartbeat while billing is open: immediately on
+  start, whenever its durable envelope set changes, periodically while open,
+  and immediately on returning to the foreground.
+- The reported state is **unresolved**, not merely unsent. It includes a command
+  in `needs_attention`, because a server refusal does not prove that physical
+  cash was never taken. Billing diagnostics still explain whether the work is
+  queued, retrying or refused.
+- The snapshot carries the oldest retained envelope's creation instant. The
+  existing `last_seen_at` is the server's report time and is never again
+  mislabelled as "pending since".
+- A report older than thirty minutes is **out of touch**. The drawer remains
+  provisional even when that old report said zero: a tablet could have accepted
+  local cash after its last successful heartbeat.
+- The count remains recordable with unresolved, stale or unreadable telemetry.
+  The warning qualifies the expected figure; it never becomes a gate in front
+  of the person physically holding the cash.
+
 ## Capabilities
 
 ### New Capabilities
@@ -218,8 +250,11 @@ rather than the code: `public.expenses` is what both new surfaces read and
 - **New tables**: `drawer_observations`, `drawer_cash_out`,
   `drawer_observation_adjustments`, `ledger_day_verifications`.
 - **Altered tables, additively only**: nullable occurrence instants on
-  `expenses` and `manual_ledger_expenses`. `cash_withdrawals` is not touched:
-  nothing has ever written it and #12 drops it.
+  `expenses` and `manual_ledger_expenses`, plus the oldest-unresolved instant on
+  `counter_devices`. `cash_withdrawals` is not touched: nothing has ever written
+  it and #12 drops it. The original one-argument tablet-state RPC remains as a
+  deployment-compatibility wrapper while the new browser begins sending the
+  richer snapshot.
 - **New RLS** on every new table, with the Super Admin reach settled above and
   Biller/Employee refused by the absence of a policy branch.
 - **New domain module** for the interval arithmetic, in integer paise, throwing
@@ -278,8 +313,9 @@ Two survive from the proposals this replaces. Neither is discharged here.
 ## Docs to update before archiving
 
 `docs/SCREENS.md` (the Cash drawer surface, the Ledger's new shape, and the
-Daily cash screen's removal), `docs/DATA_MODEL.md` (the new tables, and the
-daily-cash section), `docs/GLOSSARY.md` ("Cash sales", "Expected closing cash"
+Daily cash screen's removal), `docs/DATA_MODEL.md` (the new tables, the
+daily-cash section, and the freshness-qualified counter-device snapshot),
+`docs/GLOSSARY.md` ("Cash sales", "Expected closing cash"
 and "Actual closing cash" all describe a close and must be rewritten; "Business
 date" stays; the word "Kept" must not enter it), `docs/ROLES_AND_PERMISSIONS.md`
 (the drawer rows of the capability matrix), `docs/SECURITY_AND_PRIVACY.md` (the

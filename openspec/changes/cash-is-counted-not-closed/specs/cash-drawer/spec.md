@@ -269,17 +269,64 @@ SHALL remain and the explanation SHALL be recorded beside it with its instant.
 - **WHEN** a cash expense is recorded with an occurrence instant inside an already-observed interval
 - **THEN** the same exception path is used
 
-### Requirement: Unsynced devices advise and never block a count
+### Requirement: Tablet uncertainty advises and never blocks a count
 
-Devices holding undelivered work at the moment of counting SHALL be reported on
-the count surface, naming how many and since when, and the expected figure SHALL
-be marked as possibly understated. A count SHALL NOT be refused because a device
-has unsynced work, because the person counting is holding the cash.
+Each counter tablet SHALL report a freshness-qualified snapshot of the durable
+billing work it still holds locally. The snapshot SHALL contain the number of
+unresolved envelopes, the oldest unresolved envelope's creation instant when
+one exists, and a server-recorded report instant. **Unresolved** SHALL include
+work awaiting delivery, retrying work, dependency-held work and work requiring
+manager attention: a command having reached and been refused by the server does
+not prove that physical cash was never taken at the counter.
 
-#### Scenario: A count is taken while a tablet is behind
+The tablet SHALL publish that snapshot immediately when the billing runtime
+starts, whenever the unresolved set changes, periodically while that runtime is
+open, and immediately when the app returns to the foreground. A successful
+report of zero SHALL clear the oldest-unresolved instant. Failure to report
+SHALL NOT interrupt billing or remove local work.
 
-- **WHEN** a device has undelivered commands at the counted instant
-- **THEN** the surface says so, marks the expected figure provisional, and the count is still accepted
+The Cash drawer SHALL treat a tablet as uncertain when its last reported count
+is non-zero, when its report is more than thirty minutes old, or when it has
+never reported. The expected drawer figure SHALL be marked as possibly
+understated while any tablet at that outlet is uncertain. An old report of zero
+SHALL NOT be treated as current evidence of an empty queue, because the tablet
+may have accepted local work after the report.
+
+The surface SHALL distinguish **unresolved work** from an **out-of-touch
+tablet**, show when the tablet last reported, and show the oldest unresolved
+instant where the tablet supplied one. The report instant SHALL NOT be presented
+as the instant the unresolved work began. Telemetry SHALL be re-read when the
+surface opens, when Count & Collect opens, and when the app returns to the
+foreground. A failed telemetry read SHALL leave the last known snapshot visibly
+qualified rather than clearing its warning.
+
+A count SHALL NOT be refused because telemetry is unresolved, stale, absent or
+unreadable, because the person counting is holding the cash.
+
+#### Scenario: Fresh unresolved work qualifies the expected figure
+
+- **WHEN** a tablet reported one or more unresolved envelopes no more than thirty minutes ago
+- **THEN** the drawer names the unresolved tablet count, the report instant and the oldest unresolved instant, marks the expected figure provisional, and still accepts a count
+
+#### Scenario: An out-of-touch tablet last reported zero
+
+- **WHEN** a tablet's last report is more than thirty minutes old and its last reported unresolved count was zero
+- **THEN** the drawer says the tablet is out of touch, states when zero was last reported, marks the expected figure provisional, and still accepts a count
+
+#### Scenario: A refused command remains financially unresolved
+
+- **WHEN** a retained envelope moves to `needs_attention` after a server refusal
+- **THEN** it remains in the tablet's unresolved snapshot until an attributed correction or discard resolves it
+
+#### Scenario: Response loss heals through idempotent replay
+
+- **WHEN** the server accepted a command but the tablet stopped after reporting it unresolved and before recording the accepted response locally
+- **THEN** the next billing start replays the same command identity, records the replay result, removes the retained envelope, and publishes a fresh zero snapshot without creating a second bill
+
+#### Scenario: An outlet switch cannot carry another tablet's warning
+
+- **WHEN** the drawer moves from one outlet to another while a telemetry read is in flight
+- **THEN** no unresolved count, report instant or out-of-touch state from the previous outlet is rendered under the newly selected outlet
 
 ### Requirement: Cash leaving the drawer is one record carrying its kind
 

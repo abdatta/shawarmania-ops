@@ -1185,6 +1185,156 @@ stated ones above and below them. The mark is `aria-hidden` — the field alread
 says *in rupees* in its accessible name, so a reader who cannot see it loses
 nothing.
 
+### 34. Tablet state is a freshness-qualified unresolved snapshot
+
+Production supplied the counterexample on 2026-08-29. Kalyani's tablet wrote
+`last_reported_unsent = 1` at 23:19:33, 336 ms after the server accepted its
+last `pay_order`. No later command reached the server. At 10:00 the next morning
+the shift had expired, the row still said one, and the Cash drawer still said
+**1 tablet behind** as if it were current. The database was not wrong: it held
+exactly the last statement the tablet made. The screen and the reporting
+protocol were wrong about what that statement could support.
+
+Three implementation facts produced it:
+
+1. `BillingUnsentReporter` is a Dexie `liveQuery`, so it reports when the local
+   envelope set changes. It has no periodic heartbeat despite writing a column
+   called `last_seen_at`.
+2. A server acceptance and the local transaction that records that acceptance
+   are separate events. Closing or losing the page between them leaves an
+   envelope locally even though the server has committed it; idempotent replay
+   is the recovery mechanism, but no recovery happens while the counter is
+   closed.
+3. The drawer reads `counter_devices` once, tests only whether the last count is
+   positive, and uses `last_seen_at` as "since". That timestamp means **last
+   heard from**, not **oldest work still held**.
+
+#### One conservative concept: unresolved
+
+The local envelope count already includes `pending`, `held`, `retrying` and
+`needs_attention`, and that is the correct financial boundary. Rename the
+concept in TypeScript and user-visible text from *unsent* to **unresolved**, but
+do not filter `needs_attention` out. A refused `pay_now` may have been followed
+by a customer handing over cash before the refusal appeared. The server knows
+the command did not settle; it does not know what happened across the counter.
+Billing diagnostics name the refusal and offer correction or attributed
+discard. The drawer only needs the conservative fact that its expectation may
+be missing physical cash.
+
+This requires separating the store methods whose names currently blur two
+jobs. The finish-day guard continues to count every unresolved envelope, and
+the telemetry reporter reads a summary of that same set:
+
+```ts
+type UnresolvedSummary = {
+  count: number
+  oldestCreatedAt: string | null
+}
+```
+
+`oldestCreatedAt` is the minimum `createdAtMs` across retained envelopes and is
+null exactly when `count` is zero. It contains no payload, customer phone or
+line item.
+
+#### A heartbeat with four triggers
+
+While the billing runtime is mounted, the reporter reads the current summary
+and serialises/coalesces reports through the existing single in-flight queue:
+
+- immediately on `start()`;
+- whenever Dexie's unresolved envelope set changes;
+- every 60 seconds while the counter runtime is open; and
+- immediately on `visibilitychange` when the document becomes visible.
+
+The interval is liveness telemetry, not a poll for business data. The counter
+is the mains-powered, fixed-screen exception already recorded in
+`docs/ARCHITECTURE.md`; one tiny authenticated RPC per minute is bounded and
+buys an operational fact the cash surface acts on. A failed RPC stays swallowed
+and is retried by the next trigger. `stop()` removes the Dexie subscription,
+interval and visibility listener, then waits for the in-flight report exactly
+as it does today. The timer, clock and visibility target are injectable so the
+unit test uses fake time rather than sleeping.
+
+The reporter reads IndexedDB on every trigger. It must not periodically resend a
+cached `1`, which would keep the precise failure this decision exists to fix.
+Concurrent triggers may coalesce, but reports from one reporter remain ordered
+so an older `1` cannot complete after its newer `0`.
+
+#### Add one fact; preserve the deployed call
+
+`counter_devices` gains one nullable column:
+
+```sql
+last_reported_oldest_unresolved_at timestamptz
+```
+
+Do this in a new forward migration. The production-applied
+`20260810000001_counter_tablet_and_shift.sql` is immutable. Do not rename
+`last_reported_unsent`: its deployed name remains as compatibility storage,
+while adapters expose it as `lastReportedUnresolved`.
+
+Add a two-argument overload of `report_counter_device_state` taking the count
+and oldest instant. Keep the deployed one-argument signature for an old browser
+served during the migration-before-publication window. The legacy function
+updates `last_seen_at` and the count and leaves the oldest instant unknown for a
+positive value; reporting zero clears it. The new overload writes all three
+facts atomically, deriving the device from `auth.uid()` and retaining the same
+removed-device refusal and grants. Regenerate `database.types.ts` after reset
+and test both signatures over real HTTP. Do not let a service-role key or an
+envelope payload enter this path.
+
+An unknown oldest instant is rendered as unknown, never inferred from
+`last_seen_at`. Client clocks can be imperfect, so the oldest instant is
+evidence from the local envelope rather than a server boundary used to accept
+or reject money.
+
+#### Fresh, unresolved and out of touch are different states
+
+Move the existing thirty-minute threshold out of `devices-surface.tsx` into one
+shared domain helper. Both Tablets and Cash drawer must answer freshness the
+same way.
+
+For every non-removed tablet at the outlet:
+
+| Last report | Last unresolved | Drawer state |
+|---|---:|---|
+| no more than 30 min ago | 0 | clear |
+| no more than 30 min ago | positive | unresolved; expected is provisional |
+| older than 30 min or absent | any value, including 0 | out of touch; expected is provisional |
+
+The third row is load-bearing. An old zero is only evidence that the queue was
+empty then. The tablet may have accepted cash locally one second later and lost
+the connection before reporting it.
+
+The compact balance chip distinguishes `1 tablet unresolved` from
+`1 tablet out of touch`. Its explanation always states the report instant,
+states the last unresolved count, states the real oldest-unresolved instant when
+known, and says why the expected figure may be understated. It never says the
+report instant is when the backlog began. The existing instruction survives:
+**count anyway — you are the one holding the cash.**
+
+The drawer reads telemetry on mount, when Count & Collect opens, and on
+foreground. It does not subscribe or run a phone-side polling timer. Each read
+is one RLS-scoped snapshot; the stated report time keeps it honest. A failed
+refresh preserves the last snapshot and its qualification. An outlet switch
+clears the previous outlet's telemetry before the new drawer can render, and an
+obsolete promise cannot restore it.
+
+**Rejected: clear a positive report when its shift expires.** Work survives
+cutover and drains later by design. Expiry changes who may create new work, not
+whether accepted local work exists.
+
+**Rejected: hide `needs_attention`.** That converts a known unresolved physical
+cash risk into a clean drawer merely because the server supplied a deterministic
+refusal.
+
+**Rejected: treat a stale zero as clear.** That is the exact false assurance a
+heartbeat timestamp exists to prevent.
+
+**Rejected: a Re-read button as the only repair.** The collector should not have
+to know that telemetry can become stuck. Foreground and sheet-open reads handle
+the phone; periodic and foreground reports handle the tablet.
+
 ## The surfaces
 
 Layout conventions in these sketches: `[ 8950 ]` is typed, `( chip )` is tapped,
