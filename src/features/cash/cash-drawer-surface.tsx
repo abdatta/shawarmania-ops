@@ -33,7 +33,7 @@ import { Chip, ChipRow } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
-import { Why } from '@/components/ui/why'
+import { Explain } from '@/components/ui/why'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
@@ -452,6 +452,24 @@ export function CashDrawerSurface() {
     return match?.minutes ?? null
   }, [countedAt, sheetOpenedAt])
 
+  /**
+   * Business dates that have passed **since the one the last count belongs to**,
+   * and so have never been counted.
+   *
+   * `daysCovered` is the inclusive span of the pending interval, which always
+   * includes the last count's own business date — and that date was counted. So
+   * a count at 23:16 last night read as "2 days uncounted" by nine the next
+   * morning, which is wrong twice over: the night before was counted, and today
+   * has barely started.
+   *
+   * The chip appears from **two** upward, so a day still in progress never nags.
+   * At one there is nothing to say: nobody counts at nine in the morning, and a
+   * warning that fires every single day is a warning nobody reads. At two, a
+   * whole business date has passed with no count at all, which is the point the
+   * next difference stops being attributable to one night.
+   */
+  const uncountedDays = Math.max(0, (state?.daysCovered ?? 0) - 1)
+
   /** What the drawer should hold at the stated instant. Null before the anchor. */
   const expectedPaise = boundary && state?.lastObservation ? boundary.expectedPaise : null
 
@@ -664,14 +682,20 @@ export function CashDrawerSurface() {
           {state.exceptions.length > 0 && (
             <Card className="space-y-2" data-testid="drawer-exception">
               <ChipRow>
-                <Chip tone="warn" icon={TriangleAlert}>
-                  Needs a look
-                </Chip>
-                <Why label="why a late arrival is not folded in">
-                  A count is what somebody saw. Work landing afterwards is reported here rather than
-                  folded in, because rewriting a recorded figure is the failure this whole chain
-                  exists to prevent.
-                </Why>
+                <Explain
+                  label="why a late arrival is not folded in"
+                  explanation={
+                    <>
+                      A count is what somebody saw. Work landing afterwards is reported here rather
+                      than folded in, because rewriting a recorded figure is the failure this whole
+                      chain exists to prevent.
+                    </>
+                  }
+                >
+                  <Chip tone="warn" icon={TriangleAlert}>
+                    Needs a look
+                  </Chip>
+                </Explain>
               </ChipRow>
 
               {state.exceptions.map((exception) => (
@@ -746,12 +770,18 @@ export function CashDrawerSurface() {
                   This drawer has never been counted.
                 </p>
                 <ChipRow>
-                  <Chip tone="neutral">not tracked yet</Chip>
-                  <Why label="what not tracked yet means">
-                    Count it once and the record begins there. Earlier days keep their revenue and
-                    expenses and say the drawer was not being followed, rather than showing a
-                    balance nobody checked.
-                  </Why>
+                  <Explain
+                    label="what not tracked yet means"
+                    explanation={
+                      <>
+                        Count it once and the record begins there. Earlier days keep their revenue
+                        and expenses and say the drawer was not being followed, rather than showing
+                        a balance nobody checked.
+                      </>
+                    }
+                  >
+                    <Chip tone="neutral">not tracked yet</Chip>
+                  </Explain>
                 </ChipRow>
               </div>
             ) : (
@@ -781,29 +811,41 @@ export function CashDrawerSurface() {
                       away
                     </Chip>
                   )}
-                  {state.daysCovered > 1 && (
+                  {uncountedDays >= 2 && (
                     <>
-                      <Chip tone="warn" icon={TriangleAlert} data-testid="days-covered">
-                        {state.daysCovered} days uncounted
-                      </Chip>
-                      <Why label="what counting after several days means">
-                        The next count covers all of them, so a difference cannot be pinned to one
-                        night.
-                      </Why>
+                      <Explain
+                        label="what counting after several days means"
+                        explanation={
+                          <>
+                            The next count covers all of them, so a difference cannot be pinned to
+                            one night.
+                          </>
+                        }
+                      >
+                        <Chip tone="warn" icon={TriangleAlert} data-testid="days-covered">
+                          {uncountedDays} days uncounted
+                        </Chip>
+                      </Explain>
                     </>
                   )}
                   {unsynced.count > 0 && (
                     <>
-                      <Chip tone="warn" icon={TriangleAlert} data-testid="unsynced-chip">
-                        {unsynced.count} tablet{unsynced.count === 1 ? '' : 's'} behind
-                      </Chip>
-                      <Why label="what an unsent tablet means for this figure">
-                        The figure above may be understated by bills a tablet has not sent
-                        {unsynced.since
-                          ? `, last heard from ${formatDateTime(unsynced.since)}`
-                          : ''}
-                        . Count anyway — you are the one holding the cash.
-                      </Why>
+                      <Explain
+                        label="what an unsent tablet means for this figure"
+                        explanation={
+                          <>
+                            The figure above may be understated by bills a tablet has not sent
+                            {unsynced.since
+                              ? `, last heard from ${formatDateTime(unsynced.since)}`
+                              : ''}
+                            . Count anyway — you are the one holding the cash.
+                          </>
+                        }
+                      >
+                        <Chip tone="warn" icon={TriangleAlert} data-testid="unsynced-chip">
+                          {unsynced.count} tablet{unsynced.count === 1 ? '' : 's'} behind
+                        </Chip>
+                      </Explain>
                     </>
                   )}
                 </ChipRow>
@@ -1014,13 +1056,19 @@ export function CashDrawerSurface() {
               </span>
               {/* Every count carries this window, so it is stated rather than
                   used to mark some counts out from others (design D19). */}
-              <span className="text-content-muted" data-testid="tolerance-window">
-                give or take {APPROXIMATE_WINDOW_MINUTES} min
-              </span>
-              <Why label="why every count time is approximate">
-                Counting takes a few minutes and the counter keeps selling while you do it, so no
-                stated time is exact. The window is the same whichever option you pick.
-              </Why>
+              <Explain
+                label="why every count time is approximate"
+                explanation={
+                  <>
+                    Counting takes a few minutes and the counter keeps selling while you do it, so
+                    no stated time is exact. The window is the same whichever option you pick.
+                  </>
+                }
+              >
+                <span className="text-content-muted" data-testid="tolerance-window">
+                  give or take {APPROXIMATE_WINDOW_MINUTES} min
+                </span>
+              </Explain>
             </p>
             {boundary && boundary.excludedBills > 0 && (
               <ChipRow>
@@ -1088,23 +1136,29 @@ export function CashDrawerSurface() {
                   </ChipRow>
                 ) : (
                   <ChipRow className="justify-end">
-                    <Chip
-                      tone="bad"
-                      icon={advice.direction === 'short' ? ArrowDownRight : ArrowUpRight}
-                      // Its own handle, because the block around it also contains
-                      // the `Why` button's screen-reader label — "what short and
-                      // over mean here" — which carries both words and makes any
-                      // direction test over the whole block read `short` always.
-                      data-testid="count-direction"
+                    <Explain
+                      label="what short and over mean here"
+                      explanation={
+                        <>
+                          {advice.direction === 'short'
+                            ? 'This much is missing from the drawer against what was expected.'
+                            : 'This much more than expected was counted.'}
+                        </>
+                      }
                     >
-                      <Money paise={Math.abs(advice.differencePaise)} />{' '}
-                      {advice.direction === 'short' ? 'short' : 'over'}
-                    </Chip>
-                    <Why label="what short and over mean here">
-                      {advice.direction === 'short'
-                        ? 'This much is missing from the drawer against what was expected.'
-                        : 'This much more than expected was counted.'}
-                    </Why>
+                      <Chip
+                        tone="bad"
+                        icon={advice.direction === 'short' ? ArrowDownRight : ArrowUpRight}
+                        // Its own handle, because the block around it also contains
+                        // the `Why` button's screen-reader label — "what short and
+                        // over mean here" — which carries both words and makes any
+                        // direction test over the whole block read `short` always.
+                        data-testid="count-direction"
+                      >
+                        <Money paise={Math.abs(advice.differencePaise)} />{' '}
+                        {advice.direction === 'short' ? 'short' : 'over'}
+                      </Chip>
+                    </Explain>
                   </ChipRow>
                 )}
 
@@ -1125,14 +1179,20 @@ export function CashDrawerSurface() {
                     {advice.timingCouldExplainPaise !== null &&
                       advice.timingCouldExplainPaise > 0 && (
                         <>
-                          <Chip tone="neutral">
-                            <Money paise={advice.timingCouldExplainPaise} /> moved nearby
-                          </Chip>
-                          <Why label="what nearby cash means for this difference">
-                            Your time is approximate, so the timing could account for part of the
-                            difference. Nothing here proposes a time — move the count time only if
-                            you recognise the bills.
-                          </Why>
+                          <Explain
+                            label="what nearby cash means for this difference"
+                            explanation={
+                              <>
+                                Your time is approximate, so the timing could account for part of
+                                the difference. Nothing here proposes a time — move the count time
+                                only if you recognise the bills.
+                              </>
+                            }
+                          >
+                            <Chip tone="neutral">
+                              <Money paise={advice.timingCouldExplainPaise} /> moved nearby
+                            </Chip>
+                          </Explain>
                         </>
                       )}
                   </ChipRow>
@@ -1257,24 +1317,36 @@ export function CashDrawerSurface() {
                 data-testid="movement-reason"
               />
               <ChipRow>
-                <Chip tone="neutral" data-testid="spend-not-an-expense">
-                  not in the month&rsquo;s expenses
-                </Chip>
-                <Why label="why a spend is not an expense">
-                  The drawer is genuinely lighter, but a fridge is not a running cost. Putting it
-                  through expenses would move the drawer correctly and wreck the month.
-                </Why>
+                <Explain
+                  label="why a spend is not an expense"
+                  explanation={
+                    <>
+                      The drawer is genuinely lighter, but a fridge is not a running cost. Putting
+                      it through expenses would move the drawer correctly and wreck the month.
+                    </>
+                  }
+                >
+                  <Chip tone="neutral" data-testid="spend-not-an-expense">
+                    not in the month&rsquo;s expenses
+                  </Chip>
+                </Explain>
               </ChipRow>
             </div>
           ) : (
             <ChipRow>
-              <Chip tone="neutral" data-testid="collect-not-verified">
-                nothing verified
-              </Chip>
-              <Why label="what collecting without counting does not do">
-                You are not counting, so no difference is recorded and nothing is checked against
-                the drawer.
-              </Why>
+              <Explain
+                label="what collecting without counting does not do"
+                explanation={
+                  <>
+                    You are not counting, so no difference is recorded and nothing is checked
+                    against the drawer.
+                  </>
+                }
+              >
+                <Chip tone="neutral" data-testid="collect-not-verified">
+                  nothing verified
+                </Chip>
+              </Explain>
             </ChipRow>
           )}
 
@@ -1327,15 +1399,21 @@ export function CashDrawerSurface() {
               </div>
 
               <ChipRow>
-                <Chip tone="good" icon={Check} data-testid="edit-leaves-no-trail">
-                  no reason needed
-                </Chip>
-                <Why label="why this one takes no reason">
-                  Nothing has been counted since, so no later figure was worked out from this one
-                  and nobody has read it as settled. Correcting it now simply replaces it. Once a
-                  later count opens at this figure the offer changes to an adjustment, which does
-                  ask why and does stay on the record.
-                </Why>
+                <Explain
+                  label="why this one takes no reason"
+                  explanation={
+                    <>
+                      Nothing has been counted since, so no later figure was worked out from this
+                      one and nobody has read it as settled. Correcting it now simply replaces it.
+                      Once a later count opens at this figure the offer changes to an adjustment,
+                      which does ask why and does stay on the record.
+                    </>
+                  }
+                >
+                  <Chip tone="good" icon={Check} data-testid="edit-leaves-no-trail">
+                    no reason needed
+                  </Chip>
+                </Explain>
               </ChipRow>
             </>
           )}
@@ -1371,14 +1449,21 @@ export function CashDrawerSurface() {
                   <Money paise={adjusting.countedTotalPaise} className="font-semibold" />
                 </p>
                 <ChipRow>
-                  <Chip tone="neutral" icon={Lock}>
-                    locked
-                  </Chip>
-                  <Why label="why this count is locked">
-                    A later count read this figure as its own opening, which is the moment it became
-                    load-bearing. Both figures stay on the record, and the later count re-anchors
-                    the balance on what was physically there — so nothing after it moves.
-                  </Why>
+                  <Explain
+                    label="why this count is locked"
+                    explanation={
+                      <>
+                        A later count read this figure as its own opening, which is the moment it
+                        became load-bearing. Both figures stay on the record, and the later count
+                        re-anchors the balance on what was physically there — so nothing after it
+                        moves.
+                      </>
+                    }
+                  >
+                    <Chip tone="neutral" icon={Lock}>
+                      locked
+                    </Chip>
+                  </Explain>
                 </ChipRow>
               </div>
 
@@ -1556,14 +1641,32 @@ function TallyInput({
   testId: string
 }) {
   return (
-    <Input
-      inputMode="decimal"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      aria-label={ariaLabel}
-      data-testid={testId}
-      className="h-[var(--size-control-phone)] w-44 shrink-0 text-base text-right"
-    />
+    // The rupee sits INSIDE the field, pinned left, while the number stays
+    // right-aligned. Outside it, the mark would sit between the label and the
+    // box and read as part of the label; hugging the number would need the
+    // caret's own text metrics and would drift as digits are typed.
+    //
+    // Left mark, right number is what a bank's amount field does, and it is
+    // what keeps this column a column: the typed figures land on the same right
+    // edge as the stated ones above and below them.
+    <span className="relative inline-block w-44 shrink-0">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-base text-content-muted"
+      >
+        ₹
+      </span>
+      <Input
+        inputMode="decimal"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        // The mark is decorative, so the field still says what it wants in
+        // words: a reader who cannot see it is told "in rupees" either way.
+        aria-label={ariaLabel}
+        data-testid={testId}
+        className="h-[var(--size-control-phone)] w-full pl-7 text-right text-base"
+      />
+    </span>
   )
 }
 
@@ -1749,18 +1852,40 @@ function ObservationRow({
                 away
               </Chip>
             )}
+            {/*
+              These explain chips that sit in the row's HEADER, which is itself
+              the disclosure button — so they cannot wrap those chips without
+              nesting one button inside another. They are their own short
+              triggers here in the body instead.
+            */}
             {observation.isAnchor && (
-              <Why label="what a first count means">
-                The drawer began here — there is nothing before it to compare against, so this count
-                records no difference at all.
-              </Why>
+              <Explain
+                label="what a first count means"
+                className="text-[0.6875rem] text-content-muted"
+                explanation={
+                  <>
+                    The drawer began here — there is nothing before it to compare against, so this
+                    count records no difference at all.
+                  </>
+                }
+              >
+                why no difference?
+              </Explain>
             )}
             {observation.openingBreakPaise !== null && (
-              <Why label="why the break is not repaired">
-                This count opened at a figure the previous one does not carry to. It is reported and
-                not repaired: a figure somebody&rsquo;s count produced is evidence, and a recomputed
-                one is not.
-              </Why>
+              <Explain
+                label="why the break is not repaired"
+                className="text-[0.6875rem] text-content-muted"
+                explanation={
+                  <>
+                    This count opened at a figure the previous one does not carry to. It is reported
+                    and not repaired: a figure somebody&rsquo;s count produced is evidence, and a
+                    recomputed one is not.
+                  </>
+                }
+              >
+                why is the break left alone?
+              </Explain>
             )}
           </ChipRow>
 

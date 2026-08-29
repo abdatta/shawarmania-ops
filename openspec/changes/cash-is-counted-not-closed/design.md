@@ -1054,6 +1054,107 @@ The database remains the boundary rather than the screen: `edit_drawer_observati
 refuses the moment a later count reads this one as its opening, and the surface
 stops offering it at the same instant, from the same fact.
 
+### 31. The chip is the explanation's button, and the explanation is a modal
+
+The owner's words on 2026-08-29: *"The info icons beside each chip and how they
+expand to reveal more info is bad UI."* Both halves of that are right, and they
+are separate faults.
+
+**The icon.** Every explainable chip trailed its own ⓘ. On the balance card that
+is three little glyphs in a row of five chips, and a row of icons reads as
+clutter rather than as an offer. The chip and its explanation were also two
+controls for one idea, so a reader who wanted to know what *2 days uncounted*
+meant had to notice and hit a 20px target beside it.
+
+**The expansion.** It opened a paragraph **in place**, which pushed everything
+below it down the screen. On a card whose whole purpose is four figures, asking
+a question moved the figures. That is the opposite of what a disclosure is for.
+
+So: **the chip is the button**, and the explanation opens as a small modal over
+the surface. Nothing reflows, and the top layer means no ancestor's `overflow`
+can clip it — which matters, because these live inside a sheet that scrolls.
+Escape, focus containment and backdrop dismissal come from `<dialog>` rather
+than from code.
+
+**The affordance is a dotted underline** plus `cursor-help`, the convention an
+abbreviation has carried for thirty years. A chip that explains itself has to
+look different from one that does not, or the offer is a secret — and the icon,
+whatever else was wrong with it, was at least visible.
+
+**The accessible name is the fact first, the offer second**: `2 days uncounted,
+explain: what counting after several days means`. An `aria-label` would have
+replaced the fact with the offer, which is the wrong way round — the chip's
+content is what the reader came for. The separator is a comma rather than a
+space because the accessible-name algorithm trims each node before joining them,
+so a leading space is dropped and the two run together.
+
+**Two things this shape cost, both found by building it rather than by reasoning
+about it:**
+
+- **The modal is portalled to the body.** Several triggers sit inside a `<p>`,
+  which may not contain a `<dialog>`. Rendered in place the first version
+  produced invalid nesting. The dialog is in the top layer once open either way,
+  so where it lives in the DOM costs nothing.
+- **`Modal` now stops the `close` event.** A `close` event does not bubble in
+  the DOM, but React's synthetic system propagates it up the **React** tree — and
+  a portalled modal's React parent is a component inside another modal. So
+  dismissing an explanation opened over the count sheet closed the count sheet
+  with it, **losing everything typed into it**. A dialog closing is its own
+  business; no ancestor needs telling. This is a defect the pattern created and
+  the pattern's own test caught.
+
+Where a trigger cannot wrap its subject, it becomes a short question of its own:
+`why no difference?` in a count's disclosure body, whose chip lives in the row
+header that is already a button, and `what does this do?` beside Verify. A
+button inside a button is invalid, and inventing a way around it would be worse
+than asking the question in words.
+
+### 32. Uncounted days exclude the day that was counted, and one day is not worth saying
+
+The owner, on a drawer counted at 23:16 the previous night, reading it at nine
+the next morning: *"Why does it alert 2 days uncounted? I just counted
+yesterday, and today has barely started."*
+
+`daysCovered` is the **inclusive span** of the pending interval, which always
+includes the business date the last count belongs to. That date was counted. So
+the chip was reporting the counted day as uncounted, and would do so every
+single morning at every outlet.
+
+Two corrections, and the second matters more than the first:
+
+- **The figure is `daysCovered - 1`**: business dates that have passed *since*
+  the one the last count belongs to.
+- **The chip appears from two upward.** At one there is nothing worth saying:
+  the only uncounted day is today, it has barely started, and nobody counts a
+  drawer at nine in the morning. A warning that fires every day is a warning
+  nobody reads, and this one has real work to do at two — where a whole business
+  date has passed with no count at all, and the next difference genuinely stops
+  being attributable to one night.
+
+`daysCovered` itself is left alone. It is a factual quantity the ledger's
+`observationCoversDays` also uses, where the inclusive span is the right answer:
+a recorded count really did cover that many days of trading. Only the drawer's
+warning changes, because only the warning was making a claim about days nobody
+counted.
+
+### 33. The rupee sits inside the field
+
+A tally of four money figures where two are typed and two are stated: the stated
+ones carry `₹` and the typed ones carried nothing, so the column read as two
+kinds of thing.
+
+The mark is **inside the box, pinned left**, with the number still right-aligned
+and the field padded so the two never collide. Outside the box it would sit
+between the label and the field and read as part of the label. Hugging the
+number would need the caret's own text metrics and would drift as digits are
+typed.
+
+Left mark, right number is what a bank's amount field does, and it is what keeps
+this column a column: the typed figures land on the same right edge as the
+stated ones above and below them. The mark is `aria-hidden` — the field already
+says *in rupees* in its accessible name, so a reader who cannot see it loses
+nothing.
+
 ## The surfaces
 
 Layout conventions in these sketches: `[ 8950 ]` is typed, `( chip )` is tapped,

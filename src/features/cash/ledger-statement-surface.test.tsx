@@ -69,7 +69,8 @@ describe('the reading carries no editable figure', () => {
     await waitFor(() => expect(screen.getByTestId('ledger-revenue')).toBeInTheDocument())
 
     // The accessible name, not the text: the period steps are icon-only and name
-    // themselves with `aria-label`, while a `Why` names itself with `sr-only` text.
+    // themselves with `aria-label`, while an explanation trigger names itself
+    // with its own visible content plus `sr-only` text saying what it explains.
     const buttons = screen
       .getAllByRole('button')
       .map((button) => (button.getAttribute('aria-label') ?? button.textContent ?? '').trim())
@@ -80,7 +81,7 @@ describe('the reading carries no editable figure', () => {
     expect(buttons.length).toBeGreaterThan(0)
     for (const label of buttons) {
       expect(label).toMatch(
-        /^(one day|the month|previous day|next day|previous month|next month|verify this day|day — .+|wh(y|at) .+)$/i,
+        /^(one day|the month|previous day|next day|previous month|next month|verify this day|day — .+|.+, explain: .+)$/i,
       )
     }
   })

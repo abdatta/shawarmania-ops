@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card'
 import { LoadingBlock, LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { DayField, PeriodBar } from '@/components/ui/period-bar'
-import { Why } from '@/components/ui/why'
+import { Explain } from '@/components/ui/why'
 import { useAdapters } from '@/data-access'
 import {
   DataActionError,
@@ -295,11 +295,17 @@ function DayReading({
       {day.changedSinceVerified.length > 0 && (
         <Card className="border-warning" data-testid="changed-since-verified">
           <p className="flex items-baseline justify-between gap-2">
-            <span className="text-sm font-bold text-content">Changed since you verified it</span>
-            <Why label="why a verified day can still change">
-              Nothing is blocked. Aggregator settlement restating a day afterwards is ordinary,
-              which is why verifying freezes nothing.
-            </Why>
+            <Explain
+              label="why a verified day can still change"
+              explanation={
+                <>
+                  Nothing is blocked. Aggregator settlement restating a day afterwards is ordinary,
+                  which is why verifying freezes nothing.
+                </>
+              }
+            >
+              <span className="text-sm font-bold text-content">Changed since you verified it</span>
+            </Explain>
           </p>
           <p className="text-xs text-content-muted">{day.changedSinceVerified.join(', ')}.</p>
         </Card>
@@ -393,14 +399,16 @@ function DayReading({
             The drawer, in the order it happened
           </h3>
           {day.drawer.observationCoversDays !== null && day.drawer.observationCoversDays > 1 && (
-            <span className="inline-flex items-baseline gap-1">
+            <Explain
+              label="what a multi-day count means"
+              explanation={
+                <>That count covers several days, so a difference cannot be pinned to one night.</>
+              }
+            >
               <span className="text-xs font-semibold text-content-muted" data-testid="covers-days">
                 covers {day.drawer.observationCoversDays} days
               </span>
-              <Why label="what a multi-day count means">
-                That count covers several days, so a difference cannot be pinned to one night.
-              </Why>
-            </span>
+            </Explain>
           )}
         </div>
 
@@ -499,10 +507,18 @@ function DayReading({
           >
             Verify this day
           </Button>
-          <Why label="what verifying does and does not do">
-            An acknowledgement that you read it. It freezes nothing, is required by nothing, and
-            each day is verified on its own.
-          </Why>
+          <Explain
+            label="what verifying does and does not do"
+            className="shrink-0 text-xs text-content-muted"
+            explanation={
+              <>
+                An acknowledgement that you read it. It freezes nothing, is required by nothing, and
+                each day is verified on its own.
+              </>
+            }
+          >
+            what does this do?
+          </Explain>
         </div>
       </Card>
     </div>
@@ -854,7 +870,7 @@ function DrawerStateTag({ state }: { state: 'counted' | 'carried' | 'not-tracked
           ] as const)
 
   return (
-    <span className="inline-flex items-baseline gap-1">
+    <Explain label={`what ${label.toLowerCase()} means`} explanation={why}>
       <span
         data-testid={`drawer-state-${state}`}
         className={cn(
@@ -864,8 +880,7 @@ function DrawerStateTag({ state }: { state: 'counted' | 'carried' | 'not-tracked
       >
         {label}
       </span>
-      <Why label={`what ${label.toLowerCase()} means`}>{why}</Why>
-    </span>
+    </Explain>
   )
 }
 

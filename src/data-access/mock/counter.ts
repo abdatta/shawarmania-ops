@@ -78,7 +78,22 @@ export function createDemoCounter(): DemoCounter {
             : device.id === DEMO_KANCHRAPARA_DEVICE_ID
               ? new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
               : null,
-        lastReportedUnsent: device.id === DEMO_KANCHRAPARA_DEVICE_ID ? 3 : 0,
+        // Both outlets hold work, in different amounts, and Kalyani holds some
+        // deliberately: it is the outlet the drawer opens on, so this is what
+        // puts an **explainable chip on the demo's first screen** — the walk
+        // through this surface should include tapping one and reading why the
+        // balance may be understated, without first having to know that the
+        // other outlet is the one carrying it.
+        //
+        // The degrees still differ, which is the state the tablet management
+        // surface is for: Kanchrapara has said nothing for two days AND holds
+        // three, while Kalyani reported a minute ago and holds one.
+        lastReportedUnsent:
+          device.id === DEMO_KANCHRAPARA_DEVICE_ID
+            ? 3
+            : device.id === DEMO_COUNTER_DEVICE_ID
+              ? 1
+              : 0,
       })),
     requests: [],
     shifts: [],

@@ -142,6 +142,10 @@ describe('the drawer opens on a balance', () => {
     await user.click(within(row).getByRole('button', { name: /show the detail/i }))
     await user.click(screen.getByRole('button', { name: /what a first count means/i }))
     expect(screen.getByText(/the drawer began here/i)).toBeInTheDocument()
+
+    // And it arrives as a modal over the surface rather than as text pushed
+    // into the row, so nothing the reader was looking at moves.
+    expect(screen.getByTestId('explain-close')).toBeInTheDocument()
   })
 })
 
@@ -910,5 +914,82 @@ describe('the strip signs its figures by one rule', () => {
     await waitFor(() => expect(screen.getByTestId('expenses-since')).toBeInTheDocument())
     expect(screen.getByTestId('expenses-since').textContent).toMatch(/^\+/)
     expect(screen.getByTestId('expenses-since').className).toMatch(/text-success/)
+  })
+})
+
+/**
+ * Explanations, after the owner called the old shape bad UI on 2026-08-29.
+ *
+ * It was a separate ⓘ button beside each chip, expanding a paragraph in place.
+ * A row of chips each trailing its own icon reads as clutter rather than as an
+ * offer, and expanding in place shoved the figures below it down the screen —
+ * so on a balance card with three explainable chips, asking about one moved the
+ * numbers the reader was looking at.
+ */
+describe('an explanation is the chip itself, and opens over the surface', () => {
+  it('carries no separate info button, and names the fact before the offer', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await waitFor(() => expect(screen.getByTestId('open-count')).toBeInTheDocument())
+    await user.click(screen.getByTestId('open-count'))
+
+    const trigger = screen.getByTestId('tolerance-window').closest('button')!
+
+    // The fact is the visible name; the offer is appended for a screen reader,
+    // rather than an `aria-label` replacing the fact entirely.
+    expect(trigger).toHaveAccessibleName(
+      /give or take 15 min, explain: why every count time is approximate/i,
+    )
+
+    // Nothing is revealed until it is asked for.
+    expect(screen.queryByText(/counting takes a few minutes/i)).not.toBeInTheDocument()
+
+    await user.click(trigger)
+    expect(screen.getByText(/counting takes a few minutes/i)).toBeInTheDocument()
+
+    // And it closes again, leaving the sheet it was opened over untouched.
+    await user.click(screen.getByTestId('explain-close'))
+    expect(screen.queryByText(/counting takes a few minutes/i)).not.toBeInTheDocument()
+    expect(screen.getByTestId('counted-input')).toBeInTheDocument()
+  })
+})
+
+/**
+ * How many days are uncounted, which the owner caught reading wrong: a count
+ * taken at 23:16 last night showed "2 days uncounted" by nine the next morning.
+ *
+ * The night before HAD been counted. Only the new day is uncounted, and it has
+ * barely started — so the honest number is one, and one is not worth a warning.
+ */
+describe('the uncounted-days warning counts days nobody counted', () => {
+  const withSpan = async (daysCovered: number): Promise<DataAdapters> => {
+    const adapters = createMockAdapters('franchise_admin')
+    const base = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    return {
+      ...adapters,
+      cashDrawer: { ...adapters.cashDrawer, getState: async () => ({ ...base, daysCovered }) },
+    }
+  }
+
+  it('says nothing when the last count was last night', async () => {
+    // The interval spans two business dates — the one that was counted, and
+    // today. One uncounted day, still in progress, and nobody counts at nine in
+    // the morning: a warning that fires every single day is one nobody reads.
+    renderDrawer(await withSpan(2))
+    await waitFor(() => expect(screen.getByTestId('balance-chips')).toBeInTheDocument())
+    expect(screen.queryByTestId('days-covered')).not.toBeInTheDocument()
+  })
+
+  it('says nothing when the drawer was counted earlier the same day', async () => {
+    renderDrawer(await withSpan(1))
+    await waitFor(() => expect(screen.getByTestId('balance-chips')).toBeInTheDocument())
+    expect(screen.queryByTestId('days-covered')).not.toBeInTheDocument()
+  })
+
+  it('warns once a whole day has passed with no count, and excludes the counted one', async () => {
+    // Three business dates: the counted one, one skipped entirely, and today.
+    renderDrawer(await withSpan(3))
+    await waitFor(() => expect(screen.getByTestId('balance-chips')).toBeInTheDocument())
+    expect(screen.getByTestId('days-covered').textContent).toMatch(/2 days uncounted/i)
   })
 })
