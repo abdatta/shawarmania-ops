@@ -40,6 +40,37 @@ const bill: BillingBill = {
 }
 
 describe('manager bill detail', () => {
+  it('omits a redundant current year from operational timeline timestamps', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-30T12:00:00.000Z'))
+
+    try {
+      render(
+        <ManagerBillDetail
+          bill={bill}
+          cancelling={false}
+          reason=""
+          onReasonChange={vi.fn()}
+          onStartCancelling={vi.fn()}
+          onKeepBill={vi.fn()}
+          onConfirmCancellation={vi.fn()}
+        />,
+      )
+
+      const timeline = screen.getByText('Bill timeline').closest('details')!
+      const ordered = within(timeline).getByText('Ordered').parentElement!
+      const paid = within(timeline).getByText('Paid').parentElement!
+      const revenueDay = within(timeline).getByText('Revenue day').parentElement!
+      expect(ordered).toHaveTextContent('12 Aug, 05:30 pm')
+      expect(ordered).not.toHaveTextContent('2026')
+      expect(paid).toHaveTextContent('12 Aug, 05:35 pm')
+      expect(paid).not.toHaveTextContent('2026')
+      expect(revenueDay).toHaveTextContent('12 Aug 2026')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('shows complete structured facts while keeping cancellation progressive', async () => {
     const user = userEvent.setup()
     const start = vi.fn()

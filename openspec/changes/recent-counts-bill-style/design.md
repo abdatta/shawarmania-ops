@@ -32,8 +32,11 @@ the same heading-plus-card stack.
 
 Count timestamps use the shared `formatDayTime` rule: today and yesterday keep
 their relative labels, other dates in the current calendar year render as
-`28 Aug, 10:00 pm`, and dates from older years retain the year. The comparison
-uses the display timezone (`Asia/Kolkata`), not the browser's local timezone.
+`28 Aug, 10:00 pm`, and dates from older years retain the year. That shared rule
+also serves Billing history, bill timelines, Open orders, sync status and My
+shift; the compact current-year presentation is intentional on all of them.
+The comparison uses the display timezone (`Asia/Kolkata`), not the browser's
+local timezone.
 
 ## D7 — Expanded cards explain the count without echoing the summary
 

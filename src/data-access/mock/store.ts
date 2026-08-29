@@ -1203,6 +1203,10 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       adjusted_at: instantAt(businessDate(2), '09:20'),
     },
   ]
+  // The live command records the same last-correcting account on the
+  // observation after appending the immutable adjustment row. Keep demo data
+  // shaped like that result so every reader sees one correction story.
+  adjustedDrawerObservation.corrected_by = OWNER_ID
 
   /**
    * The drift check, mirroring the manual ledger's.

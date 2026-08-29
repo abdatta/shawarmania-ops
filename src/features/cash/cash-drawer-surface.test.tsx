@@ -8,7 +8,7 @@ import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock/fixtures/outlets'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
-import { formatPaise } from '@/domain'
+import { formatDayTime, formatPaise } from '@/domain'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
@@ -862,6 +862,17 @@ describe('every count time is approximate', () => {
  * for.
  */
 describe('the count history is a paged list of disclosures', () => {
+  it('reserves the heading and metric-bearing card stack while the drawer loads', () => {
+    renderDrawer()
+
+    const loading = screen.getByTestId('drawer-loading')
+    const visualBlocks = Array.from(loading.children).filter(
+      (child) => !child.classList.contains('sr-only'),
+    )
+    expect(visualBlocks).toHaveLength(6)
+    expect(loading.querySelectorAll('[class*="min-h-20"]')).toHaveLength(3)
+  })
+
   it('carries the verdict closed and everything else inside', async () => {
     const user = userEvent.setup()
     renderDrawer()
@@ -913,6 +924,26 @@ describe('the count history is a paged list of disclosures', () => {
     expect(summary).toHaveTextContent(/by Demo Manager/i)
   })
 
+  it('shows a signed top-up and carries it forward into a larger Left amount', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const state = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const toppedUp = state.recentObservations.find((observation) =>
+      observation.ownCashOut.some((movement) => movement.amountPaise < 0),
+    )!
+    const collected = toppedUp.ownCashOut.reduce((sum, movement) => sum + movement.amountPaise, 0)
+    const left = toppedUp.countedTotalPaise - collected
+
+    renderDrawer(adapters)
+    await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+
+    const summary = within(screen.getByTestId(`observation-${toppedUp.id}`)).getByRole('button', {
+      name: /show the detail/i,
+    })
+    expect(summary).toHaveTextContent(formatPaise(collected))
+    expect(summary).toHaveTextContent(formatPaise(left))
+    expect(left).toBeGreaterThan(toppedUp.countedTotalPaise)
+  })
+
   it('gives the section heading and each count their own layout boundary', async () => {
     renderDrawer()
     await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
@@ -956,6 +987,39 @@ describe('the count history is a paged list of disclosures', () => {
     expect(detail).not.toHaveTextContent(/Demo Manager/i)
   })
 
+  it('preserves delayed-save, away and note context in the redesigned detail', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const state = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const delayed = state.recentObservations.find(
+      (observation) => observation.recordedAt !== observation.countedAt && observation.awayReason,
+    )!
+    const noted = state.recentObservations.find((observation) => observation.note)!
+
+    renderDrawer(adapters)
+    await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+
+    await user.click(
+      within(screen.getByTestId(`observation-${delayed.id}`)).getByRole('button', {
+        name: /show the detail/i,
+      }),
+    )
+    const delayedDetail = screen.getByTestId(`observation-detail-${delayed.id}`)
+    expect(delayedDetail).toHaveTextContent(/Saved/i)
+    expect(delayedDetail).toHaveTextContent(formatDayTime(delayed.recordedAt))
+    expect(delayedDetail).toHaveTextContent(/Why away/i)
+    expect(delayedDetail).toHaveTextContent(delayed.awayReason!)
+
+    await user.click(
+      within(screen.getByTestId(`observation-${noted.id}`)).getByRole('button', {
+        name: /show the detail/i,
+      }),
+    )
+    const notedDetail = screen.getByTestId(`observation-detail-${noted.id}`)
+    expect(notedDetail).toHaveTextContent(/Note/i)
+    expect(notedDetail).toHaveTextContent(noted.note!)
+  })
+
   it('shows seeded fix and adjustment details without repeating the closed summary', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters('franchise_admin')
@@ -971,17 +1035,22 @@ describe('the count history is a paged list of disclosures', () => {
 
     const newestRow = screen.getByTestId(`observation-${newest.id}`)
     await user.click(within(newestRow).getByRole('button', { name: /show the detail/i }))
-    expect(screen.getByTestId(`observation-detail-${newest.id}`)).toHaveTextContent(
-      /Last fixed by/i,
-    )
+    const newestDetail = screen.getByTestId(`observation-detail-${newest.id}`)
+    expect(newestDetail).toHaveTextContent(/Last fixed by/i)
+    expect(newestDetail).toHaveTextContent(newest.correctedByName!)
 
     const adjustedRow = screen.getByTestId(`observation-${adjusted.id}`)
     await user.click(within(adjustedRow).getByRole('button', { name: /show the detail/i }))
     const detail = screen.getByTestId(`observation-detail-${adjusted.id}`)
     const history = screen.getByTestId(`observation-adjustment-${adjustment.id}`)
+    expect(within(adjustedRow).getByRole('button', { name: /hide the detail/i })).toHaveTextContent(
+      formatPaise(adjusted.countedTotalPaise),
+    )
     expect(detail).toHaveTextContent(/Adjusted to/i)
     expect(detail).toHaveTextContent(formatPaise(adjustment.correctedCountedTotalPaise))
     expect(detail).toHaveTextContent(adjustment.reason)
+    expect(detail).toHaveTextContent(adjustment.adjustedByName!)
+    expect(detail).toHaveTextContent(formatDayTime(adjustment.adjustedAt))
     expect(history).not.toHaveTextContent(/Previously counted/i)
     expect(history).not.toHaveTextContent(formatPaise(adjustment.originalCountedTotalPaise))
   })
