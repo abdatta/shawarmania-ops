@@ -95,6 +95,7 @@ export {
   type FenceVerdict,
 } from './geo'
 export { formatPaise, NotPaiseError, paiseToRupees, rupeesToPaise } from './money'
+export { COUNTER_TELEMETRY_FRESH_MS, isCounterTelemetryFresh } from './counter-telemetry'
 export { normalizeCategory, reservedCategoryConflict } from './expense-category'
 export {
   foldCategory,

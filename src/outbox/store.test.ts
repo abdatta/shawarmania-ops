@@ -16,14 +16,18 @@ function databaseName(): string {
   return name
 }
 
-function command(commandId = crypto.randomUUID(), payloadHash = 'a'.repeat(64)): BillingCommand {
+function command(
+  commandId = crypto.randomUUID(),
+  payloadHash = 'a'.repeat(64),
+  createdAt = '2026-08-11T12:00:00.000Z',
+): BillingCommand {
   return {
     commandId,
     schemaVersion: 1,
     tabletId: 'tablet-1',
     shiftId: 'shift-1',
     type: 'cancel_order',
-    createdAt: '2026-08-11T12:00:00.000Z',
+    createdAt,
     payload: { orderId: 'order-1', reason: 'Customer changed their mind' },
     payloadHash,
   }
@@ -47,6 +51,49 @@ afterEach(async () => {
 })
 
 describe('BillingDeliveryStore', () => {
+  it('summarises every unresolved state and the actual oldest creation time', async () => {
+    const database = new BillingDeliveryDatabase(databaseName())
+    const store = new BillingDeliveryStore(database)
+    expect(await store.unresolvedSummary('tablet-1')).toEqual({
+      count: 0,
+      oldestCreatedAtMs: null,
+    })
+
+    const states = ['pending', 'held', 'retrying', 'needs_attention'] as const
+    const instants = [
+      '2026-08-11T12:04:00.000Z',
+      '2026-08-11T12:01:00.000Z',
+      '2026-08-11T12:03:00.000Z',
+      '2026-08-11T12:02:00.000Z',
+    ]
+    for (const [index, state] of states.entries()) {
+      const serverCommand = command(crypto.randomUUID(), `${index}`.repeat(64), instants[index])
+      await store.accept({
+        ...acceptedInput(serverCommand),
+        eligibleAtMs: state === 'held' ? NOW + 10_000 : NOW,
+      })
+      if (state === 'retrying') await store.scheduleRetry(serverCommand.commandId, NOW + 20_000)
+      if (state === 'needs_attention') {
+        await store.recordResult(
+          serverCommand.commandId,
+          { status: 'order_not_open', commandId: serverCommand.commandId },
+          NOW + 1,
+        )
+      }
+    }
+
+    expect(await store.unresolvedSummary('tablet-1')).toEqual({
+      count: 4,
+      oldestCreatedAtMs: Date.parse('2026-08-11T12:01:00.000Z'),
+    })
+    expect(await store.countUnresolved('tablet-1')).toBe(4)
+    expect(await store.unresolvedSummary('another-tablet')).toEqual({
+      count: 0,
+      oldestCreatedAtMs: null,
+    })
+    database.close()
+  })
+
   it('acknowledges only after the envelope and every dependency commit together', async () => {
     const database = new BillingDeliveryDatabase(databaseName())
     const store = new BillingDeliveryStore(database)

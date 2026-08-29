@@ -360,6 +360,15 @@ dependency order; restart with the chain unsent; response loss after each server
 commit; and eventual exactly-once settlement. Database tests also prove original
 and correction rows reject update/delete and remain outlet-isolated.
 
+Counter telemetry coverage must include every retained outbox state, a lost
+final zero repaired by the minute heartbeat, foreground and IndexedDB-change
+triggers, cleanup on stop, and the commit/response-loss/restart/replay path.
+Database and real-REST probes cover both heartbeat signatures, rich positive and
+zero reports, human/anonymous/removed refusal, self-only tablet writes, and the
+versioned management snapshot. The drawer truth table is fresh-zero clear,
+fresh-positive unresolved, and stale-or-absent out of touch regardless of its
+last integer.
+
 ## What only the real transport can prove
 
 `supabase/tests/rest/attendance-adapter.test.ts` runs the real adapters against the real stack, and it exists because of a class of bug no other layer can see. A command's payload is an object here and JSON on the wire, so **the mock adapter and the component suites are handed something the database never receives.** A key whose value is `undefined` survives the mock and vanishes over HTTP.

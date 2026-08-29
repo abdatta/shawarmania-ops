@@ -57,6 +57,7 @@ export const counterDeviceFixtures: Tables<'counter_devices'>[] = [
     set_up_by: null,
     last_seen_at: null,
     last_reported_unsent: 0,
+    last_reported_oldest_unresolved_at: null,
     removed_at: null,
   },
   {
@@ -67,6 +68,7 @@ export const counterDeviceFixtures: Tables<'counter_devices'>[] = [
     set_up_by: null,
     last_seen_at: null,
     last_reported_unsent: 0,
+    last_reported_oldest_unresolved_at: null,
     removed_at: null,
   },
 ]

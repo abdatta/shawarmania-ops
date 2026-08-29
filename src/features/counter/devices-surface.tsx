@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { LoadingFigures } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
 import { DataActionError, type CounterDeviceOperationalSnapshot } from '@/data-access/adapters'
-import { formatDateTime } from '@/domain'
+import { formatDateTime, isCounterTelemetryFresh } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
 import { holdsRole } from '@/session/session'
@@ -29,14 +29,6 @@ import { holdsRole } from '@/session/session'
  * surface offers a setup code only where there is room for one. The refusal is
  * still Postgres's; this only avoids offering an act that will fail.
  */
-
-/** Beyond this, "last reported" is old enough to be worth flagging as stale. */
-const STALE_AFTER_MS = 30 * 60 * 1000
-
-function isStale(lastSeenAt: string | null): boolean {
-  if (!lastSeenAt) return true
-  return Date.now() - Date.parse(lastSeenAt) > STALE_AFTER_MS
-}
 
 export function DevicesSurface() {
   const { counter, outlets } = useAdapters()
@@ -271,10 +263,17 @@ export function DevicesSurface() {
                       <p data-testid="device-telemetry">
                         {device.lastSeenAt
                           ? `Last reported ${formatDateTime(device.lastSeenAt)}: ${
-                              device.lastReportedUnsent
-                            } not sent yet.`
+                              device.lastReportedUnresolved
+                            } unresolved${
+                              device.lastReportedUnresolved > 0 &&
+                              device.lastReportedOldestUnresolvedAt
+                                ? `, oldest since ${formatDateTime(
+                                    device.lastReportedOldestUnresolvedAt,
+                                  )}`
+                                : ''
+                            }.`
                           : 'This tablet has never reported.'}
-                        {isStale(device.lastSeenAt) && (
+                        {!isCounterTelemetryFresh(device.lastSeenAt) && (
                           <span className="ml-1 font-semibold text-warning">
                             Out of touch — treat these figures as old.
                           </span>
@@ -381,8 +380,8 @@ export function DevicesSurface() {
           removing
             ? 'This is permanent. Any shift open on it ends immediately, and it cannot be paused ' +
               'or brought back — setting it up again needs a fresh code typed at the counter.' +
-              (removing.lastReportedUnsent > 0
-                ? ` It last reported ${removing.lastReportedUnsent} not sent yet; removing it does ` +
+              (removing.lastReportedUnresolved > 0
+                ? ` It last reported ${removing.lastReportedUnresolved} unresolved; removing it does ` +
                   'not delete that work, but nothing else can send it.'
                 : '')
             : ''

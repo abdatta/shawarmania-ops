@@ -1283,6 +1283,13 @@ removed-device refusal and grants. Regenerate `database.types.ts` after reset
 and test both signatures over real HTTP. Do not let a service-role key or an
 envelope payload enter this path.
 
+The existing management snapshot's table return type cannot be changed with
+`create or replace function`. Preserve it and add
+`counter_operations_snapshot_v2(outlet_ids[])`, which wraps the original
+authorised, server-coherent read and joins the new nullable telemetry fact.
+Current adapters use V2; the deployed V1 remains callable during a rolling
+publication without a destructive drop/recreate boundary.
+
 An unknown oldest instant is rendered as unknown, never inferred from
 `last_seen_at`. Client clocks can be imperfect, so the oldest instant is
 evidence from the local envelope rather than a server boundary used to accept

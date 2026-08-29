@@ -1341,7 +1341,7 @@ export interface BillingCommandAdapter {
 /**
  * One tablet, as the management surface reads it.
  *
- * `lastSeenAt` and `lastReportedUnsent` are **what the tablet last said**, never
+ * `lastSeenAt` and `lastReportedUnresolved` are **what the tablet last said**, never
  * what is true now: they are written by the tablet's own heartbeat, so a tablet
  * that is switched off, offline or broken reports nothing at all and its figures
  * simply stop moving. The surface says "as of" for that reason, and stale
@@ -1353,7 +1353,9 @@ export interface CounterDeviceSummary {
   label: string
   setUpAt: string
   lastSeenAt: string | null
-  lastReportedUnsent: number
+  lastReportedUnresolved: number
+  /** Null for a clear report and for legacy positive reports that did not carry it. */
+  lastReportedOldestUnresolvedAt: string | null
 }
 
 /**
@@ -1501,8 +1503,8 @@ export interface CounterAdapter {
    * silently dead channel cannot leave prices or open work stale all evening.
    */
   subscribeToOutletBilling(outletId: string, onChange: () => void): () => void
-  /** The tablet's heartbeat: what it last said about itself. */
-  reportState(unsent: number): Promise<void>
+  /** The tablet's heartbeat: what it last said about unresolved local work. */
+  reportState(unresolved: number, oldestUnresolvedAt: string | null): Promise<void>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

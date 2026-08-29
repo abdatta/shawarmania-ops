@@ -20,6 +20,9 @@ export default defineConfig({
       // service-role key, so it runs in its own phase — see
       // vitest.drawer-writes.config.ts.
       'supabase/tests/rest/zz-cash-drawer-writes.test.ts',
+      // Mutates counter telemetry and restores it with the service-role key.
+      // Its dedicated phase also injects that key before Vitest collects it.
+      'supabase/tests/rest/zz-counter-telemetry.test.ts',
       // Imports the real adapter, which resolves `@/domain`. This config
       // declares no alias, so collecting it here fails to load the module
       // entirely — a red file with nothing to do with tenancy. It has its own

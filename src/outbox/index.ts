@@ -14,6 +14,7 @@ export {
   BillingDeliveryStore,
   BillingDeliveryStoreError,
   type AcceptBillingCommandInput,
+  type BillingUnresolvedSummary,
   type ResolveBillingAttentionInput,
 } from './store'
 export {

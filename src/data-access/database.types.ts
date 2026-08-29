@@ -1681,6 +1681,7 @@ export type Database = {
         Row: {
           id: string
           label: string
+          last_reported_oldest_unresolved_at: string | null
           last_reported_unsent: number
           last_seen_at: string | null
           outlet_id: string
@@ -1691,6 +1692,7 @@ export type Database = {
         Insert: {
           id: string
           label: string
+          last_reported_oldest_unresolved_at?: string | null
           last_reported_unsent?: number
           last_seen_at?: string | null
           outlet_id: string
@@ -1701,6 +1703,7 @@ export type Database = {
         Update: {
           id?: string
           label?: string
+          last_reported_oldest_unresolved_at?: string | null
           last_reported_unsent?: number
           last_seen_at?: string | null
           outlet_id?: string
@@ -3885,6 +3888,28 @@ export type Database = {
           upi_total_paise: number
         }[]
       }
+      counter_operations_snapshot_v2: {
+        Args: { p_outlet_ids: string[] }
+        Returns: {
+          bill_count: number
+          business_date: string
+          cash_total_paise: number
+          device_id: string
+          drawer_cash_paise: number
+          label: string
+          last_reported_oldest_unresolved_at: string
+          last_reported_unsent: number
+          last_seen_at: string
+          open_order_count: number
+          opened_at: string
+          operator_name: string
+          outlet_id: string
+          read_at: string
+          set_up_at: string
+          shift_id: string
+          upi_total_paise: number
+        }[]
+      }
       create_billing_order: {
         Args: {
           p_command_id?: string
@@ -4384,10 +4409,12 @@ export type Database = {
           ledger_rows_moved: number
         }[]
       }
-      report_counter_device_state: {
-        Args: { p_unsent: number }
-        Returns: string
-      }
+      report_counter_device_state:
+        | {
+            Args: { p_oldest_unresolved_at: string; p_unresolved: number }
+            Returns: string
+          }
+        | { Args: { p_unsent: number }; Returns: string }
       request_counter_shift: {
         Args: {
           p_code_hash: string

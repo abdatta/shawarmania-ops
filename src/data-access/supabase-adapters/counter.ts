@@ -91,6 +91,7 @@ interface OperationsRow {
   set_up_at: string
   last_seen_at: string | null
   last_reported_unsent: number
+  last_reported_oldest_unresolved_at: string | null
   shift_id: string | null
   operator_name: string | null
   opened_at: string | null
@@ -201,7 +202,9 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
     async listDevices(): Promise<CounterDeviceSummary[]> {
       const { data, error } = await client
         .from('counter_devices')
-        .select('id, outlet_id, label, set_up_at, last_seen_at, last_reported_unsent')
+        .select(
+          'id, outlet_id, label, set_up_at, last_seen_at, last_reported_unsent, last_reported_oldest_unresolved_at',
+        )
         .is('removed_at', null)
         .order('label')
       if (error) throw error
@@ -211,14 +214,15 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
         label: row.label,
         setUpAt: row.set_up_at,
         lastSeenAt: row.last_seen_at,
-        lastReportedUnsent: row.last_reported_unsent,
+        lastReportedUnresolved: row.last_reported_unsent,
+        lastReportedOldestUnresolvedAt: row.last_reported_oldest_unresolved_at,
       }))
     },
 
     async readDeviceOperations(
       outletIds: readonly string[],
     ): Promise<CounterDeviceOperationalSnapshot[]> {
-      const { data, error } = await client.rpc('counter_operations_snapshot', {
+      const { data, error } = await client.rpc('counter_operations_snapshot_v2', {
         p_outlet_ids: [...outletIds],
       })
       if (error) throw error
@@ -242,7 +246,8 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
           label: row.label,
           setUpAt: row.set_up_at,
           lastSeenAt: row.last_seen_at,
-          lastReportedUnsent: row.last_reported_unsent,
+          lastReportedUnresolved: row.last_reported_unsent,
+          lastReportedOldestUnresolvedAt: row.last_reported_oldest_unresolved_at,
           readAt: row.read_at,
           operations,
         }
@@ -398,8 +403,13 @@ export function createSupabaseCounterAdapter(client: SupabaseClient<Database>): 
      * report is a tablet that is having a bad time already, and the management
      * surface reads the absence correctly as stale telemetry.
      */
-    async reportState(unsent: number): Promise<void> {
-      await client.rpc('report_counter_device_state', { p_unsent: unsent })
+    async reportState(unresolved: number, oldestUnresolvedAt: string | null): Promise<void> {
+      await client.rpc(
+        'report_counter_device_state',
+        oldestUnresolvedAt === null
+          ? { p_unsent: unresolved }
+          : { p_unresolved: unresolved, p_oldest_unresolved_at: oldestUnresolvedAt },
+      )
     },
   }
 }

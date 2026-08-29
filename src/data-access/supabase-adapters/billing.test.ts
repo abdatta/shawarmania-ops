@@ -647,6 +647,60 @@ async function queuePayment(orderId: string, commandId: string) {
 }
 
 describe('the delivery handoff cannot lose accepted work', () => {
+  it('repairs a lost final heartbeat after a committed command replays on restart', async () => {
+    const commandId = '10000000-0000-4000-a000-0000000000d1'
+    const { database, store } = await queuePayment(PREPARED_ORDER_ID, commandId)
+    const committed = new Set<string>()
+    const reportedCount = (args: Record<string, unknown> | undefined) =>
+      args?.p_unresolved ?? args?.p_unsent
+    const firstReports: Record<string, unknown>[] = []
+    const firstRpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === 'report_counter_device_state') {
+        firstReports.push(args)
+        return { data: 'ok', error: null, status: 200 }
+      }
+      committed.add(String(args.p_command_id))
+      // The database committed, but the response never reached the tablet.
+      return { data: null, error: new Error('response lost'), status: 0 }
+    })
+    const first = createSupabaseBillingAdapter(clientWithRpc(firstRpc), session)
+    const stopFirst = first.subscribeCounter(() => undefined)
+
+    await vi.waitFor(() => expect(reportedCount(firstReports.at(-1))).toBe(1))
+    await vi.waitFor(async () =>
+      expect(await database.envelopes.get(commandId)).toMatchObject({ state: 'retrying' }),
+    )
+    stopFirst()
+    await vi.waitFor(() => expect(database.leases.count()).resolves.toBe(0))
+
+    // A restarted online app makes retrying work immediately eligible. The
+    // server recognises the immutable command id and returns replay, not a
+    // second bill.
+    await store.hintRetry(session.device.deviceId, 0)
+    const restartedReports: Record<string, unknown>[] = []
+    const restartedRpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
+      if (name === 'report_counter_device_state') {
+        restartedReports.push(args)
+        return { data: 'ok', error: null, status: 200 }
+      }
+      const id = String(args.p_command_id)
+      return {
+        data: { status: committed.has(id) ? 'replay' : 'accepted', commandId: id },
+        error: null,
+        status: 200,
+      }
+    })
+    const restarted = createSupabaseBillingAdapter(clientWithRpc(restartedRpc), session)
+    const stopRestarted = restarted.subscribeCounter(() => undefined)
+
+    await vi.waitFor(() => expect(reportedCount(restartedReports.at(-1))).toBe(0))
+    expect(await database.envelopes.get(commandId)).toBeUndefined()
+    expect(committed).toEqual(new Set([commandId]))
+
+    stopRestarted()
+    database.close()
+  })
+
   it('keeps a payment accepted mid-refresh off the payable band', async () => {
     const commandId = '10000000-0000-4000-a000-0000000000c1'
     const { database, store } = await queuePayment(PREPARED_ORDER_ID, commandId)

@@ -43,6 +43,16 @@ export interface ResolveBillingAttentionInput {
 }
 
 /**
+ * The smallest safe description of billing work still held by one tablet.
+ * It contains no payload facts: only how many envelopes remain and when the
+ * oldest one was created.
+ */
+export interface BillingUnresolvedSummary {
+  count: number
+  oldestCreatedAtMs: number | null
+}
+
+/**
  * The transactional acknowledgement boundary. This class does not deliver;
  * it only makes a command durable (or proves that it already is) and exposes
  * the records the leader will drain in later tasks.
@@ -68,8 +78,22 @@ export class BillingDeliveryStore {
     }
   }
 
-  async countUnsent(tabletId: string): Promise<number> {
-    return this.database.envelopes.where('tabletId').equals(tabletId).count()
+  async unresolvedSummary(tabletId: string): Promise<BillingUnresolvedSummary> {
+    const envelopes = await this.database.envelopes.where('tabletId').equals(tabletId).toArray()
+    return {
+      count: envelopes.length,
+      oldestCreatedAtMs:
+        envelopes.length === 0
+          ? null
+          : envelopes.reduce(
+              (oldest, envelope) => Math.min(oldest, envelope.createdAtMs),
+              Number.POSITIVE_INFINITY,
+            ),
+    }
+  }
+
+  async countUnresolved(tabletId: string): Promise<number> {
+    return (await this.unresolvedSummary(tabletId)).count
   }
 
   async listReady(tabletId: string, nowMs: number): Promise<BillingDeliveryEnvelopeRecord[]> {

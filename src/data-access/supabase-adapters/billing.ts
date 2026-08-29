@@ -903,8 +903,15 @@ export function createSupabaseBillingAdapter(
     reporter = new BillingUnsentReporter({
       store,
       tabletId,
-      reportState: async (unsent) => {
-        const { error } = await client.rpc('report_counter_device_state', { p_unsent: unsent })
+      reportState: async ({ count, oldestCreatedAtMs }) => {
+        const args =
+          oldestCreatedAtMs === null
+            ? { p_unsent: count }
+            : {
+                p_unresolved: count,
+                p_oldest_unresolved_at: new Date(oldestCreatedAtMs).toISOString(),
+              }
+        const { error } = await client.rpc('report_counter_device_state', args)
         if (error) throw error
       },
     })
@@ -955,7 +962,7 @@ export function createSupabaseBillingAdapter(
           'A recent payment can still be edited. Wait for its five-minute window, then finish the day.',
         )
       }
-      const locallyUnresolved = await store.countUnsent(session.device.deviceId)
+      const locallyUnresolved = await store.countUnresolved(session.device.deviceId)
       if (locallyUnresolved > 0) {
         throw new BillingActionError(
           'unresolved_operations',
@@ -978,7 +985,7 @@ export function createSupabaseBillingAdapter(
         )
       }
       await drain?.runOnce()
-      const unresolved = await store.countUnsent(session.device.deviceId)
+      const unresolved = await store.countUnresolved(session.device.deviceId)
       if (unresolved > 0) {
         throw new BillingActionError(
           'unresolved_operations',

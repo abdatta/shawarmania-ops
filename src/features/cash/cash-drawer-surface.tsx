@@ -52,10 +52,15 @@ import {
   rupeesToPaise,
 } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
+import { useOnForeground } from '@/features/attention/attention'
 import { cn } from '@/lib/cn'
 import { readPosition, type GeolocationFailureKind, type PositionReading } from '@/lib/geolocation'
 
 import { countAdvice, expectedAtInstant } from './drawer-arithmetic'
+import {
+  classifyDrawerTabletTelemetry,
+  type DrawerTabletTelemetry,
+} from './drawer-tablet-telemetry'
 
 /**
  * The Cash drawer — the surface this business was commissioned to get right, at
@@ -177,10 +182,13 @@ export function CashDrawerSurface() {
    * borrowing an authority the database did not give it is the seam violation
    * this repo's layering exists to prevent.
    */
-  const [unsynced, setUnsynced] = useState<{ count: number; since: string | null }>({
-    count: 0,
-    since: null,
-  })
+  const [tabletTelemetryReading, setTabletTelemetryReading] = useState<{
+    outletId: string
+    value: DrawerTabletTelemetry
+  } | null>(null)
+  const latestTabletRead = useRef(0)
+  const tabletTelemetry =
+    tabletTelemetryReading?.outletId === outletId ? tabletTelemetryReading.value : null
 
   // The count sheet.
   const [counted, setCounted] = useState('')
@@ -275,34 +283,46 @@ export function CashDrawerSurface() {
     }
   }, [outletsAdapter, outletId])
 
+  const loadTabletTelemetry = useCallback(async () => {
+    if (!outletId) return
+    const request = ++latestTabletRead.current
+    try {
+      const devices = await counter.listDevices()
+      if (request === latestTabletRead.current) {
+        setTabletTelemetryReading({
+          outletId,
+          value: classifyDrawerTabletTelemetry(devices, outletId),
+        })
+      }
+    } catch {
+      // Keep the last qualified reading. Telemetry is advisory and never stops
+      // the collector from recording the cash physically in front of them.
+    }
+  }, [counter, outletId])
+
   useEffect(() => {
     if (!outletId) return
-    let active = true
+    const request = ++latestTabletRead.current
     void counter
       .listDevices()
       .then((devices) => {
-        if (!active) return
-        const behind = devices.filter(
-          (device) => device.outletId === outletId && device.lastReportedUnsent > 0,
-        )
-        setUnsynced({
-          count: behind.length,
-          // The OLDEST heartbeat: "since when" is the worst case rather than the
-          // most recent, because that is what says how much cash could be
-          // missing from the expected figure.
-          since:
-            behind
-              .map((device) => device.lastSeenAt)
-              .filter((seen): seen is string => seen !== null)
-              .sort((a, b) => a.localeCompare(b))[0] ?? null,
-        })
+        if (request === latestTabletRead.current) {
+          setTabletTelemetryReading({
+            outletId,
+            value: classifyDrawerTabletTelemetry(devices, outletId),
+          })
+        }
       })
-      // Not something the collector can act on, and it must never stop a count.
-      .catch(() => {})
+      .catch(() => undefined)
     return () => {
-      active = false
+      latestTabletRead.current += 1
     }
   }, [counter, outletId])
+
+  const refreshTabletTelemetry = useCallback(() => {
+    void loadTabletTelemetry()
+  }, [loadTabletTelemetry])
+  useOnForeground(refreshTabletTelemetry)
 
   // Only while the count sheet is open: nowhere else on this surface asks what
   // time it is, and a timer running behind a closed sheet is a wakeup for nothing.
@@ -565,6 +585,7 @@ export function CashDrawerSurface() {
     setCollecting('')
     setAwayReason('')
     setSheet('count')
+    void loadTabletTelemetry()
     void locate()
   }
 
@@ -826,22 +847,40 @@ export function CashDrawerSurface() {
                       </Explain>
                     </>
                   )}
-                  {unsynced.count > 0 && (
+                  {tabletTelemetry && tabletTelemetry.kind !== 'clear' && (
                     <>
                       <Explain
-                        label="what an unsent tablet means for this figure"
+                        label="what tablet reporting means for this figure"
                         explanation={
                           <>
-                            The figure above may be understated by bills a tablet has not sent
-                            {unsynced.since
-                              ? `, last heard from ${formatDateTime(unsynced.since)}`
-                              : ''}
-                            . Count anyway — you are the one holding the cash.
+                            {tabletTelemetry.kind === 'out-of-touch'
+                              ? `The tablet is out of touch${
+                                  tabletTelemetry.reportedAt
+                                    ? `; it last reported ${formatDateTime(
+                                        tabletTelemetry.reportedAt,
+                                      )}`
+                                    : ' and has never completed a report'
+                                }. Its last report said ${tabletTelemetry.unresolvedCount} unresolved billing action${
+                                  tabletTelemetry.unresolvedCount === 1 ? '' : 's'
+                                }, but its current state is unknown.`
+                              : `The tablet reported ${tabletTelemetry.unresolvedCount} unresolved billing action${
+                                  tabletTelemetry.unresolvedCount === 1 ? '' : 's'
+                                }${
+                                  tabletTelemetry.oldestUnresolvedAt
+                                    ? `, the oldest held since ${formatDateTime(
+                                        tabletTelemetry.oldestUnresolvedAt,
+                                      )}`
+                                    : ''
+                                }.`}{' '}
+                            The figure above is provisional and may be understated. Count anyway —
+                            you are the one holding the cash.
                           </>
                         }
                       >
                         <Chip tone="warn" icon={TriangleAlert} data-testid="unsynced-chip">
-                          {unsynced.count} tablet{unsynced.count === 1 ? '' : 's'} behind
+                          {tabletTelemetry.tabletCount} tablet
+                          {tabletTelemetry.tabletCount === 1 ? '' : 's'}{' '}
+                          {tabletTelemetry.kind === 'out-of-touch' ? 'out of touch' : 'unresolved'}
                         </Chip>
                       </Explain>
                     </>

@@ -116,17 +116,24 @@ short-window abuse ledgers. They store hashes of caller IP and submitted
 identifier, never raw addresses, and have no client-readable policy.
 
 **`counter_devices`** — the tablets set up at each counter.
-`id`, `outlet_id`, `label`, `set_up_by`, `set_up_at`, `removed_at`, `last_seen_at`, `last_reported_unsent`.
+`id`, `outlet_id`, `label`, `set_up_by`, `set_up_at`, `removed_at`, `last_seen_at`, `last_reported_unsent`, `last_reported_oldest_unresolved_at`.
 
 `id` **is** the machine's `auth.users.id`. A tablet has no profile and no assignment: it is a machine principal, and what it may reach comes from the shift open on it rather than from anything it is.
 
 At most one active tablet per outlet, by a partial unique index on `(outlet_id) where removed_at is null`. A removed tablet's session must stop working immediately, so every policy it goes through checks `removed_at is null` — and removal is permanent, taking the live shift and any pending request with it in the same transaction.
 
-`last_seen_at` and `last_reported_unsent` are written by the tablet's own heartbeat and are read as **what it last said**, never as what is true now.
+The tablet heartbeat writes `last_seen_at`, the number of locally unresolved
+outbox envelopes and the creation time of the oldest one. The deployed
+`last_reported_unsent` column keeps its name for rolling compatibility, but its
+meaning includes pending, held, retrying and needs-attention envelopes. These
+fields are always read as **what the tablet last said**, never as what is true
+now. A positive legacy heartbeat has an unknown oldest instant; zero clears it.
 
-`counter_operations_snapshot(outlet_ids[])` is the management read boundary over
+`counter_operations_snapshot_v2(outlet_ids[])` is the current management read boundary over
 this hardware. It returns one server-timestamped snapshot of the live shift,
-operator name, bill count, effective Cash and UPI, waiting orders and drawer Cash.
+operator name, heartbeat telemetry, bill count, effective Cash and UPI, waiting
+orders and drawer Cash. The original snapshot remains callable during rolling
+frontend deploys.
 It is not stored state: Cash/UPI are derived through `effective_bill_payments`,
 so a superseded allocation never contributes again. The database refuses every
 caller except an active Super Admin or an assigned Franchise Admin of every

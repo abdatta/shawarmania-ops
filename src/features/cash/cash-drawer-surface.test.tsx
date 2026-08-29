@@ -6,13 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DataAdapters, DrawerObservationRecord } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
-import { OUTLET_KALYANI_ID } from '@/data-access/mock/fixtures/outlets'
+import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from '@/data-access/mock/fixtures/outlets'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
 
 import { CashDrawerSurface } from './cash-drawer-surface'
+import { classifyDrawerTabletTelemetry } from './drawer-tablet-telemetry'
 
 /**
  * The Cash drawer, driven the way a collector drives it.
@@ -80,12 +81,24 @@ const managerSession: Session = {
   persona: personaFixtures.franchise_admin,
 }
 
-function renderDrawer(adapters: DataAdapters = createMockAdapters('franchise_admin')) {
+const ownerSession: Session = {
+  mode: 'demo',
+  userId: personaFixtures.super_admin.profile.id,
+  assignments: personaFixtures.super_admin.assignments,
+  ...deriveSessionScope(personaFixtures.super_admin.assignments),
+  displayName: personaFixtures.super_admin.profile.full_name,
+  persona: personaFixtures.super_admin,
+}
+
+function renderDrawer(
+  adapters: DataAdapters = createMockAdapters('franchise_admin'),
+  session: Session = managerSession,
+) {
   return {
     adapters,
     ...render(
       <MemoryRouter>
-        <SessionContext.Provider value={managerSession}>
+        <SessionContext.Provider value={session}>
           <AdaptersContext.Provider value={adapters}>
             <CashDrawerSurface />
           </AdaptersContext.Provider>
@@ -470,8 +483,13 @@ describe('an unsynced tablet advises and never blocks', () => {
 
     // A tablet at this outlet reporting undelivered bills.
     const devices = await adapters.counter.listDevices()
-    const atOutlet = devices.find((device) => device.lastReportedUnsent === 0) ?? devices[0]
-    const behind = { ...atOutlet!, lastReportedUnsent: 3 }
+    const atOutlet = devices.find((device) => device.lastReportedUnresolved === 0) ?? devices[0]
+    const behind = {
+      ...atOutlet!,
+      lastSeenAt: new Date().toISOString(),
+      lastReportedUnresolved: 3,
+      lastReportedOldestUnresolvedAt: '2026-08-29T01:23:00.000Z',
+    }
     const patched: DataAdapters = {
       ...adapters,
       counter: {
@@ -486,10 +504,10 @@ describe('an unsynced tablet advises and never blocks', () => {
     // The advisory sits on the balance itself, so it is seen before the count
     // sheet is even opened.
     const chip = await screen.findByTestId('unsynced-chip')
-    expect(chip.textContent).toMatch(/1 tablet behind/i)
+    expect(chip.textContent).toMatch(/1 tablet unresolved/i)
 
     await user.click(
-      screen.getByRole('button', { name: /what an unsent tablet means for this figure/i }),
+      screen.getByRole('button', { name: /what tablet reporting means for this figure/i }),
     )
     expect(screen.getByText(/may be understated/i)).toBeInTheDocument()
     expect(screen.getByText(/count anyway/i)).toBeInTheDocument()
@@ -498,6 +516,188 @@ describe('an unsynced tablet advises and never blocks', () => {
     await user.click(screen.getByTestId('open-count'))
     await user.type(screen.getByTestId('counted-input'), '8950')
     expect(screen.getByTestId('save-count')).not.toBeDisabled()
+  })
+
+  it('re-reads when Count opens and lets a fresh zero repair an old warning', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const device = (await adapters.counter.listDevices())[0]!
+    const stale = {
+      ...device,
+      lastSeenAt: '2026-08-28T01:00:00.000Z',
+      lastReportedUnresolved: 0,
+      lastReportedOldestUnresolvedAt: null,
+    }
+    const clear = { ...stale, lastSeenAt: new Date().toISOString() }
+    const listDevices = vi.fn().mockResolvedValueOnce([stale]).mockResolvedValueOnce([clear])
+    renderDrawer({
+      ...adapters,
+      counter: { ...adapters.counter, listDevices },
+    })
+
+    expect((await screen.findByTestId('unsynced-chip')).textContent).toMatch(/out of touch/i)
+    await user.click(screen.getByTestId('open-count'))
+    await waitFor(() => expect(screen.queryByTestId('unsynced-chip')).not.toBeInTheDocument())
+    expect(listDevices).toHaveBeenCalledTimes(2)
+  })
+
+  it('preserves the last qualified warning when a later telemetry read fails', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const device = (await adapters.counter.listDevices())[0]!
+    const unresolved = {
+      ...device,
+      lastSeenAt: new Date().toISOString(),
+      lastReportedUnresolved: 1,
+      lastReportedOldestUnresolvedAt: '2026-08-29T01:23:00.000Z',
+    }
+    const listDevices = vi
+      .fn()
+      .mockResolvedValueOnce([unresolved])
+      .mockRejectedValueOnce(new Error('phone went offline'))
+    renderDrawer({
+      ...adapters,
+      counter: { ...adapters.counter, listDevices },
+    })
+
+    expect((await screen.findByTestId('unsynced-chip')).textContent).toMatch(/unresolved/i)
+    await user.click(screen.getByTestId('open-count'))
+    await waitFor(() => expect(listDevices).toHaveBeenCalledTimes(2))
+    expect(screen.getByTestId('unsynced-chip').textContent).toMatch(/unresolved/i)
+  })
+
+  it('re-reads tablet telemetry when the phone returns to the foreground', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const listDevices = vi.fn(adapters.counter.listDevices)
+    renderDrawer({
+      ...adapters,
+      counter: { ...adapters.counter, listDevices },
+    })
+    await waitFor(() => expect(listDevices).toHaveBeenCalledTimes(1))
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await waitFor(() => expect(listDevices).toHaveBeenCalledTimes(2))
+  })
+
+  it('clears on outlet switch and fences a late response from the old outlet', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('super_admin')
+    const devices = await adapters.counter.listDevices()
+    const kalyani = devices.find((device) => device.outletId === OUTLET_KALYANI_ID)!
+    const kanchrapara = devices.find((device) => device.outletId === OUTLET_KANCHRAPARA_ID)!
+    let resolveKalyani!: (value: typeof devices) => void
+    const delayedKalyani = new Promise<typeof devices>((resolve) => {
+      resolveKalyani = resolve
+    })
+    const listDevices = vi
+      .fn()
+      .mockReturnValueOnce(delayedKalyani)
+      .mockResolvedValueOnce([
+        {
+          ...kanchrapara,
+          lastSeenAt: new Date().toISOString(),
+          lastReportedUnresolved: 0,
+          lastReportedOldestUnresolvedAt: null,
+        },
+      ])
+    renderDrawer({ ...adapters, counter: { ...adapters.counter, listDevices } }, ownerSession)
+
+    await user.click(await screen.findByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
+    await waitFor(() => expect(listDevices).toHaveBeenCalledTimes(2))
+    expect(screen.queryByTestId('unsynced-chip')).not.toBeInTheDocument()
+
+    resolveKalyani([
+      {
+        ...kalyani,
+        lastSeenAt: new Date().toISOString(),
+        lastReportedUnresolved: 1,
+        lastReportedOldestUnresolvedAt: '2026-08-29T01:23:00.000Z',
+      },
+    ])
+    await Promise.resolve()
+    expect(screen.queryByTestId('unsynced-chip')).not.toBeInTheDocument()
+  })
+})
+
+describe('drawer tablet telemetry truth table', () => {
+  const device = {
+    id: 'tablet-1',
+    outletId: OUTLET_KALYANI_ID,
+    label: 'Counter tablet',
+    setUpAt: '2026-08-01T00:00:00.000Z',
+    lastSeenAt: '2026-08-29T10:00:00.000Z',
+    lastReportedUnresolved: 0,
+    lastReportedOldestUnresolvedAt: null,
+  }
+  const now = Date.parse('2026-08-29T10:10:00.000Z')
+
+  it('treats only a fresh zero as clear', () => {
+    expect(classifyDrawerTabletTelemetry([device], OUTLET_KALYANI_ID, now)).toEqual({
+      kind: 'clear',
+    })
+  })
+
+  it('qualifies a fresh positive report with its actual oldest unresolved instant', () => {
+    expect(
+      classifyDrawerTabletTelemetry(
+        [
+          {
+            ...device,
+            lastReportedUnresolved: 2,
+            lastReportedOldestUnresolvedAt: '2026-08-29T09:45:00.000Z',
+          },
+        ],
+        OUTLET_KALYANI_ID,
+        now,
+      ),
+    ).toMatchObject({
+      kind: 'unresolved',
+      tabletCount: 1,
+      unresolvedCount: 2,
+      oldestUnresolvedAt: '2026-08-29T09:45:00.000Z',
+    })
+  })
+
+  it.each([
+    ['an old zero', { ...device, lastSeenAt: '2026-08-29T09:00:00.000Z' }],
+    ['a missing report', { ...device, lastSeenAt: null }],
+  ])('treats %s as out of touch rather than clear', (_case, reading) => {
+    expect(classifyDrawerTabletTelemetry([reading], OUTLET_KALYANI_ID, now)).toMatchObject({
+      kind: 'out-of-touch',
+      tabletCount: 1,
+      unresolvedCount: 0,
+    })
+  })
+
+  it('treats a stale positive as out of touch and keeps its last count', () => {
+    expect(
+      classifyDrawerTabletTelemetry(
+        [
+          {
+            ...device,
+            lastSeenAt: '2026-08-29T09:00:00.000Z',
+            lastReportedUnresolved: 4,
+            lastReportedOldestUnresolvedAt: '2026-08-29T08:30:00.000Z',
+          },
+        ],
+        OUTLET_KALYANI_ID,
+        now,
+      ),
+    ).toMatchObject({ kind: 'out-of-touch', unresolvedCount: 4 })
+  })
+
+  it('does not invent an oldest time for a positive legacy report', () => {
+    expect(
+      classifyDrawerTabletTelemetry(
+        [{ ...device, lastReportedUnresolved: 1 }],
+        OUTLET_KALYANI_ID,
+        now,
+      ),
+    ).toMatchObject({ kind: 'unresolved', oldestUnresolvedAt: null })
   })
 })
 

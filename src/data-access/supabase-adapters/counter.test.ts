@@ -187,6 +187,7 @@ describe('the remote counter snapshot', () => {
           set_up_at: '2026-08-01T10:00:00.000Z',
           last_seen_at: '2026-08-12T10:04:00.000Z',
           last_reported_unsent: 0,
+          last_reported_oldest_unresolved_at: null,
           shift_id: 'shift-1',
           operator_name: 'Counter Biller',
           opened_at: '2026-08-12T06:00:00.000Z',
@@ -211,7 +212,8 @@ describe('the remote counter snapshot', () => {
         label: 'Kalyani counter tablet',
         setUpAt: '2026-08-01T10:00:00.000Z',
         lastSeenAt: '2026-08-12T10:04:00.000Z',
-        lastReportedUnsent: 0,
+        lastReportedUnresolved: 0,
+        lastReportedOldestUnresolvedAt: null,
         readAt: '2026-08-12T10:05:00.000Z',
         operations: {
           shiftId: 'shift-1',
@@ -226,7 +228,7 @@ describe('the remote counter snapshot', () => {
         },
       },
     ])
-    expect(rpc).toHaveBeenCalledWith('counter_operations_snapshot', {
+    expect(rpc).toHaveBeenCalledWith('counter_operations_snapshot_v2', {
       p_outlet_ids: ['outlet-1'],
     })
   })

@@ -88,12 +88,18 @@ export function createDemoCounter(): DemoCounter {
         // The degrees still differ, which is the state the tablet management
         // surface is for: Kanchrapara has said nothing for two days AND holds
         // three, while Kalyani reported a minute ago and holds one.
-        lastReportedUnsent:
+        lastReportedUnresolved:
           device.id === DEMO_KANCHRAPARA_DEVICE_ID
             ? 3
             : device.id === DEMO_COUNTER_DEVICE_ID
               ? 1
               : 0,
+        lastReportedOldestUnresolvedAt:
+          device.id === DEMO_COUNTER_DEVICE_ID
+            ? new Date(Date.now() - 5 * 60_000).toISOString()
+            : device.id === DEMO_KANCHRAPARA_DEVICE_ID
+              ? new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+              : null,
       })),
     requests: [],
     shifts: [],

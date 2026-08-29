@@ -143,6 +143,14 @@ fallback. Exact replay, durable refusals and correction/discard traces all land
 back in the same store. Detail and failure modes are in
 [Offline And Sync](OFFLINE_AND_SYNC.md).
 
+A separate payload-free reporter summarises every envelope the store retains —
+including needs-attention work — as count plus oldest creation instant. It reads
+Dexie on startup, store change, a one-minute tablet heartbeat and foreground;
+report delivery is serial and coalesced, but failure never enters the billing
+path. The database stamps the report time. Management readers therefore receive
+evidence with an age rather than an integer that can remain authoritative after
+the tablet disappears.
+
 A settled bill remains append-only. A tender correction is a new command and a
 new sequential correction revision with a complete replacement Cash/UPI
 allocation; it never updates the bill or its original payment rows. Every reader
@@ -162,7 +170,7 @@ count.
 The management **Tablets** surface follows the opposite freshness contract. One
 RLS-scoped database function returns each requested tablet, its live shift and
 operator, and that counter's bill count, effective Cash/UPI totals, waiting
-orders and drawer Cash with one server reading time. The function admits only an
+orders, drawer Cash and unresolved telemetry with one server reading time. The function admits only an
 active Super Admin or the outlet's assigned Franchise Admin and exposes no
 customer or bill contents. A phone reads on open and on an explicit **Re-read**;
 it has no subscription, poll or timer, so every figure stays visibly tied to the

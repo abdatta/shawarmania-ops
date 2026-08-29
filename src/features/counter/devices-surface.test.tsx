@@ -286,7 +286,7 @@ describe('the Tablets surface', () => {
     await user.click(await screen.findByRole('button', { name: /^remove$/i }))
 
     const consequence = await screen.findByText(/This is permanent/i)
-    expect(consequence).toHaveTextContent(/3 not sent yet/i)
+    expect(consequence).toHaveTextContent(/3 unresolved/i)
     expect(consequence).toHaveTextContent(/nothing else can send it/i)
   })
 })

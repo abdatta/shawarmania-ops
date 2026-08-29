@@ -124,6 +124,14 @@ activity on foreground, and Realtime events for menu, orders and bills are only
 nudges to make the same authorised reads. A silent subscription therefore cannot
 leave a counter stale for the rest of its shift.
 
+**The tablet's unresolved heartbeat repairs itself.** It reports the count of
+every retained envelope and the oldest creation instant on startup, on any
+IndexedDB change, every minute while the counter is mounted, and on return to
+the foreground. Every trigger re-reads IndexedDB; no cached zero is resent.
+Heartbeat transport failure never blocks billing, and the next trigger retries.
+This closes the response-loss case where the server accepted the final command
+but the last zero report disappeared and no later queue change occurred.
+
 ## Conflicts
 
 There are fewer than you would expect, by design.
@@ -153,11 +161,11 @@ re-close, or automatic recovery path.
 | Situation | Behaviour |
 |---|---|
 | Offline all evening, 200 bills queued | All settle locally; drain on reconnect; progress is visible, not a frozen screen |
-| Tablet dies with unsynced bills | **Data is lost.** IndexedDB is the only copy until sync. Mitigation: the pending count is always visible, and a persistent backlog is surfaced as a warning to the manager |
+| Tablet dies with unresolved bills | **Data is lost.** IndexedDB is the only copy until sync. Mitigation: the last report is freshness-qualified; once its minute heartbeat ages past 30 minutes the manager sees **out of touch**, even when the last count was zero |
 | Server rejects a bill as malformed | Quarantined, not silently dropped; surfaced to the manager with the reason |
 | Clock skew on the tablet | Both client and server timestamps are stored. Material disagreement is a signal worth surfacing, not something to paper over |
 | Two tablets at one outlet | Deferred to `multiple-billing-devices` (#35). The command and number allocators are concurrency-safe, but launch setup permits one active tablet per outlet |
-| Tablet removed while holding a queue | Draining stops and envelopes remain on that tablet. The removal confirmation names what it last reported unsent, so the admin is told before rather than after |
+| Tablet removed while holding a queue | Draining stops and envelopes remain on that tablet. The removal confirmation names what it last reported unresolved, so the admin is told before rather than after |
 | A command is accepted while the pipeline is refreshing | The read consults the outbox before the server, so the acceptance is never lost between them and the order does not return to the counter as unpaid |
 | A refusal a resend cannot fix | Discard is the only resolution offered. Correcting it would earn the same refusal and add another permanent diagnostics row |
 
