@@ -766,8 +766,10 @@ describe('every count time is approximate', () => {
     await user.click(screen.getByTestId('open-count'))
 
     // This names the stated instant of the count, never how long the count took
-    // or when its cash happened to be collected.
-    expect(screen.getByRole('group', { name: 'Counted when?' })).toBeInTheDocument()
+    // or when its cash happened to be collected — and the label carries its own
+    // answer, so the group's name begins with the label and continues with the
+    // instant rather than being the label alone.
+    expect(screen.getByRole('group', { name: /^Counted when:/ })).toBeInTheDocument()
 
     // Now, 15 min ago, 30 min ago, Other time — and the window is stated for
     // all of them, as the value of the field rather than as a chip.

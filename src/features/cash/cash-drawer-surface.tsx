@@ -1019,7 +1019,39 @@ export function CashDrawerSurface() {
       >
         <form id="count-form" onSubmit={submitCount} className="space-y-4">
           <fieldset className="space-y-2">
-            <legend className="text-sm font-bold text-content">Counted when?</legend>
+            {/*
+              The label and its answer on one line: `Counted when: Today, 04:07
+              pm, give or take 15 min`. It read as a question with the answer
+              parked under the buttons, which is two lines to say one thing and
+              puts the chosen instant furthest from the label that names it.
+
+              The flex lives on a span inside the legend rather than on the
+              legend itself, because `display` on `<legend>` is the one box in
+              HTML browsers still disagree about.
+            */}
+            <legend className="text-sm">
+              <span className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-bold text-content">Counted when:</span>
+                <span className="font-semibold text-content" data-testid="counted-at-echo">
+                  {formatDayTime(countedAt.toISOString())}
+                </span>
+                {/* Every count carries this window, so it is stated rather than
+                    used to mark some counts out from others (design D19). */}
+                <Explain
+                  label="why every count time is approximate"
+                  explanation={
+                    <>
+                      Counting takes a few minutes and the counter keeps selling while you do it, so
+                      no stated time is exact. The window is the same whichever option you pick.
+                    </>
+                  }
+                >
+                  <span className="text-content-muted" data-testid="tolerance-window">
+                    give or take {APPROXIMATE_WINDOW_MINUTES} min
+                  </span>
+                </Explain>
+              </span>
+            </legend>
             <div className="grid grid-cols-4 gap-2">
               {RELATIVE_TIMES.map((option) => {
                 const candidate = new Date(sheetOpenedAt - option.minutes * 60_000)
@@ -1081,32 +1113,6 @@ export function CashDrawerSurface() {
                 />
               </div>
             </div>
-            {/*
-              The chosen instant, as the value of the field above rather than as
-              a chip. Chips are for facts ABOUT a thing; this IS the thing, and
-              at chip size the one number the reader is choosing was the smallest
-              text in the sheet.
-            */}
-            <p className="flex flex-wrap items-center gap-x-2 text-sm text-content">
-              <span className="font-semibold" data-testid="counted-at-echo">
-                {formatDayTime(countedAt.toISOString())}
-              </span>
-              {/* Every count carries this window, so it is stated rather than
-                  used to mark some counts out from others (design D19). */}
-              <Explain
-                label="why every count time is approximate"
-                explanation={
-                  <>
-                    Counting takes a few minutes and the counter keeps selling while you do it, so
-                    no stated time is exact. The window is the same whichever option you pick.
-                  </>
-                }
-              >
-                <span className="text-content-muted" data-testid="tolerance-window">
-                  give or take {APPROXIMATE_WINDOW_MINUTES} min
-                </span>
-              </Explain>
-            </p>
             {boundary && boundary.excludedBills > 0 && (
               <ChipRow>
                 <Chip tone="neutral" data-testid="excluded-by-time">
