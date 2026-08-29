@@ -995,14 +995,14 @@ button, which is labelled *Pick another date and time*, and the picker itself is
 keyboard-navigable. Where `showPicker()` is missing, focusing and clicking the
 field is what older browsers open it on.
 
-The four labels are short — `Now`, `15 min`, `30 min`, `Other` — because four
-options must share one row on a 375px phone, and `15 min ago` cannot. **The
+The four labels — `Now`, `15m ago`, `30m ago`, `Other` — share one row on
+a 375px phone while making the relative options' past direction clear. **The
 instant they produce is spelled out in full directly beneath**, so the button
-carries the gesture and the line below carries the meaning. The spoken label
-keeps the whole phrase for a reader who does not get the line.
+carries the gesture and the line below carries the exact value. The spoken label
+keeps the complete phrase for a reader who does not get the line.
 
 **That line is text, not chips.** It reads `Today, 12:39 am · give or take 15
-min` at `text-sm`, as the value of *Collection time*. A chip states a fact
+min` at `text-sm`, as the value of *Counted when?*. A chip states a fact
 *about* a thing; this **is** the thing, and at chip size the one number the
 reader was choosing was the smallest text in the sheet. The `~ ±15 min`
 shorthand becomes words for the same reason.
@@ -1386,8 +1386,8 @@ does the same for a reader the observer does not serve.
 ┌──────────────────────────────────────────────┐
 │  COUNT & COLLECT                         ✕   │
 │                                              │
-│  Collection time                             │
-│     [ ● Now ]  ( 15 min ago )  ( 30 min ago )│
+│  Counted when?                               │
+│     [ ● Now ]  ( 15m ago )  ( 30m ago )      │
 │     ( 25 Aug, 10:20 pm ▾ )                   │
 │     ( 22:02 )  ( ~ ±15 min )                 │
 │                                              │
@@ -1477,7 +1477,7 @@ sentence anyone misreads.
 ### The same sheet with an exact coincidence
 
 ```
-│  Collection time                             │
+│  Counted when?                               │
 │     ( 22:15 )  ( ~ ±15 min )   entering 23:04│
 │                                              │
 │  Cash counted before collection              │

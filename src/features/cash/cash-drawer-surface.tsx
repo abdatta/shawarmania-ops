@@ -143,13 +143,11 @@ function readingOf(where: Whereabouts | null): PositionReading | null {
  * reached through the platform's own picker.
  */
 const RELATIVE_TIMES = [
-  // Short enough that all four options share one row on a 375px phone. The
-  // instant they produce is spelled out in full directly beneath them, so the
-  // button carries the gesture and the line below carries the meaning; the
-  // spoken label keeps the whole phrase for a reader who gets no line.
+  // These make the direction explicit without relying on the stated instant
+  // below. The spoken labels remain complete for a reader who gets no line.
   { label: 'Now', spoken: 'Counted just now', minutes: 0 },
-  { label: '15 min', spoken: 'Counted 15 minutes ago', minutes: 15 },
-  { label: '30 min', spoken: 'Counted 30 minutes ago', minutes: 30 },
+  { label: '15m ago', spoken: 'Counted 15 minutes ago', minutes: 15 },
+  { label: '30m ago', spoken: 'Counted 30 minutes ago', minutes: 30 },
 ] as const
 
 /** `datetime-local` speaks local wall-clock with no zone. Both directions here. */
@@ -982,7 +980,7 @@ export function CashDrawerSurface() {
       >
         <form id="count-form" onSubmit={submitCount} className="space-y-4">
           <fieldset className="space-y-2">
-            <legend className="text-sm font-bold text-content">Collection time</legend>
+            <legend className="text-sm font-bold text-content">Counted when?</legend>
             <div className="grid grid-cols-4 gap-2">
               {RELATIVE_TIMES.map((option) => {
                 const candidate = new Date(sheetOpenedAt - option.minutes * 60_000)

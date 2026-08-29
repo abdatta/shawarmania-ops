@@ -565,16 +565,21 @@ describe('every count time is approximate', () => {
 
     await user.click(screen.getByTestId('open-count'))
 
+    // This names the stated instant of the count, never how long the count took
+    // or when its cash happened to be collected.
+    expect(screen.getByRole('group', { name: 'Counted when?' })).toBeInTheDocument()
+
     // Now, 15 min ago, 30 min ago, Other time — and the window is stated for
     // all of them, as the value of the field rather than as a chip.
     expect(screen.getByTestId('when-0').textContent).toMatch(/now/i)
-    expect(screen.getByTestId('when-15').textContent).toMatch(/15 min/i)
-    expect(screen.getByTestId('when-30').textContent).toMatch(/30 min/i)
+    expect(screen.getByTestId('when-15').textContent).toMatch(/15m ago/i)
+    expect(screen.getByTestId('when-30').textContent).toMatch(/30m ago/i)
     expect(screen.getByTestId('when-other').textContent).toMatch(/other/i)
 
-    // The labels are short so four options share one row on a 375px phone. The
-    // whole phrase survives as the accessible name, for a reader who does not
-    // get the line beneath spelling the instant out.
+    // The labels state the elapsed direction directly, and the chosen instant
+    // below remains the full, unambiguous value of the field.
+    expect(screen.getByTestId('when-15')).toHaveTextContent('15m ago')
+    expect(screen.getByTestId('when-30')).toHaveTextContent('30m ago')
     expect(screen.getByTestId('when-15')).toHaveAccessibleName('Counted 15 minutes ago')
     expect(screen.getByTestId('when-other')).toHaveAccessibleName('Pick another date and time')
     expect(screen.getByTestId('tolerance-window').textContent).toMatch(/give or take 15 min/i)

@@ -453,8 +453,8 @@ in.
 2. **Count & Collect.** Three inputs: when you counted it, what was in it, how
    much you are taking. The count and the collection are one act, so they are
    one button.
-   - *Collection time* defaults to **Now**, with **15 min ago** and **30 min
-     ago** beside it and a date and time field for a count you are catching up
+   - *Counted when?* defaults to **Now**, with **15m ago** and **30m ago**
+     beside it and a date and time field for a count you are catching up
      on days later. **Every count is approximate**, whichever you pick, because
      counting takes a few minutes and the counter keeps selling while you do it.
      The screen states in rupees how much cash moved near your time.
