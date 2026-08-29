@@ -54,10 +54,19 @@ export function toZomatoSettlement(
           },
     revisedAt: row.revised_at,
 
-    // Dropped here until 2026-08-29, which left every screen showing a measured
-    // figure as a bare number: a day read at 11 pm and superseded by the 4 am
-    // run looked exactly like one read a minute ago. `aggregator-figures` asks
-    // a reading to name its as-of time, and this is the column that holds it.
-    asOfAt: row.as_of_at,
+    // `aggregator-figures` asks a reading to name its as-of time, and
+    // `as_of_at` is the column named for it. **It is null on every production
+    // row**, including ones the reader wrote minutes ago: the live runner does
+    // not send it in its payload, so the column the schema comment describes
+    // has never actually been filled. Shipping the stamp against it alone put
+    // a chip on the demo and nothing on the real screen, which the mock could
+    // not catch because the mock seeds the column.
+    //
+    // `updated_at` is the honest stand-in. The ingest upserts every day it
+    // covers whether or not the figures moved, so this advances on each run
+    // that re-read the day — which is exactly *last confirmed*. A settled day
+    // is skipped by that loop and keeps the moment its settlement wrote it,
+    // which is also right: nothing has re-read it since.
+    asOfAt: row.as_of_at ?? row.updated_at,
   }
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
+import { AsOfChip } from '@/components/ui/as-of-chip'
 import { Card } from '@/components/ui/card'
 import { LoadingBlock, LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
@@ -358,7 +359,12 @@ function DayReading({
             <Row
               label={`${titleCase(channel.channel)}, as stated`}
               paise={channel.grossPaise}
-              tag={<SettlementTag state={channel.settlementState} />}
+              tag={
+                <>
+                  <SettlementTag state={channel.settlementState} />
+                  <AsOfChip at={channel.asOfAt} testId={`channel-as-of-${channel.channel}`} />
+                </>
+              }
               testId={`channel-gross-${channel.channel}`}
             />
             <Row

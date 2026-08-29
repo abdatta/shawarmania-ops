@@ -234,6 +234,9 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
           ? null
           : (row.net_paise ?? row.revenue_paise - row.commission_paise),
       settlementState: row.settlement_state,
+      // `as_of_at` is null on every production row; `updated_at` moves on each
+      // run that re-read the day. Same rule as `toZomatoSettlement`.
+      asOfAt: row.as_of_at ?? row.updated_at,
     }))
     const isCeiling = channels.some((channel) => channel.commissionPaise === null)
 

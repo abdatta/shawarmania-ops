@@ -87,6 +87,34 @@ describe('the reading carries no editable figure', () => {
   })
 })
 
+describe('a measured figure says when it was last confirmed', () => {
+  /**
+   * The Ledger is the surface an owner actually opens, and it was the one this
+   * stamp missed: it renders its own settlement chip from a flattened reading
+   * and never saw the settlement object the notebook's chip was built against.
+   */
+  it('shows the freshness chip beside the channel’s source chip', async () => {
+    const user = userEvent.setup()
+    renderLedger()
+    await waitFor(() => expect(screen.getByTestId('ledger-revenue')).toBeInTheDocument())
+
+    // Back to a day the reader has actually covered; today has no channel rows.
+    await user.click(screen.getByTestId('statement-step-back'))
+    await waitFor(() =>
+      expect(screen.queryAllByTestId(/^channel-gross-/).length).toBeGreaterThan(0),
+    )
+
+    const chips = screen.queryAllByTestId(/^channel-as-of-/)
+    expect(chips.length).toBeGreaterThan(0)
+    for (const chip of chips) {
+      // A bare time is today; anything older carries its date. Never empty,
+      // which is what shipped: production has no `as_of_at` and the chip
+      // rendered nothing at all.
+      expect(chip).toHaveTextContent(/^(\d{1,2} \w{3}, )?\d{2}:\d{2} [ap]m$/)
+    }
+  })
+})
+
 describe('the day renders in full even when nothing was recorded', () => {
   it('shows both sections and a total on a date with no activity', async () => {
     const user = userEvent.setup()

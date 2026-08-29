@@ -2951,6 +2951,8 @@ export interface LedgerChannelReading {
   commissionPaise: number | null
   netPaise: number | null
   settlementState: string
+  /** When these figures were last confirmed. Null where nothing recorded it. */
+  asOfAt: string | null
 }
 
 /**

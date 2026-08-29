@@ -840,7 +840,12 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       net_paise:
         commissionPaise === null ? null : ((revenuePaise - commissionPaise) as number | null),
       source_ref: `cycle-${businessDate(daysAgo)}`,
-      as_of_at: instantAt(businessDate(daysAgo), '23:00'),
+      // **Null, because that is what production holds.** The runner does not
+      // send `as_of_at`, so every real row has it empty and the freshness
+      // stamp falls back to `updated_at`. Seeding it here once hid exactly
+      // that: the chip rendered on the demo and on nothing real. The settled
+      // day below sets it, so both branches stay demonstrable.
+      as_of_at: null as string | null,
       settlement_state: 'settled',
       origin: 'settlement',
       superseded_revenue_paise: null as number | null,
@@ -865,6 +870,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     if (daysAgo === 2) {
       return {
         ...base,
+        // The one row whose operator statement carried its own currency, so
+        // the demo walks the preferred branch as well as the fallback.
+        as_of_at: instantAt(businessDate(daysAgo), '23:00'),
         // It grew when the week paid, which is the cancellation-refund case: an
         // order rejected after the kitchen cooked it is refunded a share and paid,
         // and the live figure never showed it.

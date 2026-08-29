@@ -21,6 +21,7 @@ function row(overrides: Partial<Tables<'aggregator_channel_days'>> = {}) {
     settlement_state: 'provisional',
     origin: 'daily_reader',
     as_of_at: '2026-08-28T17:53:00.000Z',
+    updated_at: '2026-08-29T11:16:59.070Z',
     superseded_revenue_paise: null,
     superseded_commission_paise: null,
     superseded_at: null,
@@ -36,9 +37,28 @@ describe('toZomatoSettlement', () => {
     expect(toZomatoSettlement(row())?.asOfAt).toBe('2026-08-28T17:53:00.000Z')
   })
 
-  it('carries a null as-of rather than inventing one', () => {
-    // Rows written before sources named their time. A fabricated stamp would be
-    // the one wrong answer that looks like a reading.
-    expect(toZomatoSettlement(row({ as_of_at: null }))?.asOfAt).toBeNull()
+  /**
+   * **The production shape, and the one this test exists for.**
+   *
+   * Every row in production carries a null `as_of_at` — the live runner does
+   * not send it — while `updated_at` moves on every run that re-reads the day.
+   * Mapping `as_of_at` alone shipped a stamp that showed on the demo, where the
+   * mock seeds the column, and on nothing real. Asserted against the real row
+   * shape rather than the fixture's, because the fixture is what hid it.
+   */
+  it('falls back to when the row was last written, which is all production has', () => {
+    const settlement = toZomatoSettlement(
+      row({ as_of_at: null, updated_at: '2026-08-29T11:16:59.070Z' }),
+    )
+    expect(settlement?.asOfAt).toBe('2026-08-29T11:16:59.070Z')
+  })
+
+  it('prefers the source’s own moment where one was recorded', () => {
+    // `as_of_at` is how current the operator's data was; `updated_at` is when we
+    // wrote it. The first is the better answer whenever the runner supplies it.
+    const settlement = toZomatoSettlement(
+      row({ as_of_at: '2026-08-28T17:53:00.000Z', updated_at: '2026-08-29T11:16:59.070Z' }),
+    )
+    expect(settlement?.asOfAt).toBe('2026-08-28T17:53:00.000Z')
   })
 })

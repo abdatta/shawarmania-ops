@@ -2,6 +2,7 @@ import { Info, Link2Off, Pencil } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { AsOfChip } from '@/components/ui/as-of-chip'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { LoadingFigures } from '@/components/ui/loading'
@@ -17,7 +18,7 @@ import {
   type ManualLedgerExpense,
   type ZomatoSettlement,
 } from '@/data-access/adapters'
-import { formatBusinessDate, formatFreshness, rupeesToPaise } from '@/domain'
+import { formatBusinessDate, rupeesToPaise } from '@/domain'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/session/context'
 
@@ -704,7 +705,10 @@ function RecordedDay({
           tag={
             <>
               <SourceTag channel="zomato" settlement={reading.zomato.settlement} />
-              <AsOfChip settlement={reading.zomato.settlement} testId="recorded-zomato-as-of" />
+              <AsOfChip
+                at={reading.zomato.settlement?.asOfAt ?? null}
+                testId="recorded-zomato-as-of"
+              />
             </>
           }
         />
@@ -732,7 +736,7 @@ function RecordedDay({
             swiggy.settlement ? (
               <>
                 <SourceTag channel="swiggy" settlement={swiggy.settlement} />
-                <AsOfChip settlement={swiggy.settlement} testId="recorded-swiggy-as-of" />
+                <AsOfChip at={swiggy.settlement?.asOfAt ?? null} testId="recorded-swiggy-as-of" />
               </>
             ) : undefined
           }
@@ -1097,7 +1101,7 @@ function ChannelReadingBlock({
         {settlement && (
           <span className="inline-flex flex-wrap items-baseline gap-1.5">
             <SourceTag channel={testIdPrefix} settlement={settlement} />
-            <AsOfChip settlement={settlement} testId={`${testIdPrefix}-as-of`} />
+            <AsOfChip at={settlement.asOfAt} testId={`${testIdPrefix}-as-of`} />
           </span>
         )}
       </div>
@@ -1138,38 +1142,6 @@ function ChannelReadingBlock({
         </>
       )}
     </div>
-  )
-}
-
-/**
- * When these figures were last confirmed.
- *
- * Without it the block is a bare number, and a bare number reads as a live one:
- * a day read at 11 pm and superseded by the 4 am run looked exactly like a day
- * read a minute ago. It says *confirmed* rather than *changed* on purpose — a
- * re-read that found the day unchanged still moves it, because "checked again
- * and it held" is the reassurance the stamp exists to give. Where the figure
- * did move, `SupersededNote` above already tells that story.
- *
- * Silent on a null, which is a row written before sources carried their time.
- */
-function AsOfChip({
-  settlement,
-  testId,
-}: {
-  settlement: ChannelSettlement | null
-  testId: string
-}) {
-  if (!settlement || settlement.asOfAt === null) return null
-
-  return (
-    <span
-      data-testid={testId}
-      className="inline-flex items-center rounded-full border border-border px-1.5 py-0.5 text-[11px] font-semibold text-content-muted"
-      title={`Last confirmed: ${formatFreshness(settlement.asOfAt)}. A read that found these figures unchanged still counts, so this is when they were last checked rather than when they last moved.`}
-    >
-      {formatFreshness(settlement.asOfAt)}
-    </span>
   )
 }
 

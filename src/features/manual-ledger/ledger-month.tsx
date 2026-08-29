@@ -3,12 +3,13 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 
 import { EmptyState } from '@/components/layout/empty-state'
+import { AsOfChip } from '@/components/ui/as-of-chip'
 import { Card } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
-import { formatBusinessDate, formatFreshness, PROFIT_BASIS_LABELS } from '@/domain'
+import { formatBusinessDate, PROFIT_BASIS_LABELS } from '@/domain'
 
 import { cn } from '@/lib/cn'
 
@@ -309,33 +310,6 @@ export function LedgerMonth({ outletId, month }: { outletId: string; month: stri
         </p>
       </Card>
     </div>
-  )
-}
-
-/**
- * When this channel's figures were last confirmed, once for the month.
- *
- * One chip per channel rather than one per day: a run re-reads a trailing
- * window of days at once, so forty stamped cells would repeat two facts forty
- * times. And one per channel rather than one for the card, because Zomato and
- * Swiggy hold independent sessions — a shared stamp would let a fresh Zomato
- * read speak for a Swiggy session that lapsed days ago, which is the mistake
- * the stamp exists to prevent.
- *
- * Rendered exactly as the day view renders it, beside the same `as stated` row,
- * so one screen does not teach a reading the next one contradicts.
- */
-function AsOfChip({ at, testId }: { at: string | null; testId: string }) {
-  if (at === null) return null
-
-  return (
-    <span
-      data-testid={testId}
-      className="inline-flex items-center rounded-full border border-border px-1.5 py-0.5 text-[11px] font-semibold text-content-muted"
-      title={`Last confirmed: ${formatFreshness(at)}. The latest read covering any day this month, for this channel alone.`}
-    >
-      {formatFreshness(at)}
-    </span>
   )
 }
 
