@@ -7,12 +7,14 @@ import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
 import { createMockAlertsAdapter } from './alerts'
 import { createMockAttendanceAdapter } from './attendance'
 import { createMockBillingAdapter } from './billing'
+import { createMockCashDrawerAdapter } from './cash-drawer'
 import { createDemoCounter, createMockCounterAdapter, type DemoCounter } from './counter'
 import { createDemoCustomers, createMockCustomersAdapter } from './customers'
 import { createMockDailyCashAdapter } from './daily-cash'
 import { createMockExpensesAdapter } from './expenses'
 import { createMockExpenseCategoriesAdapter } from './expense-categories'
 import { createMockInsightsAdapter } from './insights'
+import { createMockLedgerStatementAdapter } from './ledger-statement'
 import { createMockInventoryAdapter } from './inventory'
 import { createMockManualLedgerAdapter } from './manual-ledger'
 import { createMockMenuAdapter } from './menu'
@@ -192,6 +194,17 @@ export function createMockAdapters(
       [DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID],
       { channel: 'swiggy' },
     ),
+    // The drawer and the derived statement (#11). Both take the persona's id
+    // rather than a role: the DATABASE decides who may reach a drawer, and both
+    // of these are reached only by a Super Admin or an assigned Franchise Admin,
+    // so a role branch here would be a second copy of a rule that already lives
+    // in `app_may_reach_drawer()` — and the two could disagree.
+    //
+    // What the id IS for is attribution: a count records who took it, and an
+    // edit records who last corrected it, which is how a count the owner
+    // recorded and a manager later fixed avoids reading as the owner's.
+    cashDrawer: createMockCashDrawerAdapter(store, persona.profile.id),
+    ledgerStatement: createMockLedgerStatementAdapter(store, persona.profile.id),
     addressLookup: createMockAddressLookupAdapter(),
   }
 }

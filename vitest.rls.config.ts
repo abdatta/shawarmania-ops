@@ -16,6 +16,15 @@ export default defineConfig({
     exclude: [
       'supabase/tests/rest/counter-handshake.test.ts',
       'supabase/tests/rest/zz-billing-command-races.test.ts',
+      // Makes real drawer writes and cleans up after itself with the
+      // service-role key, so it runs in its own phase — see
+      // vitest.drawer-writes.config.ts.
+      'supabase/tests/rest/zz-cash-drawer-writes.test.ts',
+      // Imports the real adapter, which resolves `@/domain`. This config
+      // declares no alias, so collecting it here fails to load the module
+      // entirely — a red file with nothing to do with tenancy. It has its own
+      // phase: vitest.ledger-timing.config.ts.
+      'supabase/tests/rest/zz-ledger-month-timing.test.ts',
     ],
     testTimeout: 30_000,
     hookTimeout: 30_000,

@@ -837,13 +837,17 @@ describe('who the manual ledger is for', () => {
     })
   }
 
+  // `ledger/notebook` since #11: the derived statement owns `ledger`, and this
+  // form is one reading inside that group rather than the group itself. It keeps
+  // its own navigation entry — the fallback is a tab, and a tab you have to type
+  // a URL to reach is not one.
   it('is reachable at its own path for the owner', async () => {
-    renderAt('/demo/owner/ledger')
+    renderAt('/demo/owner/ledger/notebook')
     expect(await screen.findByTestId('ledger-day-form')).toBeInTheDocument()
   })
 
   it('is reachable for a manager at the outlet they are assigned to', async () => {
-    renderAt('/demo/admin/ledger')
+    renderAt('/demo/admin/ledger/notebook')
     // The full surface, day figures included: a manager who counts the drawer
     // nightly but cannot read whether the month covered its costs is running
     // half a shop.

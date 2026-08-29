@@ -93,10 +93,36 @@ export function createMockInsightsAdapter(
       (expense) => expense.outlet_id === outletId && expense.business_date === businessDate,
     )
 
-  const closedRecord = (outletId: string, businessDate: string) =>
-    store.dailyCashRecords.find(
-      (record) => record.outlet_id === outletId && record.business_date === businessDate,
-    ) ?? null
+  /**
+   * The drawer's own verdict for a business date, from the observation that
+   * falls inside it.
+   *
+   * **This used to read `daily_cash_records`, and `cash-is-counted-not-closed`
+   * (#11) stopped anything writing that table.** Left pointed at it, the demo
+   * console would report a cash difference sourced from a model the product no
+   * longer has — which is exactly the second place for a figure to come from that
+   * this file's own contract says must not exist.
+   *
+   * `counted` stands in for what `dayClosed` used to mean. There is no close, and
+   * the honest question a console can ask of a date is whether anybody counted
+   * the drawer in it. A date with no observation is not "unclosed", it is
+   * `carried`.
+   */
+  const countedOn = (outletId: string, businessDate: string) => {
+    const from = new Date(`${businessDate}T04:00:00+05:30`).toISOString()
+    const to = new Date(`${shiftBusinessDate(businessDate, 1)}T04:00:00+05:30`).toISOString()
+    return (
+      store.drawerObservations.find(
+        (observation) =>
+          observation.outlet_id === outletId &&
+          observation.counted_at >= from &&
+          observation.counted_at < to &&
+          // An anchor carries no difference at all, so it answers this question
+          // with silence rather than with nought.
+          !observation.is_anchor,
+      ) ?? null
+    )
+  }
 
   function salesByMethod(bills: readonly Tables<'bills'>[]): MethodTotal[] {
     return METHOD_ORDER.map((method) => ({
@@ -154,13 +180,14 @@ export function createMockInsightsAdapter(
   async function day(outletId: string, businessDate: string): Promise<OutletDaySummary> {
     const bills = settledBills(outletId, businessDate)
     const expenses = expensesOn(outletId, businessDate)
-    const closed = closedRecord(outletId, businessDate)
+    const counted = countedOn(outletId, businessDate)
 
-    // A closed day's drawer figures are the snapshot. An open day's are derived
-    // from what has been recorded so far — the same arithmetic the cash screen
-    // shows, through the same domain function.
-    const expectedCashPaise = closed
-      ? closed.expected_closing_paise
+    // A counted date's expected figure is the one the observation was measured
+    // against — computed at the instant of the count and never recomputed. A date
+    // nobody counted derives one from what has been recorded so far, which is the
+    // same arithmetic the drawer shows, through the same domain function.
+    const expectedCashPaise = counted?.expected_paise
+      ? counted.expected_paise
       : expectedClosingPaise({
           openingCashPaise: store.openingCashPaise,
           cashSalesPaise: bills.reduce(
@@ -198,8 +225,8 @@ export function createMockInsightsAdapter(
       billCount: bills.length,
       salesByMethod: salesByMethod(bills),
       expectedCashPaise,
-      dayClosed: closed !== null,
-      cashDifferencePaise: closed ? closed.difference_paise : null,
+      dayClosed: counted !== null,
+      cashDifferencePaise: counted ? counted.difference_paise : null,
       lowStockCount: store.inventoryItems.filter(
         (item) =>
           item.outlet_id === outletId &&
@@ -233,15 +260,15 @@ export function createMockInsightsAdapter(
     const expenses = dates.flatMap((date) => expensesOn(outletId, date))
 
     const days: PeriodDay[] = dates.map((date) => {
-      const closed = closedRecord(outletId, date)
+      const counted = countedOn(outletId, date)
       return {
         businessDate: date,
         salesPaise: settledBills(outletId, date).reduce(
           (running, bill) => running + bill.total_paise,
           0,
         ),
-        dayClosed: closed !== null,
-        cashDifferencePaise: closed ? closed.difference_paise : null,
+        dayClosed: counted !== null,
+        cashDifferencePaise: counted ? counted.difference_paise : null,
       }
     })
 

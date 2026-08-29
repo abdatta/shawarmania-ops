@@ -88,44 +88,71 @@ describe('manager billing history asks two questions', () => {
   })
 })
 
-describe('manager billing history status', () => {
-  it('puts Cash and UPI aggregates before sync activity in one Status view', async () => {
-    const user = userEvent.setup()
-    const adapters = createMockAdapters('franchise_admin')
+describe('the day’s figures sit outside the tabs', () => {
+  /**
+   * The four money cards answer the question the surface is opened for — what
+   * did this outlet take today — so they are not behind a tab. They sit under
+   * the day bar and above the tab strip, on screen with the Bills list the
+   * surface lands on and still there through both other views. Status keeps the
+   * tablet sync panel it is named for and nothing else.
+   */
+  it('shows all four on the view the surface lands on', async () => {
+    renderHistory()
 
-    render(
-      <MemoryRouter>
-        <SessionContext.Provider value={managerSession()}>
-          <AdaptersContext.Provider value={adapters}>
-            <ManagerBillingHistory />
-          </AdaptersContext.Provider>
-        </SessionContext.Provider>
-      </MemoryRouter>,
-    )
+    await screen.findByTestId('manager-bill-list')
 
-    const statusTab = await screen.findByRole('tab', { name: /^Status/ })
-    expect(screen.queryByRole('heading', { name: 'Payment totals' })).not.toBeInTheDocument()
+    // Bills is the landing view, and no tab was operated to reach these.
+    expect(screen.getByRole('tab', { name: /^Bills/ })).toHaveAttribute('aria-selected', 'true')
 
-    await user.click(statusTab)
-
-    const paymentTotals = screen.getByRole('heading', { name: 'Payment totals' })
-    expect(paymentTotals).toBeVisible()
-    expect(within(screen.getByTestId('billing-total-cash')).getByText('Cash')).toBeVisible()
-    expect(within(screen.getByTestId('billing-total-cash')).getByText('₹3,711')).toBeVisible()
-    expect(within(screen.getByTestId('billing-total-upi')).getByText('UPI')).toBeVisible()
-    const syncStatus = screen.getByRole('heading', { name: 'Tablet sync status' })
-    expect(syncStatus).toBeVisible()
-    expect(
-      paymentTotals.compareDocumentPosition(syncStatus) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-    expect(within(screen.getByTestId('billing-total-upi')).getByText('₹1,772')).toBeVisible()
-    expect(screen.queryByText('Bills rung')).not.toBeInTheDocument()
-    expect(screen.queryByText('Drawer cash')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('manager-bill-list')).not.toBeInTheDocument()
+    const totals = screen.getByRole('region', { name: 'Payment totals' })
+    expect(within(totals).getByTestId('billing-total-cash')).toHaveTextContent('Cash')
+    expect(within(totals).getByTestId('billing-total-cash')).toHaveTextContent('₹3,711')
+    expect(within(totals).getByTestId('billing-total-upi')).toHaveTextContent('UPI')
+    expect(within(totals).getByTestId('billing-total-upi')).toHaveTextContent('₹1,772')
+    expect(within(totals).getByTestId('billing-total-combined')).toHaveTextContent('Total')
+    expect(within(totals).getByTestId('billing-total-average')).toHaveTextContent('AOV')
   })
 
-  it('reads the day’s takings and its average bill beside the tender split', async () => {
+  it('keeps them through the other two views, and holds exactly one copy', async () => {
     const user = userEvent.setup()
+    renderHistory()
+
+    await screen.findByTestId('manager-bill-list')
+
+    for (const name of [/^Open orders/, /^Status/, /^Bills/]) {
+      await user.click(screen.getByRole('tab', { name }))
+      // One copy, not one per view: a second row inside a tab would be two
+      // readings of the same day that can disagree while one is stale.
+      expect(screen.getAllByTestId('billing-total-cash')).toHaveLength(1)
+      expect(screen.getAllByTestId('billing-total-average')).toHaveLength(1)
+    }
+  })
+
+  it('leaves Status to the sync activity it is named for', async () => {
+    const user = userEvent.setup()
+    renderHistory()
+
+    await screen.findByTestId('manager-bill-list')
+    await user.click(screen.getByRole('tab', { name: /^Status/ }))
+
+    const syncStatus = screen.getByRole('heading', { name: 'Tablet sync status' })
+    expect(syncStatus).toBeVisible()
+    // The heading and the sentence that framed the cards inside this view left
+    // with them: the day bar sitting directly above the row says which day, and
+    // the outlet selector in the header says which outlet.
+    expect(screen.queryByRole('heading', { name: 'Payment totals' })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('manager-bill-list')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bills rung')).not.toBeInTheDocument()
+    expect(screen.queryByText('Drawer cash')).not.toBeInTheDocument()
+
+    // The figures are above the panel, not repeated beneath it.
+    const totals = screen.getByRole('region', { name: 'Payment totals' })
+    expect(
+      totals.compareDocumentPosition(syncStatus) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('reads the day’s takings and its average order value beside the tender split', async () => {
     renderHistory()
 
     // The bills the surface is showing are the ones these figures are about, so
@@ -134,8 +161,6 @@ describe('manager billing history status', () => {
     const bills = within(list).getAllByRole('button', { name: /^Bill \d+Paid/ })
     expect(bills.length).toBeGreaterThan(0)
 
-    await user.click(screen.getByRole('tab', { name: /^Status/ }))
-
     // ₹3,711 cash and ₹1,772 UPI, so the total is their sum and cannot drift
     // from the two cards beside it.
     expect(within(screen.getByTestId('billing-total-combined')).getByText('Total')).toBeVisible()
@@ -143,9 +168,10 @@ describe('manager billing history status', () => {
 
     // And the average is that total over the bills that were paid, in whole
     // paise — `formatPaise` throws on a float, so a division that leaked one
-    // would fail here rather than render.
+    // would fail here rather than render. `AOV` rather than `Average bill`
+    // because the full name does not fit a quarter of a phone row.
     const average = screen.getByTestId('billing-total-average')
-    expect(within(average).getByText('Average bill')).toBeVisible()
+    expect(within(average).getByText('AOV')).toBeVisible()
     expect(
       within(average).getByText(formatPaise(averageBillPaise(548_300, bills.length))),
     ).toBeVisible()
@@ -176,7 +202,7 @@ describe('the Status tab carries its own problem count', () => {
     const adapters = createMockAdapters('franchise_admin')
 
     // Delivered activity, and nothing needing a person. A count of zero would
-    // say the tab is empty, which is false: the payment totals live there too.
+    // say the tab is empty, which is false: the delivered rows are listed there.
     renderHistory({
       ...adapters,
       billing: {

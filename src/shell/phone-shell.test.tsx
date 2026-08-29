@@ -106,7 +106,10 @@ describe('the owner’s navigation', () => {
     // The role lives in the URL in demo mode, so a link into another role's
     // segment would hand the walk to a different persona mid-demo.
     expect(linkTo('Attendance')).toBe('/demo/owner/attendance')
-    expect(linkTo('Cash')).toBe('/demo/owner/cash')
+    // `Cash` was this example until #11 made the day-close screen `hidden`. The
+    // Drawer is the manager surface the owner reaches now, and it makes the same
+    // point: the link stays inside the owner's own segment.
+    expect(linkTo('Drawer')).toBe('/demo/owner/drawer')
   })
 })
 

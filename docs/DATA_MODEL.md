@@ -203,7 +203,7 @@ The snapshot is the point. `menu_item_id` is nullable and advisory — if an ite
 
 **`bill_payments`** — `id`, `bill_id`, `outlet_id`, `method`, `amount_paise`, `created_at`.
 
-These append-only rows are the canonical tender truth. Each method appears at most once per bill, every amount is positive integer paise, and the deferred integrity guard requires their sum to equal the bill total. A mixed bill remains one fully paid bill, never a partially paid order. Daily cash sums only rows whose method is `cash`, so ₹100 Cash + ₹39 UPI contributes ₹100 to the drawer and ₹139 to revenue.
+These append-only rows are the canonical tender truth. Each method appears at most once per bill, every amount is positive integer paise, and the deferred integrity guard requires their sum to equal the bill total. A mixed bill remains one fully paid bill, never a partially paid order. The drawer sums only rows whose method is `cash`, so ₹100 Cash + ₹39 UPI contributes ₹100 to the drawer and ₹139 to revenue.
 
 **`bill_payment_corrections`** records one append-only revision for a settled
 bill: bill/outlet, sequential revision, originating tablet and shift, command,
@@ -289,7 +289,11 @@ retiring a suggestion must not invalidate the rows that used it.
 `performed_by`, `performed_at`. One immutable row explains each owner rename or
 merge and records how much history moved in each expense table.
 
-Only expenses with `payment_method = 'cash'` affect the daily cash record.
+Only expenses with `payment_method = 'cash'` affect any drawer figure. A cash
+expense belongs to a drawer interval by `coalesce(occurred_at, created_at)`,
+so a spend before a count and one after it land on opposite sides of that
+count. `occurred_at` is nullable and is never a required field: it defaults to
+nothing, and interval membership falls back to when the row was written.
 
 ## Staff facts and attendance
 
@@ -451,31 +455,160 @@ outcome tally and the manager's waiting work. The explicit person/date and
 outlet/date links on attempts and decisions prevent a history row from being
 attached to a different day, including across outlets with different cutovers.
 
-## Daily cash
+## The cash drawer
 
-**`cash_withdrawals`** — `id`, `outlet_id`, `business_date`, `amount_paise`, `reason`, `withdrawn_by`, `recorded_by`, `created_at`.
+**The drawer is a continuous balance, and a count is a point-in-time observation
+of it.** The business day is not its container; it has none. Days remain real for
+revenue, expenses and reporting, and are derived for the drawer.
 
-**`daily_cash_records`** — `id`, `outlet_id`, `business_date`, `opening_cash_paise`, `cash_sales_paise`, `cash_expenses_paise`, `cash_withdrawn_paise`, `expected_closing_paise`, `actual_closing_paise`, `difference_paise`, `closed_by`, `closed_at`, `notes`. `unique (outlet_id, business_date)`.
+That is a replacement rather than a refinement, and the reason is measurable. The
+drawer is counted mid-shift, at a time the collector picks, sometimes after
+skipping a day or two, and sometimes entered an hour later from somewhere else. A
+count taken at 22:00 measured against a whole business date's cash sales produces
+a difference that is fiction — **₹4,640 of it in one month across two outlets**,
+measured on August 2026 production data by
+`scripts/rehearse-august-drawer.mjs`. At Kanchrapara it is the ordinary case
+rather than an edge: 8 of its 13 cash dates traded past 22:00.
 
-The invariant:
+**`drawer_observations`** — `id`, `outlet_id`, `counted_at`, `recorded_at`,
+`is_anchor`, `opening_paise`, `expected_paise`, `difference_paise`,
+`counted_total_paise`, `is_approximate`, `tolerance_minutes`, `recorded_by`,
+`corrected_by`, `recorded_lat`, `recorded_lng`, `recorded_accuracy_m`,
+`recorded_distance_m`, `recorded_on_site`, `away_reason`, `note`, `created_at`,
+`updated_at`.
+
+**`drawer_cash_out`** — `id`, `outlet_id`, `kind` in `('collection','spend')`,
+`amount_paise` (**signed, non-zero**), `occurred_at`, `recorded_by`,
+`observation_id`, `reason`, the same position columns, `created_at`.
+
+**`drawer_observation_adjustments`** — `id`, `observation_id`, `outlet_id`,
+`original_counted_total_paise`, `corrected_counted_total_paise`, `reason`,
+`adjusted_by`, `adjusted_at`. Append-only.
+
+**`ledger_day_verifications`** — `id`, `outlet_id`, `business_date`,
+`verified_by`, `verified_at`, `note`.
+`unique (outlet_id, business_date, verified_by)`.
+
+**`drawer_reconciliation_acknowledgements`** — `id`, `outlet_id`,
+`observation_id`, `source_kind` in `('bill','expense')`, `source_id`,
+`acknowledged_by`, `acknowledged_at`, `note`.
+`unique (observation_id, source_kind, source_id)`.
+
+### The invariant
 
 ```
-expected_closing = opening_cash + cash_sales − cash_expenses − cash_withdrawn
-difference       = actual_closing − expected_closing
+expected     = opening
+             + cash receipts whose payment instant is in (previous counted_at, this counted_at]
+             − cash expenses whose occurrence instant is in that interval
+             − cash out in that interval not belonging to this observation
+
+difference   = counted_total − expected
+next opening = counted_total − this observation's own cash out
 ```
 
-The three derived inputs come from settled cash bills whose
-`payment_business_date` matches, cash expenses, and withdrawals. They are
-**snapshotted onto the record at close**, never recomputed by a late command.
+Intervals are bounded by **timestamps, not business dates** — half-open at the
+start and closed at the end, so a payment at exactly the previous count's instant
+belonged to that count and one at exactly this instant belongs to this one. A
+date cannot express 22:00, which is precisely why the previous model was wrong.
 
-This is structural, not conventional: clients cannot write
-`daily_cash_records`. `close_business_day()` locks and rechecks billing
-readiness, computes the figures and writes the snapshot in one transaction. A
-closed date also refuses a new counter shift.
+Cash receipts are the **latest accepted effective Cash allocation** of settled
+bills, read through `effective_bill_payments`. Production already holds a tender
+correction in each direction — one that removed a cash allocation, one that
+created one — so reading the raw allocations gets two real bills wrong today.
+
+### Four properties that are load-bearing
+
+**The carry-forward anchors to the COUNTED figure, never the expected one.** This
+is what makes the whole design safe: every observation re-anchors the balance to
+physical cash, so a mistake, or a correction posted three weeks late, can only
+ever pollute the one interval it sits in. It cannot ripple through a month. A
+₹500 shortfall is recorded as a variance on the observation that found it and is
+not carried forward as phantom cash.
+
+**The opening is stored per row and never recomputed on read**, exactly as
+`manual_ledger_days.opening_cash_paise` is and for the same stated reason:
+correcting Tuesday must not silently move every row after it. Where a stored
+opening disagrees with the previous observation's carry-forward, **the surface
+reports the break and repairs nothing.** Note that this is the opposite of the
+rule *inside* one row, where a third derivable column is refused because it could
+disagree with the two it comes from. Within a row, derive. Across rows, store.
+Both rules exist to stop a figure changing without anybody deciding it should.
+
+**An outlet's first observation is a pure anchor**, carrying no opening, no
+expected total and no difference — `is_anchor` is true and all three are null
+together, tied by check constraints in both directions and by a partial unique
+index. Not a fabricated opening and not a zero: Kalyani has traded since
+2026-08-01 and its drawer is not empty, so a zero would record a variance of
+roughly the whole float as an excess, permanently, on the first row anybody
+reads. Business dates before the anchor read **`not tracked yet`**, which is a
+different claim from `carried`.
+
+**Cash into the drawer has no concept of its own.** `amount_paise` is signed:
+positive leaves the drawer, negative is added to it. The arithmetic subtracts
+this term whatever the sign, and subtracting a negative adds — so a ₹1,000 top-up
+against a ₹450 count leaves ₹1,450 by the existing formula with no branch
+anywhere. A `spend` must be positive, because drawer cash cannot un-buy a fridge.
+It happens in production: once at each outlet in August 2026.
+
+### The write path
+
+Structural, not conventional: **clients cannot write any of these five tables.**
+There is no insert, update or delete grant and no write policy. Every write goes
+through a `security definer` command that computes the derived figures inside the
+transaction that writes the row — `record_drawer_observation`,
+`record_drawer_cash_out`, `edit_drawer_observation`,
+`adjust_drawer_observation`, `acknowledge_drawer_exception`,
+`verify_ledger_day`. `record_drawer_observation` takes a per-outlet advisory lock
+so two concurrent counts cannot each read the same predecessor and both insert.
+
+An observation is **fully editable, with no reason and no trail, until the next
+observation at that outlet is recorded** — that next one reads its
+`opening_paise`, which is the moment the figure becomes load-bearing. From then a
+correction is an append-only adjustment carrying a required reason, with both
+figures readable and no later stored opening moved.
+
+A `spend` is **not** an expense. `docs/DATA_MODEL.md` records that there is
+deliberately no capital marker and the month is a cash-basis **operating**
+estimate, so a ₹40,000 fridge routed through expenses would move the drawer
+correctly and wreck the month.
+
+### The ledger day is derived and never stored
+
+No table holds a per-outlet-per-day ledger row. The day is computed on read from
+bills, expenses, `aggregator_channel_days`, drawer cash out and observations. Two
+properties follow and both are worth the read cost: the row can never disagree
+with itself, and a day nobody touched still renders in full.
+
+A reconciliation exception is derived the same way — a payment or occurrence
+instant inside an already-observed interval that arrived after the observation was
+recorded. Only the human act of acknowledging one is stored.
+
+### Superseded, and left in place
+
+**`cash_withdrawals`** — `id`, `outlet_id`, `business_date`, `amount_paise`,
+`reason`, `withdrawn_by`, `recorded_by`, `created_at`.
+
+**`daily_cash_records`** — `id`, `outlet_id`, `business_date`,
+`opening_cash_paise`, `cash_sales_paise`, `cash_expenses_paise`,
+`cash_withdrawn_paise`, `expected_closing_paise`, `actual_closing_paise`,
+`difference_paise`, `closed_by`, `closed_at`, `notes`.
+
+Both tables and `close_business_day()` still exist and are **written by nothing**.
+`cash-is-counted-not-closed` (#11) drops and renames nothing, which is its entire
+revert story: a revert is one edit to `src/gates/registry.ts` and a deploy, with
+no data to recover. Neither table has ever held a production row (verified by
+read-only query on 2026-08-26 and again on 2026-08-27), and
+`retire-the-manual-ledger` (#12) removes them after asserting that.
+
+`billing_assert_day_ready()` had exactly one caller, `close_business_day()`. The
+question it answers — whether a business date's billing is complete — is real,
+but it cannot gate counting cash at 22:00 with orders open and tablets live, and
+no day-level seal has ever been performed by anybody. It is **not re-homed**; it
+retires with its caller in #12.
 
 ## The manual ledger (temporary, #36)
 
-Two tables that exist because billing, expenses and daily cash were not live
+Two tables that exist because billing, expenses and the drawer were not live
 while August 2026 was trading. Billing now replaces their Cash/UPI inputs one
 outlet/date at a time; aggregator trade, expenses and drawer facts remain here.
 **Both are designed to be dropped**, by

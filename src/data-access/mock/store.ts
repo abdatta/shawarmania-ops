@@ -149,6 +149,23 @@ export interface DemoStore {
    * them and the form never writes them.
    */
   aggregatorChannelDays: Tables<'aggregator_channel_days'>[]
+  /**
+   * The drawer as a continuous balance (#11). Session-scoped like every other
+   * slice, so recording a count as the manager and reading it as the owner is
+   * one demo rather than two.
+   *
+   * The fixture deliberately reaches the states the surface has to render
+   * differently: an anchor carrying no arithmetic at all, an ordinary night that
+   * balanced, an approximate count whose difference exactly matches a run of cash
+   * bills, a genuine shortfall that matches nothing, a negative collection (cash
+   * added to a thin drawer), and a spend that stays out of the month's operating
+   * expenses.
+   */
+  drawerObservations: Tables<'drawer_observations'>[]
+  drawerCashOut: Tables<'drawer_cash_out'>[]
+  drawerObservationAdjustments: Tables<'drawer_observation_adjustments'>[]
+  ledgerDayVerifications: Tables<'ledger_day_verifications'>[]
+  drawerAcknowledgements: Tables<'drawer_reconciliation_acknowledgements'>[]
 }
 
 /** The outlet every demo persona but the owner belongs to. */
@@ -193,6 +210,20 @@ function outletById(id: string) {
 /** `19:24` on a business date, as an instant. Demo data, so IST is assumed. */
 function instantAt(businessDate: string, time: string): string {
   return new Date(`${businessDate}T${time}:00+05:30`).toISOString()
+}
+
+/**
+ * The same instant, or now, whichever is earlier.
+ *
+ * The seeds describe a whole trading day whatever time the demo is opened, so a
+ * row on today's business date can carry a time that has not arrived. Readers
+ * that filter by `business_date` never noticed; the drawer reads by instant and
+ * correctly ignores money not yet taken, and the two then disagree about the same
+ * cash. Production cannot produce a future instant at all.
+ */
+function notLaterThanNow(instant: string): string {
+  const now = new Date().toISOString()
+  return instant > now ? now : instant
 }
 
 export function createDemoStore(options: { billingLifecycle?: boolean } = {}): DemoStore {
@@ -340,6 +371,50 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
   ;[...billSeeds]
     .sort((a, b) => b.daysAgo - a.daysAgo || a.time.localeCompare(b.time))
     .forEach(materialise)
+
+  /**
+   * **Nothing in the demo may claim to have happened later than now.**
+   *
+   * The seeds describe a whole trading evening on today's business date — bills
+   * out to 20:40 — and the fixture stamps them at those times whatever the clock
+   * says. That was invisible while every reader filtered by `business_date`:
+   * Billing history counted all nine of today's bills either way.
+   *
+   * The drawer reads by **instant**, and it was right to exclude a bill stamped
+   * two hours from now, because cash that has not been taken is not in the
+   * drawer. So the two surfaces disagreed by ₹2,130 — Billing showing ₹3,711 of
+   * cash today against the drawer's ₹1,899 since the last count — and the drawer
+   * was the honest one.
+   *
+   * Production cannot produce this: `pay_billing_order` bounds `paid_at` to
+   * within 300 seconds of the command's own `created_at`. So the fixture is what
+   * is wrong, and this is where it stops being wrong.
+   *
+   * Rows already in the past are untouched. A row from the future is pulled back
+   * to just before now, keeping seed order and staying distinct, so a bill still
+   * follows the bill before it.
+   */
+  const clampFutureInstants = () => {
+    const nowMs = Date.now()
+    const future = bills
+      .filter((bill) => Date.parse(bill.paid_at ?? bill.created_at) > nowMs)
+      .sort((a, b) => (a.paid_at ?? a.created_at).localeCompare(b.paid_at ?? b.created_at))
+
+    // Latest first, so the last seeded bill lands closest to now and the order
+    // the seeds describe survives the move.
+    future.reverse().forEach((bill, offset) => {
+      const at = new Date(nowMs - (offset + 1) * 60_000).toISOString()
+      const syncedLater = bill.synced_at > (bill.paid_at ?? bill.created_at)
+      bill.created_at = at
+      bill.ordered_at = at
+      bill.paid_at = at
+      // A bill that arrived late keeps its own arrival instant; every other one
+      // landed when it was rung, and `synced_at` before `paid_at` would be a
+      // bill delivered before it existed.
+      if (!syncedLater) bill.synced_at = at
+    })
+  }
+  clampFutureInstants()
 
   /**
    * Every outlet numbers its own bills from one, without a gap. The real
@@ -554,7 +629,16 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     amount_paise: seed.amountPaise,
     payment_method: seed.paymentMethod,
     description: seed.description ?? null,
-    created_at: instantAt(businessDate(seed.daysAgo), seed.time),
+    created_at: notLaterThanNow(instantAt(businessDate(seed.daysAgo), seed.time)),
+    // The fixture knows the time, so it states it. That is what puts a demo
+    // expense on one side or the other of a mid-day count rather than leaving
+    // the drawer to fall back on when the row was written (#11).
+    //
+    // Clamped for the reason the bills are: an expense stamped later this evening
+    // is counted by every reader that filters on `business_date` and correctly
+    // ignored by the drawer, which reads by instant — and two surfaces
+    // disagreeing about the same money is how a demo stops being believed.
+    occurred_at: notLaterThanNow(instantAt(businessDate(seed.daysAgo), seed.time)),
     recorded_by: MANAGER_ID,
   }))
 
@@ -698,6 +782,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       // production owner manages nothing.
       recorded_away: seed.recordedAway ?? false,
       created_at: instantAt(businessDate(seed.daysAgo), seed.time),
+      occurred_at: instantAt(businessDate(seed.daysAgo), seed.time),
       updated_at: instantAt(businessDate(seed.daysAgo), seed.time),
       updated_by: null,
       voided_at: seed.voidedAtTime
@@ -892,6 +977,266 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     }
   }
 
+  // -- The drawer (#11) -----------------------------------------------------
+  //
+  // **Every derived figure here is computed from this store's own bills,
+  // expenses and cash movements, exactly as the adapter computes them.** The
+  // first version hardcoded round numbers from `design.md`'s worked example and
+  // three of the four observations disagreed with the bills the same demo shows
+  // in Billing and in the Ledger — one by ₹45,366. It also reported an
+  // opening-chain break of ₹354 that nobody had designed: an artefact of every
+  // observation storing the same opening instead of chaining from the count
+  // before it.
+  //
+  // So only two things are chosen by hand: **when** each count happened, and
+  // **how far out** it was. Everything else is derived, which is what makes the
+  // figures on this page agree with the figures two screens away. The drift check
+  // below re-derives them and throws if they ever stop agreeing.
+
+  const drawerObs = (n: number) => `dc000000-0000-4000-a000-${String(n).padStart(12, '0')}`
+  const drawerOut = (n: number) => `dd000000-0000-4000-a000-${String(n).padStart(12, '0')}`
+
+  /** Cash actually received in `(from, to]`, from the latest effective allocations. */
+  const drawerCashIn = (from: string | null, to: string): number => {
+    let total = 0
+    for (const bill of bills) {
+      if (bill.outlet_id !== DEMO_OUTLET_ID || bill.status !== 'settled') continue
+      const at = bill.paid_at ?? bill.created_at
+      // Half-open at the start, closed at the end (design D2).
+      if ((from !== null && at <= from) || at > to) continue
+      total += (billPayments.get(bill.id) ?? [])
+        .filter((allocation) => allocation.method === 'cash')
+        .reduce((sum, allocation) => sum + allocation.amountPaise, 0)
+    }
+    return total
+  }
+
+  /** Cash expenses in `(from, to]`, by occurrence instant. */
+  const drawerCashExpenses = (from: string | null, to: string): number =>
+    expenses
+      .filter((row) => row.outlet_id === DEMO_OUTLET_ID && row.payment_method === 'cash')
+      .filter((row) => {
+        const at = row.occurred_at ?? row.created_at
+        return (from === null || at > from) && at <= to
+      })
+      .reduce((sum, row) => sum + row.amount_paise, 0)
+
+  const drawerObservations: Tables<'drawer_observations'>[] = []
+  const drawerCashOut: Tables<'drawer_cash_out'>[] = []
+
+  /**
+   * The counts, as *decisions* rather than as figures.
+   *
+   * `outBy` is how far the drawer was from what the arithmetic expected, so the
+   * state each row demonstrates survives any change to the bills around it:
+   * nought matches, a negative is short, a positive is over.
+   */
+  const countPlan = [
+    // The anchor. No opening, no expected total, no difference — the drawer
+    // begins at what was counted, and every earlier date reads `not tracked yet`.
+    { daysAgo: 4, time: '22:30', anchor: true, countedPaise: 145000, collectPaise: 0 },
+    // An ordinary night that balanced, with a collection leaving a small float.
+    { daysAgo: 3, time: '22:20', outBy: 0, collectPaise: 50000 },
+    // Counted at 22:15 and typed at 23:04 — approximate, recorded away, and
+    // genuinely short. Nothing explains it, which is the case the surface must
+    // refuse to explain away.
+    {
+      daysAgo: 2,
+      time: '22:15',
+      recordedTime: '23:04',
+      outBy: -50000,
+      collectPaise: 40000,
+      onSite: false,
+      awayReason: 'counted at the counter, entered after getting home',
+    },
+    // A thin drawer topped up: the collection is NEGATIVE, which is cash added.
+    // Same table, same kind, no reason — the sign is the whole difference.
+    { daysAgo: 1, time: '22:00', outBy: -20000, collectPaise: -100000 },
+  ] as const
+
+  // A spend, well before the first count so it sits in no settled interval's
+  // arithmetic and demonstrates only what it is for: drawer cash that bought
+  // something and stays out of the month's operating figure.
+  drawerCashOut.push({
+    id: drawerOut(90),
+    outlet_id: DEMO_OUTLET_ID,
+    kind: 'spend',
+    amount_paise: 4000000,
+    occurred_at: instantAt(businessDate(5), '18:40'),
+    recorded_by: MANAGER_ID,
+    observation_id: null,
+    reason: 'Chest freezer for the prep counter',
+    recorded_lat: null,
+    recorded_lng: null,
+    recorded_accuracy_m: null,
+    recorded_distance_m: null,
+    recorded_on_site: true,
+    away_reason: null,
+    created_at: instantAt(businessDate(5), '18:40'),
+  })
+
+  countPlan.forEach((plan, index) => {
+    const countedAt = instantAt(businessDate(plan.daysAgo), plan.time)
+    const recordedTime = 'recordedTime' in plan ? plan.recordedTime : undefined
+    const recordedAt = instantAt(businessDate(plan.daysAgo), recordedTime ?? plan.time)
+    const previous = drawerObservations.at(-1) ?? null
+    const anchor = 'anchor' in plan && plan.anchor === true
+
+    let openingPaise: number | null = null
+    let expectedPaise: number | null = null
+    let countedPaise: number
+
+    if (anchor || previous === null) {
+      countedPaise = 'countedPaise' in plan ? plan.countedPaise : 0
+    } else {
+      // `next opening = counted − that observation's OWN cash out` (design D3),
+      // read from the link rather than a time window.
+      openingPaise =
+        previous.counted_total_paise -
+        drawerCashOut
+          .filter((movement) => movement.observation_id === previous.id)
+          .reduce((sum, movement) => sum + movement.amount_paise, 0)
+
+      // The previous observation's own cash out is already inside `openingPaise`,
+      // and this observation's own collection does not exist yet — which is the
+      // same rule the drift check below has to state explicitly: an observation's
+      // own cash out is in neither its expected total nor its counted total.
+      const cashOutInInterval = drawerCashOut
+        .filter((movement) => movement.observation_id !== previous.id)
+        .filter(
+          (movement) =>
+            movement.occurred_at > previous.counted_at && movement.occurred_at <= countedAt,
+        )
+        .reduce((sum, movement) => sum + movement.amount_paise, 0)
+
+      expectedPaise =
+        openingPaise +
+        drawerCashIn(previous.counted_at, countedAt) -
+        drawerCashExpenses(previous.counted_at, countedAt) -
+        cashOutInInterval
+
+      countedPaise = expectedPaise + ('outBy' in plan ? plan.outBy : 0)
+    }
+
+    const id = drawerObs(index + 1)
+    drawerObservations.push({
+      id,
+      outlet_id: DEMO_OUTLET_ID,
+      counted_at: countedAt,
+      recorded_at: recordedAt,
+      is_anchor: anchor,
+      // All three null together on the anchor, which has no interval at all.
+      opening_paise: openingPaise,
+      expected_paise: expectedPaise,
+      difference_paise: expectedPaise === null ? null : countedPaise - expectedPaise,
+      counted_total_paise: countedPaise,
+      is_approximate: recordedTime !== undefined,
+      tolerance_minutes: 15,
+      recorded_by: MANAGER_ID,
+      corrected_by: null,
+      recorded_lat: null,
+      recorded_lng: null,
+      recorded_accuracy_m: null,
+      recorded_distance_m: null,
+      recorded_on_site: 'onSite' in plan ? plan.onSite : true,
+      away_reason: 'awayReason' in plan ? plan.awayReason : null,
+      note: anchor ? 'the books open here' : null,
+      created_at: recordedAt,
+      updated_at: recordedAt,
+    })
+
+    if (plan.collectPaise !== 0) {
+      drawerCashOut.push({
+        id: drawerOut(index + 1),
+        outlet_id: DEMO_OUTLET_ID,
+        kind: 'collection',
+        amount_paise: plan.collectPaise,
+        occurred_at: countedAt,
+        recorded_by: MANAGER_ID,
+        observation_id: id,
+        reason: null,
+        recorded_lat: null,
+        recorded_lng: null,
+        recorded_accuracy_m: null,
+        recorded_distance_m: null,
+        recorded_on_site: 'onSite' in plan ? plan.onSite : true,
+        away_reason: 'awayReason' in plan ? plan.awayReason : null,
+        created_at: countedAt,
+      })
+    }
+  })
+
+  /**
+   * The drift check, mirroring the manual ledger's.
+   *
+   * The figures above are derived, so this can only fail if somebody edits a
+   * derived column by hand or changes a bill without re-deriving. That is
+   * precisely the failure worth catching loudly: a demo whose drawer disagrees
+   * with its own bills is a demo that stops being believed, and a silent ₹45,366
+   * is how that happens.
+   */
+  drawerObservations.forEach((row, index) => {
+    const previous = drawerObservations[index - 1]
+    if (row.is_anchor || !previous) {
+      if (row.opening_paise !== null || row.expected_paise !== null) {
+        throw new Error('Demo fixture drift: an anchor observation carries arithmetic.')
+      }
+      return
+    }
+
+    const ownOfPrevious = drawerCashOut
+      .filter((movement) => movement.observation_id === previous.id)
+      .reduce((sum, movement) => sum + movement.amount_paise, 0)
+    const opening = previous.counted_total_paise - ownOfPrevious
+    if (opening !== row.opening_paise) {
+      throw new Error(
+        `Demo fixture drift: ${row.counted_at} opens at ${row.opening_paise} but ` +
+          `${previous.counted_at} carries ${opening}. Fix the fixture, not this check.`,
+      )
+    }
+
+    // **Neither observation's own cash out belongs in this term.** The previous
+    // one's is already in the opening, and THIS one's is in neither its expected
+    // total nor its counted total — it reduces the next opening instead. Missing
+    // the second exclusion is what made this check disagree with the generation
+    // above by exactly one collection.
+    const cashOutInInterval = drawerCashOut
+      .filter(
+        (movement) => movement.observation_id !== previous.id && movement.observation_id !== row.id,
+      )
+      .filter(
+        (movement) =>
+          movement.occurred_at > previous.counted_at && movement.occurred_at <= row.counted_at,
+      )
+      .reduce((sum, movement) => sum + movement.amount_paise, 0)
+    const expected =
+      opening +
+      drawerCashIn(previous.counted_at, row.counted_at) -
+      drawerCashExpenses(previous.counted_at, row.counted_at) -
+      cashOutInInterval
+
+    if (expected !== row.expected_paise) {
+      throw new Error(
+        `Demo fixture drift: ${row.counted_at} expects ${row.expected_paise} but the store's ` +
+          `own bills, expenses and cash movements come to ${expected}.`,
+      )
+    }
+    if (row.difference_paise !== row.counted_total_paise - expected) {
+      throw new Error(`Demo fixture drift: ${row.counted_at} difference is not counted − expected.`)
+    }
+  })
+
+  const ledgerDayVerifications: Tables<'ledger_day_verifications'>[] = [
+    {
+      id: 'df000000-0000-4000-a000-000000000001',
+      outlet_id: DEMO_OUTLET_ID,
+      business_date: businessDate(3),
+      verified_by: OWNER_ID,
+      verified_at: instantAt(businessDate(2), '09:15'),
+      note: 'checked against the counter',
+    },
+  ]
+
   return {
     today,
     businessDate,
@@ -923,5 +1268,10 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     manualLedgerDays,
     manualLedgerExpenses,
     aggregatorChannelDays,
+    drawerObservations,
+    drawerCashOut,
+    drawerObservationAdjustments: [],
+    ledgerDayVerifications,
+    drawerAcknowledgements: [],
   }
 }

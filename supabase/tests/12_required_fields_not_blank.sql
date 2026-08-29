@@ -324,7 +324,18 @@ $$, $$ values
   ('aggregator_auth_requests_code_not_blank'),
   -- A restaurant mapping names an external identity; one that occupies the
   -- field and says nothing would be an ambiguous write waiting to happen.
-  ('outlet_channel_restaurants_ref_not_blank')
+  ('outlet_channel_restaurants_ref_not_blank'),
+  -- The drawer (#11). An observation's note is OPTIONAL, on exactly the
+  -- reasoning `manual_ledger_days_note_not_blank` gives: it exists to explain a
+  -- difference, and most counts have none to explain. What is refused is a note
+  -- that occupies the field and says nothing.
+  ('drawer_observations_note_not_blank'),
+  -- A cash movement's reason is OPTIONAL on the column and REQUIRED for a spend
+  -- by a separate constraint below, because a collection deliberately asks for
+  -- none: the person is the session, and asking why the owner took the day's
+  -- takings collects a column of the word "collection". Carried historical rows
+  -- may hold one anyway, so the column stays nullable rather than being split.
+  ('drawer_cash_out_reason_not_blank')
  $$, 'every not-blank constraint in the schema is accounted for, and no others exist');
 
 -- The manual ledger's two cash-movement reasons are blank-checked too, under
@@ -340,6 +351,24 @@ select is(
                       'manual_ledger_days_cash_removed_reason')),
   2::bigint,
   'both manual-ledger cash-movement reasons are constrained, under their own names');
+
+-- The drawer's three conditional reasons, for the same reason: each does two
+-- jobs, so neither half of the name would be honest as `_not_blank`.
+--
+--   * a reason is REQUIRED when the recorder was outside the outlet's fence, or
+--     had no position at all, and is never blank when present. Nothing is
+--     REFUSED for being elsewhere (design D11) — the reason is what makes an
+--     off-site count reviewable instead of invisible.
+--   * a spend states what it bought; a collection deliberately asks nothing.
+
+select is(
+  (select count(*) from pg_catalog.pg_constraint
+    where connamespace = 'public'::regnamespace
+      and conname in ('drawer_observations_away_needs_a_reason',
+                      'drawer_cash_out_away_needs_a_reason',
+                      'drawer_cash_out_spend_needs_a_reason')),
+  3::bigint,
+  'the drawer''s off-site reasons and its spend reason are constrained, under their own names');
 
 select * from finish();
 rollback;

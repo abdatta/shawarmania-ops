@@ -43,7 +43,8 @@ here.**
 ### Requirement: The manual ledger leaves the navigation while remaining reachable
 
 While the derived ledger statement is being proved, the manual ledger SHALL
-remain a live surface at its own route and SHALL be removed from the primary
+remain a live surface with a reachable route and its own navigation entry, and
+SHALL be removed from the primary
 navigation, so that the derived statement is the one a reader lands on and the
 manual form remains available for comparison and as the fallback.
 
@@ -57,7 +58,14 @@ business date in each and compare them.
 #### Scenario: The reader lands on the derived statement
 
 - **WHEN** a Super Admin or an assigned Franchise Admin opens the ledger from the navigation
-- **THEN** the derived statement is shown and the manual form has no navigation entry
+- **THEN** the derived statement is shown, and the manual form keeps a navigation
+  entry of its own under a different name so both can be open at once
+
+#### Scenario: The fallback is reachable without remembering a route
+
+- **WHEN** the navigation is inspected during the overlap
+- **THEN** it offers both readings as separate entries, because a fallback that
+  needs a typed URL is not one
 
 #### Scenario: The manual form is still reachable
 

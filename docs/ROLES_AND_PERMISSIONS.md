@@ -56,8 +56,22 @@ reach these surfaces, and a navigation entry keeps the reader in their own
 shell rather than reading as though they had become the manager.
 
 **Reaching a surface confers nothing.** What the owner may write there is still
-the database's answer, which is why they reach an outlet's cash surface and are
-offered neither its day close nor a withdrawal. See the drawer note below.
+the database's answer.
+
+**The drawer is the deliberate exception, and it was decided on its own merits.**
+`cash-is-counted-not-closed` (#11) grants a Super Admin every outlet's drawer
+while holding no assignment there. The old rule refused it, on the premise that a
+cash count is a claim by whoever counted the cash — and that premise is intact;
+the inference was wrong. **The person who counts the cash at these outlets is the
+owner.** Both Super Admins additionally had their Franchise Admin rows *deleted*
+rather than ended on 2026-08-01, so under the previous rule the database would
+have refused everybody the primary action, at both outlets, on day one.
+
+What replaces the refusal is evidence rather than prohibition: every drawer record
+carries whether the account was inside that outlet's geofence, a reason is
+required and stored where it was not, and **no drawer action is refused for being
+recorded elsewhere.** A collector who enters every count from home shows up as a
+column of reasons, which is oversight a refusal would not have produced.
 
 **The owner who runs a shop** is still assigned as its Franchise Admin, and
 writes there like any manager — including the drawer. That authority comes from
@@ -125,9 +139,17 @@ assignment cannot be ended by anyone, including its holder.
 | View attendance | R all | ✓ own outlet | — | R self |
 | Override a failed geofence check | ✓ | ✓ own outlet | — | — |
 | Correct a settled check-in time (audited) | ✓ any outlet | ✓ own outlet | — | — |
-| **Daily cash** |
-| View | R all | ✓ own outlet | — | — |
-| Record withdrawal, close the day | — | ✓ own outlet | — | — |
+| **Cash drawer** (#11) |
+| Read the drawer and its counts | ✓ any outlet | ✓ own outlets | — | — |
+| Record a count | ✓ any outlet | ✓ own outlets | — | — |
+| Record a collection or a spend | ✓ any outlet | ✓ own outlets | — | — |
+| Edit the most recent count | ✓ any outlet | ✓ own outlets | — | — |
+| Adjust a count a later one anchored on | ✓ any outlet | ✓ own outlets | — | — |
+| Acknowledge a late arrival | ✓ any outlet | ✓ own outlets | — | — |
+| **Ledger statement** (#11) |
+| Read a day or a month | ✓ any outlet | ✓ own outlets | — | — |
+| Verify a day | ✓ any outlet | ✓ own outlets | — | — |
+| Type any figure on it | — | — | — | — |
 | **Profit and loss** |
 | View outlet P&L | R all | R own outlet | — | — |
 | Compare outlets | ✓ | — | — | — |

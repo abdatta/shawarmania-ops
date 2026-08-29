@@ -2341,6 +2341,10 @@ export interface DataAdapters {
   /** Temporary (#36). Removed by `retire-the-manual-ledger` (#12), which carries
    *  these rows into the live records and archives the day table. */
   manualLedger: ManualLedgerAdapter
+  /** The drawer as a continuous balance, observed at instants (#11). */
+  cashDrawer: CashDrawerAdapter
+  /** The per-day and per-month reading, derived on read with nothing typed in (#11). */
+  ledgerStatement: LedgerStatementAdapter
   /** What the Zomato sync has done, and the two things the owner can do about it (#42). */
   aggregatorSync: AggregatorSyncAdapter
   /**
@@ -2639,4 +2643,399 @@ export interface AddressLookupAdapter {
    * municipality, neither of which is what goes on an invoice.
    */
   districtForPincode(pincode: string, signal?: AbortSignal): Promise<string | null>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The cash drawer, as a continuous balance (#11).
+
+/**
+ * A cash movement into or out of the drawer that is not a sale or an expense.
+ *
+ * `amountPaise` is **signed and non-zero**: positive is cash leaving the drawer,
+ * negative is cash added to it. There is deliberately no separate record, kind
+ * or surface for cash going in, because the interval arithmetic subtracts this
+ * term whatever its sign and subtracting a negative adds (design D5).
+ */
+export interface DrawerCashOutRecord {
+  id: string
+  outletId: string
+  kind: 'collection' | 'spend'
+  amountPaise: number
+  occurredAt: string
+  recordedBy: string
+  recordedByName: string | null
+  /** Set when this movement was written as part of an observation. */
+  observationId: string | null
+  /** Required for a spend, absent on a routine collection. */
+  reason: string | null
+  onSite: boolean
+  awayReason: string | null
+}
+
+/** A correction posted after an observation went load-bearing. */
+export interface DrawerAdjustmentRecord {
+  id: string
+  observationId: string
+  originalCountedTotalPaise: number
+  correctedCountedTotalPaise: number
+  reason: string
+  adjustedBy: string
+  adjustedByName: string | null
+  adjustedAt: string
+}
+
+/**
+ * One observation of the drawer.
+ *
+ * `openingPaise`, `expectedPaise` and `differencePaise` are **all null exactly
+ * when this is the outlet's anchor** — its first observation, which has no
+ * interval and therefore no arithmetic (design D18). Every other row carries all
+ * three, and the database enforces `difference = counted − expected`.
+ *
+ * Every one of those three is computed by the database inside the transaction
+ * that writes the row. A caller cannot supply them; there is no field for it.
+ */
+export interface DrawerObservationRecord {
+  id: string
+  outletId: string
+  /** Human-supplied: the instant the drawer was actually counted. */
+  countedAt: string
+  /** The server's clock, so the lag between the two cannot be understated. */
+  recordedAt: string
+  isAnchor: boolean
+  openingPaise: number | null
+  expectedPaise: number | null
+  differencePaise: number | null
+  countedTotalPaise: number
+  isApproximate: boolean
+  toleranceMinutes: number
+  recordedBy: string
+  recordedByName: string | null
+  correctedBy: string | null
+  correctedByName: string | null
+  onSite: boolean
+  awayReason: string | null
+  note: string | null
+  /** Movements written as part of this observation. Excluded from its own figures. */
+  ownCashOut: DrawerCashOutRecord[]
+  adjustments: DrawerAdjustmentRecord[]
+  /**
+   * Set when this row's stored opening disagrees with the previous observation's
+   * carry-forward. **Reported, never repaired** (design D4): a stored figure a
+   * person's count produced is evidence, and a recomputed one is not.
+   * Production's notebook already carries eleven such breaks.
+   */
+  openingBreakPaise: number | null
+}
+
+/** A cash bill near a candidate count instant. */
+export interface NearbyCashBillRecord {
+  billId: string
+  billNumber: number
+  paidAt: string
+  cashPaise: number
+}
+
+/**
+ * Work that landed inside an interval an observation had already covered.
+ *
+ * **Derived, never stored.** What makes this an exception is that the payment or
+ * occurrence instant falls inside the interval and the row arrived after the
+ * observation was recorded — both already facts on rows the schema holds. Only
+ * the acknowledgement is written down.
+ */
+export interface DrawerExceptionRecord {
+  sourceKind: 'bill' | 'expense'
+  sourceId: string
+  /** A bill reference, or an expense's category, for naming it on screen. */
+  label: string
+  amountPaise: number
+  occurredAt: string
+  arrivedAt: string
+  observationId: string
+  /** What the observation's difference would have been had this been present. */
+  differenceWouldHaveBeenPaise: number
+  /**
+   * True when this arrival accounts for the variance the observation recorded.
+   * The recorded figure still stands; the explanation sits beside it.
+   */
+  explainsRecordedVariance: boolean
+  acknowledgedAt: string | null
+  acknowledgedByName: string | null
+  acknowledgementNote: string | null
+}
+
+/**
+ * What the Cash drawer surface opens on: a balance, not a date picker.
+ *
+ * That is the question the collector has when they walk in, and it is why every
+ * figure here is "since the last count" rather than "for a business date".
+ */
+export interface DrawerState {
+  outletId: string
+  /** Null at an outlet with no observation yet: the drawer is not tracked. */
+  lastObservation: DrawerObservationRecord | null
+  /** What should be in the drawer right now. Null before the anchor. */
+  expectedNowPaise: number | null
+  /** What the last observation left behind: counted less its own cash out. */
+  leftInDrawerPaise: number | null
+  cashReceiptsSincePaise: number
+  cashReceiptsSinceCount: number
+  cashExpensesSincePaise: number
+  cashExpensesSinceCount: number
+  /** Signed, so a top-up since the last count raises this. */
+  cashOutSincePaise: number
+  cashOutSinceCount: number
+  /**
+   * How many business dates the pending interval covers. The surface says so
+   * once it exceeds one, before the count is taken, because a long interval
+   * blurs attribution and the screen should not imply precision it lacks.
+   */
+  daysCovered: number
+  /**
+   * The FIRST page of the count history, newest first, so the surface renders
+   * from one read. Older pages arrive through `listObservations` — the list is
+   * paged rather than capped, because two outlets counted daily outgrow any cap
+   * in a fortnight (design D21).
+   */
+  recentObservations: DrawerObservationRecord[]
+  /** For the movable boundary and the exact-coincidence report. */
+  nearbyCashBills: NearbyCashBillRecord[]
+  /**
+   * Devices holding undelivered work. **An advisory, never a block**: the
+   * collector is standing at the counter holding cash and must be able to record
+   * what they counted.
+   */
+  unsyncedDevices: { count: number; since: string | null }
+  exceptions: DrawerExceptionRecord[]
+}
+
+export interface RecordObservationInput {
+  outletId: string
+  countedAt: string
+  countedTotalPaise: number
+  /** True when the recorder asserted the instant rather than approximating it. */
+  certain: boolean
+  position: PositionReading | null
+  /** Required when the recorder was not inside the outlet's fence. */
+  awayReason?: string | null
+  note?: string | null
+  /**
+   * The collection taken at the same moment, written in the same transaction.
+   * Signed: negative is cash added to a thin drawer.
+   */
+  cashOut?: {
+    amountPaise: number
+    kind: 'collection' | 'spend'
+    reason?: string | null
+  } | null
+}
+
+export interface RecordCashOutInput {
+  outletId: string
+  /** Signed and non-zero. Negative is cash added. */
+  amountPaise: number
+  kind: 'collection' | 'spend'
+  occurredAt?: string | null
+  /** Required for a spend. */
+  reason?: string | null
+  position: PositionReading | null
+  awayReason?: string | null
+}
+
+export class CashDrawerActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
+    this.name = 'CashDrawerActionError'
+  }
+}
+
+/**
+ * One page of an outlet's count history.
+ *
+ * **Cursored on the counted instant, never on an offset.** A count recorded
+ * while somebody is reading shifts every offset below it by one, which either
+ * repeats a row or hides one — and the row it hides is a count nobody asked to
+ * hide. `before` is exclusive, so a page continues from the oldest row already
+ * on screen. The counted instant is strictly increasing per outlet, enforced by
+ * `record_drawer_observation`, so it is a total order and a safe cursor.
+ */
+/**
+ * How many counts a page holds. One number, shared by `getState`'s first page,
+ * both adapters and the surface, so "is there another page?" is never answered
+ * by two different sizes disagreeing.
+ */
+export const DRAWER_HISTORY_PAGE = 10
+
+export interface ObservationPageQuery {
+  /** Exclusive upper bound: the `countedAt` of the oldest row already shown. */
+  before?: string | null
+  limit?: number
+}
+
+export interface ObservationPage {
+  observations: DrawerObservationRecord[]
+  /** False once the oldest count has been reached, so the list can say so. */
+  hasMore: boolean
+}
+
+export interface CashDrawerAdapter {
+  getState(outletId: string): Promise<DrawerState>
+  /**
+   * A page of past counts, newest first. `getState` returns the first page; this
+   * returns the ones after it (design D21).
+   */
+  listObservations(outletId: string, query?: ObservationPageQuery): Promise<ObservationPage>
+  /**
+   * The primary action. Refused for an instant in the future, one not later than
+   * the previous observation's, or one before the outlet's earliest drawer
+   * activity — each named by what it collided with.
+   */
+  recordObservation(input: RecordObservationInput): Promise<DrawerObservationRecord>
+  recordCashOut(input: RecordCashOutInput): Promise<DrawerCashOutRecord>
+  /**
+   * Full edit, no reason and no trail — available only while no later
+   * observation at that outlet has anchored on this one.
+   */
+  editObservation(
+    observationId: string,
+    countedTotalPaise: number,
+    note?: string | null,
+  ): Promise<DrawerObservationRecord>
+  /** The only path once a later observation exists. Reason required. */
+  adjustObservation(
+    observationId: string,
+    correctedCountedTotalPaise: number,
+    reason: string,
+  ): Promise<DrawerAdjustmentRecord>
+  /**
+   * One of the two resolutions. The other is recording a fresh observation,
+   * which needs no method of its own. Neither alters a stored figure.
+   */
+  acknowledgeException(
+    observationId: string,
+    sourceKind: 'bill' | 'expense',
+    sourceId: string,
+    note?: string | null,
+  ): Promise<void>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The ledger as a derived statement (#11).
+
+/** One movement on the drawer's timeline, ordered by instant rather than grouped. */
+export type LedgerDrawerEvent =
+  | { kind: 'cash-sales'; instant: string; paise: number; bills: number }
+  | { kind: 'cash-expense'; instant: string; paise: number; label: string }
+  | { kind: 'cash-out'; instant: string; paise: number; label: string; spend: boolean }
+  | { kind: 'observation'; instant: string; observation: DrawerObservationRecord }
+
+export interface LedgerChannelReading {
+  channel: string
+  grossPaise: number
+  /** Null means **not known yet**, and must never render as nought. */
+  commissionPaise: number | null
+  netPaise: number | null
+  settlementState: string
+}
+
+/**
+ * One business date, computed on read from bills, expenses, sourced aggregator
+ * channel days, drawer cash out and drawer observations.
+ *
+ * **No table stores this.** Two properties follow and both are worth the read
+ * cost: the row can never disagree with itself, and a day nobody touched still
+ * renders in full.
+ */
+export interface LedgerStatementDay {
+  outletId: string
+  businessDate: string
+  revenue: {
+    cashPaise: number
+    cashBills: number
+    upiPaise: number
+    upiBills: number
+    channels: LedgerChannelReading[]
+    totalPaise: number
+    /** True while any channel's commission is undetermined, so the total is a ceiling. */
+    isCeiling: boolean
+  }
+  drawer: {
+    /**
+     * `counted` — an observation falls in this date.
+     * `carried` — the app's belief, unchecked. The only word on the month view
+     *   that says how much the numbers can be trusted.
+     * `not-tracked-yet` — before this outlet's anchor. A different claim from
+     *   `carried`: there is no belief here to leave unchecked (design D18).
+     */
+    state: 'counted' | 'carried' | 'not-tracked-yet'
+    openingPaise: number | null
+    closingPaise: number | null
+    lastConfirmedAt: string | null
+    /** How many business dates the observation covering this date spans. */
+    observationCoversDays: number | null
+    timeline: LedgerDrawerEvent[]
+  }
+  expenses: {
+    totalPaise: number
+    rows: Array<{
+      id: string
+      label: string
+      paise: number
+      isCash: boolean
+      instant: string
+      recordedByName: string | null
+    }>
+  }
+  verifications: Array<{
+    id: string
+    verifiedByName: string | null
+    verifiedAt: string
+    note: string | null
+  }>
+  /**
+   * Non-empty when a figure this day depends on moved after it was verified.
+   * Names what moved. Blocks nothing: settlement legitimately restates a day.
+   */
+  changedSinceVerified: string[]
+}
+
+/** One row of the month view. */
+export interface LedgerStatementMonthDay {
+  businessDate: string
+  openingPaise: number | null
+  closingPaise: number | null
+  state: 'counted' | 'carried' | 'not-tracked-yet'
+  countedAt: string | null
+  differencePaise: number | null
+  observationCoversDays: number | null
+}
+
+export interface LedgerStatementMonth {
+  outletId: string
+  month: string
+  days: LedgerStatementMonthDay[]
+  /**
+   * Cash out that is deliberately outside the month's operating figure — a
+   * spend. Reported so a ₹40,000 fridge is findable without touching the P&L
+   * (open question 2).
+   */
+  spends: DrawerCashOutRecord[]
+}
+
+export class LedgerStatementActionError extends DataActionError {
+  constructor(code: string, message: string) {
+    super(code, message)
+    this.name = 'LedgerStatementActionError'
+  }
+}
+
+export interface LedgerStatementAdapter {
+  getDay(outletId: string, businessDate: string): Promise<LedgerStatementDay>
+  getMonth(outletId: string, month: string): Promise<LedgerStatementMonth>
+  /**
+   * An attributed acknowledgement. Freezes nothing, is required by nothing, and
+   * does not stop a settlement restating the day afterwards.
+   */
+  verifyDay(outletId: string, businessDate: string, note?: string | null): Promise<void>
 }

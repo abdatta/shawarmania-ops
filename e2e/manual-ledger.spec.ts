@@ -25,7 +25,7 @@ test('the owner records a full trading day on a phone and reads its difference',
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('demo/owner/ledger')
+  await page.goto('demo/owner/ledger/notebook')
 
   await expect(page.getByRole('heading', { name: 'Ledger' })).toBeVisible()
   await expect(page.getByTestId('ledger-day-form')).toBeVisible()
@@ -114,7 +114,7 @@ test('the owner records a full trading day on a phone and reads its difference',
 
 test('the month names its basis and nets the aggregators per day', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('demo/owner/ledger')
+  await page.goto('demo/owner/ledger/notebook')
   await expect(page.getByTestId('ledger-day-form')).toBeVisible()
 
   await page.getByTestId('ledger-view-month').click()
@@ -145,7 +145,7 @@ test('the month names its basis and nets the aggregators per day', async ({ page
 })
 
 test('recording a day at each outlet keeps the two apart', async ({ page }) => {
-  await page.goto('demo/owner/ledger')
+  await page.goto('demo/owner/ledger/notebook')
   await expect(page.getByTestId('ledger-day-form')).toBeVisible()
 
   await page.getByTestId('cash-revenue').fill('12000')
@@ -169,7 +169,7 @@ test('a retrospective edit moves the month and never the drawer', async ({ page 
   // the month's profit says without touching a single drawer figure. Both
   // aggregators would once have been the vehicle for this; they are readings
   // now, so the form's own correctable non-cash figure is the one under test.
-  await page.goto('demo/owner/ledger')
+  await page.goto('demo/owner/ledger/notebook')
   await expect(page.getByTestId('ledger-day-form')).toBeVisible()
 
   await page.getByTestId('cash-revenue').fill('12000')
@@ -251,7 +251,9 @@ for (const role of STAFF_ROLES) {
 }
 
 test('a manager opens the full ledger at the outlet they manage', async ({ page }) => {
-  await page.goto('demo/admin/ledger')
+  // `ledger/notebook` since #11: the derived statement owns `ledger`, and this
+  // form is one reading inside that group rather than the group itself.
+  await page.goto('demo/admin/ledger/notebook')
   // The day figures included: a manager who counts the drawer nightly but cannot
   // read whether the month covered its costs is running half a shop.
   await expect(page.getByTestId('ledger-day-form')).toBeVisible()

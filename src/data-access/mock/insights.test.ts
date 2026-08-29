@@ -78,18 +78,30 @@ describe('mock insights adapter', () => {
     expect((day?.salesByMethod ?? []).length).toBeGreaterThan(1)
   })
 
-  it('reports a closed day’s drawer from the snapshot, not from a recomputation', async () => {
+  /**
+   * This used to read `daily_cash_records`. `cash-is-counted-not-closed` (#11)
+   * stopped anything writing that table, so the console's figure now comes from
+   * the drawer observation that falls inside the date — the same row the drawer
+   * and the Ledger read.
+   *
+   * The claim is unchanged and is the one that matters: the console reports the
+   * figure the count was measured against, not a recomputation of it.
+   */
+  it('reports a counted day’s drawer from the observation, not from a recomputation', async () => {
     const { store, adapter } = asOwner()
     const yesterday = store.businessDate(1)
     const day = await adapter.outletDay(DEMO_OUTLET_ID, yesterday)
-    const record = store.dailyCashRecords.find(
+    const observation = store.drawerObservations.find(
       (candidate) =>
-        candidate.outlet_id === DEMO_OUTLET_ID && candidate.business_date === yesterday,
+        candidate.outlet_id === DEMO_OUTLET_ID &&
+        !candidate.is_anchor &&
+        candidate.counted_at >= new Date(`${yesterday}T04:00:00+05:30`).toISOString(),
     )
 
+    expect(observation).toBeDefined()
     expect(day?.dayClosed).toBe(true)
-    expect(day?.expectedCashPaise).toBe(record?.expected_closing_paise)
-    expect(day?.cashDifferencePaise).toBe(record?.difference_paise)
+    expect(day?.expectedCashPaise).toBe(observation?.expected_paise)
+    expect(day?.cashDifferencePaise).toBe(observation?.difference_paise)
     expect(day?.cashDifferencePaise).not.toBe(0)
   })
 

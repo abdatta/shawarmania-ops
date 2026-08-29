@@ -109,25 +109,33 @@ const defs = {
   'owner-people': {
     role: 'super_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 6 },
+    nav: { label: 'People', icon: Users, order: 10 },
     state: 'live',
   },
   'owner-comparison': {
     role: 'super_admin',
     path: 'comparison',
-    nav: { label: 'Compare', icon: BarChart3, order: 7 },
+    nav: { label: 'Compare', icon: BarChart3, order: 11 },
     state: 'demo',
   },
   'owner-alerts': {
     role: 'super_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 8 },
+    nav: { label: 'Alerts', icon: Bell, order: 12 },
     state: 'demo',
   },
+  /**
+   * What the outlet took, **directly above what should be in its drawer**.
+   *
+   * This sat at order 12 — behind People, Compare and Alerts — and none of those
+   * is reached as often as the day's money. The adjacency is the point rather
+   * than the number: takings and drawer are read in one sitting, one against the
+   * other, and a tab between them is a tab the reader scrolls past twice.
+   */
   'owner-billing-history': {
     role: 'super_admin',
     path: 'billing-history',
-    nav: { label: 'Billing', icon: ReceiptText, order: 9 },
+    nav: { label: 'Billing', icon: ReceiptText, order: 3 },
     state: 'live',
   },
   /**
@@ -162,13 +170,99 @@ const defs = {
    * carries its rows into the live records and removes it. Never before, because
    * the rows are the value here and the surface is not.
    */
+  /**
+   * The drawer as a continuous balance (#11).
+   *
+   * **It opens on a balance, not a date picker**, because that is the question
+   * the collector has when they walk in: what should be in the drawer right now.
+   *
+   * `live` from this change rather than `demo`, and the reason is unusual enough
+   * to state: there is no previous behaviour to protect. `daily_cash_records` has
+   * never held a production row, so the surface being replaced never ran against
+   * real data, and a `demo` gate would mean two trading counters with no way to
+   * record a count at all.
+   *
+   * Ahead of the Ledger it feeds, because a count is taken nightly and a
+   * statement is read afterwards.
+   */
+  'owner-cash-drawer': {
+    role: 'super_admin',
+    path: 'drawer',
+    nav: { label: 'Drawer', icon: Banknote, order: 4 },
+    state: 'live',
+  },
+  /**
+   * The Ledger, derived on read with **no editable figure on it** (#11).
+   *
+   * This entry takes the navigation label the manual ledger had. That form keeps
+   * working at its own route and simply leaves the primary navigation, which is
+   * decision 17: **the fallback is a tab, not a runtime toggle.** Both are `live`
+   * here, honestly — both genuinely work — and the owner can open one business
+   * date in each and compare them, which is the two-day acceptance test they
+   * asked for with no engineering behind it.
+   */
+  'owner-ledger-statement': {
+    role: 'super_admin',
+    // `ledger`, because this IS the Ledger now. The sidebar nests a `ledger/*`
+    // entry under the `ledger` entry, so whichever surface holds this path
+    // becomes the parent of Expenses, Zomato, Swiggy and the notebook. Leaving it
+    // on the notebook rendered three live surfaces as children of the one being
+    // retired.
+    path: 'ledger',
+    nav: { label: 'Ledger', icon: NotepadText, order: 5 },
+    state: 'live',
+  },
+  /**
+   * What this outlet spent — the same surface the people who spend the money
+   * use, reached from the owner's shell.
+   *
+   * **It exists because #11 took the door away and had to give it back.** Both
+   * the owner and the manager recorded expenses through the manual Ledger
+   * surface; that surface left the navigation when the derived statement took
+   * its place, and the derived statement deliberately has no editable figure.
+   * Expenses became unreachable in the real app for exactly the two roles that
+   * read the Ledger nightly.
+   *
+   * Directly after the Ledger, because the Ledger is where somebody notices an
+   * expense is missing. The path is `ledger/expenses` — the same route the
+   * Biller and the Employee already reach, the same component, the same rows,
+   * and no change to how an expense is recorded. #12 re-homes all of it when it
+   * promotes the notebook's expense table to be the real one.
+   */
+  'owner-expenses': {
+    role: 'super_admin',
+    path: 'ledger/expenses',
+    nav: { label: 'Expenses', icon: Wallet, order: 6 },
+    state: 'live',
+  },
+  /**
+   * The manual ledger (#36) — **still `live`, and it keeps a navigation entry.**
+   *
+   * **Two ledger entries during the overlap is the design, not an oversight.**
+   * Decision 17: *"two entries let the owner open both and compare a day, which
+   * is the two-day acceptance test they asked for with no engineering behind
+   * it"*, and the Risks section names the crowding on an already-busy shell as
+   * the accepted cost, temporary until #12.
+   *
+   * `cash-is-counted-not-closed` task 9.2 said to remove this entry, which
+   * contradicts both of those and was followed once. **The fallback is a tab**,
+   * and a tab you have to type a URL to reach is not one: a fallback that is only
+   * reachable by somebody who remembers the route is a fallback nobody uses at
+   * 22:00 when the new surface is behaving oddly.
+   *
+   * What "leaves the primary navigation" means, and all it means: this is no
+   * longer the entry labelled `Ledger`. It sits after the derived statement,
+   * under its own name, so the reader lands on the new reading and the old one is
+   * still one tap away.
+   */
   'owner-manual-ledger': {
     role: 'super_admin',
-    path: 'ledger',
-    // Ahead of People: this is opened every night, and People is opened when
-    // somebody joins or leaves. Nav order follows how often a tab is reached for,
-    // and the nightly job should not sit behind the occasional one.
-    nav: { label: 'Ledger', icon: NotepadText, order: 3 },
+    // Moved from `ledger` to a child of it. The route changes and that is the
+    // point: this is one reading inside the ledger group now, not the group
+    // itself. An old `…/ledger` bookmark lands on the derived Ledger, which is
+    // the more useful landing place, and this is one tap from there.
+    path: 'ledger/notebook',
+    nav: { label: 'Notebook', icon: NotepadText, order: 7 },
     state: 'live',
   },
   'owner-expense-categories': {
@@ -191,7 +285,7 @@ const defs = {
   'owner-zomato-sync': {
     role: 'super_admin',
     path: 'ledger/zomato',
-    nav: { label: 'Zomato', icon: Bike, order: 4, attention: 'zomato-needs-you' },
+    nav: { label: 'Zomato', icon: Bike, order: 8, attention: 'zomato-needs-you' },
     // Live [owner, 2026-08-18]. The ledger already fills itself from Zomato; this is
     // the page that says when it last ran, what moved, and what wants a decision —
     // including the Reconnect the owner needs when a session lapses, which is the one
@@ -211,7 +305,7 @@ const defs = {
   'owner-swiggy-sync': {
     role: 'super_admin',
     path: 'ledger/swiggy',
-    nav: { label: 'Swiggy', icon: UtensilsCrossed, order: 5, attention: 'swiggy-needs-you' },
+    nav: { label: 'Swiggy', icon: UtensilsCrossed, order: 9, attention: 'swiggy-needs-you' },
     state: 'live',
   },
   /**
@@ -260,17 +354,46 @@ const defs = {
     nav: { label: 'Stock', icon: Package, order: 4 },
     state: 'demo',
   },
+  /**
+   * The `demo`-gated Expenses screen from the change #11 absorbed — **left exactly
+   * as it was.**
+   *
+   * It demonstrates a design that will never exist: the expense half of
+   * `expenses-and-inventory-live` was already delivered by #36 and #38 against
+   * `manual_ledger_expenses`. So `hidden` is arguably where it belongs, and #11
+   * briefly put it there.
+   *
+   * **Reverted deliberately.** #11's brief was to make expenses *reachable*, not
+   * to change what the walkthrough shows, and this screen is what the walkthrough
+   * has always shown — `src/demo/demo-reset.test.tsx` uses it as the cheapest
+   * write to make and to see. It also carries the label `Expenses` at a lower
+   * order than the live list, and `visibleSurfaces` dedupes by label taking the
+   * lower order: so demo mode keeps this screen and real mode, where it does not
+   * render, gets the live one. One Expenses tab in each, pointing at the surface
+   * that works there. #12 removes this with the rest.
+   */
   'admin-expenses': {
     role: 'franchise_admin',
     path: 'expenses',
     nav: { label: 'Expenses', icon: Wallet, order: 5 },
     state: 'demo',
   },
+  /**
+   * The old Daily cash surface — **`hidden`, which is how a day close stops
+   * being a thing that happens.**
+   *
+   * Not deleted, deliberately. `cash-is-counted-not-closed` (#11) drops and
+   * renames nothing (decision 16), so `daily_cash_records`,
+   * `close_business_day()` and this screen are all left in place, dead, and
+   * `retire-the-manual-ledger` (#12) removes them. `hidden` rather than `demo`
+   * because the four-role walkthrough must no longer offer a day close: the model
+   * it demonstrates does not exist any more, and a demo of it would be teaching
+   * the wrong thing to the one audience that has not seen the new surface.
+   */
   'admin-daily-cash': {
     role: 'franchise_admin',
     path: 'cash',
-    nav: { label: 'Cash', icon: Banknote, order: 6 },
-    state: 'demo',
+    state: 'hidden',
   },
   /**
    * The surface the badge mechanism was built for: an arrival nobody approves
@@ -308,22 +431,66 @@ const defs = {
    * entry gives: nav order follows how often a tab is reached for, and this is
    * opened every night while People is opened when somebody joins or leaves.
    */
-  'admin-manual-ledger': {
+  /**
+   * The manager's counterpart to `owner-cash-drawer`, scoped by assignment.
+   *
+   * A surface belongs to exactly one role's shell here, so the drawer needs two
+   * entries reaching one component — the same reason `owner-devices` and
+   * `admin-devices` are separate. What differs between them is nothing the
+   * screen can see: `app_may_reach_drawer()` grants a Super Admin every outlet
+   * and a Franchise Admin the ones their live assignment names, and the database
+   * is where that is decided.
+   */
+  'admin-cash-drawer': {
+    role: 'franchise_admin',
+    path: 'drawer',
+    nav: { label: 'Drawer', icon: Banknote, order: 6 },
+    state: 'live',
+  },
+  'admin-ledger-statement': {
     role: 'franchise_admin',
     path: 'ledger',
     nav: { label: 'Ledger', icon: NotepadText, order: 8 },
     state: 'live',
   },
+  /**
+   * The manager's counterpart to `owner-expenses`, and the same component again.
+   *
+   * **The order matters and is not arbitrary.** `admin-expenses` below is the
+   * `demo`-gated expense screen from the change #11 absorbed, and it carries the
+   * same `Expenses` label at order 5. `visibleSurfaces` deduplicates by label
+   * and takes the lower order first, so in **demo** mode the walkthrough keeps
+   * the screen it has always shown, and in **real** mode that entry is not
+   * renderable and this one is the door. Both modes end up with exactly one
+   * Expenses tab, pointing at the surface that actually works there.
+   */
+  'admin-ledger-expenses': {
+    role: 'franchise_admin',
+    path: 'ledger/expenses',
+    nav: { label: 'Expenses', icon: Wallet, order: 9 },
+    state: 'live',
+  },
+  /**
+   * The manager's fallback, and it keeps its entry for the reason
+   * `owner-manual-ledger` gives: the fallback is a tab, and two entries are what
+   * let one business date be opened in each and compared.
+   */
+  'admin-manual-ledger': {
+    role: 'franchise_admin',
+    path: 'ledger/notebook',
+    nav: { label: 'Notebook', icon: NotepadText, order: 10 },
+    state: 'live',
+  },
   'admin-pnl': {
     role: 'franchise_admin',
     path: 'pnl',
-    nav: { label: 'P&L', icon: TrendingUp, order: 10 },
+    nav: { label: 'P&L', icon: TrendingUp, order: 12 },
     state: 'demo',
   },
   'admin-alerts': {
     role: 'franchise_admin',
     path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 11 },
+    nav: { label: 'Alerts', icon: Bell, order: 13 },
     state: 'demo',
   },
   /**
@@ -339,7 +506,7 @@ const defs = {
   'admin-devices': {
     role: 'franchise_admin',
     path: 'devices',
-    nav: { label: 'Tablets', icon: TabletSmartphone, order: 12 },
+    nav: { label: 'Tablets', icon: TabletSmartphone, order: 14 },
     state: 'live',
   },
   /**
@@ -350,7 +517,7 @@ const defs = {
   'admin-people': {
     role: 'franchise_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 9 },
+    nav: { label: 'People', icon: Users, order: 11 },
     state: 'live',
   },
 

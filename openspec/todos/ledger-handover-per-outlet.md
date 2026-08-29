@@ -25,8 +25,10 @@ the rollout turns up get their own changes, which is the ordinary path.
 **The consequence to be honest about: no automated gate asserts this happened
 correctly.** Three things carry it instead — this page, step 12 of *Bringing an
 outlet's counter online* in [`docs/OPERATIONS.md`](../../docs/OPERATIONS.md),
-and `daily-cash-live` (#12), which owns migrating the manual ledger's rows and
-cannot finish while an outlet is still writing them by hand.
+and `retire-the-manual-ledger` (#12), which owns migrating the manual ledger's
+rows and cannot finish while an outlet is still writing them by hand. (That
+change used to be called `daily-cash-live`; `cash-is-counted-not-closed` (#11)
+replaced it entirely.)
 
 ## Where each outlet stands
 
@@ -59,9 +61,10 @@ handed over has no second record left to compare against — which is the entire
 reason the parallel run exists, and the reason not to set the date early to get
 past a bug.
 
-Zomato and Swiggy revenue, both commission rates, cash in and out, expenses and
-the counted drawer stay hand-entered at every outlet on every date, before and
-after. `retire-the-manual-ledger` (#12) owns their retirement.
+Zomato and Swiggy revenue stay hand-entered at every outlet on every date where
+no sync covers them, before and after. **Cash in and out and the counted drawer no
+longer do:** `cash-is-counted-not-closed` (#11) gives them a live record, and the
+notebook keeps its own rows only as history for #12 to carry across.
 
 **Update, 26 Aug 2026: this act is being dissolved rather than performed.**
 `billing_live_from` controls exactly one thing, whether the manual ledger form

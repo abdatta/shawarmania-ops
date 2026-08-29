@@ -9,7 +9,9 @@ import { ManagerBillingHistory } from '@/features/billing/manager-billing-histor
 import { MyShiftSurface } from '@/features/billing/my-shift-surface'
 import { OpenOrdersSurface } from '@/features/billing/open-orders-surface'
 import { ShiftUnlock } from '@/features/billing/shift-unlock'
+import { CashDrawerSurface } from '@/features/cash/cash-drawer-surface'
 import { DailyCashSurface } from '@/features/cash/daily-cash-surface'
+import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface'
 import { DevicesSurface } from '@/features/counter/devices-surface'
 import { ExpenseCategoriesSurface } from '@/features/expense-categories/expense-categories-surface'
 import { ExpensesSurface } from '@/features/expenses/expenses-surface'
@@ -161,6 +163,9 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
+    // The old day-close screen. Its gate is `hidden` from #11, so this resolves
+    // for nobody — and the route stays because that change drops and renames
+    // nothing. `retire-the-manual-ledger` (#12) removes both.
     path: 'cash',
     element: (
       <GatedSurface path="cash">
@@ -169,13 +174,34 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
-    // The manual ledger (#36) — temporary. This entry goes with the capability,
-    // and it is one line precisely because the gate is what decides who reaches
-    // it: only `owner-manual-ledger` declares this path, so no other role's shell
-    // resolves it and a direct URL renders nothing.
+    // The drawer as a continuous balance (#11). One path, two roles: what
+    // differs between a Super Admin and an assigned Franchise Admin is decided
+    // by `app_may_reach_drawer()` in the database, not by this screen.
+    path: 'drawer',
+    element: (
+      <GatedSurface path="drawer">
+        <CashDrawerSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // The derived Ledger (#11) owns `ledger`, because it is the Ledger. The
+    // manual form is a child of it at `ledger/notebook`, which is what makes the
+    // sidebar's nesting true: Expenses, Zomato, Swiggy and the notebook are all
+    // readings inside one group rather than children of a deprecated form.
     path: 'ledger',
     element: (
       <GatedSurface path="ledger">
+        <LedgerStatementSurface />
+      </GatedSurface>
+    ),
+  },
+  {
+    // The manual ledger (#36) — temporary, and the fallback for the reading
+    // above until `retire-the-manual-ledger` (#12) carries its rows across.
+    path: 'ledger/notebook',
+    element: (
+      <GatedSurface path="ledger/notebook">
         <ManualLedgerSurface />
       </GatedSurface>
     ),

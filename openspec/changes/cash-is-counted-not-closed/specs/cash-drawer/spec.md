@@ -93,16 +93,42 @@ NOT silently replace either figure.
 - **WHEN** an adjustment changes an earlier observation's counted total
 - **THEN** no later observation's stored opening changes, and the surface reports the break
 
-### Requirement: A count time may be approximate, and its bounds are enforced
+### Requirement: Every count time is approximate, and its bounds are enforced
 
-An observation whose counted instant differs from its recorded instant SHALL be
-treated as approximate, within a stated tolerance window, unless the recorder
-asserts certainty. Both instants SHALL be stored and both SHALL be shown, with
-the lag between them legible. The recorded instant SHALL be the server's clock.
+Every observation SHALL be treated as approximate within a stated tolerance
+window, whichever time the recorder chose and including a count recorded as
+taken now. Counting a drawer takes time, the counter keeps trading while it
+happens, and no instant a person supplies is the edge of that act.
+
+The surface SHALL NOT offer any control asserting that a counted instant is
+exact, and SHALL NOT mark individual observations as approximate in a way that
+distinguishes them from others, because all of them are.
+
+The tolerance window SHALL be the same for every time option. A window that
+narrowed because the recorder pressed a different button would make two counts
+of the same drawer incomparable for a reason that has nothing to do with the
+drawer.
+
+The surface SHALL offer, alongside its relative time options, a control for
+stating an explicit date and time, so a count recalled days later can be placed
+where it happened.
+
+Both instants SHALL be stored and both SHALL be shown, with the lag between them
+legible. The recorded instant SHALL be the server's clock.
 
 The database SHALL refuse an observation whose counted instant is later than its
 recorded instant, or is not later than the previous observation's counted instant
 at that outlet, or precedes that outlet's earliest drawer activity.
+
+#### Scenario: A count taken now is still approximate
+
+- **WHEN** an observation is recorded with the time option meaning now
+- **THEN** it is stored approximate with the same tolerance window as a recalled time, and no control offers to assert it exact
+
+#### Scenario: A count placed at an explicit past instant
+
+- **WHEN** a recorder states a date and time two days earlier for a count they are entering now
+- **THEN** that instant is what the count is measured against, and it is stored approximate
 
 #### Scenario: A count claimed in the future
 
@@ -121,9 +147,10 @@ at that outlet, or precedes that outlet's earliest drawer activity.
 
 ### Requirement: The surface states what the timing could account for, and reports only an exact coincidence
 
-Where an observation's counted instant is approximate, the surface SHALL state,
-in rupees, how much cash moved within the tolerance window, so a difference can
-be read against what the timing alone could explain.
+The surface SHALL state, in rupees, how much cash moved within the counted
+instant's tolerance window, so a difference can be read against what the timing
+alone could explain. Every counted instant carries such a window, so this
+statement is available on every count rather than only on a recalled one.
 
 Where a difference exactly equals the sum of a contiguous run of cash bills
 adjacent to the stated instant, the surface SHALL report that coincidence as a
@@ -356,6 +383,20 @@ record made outside the fence SHALL require a reason first, and that reason SHAL
 be stored and shown on the record. No drawer action SHALL be refused for being
 recorded away from the outlet.
 
+**The position SHALL be read by the surface, not typed by the recorder.** Every
+sheet that records a drawer action SHALL read one position when it opens,
+through the single module permitted to touch the browser's geolocation, and
+SHALL send it with the write so the database derives the distance and the
+on-site verdict from coordinates rather than from a claim. The read SHALL NOT
+block any field or the save control, and no drawer surface SHALL watch or sample
+a position in the background.
+
+The reason field SHALL be present exactly when the recorder was not shown to be
+inside the fence — outside it, or with no position obtained at all — and SHALL be
+required whenever it is present. It SHALL be absent when the position places the
+recorder inside the fence. A surface SHALL NOT supply a reason on the recorder's
+behalf, and SHALL NOT send a constant string in place of one.
+
 Deactivating an account, or ending the assignment that granted its reach, SHALL
 end that access on the account's next request.
 
@@ -383,3 +424,53 @@ end that access on the account's next request.
 
 - **WHEN** an account outside the fence supplies a reason
 - **THEN** the observation is accepted
+
+#### Scenario: Inside the fence, nothing is asked
+
+- **WHEN** a sheet opens and the position places the recorder inside the outlet's fence
+- **THEN** the surface states that they are at the outlet and offers no reason field
+
+#### Scenario: No position at all is treated as away
+
+- **WHEN** no position can be obtained, for any reason, or the outlet has no captured position to measure against
+- **THEN** the reason field is present and required, and the surface names why it could not tell
+
+#### Scenario: The save is refused by the sheet, not by the database
+
+- **WHEN** a drawer action is submitted from outside the fence with an empty reason
+- **THEN** the surface refuses it and says what is missing, and no write is attempted
+
+### Requirement: The count history is paged and each count is a disclosure
+
+The surface SHALL present past counts newest first, one row each, showing closed
+the instant the count was taken, the counted amount, its verdict — matched,
+short with the amount, over with the amount, or first count — and any broken
+opening. The verdict SHALL be shown when the count matched as well as when it
+did not, so a clean count is distinguishable from a row that has not loaded.
+
+Everything else a count carries — its collection, who recorded it, why they were
+away, its adjustments, and the control to adjust it — SHALL be behind that row's
+disclosure, and SHALL NOT be rendered while it is closed. The control to adjust a
+count SHALL be a control that reads as one.
+
+The history SHALL be paged rather than capped: the surface SHALL be able to reach
+every count an outlet has ever recorded, in bounded reads, without loading them
+all. Paging SHALL be cursored on the counted instant rather than an offset, so a
+count recorded while somebody is reading cannot duplicate or skip a row. The
+surface SHALL state when it has reached the oldest count, and SHALL offer a
+control that loads the next page as well as loading it on scroll.
+
+#### Scenario: A matched count reads as matched
+
+- **WHEN** a count whose difference is zero is listed
+- **THEN** its closed row says it matched
+
+#### Scenario: The detail is not rendered until it is asked for
+
+- **WHEN** a count row is closed
+- **THEN** its recorder, reason, collection, adjustments and adjust control are absent from the rendered output
+
+#### Scenario: Reaching past the first page
+
+- **WHEN** an outlet holds more counts than one page
+- **THEN** the next page loads on demand, continues from the oldest row already shown, and the surface says when there are no more
