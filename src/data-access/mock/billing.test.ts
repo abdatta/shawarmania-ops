@@ -399,7 +399,7 @@ describe('mock billing adapter', () => {
     expect(history.bills.length).toBeGreaterThan(0)
     expect(history.bills.every((bill) => bill.businessDate === store.today)).toBe(true)
     expect(history.bills.length).toBeLessThan(
-      store.bills.filter((bill) => bill.shift_id === DEMO_OPEN_SHIFT_ID).length,
+      store.bills.filter((bill) => bill.counter_shift_id === DEMO_OPEN_SHIFT_ID).length,
     )
   })
 

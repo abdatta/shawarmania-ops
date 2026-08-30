@@ -102,8 +102,24 @@ export function MyShiftSurface({
   }
 
   return (
-    <section className={embedded ? 'space-y-2' : 'space-y-5'} aria-labelledby="my-shift-title">
-      <div>
+    /*
+      Embedded, this is a **column with a fixed head and a scrolling body**, not
+      a list that grows.
+      
+      It sits in the counter's middle track, which is height-constrained by the
+      workspace, and without an internal scroller a busy evening simply ran the
+      bills off the bottom of the screen: the last bills and — worse — any
+      needs-attention card below them became unreachable, on the one surface
+      whose whole job is to be reachable mid-service. The day's Cash and UPI
+      totals stay pinned, because they are the figures somebody checks *while*
+      scrolling the list beneath them, and a total that scrolls away is a total
+      you have to stop and hunt for with a queue in front of you.
+    */
+    <section
+      className={embedded ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-5'}
+      aria-labelledby="my-shift-title"
+    >
+      <div className={embedded ? 'shrink-0' : undefined}>
         {embedded ? (
           <h3 id="my-shift-title" className="text-sm font-black text-content">
             Bills this shift
@@ -119,73 +135,56 @@ export function MyShiftSurface({
           </>
         )}
       </div>
-      <PaymentTotalCards totals={history.totals} testIdPrefix="shift-total" />
-      {message && (
-        <p
-          role="status"
-          className="rounded-lg border border-border bg-surface p-3 text-sm font-semibold text-content"
-        >
-          {message}
-        </p>
-      )}
-      {history.bills.length === 0 ? (
-        embedded ? (
-          <p className="rounded-lg bg-surface-raised p-3 text-sm text-content-muted">
-            No paid bills in this shift yet.
-          </p>
-        ) : (
-          <EmptyState icon={ClipboardList} title="No paid bills in this shift yet." />
-        )
-      ) : (
-        <div ref={billListRef}>
-          <ShiftBillList
-            bills={history.bills}
-            compact={embedded}
-            onEditPayment={(bill) => {
-              setMessage(null)
-              setEditingPayment(bill)
-            }}
-            onTakeBackPayment={(bill) => {
-              setMessage(null)
-              setUnpayingBill(bill)
-            }}
-            onCancelAfterPaid={(bill) => {
-              setMessage(null)
-              setCancellingPaidBill(bill)
-            }}
-            {...(billing.advanceDemoPaymentClock && {
-              onAdvanceDemoClock: billing.advanceDemoPaymentClock,
-            })}
-          />
-        </div>
-      )}
-      {attention
-        .filter((item) => item.state === 'needs_attention')
-        .map((item) => (
-          <article
-            key={item.reference}
-            className={
-              embedded
-                ? 'rounded-lg border-2 border-danger bg-surface p-3'
-                : 'rounded-xl border-2 border-danger bg-surface p-4'
-            }
+      <div className={embedded ? 'shrink-0 space-y-2' : 'space-y-5'}>
+        <PaymentTotalCards totals={history.totals} testIdPrefix="shift-total" />
+        {message && (
+          <p
+            role="status"
+            className="rounded-lg border border-border bg-surface p-3 text-sm font-semibold text-content"
           >
-            <div className="flex gap-2">
-              <AlertTriangle aria-hidden className="shrink-0 text-danger" />
-              <div className="min-w-0">
-                <h2 className="font-bold text-content">
-                  {item.orderNumber === null
-                    ? 'Payment needs attention'
-                    : `Order ${item.orderNumber} needs attention`}
-                </h2>
-                <p className="text-sm text-content-muted">{item.refusedTrace}</p>
-                <p className="mt-1 text-xs text-content-muted">
-                  Reference {item.reference.slice(0, 8)} · {formatDateTime(item.receivedAt)}
-                </p>
+            {message}
+          </p>
+        )}
+      </div>
+      {/* Everything below the totals scrolls together, so an attention card
+          never sits below the fold with no way to reach it. */}
+      <div className={embedded ? 'min-h-0 flex-1 space-y-2 overflow-y-auto' : 'space-y-5'}>
+        {/*
+          Needs-attention first, above the money.
+
+          It was last, beneath every bill of the evening, which put the one
+          item on this column that somebody has to *act* on furthest from the
+          eye and — before this column could scroll at all — frequently off
+          the screen entirely. A refused payment is not a footnote to the
+          day’s takings; it is the reason the takings are wrong.
+        */}
+        {attention
+          .filter((item) => item.state === 'needs_attention')
+          .map((item) => (
+            <article
+              key={item.reference}
+              className={
+                embedded
+                  ? 'rounded-lg border-2 border-danger bg-surface p-3'
+                  : 'rounded-xl border-2 border-danger bg-surface p-4'
+              }
+            >
+              <div className="flex gap-2">
+                <AlertTriangle aria-hidden className="shrink-0 text-danger" />
+                <div className="min-w-0">
+                  <h2 className="font-bold text-content">
+                    {item.orderNumber === null
+                      ? 'Payment needs attention'
+                      : `Order ${item.orderNumber} needs attention`}
+                  </h2>
+                  <p className="text-sm text-content-muted">{item.refusedTrace}</p>
+                  <p className="mt-1 text-xs text-content-muted">
+                    Reference {item.reference.slice(0, 8)} · {formatDateTime(item.receivedAt)}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {/*
+              <div className="mt-3 flex flex-wrap gap-2">
+                {/*
                 Correction resends the same payload under a new identity, so it
                 is offered only where a resend could land differently. For a
                 terminal refusal — an order already paid, an edit window closed —
@@ -193,46 +192,78 @@ export function MyShiftSurface({
                 permanent row in the manager's diagnostics, so discard is the
                 only action shown.
               */}
-              {isCorrectableRefusal(item.resultCategory) ? (
+                {isCorrectableRefusal(item.resultCategory) ? (
+                  <Button
+                    size="phone"
+                    onClick={() =>
+                      void resolve(
+                        () => billing.correctAttention(item.reference, newUuid()),
+                        'A linked correction was created with a new identity. The refused trace remains here.',
+                      )
+                    }
+                  >
+                    Correct with new copy
+                  </Button>
+                ) : (
+                  <p className="w-full text-sm text-content-muted">
+                    Sending this again cannot change the answer. Discard it with a reason.
+                  </p>
+                )}
+                <Input
+                  className="min-w-48 flex-1"
+                  aria-label="Discard reason"
+                  placeholder="Reason to discard"
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                />
                 <Button
+                  variant="danger"
                   size="phone"
+                  disabled={!reason.trim()}
                   onClick={() =>
                     void resolve(
-                      () => billing.correctAttention(item.reference, newUuid()),
-                      'A linked correction was created with a new identity. The refused trace remains here.',
+                      () => billing.discardAttention(item.reference, reason),
+                      'The item was discarded with its reason and trace retained.',
                     )
                   }
                 >
-                  Correct with new copy
+                  Discard
                 </Button>
-              ) : (
-                <p className="w-full text-sm text-content-muted">
-                  Sending this again cannot change the answer. Discard it with a reason.
-                </p>
-              )}
-              <Input
-                className="min-w-48 flex-1"
-                aria-label="Discard reason"
-                placeholder="Reason to discard"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
-              <Button
-                variant="danger"
-                size="phone"
-                disabled={!reason.trim()}
-                onClick={() =>
-                  void resolve(
-                    () => billing.discardAttention(item.reference, reason),
-                    'The item was discarded with its reason and trace retained.',
-                  )
-                }
-              >
-                Discard
-              </Button>
-            </div>
-          </article>
-        ))}
+              </div>
+            </article>
+          ))}
+        {history.bills.length === 0 ? (
+          embedded ? (
+            <p className="rounded-lg bg-surface-raised p-3 text-sm text-content-muted">
+              No paid bills in this shift yet.
+            </p>
+          ) : (
+            <EmptyState icon={ClipboardList} title="No paid bills in this shift yet." />
+          )
+        ) : (
+          <div ref={billListRef}>
+            <ShiftBillList
+              bills={history.bills}
+              compact={embedded}
+              onEditPayment={(bill) => {
+                setMessage(null)
+                setEditingPayment(bill)
+              }}
+              onTakeBackPayment={(bill) => {
+                setMessage(null)
+                setUnpayingBill(bill)
+              }}
+              onCancelAfterPaid={(bill) => {
+                setMessage(null)
+                setCancellingPaidBill(bill)
+              }}
+              {...(billing.advanceDemoPaymentClock && {
+                onAdvanceDemoClock: billing.advanceDemoPaymentClock,
+              })}
+            />
+          </div>
+        )}
+      </div>
       <UnpayDialog
         open={unpayingBill !== null}
         reference={

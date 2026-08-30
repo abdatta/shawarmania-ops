@@ -890,9 +890,18 @@ describe('who the manual ledger is for', () => {
     })
 
     it(`reaches their own expenses surface, and no day figures on it`, async () => {
-      renderAt(`/demo/${ROLE_SEGMENTS[role]}/ledger/expenses`)
+      // The Biller reaches it as a panel rather than as an address. The counter
+      // tablet is a leaf route with no navigation and no sub-paths — exactly as
+      // `/counter` is in production — and it renders the expense list directly
+      // beneath the till, because the drawer is at the counter and the person
+      // spending is often the person billing.
+      renderAt(role === 'biller' ? '/demo/biller' : `/demo/${ROLE_SEGMENTS[role]}/ledger/expenses`)
 
-      await screen.findByTestId('ledger-expense-list')
+      // Anchored on the control that records a spend rather than on the row
+      // list: the invariant this block protects is that everybody who spends can
+      // record it, and the tablet's panel is scoped to the running day, which
+      // may honestly have nothing on it yet.
+      await screen.findByTestId('add-ledger-expense')
 
       // Not one figure the day record holds. The drawer figures are refused by
       // the database rather than hidden here; the day's takings are left off

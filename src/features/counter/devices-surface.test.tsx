@@ -67,11 +67,11 @@ describe('the Tablets surface', () => {
     const data = createDemoData()
     const adapters = createMockAdapters('super_admin', data)
     const shift = data.store.shifts.find(
-      (candidate) => candidate.outlet_id === OUTLET_KALYANI_ID && candidate.closed_at === null,
+      (candidate) => candidate.outlet_id === OUTLET_KALYANI_ID && candidate.ended_at === null,
     )!
     const corrected = data.store.bills.find(
       (bill) =>
-        bill.shift_id === shift.id &&
+        bill.counter_shift_id === shift.id &&
         bill.status === 'settled' &&
         data.store.billPayments.get(bill.id)?.some((payment) => payment.method === 'cash'),
     )!
@@ -84,7 +84,7 @@ describe('the Tablets surface', () => {
     const [snapshot] = await adapters.counter.readDeviceOperations([OUTLET_KALYANI_ID])
     const operations = snapshot!.operations!
     const effective = data.store.bills
-      .filter((bill) => bill.shift_id === shift.id && bill.status === 'settled')
+      .filter((bill) => bill.counter_shift_id === shift.id && bill.status === 'settled')
       .flatMap((bill) => data.store.billPayments.get(bill.id) ?? [])
     const expectedCash = effective
       .filter((payment) => payment.method === 'cash')
@@ -97,7 +97,7 @@ describe('the Tablets surface', () => {
     expect(operations.upiTotalPaise).toBe(expectedUpi)
     expect(operations.drawerCashPaise).toBe(expectedCash)
     expect(operations.billCount).toBe(
-      data.store.bills.filter((bill) => bill.shift_id === shift.id).length,
+      data.store.bills.filter((bill) => bill.counter_shift_id === shift.id).length,
     )
   })
 

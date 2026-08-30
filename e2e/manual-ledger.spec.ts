@@ -206,12 +206,20 @@ test('the ledger is in the owner’s and the manager’s navigation, and in nobo
     await expect(page.getByRole('link', { name: 'Ledger' }), segment).toBeVisible()
   }
 
-  for (const role of STAFF_ROLES) {
-    await page.goto(`demo/${role.segment}`)
-    await expect(page.getByRole('link', { name: 'Ledger' }), role.segment).toHaveCount(0)
-    // What they get instead: the expense list alone, under its own entry.
-    await expect(page.getByRole('link', { name: 'Expenses' }), role.segment).toBeVisible()
-  }
+  // The Employee gets the expense list alone, under its own entry.
+  await page.goto('demo/staff')
+  await expect(page.getByRole('link', { name: 'Ledger' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Expenses' })).toBeVisible()
+
+  // The Biller has no navigation of any kind: their shell is the counter
+  // tablet, which offers no tabs, no account menu and no way out. Expenses
+  // reaches them as a panel beneath the till instead — the drawer is at the
+  // counter, and the person spending is often the person billing.
+  await page.goto('demo/biller')
+  await expect(page.getByRole('link', { name: 'Ledger' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Expenses' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Expenses' })).toBeVisible()
+  await expect(page.getByTestId('add-ledger-expense')).toBeVisible()
 })
 
 for (const role of STAFF_ROLES) {
@@ -230,9 +238,15 @@ for (const role of STAFF_ROLES) {
   test(`the expenses surface shows a ${role.label} expenses and no day figures`, async ({
     page,
   }) => {
-    await page.goto(`demo/${role.segment}/ledger/expenses`)
+    // The Biller reaches it on the tablet itself, which is a leaf address with
+    // nothing beneath it — exactly as `/counter` is in production.
+    await page.goto(
+      role.segment === 'biller' ? 'demo/biller' : `demo/${role.segment}/ledger/expenses`,
+    )
 
-    await expect(page.getByTestId('ledger-expense-list')).toBeVisible()
+    // Anchored on the control that records a spend: the tablet's panel is scoped
+    // to the running day, which may honestly have nothing on it yet.
+    await expect(page.getByTestId('add-ledger-expense')).toBeVisible()
 
     // Not one figure the day record holds. The drawer figures are refused by the
     // database rather than hidden here; the day's own takings are left off
@@ -243,10 +257,17 @@ for (const role of STAFF_ROLES) {
     await expect(page.getByTestId('ledger-day-form')).toHaveCount(0)
     await expect(page.getByTestId('ledger-view-month')).toHaveCount(0)
 
-    // Every row names who recorded it, which is what makes "your own rows"
-    // legible rather than remembered.
-    const first = page.getByTestId('ledger-expense-list').getByRole('listitem').first()
-    await expect(first).toContainText(/\w/)
+    if (role.segment === 'biller') {
+      // The tablet's panel is scoped to the running day, and the demo's has had
+      // nothing out of the drawer yet — so what it must do is say so, rather
+      // than show an empty box somebody has to interpret.
+      await expect(page.getByText('Nothing has gone out of the drawer today.')).toBeVisible()
+    } else {
+      // Every row names who recorded it, which is what makes "your own rows"
+      // legible rather than remembered.
+      const first = page.getByTestId('ledger-expense-list').getByRole('listitem').first()
+      await expect(first).toContainText(/\w/)
+    }
   })
 }
 

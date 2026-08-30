@@ -527,10 +527,24 @@ const defs = {
   },
 
   // ── Biller — the counter tablet ──────────────────────────────────────────
+  /**
+   * The tablet's index, and **deliberately without a navigation entry** since
+   * the demo began mounting the enrolled tablet's own shell.
+   *
+   * A counter tablet has no navigation at all: no tabs, no account menu, no
+   * sign-out. That is the shape of the production screen rather than an
+   * omission — personal navigation on a shared counter would offer whoever is
+   * standing at it somebody else's screens. The demo used to draw Counter and
+   * Expenses tabs here because it rendered a role shell instead; now it renders
+   * the same file `/counter` does, so there is no header left to draw them in
+   * and nothing that would honour them.
+   *
+   * The surface stays `live`: the gate is still what decides whether the tablet's
+   * index resolves at all.
+   */
   'counter-home': {
     role: 'biller',
     path: '',
-    nav: { label: 'Counter', icon: Home, order: 1 },
     state: 'live',
   },
   'counter-shift-unlock': {
@@ -606,10 +620,19 @@ const defs = {
    * promotes this stopgap's expense table to be the real one, by rename, because
    * it is the richer of the two.
    */
+  /**
+   * Navigation retired with `counter-home`'s, and for the same reason: the
+   * tablet has no tabs to put it in.
+   *
+   * Expenses did not go anywhere. The enrolled shell renders the expense list as
+   * a panel directly beneath the till, which is where it has always been in
+   * production — the drawer is at the counter and the person spending is often
+   * the person billing. A tab leading to a second copy of a panel already on
+   * screen is the second door into one room that `counter-billing` declines.
+   */
   'counter-expenses': {
     role: 'biller',
     path: 'ledger/expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 6 },
     state: 'live',
   },
   // The attendance kiosk is gone, not hidden: the owner rejected it (one

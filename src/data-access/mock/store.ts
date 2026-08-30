@@ -2,6 +2,7 @@ import {
   billTotals,
   differencePaise,
   expectedClosingPaise,
+  instantOnBusinessDay,
   lineTotalPaise,
   movementDelta,
   normalizeCategory,
@@ -22,6 +23,7 @@ import {
   DEMO_KANCHRAPARA_BILLER_ID,
   DEMO_KANCHRAPARA_DEVICE_ID,
   DEMO_KANCHRAPARA_SHIFT_ID,
+  DEMO_MORNING_SHIFT_ID,
   DEMO_MORNING_BILLER_ID,
   DEMO_OPEN_SHIFT_ID,
   type BillSeed,
@@ -79,8 +81,20 @@ export interface DemoStore {
   menuItems: Tables<'menu_items'>[]
   /** Read-only here; #9 owns enrolment. */
   counterDevices: Tables<'counter_devices'>[]
-  /** Owned by the billing adapter. */
-  shifts: Tables<'shifts'>[]
+  /**
+   * Owned by the billing adapter, and **the live shift table rather than the
+   * retired one**.
+   *
+   * `public.shifts` is the pre-tablet model. Since the billing transaction
+   * contract, `bills.shift_id` "points at the retired pre-tablet shift model and
+   * remains only for synthetic demo history", and every counter write goes
+   * through the command RPC under `counter_shift_id`. A demo built on the old
+   * table cannot express `expires_at` or `ended_reason`, so it can show neither a
+   * shift reaching the outlet's cutover nor a deliberately finished day — and it
+   * was putting its own ids into command columns that reference this table,
+   * which production's foreign keys would refuse.
+   */
+  shifts: Tables<'counter_shifts'>[]
   /** Owned by the billing adapter. Read by the daily-cash and insights adapters. */
   bills: Tables<'bills'>[]
   /** Owned by the billing adapter. */
@@ -213,6 +227,23 @@ function instantAt(businessDate: string, time: string): string {
 }
 
 /**
+ * When a shift opened on `businessDate` expires — the outlet's own cutover on
+ * the following calendar day.
+ *
+ * This is `app_next_cutover` in TypeScript, deliberately: the database computes
+ * `((app_business_date(ts, cutover) + 1)::timestamp + cutover) at time zone
+ * 'Asia/Kolkata'`, and a demo that expired its shifts by any other arithmetic
+ * would be demonstrating a rule the real counter does not follow.
+ *
+ * Exported because the handshake opens shifts too, and a second copy of this sum
+ * is how the seeded shift and a confirmed one would drift apart.
+ */
+export function nextCutover(businessDate: string, outletId: string): string {
+  const cutover = outletById(outletId).business_day_cutover
+  return instantOnBusinessDay(shiftBusinessDate(businessDate, 1), cutover, cutover)
+}
+
+/**
  * The same instant, or now, whichever is earlier.
  *
  * The seeds describe a whole trading day whatever time the demo is opened, so a
@@ -238,31 +269,57 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
 
   const menuItems = structuredClone(menuItemFixtures)
 
-  const shifts: Tables<'shifts'>[] = [
+  const shifts: Tables<'counter_shifts'>[] = [
     {
       id: DEMO_OPEN_SHIFT_ID,
       outlet_id: DEMO_OUTLET_ID,
-      biller_profile_id: DEMO_BILLER_ID,
-      counter_device_id: DEMO_COUNTER_DEVICE_ID,
+      person_id: DEMO_BILLER_ID,
+      device_id: DEMO_COUNTER_DEVICE_ID,
       business_date: today,
       opened_at: instantAt(today, '11:00'),
+      // Resolved the way `app_next_cutover` resolves it, so a demo opened at
+      // 00:30 holds a shift that expires at the cutover it is still short of
+      // rather than one that expired before the walkthrough began.
+      expires_at: nextCutover(today, DEMO_OUTLET_ID),
       // Open on arrival: the counter's gate is ringing and settling an order,
-      // and a walkthrough should land able to do it rather than behind a PIN
-      // nobody was handed. The shift screen is still fully walkable.
-      closed_at: null,
+      // and a walkthrough should land able to do it rather than at the request
+      // screen. Ending it, handing over and finishing the day are all walkable
+      // from there, and reset puts this back.
+      ended_at: null,
+      ended_reason: null,
     },
     {
-      // Kanchrapara's, closed. Its bills need a shift to be attributed to, and
+      // **The morning operator, who left from their phone at 11:00.**
+      //
+      // Ended the ordinary way — `operator` — at the same instant Priya's shift
+      // opens, which is what a handover looks like in the data. It exists so the
+      // demo can hold an after-departure attribution exception that is actually
+      // true: the flag says a sale was recorded after its operator left, and
+      // that needs an operator who left.
+      id: DEMO_MORNING_SHIFT_ID,
+      outlet_id: DEMO_OUTLET_ID,
+      person_id: DEMO_MORNING_BILLER_ID,
+      device_id: DEMO_COUNTER_DEVICE_ID,
+      business_date: today,
+      opened_at: instantAt(today, '07:00'),
+      expires_at: nextCutover(today, DEMO_OUTLET_ID),
+      ended_at: instantAt(today, '11:00'),
+      ended_reason: 'operator',
+    },
+    {
+      // Kanchrapara's, ended. Its bills need a shift to be attributed to, and
       // nobody is standing at that counter during a demo — an open shift at an
       // outlet no persona occupies would be a second counter the walkthrough
-      // never reaches.
+      // never reaches. It ended the ordinary way, which is what `operator` says.
       id: DEMO_KANCHRAPARA_SHIFT_ID,
       outlet_id: DEMO_SECOND_OUTLET_ID,
-      biller_profile_id: DEMO_KANCHRAPARA_BILLER_ID,
-      counter_device_id: DEMO_KANCHRAPARA_DEVICE_ID,
+      person_id: DEMO_KANCHRAPARA_BILLER_ID,
+      device_id: DEMO_KANCHRAPARA_DEVICE_ID,
       business_date: today,
       opened_at: instantAt(today, '11:00'),
-      closed_at: instantAt(today, '21:30'),
+      expires_at: nextCutover(today, DEMO_SECOND_OUTLET_ID),
+      ended_at: instantAt(today, '21:30'),
+      ended_reason: 'operator',
     },
   ]
 
@@ -317,18 +374,31 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       id: billId,
       outlet_id: outletId,
       bill_number: nextNumber,
-      biller_profile_id: billerForOutlet(outletId),
+      // The departed operator, never the one who came next. A flagged bill that
+      // read "by Demo Biller" would be demonstrating the exact inheritance the
+      // after-departure contract exists to prevent.
+      biller_profile_id: seed.recordedAfterDeparture
+        ? DEMO_MORNING_BILLER_ID
+        : billerForOutlet(outletId),
       counter_device_id: deviceForOutlet(outletId),
-      shift_id: shiftForOutlet(outletId),
-      counter_shift_id: null,
+      // As production writes them: the live counter shift, and nothing in the
+      // retired column. Every demo bill is within four days of today, so none of
+      // them is the pre-tablet history `shift_id` was left alive to hold.
+      shift_id: null,
+      // A sale the tablet captured in the gap after a remote departure stays
+      // under the shift that was live when the tablet last knew — never under
+      // the operator who came next.
+      counter_shift_id: seed.recordedAfterDeparture
+        ? DEMO_MORNING_SHIFT_ID
+        : shiftForOutlet(outletId),
       order_id: null,
       business_date: date,
       created_at: createdAt,
       ordered_at: createdAt,
       paid_at: createdAt,
       payment_business_date: date,
-      recorded_after_shift_end: false,
-      attribution_shift_ended_at: null,
+      recorded_after_shift_end: seed.recordedAfterDeparture === true,
+      attribution_shift_ended_at: seed.recordedAfterDeparture ? instantAt(date, '11:00') : null,
       // A bill that arrived after its day was closed reached the server the
       // next morning. `created_at` is when it was rung; `synced_at` is when it
       // landed, and the gap between them is the whole reconciliation problem.

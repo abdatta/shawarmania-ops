@@ -39,7 +39,7 @@ function billsAt(personId: string, outletId: string): boolean {
   )
 }
 import { DEMO_BILLER_ID, DEMO_BILLER_PIN, DEMO_COUNTER_DEVICE_ID } from './fixtures/billing'
-import { DEMO_OUTLET_ID, type DemoStore } from './store'
+import { DEMO_OUTLET_ID, nextCutover, type DemoStore } from './store'
 
 /**
  * The mock counter: an in-memory command queue that behaves the way the real
@@ -80,12 +80,12 @@ function nameOf(profileId: string): string {
   return accountFixtures.find((account) => account.id === profileId)?.full_name ?? 'Unknown biller'
 }
 
-function toShift(row: Tables<'shifts'>): CounterShift {
+function toShift(row: Tables<'counter_shifts'>): CounterShift {
   return {
     id: row.id,
     outletId: row.outlet_id,
-    billerProfileId: row.biller_profile_id,
-    billerName: nameOf(row.biller_profile_id),
+    billerProfileId: row.person_id,
+    billerName: nameOf(row.person_id),
     businessDate: row.business_date,
     openedAt: row.opened_at,
   }
@@ -131,7 +131,7 @@ export function createMockBillingAdapter(
   context: MockBillingContext = {
     role: 'biller',
     userId: DEMO_BILLER_ID,
-    outletIds: [store.shifts.find((shift) => shift.closed_at === null)?.outlet_id ?? ''],
+    outletIds: [store.shifts.find((shift) => shift.ended_at === null)?.outlet_id ?? ''],
   },
 ): BillingAdapter {
   const listeners = new Set<() => void>()
@@ -205,8 +205,19 @@ export function createMockBillingAdapter(
     }
   }
 
-  function openShiftRow(): Tables<'shifts'> | undefined {
-    return store.shifts.find((row) => row.closed_at === null)
+  /**
+   * The shift this counter is running, scoped to the outlets the caller reaches.
+   *
+   * Unscoped it returned *any* open shift in the store, which was correct only
+   * while exactly one could exist. A walkthrough can now end a shift, hand over
+   * and open another, and both outlets carry shift rows — so an unscoped read
+   * would let Kanchrapara's counter answer for Kalyani's, which is the one
+   * question outlet isolation exists to refuse.
+   */
+  function openShiftRow(): Tables<'counter_shifts'> | undefined {
+    return store.shifts.find(
+      (row) => row.ended_at === null && context.outletIds.includes(row.outlet_id),
+    )
   }
 
   function buildSnapshot(): CounterState {
@@ -379,7 +390,7 @@ export function createMockBillingAdapter(
         acceptedAt !== undefined &&
         context.role === 'biller' &&
         row.status === 'settled' &&
-        openShiftRow()?.counter_device_id === row.counter_device_id &&
+        openShiftRow()?.device_id === row.counter_device_id &&
         acceptedAt + PAYMENT_EDIT_WINDOW_MS > paymentNow()
           ? new Date(acceptedAt + PAYMENT_EDIT_WINDOW_MS).toISOString()
           : null,
@@ -508,10 +519,10 @@ export function createMockBillingAdapter(
       id: draft.clientId,
       outlet_id: draft.outletId,
       bill_number: next,
-      biller_profile_id: shift.biller_profile_id,
-      counter_device_id: shift.counter_device_id,
-      shift_id: draft.shiftId,
-      counter_shift_id: null,
+      biller_profile_id: shift.person_id,
+      counter_device_id: shift.device_id,
+      shift_id: null,
+      counter_shift_id: draft.shiftId,
       order_id: null,
       business_date: draft.businessDate,
       created_at: acceptedAt,
@@ -569,12 +580,12 @@ export function createMockBillingAdapter(
     const row: Tables<'orders'> = {
       id: input.clientId,
       outlet_id: input.outletId,
-      device_id: shift.counter_device_id,
+      device_id: shift.device_id,
       order_number: orderNumber,
       business_date: input.businessDate,
       ordered_at: orderedAt,
       created_at: orderedAt,
-      created_by: shift.biller_profile_id,
+      created_by: shift.person_id,
       created_shift_id: shift.id,
       changed_at: null,
       changed_by: null,
@@ -609,7 +620,7 @@ export function createMockBillingAdapter(
     const actor = store.shifts.find((candidate) => candidate.id === record.shiftId)
     const totals = totalsOf(record.input.lines)
     row.changed_at = new Date().toISOString()
-    row.changed_by = actor?.biller_profile_id ?? row.created_by
+    row.changed_by = actor?.person_id ?? row.created_by
     row.changed_shift_id = actor?.id ?? row.created_shift_id
     row.customer_id = record.input.customerId ?? null
     row.customer_name = record.input.customerName?.trim() || null
@@ -628,8 +639,8 @@ export function createMockBillingAdapter(
     row.status = 'cancelled'
     row.cancel_reason = record.reason
     row.cancelled_at = new Date().toISOString()
-    row.cancelled_by = actor?.biller_profile_id ?? row.created_by
-    row.cancelled_device_id = actor?.counter_device_id ?? row.device_id
+    row.cancelled_by = actor?.person_id ?? row.created_by
+    row.cancelled_device_id = actor?.device_id ?? row.device_id
     row.cancelled_shift_id = actor?.id ?? null
   }
 
@@ -664,10 +675,10 @@ export function createMockBillingAdapter(
       id: billId,
       outlet_id: row.outlet_id,
       bill_number: nextNumber,
-      biller_profile_id: row.paid_by ?? shift.biller_profile_id,
-      counter_device_id: shift.counter_device_id,
-      shift_id: shift.id,
-      counter_shift_id: null,
+      biller_profile_id: row.paid_by ?? shift.person_id,
+      counter_device_id: shift.device_id,
+      shift_id: null,
+      counter_shift_id: shift.id,
       order_id: row.id,
       business_date: row.business_date,
       created_at: paidAt,
@@ -728,7 +739,7 @@ export function createMockBillingAdapter(
     if (!shift) throw new Error(`Queued payment ${payment.billId} has no shift to attribute to.`)
     row.status = 'paid'
     row.paid_at = payment.paidAt
-    row.paid_by = shift.biller_profile_id
+    row.paid_by = shift.person_id
     row.paid_shift_id = shift.id
     if (row.prepared_at !== null) {
       // Prepared already: the order crosses into Bills at once, keeping the
@@ -761,7 +772,7 @@ export function createMockBillingAdapter(
     bill.voided_at = new Date().toISOString()
     // Command-context voids stamp the acting shift operator, exactly as the
     // database stamps the person behind the tablet's device session.
-    bill.voided_by = openShiftRow()?.biller_profile_id ?? bill.biller_profile_id
+    bill.voided_by = openShiftRow()?.person_id ?? bill.biller_profile_id
   }
 
   function reopenPaidOrder(orderId: string) {
@@ -786,8 +797,8 @@ export function createMockBillingAdapter(
     row.paid_shift_id = null
     row.cancel_reason = reason
     row.cancelled_at = new Date().toISOString()
-    row.cancelled_by = actor?.biller_profile_id ?? row.created_by
-    row.cancelled_device_id = actor?.counter_device_id ?? row.device_id
+    row.cancelled_by = actor?.person_id ?? row.created_by
+    row.cancelled_device_id = actor?.device_id ?? row.device_id
     row.cancelled_shift_id = actor?.id ?? null
   }
 
@@ -824,15 +835,15 @@ export function createMockBillingAdapter(
           overlaid.set(input.clientId, {
             id: input.clientId,
             outletId: input.outletId,
-            deviceId: creatorShift?.counter_device_id ?? DEMO_COUNTER_DEVICE_ID,
+            deviceId: creatorShift?.device_id ?? DEMO_COUNTER_DEVICE_ID,
             orderNumber: 0,
             localReference: `Local · ${provisionalToken(input.clientId)}`,
             businessDate: input.businessDate,
             orderedAt: new Date(command.acceptedAtMs).toISOString(),
             preparedAt: null,
             status: 'open',
-            creatorId: creatorShift?.biller_profile_id ?? '',
-            creatorName: actorName(creatorShift?.biller_profile_id ?? null) ?? 'Counter operator',
+            creatorId: creatorShift?.person_id ?? '',
+            creatorName: actorName(creatorShift?.person_id ?? null) ?? 'Counter operator',
             customerName: input.customerName?.trim() || null,
             customerPhone: input.customerPhone?.trim() || null,
             lines: structuredClone(input.lines),
@@ -1116,14 +1127,16 @@ export function createMockBillingAdapter(
         )
       }
 
-      const row: Tables<'shifts'> = {
+      const row: Tables<'counter_shifts'> = {
         id: `d6000000-0000-4000-b000-${String(store.shifts.length + 1).padStart(12, '0')}`,
         outlet_id: outletId,
-        biller_profile_id: billerProfileId,
-        counter_device_id: DEMO_COUNTER_DEVICE_ID,
+        person_id: billerProfileId,
+        device_id: DEMO_COUNTER_DEVICE_ID,
         business_date: store.today,
         opened_at: new Date().toISOString(),
-        closed_at: null,
+        expires_at: nextCutover(store.today, outletId),
+        ended_at: null,
+        ended_reason: null,
       }
       store.shifts.push(row)
       emit()
@@ -1132,7 +1145,7 @@ export function createMockBillingAdapter(
 
     async inspectFinishDay(shiftId: string) {
       const row = store.shifts.find((candidate) => candidate.id === shiftId)
-      if (!row || row.closed_at !== null) {
+      if (!row || row.ended_at !== null) {
         throw new BillingActionError('no_shift', 'That shift is not open.')
       }
       drain()
@@ -1161,7 +1174,7 @@ export function createMockBillingAdapter(
 
     async closeShift(shiftId: string) {
       const row = store.shifts.find((candidate) => candidate.id === shiftId)
-      if (!row || row.closed_at !== null) {
+      if (!row || row.ended_at !== null) {
         throw new BillingActionError('no_shift', 'That shift is not open.')
       }
       if (pending.size > 0) {
@@ -1170,12 +1183,16 @@ export function createMockBillingAdapter(
           `${pending.size} billing action${pending.size === 1 ? ' is' : 's are'} still unresolved on this tablet.`,
         )
       }
-      row.closed_at = new Date().toISOString()
+      // `day_finished` rather than `operator`: the tablet deliberately completed
+      // its trading date, which is a different fact from the person walking away
+      // — and since #50 it is the one that refuses later work outright.
+      row.ended_at = new Date().toISOString()
+      row.ended_reason = 'day_finished'
       emit()
     },
 
     async settleBill(draft: BillDraft) {
-      const shift = store.shifts.find((row) => row.id === draft.shiftId && row.closed_at === null)
+      const shift = store.shifts.find((row) => row.id === draft.shiftId && row.ended_at === null)
       if (!shift) {
         throw new BillingActionError(
           'no_shift',
@@ -1266,7 +1283,7 @@ export function createMockBillingAdapter(
         totalPaise,
         orderId: orderPayment?.orderId ?? null,
         orderNumber: order?.orderNumber ?? null,
-        billerName: actorName(openShiftRow()?.biller_profile_id ?? null) ?? 'Counter operator',
+        billerName: actorName(openShiftRow()?.person_id ?? null) ?? 'Counter operator',
       })
     },
 
@@ -1298,15 +1315,15 @@ export function createMockBillingAdapter(
       return {
         id: input.clientId,
         outletId: input.outletId,
-        deviceId: shift.counter_device_id,
+        deviceId: shift.device_id,
         orderNumber: 0,
         localReference: `Local · ${provisionalToken(input.clientId)}`,
         businessDate: input.businessDate,
         orderedAt: new Date(acceptedAtMs).toISOString(),
         preparedAt: null,
         status: 'open',
-        creatorId: shift.biller_profile_id,
-        creatorName: actorName(shift.biller_profile_id) ?? 'Counter operator',
+        creatorId: shift.person_id,
+        creatorName: actorName(shift.person_id) ?? 'Counter operator',
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
         lines: structuredClone(input.lines),
@@ -1322,7 +1339,7 @@ export function createMockBillingAdapter(
     async reviseOrder(orderId, input) {
       const shift = requireOpenShift()
       const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (!projected || projected.deviceId !== shift.counter_device_id) {
+      if (!projected || projected.deviceId !== shift.device_id) {
         throw new BillingActionError('not_found', 'That order is not on this tablet.')
       }
       if (projected.status !== 'open') {
@@ -1371,7 +1388,7 @@ export function createMockBillingAdapter(
     async markOrderPrepared(orderId, prepared) {
       const shift = requireOpenShift()
       const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (!projected || projected.deviceId !== shift.counter_device_id) {
+      if (!projected || projected.deviceId !== shift.device_id) {
         throw new BillingActionError('not_found', 'That order is not on this tablet.')
       }
       // The same guards the database applies at delivery, evaluated against the
@@ -1412,11 +1429,7 @@ export function createMockBillingAdapter(
       const shift = requireOpenShift()
       const cleanReason = requireReason(reason)
       const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (
-        !projected ||
-        projected.deviceId !== shift.counter_device_id ||
-        projected.billId !== billId
-      ) {
+      if (!projected || projected.deviceId !== shift.device_id || projected.billId !== billId) {
         throw new BillingActionError('not_found', 'That payment is not on this tablet.')
       }
       // The window runs from the money's own clock: a settled bill's stored
@@ -1459,7 +1472,7 @@ export function createMockBillingAdapter(
       const shift = requireOpenShift()
       const cleanReason = requireReason(reason)
       const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (!projected || projected.deviceId !== shift.counter_device_id) {
+      if (!projected || projected.deviceId !== shift.device_id) {
         throw new BillingActionError(
           'not_found',
           'That paid order is not one this tablet can cancel.',
@@ -1495,14 +1508,14 @@ export function createMockBillingAdapter(
         billId: null,
         cancelReason: cleanReason,
         cancelledAt: new Date().toISOString(),
-        cancelledByName: actorName(shift.biller_profile_id),
+        cancelledByName: actorName(shift.person_id),
       }
     },
 
     async payOrder(orderId, paymentsInput) {
       const shift = requireOpenShift()
       const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (!projected || projected.deviceId !== shift.counter_device_id) {
+      if (!projected || projected.deviceId !== shift.device_id) {
         throw new BillingActionError('not_found', 'That order is not on this tablet.')
       }
       if (projected.status === 'cancelled') {
@@ -1560,7 +1573,7 @@ export function createMockBillingAdapter(
     async cancelOrder(orderId, reason) {
       const shift = requireOpenShift()
       const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (!projected || projected.deviceId !== shift.counter_device_id)
+      if (!projected || projected.deviceId !== shift.device_id)
         throw new BillingActionError('not_found', 'That order is not on this tablet.')
       if (projected.status !== 'open')
         throw new BillingActionError(
@@ -1581,7 +1594,7 @@ export function createMockBillingAdapter(
         status: 'cancelled',
         cancelReason: cleanReason,
         cancelledAt: new Date().toISOString(),
-        cancelledByName: actorName(shift.biller_profile_id),
+        cancelledByName: actorName(shift.person_id),
       }
     },
 
@@ -1601,10 +1614,10 @@ export function createMockBillingAdapter(
       const serverBills = store.bills
         .filter(
           (bill) =>
-            bill.shift_id === shiftId &&
+            bill.counter_shift_id === shiftId &&
             !unwoundBillIds.has(bill.id) &&
             (!shift || bill.business_date === shift.business_date) &&
-            (!shift || bill.counter_device_id === shift.counter_device_id),
+            (!shift || bill.counter_device_id === shift.device_id),
         )
         .sort((a, b) => b.paid_at.localeCompare(a.paid_at))
         .map(billView)
@@ -1632,8 +1645,7 @@ export function createMockBillingAdapter(
               totalPaise: totalsOf(draft.lines).totalPaise,
               orderId: null,
               orderNumber: null,
-              billerName:
-                actorName(openShiftRow()?.biller_profile_id ?? null) ?? 'Counter operator',
+              billerName: actorName(openShiftRow()?.person_id ?? null) ?? 'Counter operator',
             })
           }
           const record = pendingOrderPayments.get(command.commandId)!
@@ -1771,13 +1783,13 @@ export function createMockBillingAdapter(
 
     async listAttention() {
       const shift = requireTabletOperator()
-      return [...attention.values()].filter((item) => item.deviceId === shift.counter_device_id)
+      return [...attention.values()].filter((item) => item.deviceId === shift.device_id)
     },
 
     async correctAttention(reference, correctionId) {
       const shift = requireTabletOperator()
       const item = attention.get(reference)
-      if (!item || item.deviceId !== shift.counter_device_id)
+      if (!item || item.deviceId !== shift.device_id)
         throw new BillingActionError('not_found', 'That item is not on this tablet.')
       if (item.state !== 'needs_attention')
         throw new BillingActionError('resolved', 'That item is already resolved.')
@@ -1786,7 +1798,7 @@ export function createMockBillingAdapter(
         state: 'corrected' as const,
         linkedCorrectionId: correctionId,
         resolvedAt: new Date().toISOString(),
-        resolvedBy: shift.biller_profile_id,
+        resolvedBy: shift.person_id,
       }
       attention.set(reference, updated)
       return updated
@@ -1795,7 +1807,7 @@ export function createMockBillingAdapter(
     async discardAttention(reference, reason) {
       const shift = requireTabletOperator()
       const item = attention.get(reference)
-      if (!item || item.deviceId !== shift.counter_device_id)
+      if (!item || item.deviceId !== shift.device_id)
         throw new BillingActionError('not_found', 'That item is not on this tablet.')
       if (item.state !== 'needs_attention')
         throw new BillingActionError('resolved', 'That item is already resolved.')
@@ -1804,7 +1816,7 @@ export function createMockBillingAdapter(
         state: 'discarded' as const,
         discardReason: requireReason(reason),
         resolvedAt: new Date().toISOString(),
-        resolvedBy: shift.biller_profile_id,
+        resolvedBy: shift.person_id,
       }
       attention.set(reference, updated)
       return updated

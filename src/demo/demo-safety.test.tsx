@@ -56,11 +56,14 @@ describe('demo mode safety', () => {
     expect(await screen.findByText('Outlet details')).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
-    // Biller. The counter chrome names whoever holds the open shift, which the
-    // demo store starts with — a walkthrough lands able to ring a bill rather
-    // than behind a PIN nobody was handed.
+    // Biller. Since the demo mounts the enrolled tablet's own shell, the chrome
+    // here names the *device* rather than the person: a tablet is set up, not
+    // signed in, and its header is the same one production draws. The open shift
+    // the demo store starts with is what puts the till on screen rather than the
+    // request card — a walkthrough lands able to ring a bill.
     await user.click(screen.getByRole('link', { name: 'Biller' }))
-    expect(await screen.findByTestId('shift-status')).toHaveTextContent('Demo Biller')
+    expect(await screen.findByRole('heading', { name: 'Counter tablet' })).toBeInTheDocument()
+    expect(screen.getByTestId('sync-indicator')).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
     // Staff.
@@ -203,9 +206,12 @@ describe('demo mode safety', () => {
     expect(screen.queryByTestId('account-menu')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument()
 
-    // Including on the Biller shell, whose chrome is built separately.
+    // Including on the tablet, which has the strongest version of this property:
+    // it is not signed in at all, so there is nothing to sign out of, and a
+    // control offering it would let whoever is standing at the counter strand
+    // the hardware.
     await user.click(screen.getByRole('link', { name: 'Biller' }))
-    await screen.findByTestId('shift-status')
+    await screen.findByRole('heading', { name: 'Counter tablet' })
     expect(screen.queryByTestId('account-menu')).not.toBeInTheDocument()
   })
 

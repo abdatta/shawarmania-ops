@@ -246,3 +246,50 @@ describe('the Status tab carries its own problem count', () => {
     ).toBeVisible()
   })
 })
+
+/**
+ * The after-departure attribution exception, walkable in the demo.
+ *
+ * Change #50 built this and nothing could show it: the flag renders only on a
+ * bill carrying it, and the demo scenario had none. The morning operator now
+ * leaves at 11:00 and the tablet records one more sale at 11:45 before it
+ * learns, which is the case the whole contract exists for.
+ */
+describe('a bill recorded after its operator left remotely', () => {
+  it('is labelled, stays in the takings, and offers the three review outcomes', async () => {
+    const person = userEvent.setup()
+    renderHistory()
+
+    // The list marks it before anybody opens it: a manager scanning the day
+    // should see that one bill's attribution is in question without having to
+    // expand thirty of them.
+    const chip = await screen.findByTestId(/^after-departure-/)
+    expect(chip).toHaveTextContent('After operator left')
+
+    await person.click(chip.closest('button') ?? chip)
+    const panel = await screen.findByTestId('attribution-exception')
+    expect(
+      within(panel).getByText(/Recorded after the operator left remotely/i),
+    ).toBeInTheDocument()
+
+    // The money is not in doubt — only who was standing at the counter. So the
+    // bill keeps its place in the day's figures rather than being held back.
+    expect(within(panel as HTMLElement).getByText(/included in takings/i)).toBeInTheDocument()
+
+    // All three answers a manager can honestly give.
+    expect(within(panel as HTMLElement).getByRole('button', { name: /^Confirm / })).toBeVisible()
+    expect(
+      within(panel as HTMLElement).getByRole('button', { name: 'Name another biller' }),
+    ).toBeVisible()
+    expect(
+      within(panel as HTMLElement).getByRole('button', { name: 'Operator unknown' }),
+    ).toBeVisible()
+
+    // And recording one appends rather than rewriting: the flag survives.
+    await person.click(within(panel as HTMLElement).getByRole('button', { name: /^Confirm / }))
+    await person.click(await screen.findByRole('button', { name: 'Record review' }))
+
+    expect(await screen.findByText(/Reviewed by/i)).toBeInTheDocument()
+    expect(screen.getByText(/Recorded after the operator left remotely/i)).toBeInTheDocument()
+  })
+})

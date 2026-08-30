@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router'
+import { useLocation, useParams } from 'react-router'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { enterDemoScope, exitDemoScope } from '@/data-access/demo-scope'
 import { createDemoData, createMockAdapters, personaFixtures } from '@/data-access/mock'
 import { trackAdapterWrites } from '@/data-access/track-adapter-writes'
 import { NotFound } from '@/routes/not-found'
-import { CounterShell } from '@/shell/counter-shell'
 import { PhoneShell } from '@/shell/phone-shell'
 import { SessionContext } from '@/session/context'
 import { deriveSessionScope, roleFromSegment, type Session } from '@/session/session'
 
 import { DemoBanner } from './demo-banner'
+import { DemoCounter } from './demo-counter'
 import { DemoResetContext } from './demo-reset'
 
 /**
@@ -23,6 +23,7 @@ import { DemoResetContext } from './demo-reset'
  */
 export function DemoRoot() {
   const { roleSegment } = useParams()
+  const { pathname } = useLocation()
   const role = roleFromSegment(roleSegment)
 
   // Mark the demo scope during render, not in an effect: children render
@@ -98,9 +99,10 @@ export function DemoRoot() {
     [role, data],
   )
 
-  if (!session) return <NotFound />
+  // The tablet's own address, with nothing after it.
+  const atTabletRoot = pathname.replace(/\/$/, '') === `/demo/${roleSegment}`
 
-  const Shell = session.role === 'biller' ? CounterShell : PhoneShell
+  if (!session) return <NotFound />
 
   return (
     <SessionContext.Provider value={session}>
@@ -109,7 +111,32 @@ export function DemoRoot() {
             would reload the data and leave a half-filled form open over it,
             which is not "the same place every walkthrough starts". */}
         <AdaptersContext.Provider key={resetCount} value={adapters}>
-          <Shell banner={<DemoBanner />} />
+          {/*
+            The Biller is a tablet, not a phone, and since this change it is the
+            *enrolled* tablet's own shell rather than a role-shell imitation of
+            one. The other three roles are people holding phones, which is what
+            `PhoneShell` is for.
+          */}
+          {session.role === 'biller' ? (
+            /*
+              A tablet has exactly one screen. Production mounts `/counter` as a
+              leaf route, so `/counter/people` and `/counter/billing` are equally
+              not pages there — the tablet's surfaces are panels within its shell,
+              not addresses. Answering the same way here keeps the honest "that
+              page does not exist" a Biller has always met, and stops the demo
+              offering a phone-shaped copy of a screen the tablet already holds.
+            */
+            atTabletRoot ? (
+              <DemoCounter banner={<DemoBanner />} />
+            ) : (
+              <>
+                <DemoBanner />
+                <NotFound />
+              </>
+            )
+          ) : (
+            <PhoneShell banner={<DemoBanner />} />
+          )}
         </AdaptersContext.Provider>
       </DemoResetContext.Provider>
     </SessionContext.Provider>

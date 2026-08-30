@@ -358,6 +358,18 @@ counter confirmation, every Finish day readiness state, immediate finish during
 the edit advisory, the After operator left review in manager history, and the
 incoming biller's deliberately silent experience.
 
+Since `demo-counter-is-the-real-counter` the demo Biller **is** the enrolled
+tablet's shell, so that walk exercises the production component rather than a
+copy: it must cover the tablet landing with no navigation, `/demo/biller` being
+a leaf with nothing resolving beneath it, Finish day naming its blockers, and
+the shift column scrolling beneath pinned Cash and UPI totals with anything
+needing attention above the bills. The mock counter suite pins the fact
+underneath it — one shift, in the live `counter_shifts` shape, agreeing across
+the counter, Tablets, every phone's live-shift card and billing attribution,
+with `operator`, `day_finished` and `device_removed` kept distinguishable, and
+with no demo row ever holding a retired-table id in a column that references the
+live one.
+
 Payment-correction coverage must include immediate and on-handover payments;
 neutral Cash/UPI empty state and unchanged dialog geometry; exact prefilled
 splits; the `5 min`, `1 min`, `59 sec` and zero boundaries; unchanged bill

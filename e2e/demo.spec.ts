@@ -36,7 +36,9 @@ test('walking all four demo role shells makes no request beyond the app origin',
   await expect(page.getByText('Outlet details')).toBeVisible()
 
   await switcher.getByRole('link', { name: 'Biller' }).click()
-  await expect(page.getByTestId('shift-status')).toBeVisible()
+  // The Biller walkthrough is the enrolled tablet's own shell, whose chrome
+  // names the device: a tablet is set up rather than signed in.
+  await expect(page.getByRole('heading', { name: 'Counter tablet' })).toBeVisible()
 
   await switcher.getByRole('link', { name: 'Staff' }).click()
   await expect(page.getByText('Hello, Demo Staff')).toBeVisible()

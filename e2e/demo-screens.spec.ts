@@ -17,10 +17,14 @@ import { expect, test, type Page } from '@playwright/test'
 const SHELLS = [
   { segment: 'owner', anchor: (page: Page) => page.getByRole('heading', { name: 'All outlets' }) },
   { segment: 'admin', anchor: (page: Page) => page.getByText('Outlet details') },
-  // The counter chrome names whoever holds the open shift. The demo store
-  // starts with one open, so a walkthrough lands able to ring a bill rather
-  // than behind a PIN nobody was handed.
-  { segment: 'biller', anchor: (page: Page) => page.getByTestId('shift-status') },
+  // The Biller's shell is the enrolled tablet's own, so its chrome names the
+  // *device*: a tablet is set up rather than signed in. The demo store starts
+  // with a shift open on it, so a walkthrough lands able to ring a bill rather
+  // than at the request screen.
+  {
+    segment: 'biller',
+    anchor: (page: Page) => page.getByRole('heading', { name: 'Counter tablet' }),
+  },
   { segment: 'staff', anchor: (page: Page) => page.getByText('Hello, Demo Staff') },
 ] as const
 

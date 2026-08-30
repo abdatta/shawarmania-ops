@@ -34,6 +34,15 @@ export const DEMO_KANCHRAPARA_BILLER_ID = 'd1000000-0000-4000-a000-000000000007'
 /** The shift that is already open when a walkthrough arrives at the counter. */
 export const DEMO_OPEN_SHIFT_ID = 'd6000000-0000-4000-a000-000000000001'
 /** Kanchrapara's shift. Closed: nobody is standing at that counter in a demo. */
+/**
+ * The morning operator's shift, ended when Priya took the counter at 11:00.
+ *
+ * It exists so the demo can carry an **after-departure attribution exception**
+ * honestly: a flag saying "recorded after the operator left" needs an operator
+ * who actually left, and the demo's other Kalyani shift is still open.
+ */
+export const DEMO_MORNING_SHIFT_ID = 'd6000000-0000-4000-a000-000000000003'
+
 export const DEMO_KANCHRAPARA_SHIFT_ID = 'd6000000-0000-4000-a000-000000000002'
 
 /**
@@ -95,6 +104,14 @@ export interface BillSeed {
    * against. The closed figures do not move; the surface says so.
    */
   arrivedAfterClose?: boolean
+  /**
+   * The tablet recorded this after its operator had already left remotely, and
+   * before it could learn that they had. The bill is genuine and stays in the
+   * day's money; what is uncertain is only who was standing at the counter, so
+   * it keeps the departed operator as flagged last-known context for a manager
+   * to review rather than being reassigned to whoever came next.
+   */
+  recordedAfterDeparture?: boolean
 }
 
 /** Resolve a seed's outlet, and its lines' menu items within that outlet. */
@@ -245,10 +262,20 @@ export const billSeeds: BillSeed[] = [
 
   // ── Kalyani, today — the day a walkthrough closes ────────────────────────
   {
+    // **The after-departure exception**, and the first sale of the open day.
+    //
+    // Promoted rather than invented: it is already counted by the drawer, the
+    // cash surface and the owner console, so flagging it moves no money. The
+    // morning operator left from their phone at 11:00 while the tablet was
+    // offline; the tablet took this ₹417 at 11:45 before it learned. The sale is
+    // real and stays in the day's takings, it keeps the departed operator as
+    // flagged last-known context, and Priya — who opened her shift at 11:00 —
+    // never inherits it and is never asked about it.
     daysAgo: 0,
     time: '11:45',
     paymentMethod: 'cash',
     lines: [{ item: 'classic', quantity: 3 }],
+    recordedAfterDeparture: true,
   },
   {
     daysAgo: 0,

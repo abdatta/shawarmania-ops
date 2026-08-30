@@ -362,6 +362,34 @@ describe('BillingCounter', () => {
     )
   })
 
+  it('scrolls the shift column beneath pinned totals, with attention first', async () => {
+    renderCounter()
+    await screen.findByRole('heading', { name: 'Bills this shift' })
+
+    const section = screen
+      .getByTestId('shift-total-cash')
+      .closest('section[aria-labelledby="my-shift-title"]')!
+    const body = [...section.children].find((child) =>
+      child.className.includes('overflow-y-auto'),
+    ) as HTMLElement | undefined
+
+    // A busy evening used to run the bills off the bottom of a height-capped
+    // column with no way to reach them — and an unreachable needs-attention card
+    // is money nobody can put right.
+    expect(body).toBeDefined()
+    expect(body!.className).toContain('flex-1')
+    expect(body!.className).toContain('min-h-0')
+
+    // The totals are outside it, so they stay put while the list moves. A total
+    // you have to scroll back for is a total you check less often.
+    expect(body!.contains(screen.getByTestId('shift-total-cash'))).toBe(false)
+
+    // And what needs acting on comes before what merely happened.
+    const attention = screen.getByRole('heading', { name: /needs attention/i })
+    const firstBill = within(body!).getAllByText(/^Bill \d+$/)[0]!
+    expect(attention.compareDocumentPosition(firstBill)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  })
+
   it('replaces Paid with Un-pay on the face of a paid preparing card', async () => {
     const person = user()
     renderCounter()

@@ -15,19 +15,33 @@ describe('gate registry', () => {
     expect(isRenderable('live', 'real')).toBe(true)
   })
 
-  it('gives every role its home surface, first, in both modes', () => {
+  it('gives every role with navigation its home surface, first, in both modes', () => {
     // auth-and-roles promoted the four homes from `demo` to `live`: a real
     // session has to land somewhere, and the homes read the outlets adapter,
     // which has a working Supabase implementation. The property that matters
     // is unchanged — every role's shell opens on its own home — so the
     // assertion follows it into real mode rather than being relaxed.
-    for (const role of ['super_admin', 'franchise_admin', 'biller', 'employee'] as const) {
+    //
+    // **The Biller is excluded, and its absence is the assertion below.** A
+    // counter tablet has no navigation at all, so it has no first tab to check.
+    for (const role of ['super_admin', 'franchise_admin', 'employee'] as const) {
       for (const mode of ['demo', 'real'] as const) {
         const visible = visibleSurfaces([role], mode)
         expect(visible.length, `${role}/${mode}`).toBeGreaterThan(0)
         expect(visible[0]?.path, `${role}/${mode}`).toBe('')
         expect(visible[0]?.state, `${role}/${mode}`).toBe('live')
       }
+    }
+  })
+
+  it('gives the counter tablet no navigation at all, in either mode', () => {
+    // Not an oversight and not a gap to be filled later. The tablet is shared
+    // hardware that nobody is signed in to: personal navigation on it would hand
+    // whoever is standing at the counter somebody else's screens, and a way out
+    // of the till is a way to strand the device. Its surfaces are panels within
+    // one shell rather than addresses, so there is nothing for a tab to point at.
+    for (const mode of ['demo', 'real'] as const) {
+      expect(visibleSurfaces(['biller'], mode), mode).toHaveLength(0)
     }
   })
 
@@ -193,7 +207,7 @@ describe('recording an expense stays reachable for every role that spends', () =
     },
   )
 
-  it.each(['super_admin', 'franchise_admin', 'biller', 'employee'] as const)(
+  it.each(['super_admin', 'franchise_admin', 'employee'] as const)(
     '%s is offered it in navigation in real mode, exactly once',
     (role) => {
       const expenses = visibleSurfaces([role], 'real').filter(
@@ -203,6 +217,21 @@ describe('recording an expense stays reachable for every role that spends', () =
       expect(expenses[0]?.path).toBe(EXPENSE_PATH)
     },
   )
+
+  it('reaches the Biller as a panel on the tablet rather than as a tab', () => {
+    // The invariant this block protects is that everybody who spends can record
+    // it, and for the Biller that is still true — it is simply not navigation.
+    // The counter shell renders the expense list directly beneath the till,
+    // which is where it belongs: the drawer is at the counter and the person
+    // spending is often the person billing. The route stays `live` above, so the
+    // gate is still the single switch deciding whether it renders at all.
+    expect(visibleSurfaces(['biller'], 'real')).toHaveLength(0)
+    const entry = surfaces.find(
+      (surface) => surface.role === 'biller' && surface.path === EXPENSE_PATH,
+    )
+    expect(entry?.state).toBe('live')
+    expect(entry?.nav).toBeUndefined()
+  })
 
   it('offers the owner exactly one Expenses tab in demo mode too', () => {
     // The owner reaches the manager's surfaces as well, and `admin-expenses` is

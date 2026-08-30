@@ -37,9 +37,14 @@ test.describe('the counter', () => {
     await page.goto('demo/biller')
   })
 
-  test('lands on the counter with a shift already open', async ({ page }) => {
-    await expect(page).toHaveURL(/\/demo\/biller\/billing$/)
-    await expect(page.getByTestId('shift-status')).toContainText('Demo Biller')
+  test('lands on the enrolled tablet itself, with a shift already open', async ({ page }) => {
+    // The demo mounts the same shell `/counter` mounts, so it stays at the
+    // tablet's one address rather than redirecting into a role-shell tab. The
+    // chrome names the *device*: a tablet is set up, not signed in.
+    await expect(page).toHaveURL(/\/demo\/biller$/)
+    await expect(page.getByRole('heading', { name: 'Counter tablet' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Hand over' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Finish day' })).toBeVisible()
     await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'pending')
     await expect(page.getByTestId('sync-indicator')).toContainText('1 pending')
   })
@@ -492,9 +497,17 @@ test.describe('the counter', () => {
       await page.evaluate(() => document.scrollingElement!.scrollWidth <= window.innerWidth),
     ).toBe(true)
 
-    // And there is no second door to a column that never left.
+    // And there is no second door to a column that never left. Since the demo
+    // mounts the enrolled shell, this is now true of the tablet's whole chrome
+    // rather than of two entries in a tab bar: it offers no navigation at all,
+    // because personal navigation on shared counter hardware would hand whoever
+    // is standing at it somebody else's screens.
     await expect(page.getByRole('link', { name: 'Open orders' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'My shift' })).toHaveCount(0)
+    // The only navigation anywhere on this page belongs to the demo banner's
+    // role switcher, which is chrome *around* the tablet rather than part of it.
+    await expect(page.getByRole('navigation')).toHaveCount(1)
+    await expect(page.getByTestId('demo-banner').getByRole('navigation')).toHaveCount(1)
 
     // With the menu pinned at its minimum there is no slack left, so any
     // further resize attempt — keyboard or pointer — is clamped back down to
@@ -545,6 +558,58 @@ test.describe('the counter', () => {
     await page.goto('demo/biller/shift')
     await expect(page.getByRole('heading', { name: 'That page does not exist' })).toBeVisible()
     await expect(page.getByLabel(/PIN/i)).toHaveCount(0)
+  })
+
+  test('is a leaf: the tablet has one address and no sub-pages', async ({ page }) => {
+    // Production mounts `/counter` as a leaf route, so nothing lives beneath it
+    // there either — the tablet's surfaces are panels within one shell, not
+    // addresses. A path a Biller has no entry for still gets the honest answer.
+    for (const path of ['demo/biller/billing', 'demo/biller/my-shift', 'demo/biller/people']) {
+      await page.goto(path)
+      await expect(page.getByRole('heading', { name: 'That page does not exist' })).toBeVisible()
+      // Still unmistakably a demo while saying so.
+      await expect(page.getByTestId('demo-banner')).toBeVisible()
+    }
+  })
+
+  test('explains what is blocking Finish day instead of refusing opaquely', async ({ page }) => {
+    await page.getByRole('button', { name: 'Finish day' }).click()
+
+    // The sheet drains first, then names every hard blocker with the action that
+    // clears it. The demo scenario carries two.
+    const readiness = page.getByTestId('finish-day-readiness')
+    await expect(readiness).toContainText('needs attention')
+    await expect(readiness).toContainText('open orders')
+    await expect(readiness).toContainText('correct or discard it with a reason')
+
+    // And it never strands the operator: billing is one tap away again.
+    await page.getByRole('button', { name: 'Keep billing' }).click()
+    await expect(readiness).toHaveCount(0)
+  })
+
+  test('keeps the shift totals pinned while the bills beneath them scroll', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 })
+    const totals = page.getByTestId('shift-total-cash')
+    await expect(totals).toBeVisible()
+
+    const before = await totals.boundingBox()
+    const scrolled = await page.evaluate(() => {
+      const section = document.querySelector('section[aria-labelledby="my-shift-title"]')!
+      const body = [...section.children].find((child) =>
+        child.className.includes('overflow-y-auto'),
+      ) as HTMLElement
+      const scrollable = body.scrollHeight > body.clientHeight
+      body.scrollTop = body.scrollHeight
+      return { scrollable, scrollTop: body.scrollTop }
+    })
+
+    // The column scrolls rather than running its last bills off the screen.
+    expect(scrolled.scrollable).toBe(true)
+    expect(scrolled.scrollTop).toBeGreaterThan(0)
+
+    // The day's takings do not move with it: a total you have to scroll back for
+    // is a total you check less often, with a queue in front of you.
+    expect((await totals.boundingBox())?.y).toBe(before?.y)
   })
 })
 

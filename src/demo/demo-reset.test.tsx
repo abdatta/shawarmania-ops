@@ -105,11 +105,14 @@ describe('demo reset', () => {
   it('is reachable from every role’s chrome, including the counter', async () => {
     const user = userEvent.setup()
     renderDemo('/demo/biller')
-    await screen.findByTestId('shift-status')
+    await screen.findByRole('heading', { name: 'Counter tablet' })
     expect(screen.getByTestId('demo-reset')).toBeInTheDocument()
 
-    // And it works there: the counter shell builds its own chrome.
+    // And it works there. The tablet draws no chrome of its own — it has no
+    // navigation, no account menu and no sign-out — so the banner sits above it
+    // and carries the reset, which is the only way it stays reachable from a
+    // screen that deliberately offers no way out.
     await reset(user)
-    expect(await screen.findByTestId('shift-status')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Counter tablet' })).toBeInTheDocument()
   })
 })
