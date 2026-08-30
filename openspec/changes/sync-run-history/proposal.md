@@ -1,7 +1,11 @@
 # Proposal: Sync Run History
 
-> **Model**: Opus · **Wave**: D · **Depends on**: #47 · **Gate**: every run the
-> sync has made is readable on the Zomato and Swiggy surfaces, newest first,
+> **Model**: Opus · **Wave**: D · **Depends on**: #47 · **Gate**: Zomato and
+> Swiggy are one **Delivery** entry whose switch hides no waiting work — the
+> entry's badge is the sum, each channel carries its own count without being
+> selected, the channel is in the route so a link opens on it, and one channel's
+> session, repair and history still cannot touch the other's; and every run the
+> sync has made is readable on that surface, newest first,
 > loaded in pages as the owner scrolls — the ones that moved figures, the ones
 > that moved nothing, the ones that failed, the ones the owner asked for and the
 > one happening right now; a run that moved something says what moved in ₹ and
@@ -56,6 +60,44 @@ into them. Anything that wants something keeps its louder home in **Needs you**,
 exactly as today.
 
 ## Scope
+
+### First, the two tabs become one
+
+Zomato and Swiggy are the same screen twice. They have been one component since
+#47 — `AggregatorSyncSurface` rendered through an `AggregatorChannelConfig`
+whose whole diff is a title, an icon, a few sentences of copy and whether
+Hyperpure rides along. **Navigation is the last place the twin still exists**,
+and it costs the owner two of their twelve tabs.
+
+They become one **Delivery** entry. The channel is chosen on the surface, in the
+shape the ledger and attendance already use for their own switches, and the
+route carries it — `ledger/delivery/:channel` — so a badge, a link or a
+returning reader lands on the channel the work is on. The old paths redirect.
+
+**The switch hides nothing.** The entry's badge is the sum across both channels
+and each channel carries its own count on the switch itself, unselected. The
+surface already argues this for its outlet chips, in its own words: *"the tab
+says three, the page shows one, and the other two are somewhere the reader has
+to go looking for by switching outlets and hoping."* A channel switch that did
+not decompose would reintroduce exactly that. Where only one channel has work
+waiting, the surface opens on it.
+
+**What stays independent stays independent, and it is not the packaging.**
+`aggregator-settlement-sync` requires today that Swiggy's *"gate, route and
+attention badge SHALL be independent from Zomato"*, and the reason given is
+sound: Swiggy holds its own session, so its waiting work can be neither created
+nor cleared by anything Zomato does. That reason is about **readers, sessions
+and counts** — not about how many rows the navigation has. The requirement is
+relaxed for the container and re-asserted for the substance: separate adapter
+instances, separate sessions, separate histories, separate repairs, and a test
+proving a Swiggy reconnect leaves a lapsed Zomato lapsed.
+
+**This lands before anything else in the change, and that is the point.**
+Section 6 rewrites the body of this surface and section 7 judges it on a phone
+in both themes. Doing the merge afterwards would mean doing both twice, and
+would mean discovering a navigation problem at archive time rather than on the
+first day. Done first, the history is built into its finished container and
+judged once.
 
 ### The list shows every run
 
@@ -202,12 +244,29 @@ this list. **Needs you** is untouched.
   scheduled Hyperpure read carries or whether it belongs on both outlets' lists
   or one. That question is asked below; if it resolves cleanly the pairing may
   follow, and it is not a condition of the gate.
+- **No combined feed.** The switch is exclusive: one channel's runs at a time.
+  Interleaving two independent accounts' failure storms into one list, each
+  wanting a different repair, is worse than two lists — and the collapse rule's
+  channel break exists for Zomato's Hyperpure companion, not to make a merged
+  feed legible.
+- **No copy sweep from "aggregator" to "delivery".** The ledger and the
+  statement surface say "aggregator" in visible prose today, in three places.
+  The navigation entry reads Delivery because that is the owner's word for it
+  and it fits a phone tab; a sentence explaining commission is a different
+  register and nobody reads the two side by side. Reconciling them is a copy
+  change with no business inside this one.
+- **No per-channel gating retained.** One gate replaces two, knowingly. See D9.
 - **No technical vocabulary.** No "browser context", "storageState", "CI".
 - No change to the ladder, the probe, the write path, or anything #44 and #47
   settled.
 
 ## Design questions to settle during `/opsx:propose`
 
+- **Settled already, on paper, before any code** — the two the merge raised:
+  one gate replaces two and the old paths redirect (D9), and the entry reads
+  **Delivery**, a word the application uses nowhere else a reader can see (D10).
+  Neither needed an experiment; both are recorded so the apply session does not
+  reopen them.
 - The exact column names and values for "how it started" (`trigger` is
   reserved), and the owner words beside a row — "Twice a day" versus "You
   asked".
@@ -228,7 +287,9 @@ this list. **Needs you** is untouched.
 
 ## Docs to update before archiving
 
-`docs/SCREENS.md` (the Zomato and Swiggy surfaces — the line stating that a row
-is an event rather than a run is the one this change overturns) and
-`docs/OPERATIONS.md` (how to read the run history, and what a collapsed line
-means).
+`docs/SCREENS.md` on two counts: the Zomato and Swiggy entries — the line
+stating that a row is an event rather than a run is the one this change
+overturns — and the navigation itself, where the sentence *"Expenses, Zomato,
+Swiggy and the notebook are all readings inside one group"* becomes one Delivery
+reading in that group. And `docs/OPERATIONS.md` (how to read the run history,
+what a collapsed line means, and which channel a Delivery link opens on).

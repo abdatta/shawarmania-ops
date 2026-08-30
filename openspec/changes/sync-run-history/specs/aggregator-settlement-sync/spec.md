@@ -1,11 +1,22 @@
 # Delta: aggregator-settlement-sync
 
+## RENAMED Requirements
+
+- FROM: `### Requirement: The owner has one surface listing what the sync changed, in which a row is an event rather than a run`
+- TO: `### Requirement: The owner has one surface listing what the sync changed, in which a row is a run`
+
+- FROM: `### Requirement: Swiggy has a parity owner surface without Hyperpure`
+- TO: `### Requirement: Swiggy is a channel of the Delivery surface, without Hyperpure`
+
 ## MODIFIED Requirements
 
-### Requirement: The owner has one surface listing what the sync changed, in which a row is an event rather than a run
+### Requirement: The owner has one surface listing what the sync changed, in which a row is a run
 
 The owner SHALL have a single surface reporting the sync's activity, in two
-sections: what needs them, and what has happened.
+sections: what needs them, and what has happened. **That surface SHALL serve
+every restaurant channel through one navigation entry**, with the channel chosen
+on the surface itself; the sections, the vocabulary and the history below are the
+same questions asked of each channel's own reader.
 
 **What needs them** SHALL list only unresolved matters — a lapsed session, a
 disputed week, a possible duplicate expense — and SHALL be presented expanded
@@ -151,3 +162,68 @@ an existing figure with an empty one.
 - **WHEN** the sync fails
 - **THEN** the report names which of the three states occurred, and a lapsed
   session is not reported as a shape change or a discrepancy
+
+### Requirement: Swiggy is a channel of the Delivery surface, without Hyperpure
+
+The Super Admin SHALL reach every restaurant channel through **one navigation
+entry**, and SHALL choose between them on the surface itself. For each
+configured outlet, each channel SHALL show credential and reader health, last
+successful read and as-of time, Read again with duplicate suppression,
+reconnect, a code field only during an open challenge for that channel,
+provisional/final bank status, its run history, upload outcome, disputes,
+recheck and accept-difference actions. Each channel SHALL identify the affected
+outlet and period and SHALL use the same state language as the ledger.
+
+**The channels SHALL remain independent in substance.** Each SHALL read through
+its own adapter instance against its own session, so that one channel's waiting
+work can be neither created nor cleared by the other, one channel's repair
+signs no other channel in, and a failure in one alters no other's health,
+history or counts. What they share is the container and nothing else: one
+navigation entry, one route that carries which channel is being read, and one
+badge.
+
+**Selecting a channel SHALL be addressable.** The channel being read SHALL be
+carried in the route, so that a badge, a link or a returning reader lands on the
+channel the work is actually on rather than on a fixed default. Where exactly
+one channel has work waiting, the surface SHALL open on that channel.
+
+The Swiggy channel SHALL contain no Hyperpure health, capture, upload or
+reconnect function. Unconfigured outlets SHALL show the not-connected state
+defined by the mapping contract. The surface SHALL depend on the typed adapter
+interface and SHALL have an internally consistent demo covering provisional,
+settled, revised, disputed, lapsed-session, upload and unconfigured states.
+
+#### Scenario: One entry serves both channels
+
+- **WHEN** the Super Admin reads their navigation
+- **THEN** one entry covering the restaurant channels is offered, and no
+  separate per-channel entry appears beside it
+
+#### Scenario: The owner sees the same recovery controls
+
+- **WHEN** a configured outlet's Swiggy reader needs attention
+- **THEN** the Swiggy channel names the health problem and offers the relevant
+  Read again, reconnect, OTP, upload, recheck or accept action
+
+#### Scenario: Swiggy has no Hyperpure child line
+
+- **WHEN** the owner reads the Swiggy channel
+- **THEN** no Hyperpure state or action is shown, and changing Swiggy health
+  cannot alter the Zomato channel's Hyperpure line
+
+#### Scenario: A repair on one channel leaves the other untouched
+
+- **WHEN** a Swiggy reconnect succeeds while Zomato's session is lapsed
+- **THEN** Zomato's health, its waiting work and its run history are unchanged,
+  and Zomato is still reported as needing the owner
+
+#### Scenario: A link opens on the channel it names
+
+- **WHEN** the owner follows a link to the Swiggy channel of the surface
+- **THEN** the surface opens reading Swiggy rather than a default channel
+
+#### Scenario: Demo mode remains self-contained
+
+- **WHEN** the surface is opened in demo mode
+- **THEN** each channel's states and actions use typed mock data, issue no live
+  request and preserve the non-dismissible demo boundary

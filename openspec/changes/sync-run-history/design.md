@@ -30,6 +30,14 @@ deletes the record of an outage at the moment the outage ends.
 to say *what this run changed* is in scope inside that loop and nowhere else
 afterwards.
 
+**4. The two surfaces have been one component since #47.**
+[`aggregator-sync-surface.tsx`](../../../src/features/aggregator-sync/aggregator-sync-surface.tsx)
+is rendered through an `AggregatorChannelConfig`, and the whole difference
+between the channels is a title, an icon, a few sentences of copy and whether
+Hyperpure rides along. Navigation is the only place the twin still exists. This
+change rewrites the body of that surface, so it is the change that can merge the
+container for free — or the change that pays to judge the same surface twice.
+
 The governing spec requirement says a row is an event, not a run, and gives a
 sound reason: over a hundred runs a month, nearly all quiet. This change
 overturns it and has to carry the burden of that reason.
@@ -43,7 +51,11 @@ overturns it and has to carry the burden of that reason.
 - A run states what it did, in rupees and in owner words, from a record written
   when it could still be known.
 - A hundred quiet runs cost one line and no bytes until scrolled to.
-- **Needs you** and the tab badge behave exactly as they do today.
+- **Needs you** behaves exactly as it does today, and the badge counts exactly
+  what it counts today — now summed across both channels and decomposed onto
+  the switch, so no waiting work moves out of view.
+- One navigation entry for the restaurant channels, with their sessions,
+  readers, counts and repairs still fully independent.
 
 **Non-Goals**
 
@@ -52,6 +64,8 @@ overturns it and has to carry the burden of that reason.
 - Backfilled summaries for runs recorded before this change.
 - Search, filters, or any control other than scrolling.
 - Any change to what the sync writes. This change records; it does not decide.
+- A combined feed showing both channels' runs interleaved.
+- Reconciling the word "aggregator" in existing visible copy with "Delivery".
 
 ## Decisions
 
@@ -154,6 +168,85 @@ claims to show everything.
 boundary and duplicate a row. No count query: the list ends when a page returns
 short.
 
+### D9. One gate at `ledger/delivery/:channel`; the two channel gates go `hidden`
+
+A single `owner-delivery-sync` entry carries the navigation, the label and the
+aggregated attention source. `owner-zomato-sync` and `owner-swiggy-sync` become
+`state: 'hidden'` rather than being deleted — the registry's own convention,
+stated on `admin-daily-cash`: *"Not deleted, deliberately."*
+
+What two gates buy is promoting or demoting one channel without the other, and
+today that is worth nothing: both are `live`, and #46 touches them equally. If
+it is ever needed the cheaper lever already exists and is not the registry — the
+channel is **data in `channel-config.ts`**, so a channel can be withheld by not
+building its config, with no route, gate or badge involved.
+
+*Rejected: two gates sharing one label.* `visibleSurfaces` dedupes navigation by
+label and takes the lower order, which is how `admin-expenses` and
+`admin-ledger-expenses` already share one Expenses tab, so this would work. It
+is refused because the switch would then be navigating between two routes under
+two gates, and "the badge lands on the channel that raised it" becomes gate
+resolution instead of a route parameter.
+
+**One consequence, accepted explicitly.** `hidden` means *"no navigation entry,
+no reachable route, in any mode"*, and
+[`gated-surface.tsx`](../../../src/routes/gated-surface.tsx) renders `NotFound`
+for it. So `ledger/zomato` and `ledger/swiggy` stop resolving on their own. Two
+plain redirect routes are added in `surfaces.tsx` outside `GatedSurface` — there
+is no redirect precedent in that file, so this is a new small pattern, and it is
+preferred to a 404 on a URL the owner may well have on their phone.
+
+### D10. The entry reads **Delivery**
+
+Checked rather than assumed. No user-visible "Delivery" string exists anywhere
+in the application: the `BillingDelivery*` names throughout the billing adapter
+are the offline outbox delivering commands to the server, internal and never
+rendered. Billing has no dine-in/takeaway/delivery order type to collide with,
+and the counter names Swiggy and Zomato only individually, never collectively.
+
+The one genuine finding is that visible prose already has a collective noun and
+it is "aggregator" — `ledger-month.tsx` twice and `ledger-statement-surface.tsx`
+once. Two words for one pair is a real cost, and it is accepted rather than
+swept: a navigation label and a sentence about commission are different
+registers, they are never read side by side, and "Delivery" is the word the
+owner reached for unprompted, which is better evidence about their vocabulary
+than what the code happens to say.
+
+### D11. The channel switch is a scope selector, and therefore badged
+
+It will look like the ledger's One day / The month and attendance's Day / Staff,
+because a reader should not have to learn a second idiom for "switch what this
+screen is about". It is not the same *kind* of control, and the difference
+decides one thing. Those two switch **lenses on one dataset**; this one switches
+between **two independent accounts**, which is what the outlet chip row on this
+very surface already does — and that row carries a count per outlet, for the
+reason its own code gives: *"the tab says three, the page shows one, and the
+other two are somewhere the reader has to go looking for by switching outlets
+and hoping."*
+
+So: the ledger's shape, the outlet chips' semantics. Each segment carries its
+own count, readable without selecting it, and the navigation badge is their sum.
+The rule is written into `attention-badges` rather than into this surface,
+because it is a general property of badging a container and the outlet chips
+have been obeying it unwritten since they were built.
+
+Arrival: where exactly one channel has waiting work, the surface opens on that
+channel; otherwise it opens on the channel in the route.
+
+### D12. The merge is section 0, and that is what makes bundling it safe
+
+Section 6 rewrites the body of this surface; task 7.2 judges a hundred runs on a
+phone in both themes. Both are invalidated by a container change landing after
+them. Sequenced first, the merge is a small self-contained edit — registry,
+route, one attention source, badged switch — that is finished and judged before
+the migration is written, and the history is then built into its final home and
+judged once.
+
+This also converts the main risk of bundling. A navigation defect found in
+section 0 costs a day; the same defect found at gate time holds a migration, two
+rewritten ingest functions and an external repo change hostage. Sections 0 and
+1–8 touch disjoint files, so either can be reverted without the other.
+
 ## Risks / Trade-offs
 
 **The money function is the risk.** `ingest_aggregator_cycle` has been rewritten
@@ -169,12 +262,34 @@ storm precisely so this is judged before it ships rather than after.
 **`origin` is null for every existing row.** Honest rendering of a pre-change
 run is a blank, not a guess. The cut-off line says where recording begins.
 
+**This change now carries two concerns, and that is a real cost.** A schema and
+money-path change and a navigation change share one gate, so a defect in either
+holds both. It is taken deliberately, on the owner's decision, and contained
+three ways: the merge lands first (D12), the two halves touch disjoint files and
+revert independently, and the merge half is entirely settled on paper before the
+apply session starts — D9 and D10 answer the only two questions it raised. What
+remains genuinely undecided in section 0 is cosmetic: where a count sits on a
+segment, judged by looking at it on a phone.
+
+**Two founding requirements are being overturned now, not one.** Alongside *a
+row is an event rather than a run*, `aggregator-settlement-sync` also requires
+that Swiggy's *"gate, route and attention badge SHALL be independent from
+Zomato"*. The delta relaxes that for the container and re-asserts it for the
+substance — separate adapters, sessions, histories and repairs — with a scenario
+proving a Swiggy reconnect leaves a lapsed Zomato lapsed. If that scenario
+cannot be made to pass, the merge is wrong and section 0 stops, which is the
+whole reason it runs first.
+
 **A group could hide a run somebody is looking for.** Mitigated by the count
 always being visible and the group always expanding, never by making groups
 smarter.
 
 ## Migration Plan
 
+0. **The merge, first and alone.** Registry, route and redirects, the aggregated
+   attention source, the badged switch, tests, and the navigation half of
+   `docs/SCREENS.md`. No schema, no adapter, no data. Judged on a phone before
+   step 1 begins; revertible on its own.
 1. Migration adds `origin text` and `summary jsonb`, both nullable, both with
    column comments. No backfill. No new RLS policy — the table's existing
    owner-scoped policy covers both columns, and the isolation test case for
@@ -186,7 +301,8 @@ smarter.
 4. Adapter gains the paginated read; the surface gains the list; the merged
    derived list retires.
 
-Steps 1–3 are safe in either order relative to 4. Nothing is destructive and
+Step 0 stands alone and is safe before all of them. Steps 1–3 are safe in
+either order relative to 4. Nothing is destructive and
 nothing needs a window: a run recorded without a summary renders coarse, which
 is the same thing every pre-change run does permanently.
 
