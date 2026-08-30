@@ -21,7 +21,8 @@
 - [ ] 3.3 Add revocation tests proving one device is blocked immediately at the server while another same-outlet device and every human assignment remain active.
 - [ ] 3.4 Update device current-shift and authorized outlet-history views to reconcile several devices without double counting and without sorting chronology by bill number.
 - [ ] 3.5 Extend settlement readiness and tests so every participating device must end its grant, resolve its own queue, and hold a current seal; one device cannot satisfy or hide another's blocker.
-- [ ] 3.6 Update `docs/ARCHITECTURE.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/SCREENS.md`, `docs/OPERATIONS.md`, `docs/TESTING.md`, `docs/SECURITY_AND_PRIVACY.md`, and `docs/LIMITATIONS.md` for multi-device operation.
+- [ ] 3.6 Carry the `counter-billing` correction from `openspec/todos/pipeline-rename-left-two-sentences-behind.md` into this change's delta: the composer's saved-order scenario says the order appears in Preparing, matching the pipeline requirement beside it, while the standalone page and manager tab keep their Open orders heading. If #34 did not take the `app-shell` half, take it here too, then close the todo.
+- [ ] 3.7 Update `docs/ARCHITECTURE.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/SCREENS.md`, `docs/OPERATIONS.md`, `docs/TESTING.md`, `docs/SECURITY_AND_PRIVACY.md`, and `docs/LIMITATIONS.md` for multi-device operation.
 
 ## 4. Verification And Phase Gate
 

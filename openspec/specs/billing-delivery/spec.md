@@ -6,6 +6,7 @@ Guarantees that a counter accepts work into a durable local store before acknowl
 
 ## Requirements
 
+
 ### Requirement: Counter acknowledgement is a durable local commit
 
 The system SHALL write an immutable, versioned billing command envelope to the
@@ -52,16 +53,14 @@ the new adjustment not sent yet until its authoritative result arrives.
 
 Unsent and needs-attention envelopes SHALL survive the shift ending, cutover,
 browser restart and compatible application updates while the tablet remains set
-up. Old unsent work MAY drain without a new shift, but new billing after cutover
-or a reload SHALL require a fresh approved shift.
+up. The enrolled device SHALL continue delivery and non-identifying telemetry
+without a live shift. Replaying an immutable old envelope SHALL NOT grant the
+tablet authority to create new work.
 
-#### Scenario: Unsent command survives the shift ending and a restart
-- **WHEN** an accepted local command is still unsent and the shift ends or the browser restarts
-- **THEN** the same tablet retains the command and later resumes delivery without recreating it or changing its UUID
+#### Scenario: Remote leave with queued work
 
-#### Scenario: Cutover passes with unsent work
-- **WHEN** the outlet cutover arrives while commands are unsent
-- **THEN** the system may deliver those historical commands but refuses new billing until a fresh shift request is approved
+- **WHEN** an operator leaves from their phone while their tablet retains unsent commands
+- **THEN** the tablet returns to shift request when it learns the end, keeps draining those exact commands in the background, and exposes no new-work control until another shift is approved
 
 ### Requirement: One leader drains commands in dependency order
 
@@ -95,19 +94,40 @@ hints only to trigger attempts, never as proof the backend is reachable.
 ### Requirement: Delivery outcomes are explicit and idempotent
 
 An accepted response or an exact replay SHALL resolve one local command to the
-same server result. Retryable failures SHALL stay unsent. A correctable permanent
-refusal SHALL move to needs attention, and a correction SHALL use a new UUID
-linked to the refused command. A discard SHALL retain actor, time and a non-blank
-reason. Correction and discard SHALL be available only on the originating tablet
-to an operator holding its live shift, and both SHALL retain the refused trace.
+same server result. Retryable failures SHALL stay unsent. A permanent refusal
+SHALL move to needs attention, and SHALL be classified as correctable or
+terminal by whether resending the same payload could ever succeed.
+
+A correctable refusal SHALL offer correction, and a correction SHALL use a new
+UUID linked to the refused command. A **terminal** refusal SHALL offer discard
+alone: the system SHALL NOT offer to resend a payload whose refusal cannot
+change, and SHALL refuse such a correction if one is attempted. A refusal
+SHALL name the order it concerned wherever the refusing operation identified
+one, so the item can be read without correlating timestamps.
+
+A discard SHALL retain actor, time and a non-blank reason. Correction and
+discard SHALL be available only on the originating tablet to an operator
+holding its live shift, and both SHALL retain the refused trace.
 
 #### Scenario: The response is lost after the server commits
+
 - **WHEN** the server commits a command, the response is lost, and the same UUID and payload are retried
 - **THEN** the exact replay returns the original result and the local command resolves with no duplicate bill
 
 #### Scenario: A UUID is reused with different content
+
 - **WHEN** a retry uses an existing command UUID with a different canonical payload
 - **THEN** the system moves it to needs attention as an identity conflict and does not treat it as delivered
+
+#### Scenario: A refusal that cannot change offers no correction
+
+- **WHEN** a payment is refused because its order is no longer open
+- **THEN** the item offers discard and not correction, and an attempted correction is refused rather than resent
+
+#### Scenario: A refusal says which order it was about
+
+- **WHEN** an operator or a manager reads a refused command whose operation identified an order
+- **THEN** the order is named on the item, without any payload or customer detail
 
 ### Requirement: A removed tablet stops delivering and keeps its evidence
 
@@ -131,26 +151,77 @@ offer no correction or discard action.
 - **WHEN** a manager views delivery diagnostics
 - **THEN** they see actionable unsent and needs-attention metadata with no customer phone numbers and no payload content
 
-### Requirement: Finishing the day requires a resolved online queue
+### Requirement: Finish Day explains readiness before acting
 
-The tablet SHALL offer an online finish-day action that refuses while any command
-for the business date is unsent, blocked or needing attention, or while any paid
-bill still promises its five-minute edit action. Success SHALL end the shift and
-create the server end-of-day confirmation used by business-day sign-off. An
-ordinary shift ending SHALL NOT create that confirmation.
+Every Finish Day attempt SHALL open one readiness sheet, attempt delivery, and
+obtain authoritative server state before enabling completion. It SHALL name each
+hard blocker and its resolution. Unsent/retrying work, needs-attention work, open
+orders, or inability to obtain server authority SHALL block completion.
 
-#### Scenario: The queue is fully delivered
-- **WHEN** the operator finishes billing online with nothing unresolved for the date
-- **THEN** the shift ends, the server records a current end-of-day confirmation, and the counter accepts no more work under it
+The five-minute tender-edit window SHALL be advisory. An otherwise ready tablet
+MAY review recent payments, keep billing, or finish immediately. Finishing SHALL
+end that edit opportunity and SHALL NOT bypass a hard blocker.
 
-#### Scenario: A command still needs attention
-- **WHEN** the operator attempts to finish while a command needs attention
-- **THEN** the action is refused and names the unresolved category without exposing customer details
+#### Scenario: Recent payment is the only concern
 
-#### Scenario: The last payment is still editable
-- **WHEN** the operator attempts to finish before five minutes have elapsed from the latest paid bill
-- **THEN** the action is refused until the displayed payment-edit window ends, so closing never shortens a promised edit or freezes stale tender totals
+- **WHEN** the latest payment remains editable but delivery, attention, orders and server authority are clear
+- **THEN** the sheet offers Review recent payments, Finish day now and Keep billing without a countdown blocker
 
-#### Scenario: The counter is offline at finishing time
-- **WHEN** the operator attempts to finish with no authoritative server response
-- **THEN** billing state stays intact and the app explains that the queue must reach the server before the day can be signed off
+#### Scenario: Local commands are unresolved
+
+- **WHEN** automatic drain leaves pending, retrying or needs-attention commands
+- **THEN** the sheet names their categories, explains reconnect or local resolution, and does not offer Finish day now
+
+#### Scenario: Finish deliberately ends correction authority
+
+- **WHEN** the operator chooses Finish day now
+- **THEN** the server ends the shift as day finished, records the device confirmation, and refuses any correction created after that instant
+
+### Requirement: Unwinds chain behind the payment they reverse and project locally before delivery
+
+`void_order_payment` and `cancel_paid_order` envelopes SHALL join the same
+per-order dependency chain as the payment they reverse, so an unwind can never
+deliver ahead of its payment whatever the connectivity. Before delivery, the
+tablet's local reads SHALL project an accepted unwind: a voided-and-reopened
+order reappears as open with its prior preparation state, a cancelled order
+leaves the actionable pipeline, and neither presents the unwound bill as
+settled in shift totals.
+
+#### Scenario: Offline unpay replays after its payment
+
+- **WHEN** an operator takes a payment back offline and both commands deliver after reconnecting
+- **THEN** the pay lands first, the unwind second, the bill ends void with kind `counter_unpay`, and no duplicate bill exists
+
+#### Scenario: The pipeline reads the unwind immediately
+
+- **WHEN** `void_order_payment` is durably accepted locally while offline
+- **THEN** the order card returns to its prior section at once and shift totals stop counting that bill, without waiting for delivery
+
+### Requirement: Accepted work stays visible across the delivery handoff
+
+A command's acceptance moves its effect from the tablet's outbox into the
+server's own rows and retires the local envelope. The counter's reads SHALL
+compose those two sources such that no ordering of that handoff against a
+read in progress can present accepted work as though it never happened. In
+particular a settled payment SHALL NOT reappear as an unpaid order, whatever
+the moment of acceptance relative to the read.
+
+The tablet SHALL hold one projection of what it believes about an order, and
+every reader SHALL use it. A command that would act on an order SHALL be
+refused locally when that projection already shows the action taken, rather
+than being sent for the server to refuse.
+
+#### Scenario: A payment is accepted while the pipeline is refreshing
+
+- **WHEN** the server accepts a payment during a pipeline read that began before it
+- **THEN** the order is presented as paid, leaves the payable section, and no further payment can be taken for it on that tablet
+
+#### Scenario: A payment already taken is refused before it becomes a command
+
+- **WHEN** an operator attempts a payment for an order the tablet already holds as paid
+- **THEN** the tablet refuses it in place, naming the order as already paid, and mints no command
+
+#### Scenario: Taking a payment back leaves the order payable again
+
+- **WHEN** an operator unwinds a payment inside its edit window and takes payment again
+- **THEN** the second payment is accepted, because the refusal follows the order's projected state rather than its command history

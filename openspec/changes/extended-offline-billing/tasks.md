@@ -19,7 +19,8 @@
 - [ ] 3.2 On reconnect, verify device/grant status before ordinary drain, preserve all envelopes, deliver dependency chains, quarantine explicit conflicts, and refresh authoritative projections afterwards.
 - [ ] 3.3 Freeze ordinary billing and delivery when reconnect reveals revocation while retaining upload-only recovery for eligible pre-revocation work.
 - [ ] 3.4 Require online verification, complete drain/resolution, ended grant, and server device-day seal before extended-offline work can stop blocking date sign-off.
-- [ ] 3.5 Update `docs/ARCHITECTURE.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/SCREENS.md`, `docs/OPERATIONS.md`, `docs/TESTING.md`, `docs/SECURITY_AND_PRIVACY.md`, and `docs/LIMITATIONS.md` with the V2 offline boundary.
+- [ ] 3.5 Carry the `app-shell` correction from `openspec/todos/pipeline-rename-left-two-sentences-behind.md` into this change's delta, if it is still uncorrected when this change runs: the Counter workspace is the composer/Bills this shift middle column beside the **outlet's** preparation pipeline, not this tablet's open orders. Verify against the rail itself rather than against the paragraph; then close the todo, or narrow it to the `counter-billing` half that #35 owns.
+- [ ] 3.6 Update `docs/ARCHITECTURE.md`, `docs/OFFLINE_AND_SYNC.md`, `docs/SCREENS.md`, `docs/OPERATIONS.md`, `docs/TESTING.md`, `docs/SECURITY_AND_PRIVACY.md`, and `docs/LIMITATIONS.md` with the V2 offline boundary.
 
 ## 4. Verification And Phase Gate
 

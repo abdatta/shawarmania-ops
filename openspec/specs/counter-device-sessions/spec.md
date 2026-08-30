@@ -143,21 +143,28 @@ own pending request at any point before it resolves.
 - **WHEN** the tablet submits another request while one is still pending
 - **THEN** the earlier request is superseded, a new code is issued, and at most one pending request exists for that tablet
 
-### Requirement: A person can end their own shift from their own device
+### Requirement: A person can leave their counter from their own device
 
-A person holding a live shift SHALL see it on the home surface of their own
-shell, with its outlet, tablet and opening time, and SHALL be able to end it from
-there. Ending SHALL take effect at the database, and the tablet SHALL stop
-accepting new counter work at its next request. Locally accepted work SHALL NOT
-be discarded.
+A person holding a live shift SHALL see it on their own phone and MAY choose
+**Leave counter**. The confirmation SHALL distinguish this immediate remote stop
+from ordinary Hand over at the tablet. Leaving takes effect at the database
+immediately. The tablet stops exposing new work when it next learns the state,
+while its device-level delivery continues.
 
-#### Scenario: Ending a shift remotely
-- **WHEN** the operator ends their live shift from their own phone
-- **THEN** the shift is no longer live, the tablet returns to the shift-request screen, and no already-committed local operation is lost
+#### Scenario: Ordinary handover
 
-#### Scenario: Somebody else's shift
-- **WHEN** any person hand-crafts a request to end a shift they do not hold
-- **THEN** the database refuses it
+- **WHEN** one person is replacing another at the counter
+- **THEN** the tablet recommends Hand over so the old shift stays live until the incoming person's approval opens the next shift atomically
+
+#### Scenario: Offline tablet learns remote leave late
+
+- **WHEN** the phone ends the shift while the tablet cannot receive the event
+- **THEN** the phone says authority ended immediately, and later tablet commands are handled by the explicit after-departure contract rather than silently assigned to the next person
+
+#### Scenario: Incoming operator signs in
+
+- **WHEN** Priya opens a new shift after Rahul remotely left and Rahul's commands are still draining or flagged
+- **THEN** Priya's new work belongs only to Priya, Rahul's records remain unchanged, and Priya receives no alert or acknowledgement task for Rahul's attribution exception
 
 ### Requirement: Shifts expire at the outlet cutover
 

@@ -86,7 +86,7 @@ was the decision that history counts as prepared at its paid moment.
 - [x] 10.1 Failing pgTAP first (`40_prepared_history_backfill.sql`): a paid order with null `prepared_at` — the exact legacy shape — is stamped prepared at its stored `paid_at`; open orders stay preparing; cancelled stays terminal; bills keep status and total byte-for-byte; a second run moves nothing.
 - [x] 10.2 Migration `20260823000000_prepared_history_backfill.sql`: guarded maintenance helper (`backfill_prepared_history`, execute revoked from anon/authenticated/public) plus one invocation so every environment built from the chain agrees with production.
 - [x] 10.3 Manager history tab keeps its plain `Open orders (N)` name (owner's call against "Pipeline") and now counts the whole board honestly; `Unpaid prepared (N)` had labelled one section while counting both bands.
-- [ ] 10.4 Post-deploy check on prod: the owner's pipeline tab reads single digits at both outlets, demo mode still walks, and no bill totals moved.
+- [x] 10.4 Post-deploy check on prod: the owner's pipeline tab reads single digits at both outlets, demo mode still walks, and no bill totals moved.
 
 Deliberately not done here: bounding pipeline reads by business date. Stale
 unpaid work must stay visible for a manager to cancel it (spec: an order

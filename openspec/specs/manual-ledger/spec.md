@@ -5,7 +5,10 @@
 A **temporary** record of what each outlet took, spent and held in the drawer, kept by hand while billing, expenses and daily cash are not yet live. It answers two questions and no others: did the drawer balance on a given day, and did a month's trading cover its running costs. Revenue is split across cash, UPI, Zomato and Swiggy; aggregator commission is stored per day so a rate that changes mid-month is right on both sides of the change; every figure is integer paise and every derived figure is computed in one place.
 
 This capability carries its own retirement contract. It grants no authority that outlives it, and it may be removed only by a change that first carries its rows into the live cash and expense records.
-## Requirements### Requirement: The day record is reachable by owners, and by managers at the outlets they are assigned to
+
+## Requirements
+
+### Requirement: The day record is reachable by owners, and by managers at the outlets they are assigned to
 
 The manual ledger's day record, its sourced daily aggregator figures and its
 full surface SHALL be available to an account holding a live Super Admin
@@ -870,8 +873,6 @@ here.**
 
 - **WHEN** the change that removes this capability runs
 - **THEN** every recorded day and expense row is carried into the live records with its recording account, correcting account, void state and reason, and recorded-from-away marker intact, and the removal is incomplete until it is
-
-## ADDED Requirements
 
 ### Requirement: The rows recorded before categories were free text keep every word already typed into them
 

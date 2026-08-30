@@ -42,6 +42,13 @@ so a busy outlet can add counters without redesigning transaction integrity.
   duplicate effects or global client-side coordination.
 - `counter-billing`: Per-outlet numbering and shift/history views reconcile
   concurrent device results.
+  While editing this capability, carry the correction described in
+  [`openspec/todos/pipeline-rename-left-two-sentences-behind.md`](../../todos/pipeline-rename-left-two-sentences-behind.md):
+  the composer requirement still ends a scenario with the order appearing in
+  **Open orders**, while its sibling two screens away says **Preparing**. One
+  capability, two names for one rail. The standalone page and the manager's
+  history tab keep the plain Open orders heading by the owner's call, so only
+  the counter rail's name is at issue.
 - `app-shell`: FA/SA management surfaces list and operate several devices.
 
 ## Impact

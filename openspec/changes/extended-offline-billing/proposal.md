@@ -41,6 +41,13 @@ working through an extended outage without weakening daily reauthentication.
   offline with explicit provenance and freshness.
 - `app-shell`: An enrolled device may enter a constrained offline counter shell
   after restart when its last verified daily grant is still valid.
+  While editing this capability, carry the correction described in
+  [`openspec/todos/pipeline-rename-left-two-sentences-behind.md`](../../todos/pipeline-rename-left-two-sentences-behind.md):
+  its Counter-workspace paragraph still says the activity column holds **this
+  tablet's open orders**, which the preparation pipeline (#45) made
+  outlet-wide, and still names the resizable pair the current-bill and activity
+  columns where `counter-billing` now says middle and activity. The app already
+  behaves the corrected way; only the sentence is behind.
 
 ## Impact
 

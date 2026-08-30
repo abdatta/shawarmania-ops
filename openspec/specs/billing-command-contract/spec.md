@@ -60,20 +60,30 @@ SHALL be rejected as malformed rather than silently matching no function.
 
 ### Requirement: Delayed commands use historical shift validity
 
-A delayed command SHALL remain eligible when its immutable client creation time
-falls inside its referenced tablet and shift, and before that tablet was removed,
-even if it arrives after cutoff or after a later account change. Ordinary
-submission by a removed tablet SHALL remain blocked.
+A delayed command SHALL retain its referenced tablet, shift, operator, immutable
+client creation time and business date. A command created before a shift ended
+remains ordinarily eligible. A command created after a remote `operator` end MAY
+be accepted only before that shift's expiry and before another shift opens on the
+tablet; it SHALL carry an immutable after-departure flag and the snapshotted end
+time. It SHALL NOT be reassigned to a later operator.
 
-#### Scenario: Operator is deactivated after creation
+A command created after deliberate day finish, tablet removal, shift expiry, or
+the opening of a later shift SHALL be refused permanently.
 
-- **WHEN** a command created during their valid shift arrives after the account was deactivated
-- **THEN** it may be accepted with its original historical attribution
+#### Scenario: Offline tablet records a sale after remote leave
 
-#### Scenario: Command claims a time outside its shift
+- **WHEN** a tablet durably creates a sale after its operator left remotely but before it could learn that fact, and no later shift had opened at creation time
+- **THEN** the sale is accepted exactly once with the former shift and operator context, marked recorded after shift end, financially included, and never inherited by a later operator
 
-- **WHEN** its creation time precedes the shift opening or reaches its expiry
-- **THEN** the command is refused permanently
+#### Scenario: A later shift already owns the tablet
+
+- **WHEN** an old-shift command claims a creation time at or after the next shift opened
+- **THEN** it is refused permanently rather than attributed to either operator
+
+#### Scenario: Finish Day has ended the shift
+
+- **WHEN** a command claims a creation time after the tablet deliberately finished the day
+- **THEN** it is refused permanently even when an old client view still references the ended shift
 
 ### Requirement: Command responses classify retry safely
 
@@ -179,3 +189,60 @@ itself invalidate a correction that was durably created inside the window.
 #### Scenario: Replacement allocations do not match the bill
 - **WHEN** the replacement is empty, duplicated by method, non-positive, unsupported or does not sum exactly to the immutable bill total
 - **THEN** the transaction appends no correction, allocation or accepted command effect
+
+### Requirement: Preparation and payment-takeback are typed atomic commands
+
+The command vocabulary SHALL include `set_order_preparation`,
+`void_order_payment` and `cancel_paid_order`, each carrying the standard
+envelope — client UUID, type, schema version, canonical payload hash — and
+obeying the same replay and conflict rules as every sibling command.
+
+`set_order_preparation` SHALL carry the order id, an explicit prepared flag
+and its command time, and SHALL be refused for an order that is not open,
+except that marking prepared is accepted for a paid order whose preparation is
+not yet recorded — settling that order into a bill when its payment was taken
+upfront. Repreparing a paid order SHALL be refused.
+
+`void_order_payment` and `cancel_paid_order` SHALL each name the order and
+carry a non-blank reason, and execute as one atomic transaction: the bill's
+void transition with its structured kind where a bill exists — an upfront
+payer paid before preparation holds its money without one, and unwinding it
+discards the held tender — and the order's return to open or to cancelled
+respectively. Both SHALL be refused unless the commanding tablet and shift are
+the ones that took the payment,
+under the same historical-shift validity every delayed command uses; where a
+bill exists it
+is settled and not already voided; the order is paid; and the commanding time
+falls within five minutes of the money's own `paid_at`. Outside that window
+both SHALL be refused permanently. Direct table writes performing either
+effect SHALL remain impossible for every client role.
+
+#### Scenario: Preparation command replays exactly
+
+- **WHEN** an accepted `set_order_preparation` envelope is submitted twice
+- **THEN** both responses report the same result and `prepared_at` holds one value
+
+#### Scenario: Repreparing a paid order is refused
+
+- **WHEN** the owning tablet submits `set_order_preparation` with prepared false against a paid order
+- **THEN** the command is refused with a category naming the state and nothing changes
+
+#### Scenario: An unwind within the window succeeds atomically
+
+- **WHEN** the originating tablet submits `void_order_payment` inside five minutes of the bill's stored `paid_at`
+- **THEN** the bill is void with kind `counter_unpay` and the order is open again in one transaction, or neither effect exists
+
+#### Scenario: An unwind outside the window is refused
+
+- **WHEN** either unwind command's commanding time exceeds five minutes past the bill's stored `paid_at`
+- **THEN** the command is refused permanently, the bill stays settled and the order stays paid
+
+#### Scenario: Another tablet cannot unwind a payment
+
+- **WHEN** a different tablet of the same outlet hand-crafts `cancel_paid_order` for a bill it did not take
+- **THEN** the database refuses it, under the same device-and-shift guard as every ordinary order action
+
+#### Scenario: A direct write cannot void a bill
+
+- **WHEN** any session attempts the void transition through the data API
+- **THEN** the database refuses the write, whatever the window

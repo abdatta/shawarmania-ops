@@ -9,7 +9,9 @@ when present and is required for every Super Admin, accounts are created and
 reset by an admin handing over a single-use one-time link with no external
 messaging service involved, and an account that is deactivated or reassigned
 stops working immediately rather than at token expiry.
-## Requirements### Requirement: Usernames are canonical and unique across the business
+## Requirements
+
+### Requirement: Usernames are canonical and unique across the business
 
 Every human account SHALL have one canonical username shared by all of that
 person's roles and outlet assignments. Input SHALL be trimmed and lowercased
