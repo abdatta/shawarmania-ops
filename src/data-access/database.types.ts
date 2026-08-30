@@ -1267,9 +1267,82 @@ export type Database = {
           },
         ]
       }
+      billing_attribution_reviews: {
+        Row: {
+          bill_id: string
+          id: string
+          original_operator_id: string
+          outcome: string
+          outlet_id: string
+          reason: string | null
+          resolved_operator_id: string | null
+          reviewed_at: string
+          reviewed_by: string
+        }
+        Insert: {
+          bill_id: string
+          id?: string
+          original_operator_id: string
+          outcome: string
+          outlet_id: string
+          reason?: string | null
+          resolved_operator_id?: string | null
+          reviewed_at?: string
+          reviewed_by: string
+        }
+        Update: {
+          bill_id?: string
+          id?: string
+          original_operator_id?: string
+          outcome?: string
+          outlet_id?: string
+          reason?: string | null
+          resolved_operator_id?: string | null
+          reviewed_at?: string
+          reviewed_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_attribution_reviews_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: true
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_attribution_reviews_original_operator_id_fkey"
+            columns: ["original_operator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_attribution_reviews_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_attribution_reviews_resolved_operator_id_fkey"
+            columns: ["resolved_operator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_attribution_reviews_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_commands: {
         Row: {
           actor_id: string | null
+          attribution_shift_ended_at: string | null
           business_date: string | null
           client_created_at: string
           command_type: string
@@ -1279,6 +1352,7 @@ export type Database = {
           payload_hash: string
           payment_business_date: string | null
           received_at: string
+          recorded_after_shift_end: boolean
           result: Json
           result_category: string
           schema_version: number
@@ -1287,6 +1361,7 @@ export type Database = {
         }
         Insert: {
           actor_id?: string | null
+          attribution_shift_ended_at?: string | null
           business_date?: string | null
           client_created_at: string
           command_type: string
@@ -1296,6 +1371,7 @@ export type Database = {
           payload_hash: string
           payment_business_date?: string | null
           received_at?: string
+          recorded_after_shift_end?: boolean
           result?: Json
           result_category: string
           schema_version: number
@@ -1304,6 +1380,7 @@ export type Database = {
         }
         Update: {
           actor_id?: string | null
+          attribution_shift_ended_at?: string | null
           business_date?: string | null
           client_created_at?: string
           command_type?: string
@@ -1313,6 +1390,7 @@ export type Database = {
           payload_hash?: string
           payment_business_date?: string | null
           received_at?: string
+          recorded_after_shift_end?: boolean
           result?: Json
           result_category?: string
           schema_version?: number
@@ -1417,6 +1495,7 @@ export type Database = {
       }
       bills: {
         Row: {
+          attribution_shift_ended_at: string | null
           bill_number: number
           biller_profile_id: string
           business_date: string
@@ -1435,6 +1514,7 @@ export type Database = {
           payment_business_date: string
           payment_method: Database["public"]["Enums"]["payment_method"] | null
           pricing_mode: Database["public"]["Enums"]["pricing_mode"]
+          recorded_after_shift_end: boolean
           shift_id: string | null
           status: Database["public"]["Enums"]["bill_status"]
           subtotal_paise: number
@@ -1447,6 +1527,7 @@ export type Database = {
           voided_by: string | null
         }
         Insert: {
+          attribution_shift_ended_at?: string | null
           bill_number?: number
           biller_profile_id: string
           business_date: string
@@ -1465,6 +1546,7 @@ export type Database = {
           payment_business_date?: string
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
+          recorded_after_shift_end?: boolean
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal_paise: number
@@ -1477,6 +1559,7 @@ export type Database = {
           voided_by?: string | null
         }
         Update: {
+          attribution_shift_ended_at?: string | null
           bill_number?: number
           biller_profile_id?: string
           business_date?: string
@@ -1495,6 +1578,7 @@ export type Database = {
           payment_business_date?: string
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
+          recorded_after_shift_end?: boolean
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal_paise?: number
@@ -4458,6 +4542,31 @@ export type Database = {
       }
       retire_expense_category: { Args: { p_name: string }; Returns: undefined }
       retire_menu_item: { Args: { p_item_id: string }; Returns: undefined }
+      review_billing_attribution: {
+        Args: {
+          p_bill_id: string
+          p_outcome: string
+          p_reason?: string
+          p_resolved_operator_id?: string
+        }
+        Returns: {
+          bill_id: string
+          id: string
+          original_operator_id: string
+          outcome: string
+          outlet_id: string
+          reason: string | null
+          resolved_operator_id: string | null
+          reviewed_at: string
+          reviewed_by: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "billing_attribution_reviews"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       revise_billing_order: {
         Args: {
           p_command_id?: string

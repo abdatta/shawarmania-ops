@@ -110,7 +110,7 @@ The tablet's own tree has **no navigation, no account menu and no sign-out** sin
 
 **Ask to open the counter** — what a set-up tablet shows when nobody is on it. Type the username of the person taking the counter, and the tablet displays a **four-digit confirmation code**, rendered as large as the screen allows because the person approving is standing on the other side reading it off. That is the entire property the code buys: approval is impossible unless you can see the tablet. The tablet holds no secret belonging to that person and learns nothing about them from the response — **an unknown username produces the same code, the same wait and the same two-minute timeout as a real one**, so a counter anybody can reach across cannot be used to discover who works here. One open request per tablet, and the tablet can withdraw its own for the ordinary case of a mistyped name, which takes the card off the person's phone rather than leaving it there to be puzzled over.
 
-**Open the counter?** — the card on the *person's own phone*, on whichever home surface they land on. It names the outlet, the tablet and how long it has been waiting, takes the four digits, and offers a rejection that **needs no code at all**: saying "that was not me" is not an act anybody should have to walk to a counter to take. Three wrong codes destroy the request, so a typo loop ends in a fresh start rather than an indefinite retry. Once confirmed, the same place shows the shift they now hold and one action that ends it — from their phone, not from the tablet.
+**Open the counter?** — the card on the *person's own phone*, on whichever home surface they land on. It names the outlet, the tablet and how long it has been waiting, takes the four digits, and offers a rejection that **needs no code at all**: saying "that was not me" is not an act anybody should have to walk to a counter to take. Three wrong codes destroy the request, so a typo loop ends in a fresh start rather than an indefinite retry. Once confirmed, the same place shows the shift they now hold and **Leave counter**. Its confirmation says that authority ends immediately and points an ordinary operator change to **Hand over** on the tablet. If an offline tablet records a sale after that leave, the sale retains this shift only as flagged last-known context for manager review; it is never silently moved to whoever signs in next.
 
 **Tablets** (manager and owner) — the hardware and counter standing at each outlet. Heartbeat time, unresolved count and the oldest unresolved instant remain explicitly **last reported**: a tablet that is off, offline or broken stops moving them and is marked out of touch after 30 minutes. Unresolved includes work needing attention; excluding it would make the drawer look safer when it is not. Beneath that telemetry, a coherent read names the live operator and opening time; if no shift is open it says **Nobody is at this counter**. Billing figures do not appear here: managers read the outlet-day Cash and UPI totals in **Billing → Totals**, while Bills and Open orders already carry their own counts. **Re-read** refreshes the tablet and counter state — there is no subscription or timer on the manager's phone. Setting one up is offered only where there is room for one, because one active tablet per outlet is a database invariant. Removing one is permanent, ends any live shift immediately, and the confirmation names what the tablet last reported unresolved.
 
@@ -161,12 +161,17 @@ A queued bill is identified as `Queued · A3F9` and never as an integer, because
 
 **My shift** — paid bills created during this tablet's current shift. Every bill is collapsed by default and expands to its immutable item names, quantities, captured prices, line totals, payment facts, total and optional customer name. This list sits below Open orders in the Counter's continuous right rail at every width, which is why neither it nor Open orders carries a navigation entry any more — a tab leading to a second copy of a column already on screen is a second door into one room. Both routes still resolve, so a link into either one still works. Bills name **Today** with the time rather than repeating the date on every row and say Yesterday for a shift that has crossed midnight. Earlier dates in the current calendar year omit the repeated year; older years retain it. It also holds the originating tablet's needs-attention work, naming the order it was about where the refusal named one. **Which resolutions are offered depends on whether a resend could land differently**: a stale revision or a colliding identity can be corrected by creating a linked command with a new identity, while a terminal refusal — an order already paid, a closed edit window — offers discard alone and says why, because resending the identical payload would earn the identical refusal and add another permanent row to the manager's diagnostics. Either way a reason is required to discard and the refused trace is retained. It is not the outlet's whole history — reviewing the day is a manager's job, and a shared tablet should not display the outlet's takings to whoever is standing at it.
 
-**Finish day** is online and final for the tablet shift. It first waits until no
-paid bill has a five-minute edit window, then drains the local date and refuses while any command needs delivery or
-attention, or a server order remains open, then ends the shift and writes one
-server confirmation under the same outlet/date lock. **Hand over** remains the
-operator-change path and keeps the outgoing shift live until the incoming person
-approves on their own phone.
+**Finish day** always opens a readiness sheet. Opening it immediately asks the
+tablet to drain and names every hard blocker with the action that resolves it:
+work still sending, work needing attention, open orders, or an unavailable
+server. A recent payment whose five-minute correction window remains is an
+advisory, not a blocker: the biller can review it, keep billing, or finish now
+and knowingly end that correction opportunity. Earlier post-departure
+attribution exceptions are already included in takings and do not block the
+day. Once the hard blockers are clear, one server confirmation ends the shift
+under the same outlet/date lock. **Hand over** remains the operator-change path
+and keeps the outgoing shift live until the incoming person approves on their
+own phone.
 
 Personal Biller accounts never mount this counter. On a phone their Biller
 assignment opens the Employee/staff shell for attendance and expenses; only the
@@ -183,6 +188,15 @@ A staff member assigned at more than one outlet chooses which outlet this screen
 **There is no attendance kiosk on the tablet** — considered and rejected by the owner (2026-07-28): one shared device, usually busy billing, is the wrong place for everyone's check-in queue. The escape hatch for a dead phone or a failed GPS fix is the manager entering the check-in from their own Attendance screen, recorded as entered by them (#21) — see the Franchise Admin's Attendance below.
 
 ## Franchise Admin — one outlet, on a phone
+
+An offline sale accepted after its operator used **Leave counter** carries an
+**After operator left** marker in Billing history. Its detail names the original
+operator, the leave time and the fact that the sale is already included in
+takings. A Franchise Admin for that outlet or the Super Admin can append one
+review: confirm the original operator, name another eligible biller, or record
+the operator as unknown with a reason. The original shift attribution remains
+immutable audit context. The incoming biller sees no alert or task for this
+exception because it is not theirs.
 
 **Outlet dashboard** — today at a glance: sales so far split by payment method, cash position, low-stock items, open alerts, who is checked in. The screen a manager opens twenty times a day, so it answers questions without navigation. *(Still a placeholder. It is a `live` surface, so it may not render mock figures; it gets its real summary when the figures behind it become real — #11, #13.)*
 

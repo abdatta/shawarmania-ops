@@ -1,11 +1,11 @@
 import { Ban, ChevronDown, Clock3, ReceiptText, UserRound } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { Money } from '@/components/ui/money'
-import type { BillingBill } from '@/data-access/adapters'
+import type { BillingAttributionOutcome, BillingBill, CounterBiller } from '@/data-access/adapters'
 import { formatBusinessDate, formatDayTime, lineTotalPaise } from '@/domain'
 
 const CANCELLATION_REASONS = ['Duplicate bill', 'Mistaken entry'] as const
@@ -107,6 +107,8 @@ export function ManagerBillDetail({
   onStartCancelling,
   onKeepBill,
   onConfirmCancellation,
+  eligibleBillers = [],
+  onReviewAttribution = async () => undefined,
 }: {
   bill: BillingBill
   currentUserId?: string
@@ -116,10 +118,39 @@ export function ManagerBillDetail({
   onStartCancelling: () => void
   onKeepBill: () => void
   onConfirmCancellation: () => void
+  eligibleBillers?: CounterBiller[]
+  onReviewAttribution?: (
+    outcome: BillingAttributionOutcome,
+    resolvedOperatorId?: string | null,
+    reason?: string | null,
+  ) => Promise<unknown>
 }) {
   const detailId = `bill-detail-${bill.id}`
   const cancellationActor =
     bill.voidedBy?.id === currentUserId ? 'You' : (bill.voidedBy?.name ?? 'someone')
+  const [reviewing, setReviewing] = useState<BillingAttributionOutcome | null>(null)
+  const [resolvedOperatorId, setResolvedOperatorId] = useState('')
+  const [reviewReason, setReviewReason] = useState('')
+  const [reviewBusy, setReviewBusy] = useState(false)
+
+  async function submitReview() {
+    if (!reviewing) return
+    setReviewBusy(true)
+    try {
+      await onReviewAttribution(
+        reviewing,
+        reviewing === 'assigned_other' ? resolvedOperatorId || null : null,
+        reviewing === 'operator_unknown' ? reviewReason : null,
+      )
+      setReviewing(null)
+      setResolvedOperatorId('')
+      setReviewReason('')
+    } catch {
+      return
+    } finally {
+      setReviewBusy(false)
+    }
+  }
 
   return (
     <article
@@ -146,6 +177,51 @@ export function ManagerBillDetail({
           </span>
           {bill.voidReason}
         </BillStatusNotice>
+      )}
+
+      {bill.recordedAfterShiftEnd && bill.attributionShiftEndedAt && (
+        <section
+          data-testid="attribution-exception"
+          className="mb-3 rounded-xl border border-warning bg-surface p-3"
+        >
+          <p className="font-black text-content">Recorded after the operator left remotely</p>
+          <p className="mt-1 text-sm text-content-muted">
+            This tablet recorded the sale at {formatDayTime(bill.paidAt)}, after {bill.billerName}’s
+            shift ended at {formatDayTime(bill.attributionShiftEndedAt)}. The bill is included in
+            takings; {bill.billerName} is preserved as qualified last-known context.
+          </p>
+          {bill.attributionReview ? (
+            <p className="mt-2 text-sm font-semibold text-content">
+              Reviewed by {bill.attributionReview.reviewedByName} at{' '}
+              {formatDayTime(bill.attributionReview.reviewedAt)}:{' '}
+              {bill.attributionReview.outcome === 'confirmed_original'
+                ? `${bill.billerName} was confirmed.`
+                : bill.attributionReview.outcome === 'assigned_other'
+                  ? `${bill.attributionReview.resolvedOperatorName ?? 'Another biller'} was identified.`
+                  : `Operator unknown — ${bill.attributionReview.reason}`}
+            </p>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button size="phone" onClick={() => setReviewing('confirmed_original')}>
+                Confirm {bill.billerName}
+              </Button>
+              <Button
+                variant="secondary"
+                size="phone"
+                onClick={() => setReviewing('assigned_other')}
+              >
+                Name another biller
+              </Button>
+              <Button
+                variant="secondary"
+                size="phone"
+                onClick={() => setReviewing('operator_unknown')}
+              >
+                Operator unknown
+              </Button>
+            </div>
+          )}
+        </section>
       )}
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -276,6 +352,76 @@ export function ManagerBillDetail({
           >
             <Ban aria-hidden size={18} />
             Cancel bill
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={reviewing !== null}
+        onClose={() => !reviewBusy && setReviewing(null)}
+        aria-label="Review bill attribution"
+        className="m-auto w-[min(92vw,28rem)] rounded-2xl p-4"
+      >
+        <h2 className="text-lg font-black text-content">Review bill attribution</h2>
+        <p className="mt-2 text-sm text-content-muted">
+          The original {bill.billerName} context and after-departure flag remain in history whatever
+          you record here.
+        </p>
+        {reviewing === 'assigned_other' && (
+          <label className="mt-4 block text-sm font-bold text-content">
+            Person who handled the sale
+            <select
+              className="mt-1 min-h-11 w-full rounded-lg border border-border bg-surface px-3 text-content"
+              value={resolvedOperatorId}
+              onChange={(event) => setResolvedOperatorId(event.target.value)}
+            >
+              <option value="">Choose a biller</option>
+              {eligibleBillers
+                .filter((person) => person.profileId !== bill.billerId)
+                .map((person) => (
+                  <option key={person.profileId} value={person.profileId}>
+                    {person.fullName}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
+        {reviewing === 'operator_unknown' && (
+          <label className="mt-4 block text-sm font-bold text-content">
+            Why the operator cannot be established
+            <Input
+              className="mt-1"
+              value={reviewReason}
+              onChange={(event) => setReviewReason(event.target.value)}
+              placeholder="For example: tablet was unattended"
+            />
+          </label>
+        )}
+        {reviewing === 'confirmed_original' && (
+          <p className="mt-4 text-sm text-content">
+            Confirm that {bill.billerName} handled this sale despite its tablet time being after
+            remote departure.
+          </p>
+        )}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Button
+            variant="secondary"
+            size="control"
+            disabled={reviewBusy}
+            onClick={() => setReviewing(null)}
+          >
+            Cancel
+          </Button>
+          <Button
+            size="control"
+            disabled={
+              reviewBusy ||
+              (reviewing === 'assigned_other' && !resolvedOperatorId) ||
+              (reviewing === 'operator_unknown' && !reviewReason.trim())
+            }
+            onClick={() => void submitReview()}
+          >
+            {reviewBusy ? 'Recording…' : 'Record review'}
           </Button>
         </div>
       </Modal>

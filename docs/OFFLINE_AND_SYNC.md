@@ -148,6 +148,20 @@ contribute to effective totals.
 
 **Shifts can overlap** if a device was offline when another opened one. Both are recorded; the manager sees an overlap flag. The app does not silently pick a winner, because the correct resolution depends on what actually happened in the shop.
 
+**Remote leave does not rewrite queued attribution.** Commands accepted before
+the operator left retain that operator normally. If an offline tablet has not
+learned that the operator used **Leave counter** on their phone, a later command
+may still land against the ended shift only until a new shift opens or the
+business-day cutoff arrives. The resulting bill is settled normally and marked
+as recorded after shift end, with the shift's end time frozen beside it. It is
+never attributed to the next operator. Day finish, tablet removal, cutoff and a
+later shift are terminal boundaries and refuse stale new work.
+
+The delivery subscriber belongs to the enrolled device, so it stays mounted
+even while the visible tablet is waiting for the next operator. Old envelopes
+continue to drain and heartbeat telemetry can repair itself without granting
+the no-shift screen authority to compose new work.
+
 **The genuine hard case is a late bill against a closed day.** A tablet offline all evening syncs after the manager has already counted the drawer and closed the business date.
 
 The rule: **a closed cash record is a snapshot and is never silently
@@ -186,10 +200,14 @@ Almost nothing, which is the point.
   server names its order too, so neither the biller nor the manager has to work
   out which one it was about.
 
-**Finish day** is the explicit online boundary. The tablet waits out the last
-five-minute payment-edit window, drains the date, refuses while any local
-envelope or server open order remains, then ends the shift and records one
-end-of-day confirmation atomically.
+**Finish day** is the explicit online boundary. Its readiness sheet first tries
+to drain the date, then distinguishes work still sending, work needing human
+attention, open orders and an unreachable server, with a resolution for each.
+Those are hard blockers. A payment still inside its five-minute edit window is
+only an advisory: finishing now deliberately gives up that edit opportunity.
+Flagged post-departure bills are already settled financial records and do not
+block the day. Once the hard blockers clear, the tablet ends the shift and
+records one end-of-day confirmation atomically.
 It never treats a browser's `online` flag as proof that the server was reached.
 
 ## Cash that arrives after the drawer was counted (#11)

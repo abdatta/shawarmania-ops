@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
@@ -210,7 +210,7 @@ describe('the phone answering', () => {
     expect(screen.queryByTestId('counter-shift-card')).not.toBeInTheDocument()
   })
 
-  it('ends a shift it holds, from the phone that opened it', async () => {
+  it('explains immediate remote leave before ending the shift it holds', async () => {
     const user = userEvent.setup()
     const { tablet, phone } = bothEnds()
     const code = await askFor('Demo Staff', tablet)
@@ -221,7 +221,12 @@ describe('the phone answering', () => {
     await user.click(screen.getByRole('button', { name: /open counter/i }))
     await screen.findByTestId('counter-shift-card')
 
-    await user.click(screen.getByRole('button', { name: /end my shift/i }))
+    await user.click(screen.getByRole('button', { name: /leave counter/i }))
+    const dialog = screen.getByRole('dialog', { name: /leave this counter now/i })
+    expect(dialog).toHaveTextContent(/authority ends immediately/i)
+    expect(dialog).toHaveTextContent(/use Hand over on the tablet/i)
+    expect(dialog).toHaveTextContent(/flagged last-known context/i)
+    await user.click(within(dialog).getByRole('button', { name: 'Leave counter' }))
     await waitFor(() => {
       expect(screen.queryByTestId('counter-shift-card')).not.toBeInTheDocument()
     })

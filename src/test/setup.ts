@@ -28,6 +28,11 @@ vi.stubEnv(
  */
 if (typeof window !== 'undefined') {
   await import('@testing-library/jest-dom/vitest')
+  // Enrolled tablets keep their durable delivery subscriber mounted even on
+  // the no-shift screen. jsdom therefore needs the browser storage boundary
+  // whenever an app-route test resolves a counter session, not only in the
+  // outbox unit suites that import this polyfill themselves.
+  await import('fake-indexeddb/auto')
   const { cleanup } = await import('@testing-library/react')
 
   afterEach(() => {

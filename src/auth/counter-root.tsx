@@ -5,6 +5,7 @@ import { LoadingShell } from '@/components/ui/loading'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createSupabaseAdapters } from '@/data-access/supabase-adapters'
 import { CounterShell } from '@/features/counter/counter-shell'
+import { useCounterState } from '@/features/billing/use-counter-state'
 import { NotFound } from '@/routes/not-found'
 import { CounterDeviceContext } from '@/session/counter-context'
 
@@ -55,8 +56,20 @@ export function CounterRoot() {
   return (
     <CounterDeviceContext.Provider value={state.device}>
       <AdaptersContext.Provider value={adapters}>
+        <CounterDeliveryRuntime />
         <CounterShell shift={state.device.shift} onShiftChanged={onShiftChanged} />
       </AdaptersContext.Provider>
     </CounterDeviceContext.Provider>
   )
+}
+
+/**
+ * Delivery belongs to the enrolled tablet, not to the presence of a live
+ * operator. Keeping one subscriber here lets immutable old work drain and lets
+ * telemetry clear while the visible shell is asking for the next shift. It
+ * grants no compose controls and creates no new-work authority.
+ */
+function CounterDeliveryRuntime() {
+  useCounterState()
+  return null
 }

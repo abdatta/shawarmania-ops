@@ -143,6 +143,15 @@ fallback. Exact replay, durable refusals and correction/discard traces all land
 back in the same store. Detail and failure modes are in
 [Offline And Sync](OFFLINE_AND_SYNC.md).
 
+The drain and reporter are enrolled-device services, not children of the
+billing workspace. They stay subscribed while the tablet is showing its
+no-shift request screen, so retained work can finish without granting that
+screen permission to create more. If the operator remotely leaves before an
+offline tablet learns it, the command boundary may accept bounded old-shift work
+only until a later shift or cutoff. It stamps the receipt and bill as
+post-departure last-known context; an append-only manager review can qualify the
+operator later without changing the financial record.
+
 A separate payload-free reporter summarises every envelope the store retains —
 including needs-attention work — as count plus oldest creation instant. It reads
 Dexie on startup, store change, a one-minute tablet heartbeat and foreground;

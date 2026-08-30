@@ -13,6 +13,8 @@ import {
   type BillLineDraft,
   type BillingAdapter,
   type BillingAttentionItem,
+  type BillingAttributionOutcome,
+  type BillingAttributionReview,
   type BillingBill,
   type BillingOrder,
   type CounterBiller,
@@ -134,6 +136,7 @@ export function createMockBillingAdapter(
 ): BillingAdapter {
   const listeners = new Set<() => void>()
   const paymentCorrections = new Map<string, PaymentAllocation[][]>()
+  const attributionReviews = new Map<string, BillingAttributionReview>()
   /** When this tablet accepted a payment — the grace windows measure from here. */
   const acceptedPaymentTimes = new Map<string, number>()
   /** Undelivered commands by client id — the mock's stand-in for the outbox. */
@@ -383,6 +386,10 @@ export function createMockBillingAdapter(
       paymentMethod: payments.length === 1 ? payments[0]!.method : 'mixed',
       status: row.status,
       billerName: actorName(row.biller_profile_id) ?? 'Counter operator',
+      billerId: row.biller_profile_id,
+      recordedAfterShiftEnd: row.recorded_after_shift_end,
+      attributionShiftEndedAt: row.attribution_shift_ended_at,
+      attributionReview: attributionReviews.get(row.id) ?? null,
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
       lines: store.billItems
@@ -511,6 +518,8 @@ export function createMockBillingAdapter(
       ordered_at: acceptedAt,
       paid_at: acceptedAt,
       payment_business_date: draft.businessDate,
+      recorded_after_shift_end: false,
+      attribution_shift_ended_at: null,
       synced_at: new Date().toISOString(),
       customer_id: null,
       customer_name: draft.customerName?.trim() || null,
@@ -665,6 +674,8 @@ export function createMockBillingAdapter(
       ordered_at: row.ordered_at,
       paid_at: paidAt,
       payment_business_date: shift.business_date,
+      recorded_after_shift_end: false,
+      attribution_shift_ended_at: null,
       synced_at: new Date().toISOString(),
       customer_id: row.customer_id,
       customer_name: row.customer_name,
@@ -1119,6 +1130,35 @@ export function createMockBillingAdapter(
       return toShift(row)
     },
 
+    async inspectFinishDay(shiftId: string) {
+      const row = store.shifts.find((candidate) => candidate.id === shiftId)
+      if (!row || row.closed_at !== null) {
+        throw new BillingActionError('no_shift', 'That shift is not open.')
+      }
+      drain()
+      const needsAttentionCount = [...attention.values()].filter(
+        (item) => item.state === 'needs_attention',
+      ).length
+      const unsentCount = pending.size
+      const openOrderCount = projectedOrders(row.outlet_id).filter(
+        (order) => order.status === 'open',
+      ).length
+      const latestPaidAt = Math.max(0, ...acceptedPaymentTimes.values())
+      const editablePaymentCount = latestPaidAt + PAYMENT_EDIT_WINDOW_MS > paymentNow() ? 1 : 0
+      return {
+        unsentCount,
+        needsAttentionCount,
+        openOrderCount,
+        editablePaymentCount,
+        serverReachable: isOnline(),
+        attributionExceptionCount: store.bills.filter(
+          (bill) => bill.recorded_after_shift_end && bill.business_date === row.business_date,
+        ).length,
+        canFinish:
+          isOnline() && unsentCount === 0 && needsAttentionCount === 0 && openOrderCount === 0,
+      }
+    },
+
     async closeShift(shiftId: string) {
       const row = store.shifts.find((candidate) => candidate.id === shiftId)
       if (!row || row.closed_at !== null) {
@@ -1128,13 +1168,6 @@ export function createMockBillingAdapter(
         throw new BillingActionError(
           'unresolved_operations',
           `${pending.size} billing action${pending.size === 1 ? ' is' : 's are'} still unresolved on this tablet.`,
-        )
-      }
-      const latestPaidAt = Math.max(0, ...acceptedPaymentTimes.values())
-      if (latestPaidAt + PAYMENT_EDIT_WINDOW_MS > paymentNow()) {
-        throw new BillingActionError(
-          'unresolved_operations',
-          'A recent payment can still be edited. Wait for its five-minute window, then finish the day.',
         )
       }
       row.closed_at = new Date().toISOString()
@@ -1699,6 +1732,41 @@ export function createMockBillingAdapter(
       row.cancelled_shift_id = null
       emit()
       return orderView(row)
+    },
+
+    async reviewAttribution(
+      billId: string,
+      outcome: BillingAttributionOutcome,
+      resolvedOperatorId?: string | null,
+      reason?: string | null,
+    ) {
+      const bill = store.bills.find((candidate) => candidate.id === billId)
+      if (!bill?.recorded_after_shift_end) {
+        throw new BillingActionError('not_found', 'That attribution exception is not available.')
+      }
+      requireManager(bill.outlet_id)
+      if (attributionReviews.has(billId)) {
+        throw new BillingActionError('already_reviewed', 'This attribution was already reviewed.')
+      }
+      const resolved =
+        outcome === 'confirmed_original' ? bill.biller_profile_id : (resolvedOperatorId ?? null)
+      const cleanReason = outcome === 'operator_unknown' ? reason?.trim() || null : null
+      if (outcome === 'operator_unknown' && !cleanReason) {
+        throw new BillingActionError('reason_required', 'Say why the operator is unknown.')
+      }
+      const review: BillingAttributionReview = {
+        id: `review-${billId}`,
+        outcome,
+        resolvedOperatorId: resolved,
+        resolvedOperatorName: resolved ? actorName(resolved) : null,
+        reason: cleanReason,
+        reviewedBy: context.userId,
+        reviewedByName: actorName(context.userId) ?? 'Manager',
+        reviewedAt: new Date().toISOString(),
+      }
+      attributionReviews.set(billId, review)
+      emit()
+      return review
     },
 
     async listAttention() {

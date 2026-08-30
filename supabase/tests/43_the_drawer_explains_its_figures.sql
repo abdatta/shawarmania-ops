@@ -206,6 +206,14 @@ select is(
 -- the readers something to group.
 select pg_temp.unimpersonate();
 
+-- Put this test's cutover exactly between t-700 and t-200. A fixed 04:00
+-- cutover makes both fixtures land on the same business date during part of
+-- every day, turning the partition assertion below into a clock-dependent
+-- failure. The production value is restored before the next section.
+select pg_temp.set_cutover(
+  :'KAL',
+  (pg_temp.t(450) at time zone 'Asia/Kolkata')::time);
+
 -- Bills either side of the cutover, and one before the whole interval so that
 -- "sums to the scalar" is a claim about a bounded window rather than about
 -- everything.
@@ -220,9 +228,17 @@ select pg_temp.ring_cash(:'KAL', :'BILLER_KAL', '10000000-0000-4000-a000-0000000
 
 select pg_temp.note_expense(:'KAL', :'OWNER', pg_temp.t(690), 26000, 'Grouped · vegetables', true);
 select pg_temp.note_expense(:'KAL', :'OWNER', pg_temp.t(150), 90000, 'Grouped · gas', true);
+
+select pg_temp.impersonate(:'OWNER');
+
+create temporary table pg_temp.upi_expense_baseline (paise bigint not null);
+insert into pg_temp.upi_expense_baseline
+select coalesce(sum(paise), 0)::bigint
+  from public.drawer_cash_expenses_by_day(:'KAL', pg_temp.t(1440), pg_temp.t(1));
+
+select pg_temp.unimpersonate();
 -- Not cash, so it reaches neither the groups nor the scalar.
 select pg_temp.note_expense(:'KAL', :'OWNER', pg_temp.t(140), 500000, 'Grouped · UPI', false);
-
 select pg_temp.impersonate(:'OWNER');
 
 select is(
@@ -256,11 +272,11 @@ select is(
 select is(
   (select coalesce(sum(paise), 0)::bigint
      from public.drawer_cash_expenses_by_day(:'KAL', pg_temp.t(1440), pg_temp.t(1))),
-  (select coalesce(sum(paise), 0)::bigint
-     from public.drawer_cash_expenses_by_day(:'KAL', pg_temp.t(1440), pg_temp.t(145)))
-    + 0::bigint,
+  (select paise from pg_temp.upi_expense_baseline),
   'the ₹5,000 UPI expense at t-140 reaches no group, because only cash moves '
   'the drawer');
+
+select pg_temp.set_cutover(:'KAL', time '04:00');
 
 -- ===========================================================================
 -- 3. The oldest group is a FRAGMENT of its business date (design D1).

@@ -14,8 +14,10 @@ import {
   BILLING_PAYMENT_METHODS,
   DataActionError,
   type BillingBill,
+  type BillingAttributionOutcome,
   type BillingDeliveryDiagnostic,
   type BillingOrder,
+  type CounterBiller,
 } from '@/data-access/adapters'
 import { earliestOffered, formatDayTime, resolveBusinessDate, shiftBusinessDate } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
@@ -105,6 +107,7 @@ export function ManagerBillingHistory() {
   const [bills, setBills] = useState<BillingBill[]>([])
   const [orders, setOrders] = useState<BillingOrder[]>([])
   const [diagnostics, setDiagnostics] = useState<BillingDeliveryDiagnostic[]>([])
+  const [billers, setBillers] = useState<CounterBiller[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [closingIds, setClosingIds] = useState<string[]>([])
   const [cancellingId, setCancellingId] = useState<string | null>(null)
@@ -178,14 +181,16 @@ export function ManagerBillingHistory() {
       // parameters stay on the adapter for the counter, and this surface passes
       // neither: every bill of the day is listed, and each says for itself
       // whether it was paid or cancelled and what it was paid with.
-      const [nextBills, nextOrders, nextDiagnostics] = await Promise.all([
+      const [nextBills, nextOrders, nextDiagnostics, nextBillers] = await Promise.all([
         billing.listManagerHistory({ outletId, businessDate, status: 'all', paymentMethod: 'all' }),
         billing.listManagerOpenOrders(outletId),
         billing.listDeliveryDiagnostics(outletId),
+        billing.listBillers(outletId),
       ])
       setBills(nextBills)
       setOrders(nextOrders)
       setDiagnostics(nextDiagnostics)
+      setBillers(nextBillers)
       setSelectedId((current) =>
         current && nextBills.some((bill) => bill.id === current) ? current : null,
       )
@@ -215,6 +220,24 @@ export function ManagerBillingHistory() {
       setMessage(
         cause instanceof DataActionError ? cause.message : 'That action could not be completed.',
       )
+    }
+  }
+
+  const reviewAttribution = async (
+    billId: string,
+    outcome: BillingAttributionOutcome,
+    resolvedOperatorId?: string | null,
+    reviewReason?: string | null,
+  ) => {
+    try {
+      setMessage(null)
+      await billing.reviewAttribution(billId, outcome, resolvedOperatorId, reviewReason)
+      await load()
+    } catch (cause) {
+      setMessage(
+        cause instanceof DataActionError ? cause.message : 'That review could not be recorded.',
+      )
+      throw cause
     }
   }
 
@@ -439,6 +462,14 @@ export function ManagerBillingHistory() {
                             Cancelled after paid
                           </span>
                         )}
+                        {bill.recordedAfterShiftEnd && (
+                          <span
+                            data-testid={`after-departure-${bill.id}`}
+                            className="rounded-full border border-warning px-2 py-0.5 text-xs font-black text-warning"
+                          >
+                            After operator left
+                          </span>
+                        )}
                       </span>
                       <span className="mt-1 block text-sm font-normal text-content-muted">
                         {methodLabel(bill.paymentMethod)} · {formatDayTime(bill.paidAt)} · by{' '}
@@ -472,6 +503,10 @@ export function ManagerBillingHistory() {
                         }}
                         onConfirmCancellation={() =>
                           void mutate(() => billing.voidBill(bill.id, reason), true)
+                        }
+                        eligibleBillers={billers}
+                        onReviewAttribution={(outcome, resolvedOperatorId, reviewReason) =>
+                          reviewAttribution(bill.id, outcome, resolvedOperatorId, reviewReason)
                         }
                       />
                     </BillDetailTransition>

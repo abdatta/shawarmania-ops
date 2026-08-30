@@ -14,6 +14,8 @@ import {
   type BillLineDraft,
   type BillingAdapter,
   type BillingAttentionItem,
+  type BillingAttributionOutcome,
+  type BillingAttributionReview,
   type BillingBill,
   type BillingCommandAdapter,
   type BillingDeliveryDiagnostic,
@@ -67,6 +69,12 @@ type BillReadRow = Tables<'bills'> & {
   order: { order_number: number } | { order_number: number }[] | null
   biller: { full_name: string } | { full_name: string }[] | null
   voider: { id: string; full_name: string } | { id: string; full_name: string }[] | null
+  attribution_reviews: ReviewReadRow[] | ReviewReadRow | null
+}
+
+type ReviewReadRow = Tables<'billing_attribution_reviews'> & {
+  resolved_operator: { full_name: string } | { full_name: string }[] | null
+  reviewer: { full_name: string } | { full_name: string }[] | null
 }
 
 type EffectivePaymentRow = {
@@ -121,6 +129,7 @@ function billView(
   paymentEditable = false,
 ): BillingBill {
   const voider = joined(row.voider)
+  const review = joined(row.attribution_reviews)
   const effectiveForBill = effective.filter((payment) => payment.bill_id === row.id)
   const payments =
     effectiveForBill.length > 0
@@ -160,6 +169,21 @@ function billView(
     paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
     status: row.status,
     billerName: joined(row.biller)?.full_name ?? 'Counter operator',
+    billerId: row.biller_profile_id,
+    recordedAfterShiftEnd: row.recorded_after_shift_end,
+    attributionShiftEndedAt: row.attribution_shift_ended_at,
+    attributionReview: review
+      ? {
+          id: review.id,
+          outcome: review.outcome as BillingAttributionOutcome,
+          resolvedOperatorId: review.resolved_operator_id,
+          resolvedOperatorName: joined(review.resolved_operator)?.full_name ?? null,
+          reason: review.reason,
+          reviewedBy: review.reviewed_by,
+          reviewedByName: joined(review.reviewer)?.full_name ?? 'Manager',
+          reviewedAt: review.reviewed_at,
+        }
+      : null,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
     lines: row.bill_items.map(lineView),
@@ -608,7 +632,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('bills')
       .select(
-        '*, bill_items(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name)',
+        '*, bill_items(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name))',
       )
     if (filters.id) query = query.eq('id', filters.id)
     if (filters.outletId) query = query.eq('outlet_id', filters.outletId)
@@ -942,48 +966,99 @@ export function createSupabaseBillingAdapter(
         if (listeners.size === 0) void stopRuntime()
       }
     },
-    async listBillers() {
-      return []
+    async listBillers(outletId) {
+      if (counterSession) return []
+      const { data, error } = await client
+        .from('assignments')
+        .select('person_id, person:profiles!assignments_person_id_fkey(full_name)')
+        .eq('outlet_id', outletId)
+        .eq('role', 'biller')
+        .is('ended_on', null)
+      if (error) throw actionError(error, 'Could not load eligible billers.')
+      return data
+        .map((row) => ({
+          profileId: row.person_id,
+          fullName: joined(row.person)?.full_name ?? 'Former team member',
+        }))
+        .sort((left, right) => left.fullName.localeCompare(right.fullName))
     },
     openShift: notLive,
+    async inspectFinishDay(shiftId) {
+      const { session, shift, store } = requireTablet()
+      if (shift.id !== shiftId) {
+        throw new BillingActionError('not_permitted', 'That is not this tablet’s live shift.')
+      }
+      await startRuntime()
+      // A negative browser signal is enough to avoid waiting for a doomed
+      // request. A positive signal is never treated as proof: the drain and
+      // authoritative reads below must still succeed before Finish Day clears.
+      let serverReachable = typeof navigator === 'undefined' || navigator.onLine
+      if (serverReachable) {
+        try {
+          await drain?.runOnce()
+        } catch {
+          serverReachable = false
+        }
+      }
+
+      const envelopes = await store.database.envelopes
+        .where('tabletId')
+        .equals(session.device.deviceId)
+        .filter((envelope) => envelope.businessDate === shift.businessDate)
+        .toArray()
+      const needsAttentionCount = envelopes.filter(
+        (envelope) => envelope.state === 'needs_attention',
+      ).length
+      const unsentCount = envelopes.length - needsAttentionCount
+
+      let openOrderCount = 0
+      let editablePaymentCount = 0
+      try {
+        if (!serverReachable) throw new Error('offline')
+        const [ordersResult, billsResult] = await Promise.all([
+          client
+            .from('orders')
+            .select('id', { count: 'exact', head: true })
+            .eq('device_id', session.device.deviceId)
+            .eq('business_date', shift.businessDate)
+            .eq('status', 'open'),
+          client
+            .from('bills')
+            .select('id', { count: 'exact', head: true })
+            .eq('counter_device_id', session.device.deviceId)
+            .eq('payment_business_date', shift.businessDate)
+            .eq('status', 'settled')
+            .gt('paid_at', new Date(Date.now() - PAYMENT_EDIT_WINDOW_MS).toISOString()),
+        ])
+        if (ordersResult.error || billsResult.error) throw ordersResult.error ?? billsResult.error
+        openOrderCount = ordersResult.count ?? 0
+        editablePaymentCount = billsResult.count ?? 0
+      } catch {
+        serverReachable = false
+      }
+
+      const localBills = await overlayDurableBills(shift.id, [])
+      editablePaymentCount += localBills.filter(
+        (bill) => bill.paymentEditableUntil && Date.parse(bill.paymentEditableUntil) > Date.now(),
+      ).length
+
+      return {
+        unsentCount,
+        needsAttentionCount,
+        openOrderCount,
+        editablePaymentCount,
+        serverReachable,
+        attributionExceptionCount: 0,
+        canFinish:
+          serverReachable && unsentCount === 0 && needsAttentionCount === 0 && openOrderCount === 0,
+      }
+    },
     async closeShift(shiftId: string): Promise<void> {
       const { session, shift, store } = requireTablet()
       if (shift.id !== shiftId) {
         throw new BillingActionError('not_permitted', 'That is not this tablet’s live shift.')
       }
       await startRuntime()
-      const localBills = await overlayDurableBills(shift.id, [])
-      const editable = localBills.filter(
-        (bill) => bill.paymentEditableUntil && Date.parse(bill.paymentEditableUntil) > Date.now(),
-      )
-      if (editable.length > 0) {
-        throw new BillingActionError(
-          'unresolved_operations',
-          'A recent payment can still be edited. Wait for its five-minute window, then finish the day.',
-        )
-      }
-      const locallyUnresolved = await store.countUnresolved(session.device.deviceId)
-      if (locallyUnresolved > 0) {
-        throw new BillingActionError(
-          'unresolved_operations',
-          `${locallyUnresolved} billing action${locallyUnresolved === 1 ? ' is' : 's are'} still unresolved on this tablet.`,
-        )
-      }
-      const { data: recentServerBills, error: recentError } = await client
-        .from('bills')
-        .select('id')
-        .eq('counter_device_id', session.device.deviceId)
-        .eq('payment_business_date', shift.businessDate)
-        .eq('status', 'settled')
-        .gt('paid_at', new Date(Date.now() - PAYMENT_EDIT_WINDOW_MS).toISOString())
-        .limit(1)
-      if (recentError) throw actionError(recentError, 'Could not verify the payment edit window.')
-      if (recentServerBills.length > 0) {
-        throw new BillingActionError(
-          'unresolved_operations',
-          'A recent payment can still be edited. Wait for its five-minute window, then finish the day.',
-        )
-      }
       await drain?.runOnce()
       const unresolved = await store.countUnresolved(session.device.deviceId)
       if (unresolved > 0) {
@@ -1491,6 +1566,26 @@ export function createSupabaseBillingAdapter(
       const order = await readOrder(orderId)
       if (!order) throw new BillingActionError('not_found', 'That order was not found.')
       return order
+    },
+
+    async reviewAttribution(
+      billId: string,
+      outcome: BillingAttributionOutcome,
+      resolvedOperatorId?: string | null,
+      reason?: string | null,
+    ): Promise<BillingAttributionReview> {
+      const { error } = await client.rpc('review_billing_attribution', {
+        p_bill_id: billId,
+        p_outcome: outcome,
+        ...(resolvedOperatorId ? { p_resolved_operator_id: resolvedOperatorId } : {}),
+        ...(reason ? { p_reason: reason } : {}),
+      })
+      if (error) throw actionError(error, 'That attribution review could not be recorded.')
+      const bill = (await readBills({ id: billId, limit: 1 }))[0]
+      if (!bill?.attributionReview) {
+        throw new BillingActionError('not_found', 'The attribution review could not be read back.')
+      }
+      return bill.attributionReview
     },
 
     async listAttention(): Promise<BillingAttentionItem[]> {

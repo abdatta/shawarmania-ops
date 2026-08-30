@@ -239,4 +239,40 @@ describe('manager bill detail', () => {
     expect(paidNotice).toHaveClass('border-success/60')
     expect(screen.queryByRole('button', { name: 'Cancel this bill' })).not.toBeInTheDocument()
   })
+
+  it('qualifies a post-departure bill and records review without rewriting its context', async () => {
+    const user = userEvent.setup()
+    const onReview = vi.fn().mockResolvedValue(undefined)
+    render(
+      <ManagerBillDetail
+        bill={{
+          ...bill,
+          billerId: 'rahul',
+          billerName: 'Rahul',
+          paidAt: '2026-08-12T14:03:00.000Z',
+          recordedAfterShiftEnd: true,
+          attributionShiftEndedAt: '2026-08-12T14:00:00.000Z',
+          attributionReview: null,
+        }}
+        cancelling={false}
+        reason=""
+        onReasonChange={vi.fn()}
+        onStartCancelling={vi.fn()}
+        onKeepBill={vi.fn()}
+        onConfirmCancellation={vi.fn()}
+        eligibleBillers={[{ profileId: 'priya', fullName: 'Priya' }]}
+        onReviewAttribution={onReview}
+      />,
+    )
+
+    const exception = screen.getByTestId('attribution-exception')
+    expect(exception).toHaveTextContent(/included in takings/i)
+    expect(exception).toHaveTextContent(/qualified last-known context/i)
+
+    await user.click(screen.getByRole('button', { name: /name another biller/i }))
+    await user.selectOptions(screen.getByLabelText(/person who handled the sale/i), 'priya')
+    await user.click(screen.getByRole('button', { name: /record review/i }))
+
+    expect(onReview).toHaveBeenCalledWith('assigned_other', 'priya', null)
+  })
 })

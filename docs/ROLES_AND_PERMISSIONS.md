@@ -259,7 +259,7 @@ the paragraph above is untouched by it. See
 for the capability's stated exit, which belongs to `retire-the-manual-ledger`
 (#12).
 
-Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to a set-up tablet and a live shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it.
+Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to a set-up tablet and a live shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it. A bill accepted after its operator remotely left is therefore review work for that outlet's Franchise Admin or the Super Admin, never an alert for the next biller. Their append-only decision qualifies the immutable original attribution; it does not rewrite it.
 
 ## Authentication
 

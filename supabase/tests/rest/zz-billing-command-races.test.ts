@@ -82,10 +82,19 @@ function payNowPayload(billId: string, lineId: string, businessDate: string): Pa
 
 let tablet: Client
 let manager: Client
+let otherOutletManager: Client
 let service: Client
 
 beforeAll(async () => {
-  ;[tablet, manager] = await Promise.all([signIn('tablet.kalyani'), signIn('admin.kalyani')])
+  ;[tablet, manager, otherOutletManager] = await Promise.all([
+    signIn('tablet.kalyani'),
+    signIn('admin.kalyani'),
+    signIn('admin.kanchrapara'),
+  ])
+  // The local Auth and PostgREST containers can straddle a one-second clock
+  // boundary immediately after reset. Let a freshly issued token become
+  // unambiguously current before the first deliberately concurrent request.
+  await new Promise((resolve) => setTimeout(resolve, 5_000))
   service = createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
@@ -395,5 +404,95 @@ describe.sequential('billing command races over PostgREST', () => {
       }),
     ])
     expect(newShift.error === null).not.toBe(secondClose.error === null)
+  })
+
+  it('keeps remote-leave work on the old operator, flags it, and isolates its review', async () => {
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
+    const endedAt = new Date(Date.now() - 1_000).toISOString()
+    const ended = await service
+      .from('counter_shifts')
+      .update({ ended_at: endedAt, ended_reason: 'operator' })
+      .eq('id', SHIFT)
+      .select('expires_at')
+      .single()
+    expect(ended.error).toBeNull()
+    if (!ended.data) throw new Error('seeded shift did not end')
+
+    const command = await createBillingCommand({
+      commandId: 'fa100000-0000-4000-a000-000000000030',
+      tabletId: TABLET,
+      shiftId: SHIFT,
+      type: 'pay_now',
+      createdAt: new Date().toISOString(),
+      payload: payNowPayload(
+        'fa500000-0000-4000-a000-000000000030',
+        'fa600000-0000-4000-a000-000000000030',
+        businessDate,
+      ),
+    })
+    const first = await tablet.rpc('pay_billing_now', rpcArgs(command))
+    const replay = await tablet.rpc('pay_billing_now', rpcArgs(command))
+    expect(first.error).toBeNull()
+    expect(replay.error).toBeNull()
+    expect([status(first.data), status(replay.data)]).toEqual(['accepted', 'replay'])
+
+    const bill = await manager
+      .from('bills')
+      .select('id, biller_profile_id, recorded_after_shift_end, attribution_shift_ended_at')
+      .eq('id', 'fa500000-0000-4000-a000-000000000030')
+      .single()
+    expect(bill.error).toBeNull()
+    expect(bill.data).toMatchObject({
+      biller_profile_id: '10000000-0000-4000-a000-00000000000a',
+      recorded_after_shift_end: true,
+    })
+    expect(new Date(bill.data!.attribution_shift_ended_at!).toISOString()).toBe(endedAt)
+
+    const hidden = await otherOutletManager
+      .from('bills')
+      .select('id')
+      .eq('id', 'fa500000-0000-4000-a000-000000000030')
+    expect(hidden.error).toBeNull()
+    expect(hidden.data).toEqual([])
+
+    const reviewed = await manager.rpc('review_billing_attribution', {
+      p_bill_id: 'fa500000-0000-4000-a000-000000000030',
+      p_outcome: 'confirmed_original',
+    })
+    expect(reviewed.error).toBeNull()
+
+    const refusedReview = await otherOutletManager.rpc('review_billing_attribution', {
+      p_bill_id: 'fa500000-0000-4000-a000-000000000030',
+      p_outcome: 'operator_unknown',
+      p_reason: 'Unknown',
+    })
+    expect(refusedReview.error).not.toBeNull()
+
+    const laterShift = await service.from('counter_shifts').insert({
+      id: 'fa700000-0000-4000-a000-000000000030',
+      device_id: TABLET,
+      outlet_id: OUTLET,
+      person_id: '10000000-0000-4000-a000-00000000000a',
+      opened_at: new Date().toISOString(),
+      business_date: businessDate,
+      expires_at: ended.data.expires_at,
+    })
+    expect(laterShift.error).toBeNull()
+
+    const stale = await createBillingCommand({
+      commandId: 'fa100000-0000-4000-a000-000000000031',
+      tabletId: TABLET,
+      shiftId: SHIFT,
+      type: 'pay_now',
+      createdAt: new Date(Date.now() + 1_000).toISOString(),
+      payload: payNowPayload(
+        'fa500000-0000-4000-a000-000000000031',
+        'fa600000-0000-4000-a000-000000000031',
+        businessDate,
+      ),
+    })
+    const staleResult = await tablet.rpc('pay_billing_now', rpcArgs(stale))
+    expect(staleResult.error).toBeNull()
+    expect(status(staleResult.data)).toBe('authorization_refused')
   })
 })

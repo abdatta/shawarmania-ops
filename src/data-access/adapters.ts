@@ -1150,6 +1150,14 @@ export interface BillingBill {
   status: BillStatus
   /** Snapshotted attribution resolved for display; never inferred from the reader's session. */
   billerName: string
+  /** The original shift operator id. It never changes when attribution is reviewed. */
+  billerId?: string
+  /** True only when the server accepted this sale in the bounded remote-leave gap. */
+  recordedAfterShiftEnd?: boolean
+  /** Snapshotted remote departure time; paired with `recordedAfterShiftEnd`. */
+  attributionShiftEndedAt?: string | null
+  /** Manager/owner review, kept beside rather than written over original attribution. */
+  attributionReview?: BillingAttributionReview | null
   customerName: Tables<'bills'>['customer_name']
   customerPhone: Tables<'bills'>['customer_phone']
   lines: BillLineDraft[]
@@ -1164,6 +1172,31 @@ export interface BillingBill {
   voidedAt: Tables<'bills'>['voided_at']
   /** The actor stamped by the database when the immutable bill was cancelled. */
   voidedBy: LedgerActor | null
+}
+
+export type BillingAttributionOutcome = 'confirmed_original' | 'assigned_other' | 'operator_unknown'
+
+export interface BillingAttributionReview {
+  id: string
+  outcome: BillingAttributionOutcome
+  resolvedOperatorId: string | null
+  resolvedOperatorName: string | null
+  reason: string | null
+  reviewedBy: string
+  reviewedByName: string
+  reviewedAt: string
+}
+
+/** One current tablet answer assembled after an automatic drain attempt. */
+export interface FinishDayReadiness {
+  unsentCount: number
+  needsAttentionCount: number
+  openOrderCount: number
+  editablePaymentCount: number
+  serverReachable: boolean
+  /** Flagged prior-shift bills are financially included and never block finish. */
+  attributionExceptionCount: number
+  canFinish: boolean
 }
 
 export interface BillingHistoryFilters {
@@ -1250,6 +1283,8 @@ export interface BillingAdapter {
     pin: string
   }): Promise<CounterShift>
   closeShift(shiftId: string): Promise<void>
+  /** Drain, then explain every condition relevant to Finish Day. */
+  inspectFinishDay(shiftId: string): Promise<FinishDayReadiness>
   /**
    * Hand a bill to the queue.
    *
@@ -1307,6 +1342,12 @@ export interface BillingAdapter {
   voidBill(billId: string, reason: string): Promise<BillingBill>
   listManagerOpenOrders(outletId: string): Promise<BillingOrder[]>
   managerCancelOrder(orderId: string, reason: string): Promise<BillingOrder>
+  reviewAttribution(
+    billId: string,
+    outcome: BillingAttributionOutcome,
+    resolvedOperatorId?: string | null,
+    reason?: string | null,
+  ): Promise<BillingAttributionReview>
   listAttention(): Promise<BillingAttentionItem[]>
   correctAttention(reference: string, correctionId: string): Promise<BillingAttentionItem>
   discardAttention(reference: string, reason: string): Promise<BillingAttentionItem>

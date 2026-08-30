@@ -411,8 +411,11 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    immediate and an on-handover payment inside their five-minute windows. Force
    a response loss and restart once with the payment/correction chain unsent;
    verify one bill, one correction revision and effective Cash/UPI totals after
-   recovery. Wait for the edit window before Finish day, cancel the test orders,
-   and have a manager void the test bills with reasons.
+   recovery. Open Finish day while the edit window is still live, verify it is
+   advisory and choose Finish day now, then cancel the test orders and have a
+   manager void the test bills with reasons. Also rehearse Leave counter while
+   offline: the later sale must settle once under the old operator with an
+   After operator left marker, never under the incoming operator.
 12. **Schedule the ledger handover** (Super Admin → Outlets → Edit → **Counter
    billing starts on**) for a business date that has not started. From that date
    the ledger removes typed Cash and UPI and labels their settled bill totals
@@ -523,10 +526,12 @@ Two or three minutes per outlet, from a phone.
    aggregator readings, and the drawer below it.
 
 At the tablet, **Finish day** is a separate online boundary: use it only after
-the activity rail has no open orders and Sync says everything is sent. It drains
-again, refuses any unresolved local or server work, ends the shift and records
-the date's confirmation. A refusal is work to resolve, never a prompt to clear
-site data.
+the activity rail has no open orders. Its sheet drains again and names anything
+still sending, needing attention, open on the server, or unable to reach the
+server, together with the resolution. A recent editable payment is advisory and
+can be reviewed or deliberately left behind by finishing now. Once the hard
+blockers clear, it ends the shift and records the date's confirmation. A refusal
+is work to resolve, never a prompt to clear site data.
 
 To correct a day later, open it and press **Edit**. It opens as a reading, so the
 figures cannot be nudged by a stray tap on the way past; every field comes back

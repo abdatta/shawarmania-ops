@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Input } from '@/components/ui/input'
+import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { useAdapters } from '@/data-access'
 import { DataActionError } from '@/data-access/adapters'
 import type { CounterShiftRequest, LiveCounterShift } from '@/data-access/adapters'
@@ -228,6 +229,7 @@ function ShiftRequestCard({
 function LiveShiftCard({ shift, onEnded }: { shift: LiveCounterShift; onEnded: () => void }) {
   const { counter } = useAdapters()
   const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   async function end() {
     setBusy(true)
@@ -237,6 +239,7 @@ function LiveShiftCard({ shift, onEnded }: { shift: LiveCounterShift; onEnded: (
       // Either it ended or it had already ended. Both mean the same to the
       // person holding the phone, and the re-read settles which.
     }
+    setConfirming(false)
     onEnded()
   }
 
@@ -247,16 +250,27 @@ function LiveShiftCard({ shift, onEnded }: { shift: LiveCounterShift; onEnded: (
         <p className="text-content">
           {shift.deviceLabel ?? 'A counter tablet'}
           {shift.outletName ? ` at ${shift.outletName}` : ''}, since{' '}
-          {formatDateTime(shift.openedAt)}. Every bill rung on it is recorded under your name.
+          {formatDateTime(shift.openedAt)}. Bills recorded before you leave use your shift. If the
+          tablet is offline, later sales keep your name only as flagged last-known context.
         </p>
         <button
           type="button"
-          onClick={end}
+          onClick={() => setConfirming(true)}
           disabled={busy}
           className={buttonVariants({ variant: 'secondary', size: 'phone' })}
         >
-          {busy ? 'Ending…' : 'End my shift'}
+          {busy ? 'Leaving…' : 'Leave counter'}
         </button>
+        <ConfirmDialog
+          open={confirming}
+          title="Leave this counter now?"
+          consequence="Your authority ends immediately. For an ordinary operator change, use Hand over on the tablet instead. If that tablet is offline, sales it records before learning you left remain under your shift as flagged last-known context for a manager to review."
+          confirmLabel={busy ? 'Leaving…' : 'Leave counter'}
+          cancelLabel="Stay on counter"
+          busy={busy}
+          onClose={() => setConfirming(false)}
+          onConfirm={() => void end()}
+        />
       </CardBody>
     </Card>
   )

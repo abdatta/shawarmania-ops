@@ -203,9 +203,12 @@ test('the real tablet survives network loss and settles each local acceptance ex
   await page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
 
   await page.getByRole('button', { name: 'Finish day' }).click()
-  await expect(page.getByRole('alert')).toContainText(
-    /cannot finish|still waiting|reconnect|unresolved|recent payment|edited/i,
-  )
+  const finish = page.getByRole('dialog', { name: 'Finish day' })
+  await expect(finish.getByText(/server could not be reached/i)).toBeVisible()
+  await expect(finish.getByText(/actions? still sending/i)).toBeVisible()
+  await expect(finish.getByRole('button', { name: 'Check again' })).toBeVisible()
+  await expect(finish.getByRole('button', { name: 'Keep billing' })).toBeVisible()
+  await expect(finish.getByRole('button', { name: /finish day now/i })).toHaveCount(0)
 
   await page.reload({ waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Loading the app…')).toBeVisible()

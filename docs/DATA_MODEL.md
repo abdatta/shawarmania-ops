@@ -154,7 +154,7 @@ Readable by the tablet and by the person named, and by nobody else — not the o
 
 **`counter_shifts`** — `id`, `device_id`, `outlet_id`, `person_id`, `opened_at`, `business_date`, `expires_at`, `ended_at`, `ended_reason`.
 
-The approved counter session, and what a bill or a counter expense is attributed to. `expires_at` is the outlet's next cutover, stored rather than computed by a job, so "is this shift live?" is a `where` clause and there is nothing scheduled to fail. One open shift per tablet. Readable by the tablet, the operator, the outlet's manager and the owner — unlike the request, a shift is an operational fact about the outlet.
+The approved counter session, and what a bill or a counter expense is attributed to. `expires_at` is the outlet's next cutover, stored rather than computed by a job, so "is this shift live?" is a `where` clause and there is nothing scheduled to fail. `ended_reason` distinguishes an operator's remote leave from day finish and device removal; only remote leave permits the bounded last-known-context rule for an offline command. One open shift per tablet. Readable by the tablet, the operator, the outlet's manager and the owner — unlike the request, a shift is an operational fact about the outlet.
 
 ## Menu
 
@@ -188,6 +188,13 @@ snapshot through later menu changes.
 `payment_business_date` (drawer), operator/tablet/counter-shift attribution,
 customer snapshot, integer-paise totals, optional single-method summary, status and void
 attribution.
+
+`recorded_after_shift_end` and its paired `attribution_shift_ended_at` are
+server-stamped immutable facts. They are true only when a command from an
+offline tablet is accepted after the attributed operator remotely left, before
+any later shift or cutoff. The bill remains in ordinary revenue and tender
+totals and retains its original person and shift; the flag qualifies that
+attribution rather than replacing it.
 
 - `payment_method`: nullable compatibility summary. It is `cash` or `upi` for a single-tender bill and null for mixed tender. Aggregators, Card and Other are not accepted payment categories.
 - `pricing_mode`: `no_tax` | `gst_inclusive` | `gst_exclusive`. **v1 always writes `no_tax` and `tax_paise = 0`.** It exists now so that when GST is enabled, historical bills stay unambiguous instead of being silently reinterpreted under new rules.
@@ -228,7 +235,16 @@ appending again.
 identity, attribution, command type/version/hash, client and server clocks,
 affected dates, result category, entity references and a server watermark. They
 store no customer or line payload. Exact replay returns the original result;
-changed reuse of the UUID is `identity_conflict`.
+changed reuse of the UUID is `identity_conflict`. A receipt accepted through
+the bounded remote-leave exception freezes the same post-shift flag and shift
+end time that the created bill receives.
+
+**`billing_attribution_reviews`** — one append-only manager review per flagged
+bill. It preserves the original operator and records one outcome:
+`confirmed_original`, `assigned_other` with an outlet-eligible biller, or
+`operator_unknown` with a required reason. It also stamps the reviewing account
+and time. Only the outlet's Franchise Admin or the Super Admin may read and
+create it; update and delete are refused. The review never mutates the bill.
 
 **`billing_end_of_day_confirmations`** — one tablet/business-date confirmation
 with its final shift and last acknowledged command watermark. A later shift or
@@ -236,9 +252,10 @@ accepted command for that tablet/date makes it stale. The tablet can confirm
 only after participating and reporting zero unsent and zero needs-attention
 operations. The confirmation command itself refuses open orders and atomically
 ends that tablet's shift. Readiness requires no open orders, no live shifts,
-and a current confirmation from every participating tablet. An insert or update
-is also refused while that tablet has a settled bill whose five-minute
-payment-correction window is still open.
+and a current confirmation from every participating tablet. A settled bill's
+still-open five-minute payment-correction window is reported to the tablet as an
+advisory; it does not prevent confirmation, and confirmation deliberately ends
+the tablet's opportunity to submit that correction.
 
 All order and bill mutations use versioned command RPCs. Authenticated clients
 have no direct insert, update or delete privilege on the money tables, so

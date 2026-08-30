@@ -517,6 +517,15 @@ order transfer and no privileged recovery upload. A manager cancels a stranded
 open order with a reason and the counter re-rings it; a destroyed tablet's
 unsent pay-now sale has no recovery path.
 
+Remote **Leave counter** has one deliberately bounded exception to the ordinary
+live-shift rule: an offline tablet that has not learned of the leave can still
+deliver work created afterward until another shift opens or the business day
+cuts over. The bill is not guessed onto the incoming operator; it remains under
+the old shift with an immutable after-departure flag and needs human manager
+review if the actual operator matters. That review can qualify attribution but
+cannot rewrite the bill. The system cannot infer who physically touched an
+offline shared tablet, and presents `operator unknown` as the honest outcome.
+
 ### Late bills against a closed day
 
 A bill accepted after its payment business date was closed leaves the signed

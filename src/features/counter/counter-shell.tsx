@@ -14,6 +14,7 @@ import { useCounterDevice } from '@/session/counter-context'
 import type { CounterShift } from '@/session/counter-session'
 
 import { ShiftRequestScreen } from './shift-request-screen'
+import { FinishDaySheet } from './finish-day-sheet'
 
 /**
  * Everything a counter tablet is, once it has a shift.
@@ -38,7 +39,7 @@ export function CounterShell({
   onShiftChanged: () => void
 }) {
   const device = useCounterDevice()
-  const { billing, counter } = useAdapters()
+  const { counter } = useAdapters()
   /**
    * The outgoing operator has stepped away and somebody else is taking the
    * counter.
@@ -54,24 +55,7 @@ export function CounterShell({
    * a shift, and asking has never been what opens one.
    */
   const [handingOver, setHandingOver] = useState(false)
-  const [finishing, setFinishing] = useState(false)
-  const [finishError, setFinishError] = useState<string | null>(null)
-
-  const finishDay = async () => {
-    if (!shift) return
-    setFinishing(true)
-    setFinishError(null)
-    try {
-      await billing.closeShift(shift.id)
-      onShiftChanged()
-    } catch (cause) {
-      setFinishError(
-        cause instanceof Error ? cause.message : 'The day could not be finished. Try again online.',
-      )
-    } finally {
-      setFinishing(false)
-    }
-  }
+  const [finishOpen, setFinishOpen] = useState(false)
 
   /**
    * Watch for a shift that ended somewhere else — at the cutover, or from the
@@ -122,23 +106,25 @@ export function CounterShell({
             </button>
             <button
               type="button"
-              disabled={finishing}
-              onClick={() => void finishDay()}
+              onClick={() => setFinishOpen(true)}
               className={buttonVariants({ variant: 'primary', size: 'phone' })}
             >
-              {finishing ? 'Finishing…' : 'Finish day'}
+              Finish day
             </button>
           </div>
         </header>
 
-        {finishError && (
-          <p role="alert" className="text-sm font-semibold text-danger">
-            {finishError}
-          </p>
-        )}
-
         <BillingPanel />
         <CounterExpenses shift={shift} />
+        <FinishDaySheet
+          open={finishOpen}
+          shiftId={shift.id}
+          onClose={() => setFinishOpen(false)}
+          onFinished={() => {
+            setFinishOpen(false)
+            onShiftChanged()
+          }}
+        />
       </div>
     </div>
   )

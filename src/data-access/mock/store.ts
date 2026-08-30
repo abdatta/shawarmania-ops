@@ -327,6 +327,8 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       ordered_at: createdAt,
       paid_at: createdAt,
       payment_business_date: date,
+      recorded_after_shift_end: false,
+      attribution_shift_ended_at: null,
       // A bill that arrived after its day was closed reached the server the
       // next morning. `created_at` is when it was rung; `synced_at` is when it
       // landed, and the gap between them is the whole reconciliation problem.
@@ -548,6 +550,8 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     actor_id: DEMO_BILLER_ID,
     business_date: today,
     payment_business_date: today,
+    recorded_after_shift_end: false,
+    attribution_shift_ended_at: null,
     client_created_at: instantAt(today, '19:00'),
     received_at: instantAt(today, '19:01'),
     command_type: 'pay_now',

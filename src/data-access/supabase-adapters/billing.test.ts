@@ -310,6 +310,21 @@ describe('the live tablet acceptance boundary', () => {
     database.close()
   })
 
+  it('reports an explicitly offline Finish Day check without waiting for a network timeout', async () => {
+    const previous = Object.getOwnPropertyDescriptor(navigator, 'onLine')
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+    try {
+      const billing = createSupabaseBillingAdapter(offlineClient(), session)
+      const readiness = await billing.inspectFinishDay(session.shift!.id)
+
+      expect(readiness.serverReachable).toBe(false)
+      expect(readiness.canFinish).toBe(false)
+    } finally {
+      if (previous) Object.defineProperty(navigator, 'onLine', previous)
+      else Reflect.deleteProperty(navigator, 'onLine')
+    }
+  })
+
   // Spec: preparation commands ride the same outbox as every sibling, unwinds
   // chain behind the payment they reverse, and reads project all of it before
   // anything is delivered.

@@ -1,4 +1,6 @@
 /// <reference types="vite/client" />
+
+declare module 'fake-indexeddb/auto'
 /// <reference types="vite-plugin-pwa/client" />
 
 /** Injected by Vite at build time — see `define` in vite.config.ts. */

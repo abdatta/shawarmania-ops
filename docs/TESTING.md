@@ -193,11 +193,16 @@ End-to-end, with the network genuinely disabled rather than mocked away.
   restores lines, customer and exact tender allocation.
 - Create → revise → pay/cancel remains dependency ordered while an unrelated
   order chain continues.
+- Leave from the operator's phone while the tablet is offline → work created
+  before leave lands normally; work created afterward lands once under the old
+  shift with its post-departure flag; a later shift and cutoff each refuse stale
+  new work, and the incoming operator receives no alert.
 - End the shift, cross cutover and restart with queued work → old work remains
   deliverable, but no new work opens without the backend and a fresh shift.
 - Remove a tablet with pending work → draining stops and the envelopes remain.
-- Finish day refuses Undo-held, unsent, needs-attention and server-open work;
-  after a clean drain it ends the shift and writes exactly one confirmation.
+- Finish day names and refuses unsent, needs-attention, server-open and
+  unreachable-server states; a still-editable payment is advisory, and after a
+  clean drain either Finish day choice writes exactly one confirmation.
 - Force a duplicate submission of the same client UUID → one row.
 - Bill numbers are assigned by the server, are sequential per outlet, and never collide across two devices.
 - A bill settled at 00:20, synced at 09:00, carries the **previous** business date.
@@ -348,7 +353,10 @@ For billing, that walk additionally covers the three-column counter at tablet
 and narrow widths, Cash/UPI only, local reference before server numbering,
 offline banner, freshness after foreground and a reported change, manager void
 with manual re-ring wording, ledger **from counter** labels, and a personal
-Biller landing on staff navigation rather than a till.
+Biller landing on staff navigation rather than a till. It also covers the Leave
+counter confirmation, every Finish day readiness state, immediate finish during
+the edit advisory, the After operator left review in manager history, and the
+incoming biller's deliberately silent experience.
 
 Payment-correction coverage must include immediate and on-handover payments;
 neutral Cash/UPI empty state and unchanged dialog geometry; exact prefilled
