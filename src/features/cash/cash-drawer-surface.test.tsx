@@ -262,78 +262,58 @@ describe('a negative amount announces itself on the keystroke', () => {
     expect(screen.queryByTestId('negative-warning')).not.toBeInTheDocument()
     expect(screen.getByTestId('leaving-preview').textContent).toMatch(/1,450/)
   })
-
-  it('flips the standalone sheet title and its confirming control', async () => {
-    const user = userEvent.setup()
-    renderDrawer()
-    await waitFor(() => expect(screen.getByTestId('open-collect')).toBeInTheDocument())
-
-    await user.click(screen.getByTestId('open-collect'))
-    await user.type(screen.getByTestId('movement-amount'), '-1000')
-
-    expect(await screen.findByTestId('movement-negative-warning')).toBeInTheDocument()
-    // The stated action agrees with the sign.
-    expect(screen.getByTestId('save-movement').textContent).toMatch(/add to drawer/i)
-  })
 })
 
-describe('collecting without counting says so', () => {
-  it('states that nothing is being verified, and asks for no reason or actor', async () => {
-    const user = userEvent.setup()
-    renderDrawer()
-    await waitFor(() => expect(screen.getByTestId('open-collect')).toBeInTheDocument())
-
-    await user.click(screen.getByTestId('open-collect'))
-
-    expect(screen.getByTestId('collect-not-verified').textContent).toMatch(/nothing verified/i)
-    await user.click(
-      screen.getByRole('button', { name: /what collecting without counting does not do/i }),
-    )
-    expect(screen.getByText(/you are not counting/i)).toBeInTheDocument()
-
-    // No actor picker: the actor is the session.
-    expect(screen.queryByLabelText(/who took/i)).not.toBeInTheDocument()
-    expect(screen.queryByTestId('movement-reason')).not.toBeInTheDocument()
-  })
-})
-
-describe('a cash spend is secondary, and says it is not an operating cost', () => {
-  it('requires a reason and states that the month is unchanged', async () => {
-    const user = userEvent.setup()
-    renderDrawer()
-    await waitFor(() => expect(screen.getByTestId('open-spend')).toBeInTheDocument())
-
-    await user.click(screen.getByTestId('open-spend'))
-
-    expect(screen.getByTestId('movement-reason')).toBeInTheDocument()
-    expect(screen.getByTestId('spend-not-an-expense').textContent).toMatch(
-      /not in the month.s expenses/i,
-    )
-    await user.click(screen.getByRole('button', { name: /why a spend is not an expense/i }))
-    expect(screen.getByText(/a fridge is not a running cost/i)).toBeInTheDocument()
-  })
-
-  it('is reachable less prominently than a count, and still reads as a control', async () => {
+/**
+ * **Cash leaves the drawer only at a count** (design D5).
+ *
+ * Deleting Only Collect and Other Spend is not tidiness. `In the drawer now` is
+ * four terms - opening, plus receipts, less expenses, less cash out - and the
+ * strip beneath it shows three. `cashOutSincePaise` had no tile, so a
+ * standalone collection dropped the headline with nothing on the card
+ * accounting for it. With no way to record a movement outside a count, the three
+ * tiles account for the headline by construction rather than by adding a fourth
+ * tile for a term measured at zero occurrences in production.
+ */
+describe('the drawer records no movement of its own', () => {
+  it('offers neither Only Collect nor Other Spend, and no fourth tile', async () => {
     renderDrawer()
     await waitFor(() => expect(screen.getByTestId('open-count')).toBeInTheDocument())
 
-    const count = screen.getByTestId('open-count')
-    const collect = screen.getByTestId('open-collect')
-    const spend = screen.getByTestId('open-spend')
+    expect(screen.queryByTestId('open-collect')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('open-spend')).not.toBeInTheDocument()
+    expect(screen.queryByText(/only collect/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/other spend/i)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('movement-amount')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('movement-reason')).not.toBeInTheDocument()
 
-    // Decision 5's separation survives: the primary action is full width and
-    // alone, the two secondary ones share the quieter row beneath it.
-    expect(count.className).toMatch(/w-full/)
-    expect(spend.className).not.toMatch(/w-full/)
+    // Three tiles, not four. The term a fourth would have shown is the one the
+    // two deleted controls were the only way to produce.
+    expect(screen.getByTestId('left')).toBeInTheDocument()
+    expect(screen.getByTestId('receipts-since')).toBeInTheDocument()
+    expect(screen.getByTestId('expenses-since')).toBeInTheDocument()
+    expect(screen.queryByTestId('cash-out-since')).not.toBeInTheDocument()
 
-    // **Distance, not invisibility** (design D22). Rendered `ghost` this was
-    // text with no boundary and the owner could not tell it was a control at
-    // all, so it carries the same border its neighbour does.
-    expect(collect.className).toMatch(/border/)
-    expect(spend.className).toMatch(/border/)
+    // The count stands alone now, full width, with no quieter row beneath it.
+    expect(screen.getByTestId('open-count').className).toMatch(/w-full/)
+  })
 
-    // And the collection sits ahead of the spend in the document.
-    expect(collect.compareDocumentPosition(spend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  it('never calls recordCashOut, from anywhere the surface can reach', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const recordCashOut = vi.spyOn(adapters.cashDrawer, 'recordCashOut')
+    renderDrawer(adapters)
+    await waitFor(() => expect(screen.getByTestId('open-count')).toBeInTheDocument())
+
+    // A count with a collection still writes one - through `recordObservation`,
+    // in the same transaction, as `submitCount` always did.
+    await user.click(screen.getByTestId('open-count'))
+    await user.type(screen.getByTestId('counted-input'), '5000')
+    await user.type(screen.getByTestId('collecting-input'), '1000')
+    await user.click(screen.getByTestId('save-count'))
+
+    await waitFor(() => expect(screen.queryByTestId('counted-input')).not.toBeInTheDocument())
+    expect(recordCashOut).not.toHaveBeenCalled()
   })
 })
 
@@ -426,12 +406,12 @@ describe('where the recorder stood is detected, not typed', () => {
     expect(screen.getByTestId('away-reason')).toBeInTheDocument()
   })
 
-  it('asks the same question on the collect sheet, and invents no reason', async () => {
+  it('invents no reason on the one sheet that records a position', async () => {
     const user = userEvent.setup()
     renderDrawer()
-    await waitFor(() => expect(screen.getByTestId('open-collect')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('open-count')).toBeInTheDocument())
 
-    await user.click(screen.getByTestId('open-collect'))
+    await user.click(screen.getByTestId('open-count'))
 
     // The hardcoded `'recorded from the app'` string this replaced satisfied the
     // constraint by writing a sentence true of every row and evidence about none.
@@ -740,16 +720,14 @@ describe('the balance card says what it means', () => {
   })
 })
 
-describe('the three actions are named for what tells them apart', () => {
-  it('reads Count and Collect, Only Collect, Other Spend', async () => {
+describe('the one action is named for the act it records', () => {
+  it('reads Count and Collect', async () => {
     renderDrawer()
     await waitFor(() => expect(screen.getByTestId('open-count')).toBeInTheDocument())
 
     // The count and the collection are one physical act, and the primary
     // control was the last place still describing half of it (design D22).
     expect(screen.getByTestId('open-count').textContent).toMatch(/count & collect/i)
-    expect(screen.getByTestId('open-collect').textContent).toMatch(/only collect/i)
-    expect(screen.getByTestId('open-spend').textContent).toMatch(/other spend/i)
   })
 })
 
@@ -1183,8 +1161,12 @@ describe('the count reads as a tally', () => {
 describe('correcting a count', () => {
   it('offers a plain fix on the newest count, with no reason asked', async () => {
     const user = userEvent.setup()
-    renderDrawer()
+    const adapters = createMockAdapters('franchise_admin')
+    renderDrawer(adapters)
     await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+
+    const before = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const newest = before.recentObservations[0]!
 
     const rows = screen.getAllByRole('button', { name: /show the detail/i })
     await user.click(rows[0]!)
@@ -1201,9 +1183,17 @@ describe('correcting a count', () => {
     expect(screen.queryByTestId('adjust-reason')).not.toBeInTheDocument()
     expect(screen.getByTestId('edit-leaves-no-trail').textContent).toMatch(/no reason needed/i)
 
+    // **The fields arrive holding what is stored**, which is what stops an edit
+    // from clearing something nobody meant to touch: the note used to be wiped
+    // by every amount correction because nothing on screen held it.
+    const amount = screen.getByTestId('edited-amount') as HTMLInputElement
+    expect(Number(amount.value)).toBe(newest.countedTotalPaise / 100)
+    expect((screen.getByTestId('edited-note') as HTMLInputElement).value).toBe(newest.note ?? '')
+
     // Refused while empty, accepted once a figure is given.
+    await user.clear(amount)
     expect(screen.getByTestId('save-edit')).toBeDisabled()
-    await user.type(screen.getByTestId('edited-amount'), '8950')
+    await user.type(amount, '8950')
     expect(screen.getByTestId('save-edit')).not.toBeDisabled()
   })
 
@@ -1219,7 +1209,8 @@ describe('correcting a count', () => {
     const rows = screen.getAllByRole('button', { name: /show the detail/i })
     await user.click(rows[0]!)
     await user.click(screen.getAllByTestId(/^edit-/)[0]!)
-    await user.type(await screen.findByTestId('edited-amount'), '4321')
+    await user.clear(await screen.findByTestId('edited-amount'))
+    await user.type(screen.getByTestId('edited-amount'), '4321')
     await user.click(screen.getByTestId('save-edit'))
 
     await waitFor(async () => {
@@ -1369,5 +1360,242 @@ describe('the uncounted-days warning counts days nobody counted', () => {
     renderDrawer(await withSpan(3))
     await waitFor(() => expect(screen.getByTestId('balance-chips')).toBeInTheDocument())
     expect(screen.getByTestId('days-covered').textContent).toMatch(/2 days uncounted/i)
+  })
+})
+
+/**
+ * Every term in the balance is reachable from the figure that states it.
+ *
+ * The owner's question standing at the drawer is never *what is the total* — the
+ * total is on screen. It is *which day did that come from*, and *did Tuesday's
+ * vegetable money ever get entered*.
+ */
+describe('the figures open the readings behind them', () => {
+  it('makes both interval figures controls, and says so without a second icon', async () => {
+    renderDrawer()
+    await waitFor(() => expect(screen.getByTestId('receipts-since')).toBeInTheDocument())
+
+    for (const tile of ['receipts-since', 'expenses-since'] as const) {
+      const control = screen.getByTestId(`open-${tile}`)
+      expect(control.tagName).toBe('BUTTON')
+      // **The whole tile presses; the figure carries no underline**
+      // [owner, 2026-08-30]. A rule under a money amount reads as a mark on the
+      // number rather than as an offer, and `:active` is the one affordance that
+      // works the same under a thumb as under a cursor.
+      expect(control.className).toMatch(/active:/)
+      expect(control.className).toMatch(/hover:bg-surface-raised/)
+      // **The three figures sit on one baseline.** A `<button>` centres its own
+      // content, and these tiles do not all carry a row count — so in a stretch
+      // grid the shorter one drops its figure below its neighbours' and the
+      // column of money stops being a column. Only a flex or grid display on the
+      // button replaces that centring; `display: block` does not.
+      expect(control.className).toContain('flex flex-col')
+      expect(screen.getByTestId(tile).className ?? '').not.toMatch(/underline/)
+    }
+
+    // **All three, for parity** [owner, 2026-08-30]. `Last Left` is not an
+    // interval, so what it opens is the count that produced it rather than a
+    // day-by-day reading — but a figure on this strip that cannot be asked
+    // about is the odd one out.
+    const left = screen.getByTestId('open-left')
+    expect(left.tagName).toBe('BUTTON')
+    expect(left.className).toMatch(/active:/)
+    // The tile with no row count under it — the one the centring dropped.
+    expect(left.className).toContain('flex flex-col')
+    expect(screen.getByTestId('left').className ?? '').not.toMatch(/underline/)
+  })
+
+  it('opens the last count behind Last Left, with what it collected', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('franchise_admin')
+    const state = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const newest = state.lastObservation!
+    const collected = newest.ownCashOut.reduce((sum, movement) => sum + movement.amountPaise, 0)
+
+    renderDrawer(adapters)
+    await waitFor(() => expect(screen.getByTestId('open-left')).toBeInTheDocument())
+    await user.click(screen.getByTestId('open-left'))
+
+    const reading = await screen.findByTestId('last-left-breakdown')
+    expect(reading.textContent).toMatch(formatDayTime(newest.countedAt))
+    expect(screen.getByTestId('last-left-counted').textContent).toBe(
+      formatPaise(newest.countedTotalPaise),
+    )
+    expect(screen.getByTestId('last-left-collected').textContent).toBe(formatPaise(collected))
+    // The tile's own arithmetic, from the one function both use.
+    expect(screen.getByTestId('last-left-left').textContent).toBe(
+      formatPaise(newest.countedTotalPaise - collected),
+    )
+    expect(screen.getByTestId('last-left-left').textContent).toBe(
+      screen.getByTestId('left').textContent,
+    )
+
+    // **The same Fix, from a second doorway** [owner, 2026-08-30]. Not a second
+    // correction path: this tile always shows the newest count, which is the one
+    // nothing has anchored on, so the offer here is the offer Recent counts
+    // makes on the same row. It swaps sheets rather than stacking them.
+    await user.click(within(reading).getByTestId('last-left-fix'))
+
+    expect(await screen.findByTestId('edited-amount')).toBeInTheDocument()
+    expect((screen.getByTestId('edited-amount') as HTMLInputElement).value).toBe(
+      String(newest.countedTotalPaise / 100),
+    )
+    expect(screen.getByTestId('edited-at-echo').textContent).toBe(formatDayTime(newest.countedAt))
+    expect(screen.queryByTestId('last-left-breakdown')).not.toBeInTheDocument()
+  })
+
+  it('says the collection is corrected by counting again, rather than offering a dead field', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await waitFor(() => expect(screen.getByTestId('open-left')).toBeInTheDocument())
+    await user.click(screen.getByTestId('open-left'))
+
+    const reading = await screen.findByTestId('last-left-breakdown')
+    // `edit_drawer_observation` corrects an observation; the movement beside it
+    // is a row of its own with no command to amend it.
+    expect(reading.textContent).toMatch(/corrected by counting again/i)
+  })
+
+  it('opens the day-by-day reading of cash from bills', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await waitFor(() => expect(screen.getByTestId('open-receipts-since')).toBeInTheDocument())
+
+    await user.click(screen.getByTestId('open-receipts-since'))
+
+    const breakdown = await screen.findByTestId('receipts-breakdown')
+    // Whatever the demo's interval holds, the total it states is the tile's own.
+    expect(breakdown.textContent).toMatch(/since the last count/i)
+    expect(screen.getByTestId('receipts-breakdown-total').textContent).toBe(
+      screen.getByTestId('receipts-since').textContent?.replace(/^\+/, '') ?? '',
+    )
+  })
+
+  it('opens the expense list, grouped by business date, with an Add on each', async () => {
+    const user = userEvent.setup()
+    renderDrawer()
+    await waitFor(() => expect(screen.getByTestId('open-expenses-since')).toBeInTheDocument())
+
+    await user.click(screen.getByTestId('open-expenses-since'))
+
+    const breakdown = await screen.findByTestId('expenses-breakdown')
+    const groups = within(breakdown).getAllByTestId(/^expenses-day-\d{4}-\d{2}-\d{2}$/)
+    expect(groups.length).toBeGreaterThan(0)
+    for (const group of groups) {
+      expect(within(group).getByRole('button', { name: /add expense/i })).toBeInTheDocument()
+    }
+  })
+})
+
+/**
+ * **The instant is the whole thesis of the drawer** (#11): a count at 22:00 is
+ * measured against cash received up to 22:00. The sheet used to offer the
+ * counted amount and nothing else, so a count recorded at 23:30 having been
+ * taken at 22:00 carried ninety minutes of bills that were never in the drawer —
+ * and the only knob on screen was the physical count. That is the precise
+ * inversion of what this surface is for.
+ */
+describe('the newest count is editable in full', () => {
+  async function openTheFix(adapters: DataAdapters) {
+    const user = userEvent.setup()
+    renderDrawer(adapters)
+    await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+    await user.click(screen.getAllByRole('button', { name: /show the detail/i })[0]!)
+    await user.click(screen.getAllByTestId(/^edit-/)[0]!)
+    await screen.findByTestId('edited-amount')
+    return user
+  }
+
+  it('offers the counted instant and the note, both holding what is stored', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const before = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const newest = before.recentObservations[0]!
+
+    await openTheFix(adapters)
+
+    expect(screen.getByTestId('edited-at-echo').textContent).toBe(formatDayTime(newest.countedAt))
+    expect((screen.getByTestId('edited-note') as HTMLInputElement).value).toBe(newest.note ?? '')
+    // The same movable-boundary control the count sheet carries, not a second one.
+    expect(screen.getByTestId('when-other')).toBeInTheDocument()
+    expect(screen.getByTestId('counted-at-picker')).toBeInTheDocument()
+  })
+
+  it('sends no instant, and re-sends the note, when only the amount changes', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const before = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const newest = before.recentObservations[0]!
+    const editObservation = vi.spyOn(adapters.cashDrawer, 'editObservation')
+
+    const user = await openTheFix(adapters)
+    await user.clear(screen.getByTestId('edited-amount'))
+    await user.type(screen.getByTestId('edited-amount'), '8950')
+    await user.click(screen.getByTestId('save-edit'))
+
+    await waitFor(() => expect(editObservation).toHaveBeenCalled())
+    const edit = editObservation.mock.calls[0]?.[1]
+    expect(edit?.countedTotalPaise).toBe(895000)
+    // **Omitted, so nothing recomputes for an amount-only correction** — the
+    // interval did not move, only what was found in the drawer.
+    expect(edit && 'countedAt' in edit).toBe(false)
+    // And the note goes back as it came, which is the bug this replaces: it used
+    // to be sent as nothing and assigned unconditionally.
+    expect(edit?.note).toBe(newest.note ?? '')
+
+    const after = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const corrected = after.recentObservations.find((row) => row.id === newest.id)!
+    expect(corrected.expectedPaise).toBe(newest.expectedPaise)
+    expect(corrected.note).toBe(newest.note)
+  })
+
+  it('moves the boundary, says what that did, and sends the new instant', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const before = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const newest = before.recentObservations[0]!
+    const editObservation = vi.spyOn(adapters.cashDrawer, 'editObservation')
+
+    const user = await openTheFix(adapters)
+    await user.click(screen.getByTestId('when-30'))
+
+    expect(screen.getByTestId('edited-at-echo').textContent).not.toBe(
+      formatDayTime(newest.countedAt),
+    )
+    // The sentence comes from `drawer-arithmetic.ts`, over the same nearby cash
+    // bills the count sheet's boundary uses — not a second implementation.
+    expect(screen.getByTestId('edit-boundary-moved').textContent).toMatch(/inside this count/i)
+
+    await user.click(screen.getByTestId('save-edit'))
+
+    await waitFor(() => expect(editObservation).toHaveBeenCalled())
+    expect(editObservation.mock.calls[0]?.[1].countedAt).toBeTruthy()
+
+    const after = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
+    const corrected = after.recentObservations.find((row) => row.id === newest.id)!
+    expect(corrected.countedAt).not.toBe(newest.countedAt)
+    // Recomputed from the instant it moved to, by the same readers that
+    // computed it at recording. Never left measuring a count against bills that
+    // were not in the drawer.
+    expect(corrected.differencePaise).toBe(
+      corrected.countedTotalPaise - (corrected.expectedPaise ?? 0),
+    )
+  })
+
+  it('refuses an instant in the future before the database has to', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const user = await openTheFix(adapters)
+
+    const picker = screen.getByTestId('counted-at-picker')
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60_000)
+    const pad = (value: number) => String(value).padStart(2, '0')
+    fireEvent.change(picker, {
+      target: {
+        value:
+          `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}` +
+          `T${pad(tomorrow.getHours())}:${pad(tomorrow.getMinutes())}`,
+      },
+    })
+
+    expect(await screen.findByTestId('edit-time-problem')).toHaveTextContent(/future/i)
+    expect(screen.getByTestId('save-edit')).toBeDisabled()
+    await user.click(screen.getByTestId('save-edit'))
   })
 })

@@ -45,6 +45,7 @@ function expense(overrides: Partial<ManualLedgerExpense> = {}): ManualLedgerExpe
     amountPaise: 50_000,
     note: 'Chicken from Nadia Poultry',
     source: null,
+    occurredAt: null,
     createdAt: '2026-08-01T10:00:00.000Z',
     updatedAt: '2026-08-01T10:00:00.000Z',
     recordedBy: { id: 'person-owner', name: 'Synthetic Owner' },

@@ -62,6 +62,8 @@ function stateWith(overrides: Partial<DrawerState> = {}): DrawerState {
     cashReceiptsSinceCount: 51,
     cashExpensesSincePaise: 90000,
     cashExpensesSinceCount: 1,
+    receiptsByDay: [{ businessDate: '2026-08-25', paise: 750000, bills: 51 }],
+    cashExpensesByDay: [{ businessDate: '2026-08-25', paise: 0, rows: 1 }],
     cashOutSincePaise: 0,
     cashOutSinceCount: 0,
     daysCovered: 1,

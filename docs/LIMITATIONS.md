@@ -44,6 +44,65 @@ up as a column of reasons, which is oversight a refusal would not have
 produced — and which the refusal would have converted into a phone call nobody
 records.
 
+## The app records no cash movement outside a count, and the record still carries both
+
+`the-drawer-explains-its-figures` deleted **Only Collect** and **Other Spend**
+from the Cash drawer. The application therefore has no way to record a collection
+on its own, and no way to record a **spend** at all.
+
+**Neither had ever been used.** Measured on production 2026-08-29,
+`drawer_cash_out` holds two rows at both outlets combined: both collections, both
+attached to an observation, no standalone movement and no spend of either kind.
+
+*Other Spend* existed for one case — drawer cash buying capital, the ₹40,000
+fridge that has to reconcile the drawer without polluting a cash-basis operating
+month. The owner has ruled that case out: major spending is always online, and
+only small amounts are ever cash [owner, 2026-08-29]. With no case to serve it
+was a control that widened the model for nobody.
+
+**What removing them bought is not tidiness.** `In the drawer now` is four terms
+— opening, plus receipts, less expenses, less cash out — and the strip beneath it
+shows three. Cash out had no tile, so ₹5,000 taken between counts dropped the
+headline by ₹5,000 with nothing on the card accounting for it. With no way to
+create a movement outside a count, every movement belongs to one and is folded
+into **Last Left** — so the three figures account for the headline *by
+construction* rather than by adding a fourth tile for a term that is now always
+nought.
+
+**The record is untouched, and that is the limitation.** `drawer_cash_out` keeps
+its `kind`, its positive-spend constraint, its reason requirement, its policies
+and its grants; `record_drawer_cash_out` keeps its grant and its adapter method,
+which nothing under `src/` calls. So a spend reaching the table by any other path
+is still bound by every rule it always was, the two production rows keep reading,
+and re-offering a spend when a real case turns up is a matter of adding a control
+rather than writing a migration. The Ledger's month `spends` card is likewise
+left in place, guarded by `spends.length > 0`: it will simply never fire, and a
+card that renders nothing costs nothing while a historical spend must stay
+readable.
+
+**A collection cannot be amended, only re-counted.** `edit_drawer_observation`
+corrects an observation — its counted total, its note and its counted instant.
+The movement written beside it is a row on `drawer_cash_out` with no command to
+amend it, so an amount collected that was typed wrong is corrected by recording
+another count rather than by editing the movement. The Last Left reading says so
+in words instead of offering a field that would do nothing.
+
+## In demo mode the drawer's expense breakdown lists fewer rows than it totals
+
+The Cash Expenses breakdown lists rows from the notebook — the table every live
+Expenses surface writes — while its totals come from `effective_expenses`, the
+union of that notebook and `public.expenses`. **In production the two agree
+exactly**, because `public.expenses` has never held a row (measured 2026-08-28,
+and the reason `effective_expenses` exists at all).
+
+The demo store populates *both* arrays, so a demo group can state a subtotal
+larger than the rows it lists. That is a fixture fact rather than a surface one:
+it predates this change — the demo's own Expenses tab has never been able to show
+those rows either, while the drawer's expected balance has always subtracted
+them. `retire-the-manual-ledger` (#12) carries the notebook rows across and
+collapses the union, after which the question disappears rather than being
+answered.
+
 ## The manual ledger is a stopgap with a stated exit
 
 Billing records Cash and UPI at each counter, and `cash-is-counted-not-closed`

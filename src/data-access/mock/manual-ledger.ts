@@ -130,6 +130,7 @@ function toExpense(row: Tables<'manual_ledger_expenses'>): ManualLedgerExpense {
     isCash: row.is_cash,
     amountPaise: row.amount_paise,
     note: row.description,
+    occurredAt: row.occurred_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     recordedBy: optionalActor(row.recorded_by),

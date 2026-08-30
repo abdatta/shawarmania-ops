@@ -11,8 +11,11 @@ import {
   type CashDrawerAdapter,
   type DrawerAdjustmentRecord,
   type DrawerCashOutRecord,
+  type DrawerEdit,
   type DrawerExceptionRecord,
+  type DrawerExpensesDay,
   type DrawerObservationRecord,
+  type DrawerReceiptsDay,
   type DrawerState,
   type ObservationPage,
   type ObservationPageQuery,
@@ -23,6 +26,7 @@ import type { Tables } from '../database.types'
 
 import { cashExpensesIn } from './effective-expenses'
 import { accountFixtures } from './fixtures/accounts'
+import { outletFixtures } from './fixtures/outlets'
 import type { DemoStore } from './store'
 
 /**
@@ -51,15 +55,21 @@ function paise(value: number, what: string): number {
   return value
 }
 
-/** Cash actually received in `(from, to]`, from the latest effective allocations. */
-function cashReceipts(
+/**
+ * The bills that contributed cash in `(from, to]`, from the latest effective
+ * allocations.
+ *
+ * The rows rather than the sum, because the breakdown groups exactly these — so
+ * the grouped reading and the scalar it explains are two views of one list and
+ * cannot select differently.
+ */
+function cashReceiptBills(
   store: DemoStore,
   outletId: string,
   from: string | null,
   to: string,
-): { paise: number; bills: number } {
-  let total = 0
-  let bills = 0
+): { paidAt: string; cashPaise: number }[] {
+  const found: { paidAt: string; cashPaise: number }[] = []
 
   for (const bill of store.bills) {
     if (bill.outlet_id !== outletId || bill.status !== 'settled') continue
@@ -74,11 +84,24 @@ function cashReceipts(
       .reduce((sum, allocation) => sum + allocation.amountPaise, 0)
     if (cash === 0) continue
 
-    total += cash
-    bills += 1
+    found.push({ paidAt, cashPaise: cash })
   }
 
-  return { paise: total, bills }
+  return found
+}
+
+/** Cash actually received in `(from, to]`, and how many bills brought it. */
+function cashReceipts(
+  store: DemoStore,
+  outletId: string,
+  from: string | null,
+  to: string,
+): { paise: number; bills: number } {
+  const contributing = cashReceiptBills(store, outletId, from, to)
+  return {
+    paise: contributing.reduce((sum, bill) => sum + bill.cashPaise, 0),
+    bills: contributing.length,
+  }
 }
 
 /**
@@ -130,6 +153,50 @@ function cashOutIn(
   }
 
   return { paise: total, rows }
+}
+
+/**
+ * The outlet's own business-day cutover.
+ *
+ * **Read from the outlet, never held as a constant here.** The real adapter used
+ * to carry `const CUTOVER = '04:00'`; the grouped readers take it from
+ * `outlets.business_day_cutover`, and a mock that assumed one would be teaching
+ * a rule the database does not follow.
+ */
+function cutoverOf(outletId: string): string {
+  return outletFixtures.find((outlet) => outlet.id === outletId)?.business_day_cutover ?? '04:00:00'
+}
+
+/**
+ * The mock's half of `drawer_cash_receipts_by_day` and
+ * `drawer_cash_expenses_by_day`.
+ *
+ * **The partition is of the INTERVAL, not of the calendar day** (design D1).
+ * Everything the scalar readers above already selected is grouped by the
+ * business date its instant resolves to, so the groups sum to the scalar by
+ * construction on this side of the seam exactly as they do in SQL. Grouping a
+ * different set of rows here is how the demo would come to disagree with
+ * production, which is the failure `effective-expenses.ts` exists to remember.
+ */
+function groupByBusinessDate<T>(
+  rows: readonly T[],
+  outletId: string,
+  instantOf: (row: T) => string,
+  paiseOf: (row: T) => number,
+): { businessDate: string; paise: number; rows: number }[] {
+  const cutover = cutoverOf(outletId)
+  const groups = new Map<string, { businessDate: string; paise: number; rows: number }>()
+
+  for (const row of rows) {
+    const businessDate = resolveBusinessDate(new Date(instantOf(row)), cutover)
+    const group = groups.get(businessDate) ?? { businessDate, paise: 0, rows: 0 }
+    group.paise += paiseOf(row)
+    group.rows += 1
+    groups.set(businessDate, group)
+  }
+
+  // Newest first, which is the order the breakdown reads in.
+  return [...groups.values()].sort((a, b) => b.businessDate.localeCompare(a.businessDate))
 }
 
 /** That observation's own cash out, read from the link rather than a window. */
@@ -323,6 +390,8 @@ export function createMockCashDrawerAdapter(
         cashReceiptsSinceCount: 0,
         cashExpensesSincePaise: 0,
         cashExpensesSinceCount: 0,
+        receiptsByDay: [],
+        cashExpensesByDay: [],
         cashOutSincePaise: 0,
         cashOutSinceCount: 0,
         daysCovered: 0,
@@ -337,17 +406,44 @@ export function createMockCashDrawerAdapter(
       last.counted_total_paise,
       ownCashOut(store, last.id).reduce((sum, movement) => sum + movement.amount_paise, 0),
     )
-    const receipts = cashReceipts(store, outletId, last.counted_at, now)
-    const expenses = cashExpenses(store, outletId, last.counted_at, now)
+    const receiptBills = cashReceiptBills(store, outletId, last.counted_at, now)
+    const expenseRows = cashExpensesIn(store, outletId, last.counted_at, now)
     const out = cashOutIn(store, outletId, last.counted_at, now, last.id)
 
-    const cutover = '04:00'
-    const fromDate = resolveBusinessDate(new Date(last.counted_at), cutover)
-    const toDate = resolveBusinessDate(new Date(now), cutover)
+    const receiptsByDay: DrawerReceiptsDay[] = groupByBusinessDate(
+      receiptBills,
+      outletId,
+      (bill) => bill.paidAt,
+      (bill) => bill.cashPaise,
+    ).map((group) => ({ businessDate: group.businessDate, paise: group.paise, bills: group.rows }))
+
+    const cashExpensesByDay: DrawerExpensesDay[] = groupByBusinessDate(
+      expenseRows,
+      outletId,
+      (expense) => expense.instant,
+      (expense) => expense.amountPaise,
+    )
+
+    const receipts = {
+      paise: receiptBills.reduce((sum, bill) => sum + bill.cashPaise, 0),
+      bills: receiptBills.length,
+    }
+    const expenses = {
+      paise: expenseRows.reduce((sum, expense) => sum + expense.amountPaise, 0),
+      rows: expenseRows.length,
+    }
+
+    // The inclusive span of business dates the interval actually touched, read
+    // off the groups so the outlet's own cutover decides it (design D2).
+    const touched = [...receiptsByDay, ...cashExpensesByDay].map((group) => group.businessDate)
     const daysCovered =
-      Math.round(
-        (Date.parse(`${toDate}T00:00:00Z`) - Date.parse(`${fromDate}T00:00:00Z`)) / 86_400_000,
-      ) + 1
+      touched.length === 0
+        ? 1
+        : Math.round(
+            (Date.parse(`${touched.reduce((a, b) => (a > b ? a : b))}T00:00:00Z`) -
+              Date.parse(`${touched.reduce((a, b) => (a < b ? a : b))}T00:00:00Z`)) /
+              86_400_000,
+          ) + 1
 
     // The bills either side of the last count, for the movable boundary and the
     // exact-coincidence report. Deliberately the bills themselves rather than
@@ -384,6 +480,8 @@ export function createMockCashDrawerAdapter(
       cashReceiptsSinceCount: receipts.bills,
       cashExpensesSincePaise: expenses.paise,
       cashExpensesSinceCount: expenses.rows,
+      receiptsByDay,
+      cashExpensesByDay,
       cashOutSincePaise: out.paise,
       cashOutSinceCount: out.rows,
       daysCovered,
@@ -550,6 +648,12 @@ export function createMockCashDrawerAdapter(
       return toObservation(store, row, previous)
     },
 
+    /**
+     * **Unreachable from the app**, and kept in step with the real adapter
+     * anyway. `the-drawer-explains-its-figures` deleted the two controls that
+     * reached it; the record still carries both kinds and their refusals, so
+     * this mock still demonstrates them for whatever reaches the table next.
+     */
     async recordCashOut(input: RecordCashOutInput) {
       paise(input.amountPaise, 'The amount')
       if (input.amountPaise === 0) {
@@ -601,8 +705,8 @@ export function createMockCashDrawerAdapter(
       return toCashOut(row)
     },
 
-    async editObservation(observationId, countedTotalPaise, note) {
-      paise(countedTotalPaise, 'The counted amount')
+    async editObservation(observationId, edit: DrawerEdit) {
+      paise(edit.countedTotalPaise, 'The counted amount')
       const row = store.drawerObservations.find((candidate) => candidate.id === observationId)
       if (!row) throw new CashDrawerActionError('not_found', 'That count is no longer there.')
 
@@ -610,7 +714,9 @@ export function createMockCashDrawerAdapter(
       const later = observations.filter((other) => other.counted_at > row.counted_at)
 
       // The lock, in one sentence: the next count read this figure as its own
-      // stored opening, which is the moment it became load-bearing.
+      // stored opening, which is the moment it became load-bearing. It is
+      // checked FIRST, before any bound on the instant, so a caller correcting
+      // an anchored count is told the one thing that matters.
       if (later.length > 0) {
         throw new CashDrawerActionError(
           'anchored',
@@ -618,19 +724,82 @@ export function createMockCashDrawerAdapter(
         )
       }
 
-      row.counted_total_paise = countedTotalPaise
-      // Recomputed from the SAME expected total: the interval did not move, only
-      // what was found in the drawer.
+      const countedAt = edit.countedAt ?? row.counted_at
+      const previous =
+        observations.filter((other) => other.counted_at < row.counted_at).at(-1) ?? null
+
+      if (countedAt !== row.counted_at) {
+        // The recording bounds, re-asserted: a corrected instant is an instant.
+        const now = new Date().toISOString()
+        if (countedAt > now) {
+          throw new CashDrawerActionError(
+            'future_count',
+            'A count cannot be taken in the future. Choose when you actually counted it.',
+          )
+        }
+        if (previous && countedAt <= previous.counted_at) {
+          throw new CashDrawerActionError(
+            'already_counted',
+            'This drawer was already counted at that moment or later. A count cannot be moved into a settled interval.',
+          )
+        }
+        const earliest = store.bills
+          .filter((bill) => bill.outlet_id === row.outlet_id && bill.status === 'settled')
+          .map((bill) => bill.paid_at ?? bill.created_at)
+          .sort()[0]
+        if (earliest && countedAt < earliest) {
+          throw new CashDrawerActionError(
+            'before_activity',
+            `This outlet had no drawer activity before ${earliest}; a count cannot precede it.`,
+          )
+        }
+
+        // **A moved boundary genuinely changes which cash was in the drawer.**
+        // The stored opening does not move — it is the previous count's
+        // carry-forward — but the three interval terms are recomputed over
+        // `(previous count, the new instant]`, with this observation's OWN
+        // movements excluded because they belong to the following opening.
+        row.expected_paise =
+          row.is_anchor || previous === null
+            ? null
+            : expectedTotalPaise({
+                openingPaise: row.opening_paise ?? 0,
+                cashReceiptsPaise: cashReceipts(
+                  store,
+                  row.outlet_id,
+                  previous.counted_at,
+                  countedAt,
+                ).paise,
+                cashExpensesPaise: cashExpenses(
+                  store,
+                  row.outlet_id,
+                  previous.counted_at,
+                  countedAt,
+                ).paise,
+                cashOutPaise: cashOutIn(
+                  store,
+                  row.outlet_id,
+                  previous.counted_at,
+                  countedAt,
+                  row.id,
+                ).paise,
+              })
+        row.counted_at = countedAt
+      }
+
+      row.counted_total_paise = edit.countedTotalPaise
       row.difference_paise =
         row.expected_paise === null
           ? null
-          : drawerDifferencePaise(countedTotalPaise, row.expected_paise)
-      row.note = note?.trim() || null
+          : drawerDifferencePaise(edit.countedTotalPaise, row.expected_paise)
+      // **Undefined leaves it alone**, which is the bug this replaces: the note
+      // was assigned from a parameter nobody sent, so every amount correction
+      // cleared it. An empty string clears it on purpose.
+      if (edit.note !== undefined) row.note = edit.note?.trim() || null
       if (recordedBy !== row.recorded_by) row.corrected_by = recordedBy
       row.updated_at = new Date().toISOString()
 
-      const index = observations.findIndex((other) => other.id === row.id)
-      return toObservation(store, row, observations[index - 1] ?? null)
+      return toObservation(store, row, previous)
     },
 
     async adjustObservation(observationId, correctedCountedTotalPaise, reason) {

@@ -543,6 +543,23 @@ which let any authenticated session read any outlet's cash totals as an
 aggregate. A caller with no reach gets nought rather than an exception, which is
 the answer an RLS-filtered select would have given them.
 
+Two **grouped** readers sit beside them and answer the same two questions one
+`group by` apart: `drawer_cash_receipts_by_day()` returning
+`(business_date, paise, bills)` and `drawer_cash_expenses_by_day()` returning
+`(business_date, paise, rows)`, both over `(p_from, p_to]`, newest first, with
+the same guard and the same `security definer` posture. They exist so the drawer
+surface can explain a figure without a second opinion about it: same relation,
+same predicate, same interval, so the groups sum to the scalar exactly. The
+business date comes from `app_business_date(instant, outlets.business_day_cutover)`
+read from the outlet's **own row** — the adapter used to carry
+`const CUTOVER = '04:00'`, which is right at both outlets today and is exactly
+the kind of constant that stays right until an outlet opens with a different one.
+
+**The partition is of the interval, never of a calendar day.** The interval is
+bounded by instants, so its oldest group is routinely a *fragment* of a business
+date: the part after the count that bounds it. Nothing may fetch whole days and
+trim them, which is the model `cash-is-counted-not-closed` replaced.
+
 Intervals are bounded by **timestamps, not business dates** — half-open at the
 start and closed at the end, so a payment at exactly the previous count's instant
 belonged to that count and one at exactly this instant belongs to this one. A
@@ -585,7 +602,19 @@ positive leaves the drawer, negative is added to it. The arithmetic subtracts
 this term whatever the sign, and subtracting a negative adds — so a ₹1,000 top-up
 against a ₹450 count leaves ₹1,450 by the existing formula with no branch
 anywhere. A `spend` must be positive, because drawer cash cannot un-buy a fridge.
-It happens in production: once at each outlet in August 2026.
+A `spend` has never been recorded: measured on production 2026-08-29,
+`drawer_cash_out` holds two rows, both collections, both attached to an
+observation.
+
+**The application no longer records a movement outside a count**, and the record
+is unchanged by that. `the-drawer-explains-its-figures` deleted the two surface
+controls that could create one, so every movement the app writes belongs to an
+observation and reduces the following opening — which is what makes the balance
+card's three figures a complete account of its headline. The table keeps both
+kinds, the positive-spend constraint, its policies and its grants, and
+`record_drawer_cash_out` keeps its grant, so a movement arriving by any other
+path is still bound by them and a historical spend stays readable. Re-offering a
+spend is a matter of adding a control, not of writing a migration.
 
 ### The write path
 
@@ -603,6 +632,26 @@ observation at that outlet is recorded** — that next one reads its
 `opening_paise`, which is the moment the figure becomes load-bearing. From then a
 correction is an append-only adjustment carrying a required reason, with both
 figures readable and no later stored opening moved.
+
+Fully editable means **the counted total, the note and the counted instant**.
+`edit_drawer_observation(p_observation_id, p_counted_total_paise, p_note,
+p_counted_at)`:
+
+- **A moved instant recomputes the expected total and the difference**, by
+  *calling* `drawer_cash_receipts_paise`, `drawer_cash_expenses_paise` and
+  `drawer_cash_out_paise` over `(the previous observation's instant, the new
+  instant]` — the same three, in the same order, as `record_drawer_observation`,
+  excluding this observation's own movements. The instant IS the interval's upper
+  bound, so an expected total that survived a moved instant unchanged would
+  measure the count against bills that were never in the drawer. The stored
+  opening does not move: it is the previous count's carry-forward.
+- **The moved instant is bounded exactly as a recorded one is** — not in the
+  future, strictly later than the preceding observation, not before the outlet's
+  earliest drawer activity — and each refusal names what it collided with. The
+  later-observation lock runs first.
+- **A null `p_note` leaves the stored note alone**; an empty string clears it.
+  The parameter defaulted to null and was assigned unconditionally, so every
+  amount correction silently wiped a note the caller never mentioned.
 
 A `spend` is **not** an expense. `docs/DATA_MODEL.md` records that there is
 deliberately no capital marker and the month is a cash-basis **operating**

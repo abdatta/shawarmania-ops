@@ -1,11 +1,6 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
-import {
-  drawerDifferencePaise,
-  expectedTotalPaise,
-  nextOpeningPaise,
-  resolveBusinessDate,
-} from '@/domain'
+import { drawerDifferencePaise, expectedTotalPaise, nextOpeningPaise } from '@/domain'
 
 import {
   CashDrawerActionError,
@@ -13,8 +8,11 @@ import {
   type CashDrawerAdapter,
   type DrawerAdjustmentRecord,
   type DrawerCashOutRecord,
+  type DrawerEdit,
   type DrawerExceptionRecord,
+  type DrawerExpensesDay,
   type DrawerObservationRecord,
+  type DrawerReceiptsDay,
   type NearbyCashBillRecord,
   type ObservationPage,
   type ObservationPageQuery,
@@ -86,7 +84,30 @@ function refuse(error: PostgrestError | Error): never {
   throw new CashDrawerActionError('failed', message)
 }
 
-const CUTOVER = '04:00'
+/**
+ * How many business dates the pending interval touched.
+ *
+ * **The `const CUTOVER = '04:00'` this replaces was a guess.** It happened to be
+ * right — both outlets read 04:00, measured 2026-08-29 — and it is exactly the
+ * kind of constant that stays right until an outlet opens with a different one.
+ * The grouped readers resolve every date through `outlets.business_day_cutover`
+ * on the outlet's own row, so the span is read off them and nothing here has an
+ * opinion about when a day starts.
+ *
+ * An interval that touched no business date at all counts as one: nothing moved
+ * in it, so there is no attribution for a long interval to blur.
+ */
+function daysCoveredBy(groups: readonly { businessDate: string }[][]): number {
+  const dates = groups.flat().map((group) => group.businessDate)
+  if (dates.length === 0) return 1
+  const oldest = dates.reduce((a, b) => (a < b ? a : b))
+  const newest = dates.reduce((a, b) => (a > b ? a : b))
+  return (
+    Math.round(
+      (Date.parse(`${newest}T00:00:00Z`) - Date.parse(`${oldest}T00:00:00Z`)) / 86_400_000,
+    ) + 1
+  )
+}
 
 function toCashOut(
   row: Tables<'drawer_cash_out'>,
@@ -264,6 +285,8 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
           cashReceiptsSinceCount: 0,
           cashExpensesSincePaise: 0,
           cashExpensesSinceCount: 0,
+          receiptsByDay: [],
+          cashExpensesByDay: [],
           cashOutSincePaise: 0,
           cashOutSinceCount: 0,
           daysCovered: 0,
@@ -279,7 +302,7 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
       // The three interval readers, called on the database rather than
       // reimplemented here, so the pending figure and the figure the next count
       // is measured against come from one piece of arithmetic.
-      const [receipts, expenses, cashOut] = await Promise.all([
+      const [receipts, expenses, cashOut, receiptDays, expenseDays] = await Promise.all([
         client.rpc('drawer_cash_receipts_paise', {
           p_outlet_id: outletId,
           p_from: last.counted_at,
@@ -296,10 +319,37 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
           p_to: now,
           p_exclude_observation: last.id,
         }),
+        // The same two questions, one `group by` apart — same relation, same
+        // predicate, same `(from, to]` interval. That is what lets the surface
+        // assert that the breakdown sums to the tile it was opened from, rather
+        // than hoping (design D2). Nothing here re-adds them in TypeScript.
+        client.rpc('drawer_cash_receipts_by_day', {
+          p_outlet_id: outletId,
+          p_from: last.counted_at,
+          p_to: now,
+        }),
+        client.rpc('drawer_cash_expenses_by_day', {
+          p_outlet_id: outletId,
+          p_from: last.counted_at,
+          p_to: now,
+        }),
       ])
       if (receipts.error) refuse(receipts.error)
       if (expenses.error) refuse(expenses.error)
       if (cashOut.error) refuse(cashOut.error)
+      if (receiptDays.error) refuse(receiptDays.error)
+      if (expenseDays.error) refuse(expenseDays.error)
+
+      const receiptsByDay: DrawerReceiptsDay[] = (receiptDays.data ?? []).map((row) => ({
+        businessDate: row.business_date,
+        paise: Number(row.paise),
+        bills: row.bills,
+      }))
+      const cashExpensesByDay: DrawerExpensesDay[] = (expenseDays.data ?? []).map((row) => ({
+        businessDate: row.business_date,
+        paise: Number(row.paise),
+        rows: row.rows,
+      }))
 
       const cashOutRows = await client
         .from('drawer_cash_out')
@@ -339,13 +389,6 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
         last.counted_total_paise,
         ownOf(last.id).reduce((sum, movement) => sum + movement.amount_paise, 0),
       )
-
-      const fromDate = resolveBusinessDate(new Date(last.counted_at), CUTOVER)
-      const toDate = resolveBusinessDate(new Date(now), CUTOVER)
-      const daysCovered =
-        Math.round(
-          (Date.parse(`${toDate}T00:00:00Z`) - Date.parse(`${fromDate}T00:00:00Z`)) / 86_400_000,
-        ) + 1
 
       // The nearby cash bills, for the movable boundary and the coincidence
       // report. Deliberately the bills themselves and never a candidate instant.
@@ -452,17 +495,22 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
         }),
         leftInDrawerPaise: left,
         cashReceiptsSincePaise: Number(receipts.data ?? 0),
-        // Counted from the nearby list rather than a second aggregate query: the
-        // figure that matters is the money, and the row count is context beside it.
-        cashReceiptsSinceCount: nearbyCashBills.filter((bill) => bill.paidAt > last.counted_at)
-          .length,
+        // **The true count, from the grouped read.** It used to be the length of
+        // `nearbyCashBills`, which is capped at twelve and drawn from the last
+        // forty settled bills for a different job entirely — so forty cash bills
+        // since the last count reported twelve. The cap on that list is
+        // deliberate and stays; only the count stops being derived from it.
+        cashReceiptsSinceCount: receiptsByDay.reduce((sum, day) => sum + day.bills, 0),
         cashExpensesSincePaise: Number(expenses.data ?? 0),
-        cashExpensesSinceCount: 0,
+        // And this was the literal nought.
+        cashExpensesSinceCount: cashExpensesByDay.reduce((sum, day) => sum + day.rows, 0),
+        receiptsByDay,
+        cashExpensesByDay,
         cashOutSincePaise: Number(cashOut.data ?? 0),
         cashOutSinceCount: movements.filter(
           (row) => row.occurred_at > last.counted_at && row.observation_id !== last.id,
         ).length,
-        daysCovered,
+        daysCovered: daysCoveredBy([receiptsByDay, cashExpensesByDay]),
         recentObservations: recent,
         nearbyCashBills,
         unsyncedDevices: { count: 0, since: null },
@@ -599,6 +647,20 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
       }
     },
 
+    /**
+     * **Nothing under `src/` calls this, and that is the point.**
+     *
+     * `the-drawer-explains-its-figures` deleted Only Collect and Other Spend
+     * from the drawer surface, so every movement the app writes now belongs to a
+     * count and is folded into the following opening. That is what makes the
+     * three tiles on the balance card account for the headline exactly, rather
+     * than leaving `cashOutSincePaise` as a term with no tile.
+     *
+     * The command, the table, both kinds, their constraints, their policies and
+     * their grants are untouched: two production rows exist and must keep
+     * reading, and a later change that finds a real spend case re-offers it by
+     * adding a control, not by writing a migration.
+     */
     async recordCashOut(input: RecordCashOutInput) {
       const { data, error } = await client.rpc('record_drawer_cash_out', {
         p_outlet_id: input.outletId,
@@ -621,11 +683,20 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
       return toCashOut(row, names)
     },
 
-    async editObservation(observationId, countedTotalPaise, note) {
+    async editObservation(observationId, edit: DrawerEdit) {
+      // Each key OMITTED where the caller left the field alone, so the command's
+      // own "null means leave it" default applies. `note: ''` is sent as an
+      // empty string, which is how the sheet clears a note on purpose — the
+      // shorter `edit.note ? …` spelling is what silently wiped notes before.
       const { data, error } = await client.rpc('edit_drawer_observation', {
         p_observation_id: observationId,
-        p_counted_total_paise: countedTotalPaise,
-        ...(note ? { p_note: note } : {}),
+        p_counted_total_paise: edit.countedTotalPaise,
+        // `?? ''` rather than a null: the command reads an empty string as
+        // "clear this", and `p_note` is not nullable over the wire.
+        ...(edit.note === undefined ? {} : { p_note: edit.note ?? '' }),
+        ...(edit.countedAt === undefined || edit.countedAt === null
+          ? {}
+          : { p_counted_at: edit.countedAt }),
       })
       if (error) refuse(error)
       const row = data as unknown as Tables<'drawer_observations'>

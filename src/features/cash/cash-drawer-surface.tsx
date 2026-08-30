@@ -9,9 +9,7 @@ import {
   Lock,
   MapPin,
   MapPinOff,
-  Minus,
   Pencil,
-  Receipt,
   TriangleAlert,
 } from 'lucide-react'
 import {
@@ -52,11 +50,19 @@ import {
   rupeesToPaise,
 } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
+import { useSession } from '@/session/context'
 import { useOnForeground } from '@/features/attention/attention'
 import { cn } from '@/lib/cn'
 import { readPosition, type GeolocationFailureKind, type PositionReading } from '@/lib/geolocation'
 
-import { countAdvice, expectedAtInstant } from './drawer-arithmetic'
+import { boundaryMove, countAdvice, expectedAtInstant } from './drawer-arithmetic'
+import {
+  ExpensesBreakdown,
+  LastLeftBreakdown,
+  ReceiptsBreakdown,
+  breakdownContext,
+  verdictOf,
+} from './drawer-breakdowns'
 import {
   classifyDrawerTabletTelemetry,
   type DrawerTabletTelemetry,
@@ -106,9 +112,35 @@ import {
  *
  *   * **The count history is paged** (D21). It was capped at one read, which two
  *     outlets counted daily outgrow in a fortnight.
+ *
+ * The 2026-08-30 pass added the last of them, and replaced a piece of reasoning
+ * this file used to carry.
+ *
+ *   * **Every term in the balance is reachable from the figure that states
+ *     it.** Cash from Bills opens a day-by-day reading of the interval; Cash
+ *     Expenses opens the same list and entry form the Expenses tab renders, one
+ *     per business date, each with its own Add. Both partition the INTERVAL and
+ *     never the calendar day, both are grouped by the database from the same
+ *     predicate as the tile they explain, and both therefore sum to it.
+ *
+ *   * **Only Collect and Other Spend are gone, and what they cost was not
+ *     tidiness.** This file used to argue for keeping them as a quieter escape
+ *     hatch — distance rather than invisibility. That argument is now history,
+ *     and here is what replaced it. `In the drawer now` is four terms — opening,
+ *     plus receipts, less expenses, less cash out — and the strip beneath it
+ *     shows three. `cashOutSincePaise` had no tile, so taking ₹5,000 out between
+ *     counts dropped the headline by ₹5,000 with nothing on the card accounting
+ *     for it. Deleting the only two controls that could create a standalone
+ *     movement makes every movement part of a count, folded into `Last Left` by
+ *     `nextOpeningPaise` — so the three tiles are a complete account of the
+ *     headline **by construction** rather than by adding a fourth tile for a
+ *     term measured at zero occurrences in production. Neither had ever been
+ *     used: `drawer_cash_out` held two rows on 2026-08-29, both collections,
+ *     both attached to a count. The database keeps both kinds and every grant,
+ *     so re-offering a spend is a control, not a migration.
  */
 
-type Sheet = 'none' | 'count' | 'collect' | 'spend' | 'adjust' | 'edit'
+type Sheet = 'none' | 'count' | 'adjust' | 'edit' | 'left' | 'receipts' | 'expenses'
 
 /**
  * Where the recorder is standing, as far as the sheet can tell.
@@ -208,6 +240,7 @@ function DrawerLoading() {
 export function CashDrawerSurface() {
   const { cashDrawer: adapter, counter, outlets: outletsAdapter } = useAdapters()
   const { outletId, selector: outletSelector } = useOutletScope()
+  const session = useSession()
 
   const [state, setState] = useState<DrawerState | null>(null)
   const [outlet, setOutlet] = useState<Tables<'outlets'> | null>(null)
@@ -237,7 +270,6 @@ export function CashDrawerSurface() {
   // before typing, and leaving it alone already means nothing was collected.
   const [collecting, setCollecting] = useState('')
   const [countedAt, setCountedAt] = useState<Date>(() => new Date())
-  const timePicker = useRef<HTMLInputElement | null>(null)
   const [sheetOpenedAt, setSheetOpenedAt] = useState<number>(() => Date.now())
   /**
    * A reference instant for the "not in the future" check, ticking while the
@@ -253,14 +285,21 @@ export function CashDrawerSurface() {
   // Where the person is, read once when a recording sheet opens (design D20).
   const [where, setWhere] = useState<Whereabouts | null>(null)
 
-  // The standalone sheets.
-  const [movementAmount, setMovementAmount] = useState('')
-  const [movementReason, setMovementReason] = useState('')
-
-  // The adjustment sheet.
+  // The adjustment sheet, and the edit sheet beside it.
   const [adjustingId, setAdjustingId] = useState<string | null>(null)
   const [adjustedAmount, setAdjustedAmount] = useState('')
   const [adjustReason, setAdjustReason] = useState('')
+  /**
+   * The edit sheet's own fields.
+   *
+   * `editedNote` starts as the stored note rather than blank, and `editedAt`
+   * as the stored instant. Both are what makes an edit a *correction of this
+   * observation* rather than a fresh statement of it — the note used to be
+   * wiped by every amount edit precisely because nothing on screen held it.
+   */
+  const [editedNote, setEditedNote] = useState('')
+  const [editedAt, setEditedAt] = useState<Date>(() => new Date())
+  const [editOpenedAt, setEditOpenedAt] = useState<number>(() => Date.now())
 
   // Pages of the count history beyond the first, which arrives with the state.
   const [older, setOlder] = useState<DrawerObservationRecord[]>([])
@@ -365,10 +404,13 @@ export function CashDrawerSurface() {
   }, [loadTabletTelemetry])
   useOnForeground(refreshTabletTelemetry)
 
-  // Only while the count sheet is open: nowhere else on this surface asks what
-  // time it is, and a timer running behind a closed sheet is a wakeup for nothing.
+  // Only while a sheet that states an instant is open: nowhere else on this
+  // surface asks what time it is, and a timer running behind a closed sheet is a
+  // wakeup for nothing. Both the count sheet and the edit sheet refuse an
+  // instant in the future, and both need a reference that does not go stale
+  // while somebody thinks about it.
   useEffect(() => {
-    if (sheet !== 'count') return
+    if (sheet !== 'count' && sheet !== 'edit') return
     const timer = setInterval(() => setClock(Date.now()), 30_000)
     return () => clearInterval(timer)
   }, [sheet])
@@ -482,6 +524,16 @@ export function CashDrawerSurface() {
   }, [state, countedAt])
 
   /**
+   * What the two breakdowns need: the state, and two business dates resolved
+   * through **the outlet's own cutover** rather than a constant this file used
+   * to carry. Null until both the drawer and the outlet have arrived.
+   */
+  const breakdown = useMemo(
+    () => (state ? breakdownContext(state, outlet?.business_day_cutover ?? null) : null),
+    [state, outlet],
+  )
+
+  /**
    * What the sheet refuses before the database gets the chance.
    *
    * Both bounds are enforced in Postgres and both come back as a sentence naming
@@ -498,18 +550,6 @@ export function CashDrawerSurface() {
     }
     return null
   }, [clock, countedAt, state])
-
-  /**
-   * Which of the three relative options the stated instant currently is, or null
-   * for a time picked out of the air. Drives which button reads as chosen.
-   */
-  const relativeChoice = useMemo(() => {
-    const match = RELATIVE_TIMES.find(
-      (option) =>
-        Math.abs(countedAt.getTime() - (sheetOpenedAt - option.minutes * 60_000)) < 30_000,
-    )
-    return match?.minutes ?? null
-  }, [countedAt, sheetOpenedAt])
 
   /**
    * Business dates that have passed **since the one the last count belongs to**,
@@ -532,24 +572,6 @@ export function CashDrawerSurface() {
   /** What the drawer should hold at the stated instant. Null before the anchor. */
   const expectedPaise = boundary && state?.lastObservation ? boundary.expectedPaise : null
 
-  function openTimePicker() {
-    const field = timePicker.current
-    if (!field) return
-    // `showPicker()` is the supported way to open a date control from another
-    // element. Where it is missing, focusing and clicking the field is what
-    // older browsers open it on, and the field is still bound either way.
-    if (typeof field.showPicker === 'function') {
-      try {
-        field.showPicker()
-        return
-      } catch {
-        // A browser that refuses is one that falls through to the same fallback.
-      }
-    }
-    field.focus()
-    field.click()
-  }
-
   const collectingRupees = Number(collecting.trim())
   const collectingUsable = collecting.trim() !== '' && Number.isFinite(collectingRupees)
   const collectingPaise = collectingUsable ? rupeesToPaise(collectingRupees) : 0
@@ -558,23 +580,31 @@ export function CashDrawerSurface() {
   const collectingIsAdding = collectingUsable && collectingPaise < 0
   const leavingPaise = countedUsable ? rupeesToPaise(countedRupees) - collectingPaise : null
 
-  const movementRupees = Number(movementAmount.trim())
-  const movementUsable = movementAmount.trim() !== '' && Number.isFinite(movementRupees)
-  const movementPaise = movementUsable ? rupeesToPaise(movementRupees) : 0
-  const movementIsAdding = movementUsable && movementPaise < 0
-
   const reasonMissing = needsReason(where) && awayReason.trim() === ''
+
+  /**
+   * Dismiss a sheet, but only if it is still the one on screen.
+   *
+   * **Swapping one sheet for another fires the first one's `close`.** `Modal`
+   * closes its `<dialog>` in an effect when `open` goes false, and a closing
+   * dialog dispatches `close` — so handing a sheet `closeSheets` directly means
+   * opening its successor immediately tears the successor down again. The guard
+   * reads the sheet state *after* the swap, so a genuine dismissal still clears
+   * every field and a swap leaves the new sheet alone.
+   */
+  function closeIfCurrent(kind: Sheet) {
+    if (sheet === kind) closeSheets()
+  }
 
   function closeSheets() {
     setSheet('none')
     setCounted('')
     setCollecting('')
     setAwayReason('')
-    setMovementAmount('')
-    setMovementReason('')
     setAdjustingId(null)
     setAdjustedAmount('')
     setAdjustReason('')
+    setEditedNote('')
     setWhere(null)
     setCountedAt(new Date())
     setError(null)
@@ -630,14 +660,6 @@ export function CashDrawerSurface() {
     void locate()
   }
 
-  function openMovement(kind: 'collect' | 'spend') {
-    setMovementAmount('')
-    setMovementReason('')
-    setAwayReason('')
-    setSheet(kind)
-    void locate()
-  }
-
   async function submitCount(event: FormEvent) {
     event.preventDefault()
     if (!outletId || !countedUsable || timeProblem || reasonMissing) return
@@ -659,24 +681,6 @@ export function CashDrawerSurface() {
     if (ok) closeSheets()
   }
 
-  async function submitMovement(event: FormEvent, kind: 'collection' | 'spend') {
-    event.preventDefault()
-    if (!outletId || !movementUsable || reasonMissing) return
-    const ok = await run(async () => {
-      await adapter.recordCashOut({
-        outletId,
-        amountPaise: movementPaise,
-        kind,
-        reason: movementReason.trim() || null,
-        position: readingOf(where),
-        // No constant standing in for a recorder's reason. A sentence true of
-        // every row is evidence about none of them (design D20).
-        awayReason: needsReason(where) ? awayReason.trim() : null,
-      })
-    })
-    if (ok) closeSheets()
-  }
-
   /**
    * The quick correction, for a count nothing has anchored on yet.
    *
@@ -690,14 +694,27 @@ export function CashDrawerSurface() {
    */
   async function submitEdit(event: FormEvent) {
     event.preventDefault()
-    if (!adjustingId) return
+    if (!adjustingId || !adjusting) return
     const rupees = Number(adjustedAmount.trim())
     if (!Number.isFinite(rupees) || rupees < 0) {
       setError('Enter what the count should have been, in rupees.')
       return
     }
+    if (editTimeProblem) {
+      setError(editTimeProblem)
+      return
+    }
+    const moved = editedAt.toISOString() !== adjusting.countedAt
     const ok = await run(async () => {
-      await adapter.editObservation(adjustingId, rupeesToPaise(rupees))
+      await adapter.editObservation(adjustingId, {
+        countedTotalPaise: rupeesToPaise(rupees),
+        // Always sent, which is the whole of the note fix: the field holds what
+        // is stored, so leaving it alone re-sends it and clearing it clears it.
+        note: editedNote.trim(),
+        // Omitted where the instant did not move, so the command takes the
+        // cheap path and nothing recomputes for an amount-only correction.
+        ...(moved ? { countedAt: editedAt.toISOString() } : {}),
+      })
     })
     if (ok) closeSheets()
   }
@@ -720,6 +737,35 @@ export function CashDrawerSurface() {
   // Editable until the next observation anchors on it, so the most recent is the
   // only one nothing has anchored on.
   const newestId = observations[0]?.id ?? null
+
+  /**
+   * What a moved boundary does to the count being edited, in one sentence.
+   *
+   * **The database is what recomputes the expected total**, by calling the same
+   * three interval readers that computed it at recording — this is only the
+   * statement, drawn from the nearby cash bills the surface already holds as
+   * evidence for the movable boundary. Two different arithmetics would be the
+   * thing `drawer-arithmetic.ts` exists to prevent.
+   */
+  const editMoved =
+    state && adjusting ? boundaryMove(state, new Date(adjusting.countedAt), editedAt) : null
+
+  /**
+   * The recording bounds, asked by the field rather than by a round trip. The
+   * database enforces all three and names what each collided with; a person who
+   * has just moved a time should not have to press Save to find out.
+   */
+  const editTimeProblem = ((): string | null => {
+    if (!adjusting) return null
+    const at = editedAt.getTime()
+    if (Number.isNaN(at)) return 'Pick the date and time the drawer was counted.'
+    if (at > clock) return 'A count cannot be taken in the future.'
+    const previous = observations.find((row) => row.countedAt < adjusting.countedAt)
+    if (previous && editedAt.toISOString() <= previous.countedAt) {
+      return `This drawer was already counted at ${formatDayTime(previous.countedAt)}. Pick a later time.`
+    }
+    return null
+  })()
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -929,59 +975,67 @@ export function CashDrawerSurface() {
                 </ChipRow>
 
                 <div className="grid grid-cols-3 gap-2 border-t border-border pt-2 text-center">
-                  <Figure label="Last Left" paise={state.leftInDrawerPaise ?? 0} testId="left" />
+                  {/* Not an interval, so it opens the count that produced it
+                      rather than a day-by-day reading — but it opens, because a
+                      figure on this strip that cannot be asked about is the odd
+                      one out [owner, 2026-08-30]. */}
+                  <Figure
+                    label="Last Left"
+                    paise={state.leftInDrawerPaise ?? 0}
+                    testId="left"
+                    onOpen={() => setSheet('left')}
+                    openLabel="Last Left, from the count that produced it"
+                  />
                   {/* Both through the same rule, so the two cannot disagree
                       about what a sign means. Expenses are negated on the way
                       in, which is the whole of the difference between them. */}
                   <Figure
                     label="Cash from Bills"
                     paise={state.cashReceiptsSincePaise}
-                    rows={state.cashReceiptsSinceCount}
+                    rows={
+                      state.cashReceiptsSinceCount === 1
+                        ? '1 bill'
+                        : `${state.cashReceiptsSinceCount} bills`
+                    }
                     testId="receipts-since"
                     signed
+                    onOpen={() => setSheet('receipts')}
+                    openLabel="Cash from Bills, day by day"
                   />
                   <Figure
                     label="Cash Expenses"
                     paise={-state.cashExpensesSincePaise}
-                    rows={state.cashExpensesSinceCount}
+                    rows={
+                      state.cashExpensesSinceCount === 1
+                        ? '1 expense'
+                        : `${state.cashExpensesSinceCount} expenses`
+                    }
                     testId="expenses-since"
                     signed
+                    onOpen={() => setSheet('expenses')}
+                    openLabel="Cash Expenses, day by day"
                   />
                 </div>
               </>
             )}
           </Card>
 
-          {/* ── The actions ─────────────────────────────────────────────── */}
-          <div className="space-y-2">
-            <Button className="w-full" onClick={openCount} data-testid="open-count">
-              <Banknote aria-hidden size={16} /> Count &amp; Collect
-            </Button>
-            {/* The escape hatch keeps the distance decision 5 asked for — the
-                quieter row, after the collection — but not the invisibility.
-                Rendered `ghost` it was text with no boundary, and the owner
-                could not tell it was a control at all (design D22). */}
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="phone"
-                className="flex-1"
-                onClick={() => openMovement('collect')}
-                data-testid="open-collect"
-              >
-                <Minus aria-hidden size={14} /> Only Collect
-              </Button>
-              <Button
-                variant="secondary"
-                size="phone"
-                className="flex-1"
-                onClick={() => openMovement('spend')}
-                data-testid="open-spend"
-              >
-                <Receipt aria-hidden size={14} /> Other Spend
-              </Button>
-            </div>
-          </div>
+          {/* ── The action ──────────────────────────────────────────────
+              One control, and there is no longer a quieter row beneath it.
+              Only Collect and Other Spend are gone (design D5): with no way to
+              record a movement outside a count, every movement belongs to one
+              and is folded into the following opening — which is what makes the
+              three tiles above account for the headline exactly.
+
+              It carries its own vertical margin rather than taking the strip's
+              `space-y-3`, because it is the one thing on this screen somebody
+              came here to press: the reading above it and the history below it
+              are both things to look at, and the act between them earns a band
+              of its own. Four rather than five: at five the button drifted away
+              from the reading it acts on [owner, 2026-08-30]. */}
+          <Button className="my-4 w-full" onClick={openCount} data-testid="open-count">
+            <Banknote aria-hidden size={16} /> Count &amp; Collect
+          </Button>
 
           {/* ── Recent counts ───────────────────────────────────────────── */}
           {observations.length > 0 && (
@@ -1002,7 +1056,15 @@ export function CashDrawerSurface() {
                   }}
                   onEdit={() => {
                     setAdjustingId(observation.id)
-                    setAdjustedAmount('')
+                    // Prefilled with what is stored, because this sheet corrects
+                    // an observation rather than restating one: a blank note
+                    // field would be an invitation to clear a note nobody meant
+                    // to touch, which is the bug in the shape it replaces.
+                    setAdjustedAmount(String(observation.countedTotalPaise / 100))
+                    setEditedNote(observation.note ?? '')
+                    setEditedAt(new Date(observation.countedAt))
+                    setEditOpenedAt(Date.now())
+                    setClock(Date.now())
                     setAdjustReason('')
                     setSheet('edit')
                   }}
@@ -1093,67 +1155,7 @@ export function CashDrawerSurface() {
                 </Explain>
               </span>
             </legend>
-            <div className="grid grid-cols-4 gap-2">
-              {RELATIVE_TIMES.map((option) => {
-                const candidate = new Date(sheetOpenedAt - option.minutes * 60_000)
-                return (
-                  <Button
-                    key={option.label}
-                    type="button"
-                    size="phone"
-                    className="px-0"
-                    aria-label={option.spoken}
-                    variant={relativeChoice === option.minutes ? 'primary' : 'secondary'}
-                    onClick={() => setCountedAt(candidate)}
-                    data-testid={`when-${option.minutes}`}
-                  >
-                    {option.label}
-                  </Button>
-                )
-              })}
-              {/*
-                The fourth option, in the space beside the other three, for a
-                count being caught up on days later — which has no relative name.
-
-                **It opens the platform's own picker and takes no typing.** The
-                input is present and bound, because that is what `showPicker()`
-                acts on and what carries the value, but it is not somewhere a
-                person puts a caret: a half-typed date is a date, and this field
-                decides which cash a count is measured against.
-              */}
-              <div className="relative">
-                <Button
-                  type="button"
-                  size="phone"
-                  className="w-full px-0"
-                  aria-label="Pick another date and time"
-                  variant={relativeChoice === null ? 'primary' : 'secondary'}
-                  onClick={openTimePicker}
-                  data-testid="when-other"
-                >
-                  Other
-                </Button>
-                <input
-                  ref={timePicker}
-                  type="datetime-local"
-                  value={toLocalInput(countedAt)}
-                  onChange={(event) => {
-                    const picked = new Date(event.target.value)
-                    if (!Number.isNaN(picked.getTime())) setCountedAt(picked)
-                  }}
-                  // Reachable through the button above, which is the labelled
-                  // control; a second tab stop for the same value is one control
-                  // too many, and the picker itself is keyboard-navigable.
-                  tabIndex={-1}
-                  aria-hidden
-                  // Rendered rather than `display:none`, so the picker has
-                  // somewhere to anchor, and inert to the pointer so a stray tap
-                  // lands on the button.
-                  className="pointer-events-none absolute inset-0 size-full opacity-0"
-                  data-testid="counted-at-picker"
-                />
-              </div>
-            </div>
+            <CountedAtButtons value={countedAt} onChange={setCountedAt} anchorMs={sheetOpenedAt} />
             {boundary && boundary.excludedBills > 0 && (
               <ChipRow>
                 <Chip tone="neutral" data-testid="excluded-by-time">
@@ -1332,116 +1334,40 @@ export function CashDrawerSurface() {
         </form>
       </FormSheet>
 
-      {/* ── Only Collect, and the rare Other Spend ─────────────────────── */}
-      <FormSheet
-        open={sheet === 'collect' || sheet === 'spend'}
+      {/* ── The two readings behind the figures ────────────────────────
+          Rendered whenever there is a state to read, so opening one is a state
+          change and nothing else. `breakdownContext` returns null before the
+          anchor and before the outlet's own cutover has been read — neither
+          tile is a control in that case either. */}
+      <LastLeftBreakdown
+        open={sheet === 'left'}
+        onClose={() => closeIfCurrent('left')}
+        observation={state?.lastObservation ?? null}
+        // The same edit, from a second doorway. It swaps sheets rather than
+        // stacking them: two bottom sheets over each other on a phone is one
+        // sheet nobody can read, and the edit sheet is where the fields live.
+        onFix={() => {
+          const newest = state?.lastObservation
+          if (!newest) return
+          setAdjustingId(newest.id)
+          setAdjustedAmount(String(newest.countedTotalPaise / 100))
+          setEditedNote(newest.note ?? '')
+          setEditedAt(new Date(newest.countedAt))
+          setEditOpenedAt(Date.now())
+          setClock(Date.now())
+          setAdjustReason('')
+          setSheet('edit')
+        }}
+      />
+      <ReceiptsBreakdown open={sheet === 'receipts'} onClose={closeSheets} context={breakdown} />
+      <ExpensesBreakdown
+        open={sheet === 'expenses'}
         onClose={closeSheets}
-        title={
-          sheet === 'spend' ? 'Other spend' : movementIsAdding ? 'Add to drawer' : 'Collect cash'
-        }
-        error={error}
-        footer={
-          <Button
-            type="submit"
-            form="movement-form"
-            className="w-full"
-            disabled={busy || !movementUsable || movementPaise === 0 || reasonMissing}
-            data-testid="save-movement"
-          >
-            {sheet === 'spend' ? 'Record spend' : movementIsAdding ? 'Add to drawer' : 'Collect'}
-          </Button>
-        }
-      >
-        <form
-          id="movement-form"
-          onSubmit={(event) => submitMovement(event, sheet === 'spend' ? 'spend' : 'collection')}
-          className="space-y-4"
-        >
-          <div className="space-y-2">
-            <label htmlFor="movement-amount" className="text-sm font-bold text-content">
-              How much?
-            </label>
-            <Input
-              id="movement-amount"
-              inputMode="decimal"
-              value={movementAmount}
-              onChange={(event) => setMovementAmount(event.target.value)}
-              placeholder="5000"
-              data-testid="movement-amount"
-            />
-            {movementIsAdding && sheet !== 'spend' && (
-              <p
-                role="alert"
-                className="rounded-lg bg-warning px-2 py-1 text-sm font-bold text-on-warning"
-                data-testid="movement-negative-warning"
-              >
-                A minus means you are ADDING money to the drawer, not taking it out.
-              </p>
-            )}
-            {movementUsable && state && (
-              <ChipRow>
-                <Chip tone="neutral" data-testid="movement-preview">
-                  <Money paise={state.expectedNowPaise ?? 0} /> →{' '}
-                  <Money paise={(state.expectedNowPaise ?? 0) - movementPaise} />
-                </Chip>
-              </ChipRow>
-            )}
-          </div>
-
-          {sheet === 'spend' ? (
-            <div className="space-y-2">
-              <label htmlFor="movement-reason" className="text-sm font-bold text-content">
-                What did it buy?
-              </label>
-              <Input
-                id="movement-reason"
-                value={movementReason}
-                onChange={(event) => setMovementReason(event.target.value)}
-                placeholder="Chest freezer for the prep counter"
-                data-testid="movement-reason"
-              />
-              <ChipRow>
-                <Explain
-                  label="why a spend is not an expense"
-                  explanation={
-                    <>
-                      The drawer is genuinely lighter, but a fridge is not a running cost. Putting
-                      it through expenses would move the drawer correctly and wreck the month.
-                    </>
-                  }
-                >
-                  <Chip tone="neutral" data-testid="spend-not-an-expense">
-                    not in the month&rsquo;s expenses
-                  </Chip>
-                </Explain>
-              </ChipRow>
-            </div>
-          ) : (
-            <ChipRow>
-              <Explain
-                label="what collecting without counting does not do"
-                explanation={
-                  <>
-                    You are not counting, so no difference is recorded and nothing is checked
-                    against the drawer.
-                  </>
-                }
-              >
-                <Chip tone="neutral" data-testid="collect-not-verified">
-                  nothing verified
-                </Chip>
-              </Explain>
-            </ChipRow>
-          )}
-
-          <WhereaboutsPanel
-            where={where}
-            outletName={outlet?.name ?? null}
-            reason={awayReason}
-            onReason={setAwayReason}
-          />
-        </form>
-      </FormSheet>
+        context={breakdown}
+        outletId={outletId ?? ''}
+        viewerId={session.userId}
+        onChanged={load}
+      />
 
       {/* ── Fix the newest count, which nothing has anchored on ────────── */}
       <FormSheet
@@ -1454,7 +1380,7 @@ export function CashDrawerSurface() {
             type="submit"
             form="edit-form"
             className="w-full"
-            disabled={busy || adjustedAmount.trim() === ''}
+            disabled={busy || adjustedAmount.trim() === '' || editTimeProblem !== null}
             data-testid="save-edit"
           >
             Save the figure
@@ -1465,7 +1391,7 @@ export function CashDrawerSurface() {
           {adjusting && (
             <>
               <TallyRow
-                label={formatDayTime(adjusting.countedAt)}
+                label={`Recorded as ${formatDayTime(adjusting.countedAt)}`}
                 value={<Money paise={adjusting.countedTotalPaise} />}
               />
 
@@ -1479,6 +1405,62 @@ export function CashDrawerSurface() {
                   value={adjustedAmount}
                   onChange={(event) => setAdjustedAmount(event.target.value)}
                   data-testid="edited-amount"
+                />
+              </div>
+
+              {/*
+                **The instant, which is the whole reason this sheet exists.** The
+                count sheet's own thesis is that a count at 22:00 is measured
+                against cash received up to 22:00 — so a count recorded at 23:30
+                and offering only the amount left the recorder one affordance:
+                falsify the physical count until it balances. That is the precise
+                inversion of what this surface is for.
+              */}
+              <fieldset className="space-y-2">
+                <legend className="text-sm">
+                  <span className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="font-bold text-content">Counted when:</span>
+                    <span className="font-semibold text-content" data-testid="edited-at-echo">
+                      {formatDayTime(editedAt.toISOString())}
+                    </span>
+                  </span>
+                </legend>
+                <CountedAtButtons value={editedAt} onChange={setEditedAt} anchorMs={editOpenedAt} />
+                {editMoved && editMoved.direction !== 'none' && (
+                  <p className="text-sm text-content" data-testid="edit-boundary-moved">
+                    <Money paise={editMoved.paise} /> of cash rung{' '}
+                    {editMoved.direction === 'out' ? 'after' : 'up to'}{' '}
+                    {formatTime(editedAt.toISOString())} is{' '}
+                    {editMoved.direction === 'out' ? 'no longer' : 'now'} inside this count.
+                  </p>
+                )}
+                {editTimeProblem && (
+                  <p
+                    role="alert"
+                    className="text-sm font-semibold text-danger"
+                    data-testid="edit-time-problem"
+                  >
+                    {editTimeProblem}
+                  </p>
+                )}
+              </fieldset>
+
+              {/*
+                **The note is a field because it was silently a casualty.** The
+                sheet sent no note and the command assigned one unconditionally,
+                so typing a note and then fixing a typo in the figure lost the
+                note with no warning at all.
+              */}
+              <div className="space-y-1">
+                <label htmlFor="edited-note" className="text-sm font-bold text-content">
+                  Note (optional)
+                </label>
+                <Input
+                  id="edited-note"
+                  value={editedNote}
+                  onChange={(event) => setEditedNote(event.target.value)}
+                  placeholder="counted with the evening float still in"
+                  data-testid="edited-note"
                 />
               </div>
 
@@ -1668,6 +1650,117 @@ function WhereaboutsPanel({
 }
 
 /**
+ * The movable boundary: three relative options and the platform's own picker.
+ *
+ * **One control, two sheets.** The count sheet moves the boundary of an interval
+ * that has not closed; the edit sheet moves the boundary of one that has. They
+ * are the same act — a person stating when the drawer was actually counted — and
+ * a second implementation would be a second set of rules about what a stated
+ * instant may be.
+ *
+ * `anchorMs` is what the relative options are measured from, and it must stay
+ * frozen for as long as the sheet is open: an anchor that advanced would move a
+ * time the recorder had already chosen out from under them.
+ */
+function CountedAtButtons({
+  value,
+  onChange,
+  anchorMs,
+}: {
+  value: Date
+  onChange: (next: Date) => void
+  anchorMs: number
+}) {
+  const picker = useRef<HTMLInputElement | null>(null)
+
+  /** Which of the three relative options this instant currently is, or null. */
+  const relative = RELATIVE_TIMES.find(
+    (option) => Math.abs(value.getTime() - (anchorMs - option.minutes * 60_000)) < 30_000,
+  )
+
+  function openPicker() {
+    const field = picker.current
+    if (!field) return
+    // `showPicker()` is the supported way to open a date control from another
+    // element. Where it is missing, focusing and clicking the field is what
+    // older browsers open it on, and the field is still bound either way.
+    if (typeof field.showPicker === 'function') {
+      try {
+        field.showPicker()
+        return
+      } catch {
+        // A browser that refuses is one that falls through to the same fallback.
+      }
+    }
+    field.focus()
+    field.click()
+  }
+
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {RELATIVE_TIMES.map((option) => {
+        const candidate = new Date(anchorMs - option.minutes * 60_000)
+        return (
+          <Button
+            key={option.label}
+            type="button"
+            size="phone"
+            className="px-0"
+            aria-label={option.spoken}
+            variant={relative?.minutes === option.minutes ? 'primary' : 'secondary'}
+            onClick={() => onChange(candidate)}
+            data-testid={`when-${option.minutes}`}
+          >
+            {option.label}
+          </Button>
+        )
+      })}
+      {/*
+        The fourth option, in the space beside the other three, for a count being
+        caught up on days later — which has no relative name.
+
+        **It opens the platform's own picker and takes no typing.** The input is
+        present and bound, because that is what `showPicker()` acts on and what
+        carries the value, but it is not somewhere a person puts a caret: a
+        half-typed date is a date, and this field decides which cash a count is
+        measured against.
+      */}
+      <div className="relative">
+        <Button
+          type="button"
+          size="phone"
+          className="w-full px-0"
+          aria-label="Pick another date and time"
+          variant={relative === undefined ? 'primary' : 'secondary'}
+          onClick={openPicker}
+          data-testid="when-other"
+        >
+          Other
+        </Button>
+        <input
+          ref={picker}
+          type="datetime-local"
+          value={toLocalInput(value)}
+          onChange={(event) => {
+            const picked = new Date(event.target.value)
+            if (!Number.isNaN(picked.getTime())) onChange(picked)
+          }}
+          // Reachable through the button above, which is the labelled control; a
+          // second tab stop for the same value is one control too many, and the
+          // picker itself is keyboard-navigable.
+          tabIndex={-1}
+          aria-hidden
+          // Rendered rather than `display:none`, so the picker has somewhere to
+          // anchor, and inert to the pointer so a stray tap lands on the button.
+          className="pointer-events-none absolute inset-0 size-full opacity-0"
+          data-testid="counted-at-picker"
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
  * One line of the count tally: a label on the left, a figure or a field on the
  * right, aligned down one column so the four read as arithmetic.
  */
@@ -1784,61 +1877,75 @@ function Figure({
   rows,
   testId,
   signed = false,
+  onOpen,
+  openLabel,
 }: {
   label: string
   paise: number
-  rows?: number
+  rows?: string
   testId: string
   /** Read this figure as a movement, so its sign and tone follow its value. */
   signed?: boolean
+  /** Where given, the whole tile opens the reading behind this figure. */
+  onOpen?: () => void
+  /** What that reading is, for a reader who gets no layout. */
+  openLabel?: string
 }) {
   const { prefix, tone } = signed ? signOf(paise) : { prefix: '', tone: undefined }
-  return (
-    <div>
+
+  const body = (
+    <>
       <p className="text-[0.6875rem] uppercase tracking-wide text-content-muted">{label}</p>
       <p data-testid={testId} className={tone}>
         {prefix}
         <Money paise={paise} />
       </p>
       {rows !== undefined && <p className="text-[0.6875rem] text-content-muted">{rows}</p>}
-    </div>
+    </>
   )
-}
 
-/** What a count came to, in the fewest words that say it. */
-function verdictOf(observation: DrawerObservationRecord): {
-  chip: ReactNode
-  spoken: string
-} {
-  if (observation.isAnchor) {
-    return {
-      chip: (
-        <Chip tone="neutral" data-testid={`anchor-${observation.id}`}>
-          first count
-        </Chip>
-      ),
-      spoken: 'first count',
-    }
-  }
-  const difference = observation.differencePaise ?? 0
-  if (difference === 0) {
-    return {
-      chip: (
-        <Chip tone="good" icon={Check}>
-          matched
-        </Chip>
-      ),
-      spoken: 'matched',
-    }
-  }
-  return {
-    chip: (
-      <Chip tone="bad" icon={difference < 0 ? ArrowDownRight : ArrowUpRight}>
-        <Money paise={Math.abs(difference)} /> {difference < 0 ? 'short' : 'over'}
-      </Chip>
-    ),
-    spoken: `${formatPaise(Math.abs(difference))} ${difference < 0 ? 'short' : 'over'}`,
-  }
+  if (!onOpen) return <div>{body}</div>
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      // The figure and its label are the visible name; this says what a tap
+      // does, after the fact rather than instead of it.
+      aria-label={openLabel}
+      data-testid={`open-${testId}`}
+      // **The whole tile is the target, and it says so by pressing** — no
+      // underline under the figure [owner, 2026-08-30]. A dotted rule under a
+      // money amount reads as a mark on the number rather than as an offer, and
+      // three of them in a row read as clutter. So the tile lifts on hover and
+      // sinks on press, which is the one affordance that works the same under a
+      // thumb as under a cursor: a phone has no hover, and `:active` fires on
+      // the tap itself.
+      //
+      // Negative margin and matching padding, so the pressed surface is bigger
+      // than the text without moving the three-up grid a pixel.
+      className={cn(
+        // **`flex flex-col`, because a button centres its own content and these
+        // do not all hold the same number of lines.** The strip is a stretch
+        // grid, so a tile with no row count under it is a shorter box in a cell
+        // as tall as its neighbours — and the browser's button box centres that
+        // short content, dropping its figure seven pixels below theirs. A column
+        // of money that is not a column is the one thing this strip cannot be
+        // [owner, 2026-08-30]. `display: block` does not fix it: the centring
+        // comes from the anonymous button-content box, which only a flex or grid
+        // display on the button itself replaces.
+        'flex flex-col -m-1 rounded-lg p-1 text-center transition-[background-color,box-shadow,transform]',
+        'hover:bg-surface-raised',
+        // `brightness-95` is the same press this app's primary button already
+        // uses; over `surface-raised` it lands darker than the card the tile
+        // sits on, which is what reads as sunken rather than merely tinted.
+        'active:translate-y-px active:bg-surface-raised active:shadow-inner active:brightness-95',
+        'focus-visible:focus-ring',
+      )}
+    >
+      {body}
+    </button>
+  )
 }
 
 /**

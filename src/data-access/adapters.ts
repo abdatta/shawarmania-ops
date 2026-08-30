@@ -2165,6 +2165,17 @@ export interface ManualLedgerExpense {
   amountPaise: number
   /** Optional detail beyond the category, such as a quantity. */
   note: string | null
+  /**
+   * When the money actually left, where that differs from when the row was
+   * typed. Null on a row that never stated one.
+   *
+   * Carried here so a client filtering rows into a drawer interval uses the same
+   * `coalesce(occurredAt, createdAt)` the database's interval readers use. On
+   * `createdAt` alone the two would part company the first time somebody
+   * backdates an expense, and the drawer's expenses breakdown would list a row
+   * its own total does not contain (design D3).
+   */
+  occurredAt: string | null
   createdAt: string
   updatedAt: string
   /**
@@ -2780,6 +2791,35 @@ export interface DrawerExceptionRecord {
 }
 
 /**
+ * One business date's share of the pending interval.
+ *
+ * **The partition is of the INTERVAL, never of the calendar day** (design D1).
+ * The interval is `(last count, now]` and is bounded by instants; these groups
+ * only say which business date each part of it fell on, resolved through the
+ * outlet's own cutover by the database. So the oldest group is routinely a
+ * *fragment* of its business date — the part after the count that cut it — and
+ * the surface has to say so rather than implying it holds the whole day.
+ *
+ * **They sum to the scalar they explain, by construction.** Both lists come
+ * from readers built on the same relation, predicate and interval convention as
+ * `cashReceiptsSincePaise` and `cashExpensesSincePaise`, one `group by` apart. A
+ * breakdown that did not add up to the figure it was opened from would be worse
+ * than no breakdown at all, so nothing here is summed in TypeScript.
+ */
+export interface DrawerReceiptsDay {
+  businessDate: string
+  paise: number
+  /** Distinct settled bills contributing cash, not allocations. */
+  bills: number
+}
+
+export interface DrawerExpensesDay {
+  businessDate: string
+  paise: number
+  rows: number
+}
+
+/**
  * What the Cash drawer surface opens on: a balance, not a date picker.
  *
  * That is the question the collector has when they walk in, and it is why every
@@ -2794,9 +2834,20 @@ export interface DrawerState {
   /** What the last observation left behind: counted less its own cash out. */
   leftInDrawerPaise: number | null
   cashReceiptsSincePaise: number
+  /** The TRUE number of contributing bills, never a capped sample's length. */
   cashReceiptsSinceCount: number
   cashExpensesSincePaise: number
   cashExpensesSinceCount: number
+  /**
+   * The interval's cash receipts, by business date, newest first.
+   *
+   * `sum(paise)` equals `cashReceiptsSincePaise` and `sum(bills)` equals
+   * `cashReceiptsSinceCount`. The oldest entry may be a fragment of its business
+   * date — the part after the count that bounds the interval.
+   */
+  receiptsByDay: DrawerReceiptsDay[]
+  /** The same, for the interval's cash expenses. Sums to the expense scalar. */
+  cashExpensesByDay: DrawerExpensesDay[]
   /** Signed, so a top-up since the last count raises this. */
   cashOutSincePaise: number
   cashOutSinceCount: number
@@ -2804,6 +2855,13 @@ export interface DrawerState {
    * How many business dates the pending interval covers. The surface says so
    * once it exceeds one, before the count is taken, because a long interval
    * blurs attribution and the screen should not imply precision it lacks.
+   *
+   * **Derived from the grouped days, which carry the outlet's own cutover.** It
+   * used to be computed against a hardcoded `04:00` — right at both outlets and
+   * wrong the first time one opens with a different one. So it is now the
+   * inclusive span between the oldest and newest business dates the interval
+   * actually touched, and one where the interval touched nothing at all: an
+   * interval with no cash movement in it has no attribution to blur.
    */
   daysCovered: number
   /**
@@ -2857,6 +2915,27 @@ export interface RecordCashOutInput {
   awayReason?: string | null
 }
 
+/**
+ * A correction to a count nothing has anchored on — the whole observation.
+ *
+ * **Each field absent means "leave it as it is".** That is not politeness: the
+ * note used to be wiped by every amount edit, because the adapter never sent one
+ * and the command assigned it unconditionally. So `note: undefined` leaves the
+ * stored note alone, while `note: ''` — or an explicit `null` — clears it on
+ * purpose, which is a thing only a caller who meant it can send.
+ *
+ * **A moved `countedAt` moves the interval's upper bound**, so the database
+ * recomputes that observation's expected total and difference from it. That is
+ * the entire reason to offer the instant: a count taken at 22:00 and recorded at
+ * 23:30 is otherwise measured against ninety minutes of bills that were never in
+ * the drawer, and the only knob left is the physical count.
+ */
+export interface DrawerEdit {
+  countedTotalPaise: number
+  note?: string | null
+  countedAt?: string | null
+}
+
 export class CashDrawerActionError extends DataActionError {
   constructor(code: string, message: string) {
     super(code, message)
@@ -2906,16 +2985,29 @@ export interface CashDrawerAdapter {
    * activity — each named by what it collided with.
    */
   recordObservation(input: RecordObservationInput): Promise<DrawerObservationRecord>
+  /**
+   * **Unreachable from the app, and deliberately still here.**
+   *
+   * `the-drawer-explains-its-figures` deleted Only Collect and Other Spend from
+   * the drawer surface, so every movement the app creates now belongs to a
+   * count — which is what makes the three tiles on the balance card a complete
+   * account of the headline rather than a nearly complete one. Nothing in the
+   * database changed: `drawer_cash_out` keeps both kinds, their constraints,
+   * their policies and their grants, and `record_drawer_cash_out` keeps its
+   * grant. Two production rows already exist and must keep reading.
+   *
+   * So this method stays, unused, because re-offering a spend when a real case
+   * for one turns up is a matter of adding a control rather than writing a
+   * migration — and because a reader finding the command in the database and no
+   * method here would spend an afternoon working out whether that was an
+   * oversight.
+   */
   recordCashOut(input: RecordCashOutInput): Promise<DrawerCashOutRecord>
   /**
    * Full edit, no reason and no trail — available only while no later
    * observation at that outlet has anchored on this one.
    */
-  editObservation(
-    observationId: string,
-    countedTotalPaise: number,
-    note?: string | null,
-  ): Promise<DrawerObservationRecord>
+  editObservation(observationId: string, edit: DrawerEdit): Promise<DrawerObservationRecord>
   /** The only path once a later observation exists. Reason required. */
   adjustObservation(
     observationId: string,

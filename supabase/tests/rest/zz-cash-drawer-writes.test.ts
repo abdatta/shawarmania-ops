@@ -37,7 +37,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, describe, expect, it } from 'vitest'
 
 import type { Database } from '../../../src/data-access/database.types'
+import { createSupabaseCashDrawerAdapter } from '../../../src/data-access/supabase-adapters/cash-drawer'
 import { createSupabaseLedgerStatementAdapter } from '../../../src/data-access/supabase-adapters/ledger-statement'
+import { resolveBusinessDate } from '../../../src/domain/datetime'
 
 const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
 const SUPABASE_ANON_KEY =
@@ -106,10 +108,27 @@ afterAll(async () => {
   const service = serviceClient()
   const outlets = [OUTLETS.kalyani, OUTLETS.kanchrapara]
 
-  // The notebook expense the effective_expenses probe writes. Deleted by its
-  // own category rather than by outlet: the seed may carry notebook rows of its
-  // own one day, and a cleanup that emptied the table would hide that.
-  await service.from('manual_ledger_expenses').delete().eq('category', PROBE_EXPENSE)
+  // **The notebook expenses this file writes are withdrawn, not deleted, and
+  // the difference was a real bug.** `manual_ledger_expenses_no_delete` refuses
+  // a delete from every role, and `service_role` holds no grant on that table at
+  // all — so the `.delete()` this replaces failed silently on every run and left
+  // its row behind. A second run against the same reset then found two rows
+  // where the probe asserts one. CI never saw it, because CI resets first and
+  // runs once.
+  //
+  // Withdrawing is what the app itself does, it is what the guard permits, and
+  // a withdrawn row never reaches `effective_expenses` — so the figures go back
+  // exactly where the seed left them while the record stays honest about having
+  // been written. Voided through the owner's own session for the same reason the
+  // adapter does: the guard stamps `voided_by` from the session and refuses a
+  // forged actor.
+  const owner = await signIn(EMAILS.superAdmin)
+  const { error: withdrawError } = await owner
+    .from('manual_ledger_expenses')
+    .update({ voided_at: new Date().toISOString(), voided_reason: 'probe cleanup' })
+    .in('category', [PROBE_EXPENSE, PROBE_DRAWER_EXPENSE])
+    .is('voided_at', null)
+  if (withdrawError) throw withdrawError
 
   await service.from('drawer_observation_adjustments').delete().in('outlet_id', outlets)
   await service.from('drawer_cash_out').delete().in('outlet_id', outlets)
@@ -135,6 +154,9 @@ afterAll(async () => {
 
 /** The category this file's notebook expense carries, so cleanup can find it. */
 const PROBE_EXPENSE = 'Probe · gas cylinder'
+
+/** The same, for the row the drawer-breakdown probe writes at Kanchrapara. */
+const PROBE_DRAWER_EXPENSE = 'Probe · drawer breakdown'
 
 /** A count instant guaranteed to be after any this file has already used. */
 let instantCursor = 0
@@ -479,5 +501,158 @@ describe('expenses are read where they are written', () => {
     })
     expect(cashOutError).toBeNull()
     expect(Number(cashOut)).toBe(0)
+  })
+})
+
+/**
+ * The row counts beside the balance card's figures, through the real adapter.
+ *
+ * **Nothing else in this repo executes `createSupabaseCashDrawerAdapter`.**
+ * pgTAP proves the grouped readers with simulated claims, the component suites
+ * prove the screens against mocks. So an RPC name PostgREST does not expose, a
+ * `Returns` row shape that maps to `undefined`, or a count still derived from
+ * the wrong list would all ship green. This closes that gap, and it is the layer
+ * where the two defects this change fixes actually lived:
+ *
+ *   * `cashReceiptsSinceCount` was `nearbyCashBills.filter(...).length` — over a
+ *     list capped at twelve and drawn from the last forty settled bills for the
+ *     movable boundary and the exact-coincidence report. Forty cash bills since
+ *     the last count reported twelve. The cap on that list is deliberate and
+ *     untouched: it is evidence for a person to recognise rather than an
+ *     aggregate. Only the count stops being derived from it, and what it is
+ *     derived from instead is asserted below. That the grouped reader itself
+ *     counts thirteen bills as thirteen is
+ *     `supabase/tests/43_the_drawer_explains_its_figures.sql` section 5, which
+ *     can hold a bill and its payment in one transaction — the deferred
+ *     payment-total guard makes that impossible over two PostgREST requests.
+ *
+ *   * `cashExpensesSinceCount` was the literal `0`, which one real expense is
+ *     enough to falsify.
+ */
+describe('the counts beside the figures come from the grouped reads', () => {
+  it('reconciles both breakdowns to their own tiles, and counts a real expense', async () => {
+    const owner = await signIn(EMAILS.superAdmin)
+
+    // An anchor at Kanchrapara, so there is an interval to read. Recorded
+    // through the command, because no client may write the table.
+    const anchorAt = freshInstant()
+    const { error: anchorError } = await owner.rpc('record_drawer_observation', {
+      p_outlet_id: OUTLETS.kanchrapara,
+      p_counted_at: anchorAt,
+      p_counted_total_paise: 500000,
+      p_certain: false,
+      p_lat: 22.9345,
+      p_lng: 88.42,
+      p_accuracy_m: 10,
+      p_away_reason: 'probe',
+    })
+    expect(anchorError).toBeNull()
+
+    // A cash expense inside the interval, written the way the live Expenses
+    // surface writes one. On the tree the drawer reported nought expenses
+    // whatever this row said.
+    const { error: expenseError } = await owner.from('manual_ledger_expenses').insert({
+      outlet_id: OUTLETS.kanchrapara,
+      business_date: resolveBusinessDate(new Date(), '04:00'),
+      category: PROBE_DRAWER_EXPENSE,
+      amount_paise: 47500,
+      is_cash: true,
+      occurred_at: new Date(Date.parse(anchorAt) + 1000).toISOString(),
+    } as never)
+    expect(expenseError).toBeNull()
+
+    const drawer = createSupabaseCashDrawerAdapter(owner)
+    const state = await drawer.getState(OUTLETS.kanchrapara)
+
+    // The literal nought, gone.
+    expect(state.cashExpensesSinceCount).toBeGreaterThanOrEqual(1)
+    expect(state.cashExpensesSincePaise).toBeGreaterThanOrEqual(47500)
+
+    // **And each breakdown adds up to the tile it explains** (design D8).
+    // Summed here, in the test, precisely because nothing in the app is allowed
+    // to: the groups and the scalar come from one predicate a `group by` apart,
+    // and this is what proves the two have not parted company over the wire.
+    expect(state.cashExpensesByDay.reduce((sum, day) => sum + day.paise, 0)).toBe(
+      state.cashExpensesSincePaise,
+    )
+    expect(state.cashExpensesByDay.reduce((sum, day) => sum + day.rows, 0)).toBe(
+      state.cashExpensesSinceCount,
+    )
+    expect(state.receiptsByDay.reduce((sum, day) => sum + day.paise, 0)).toBe(
+      state.cashReceiptsSincePaise,
+    )
+    expect(state.receiptsByDay.reduce((sum, day) => sum + day.bills, 0)).toBe(
+      state.cashReceiptsSinceCount,
+    )
+
+    // Every group is a business date, resolved by the database through the
+    // outlet's own cutover rather than by a constant in the adapter.
+    for (const day of [...state.receiptsByDay, ...state.cashExpensesByDay]) {
+      expect(day.businessDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    }
+
+    // The nearby list keeps its cap: it serves the movable boundary and the
+    // coincidence report, and is deliberately not a complete set.
+    expect(state.nearbyCashBills.length).toBeLessThanOrEqual(12)
+  })
+
+  it('edits the newest count in full, and leaves the note alone when it is not touched', async () => {
+    const owner = await signIn(EMAILS.superAdmin)
+
+    // Three ticks of the cursor, so the count lands a comfortable few seconds
+    // after whatever this file counted last and the boundary below has somewhere
+    // to move to without colliding with its predecessor.
+    freshInstant()
+    freshInstant()
+    const countedAt = freshInstant()
+    const { data: recorded, error: recordError } = await owner.rpc('record_drawer_observation', {
+      p_outlet_id: OUTLETS.kanchrapara,
+      p_counted_at: countedAt,
+      p_counted_total_paise: 610000,
+      p_certain: false,
+      p_lat: 22.9345,
+      p_lng: 88.42,
+      p_accuracy_m: 10,
+      p_away_reason: 'probe',
+      p_note: 'the note that must survive',
+    })
+    expect(recordError).toBeNull()
+    const observationId = (recorded as unknown as { id: string }).id
+    const expectedBefore = (recorded as unknown as { expected_paise: number | null }).expected_paise
+
+    const drawer = createSupabaseCashDrawerAdapter(owner)
+
+    // An amount-only edit. **This is the live bug**: the adapter sent no note
+    // and the command assigned one unconditionally, so every typo correction
+    // silently cleared the note.
+    const amountOnly = await drawer.editObservation(observationId, {
+      countedTotalPaise: 605000,
+    })
+    expect(amountOnly.countedTotalPaise).toBe(605000)
+    expect(amountOnly.note).toBe('the note that must survive')
+    expect(amountOnly.expectedPaise).toBe(expectedBefore)
+    // Compared as instants: PostgREST renders `+00:00` where the client wrote
+    // `Z`, and a string comparison would be about the serialisation.
+    expect(Date.parse(amountOnly.countedAt)).toBe(Date.parse(countedAt))
+
+    // Moving the instant recomputes what the count is measured against.
+    const movedTo = new Date(Date.parse(countedAt) - 1_500).toISOString()
+    const moved = await drawer.editObservation(observationId, {
+      countedTotalPaise: 605000,
+      countedAt: movedTo,
+    })
+    expect(Date.parse(moved.countedAt)).toBe(Date.parse(movedTo))
+    expect(moved.note).toBe('the note that must survive')
+    if (moved.expectedPaise !== null) {
+      expect(moved.differencePaise).toBe(moved.countedTotalPaise - moved.expectedPaise)
+    }
+
+    // And the bounds a recorded instant carries apply to a moved one.
+    await expect(
+      drawer.editObservation(observationId, {
+        countedTotalPaise: 605000,
+        countedAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+      }),
+    ).rejects.toThrow(/future/i)
   })
 })

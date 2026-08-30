@@ -3968,6 +3968,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      drawer_cash_expenses_by_day: {
+        Args: { p_from: string; p_outlet_id: string; p_to: string }
+        Returns: {
+          business_date: string
+          paise: number
+          rows: number
+        }[]
+      }
       drawer_cash_expenses_paise: {
         Args: { p_from: string; p_outlet_id: string; p_to: string }
         Returns: number
@@ -3980,6 +3988,14 @@ export type Database = {
           p_to: string
         }
         Returns: number
+      }
+      drawer_cash_receipts_by_day: {
+        Args: { p_from: string; p_outlet_id: string; p_to: string }
+        Returns: {
+          bills: number
+          business_date: string
+          paise: number
+        }[]
       }
       drawer_cash_receipts_paise: {
         Args: { p_from: string; p_outlet_id: string; p_to: string }
@@ -4013,6 +4029,7 @@ export type Database = {
       }
       edit_drawer_observation: {
         Args: {
+          p_counted_at?: string
           p_counted_total_paise: number
           p_note?: string
           p_observation_id: string

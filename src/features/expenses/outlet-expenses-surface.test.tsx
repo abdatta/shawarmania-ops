@@ -34,6 +34,7 @@ function expense(
     isCash: options.isCash ?? true,
     amountPaise,
     note: null,
+    occurredAt: null,
     createdAt: `${businessDate}T12:00:00.000Z`,
     updatedAt: `${businessDate}T12:00:00.000Z`,
     recordedBy: { id: 'someone-else', name: 'Another staff member' },

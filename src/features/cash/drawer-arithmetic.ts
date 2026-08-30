@@ -59,6 +59,34 @@ function toNearby(bills: readonly NearbyCashBillRecord[]): NearbyCashBill[] {
 }
 
 /**
+ * The nearby cash bills whose payment instant falls in `(after, until]`.
+ *
+ * **One predicate, used by both movable boundaries.** The count sheet moves the
+ * boundary of an interval that has not closed yet; the edit sheet moves the
+ * boundary of one that has. They ask about different pairs of instants and must
+ * not answer with two different filters — a half-open lower bound and a closed
+ * upper one, on `nearbyCashBills`, is the whole of the rule.
+ *
+ * `nearbyCashBills` is deliberately a bounded window rather than a complete set:
+ * it is evidence for a person to recognise, not an aggregate. The totals on the
+ * card come from the database.
+ */
+function billsBetween(
+  bills: readonly NearbyCashBillRecord[],
+  after: number,
+  until: number,
+): { paise: number; bills: number } {
+  const matching = bills.filter((bill) => {
+    const at = new Date(bill.paidAt).getTime()
+    return at > after && at <= until
+  })
+  return {
+    paise: matching.reduce((sum, bill) => sum + bill.cashPaise, 0),
+    bills: matching.length,
+  }
+}
+
+/**
  * Recompute what is expected at a candidate count instant, from the same figures
  * the surface is showing.
  *
@@ -77,22 +105,58 @@ export function expectedAtInstant(
   const previous = new Date(state.lastObservation.countedAt).getTime()
   const boundary = countedAt.getTime()
 
-  const excluded = state.nearbyCashBills.filter((bill) => {
-    const at = new Date(bill.paidAt).getTime()
-    return at > previous && at > boundary
-  })
-  const excludedPaise = excluded.reduce((sum, bill) => sum + bill.cashPaise, 0)
+  // Everything the pending interval holds after the candidate instant: the
+  // interval runs to now, so `Infinity` is its upper bound.
+  const excluded = billsBetween(state.nearbyCashBills, Math.max(previous, boundary), Infinity)
 
   return {
     expectedPaise: expectedTotalPaise({
       openingPaise: state.leftInDrawerPaise,
-      cashReceiptsPaise: state.cashReceiptsSincePaise - excludedPaise,
+      cashReceiptsPaise: state.cashReceiptsSincePaise - excluded.paise,
       cashExpensesPaise: state.cashExpensesSincePaise,
       cashOutPaise: state.cashOutSincePaise,
     }),
-    excludedPaise,
-    excludedBills: excluded.length,
+    excludedPaise: excluded.paise,
+    excludedBills: excluded.bills,
   }
+}
+
+/**
+ * What moving an already-recorded count's instant does to it.
+ *
+ * The edit sheet's half of the movable boundary. It asks a different question
+ * from `expectedAtInstant` — that one bounds the interval still running, this one
+ * bounds one that closed — but through the same predicate above, so the two
+ * cannot disagree about what `(a, b]` means.
+ *
+ * Moving the instant **earlier** puts the cash rung between the two instants
+ * outside the count; moving it **later** brings that cash in. Both are worth
+ * saying out loud, because the recorder is about to change what their count is
+ * measured against and the sentence is the only place that shows.
+ *
+ * **The database is what actually recomputes the expected total**, by calling the
+ * three interval readers. This is the sentence, from the bills the surface is
+ * already holding as evidence, and it is deliberately not a second arithmetic.
+ */
+export function boundaryMove(
+  state: DrawerState,
+  from: Date,
+  to: Date,
+): { direction: 'out' | 'in' | 'none'; paise: number; bills: number } {
+  const before = from.getTime()
+  const after = to.getTime()
+  if (!Number.isFinite(after) || before === after) {
+    return { direction: 'none', paise: 0, bills: 0 }
+  }
+
+  const moved = billsBetween(
+    state.nearbyCashBills,
+    Math.min(before, after),
+    Math.max(before, after),
+  )
+  if (moved.bills === 0) return { direction: 'none', paise: 0, bills: 0 }
+
+  return { direction: after < before ? 'out' : 'in', paise: moved.paise, bills: moved.bills }
 }
 
 /**
