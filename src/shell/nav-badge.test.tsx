@@ -142,9 +142,25 @@ describe('the mechanism, rather than this one badge', () => {
     const declared = surfaces.map((surface) => surface.nav?.attention).filter((id) => id != null)
     expect(declared.length).toBeGreaterThan(0)
     for (const id of declared) expect(ATTENTION_SOURCES[id]).toBeTypeOf('function')
-    // The map is keyed by the id union, so a source with no registry entry would
-    // be dead code and a registry entry with no source would not compile.
-    expect(Object.keys(ATTENTION_SOURCES).sort()).toEqual([...new Set(declared)].sort())
+
+    /*
+     * And nothing in the map is dead. The registry side is free — the map is
+     * keyed by the id union, so an entry naming a source nobody wrote would not
+     * compile — but the other direction needs asserting, or a source outlives
+     * the entry that used it and nothing says so.
+     *
+     * **One kind of source is legitimately not on a navigation entry**, and it
+     * is named here rather than the rule being loosened: a badged surface that
+     * shows one scope at a time decomposes its badge onto the control that
+     * switches scopes, and each scope's count is a source of its own
+     * (attention-badges, #48). `delivery-needs-you` is the entry's sum; these
+     * two are the shares the channel switch shows. Removing the switch without
+     * removing them fails here, which is the point.
+     */
+    const decomposed = ['swiggy-needs-you', 'zomato-needs-you']
+    expect(Object.keys(ATTENTION_SOURCES).sort()).toEqual(
+      [...new Set([...declared, ...decomposed])].sort(),
+    )
   })
 
   it('keeps both shells ignorant of what is being counted', () => {

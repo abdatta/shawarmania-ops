@@ -1,4 +1,4 @@
-import type { RouteObject } from 'react-router'
+import { Navigate, type RouteObject } from 'react-router'
 
 import { AccountsSurface } from '@/features/accounts/accounts-surface'
 import { AlertsSurface } from '@/features/alerts/alerts-surface'
@@ -23,8 +23,7 @@ import { MovementLedger } from '@/features/inventory/movement-ledger'
 import { MenuSurface } from '@/features/menu/menu-surface'
 import { OutletsSurface } from '@/features/outlets/outlets-surface'
 import { RoleHome } from '@/features/overview/role-home'
-import { ZomatoSyncSurface } from '@/features/zomato-sync/zomato-sync-surface'
-import { SwiggySyncSurface } from '@/features/aggregator-sync/swiggy-sync-surface'
+import { DeliverySyncSurface } from '@/features/aggregator-sync/delivery-sync-surface'
 
 import { GatedSurface } from './gated-surface'
 import { NotFound } from './not-found'
@@ -163,8 +162,8 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
-    // The derived Ledger owns `ledger`; expenses and channel readings are its
-    // neighbouring operational views.
+    // The derived Ledger owns `ledger`; Expenses and the Delivery channels are
+    // its neighbouring operational views, nested beneath it in the sidebar.
     path: 'ledger',
     element: (
       <GatedSurface path="ledger">
@@ -190,24 +189,40 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
-    path: 'ledger/zomato',
+    // One Delivery entry for every restaurant channel (#48). The nav entry
+    // points here, with no channel named; the surface resolves one and rewrites
+    // the address to say which.
+    path: 'ledger/delivery',
     element: (
-      <GatedSurface path="ledger/zomato">
-        <ZomatoSyncSurface />
+      <GatedSurface path="ledger/delivery">
+        <DeliverySyncSurface />
       </GatedSurface>
     ),
   },
   {
-    // The Swiggy page of the shared sync surface, behind its own gate and its
-    // own attention key: an independent channel whose waiting work is neither
-    // created nor cleared by anything on the Zomato page.
-    path: 'ledger/swiggy',
+    // The channel is in the route, so a badge, a link or a returning reader
+    // lands on the channel the work is actually on. Gated against the parent
+    // pattern, the way `inventory/:itemId` already is: the gate is a question
+    // about the surface, not about which of its addresses is being opened.
+    path: 'ledger/delivery/:channel',
     element: (
-      <GatedSurface path="ledger/swiggy">
-        <SwiggySyncSurface />
+      <GatedSurface path="ledger/delivery">
+        <DeliverySyncSurface />
       </GatedSurface>
     ),
   },
+  /*
+   * The two addresses the merged entry replaced.
+   *
+   * `owner-zomato-sync` and `owner-swiggy-sync` are `hidden`, and a hidden gate
+   * renders NotFound — so these redirects sit OUTSIDE `GatedSurface`, which is
+   * the only way they can resolve at all. There was no redirect precedent in
+   * this file; it is preferred to answering a URL the owner may well have on
+   * their phone with a 404, and each lands on the channel it names rather than
+   * on whatever the arrival rule would have picked.
+   */
+  { path: 'ledger/zomato', element: <Navigate to="../ledger/delivery/zomato" replace /> },
+  { path: 'ledger/swiggy', element: <Navigate to="../ledger/delivery/swiggy" replace /> },
   {
     // One path, two roles: `admin-devices` carries navigation and
     // `owner-devices` deliberately does not. Both reach this component, and the

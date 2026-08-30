@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, Route, Routes } from 'react-router'
 
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
@@ -11,8 +11,8 @@ import { SessionContext } from '@/session/context'
 import { demoSessionFor } from '@/test/session'
 import { chooseOutlet } from '@/test/outlet-scope'
 
+import { DeliverySyncSurface } from './delivery-sync-surface'
 import { needsOwner } from './needs-you-count'
-import { SwiggySyncSurface } from './swiggy-sync-surface'
 
 /**
  * The Swiggy page's own claims, on top of everything the shared surface is
@@ -32,12 +32,19 @@ import { SwiggySyncSurface } from './swiggy-sync-surface'
  * all — the state a new restaurant reference starts in.
  */
 
+/**
+ * Mounted at the channel's real address, through the merged container (#48).
+ * The channel comes from the route rather than from a prop, so this renders the
+ * Swiggy channel for the same reason the app does.
+ */
 async function renderSurface(outletId: string, adapters = createMockAdapters('super_admin')) {
   const view = render(
-    <MemoryRouter initialEntries={['/demo/owner/ledger/swiggy']}>
+    <MemoryRouter initialEntries={['/demo/owner/ledger/delivery/swiggy']}>
       <SessionContext.Provider value={demoSessionFor('super_admin')}>
         <AdaptersContext.Provider value={adapters}>
-          <SwiggySyncSurface />
+          <Routes>
+            <Route path="/demo/owner/ledger/delivery/:channel" element={<DeliverySyncSurface />} />
+          </Routes>
         </AdaptersContext.Provider>
       </SessionContext.Provider>
     </MemoryRouter>,

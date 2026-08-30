@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router'
 
 import { PageHeader } from '@/components/layout/page-header'
@@ -68,7 +68,31 @@ export function readAgainInHours(health: AggregatorSyncHealth, now = Date.now())
   return Math.max(1, Math.ceil(READ_AGAIN_AFTER_HOURS - since))
 }
 
-export function AggregatorSyncSurface({ config }: { config: AggregatorChannelConfig }) {
+export function AggregatorSyncSurface({
+  config,
+  heading,
+  channelSwitch,
+}: {
+  config: AggregatorChannelConfig
+  /**
+   * The word at the top of the page. Defaults to the channel's own.
+   *
+   * The Delivery container overrides it, because the switch directly below
+   * already names the channel and a header repeating it is a wasted line on a
+   * phone — two rows of controls sit between the title and the first figure as
+   * it is.
+   */
+  heading?: string
+  /**
+   * Which channel this screen is about, rendered directly under the header.
+   *
+   * Above the loading block rather than inside the loaded body, so switching
+   * channels moves the selection immediately and the panel beneath it fills in
+   * afterwards. A switch that disappeared while its own channel loaded would be
+   * a control that cannot be used twice in a row.
+   */
+  channelSwitch?: ReactNode
+}) {
   const adapter = config.adapter
   const { pathname } = useLocation()
 
@@ -340,7 +364,13 @@ export function AggregatorSyncSurface({ config }: { config: AggregatorChannelCon
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader scope={outletSelector} title={config.title} subtitle={config.subtitle} />
+      <PageHeader
+        scope={outletSelector}
+        title={heading ?? config.title}
+        subtitle={config.subtitle}
+      />
+
+      {channelSwitch}
 
       {error && (
         <p className="mb-4 rounded-md border border-danger/40 bg-danger/5 p-3 text-sm text-content">

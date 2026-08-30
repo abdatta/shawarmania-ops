@@ -169,17 +169,78 @@ describe('gate registry', () => {
     }
   })
 
-  it('makes the independently verified Swiggy controls reachable to owners in real mode', () => {
-    const swiggy = surfaces.find((surface) => surface.id === 'owner-swiggy-sync')
+  it('makes the delivery channels reachable to owners in real mode, through one entry', () => {
+    const delivery = surfaces.find((surface) => surface.id === 'owner-delivery-sync')
 
-    expect(swiggy).toMatchObject({
+    expect(delivery).toMatchObject({
       role: 'super_admin',
-      path: 'ledger/swiggy',
+      // The gate's path is the surface, and the channel is a parameter beneath
+      // it — `ledger/delivery/:channel` resolves against this entry, the way
+      // `inventory/:itemId` resolves against `inventory`. Navigation needs an
+      // entry point it can build a link to, and a path carrying `:channel` is
+      // not one.
+      path: 'ledger/delivery',
       state: 'live',
     })
     expect(visibleSurfaces(['super_admin'], 'real').map((surface) => surface.id)).toContain(
-      'owner-swiggy-sync',
+      'owner-delivery-sync',
     )
+  })
+
+  it('offers the owner exactly one restaurant-channel entry, in both modes', () => {
+    // The merge (#48) is only worth anything if it actually costs one tab
+    // rather than adding a third. The per-channel gates are kept — `hidden`,
+    // not deleted — so nothing but this assertion stops one drifting back into
+    // navigation.
+    for (const mode of ['demo', 'real'] as const) {
+      const nav = visibleSurfaces(['super_admin'], mode)
+      const channels = nav.filter((surface) => surface.path.startsWith('ledger/delivery'))
+      expect(
+        channels.map((surface) => surface.id),
+        mode,
+      ).toEqual(['owner-delivery-sync'])
+      expect(
+        nav.map((surface) => surface.nav?.label),
+        mode,
+      ).not.toContain('Zomato')
+      expect(
+        nav.map((surface) => surface.nav?.label),
+        mode,
+      ).not.toContain('Swiggy')
+    }
+  })
+
+  it('resolves no delivery sync surface inside the manager’s shell, in any mode', () => {
+    /*
+     * Carried here when `retire-the-manual-ledger` (#12) deleted
+     * `src/data-access/mock/swiggy-admin.test.ts`, which had held it.
+     *
+     * That file was mostly about reading a settlement through the manual
+     * ledger, which no longer exists — but this one assertion never belonged to
+     * the ledger at all. These tables carry settlement money and the decisions
+     * taken about it, and NO outlet role reaches them at any outlet including
+     * their own. The database enforces that; this stops a manager being offered
+     * a door the policies would then slam.
+     */
+    for (const mode of ['demo', 'real'] as const) {
+      const reached = visibleSurfaces(['franchise_admin'], mode, ['franchise_admin']).map(
+        (surface) => surface.id,
+      )
+      for (const id of ['owner-delivery-sync', 'owner-zomato-sync', 'owner-swiggy-sync']) {
+        expect(reached, `${id} in ${mode}`).not.toContain(id)
+      }
+    }
+  })
+
+  it('keeps the retired per-channel gates present, hidden, and out of navigation', () => {
+    // Not deleted, deliberately — `admin-daily-cash`'s convention. The routes
+    // they name are redirects now, and the cheaper lever for withholding one
+    // channel is its config rather than its gate (design D9).
+    for (const id of ['owner-zomato-sync', 'owner-swiggy-sync'] as const) {
+      const retired = surfaces.find((surface) => surface.id === id)
+      expect(retired?.state, id).toBe('hidden')
+      expect(retired?.nav, id).toBeUndefined()
+    }
   })
 })
 

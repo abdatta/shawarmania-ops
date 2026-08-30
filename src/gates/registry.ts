@@ -49,6 +49,11 @@ export type GateState = 'hidden' | 'demo' | 'live'
 export type AttentionSourceId =
   | 'attendance-waiting'
   | 'counter-request-waiting'
+  // What the Delivery entry badges: the sum across every restaurant channel it
+  // can reach. The two below are the same counts undivided, and they stay —
+  // they are what the channel switch decomposes the sum onto, so no waiting
+  // work sits invisibly behind an unselected channel (attention-badges).
+  | 'delivery-needs-you'
   | 'zomato-needs-you'
   // Independent of `zomato-needs-you` by construction: Swiggy's waiting work
   // lives in Swiggy's rows, read through Swiggy's adapter instance, so one
@@ -198,7 +203,7 @@ const defs = {
     role: 'super_admin',
     // `ledger`, because this IS the Ledger now. The sidebar nests a `ledger/*`
     // entry under the `ledger` entry, so whichever surface holds this path
-    // becomes the parent of Expenses, Zomato, Swiggy and the notebook. Leaving it
+    // becomes the parent of Expenses, Delivery and the notebook. Leaving it
     // on the notebook rendered three live surfaces as children of the one being
     // retired.
     path: 'ledger',
@@ -239,42 +244,62 @@ const defs = {
     state: 'live',
   },
   /**
-   * What the Zomato sync did, and the two things the owner can do about it (#42).
+   * What the restaurant delivery channels' sync did, and what needs the owner
+   * about it (#42, #47, #48).
    *
-   * `demo` while the screens are argued with. The owner asked to approve the
-   * experience before a live merchant credential is handed to anything, which is
-   * this repo's ordinary delivery model and matters more than usual here: the
-   * states worth designing for are the ones the live account will not produce on
-   * cue. A week that would not reconcile happened once in eight.
+   * **One entry for both channels.** Zomato and Swiggy have been one component
+   * since #47 — the whole difference between them is a title, an icon, a few
+   * sentences and whether Hyperpure rides along — and two navigation rows for
+   * one screen cost the owner two of their twelve tabs. The channel is chosen on
+   * the surface and carried in the route, so a badge, a link or a returning
+   * reader lands on the channel the work is actually on.
    *
    * It carries navigation because a surface that only reports failures still has
    * to be findable before one happens. It sits after the Ledger it explains.
+   *
+   * The badge is the sum across both channels, and the switch on the surface
+   * decomposes it — see `delivery-needs-you` above.
+   */
+  'owner-delivery-sync': {
+    role: 'super_admin',
+    // The surface's address; the channel is a parameter beneath it, resolved
+    // against this pattern the way `inventory/:itemId` resolves against
+    // `inventory`. A gate is a question about the surface, not about which of
+    // its addresses is open — and navigation needs an entry point it can build
+    // a link to, which a path carrying `:channel` is not.
+    path: 'ledger/delivery',
+    nav: { label: 'Delivery', icon: Bike, order: 8, attention: 'delivery-needs-you' },
+    // Live [owner, 2026-08-18 for Zomato; #47 for Swiggy]. The ledger already
+    // fills itself from both; this is the page that says when each last ran,
+    // what moved, and what wants a decision — including the Reconnect the owner
+    // needs when a session lapses, which is the one repair they cannot make
+    // anywhere else.
+    state: 'live',
+  },
+  /**
+   * The two per-channel entries `owner-delivery-sync` replaced (#48).
+   *
+   * Not deleted, deliberately — the convention `admin-daily-cash` states. What
+   * two gates bought was promoting or demoting one channel without the other,
+   * and that is worth nothing today: both are live and both are reached through
+   * the one entry above. **If it is ever needed the cheaper lever is not the
+   * registry** — a channel is data in
+   * `src/features/aggregator-sync/channel-config.ts`, so it can be withheld by
+   * not building its config, with no route, gate or badge involved (design D9).
+   *
+   * `hidden` means the old paths stop resolving on their own, so `surfaces.tsx`
+   * redirects `ledger/zomato` and `ledger/swiggy` into the merged route rather
+   * than answering a URL the owner may have on their phone with a 404.
    */
   'owner-zomato-sync': {
     role: 'super_admin',
     path: 'ledger/zomato',
-    nav: { label: 'Zomato', icon: Bike, order: 8, attention: 'zomato-needs-you' },
-    // Live [owner, 2026-08-18]. The ledger already fills itself from Zomato; this is
-    // the page that says when it last ran, what moved, and what wants a decision —
-    // including the Reconnect the owner needs when a session lapses, which is the one
-    // repair they cannot make anywhere else.
-    state: 'live',
+    state: 'hidden',
   },
-  /**
-   * What the Swiggy sync did, and what needs you about it (#47).
-   *
-   * Live because the browser-free reader has completed its production
-   * no-write rehearsal and a scheduled write from the captured session. It carries
-   * navigation for the same reason Zomato's does — a surface has to be
-   * findable before its first failure — and an attention key of its own,
-   * because Swiggy's session is independent of Zomato's and its waiting work
-   * can neither be created nor cleared by anything on the Zomato page.
-   */
   'owner-swiggy-sync': {
     role: 'super_admin',
     path: 'ledger/swiggy',
-    nav: { label: 'Swiggy', icon: UtensilsCrossed, order: 9, attention: 'swiggy-needs-you' },
-    state: 'live',
+    state: 'hidden',
   },
   /**
    * The owner's counterpart to `admin-devices`, across every outlet.

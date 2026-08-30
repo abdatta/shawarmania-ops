@@ -1,6 +1,10 @@
 import { useWaitingAttention } from '@/features/attendance/waiting-counts'
 import { useCounterRequestAttention } from '@/features/counter/use-counter-handshake'
-import { useSwiggyAttention, useZomatoAttention } from '@/features/aggregator-sync/needs-you-count'
+import {
+  useDeliveryAttention,
+  useSwiggyAttention,
+  useZomatoAttention,
+} from '@/features/aggregator-sync/needs-you-count'
 import type { AttentionSourceId } from '@/gates/registry'
 
 import type { AttentionSource } from './attention'
@@ -16,6 +20,10 @@ import type { AttentionSource } from './attention'
 export const ATTENTION_SOURCES: Record<AttentionSourceId, AttentionSource> = {
   'attendance-waiting': useWaitingAttention,
   'counter-request-waiting': useCounterRequestAttention,
+  // The navigation entry's sum, and the two parts the channel switch shows
+  // beside it. All three stay: the sum is what the tab badges, and the parts are
+  // what stop it hiding one channel's work behind the other's selection.
+  'delivery-needs-you': useDeliveryAttention,
   'zomato-needs-you': useZomatoAttention,
   'swiggy-needs-you': useSwiggyAttention,
 }

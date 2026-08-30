@@ -58,6 +58,28 @@ export function useSwiggyAttention(): Attention | null {
 }
 
 /**
+ * What the one Delivery entry badges: every restaurant channel it can reach.
+ *
+ * The sum, because the entry leads to all of them and a badge that counted only
+ * the channel the reader happens to land on would hide the other one's work
+ * behind a switch — the same defect the outlet chips were built to avoid, one
+ * level up. The switch on the surface carries the same two numbers undivided,
+ * so the sum is never a figure the reader has to go hunting for the parts of
+ * (spec: attention-badges).
+ *
+ * Null until BOTH channels have answered. A partial sum is a wrong number, and
+ * a wrong number on a badge is worse than no badge: it would settle to a
+ * different value a moment later with nothing to say it had.
+ */
+export function useDeliveryAttention(): Attention | null {
+  const zomato = useZomatoAttention()
+  const swiggy = useSwiggyAttention()
+  if (zomato === null || swiggy === null) return null
+  const total = zomato.count + swiggy.count
+  return { count: total, label: zomatoAttentionLabel(total) }
+}
+
+/**
  * The sentence somebody hears instead of seeing the number.
  *
  * It does not name the surface, because the shell already puts the tab's label

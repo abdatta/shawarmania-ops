@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, Route, Routes } from 'react-router'
 
 import type { AggregatorSyncHealth } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
@@ -12,8 +12,9 @@ import { SessionContext } from '@/session/context'
 import { chooseOutlet } from '@/test/outlet-scope'
 import { demoSessionFor } from '@/test/session'
 
+import { readAgainInHours } from './aggregator-sync-surface'
+import { DeliverySyncSurface } from './delivery-sync-surface'
 import { needsOwner } from './needs-you-count'
-import { readAgainInHours, ZomatoSyncSurface } from './zomato-sync-surface'
 
 /**
  * The two claims this surface makes that are easy to break and hard to notice.
@@ -39,12 +40,14 @@ async function renderSurface(outletId: string, adapters?: ReturnType<typeof crea
     // At its real address, because the ledger link is derived from it: the role
     // segment differs per shell and demo mode carries the persona in the URL, so
     // a hard-coded path would walk the reader into somebody else's shell.
-    <MemoryRouter initialEntries={['/demo/owner/ledger/zomato']}>
+    <MemoryRouter initialEntries={['/demo/owner/ledger/delivery/zomato']}>
       <SessionContext.Provider value={demoSessionFor('super_admin')}>
         {/* Shared when given, so a test can leave the page and come back to the
             same underlying state — which is the thing navigation loses. */}
         <AdaptersContext.Provider value={adapters ?? createMockAdapters('super_admin')}>
-          <ZomatoSyncSurface />
+          <Routes>
+            <Route path="/demo/owner/ledger/delivery/:channel" element={<DeliverySyncSurface />} />
+          </Routes>
         </AdaptersContext.Provider>
       </SessionContext.Provider>
     </MemoryRouter>,
