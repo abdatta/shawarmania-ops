@@ -85,6 +85,7 @@ describe('the Swiggy sync surface', () => {
             awaitingOneTimePassword: null,
             hasSession: false,
             syncedFrom: null,
+            readsPerDay: 4,
           }
         },
         async listEvents() {
@@ -114,6 +115,7 @@ describe('the Swiggy sync surface', () => {
             awaitingOneTimePassword: null,
             hasSession: false,
             syncedFrom: '2026-08-01',
+            readsPerDay: 4,
           }
         },
         async listEvents() {
@@ -133,7 +135,11 @@ describe('the Swiggy sync surface', () => {
 
     expect(await screen.findByRole('button', { name: /paid/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /revised from .* to /i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /does not add up/i })).toBeInTheDocument()
+    // More than one cycle is off here since the demo grid was made asymmetric,
+    // so the counts on the chips and the switch can be told apart by eye. Any
+    // of them proves the disputed state renders; the count itself belongs to
+    // the badge tests.
+    expect(screen.getAllByRole('button', { name: /does not add up/i }).length).toBeGreaterThan(0)
 
     // Both decisions exist here exactly as they do on Zomato's page, because
     // the reconciliation gate is the capability, not a channel detail.
@@ -149,9 +155,13 @@ describe('the Swiggy sync surface', () => {
     // Different stories by design: Swiggy waits at both outlets (a disputed
     // cycle at the connected one, a lapsed session at the other), and Zomato
     // waits on its own rows. A shared counter would show either everywhere.
-    expect(swiggyCounts.find((entry) => entry.outletId === OUTLET_KALYANI_ID)?.needing).toBe(1)
-    expect(swiggyCounts.find((entry) => entry.outletId === OUTLET_KANCHRAPARA_ID)?.needing).toBe(2)
-    void zomatoCounts
+    // The demo's four channel-by-outlet counts are deliberately 1, 2, 3 and 4,
+    // so no two cells share a digit and the chip arithmetic can be read straight
+    // off the screen. Swiggy holds the two larger ones.
+    expect(swiggyCounts.find((entry) => entry.outletId === OUTLET_KALYANI_ID)?.needing).toBe(3)
+    expect(swiggyCounts.find((entry) => entry.outletId === OUTLET_KANCHRAPARA_ID)?.needing).toBe(4)
+    expect(zomatoCounts.find((entry) => entry.outletId === OUTLET_KALYANI_ID)?.needing).toBe(1)
+    expect(zomatoCounts.find((entry) => entry.outletId === OUTLET_KANCHRAPARA_ID)?.needing).toBe(2)
 
     // And resolving Zomato's work moves Zomato's number alone: the two channels
     // share no store, so one side's repair cannot quiet the other's badge.
@@ -166,7 +176,7 @@ describe('the Swiggy sync surface', () => {
       )
     }
     const swiggyAfter = await adapters.swiggySync.countNeedsOwner()
-    expect(swiggyAfter.find((entry) => entry.outletId === OUTLET_KALYANI_ID)?.needing).toBe(1)
+    expect(swiggyAfter.find((entry) => entry.outletId === OUTLET_KALYANI_ID)?.needing).toBe(3)
   }, 15_000)
 
   it('repairs its own lapsed session through its own code card', async () => {

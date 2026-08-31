@@ -38,6 +38,15 @@ import type { DemoStore } from './store'
  * than on finishing.
  */
 
+/**
+ * The cadence the demo's runners report, matching the real crons.
+ *
+ * Reported rather than left null, so the demo exercises the path a live run
+ * takes — the caption and the read-again lockout both read what the runner
+ * said, and a demo that left it unsaid would only ever show the fallback.
+ */
+const DEMO_READS_PER_DAY = 4
+
 /** Long enough to see, short enough to sit through. */
 const RUN_MILLISECONDS = 2_400
 const OTP_VALID_MILLISECONDS = 5 * 60 * 1000
@@ -96,6 +105,7 @@ function seedFor(
       kind: 'session-lapsed',
       detail: 'Swiggy ended this session. It needs a one time password to get back in.',
     })
+    seedSwiggyExtras(push, day)
     return events
   }
 
@@ -142,6 +152,7 @@ function seedFor(
         statedPayoutPaise: 1_516_759,
         differencePaise: -14_449,
       })
+      seedSwiggyExtras(push, day)
     }
   } else {
     push(20, {
@@ -162,6 +173,49 @@ function seedFor(
   }
 
   return events
+}
+
+/**
+ * Swiggy's second and third open matters, seeded at every outlet.
+ *
+ * **The counts in this demo are deliberately all different**: 1, 2, 3 and 4
+ * across the two channels and two outlets. They used to be 1, 2, 1, 2, which is
+ * symmetric — and a symmetric grid makes the outlet chips and the channel switch
+ * show identical digits whichever way round their arithmetic works. Nobody could
+ * read the rule off the screen, including the person who wrote it.
+ *
+ * Both of these are states Swiggy genuinely reaches. A second cycle off by a
+ * different amount is ordinary; and a Swiggy deduction can match a typed expense
+ * exactly as a Hyperpure invoice does, because both arrive as sourced rows
+ * against a ledger somebody also writes by hand.
+ */
+function seedSwiggyExtras(
+  push: (minutesAgo: number, event: AggregatorSyncEventRow['event']) => void,
+  day: (daysAgo: number) => string,
+) {
+  push(34, {
+    kind: 'week-disputed',
+    from: day(28),
+    to: day(22),
+    computedPaise: 1_476_005,
+    statedPayoutPaise: 1_479_120,
+    differencePaise: -3_115,
+  })
+  push(32, {
+    kind: 'possible-duplicate-expense',
+    typed: {
+      businessDate: day(9),
+      amountPaise: 120_000,
+      note: 'Swiggy ad campaign',
+      expenseId: 'demo-expense-typed-swiggy-ads',
+    },
+    synced: {
+      businessDate: day(10),
+      amountPaise: 118_400,
+      note: 'Swiggy promotion recovery SW-4471',
+      expenseId: 'demo-expense-synced-swiggy-ads',
+    },
+  })
 }
 
 export function createMockAggregatorSyncAdapter(
@@ -186,6 +240,10 @@ export function createMockAggregatorSyncAdapter(
     running: false,
     hasSession: false,
     sessionExpiresAt: null,
+    // What the real crons say today. The demo reports it the way a runner does,
+    // so the caption and the read-again lockout are exercised rather than
+    // falling through to the app's own constant.
+    readsPerDay: DEMO_READS_PER_DAY,
   }
 
   /** The capture landed or the login completed: the child rides the parent back to quiet. */
@@ -208,6 +266,7 @@ export function createMockAggregatorSyncAdapter(
         awaitingOneTimePassword: null,
         hasSession: healthy,
         syncedFrom: day(16),
+        readsPerDay: DEMO_READS_PER_DAY,
       },
       events: seedFor(outletId, healthy, at, day, channel),
       runs: seedRunHistory({ outletId, channel, at, day }),
@@ -282,6 +341,7 @@ export function createMockAggregatorSyncAdapter(
               detail: null,
               startedBy: 'owner',
               summary: null,
+              readsPerDay: DEMO_READS_PER_DAY,
             },
           ]
         : []

@@ -55,15 +55,27 @@ returns uuid[] language sql stable as $$
   select array['00000000-0000-4000-a000-000000000001'::uuid]
 $$;
 
--- One recorded day and one deliberately without, so the summary's
--- "dates_without_a_recorded_day" has something true to say.
-insert into public.manual_ledger_days
-  (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-   cash_revenue_paise, recorded_by)
+/*
+ * One counted day and one deliberately without, so the summary's
+ * "dates_without_a_recorded_day" has something true to say.
+ *
+ * A drawer observation rather than a recorded ledger day: `retire-the-manual-
+ * ledger` (#12) dropped `manual_ledger_days` and rewrote the ingest to ask the
+ * drawer which dates have been counted. The insert is the shape that change
+ * gave `33_aggregator_cycle_ingest.sql` for the same job, so the two tests seed
+ * a counted day the same way and the ingest sees what it expects.
+ */
+insert into public.drawer_observations
+  (outlet_id, counted_at, recorded_at, is_anchor, opening_paise,
+   expected_paise, difference_paise, counted_total_paise, is_approximate,
+   recorded_by, recorded_on_site, away_reason)
 values ('00000000-0000-4000-a000-000000000001',
-        public.app_business_date(now(), time '04:00') - 20,
-        500000, 500000, 0, '10000000-0000-4000-a000-000000000001')
-on conflict (outlet_id, business_date) do nothing;
+        (((public.app_business_date(now(), time '04:00') - 20) + time '20:00')
+          at time zone 'Asia/Kolkata'),
+        (((public.app_business_date(now(), time '04:00') - 20) + time '20:00')
+          at time zone 'Asia/Kolkata'),
+        false, 500000, 500000, 0, 500000, false,
+        '10000000-0000-4000-a000-000000000001', false, 'Synthetic test count');
 
 /*
  * Everything the two functions can write, photographed.
@@ -81,7 +93,7 @@ returns jsonb language sql as $$
        where t.outlet_id = '00000000-0000-4000-a000-000000000001'), '[]'::jsonb),
     'expenses', coalesce((
       select jsonb_agg(to_jsonb(e) - 'id' order by e.source_system, e.source_ref, e.business_date)
-        from public.manual_ledger_expenses e
+        from public.expenses e
        where e.outlet_id = '00000000-0000-4000-a000-000000000001'), '[]'::jsonb),
     'reconciliations', coalesce((
       select jsonb_agg(to_jsonb(r) - 'id' order by r.channel, r.operator_cycle_ref)
@@ -90,8 +102,17 @@ returns jsonb language sql as $$
 $$;
 
 -- ---------------------------------------------------------------------------
--- The frozen pre-change function, lifted verbatim. It is duplication, and it is
--- the point: a copy that drifted with the live one would assert nothing.
+-- The frozen pre-accumulator function.
+--
+-- **Dumped from the database rather than copied from a migration**, because no
+-- migration file holds this text: `retire_the_manual_ledger` produced it by
+-- reading the previous definition and rewriting two relations inside it. Taking
+-- it from `20260825000000` instead would freeze a version that still writes to
+-- tables the retirement dropped, and the comparison would fail for a reason
+-- that has nothing to do with what is under test.
+--
+-- It is duplication, and it is the point: a copy that drifted with the live one
+-- would assert nothing.
 
 create function pg_temp.ingest_before(
   p_payload jsonb,
@@ -100,7 +121,7 @@ create function pg_temp.ingest_before(
 returns jsonb
 language plpgsql
 set search_path = public
-as $$
+as $frozen$
 declare
   v_outlet uuid;
   v_channel text;
@@ -402,14 +423,19 @@ begin
   select string_agg(i.business_date::text, ', ' order by i.business_date) into v_unrecorded
     from ingest_days i
    where i.business_date >= v_synced_from
-     and not exists (select 1 from public.manual_ledger_days d
-                      where d.outlet_id = v_outlet and d.business_date = i.business_date);
+     and not exists (select 1 from public.drawer_observations observation
+                      join public.outlets outlet on outlet.id = observation.outlet_id
+                     where observation.outlet_id = v_outlet
+                       and public.app_business_date(
+                         observation.counted_at - case when observation.is_legacy_imprecise
+                           then interval '1 microsecond' else interval '0' end,
+                         outlet.business_day_cutover) = i.business_date);
   select count(*) into v_deductions_skipped
     from jsonb_array_elements(coalesce(p_payload -> 'deductions', '[]'::jsonb)) d
    where (d ->> 'spent_on')::date < v_synced_from
      and public.expense_category_reserved_owner(coalesce(nullif(d ->> 'category', ''), 'Other')) is null;
 
-  insert into public.manual_ledger_expenses
+  insert into public.expenses
     (outlet_id, business_date, category, is_cash, amount_paise, description,
      source_system, source_ref, recorded_by)
   select v_outlet, (d ->> 'spent_on')::date,
@@ -423,7 +449,7 @@ begin
                 business_date = excluded.business_date,
                 description = excluded.description,
                 category = excluded.category
-  where public.manual_ledger_expenses.voided_at is null;
+  where public.expenses.voided_at is null;
 
   insert into public.aggregator_cycle_deductions
     (outlet_id, channel, kind, period_start, period_end, amount_paise,
@@ -458,7 +484,7 @@ begin
     'stated_payout_paise', v_stated_payout,
     'difference_paise', v_difference);
 end;
-$$;
+$frozen$;
 
 -- ---------------------------------------------------------------------------
 -- The five fixture cycles, each a way a figure can or cannot move.
@@ -550,6 +576,13 @@ select is(
   jsonb_build_array(pg_temp.day(19)),
   'the day with no recorded ledger row is named, and the recorded one is not');
 
+-- What the run LOOKED AT, which is what makes "nothing moved" a sentence rather
+-- than a shrug. It cannot be worked out afterwards: the payload is gone.
+select is(
+  :'after_1'::jsonb -> 'summary' -> 'read',
+  jsonb_build_object('from', pg_temp.day(20), 'to', pg_temp.day(19), 'days', 2),
+  'the run reports the window it considered and how many days were in it');
+
 -- ---------------------------------------------------------------------------
 -- Case 2 — a revision.
 
@@ -625,6 +658,12 @@ select is(
   (:'after_5'::jsonb -> 'summary' -> 'cycles_settled')::text, '[]',
   'and re-reading a week already reconciled to the same payout says nothing about it');
 
+-- It still says it looked. A run over days it may not touch read them and found
+-- nothing to do, which is a different sentence from a run that read nothing.
+select is(
+  :'after_5'::jsonb -> 'summary' -> 'read' ->> 'days', '2',
+  'a run that wrote nothing still reports the window it considered');
+
 -- ---------------------------------------------------------------------------
 -- The supplier's side: only an order that landed or moved is counted.
 
@@ -660,8 +699,8 @@ select is(
 select lives_ok($$
   select public.record_aggregator_sync_run(
     '00000000-0000-4000-a000-000000000001', 'zomato', now(), 'ok', null, false,
-    'owner', '{"version":1,"days":[]}'::jsonb)
-$$, 'a run records how it began and what it changed');
+    'owner', '{"version":1,"days":[]}'::jsonb, 4)
+$$, 'a run records how it began, what it changed, and how often it is scheduled');
 
 select is(
   (select started_by from public.aggregator_sync_runs
@@ -674,6 +713,29 @@ select throws_ok($$
     (outlet_id, channel, started_at, outcome, started_by)
   values ('00000000-0000-4000-a000-000000000001', 'zomato', now(), 'ok', 'guessed')
 $$, '23514', null, 'a run cannot claim to have begun in a way the vocabulary does not have');
+
+-- ---------------------------------------------------------------------------
+-- And the cadence it ran under, parsed by the runner from its own cron.
+
+select is(
+  (select reads_per_day from public.aggregator_sync_runs
+    where outlet_id = '00000000-0000-4000-a000-000000000001' and reads_per_day is not null
+    order by created_at desc limit 1),
+  4, 'the cadence the runner reported is the cadence stored');
+
+select throws_ok($$
+  insert into public.aggregator_sync_runs
+    (outlet_id, channel, started_at, outcome, reads_per_day)
+  values ('00000000-0000-4000-a000-000000000001', 'zomato', now(), 'ok', 0)
+$$, '23514', null, 'a schedule that fires no times a day is a parse gone wrong, not a schedule');
+
+select throws_ok($$
+  insert into public.aggregator_sync_runs
+    (outlet_id, channel, started_at, outcome, reads_per_day)
+  values ('00000000-0000-4000-a000-000000000001', 'zomato', now(), 'ok', 1441)
+$$, '23514', null,
+  'and neither is one that fires every minute — the app would derive a nonsense '
+  'lockout from it and tell the owner something nobody set');
 
 select * from finish();
 rollback;

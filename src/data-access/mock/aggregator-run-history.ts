@@ -6,7 +6,7 @@ import type { AggregatorRunSummary, AggregatorSyncRunRow, AggregatorRunOutcome }
  *
  * **This fixture is the check on the rule this change overturns.** The spec
  * used to say a row is an event rather than a run, and gave a sound reason: two
- * channels reading twice a day is well over a hundred runs a month, nearly all
+ * channels reading four times a day is well over two hundred runs a month, nearly
  * of them quiet. What replaces that reason is compression plus laziness — so
  * the demo has to carry the case that would break it, not a tidy dozen.
  *
@@ -37,6 +37,7 @@ import type { AggregatorRunSummary, AggregatorSyncRunRow, AggregatorRunOutcome }
 /** Deterministic, so a walkthrough shows the same page twice. */
 function summary(parts: Partial<AggregatorRunSummary> = {}): AggregatorRunSummary {
   return {
+    read: null,
     days: [],
     cyclesSettled: [],
     supplyOrders: { added: 0, amended: 0 },
@@ -59,6 +60,39 @@ export function seedRunHistory({ outletId, channel, at, day }: Seed): Aggregator
   let serial = 0
 
   /**
+   * The window a scheduled read considers: the last week of trading, ending on
+   * the day it ran. Real runs read a rolling window rather than one day, which
+   * is why a quiet run has something to say at all.
+   *
+   * **Dated from the run's own calendar day in Kolkata, not from how long ago it
+   * was.** Two runs at 6 am and 3 pm on one day genuinely read the same window,
+   * and bucketing by elapsed hours split them either side of a 24-hour mark and
+   * invented a difference. That mattered on screen: the history only prints a
+   * run's window where it differs from the group's, so a fabricated difference
+   * showed up as an unexplained extra line inside a collapsed group.
+   */
+  const calendarDay = (iso: string) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(iso))
+
+  const daysBack = (iso: string) =>
+    Math.round(
+      (Date.parse(`${calendarDay(new Date().toISOString())}T00:00:00Z`) -
+        Date.parse(`${calendarDay(iso)}T00:00:00Z`)) /
+        86_400_000,
+    )
+
+  const readWindow = (daysAgo: number): AggregatorRunSummary['read'] => ({
+    from: day(daysAgo + 6),
+    to: day(daysAgo),
+    days: 7,
+  })
+
+  /**
    * One run, oldest first.
    *
    * `summary` defaults to the empty one — a run that ran and moved nothing —
@@ -67,7 +101,8 @@ export function seedRunHistory({ outletId, channel, at, day }: Seed): Aggregator
    * different sentence and the surface draws a line where it starts.
    */
   const run = (
-    minutesAgo: number,
+    /** Minutes ago, or an ISO instant where the clock time is load-bearing. */
+    when: number | string,
     outcome: AggregatorRunOutcome,
     extra: {
       detail?: string | null
@@ -77,21 +112,49 @@ export function seedRunHistory({ outletId, channel, at, day }: Seed): Aggregator
     } = {},
   ) => {
     serial += 1
+    const startedAt = typeof when === 'string' ? when : at(when)
     rows.push({
       id: `${channel}-${outletId}-run-${serial}`,
       outletId,
       channel,
-      startedAt: at(minutesAgo),
-      finishedAt: extra.running ? null : at(minutesAgo - 1),
+      startedAt,
+      finishedAt: extra.running ? null : new Date(Date.parse(startedAt) + 60_000).toISOString(),
       outcome,
       detail: extra.detail ?? null,
       startedBy: extra.startedBy === undefined ? 'schedule' : extra.startedBy,
-      summary: extra.summary === undefined ? summary() : extra.summary,
+      // The cadence each run ran under. Constant here, but recorded per run so
+      // that a schedule change leaves older rows saying what was true then.
+      readsPerDay: 4,
+      summary:
+        extra.summary !== undefined
+          ? extra.summary
+          : // **Only a run that got through reports a window.** The write
+            // contract builds its summary on the success path alone: a run that
+            // was signed out never reached the portal, and one refused over the
+            // payout returns before the day window is even computed. A failure
+            // claiming to have read a week would be the surface inventing work
+            // that did not happen.
+            outcome === 'ok'
+            ? summary({ read: readWindow(daysBack(startedAt)) })
+            : summary(),
     })
   }
 
   const HOUR = 60
   const DAY = 24 * HOUR
+
+  /**
+   * An instant at a fixed Kolkata clock time on a given day.
+   *
+   * **The storm below needs this and the rest of the fixture does not.** Runs
+   * placed by "how long ago" slide across midnight as the wall clock moves, and
+   * the collapse rule breaks at a day boundary — so nine identical failures
+   * rendered as one group of nine in the morning and as eight plus one in the
+   * afternoon. The demo is meant to show a session dying at 4:10 am and being
+   * repaired around noon, so it says that in clock times and stops drifting.
+   */
+  const atOn = (daysAgo: number, clock: string) =>
+    new Date(`${day(daysAgo)}T${clock}:00+05:30`).toISOString()
   // Swiggy's story is offset from Zomato's so that switching channels in demo
   // shows two independent histories rather than the same one relabelled.
   const shift = channel === 'swiggy' ? 3 * HOUR : 0
@@ -123,6 +186,7 @@ export function seedRunHistory({ outletId, channel, at, day }: Seed): Aggregator
         },
       ],
       datesWithoutARecordedDay: [day(10)],
+      read: readWindow(9),
     }),
   })
   run(8 * DAY + shift, 'ok', {
@@ -165,9 +229,11 @@ export function seedRunHistory({ outletId, channel, at, day }: Seed): Aggregator
   }
 
   // ── The session dies at 4:10 am, and every read fails until noon ──────────
-  const stormStart = 4 * DAY + shift
-  for (let i = 9; i >= 1; i -= 1) {
-    run(stormStart - (9 - i) * 55, 'session_lapsed', {
+  // Nine failures inside one Kolkata day, so the group is nine whatever hour
+  // somebody opens the demo at.
+  const STORM = ['04:10', '05:05', '06:00', '06:55', '07:50', '08:45', '09:40', '10:35', '11:30']
+  for (const clock of STORM) {
+    run(atOn(4, clock), 'session_lapsed', {
       detail:
         channel === 'swiggy'
           ? 'Swiggy ended this session. It needs a one time password to get back in.'
@@ -176,11 +242,11 @@ export function seedRunHistory({ outletId, channel, at, day }: Seed): Aggregator
   }
 
   // ── The repair, and the run that followed it ──────────────────────────────
-  run(stormStart - 9 * 55 - 20, 'awaiting_one_time_password', {
+  run(atOn(4, '11:55'), 'awaiting_one_time_password', {
     detail: 'Waiting for the code sent to the account’s phone.',
     startedBy: 'owner',
   })
-  run(stormStart - 9 * 55 - 40, 'ok', {
+  run(atOn(4, '12:05'), 'ok', {
     startedBy: 'owner',
     summary: summary({
       days: [

@@ -7,7 +7,14 @@
  * an allowlisted outlet and the outcomes a supplier reader can truthfully make.
  */
 
-import { emptySummary, readRunOrigin, type RunOrigin, type RunSummary } from './run-summary.ts'
+import {
+  emptySummary,
+  readReadsPerDay,
+  readRunOrigin,
+  saidHowItBegan,
+  type RunOrigin,
+  type RunSummary,
+} from './run-summary.ts'
 
 export const HYPERPURE_RUN_OUTCOMES = ['ok', 'session_lapsed', 'shape_changed'] as const
 
@@ -22,6 +29,8 @@ export interface HyperpureRunRecord {
   startedBy: RunOrigin | null
   /** What the statement read moved, from the ingest that moved it. */
   summary: RunSummary
+  /** How often this reader is scheduled, from its own cron. Null if unsaid. */
+  readsPerDay: number | null
 }
 
 function text(value: unknown): string | null {
@@ -49,8 +58,8 @@ export function parseHyperpureRunRecord(
 
   // Two constrained words or nothing. An unknown one is refused rather than
   // stored, for the same reason the cycle boundary refuses it.
-  const startedBy = body['started_by'] === undefined ? null : readRunOrigin(body['started_by'])
-  if (body['started_by'] !== undefined && startedBy === null) {
+  const startedBy = readRunOrigin(body['started_by'])
+  if (saidHowItBegan(body['started_by']) && startedBy === null) {
     return { error: 'unknown_started_by' }
   }
 
@@ -75,6 +84,7 @@ export function parseHyperpureRunRecord(
       detail: text(body['detail']),
       startedBy,
       summary,
+      readsPerDay: readReadsPerDay(body['reads_per_day']),
     },
   }
 }

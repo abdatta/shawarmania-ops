@@ -54,14 +54,34 @@ function renderApp(at: string, adapters: Adapters) {
   return router
 }
 
-/** The same adapters, answering a fixed amount of waiting work per channel. */
-function countingAdapters(counts: { zomato: number; swiggy: number }): Adapters {
+/**
+ * The same adapters, answering a fixed amount of waiting work per cell.
+ *
+ * A cell is one channel at one outlet, which is the grain everything on this
+ * surface is a sum of. Kanchrapara defaults to nothing so a test that only
+ * cares about one outlet reads cleanly.
+ */
+function countingAdapters(counts: {
+  zomato: number
+  swiggy: number
+  zomatoElsewhere?: number
+  swiggyElsewhere?: number
+}): Adapters {
   const real = createMockAdapters('super_admin')
-  const answer = (needing: number) => async () => [{ outletId: OUTLET_KALYANI_ID, needing }]
+  const answer = (here: number, elsewhere: number) => async () => [
+    { outletId: OUTLET_KALYANI_ID, needing: here },
+    { outletId: OUTLET_KANCHRAPARA_ID, needing: elsewhere },
+  ]
   return {
     ...real,
-    aggregatorSync: { ...real.aggregatorSync, countNeedsOwner: answer(counts.zomato) },
-    swiggySync: { ...real.swiggySync, countNeedsOwner: answer(counts.swiggy) },
+    aggregatorSync: {
+      ...real.aggregatorSync,
+      countNeedsOwner: answer(counts.zomato, counts.zomatoElsewhere ?? 0),
+    },
+    swiggySync: {
+      ...real.swiggySync,
+      countNeedsOwner: answer(counts.swiggy, counts.swiggyElsewhere ?? 0),
+    },
   }
 }
 
@@ -70,23 +90,64 @@ function segment(channel: 'zomato' | 'swiggy'): HTMLElement {
 }
 
 describe('the Delivery surface, as one entry over two channels', () => {
-  it('badges the entry with the sum and shows each channel its own share', async () => {
-    renderApp('/demo/owner/ledger/delivery/zomato', countingAdapters({ zomato: 2, swiggy: 1 }))
-
-    // The tab's number is the whole of it…
-    await waitFor(() =>
-      expect(screen.getByTestId('nav-badge-delivery-needs-you')).toHaveTextContent('3'),
+  /**
+   * The two controls nest, and each row decomposes the one above it.
+   *
+   * The grid below is 1 / 2 / 3 / 4 across two channels and two outlets, for the
+   * reason the demo's own fixture is: a symmetric grid shows identical digits
+   * whichever way round the arithmetic works, so it proves nothing.
+   */
+  it('badges the entry with everything, splits it by outlet, then by channel', async () => {
+    renderApp(
+      '/demo/owner/ledger/delivery/zomato',
+      countingAdapters({ zomato: 1, swiggy: 3, zomatoElsewhere: 2, swiggyElsewhere: 4 }),
     )
-    // …and the switch says where the three are, without the reader selecting
-    // anything. The unselected channel is the one this rule exists for.
-    expect(await screen.findByTestId('delivery-needing-zomato')).toHaveTextContent('2')
-    expect(screen.getByTestId('delivery-needing-swiggy')).toHaveTextContent('1')
+
+    // The tab's number is every channel at every outlet.
+    await waitFor(() =>
+      expect(screen.getByTestId('nav-badge-delivery-needs-you')).toHaveTextContent('10'),
+    )
+
+    // The chips split that by outlet, across BOTH channels — 1+3 here, 2+4
+    // there — and they add back up to the tab. A chip means the same thing on
+    // this surface as it does on attendance: this outlet's work on this screen.
+    expect(
+      await screen.findByTestId(`delivery-outlet-needing-${OUTLET_KALYANI_ID}`),
+    ).toHaveTextContent('4')
+    expect(
+      screen.getByTestId(`delivery-outlet-needing-${OUTLET_KANCHRAPARA_ID}`),
+    ).toHaveTextContent('6')
+
+    // And the switch splits the SELECTED outlet's chip by channel: 1 and 3 add
+    // back up to Kalyani's 4, not to the tab's 10.
+    expect(screen.getByTestId('delivery-needing-zomato')).toHaveTextContent('1')
+    expect(screen.getByTestId('delivery-needing-swiggy')).toHaveTextContent('3')
     expect(segment('zomato')).toHaveAttribute('aria-pressed', 'true')
     expect(segment('swiggy')).toHaveAttribute('aria-pressed', 'false')
 
     // Spoken, not only shown. A count that reads as a bare digit to a screen
     // reader has told somebody a number without saying what it counts.
-    expect(within(segment('swiggy')).getByText(/^Swiggy: 1 item needs you$/)).toBeInTheDocument()
+    expect(within(segment('swiggy')).getByText(/^Swiggy: 3 items need you$/)).toBeInTheDocument()
+  })
+
+  it('re-splits the switch when the reader moves to another outlet', async () => {
+    const user = userEvent.setup()
+    renderApp(
+      '/demo/owner/ledger/delivery/zomato',
+      countingAdapters({ zomato: 1, swiggy: 3, zomatoElsewhere: 2, swiggyElsewhere: 4 }),
+    )
+
+    expect(await screen.findByTestId('delivery-needing-swiggy')).toHaveTextContent('3')
+
+    // The switch sits beneath the chips, and everything beneath them is about
+    // the chosen outlet. A switch that kept showing every outlet's total would
+    // be the one control on the page that ignored the filter above it.
+    await user.click(screen.getByTestId(`surface-outlet-${OUTLET_KANCHRAPARA_ID}`))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('delivery-needing-swiggy')).toHaveTextContent('4'),
+    )
+    expect(screen.getByTestId('delivery-needing-zomato')).toHaveTextContent('2')
   })
 
   it('says what waits behind a channel nobody has selected', async () => {

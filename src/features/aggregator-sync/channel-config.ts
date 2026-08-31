@@ -2,8 +2,6 @@ import { useAdapters } from '@/data-access'
 import type { AggregatorSyncAdapter } from '@/data-access/adapters'
 import type { AttentionSourceId } from '@/gates/registry'
 
-import { useNeedsYouCounts, useSwiggyNeedsYouCounts, zomatoAttentionLabel } from './needs-you-count'
-
 /**
  * What differs between the channels, stated once.
  *
@@ -35,11 +33,14 @@ export interface AggregatorChannelConfig {
   showsHyperpure: boolean
   /** Test-id prefix, so both surfaces can sit in one DOM in tests. */
   testIdPrefix: 'zomato' | 'swiggy'
-  attention: {
-    source: AttentionSourceId
-    label: (count: number) => string
-    useCounts: () => readonly { outletId: string; needing: number }[] | null
-  }
+  /**
+   * Which attention source badges this channel.
+   *
+   * Kept as documentation of the registry mapping rather than as something the
+   * surface reads. The COUNTS are the Delivery container's, because the outlet
+   * chips carry both channels' work and only the container may know about both.
+   */
+  attention: { source: AttentionSourceId }
   /** The sub-path this channel's ledger lives under, stripped from links. */
   pathSegment: '/delivery/zomato' | '/delivery/swiggy'
   otpHeading: string
@@ -72,11 +73,7 @@ export function useZomatoChannelConfig(): AggregatorChannelConfig {
     label: 'Zomato',
     showsHyperpure: true,
     testIdPrefix: 'zomato',
-    attention: {
-      source: 'zomato-needs-you',
-      label: zomatoAttentionLabel,
-      useCounts: useNeedsYouCounts,
-    },
+    attention: { source: 'zomato-needs-you' },
     pathSegment: '/delivery/zomato',
     otpHeading: 'Zomato sent you a code',
     uploadHint:
@@ -104,11 +101,7 @@ export function useSwiggyChannelConfig(): AggregatorChannelConfig {
     label: 'Swiggy',
     showsHyperpure: false,
     testIdPrefix: 'swiggy',
-    attention: {
-      source: 'swiggy-needs-you',
-      label: zomatoAttentionLabel,
-      useCounts: useSwiggyNeedsYouCounts,
-    },
+    attention: { source: 'swiggy-needs-you' },
     pathSegment: '/delivery/swiggy',
     otpHeading: 'Swiggy sent you a code',
     uploadHint:

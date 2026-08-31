@@ -99,7 +99,7 @@ export function createSupabaseAggregatorSyncAdapter(
     const [run, configured, credential] = await Promise.all([
       client
         .from('aggregator_sync_runs')
-        .select('started_at, finished_at, outcome, rehearsal')
+        .select('started_at, finished_at, outcome, rehearsal, reads_per_day')
         .eq('outlet_id', outletId)
         .eq('channel', channel)
         // A rehearsal wrote nothing, so it is not what "last ran" means to somebody
@@ -137,6 +137,7 @@ export function createSupabaseAggregatorSyncAdapter(
       awaitingOneTimePassword: waiting,
       hasSession: credential.data?.has_session ?? false,
       syncedFrom: configured.data?.synced_from ?? null,
+      readsPerDay: run.data?.reads_per_day ?? null,
     }
   }
 
@@ -146,7 +147,7 @@ export function createSupabaseAggregatorSyncAdapter(
     const [run, credential] = await Promise.all([
       client
         .from('aggregator_sync_runs')
-        .select('started_at, finished_at, outcome, rehearsal')
+        .select('started_at, finished_at, outcome, rehearsal, reads_per_day')
         .eq('channel', 'hyperpure')
         .eq('rehearsal', false)
         .order('started_at', { ascending: false })
@@ -161,6 +162,7 @@ export function createSupabaseAggregatorSyncAdapter(
       running: run.data !== null && run.data.finished_at === null,
       hasSession: credential.data?.has_session ?? false,
       sessionExpiresAt: credential.data?.session_expires_at ?? null,
+      readsPerDay: run.data?.reads_per_day ?? null,
     }
   }
 
@@ -390,7 +392,7 @@ export function createSupabaseAggregatorSyncAdapter(
     let query = client
       .from('aggregator_sync_runs')
       .select(
-        'id, outlet_id, channel, started_at, finished_at, outcome, detail, started_by, summary',
+        'id, outlet_id, channel, started_at, finished_at, outcome, detail, started_by, summary, reads_per_day',
       )
       .eq('outlet_id', outletId)
       .eq('channel', channel)
@@ -416,6 +418,7 @@ export function createSupabaseAggregatorSyncAdapter(
       detail: row.detail,
       startedBy: (row.started_by ?? null) as 'schedule' | 'owner' | null,
       summary: parseRunSummary(row.summary),
+      readsPerDay: row.reads_per_day,
     }))
 
     return {

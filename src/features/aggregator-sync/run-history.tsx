@@ -1,3 +1,4 @@
+import { ChevronDown } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Card } from '@/components/ui/card'
@@ -12,7 +13,8 @@ import type {
 import { summaryMoved } from '@/data-access/aggregator-run-summary'
 import { cn } from '@/lib/cn'
 
-import { collapseRuns, runDay, type RunGroup } from './collapse-runs'
+import { collapseRuns, type RunGroup } from './collapse-runs'
+import { dayInWords, kolkataClock, readsPerDayPhrase, shortDate } from './when'
 
 /**
  * Every run the sync has made, newest first (#48).
@@ -30,40 +32,6 @@ import { collapseRuns, runDay, type RunGroup } from './collapse-runs'
  * Anything that still wants a person keeps its louder home in *Needs you*,
  * which this change does not touch.
  */
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-/** A business date read as a date, never through the device's timezone. */
-function shortDate(businessDate: string): string {
-  const [, month, day] = businessDate.split('-').map(Number)
-  return `${day} ${MONTHS[(month ?? 1) - 1]}`
-}
-
-/** The time of day a run started, in the outlet's own zone. */
-function clock(startedAt: string): string {
-  return new Intl.DateTimeFormat('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(startedAt))
-}
-
-/**
- * The date rail: `Today`, `Yesterday`, `26 Aug`.
- *
- * It costs almost nothing and it is what makes a hundred lines scannable rather
- * than soup. Kolkata, like every other timestamp here — a rail on the reader's
- * own zone would disagree with the figures underneath it.
- */
-function dayHeading(day: string, today: string, yesterday: string): string {
-  if (day === today) return 'Today'
-  if (day === yesterday) return 'Yesterday'
-  return shortDate(day)
-}
-
-function kolkataDayOffset(daysAgo: number): string {
-  return runDay(new Date(Date.now() - daysAgo * 86_400_000).toISOString())
-}
 
 /**
  * What one run says, in owner words.
@@ -182,6 +150,33 @@ function describeMovements(summary: AggregatorRunSummary): Movement[] {
   return lines
 }
 
+/**
+ * The window a run considered, in one short phrase.
+ *
+ * **This is what a quiet run has to say.** "Nothing moved" on its own is a
+ * shrug; "read 7 days, 24–30 Aug and nothing moved" is a report. It is also the
+ * only thing that differs between the runs inside a collapsed group — they
+ * collapsed precisely because everything else about them matched — so it is what
+ * makes opening one worth the tap.
+ *
+ * Kept to a phrase rather than a sentence because it sits on a row beside a
+ * time, on a phone. One day reads as the day; a span reads as the span, with the
+ * month said once where both ends share it.
+ */
+function readSpan(summary: AggregatorRunSummary | null): string | null {
+  const read = summary?.read
+  if (!read) return null
+  if (read.from === read.to) return `${read.days} day, ${shortDate(read.to)}`
+
+  const [, fromMonth] = read.from.split('-')
+  const [, toMonth] = read.to.split('-')
+  // `24–30 Aug` rather than `24 Aug–30 Aug`: the month twice in six characters
+  // of row is width spent saying nothing.
+  const from =
+    fromMonth === toMonth ? String(Number(read.from.split('-')[2])) : shortDate(read.from)
+  return `${read.days} days, ${from}–${shortDate(read.to)}`
+}
+
 function RunCard({ group, channelLabel }: { group: RunGroup; channelLabel: string }) {
   const [open, setOpen] = useState(false)
   const line = lineFor(group.lead, channelLabel)
@@ -197,10 +192,10 @@ function RunCard({ group, channelLabel }: { group: RunGroup; channelLabel: strin
    * that hid a run somebody was looking for.
    */
   const subject = many
-    ? `${group.runs.length} reads · ${clock(oldest.startedAt)}–${clock(group.lead.startedAt)}`
+    ? `${group.runs.length} reads · ${kolkataClock(oldest.startedAt)}–${kolkataClock(group.lead.startedAt)}`
     : group.lead.startedBy === 'owner'
-      ? `${clock(group.lead.startedAt)} · you asked`
-      : `${clock(group.lead.startedAt)}${group.lead.startedBy === 'schedule' ? ' · twice a day' : ''}`
+      ? `${kolkataClock(group.lead.startedAt)} · you asked`
+      : `${kolkataClock(group.lead.startedAt)}${group.lead.startedBy === 'schedule' ? ` · ${readsPerDayPhrase(group.lead.readsPerDay)}` : ''}`
 
   /*
    * What moved is on the CLOSED row, including what it changed from.
@@ -210,6 +205,11 @@ function RunCard({ group, channelLabel }: { group: RunGroup; channelLabel: strin
    * for the answer. So the movements are always rendered; expanding is for the
    * runs inside a collapsed group and for the failure's own words.
    */
+  // A quiet run says what it looked at, where a moving one says what it moved.
+  // Never both: a run that moved something has already said the interesting half
+  // and the window would be a second line nobody reads.
+  const span = moved.length === 0 ? readSpan(group.lead.summary) : null
+
   const expandable = many || group.lead.detail !== null
 
   return (
@@ -226,6 +226,7 @@ function RunCard({ group, channelLabel }: { group: RunGroup; channelLabel: strin
           // A reader told only that a day was revised has been told less than
           // the screen says.
           ...moved.map((movement) => movement.spoken),
+          span === null ? '' : `Read ${span}`,
           expandable ? `${open ? 'Hide' : 'Show'} the detail.` : '',
         ]
           .filter(Boolean)
@@ -241,6 +242,13 @@ function RunCard({ group, channelLabel }: { group: RunGroup; channelLabel: strin
           {line.tag}
         </span>
         <span className="min-w-0 flex-1 truncate text-sm text-content">{subject}</span>
+        {expandable && (
+          <ChevronDown
+            aria-hidden
+            size={14}
+            className={cn('shrink-0 text-content-muted transition-transform', open && 'rotate-180')}
+          />
+        )}
       </button>
 
       {moved.length > 0 && (
@@ -249,6 +257,18 @@ function RunCard({ group, channelLabel }: { group: RunGroup; channelLabel: strin
             <li key={index}>{entry.node}</li>
           ))}
         </ul>
+      )}
+
+      {/*
+        Beneath the row rather than beside it. A tag, a subject, a window and a
+        chevron do not fit across 375px, and this surface is read on a phone by
+        definition — so what the run did takes its own line, exactly as the
+        movements above do.
+      */}
+      {span !== null && (
+        <p className="px-3 pb-2.5 text-sm text-content-muted" data-testid="run-read">
+          Read {span}
+        </p>
       )}
 
       {open && (
@@ -263,9 +283,32 @@ function RunCard({ group, channelLabel }: { group: RunGroup; channelLabel: strin
               </p>
             )}
           {many && (
+            /*
+             * One line per run, and each says what IT looked at.
+             *
+             * A bare column of times was the first version and it answered
+             * nothing: the reader already knew there were six, and the span was
+             * on the line above. What actually differs between runs in a group
+             * is the window each one read, which is also the only thing that
+             * can differ — everything else matched, which is why they collapsed.
+             */
             <ul className="space-y-1">
               {group.runs.map((run) => (
-                <li key={run.id}>{clock(run.startedAt)}</li>
+                <li key={run.id} className="flex items-baseline justify-between gap-3">
+                  <span className="shrink-0 tabular-nums">{kolkataClock(run.startedAt)}</span>
+                  {/*
+                    The window, but only where it is not the one already stated
+                    above. Collapsing breaks at a day boundary, so runs in a
+                    group almost always read the same rolling window — printing
+                    it against every time would be the same string four times
+                    and would bury the one occasion it differs.
+                  */}
+                  {readSpan(run.summary) !== span && (
+                    <span className="min-w-0 truncate text-right">
+                      {readSpan(run.summary) ?? 'nothing read'}
+                    </span>
+                  )}
+                </li>
               ))}
             </ul>
           )}
@@ -367,8 +410,6 @@ export function RunHistory({
   }, [done, failed, loadMore, loaded])
 
   const groups = useMemo(() => collapseRuns(runs ?? []), [runs])
-  const today = kolkataDayOffset(0)
-  const yesterday = kolkataDayOffset(1)
 
   if (runs === null) {
     // The shape of what is arriving: run cards, not a generic block. The list
@@ -397,7 +438,7 @@ export function RunHistory({
               className="px-1 pt-2 text-xs font-medium uppercase tracking-wide text-content-muted"
               data-testid={`run-day-${group.day}`}
             >
-              {dayHeading(group.day, today, yesterday)}
+              {dayInWords(group.day)}
             </h3>
           )}
           {index === firstCoarse && (

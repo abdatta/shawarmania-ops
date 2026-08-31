@@ -269,10 +269,29 @@ other two are somewhere the reader has to go looking for by switching outlets
 and hoping."*
 
 So: the ledger's shape, the outlet chips' semantics. Each segment carries its
-own count, readable without selecting it, and the navigation badge is their sum.
-The rule is written into `attention-badges` rather than into this surface,
-because it is a general property of badging a container and the outlet chips
-have been obeying it unwritten since they were built.
+own count, readable without selecting it. The rule is written into
+`attention-badges` rather than into this surface, because it is a general
+property of badging a container and the outlet chips have been obeying it
+unwritten since they were built.
+
+**Amended during apply, on the owner looking at it: the two controls nest,
+outlet first.** The navigation badge counts every channel at every outlet; each
+outlet chip carries that outlet's share across both channels; the channel switch
+beneath carries the selected outlet's share per channel. Chips add to the badge,
+segments add to the filled-in chip.
+
+Built the other way round first — segments totalled across outlets, chips scoped
+to the selected channel — which is equally consistent arithmetic and reads
+wrongly for one reason: **everything else beneath the chips is already scoped to
+the chosen outlet**, so a chip whose number changed when the reader switched
+channel tabs was the single control on the page that did not mean what it looked
+like. The chip has to mean here what it means on attendance and the ledger.
+
+The two were indistinguishable in the demo, which is how it survived a phone
+review: the fixture was 1, 2, 1, 2 across the grid, and a symmetric grid shows
+identical digits whichever way the arithmetic runs. It is 1, 2, 3, 4 now, and the
+change is not cosmetic — a demo that cannot tell two designs apart cannot be used
+to choose between them.
 
 Arrival: where exactly one channel has waiting work, the surface opens on that
 channel; otherwise it opens on the channel in the route.
@@ -290,6 +309,39 @@ This also converts the main risk of bundling. A navigation defect found in
 section 0 costs a day; the same defect found at gate time holds a migration, two
 rewritten ingest functions and an external repo change hostage. Sections 0 and
 1–8 touch disjoint files, so either can be reverted without the other.
+
+### D13. The cadence is reported by the runner, not asserted by the app
+
+Added during apply, on the owner noticing the surface said "twice a day" when the
+readers had run four times a day for weeks.
+
+It could not have been right. The cadence was prose in this repository about
+crons in another one, so nothing could fail when they diverged — the same class
+of defect as D4's origin, and the same answer: **the process that runs under the
+schedule is the only one that knows.** It has its own workflow file in its
+checkout and GitHub hands it the path in `GITHUB_WORKFLOW_REF`, so it parses the
+cron and posts `reads_per_day` with each run.
+
+*Recorded per run rather than as configuration.* The health line already reads
+the newest run, so it costs no query; and a run that ran under the old schedule
+keeps saying so, which means the history reads correctly across a cadence change
+instead of retelling every past run under today's number.
+
+*And the lockout is derived from it.* `READ_AGAIN_AFTER_HOURS` was a constant six
+— one read interval at four a day, and half an interval as soon as that changed.
+It is `24 / readsPerDay` now, because the rule it means to express is "there is
+nothing new until the next scheduled read".
+
+*Rejected: deriving the cadence from observed run timings.* Self-correcting and
+needs no new field, but it reads low for exactly as long as an outage lasted, and
+the caption would then shorten the lockout at the moment the sync was least
+healthy. *Rejected: fetching the workflow from GitHub at read time.* Needs a
+token the browser must not hold, so an Edge proxy and a rate limit for a caption.
+
+**A bad value is dropped, not refused**, unlike an unknown `started_by`. A third
+origin word means a caller invented one; a bad cadence means a cron parse
+slipped, and failing a settlement run over a caption would trade a wrong number
+for no run record at all.
 
 ## Risks / Trade-offs
 

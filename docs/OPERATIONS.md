@@ -596,6 +596,15 @@ how they went and nothing more, and that is permanent: what a run changed can
 only be worked out while it is running, because once a figure is written a day
 restated identically is indistinguishable from a day that moved.
 
+**How often it reads is the runner's answer, not the app's.** The caption beside
+the last-run time — `four times a day` — and the wait before **Read now** does
+anything again both come from a number the runner reports with each run: it
+parses the cron in its own workflow file and posts what it fires. So changing a
+cron in `abdatta/shawarmania-sync` corrects both, on the next run, with no
+deploy here. Until a reader has reported once, the app shows its own fallback of
+four. The history shows the cadence each run ran under rather than today's, so a
+schedule change leaves older rows reading correctly.
+
 **Rehearsals never appear.** A rehearsal reads a real cycle and throws the
 writes away, so it says nothing about the figures and is not part of this
 record.

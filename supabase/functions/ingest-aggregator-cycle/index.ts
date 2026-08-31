@@ -1,6 +1,12 @@
 import { serviceClient } from '../_shared/authority.ts'
 import { json, preflight, readJson, str } from '../_shared/http.ts'
-import { emptySummary, mergeSummaries, readRunOrigin } from '../_shared/run-summary.ts'
+import {
+  emptySummary,
+  mergeSummaries,
+  readReadsPerDay,
+  readRunOrigin,
+  saidHowItBegan,
+} from '../_shared/run-summary.ts'
 
 /**
  * The door the aggregator readers post settlement through.
@@ -124,10 +130,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
    * database would refuse it anyway — this turns that refusal into a legible
    * 400 instead of a run that failed to record itself.
    */
-  const startedBy = body['started_by'] === undefined ? null : readRunOrigin(body['started_by'])
-  if (body['started_by'] !== undefined && startedBy === null) {
+  const startedBy = readRunOrigin(body['started_by'])
+  if (saidHowItBegan(body['started_by']) && startedBy === null) {
     return json({ error: 'unknown_started_by' }, 400)
   }
+
+  /*
+   * How often the runner is scheduled, parsed by the runner from its own cron.
+   *
+   * **Dropped rather than refused when it makes no sense.** An unknown
+   * `started_by` is a caller bug worth a 400, because there are two words and a
+   * third means somebody invented one. A cadence is arithmetic on a cron the
+   * runner read itself, so a bad value means a parse went wrong — and failing
+   * the whole run over a caption would trade a wrong number for no run record
+   * at all. The app falls back to its own constant.
+   */
+  const readsPerDay = readReadsPerDay(body['reads_per_day'])
 
   if (!outletId || !outlets.includes(outletId)) {
     return json({ error: 'outlet_not_permitted' }, 403)
@@ -188,6 +206,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       p_rehearsal: rehearsing,
       p_started_by: startedBy ?? undefined,
       p_summary: summaryFor(results),
+      p_reads_per_day: readsPerDay ?? undefined,
     })
     if (error) {
       // The run's own record failing is not a reason to lose the answer, but it

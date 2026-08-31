@@ -3,7 +3,6 @@ import { useLocation } from 'react-router'
 
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { LoadingBlock } from '@/components/ui/loading'
 import type {
@@ -13,12 +12,12 @@ import type {
 } from '@/data-access/adapters'
 
 import { attentionChanged } from '@/features/attention/attention'
-import { useOutletScope } from '@/features/outlet-scope'
 import { cn } from '@/lib/cn'
 
 import type { AggregatorChannelConfig } from './channel-config'
 import { needsOwner } from './needs-you-count'
 import { RunHistory } from './run-history'
+import { readAgainAfterHours, readsPerDayPhrase, whenItRan } from './when'
 import { SyncEventRow } from './sync-event-row'
 
 /**
@@ -26,8 +25,9 @@ import { SyncEventRow } from './sync-event-row'
  * do about it.
  *
  * **A row here is something that happened, not a time the job ran.** The sync
- * runs twice a day against every outlet, which is roughly a hundred and twenty
- * runs a month of which nearly all change nothing. A row per run would bury the
+ * runs several times a day against every outlet, which is hundreds of runs a
+ * month of which nearly all change nothing. (How many exactly is the runner's to
+ * report, not this file's to claim — see `when.ts`.) A row per run would bury the
  * two that matter inside a hundred and eighteen that say "nothing", and a log
  * nobody reads is the same as no log. The line at the top carries "it ran, it
  * was fine"; the list carries only what moved.
@@ -60,19 +60,23 @@ import { SyncEventRow } from './sync-event-row'
  * and a six-hour lockout on a lapsed session would leave the owner staring at a
  * disabled button on the one screen built to fix it.
  */
-const READ_AGAIN_AFTER_HOURS = 6
-
 export function readAgainInHours(health: AggregatorSyncHealth, now = Date.now()): number | null {
   if (health.lastOutcome !== 'ok' || !health.lastRunAt) return null
+  // One read interval, from the cadence the runner reported — not a constant six
+  // beside it. Six was one interval while the readers ran four times a day and
+  // silently became half of one when they did not.
+  const window = readAgainAfterHours(health.readsPerDay)
   const since = (now - new Date(health.lastRunAt).getTime()) / 3_600_000
-  if (!Number.isFinite(since) || since >= READ_AGAIN_AFTER_HOURS) return null
-  return Math.max(1, Math.ceil(READ_AGAIN_AFTER_HOURS - since))
+  if (!Number.isFinite(since) || since >= window) return null
+  return Math.max(1, Math.ceil(window - since))
 }
 
 export function AggregatorSyncSurface({
   config,
   heading,
   channelSwitch,
+  outletId,
+  outletSelector,
 }: {
   config: AggregatorChannelConfig
   /**
@@ -93,6 +97,17 @@ export function AggregatorSyncSurface({
    * a control that cannot be used twice in a row.
    */
   channelSwitch?: ReactNode
+  /**
+   * Which outlet this is about, chosen by the container above.
+   *
+   * **The scope is not this component's**, since #48 gave the surface two
+   * controls that have to agree: the outlet chips and the channel switch nest,
+   * and a component that owned one of them while the container owned the other
+   * could not make their arithmetic line up. Null while the outlets load.
+   */
+  outletId: string | null
+  /** The chips themselves, rendered in this surface's header. */
+  outletSelector: ReactNode
 }) {
   const adapter = config.adapter
   const { pathname } = useLocation()
@@ -101,26 +116,6 @@ export function AggregatorSyncSurface({
   // badge uses. Without it the tab says three, the page shows one, and the other
   // two are somewhere the reader has to go looking for by switching outlets and
   // hoping.
-  const needing = config.attention.useCounts()
-  const { outletId, selector: outletSelector } = useOutletScope({
-    badgeFor: (candidate, selected) => {
-      const count = needing?.find((entry) => entry.outletId === candidate)?.needing ?? 0
-      return (
-        <Badge
-          data-testid={`${config.testIdPrefix}-needing-${candidate}`}
-          count={count}
-          // The chip already names the outlet, so the label does not repeat it.
-          label={config.attention.label(count)}
-          // A selected chip is filled with `--primary`, which is the badge's own
-          // colour, so an unswapped badge sits invisibly on top of it. Inverting
-          // to the same asserted pair the other way round is what attendance's
-          // chips already do, and it is the contrast the validator checks.
-          className={selected ? 'bg-on-primary text-primary' : ''}
-        />
-      )
-    },
-  })
-
   const [health, setHealth] = useState<AggregatorSyncHealth | null>(null)
   const [hyperpure, setHyperpure] = useState<HyperpureHealth | null>(null)
   const [events, setEvents] = useState<AggregatorSyncEventRow[] | null>(null)
@@ -624,14 +619,7 @@ function HealthLine({
   readAgainIn: number | null
   onRun: () => void
 }) {
-  const when = health.lastRunAt
-    ? new Date(health.lastRunAt).toLocaleString(undefined, {
-        day: 'numeric',
-        month: 'short',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    : null
+  const when = health.lastRunAt ? whenItRan(health.lastRunAt) : null
 
   // No status dot. A round mark in the primary colour is what a badge looks
   // like everywhere else in this app, and a badge means exactly one thing here:
@@ -655,8 +643,8 @@ function HealthLine({
             {!health.syncedFrom
               ? `Not switched on here yet`
               : when
-                ? `${when} · twice a day`
-                : 'Twice a day'}
+                ? `${when} · ${readsPerDayPhrase(health.readsPerDay)}`
+                : `Reads ${readsPerDayPhrase(health.readsPerDay)}`}
           </p>
         </div>
       </div>
@@ -674,7 +662,14 @@ function HealthLine({
             className="mt-1 text-xs text-content-muted"
             data-testid={`${config.testIdPrefix}-read-now-why`}
           >
-            Just read. Again in {readAgainIn}h.
+            {/*
+              Not "just read": the lockout runs for six hours after a SUCCESSFUL
+              run, so this sat under a button saying "just" about something that
+              happened five hours ago. When it last ran is on the line to the
+              left; what this has to say is only when pressing would be worth
+              anything again.
+            */}
+            Ready again in {readAgainIn}h.
           </p>
         )}
       </div>
@@ -693,14 +688,7 @@ function HyperpureHealthLine({
   health: HyperpureHealth
   halfFailed: boolean
 }) {
-  const when = health.lastRunAt
-    ? new Date(health.lastRunAt).toLocaleString(undefined, {
-        day: 'numeric',
-        month: 'short',
-        hour: 'numeric',
-        minute: '2-digit',
-      })
-    : null
+  const when = health.lastRunAt ? whenItRan(health.lastRunAt) : null
 
   const stale = !health.hasSession || health.lastOutcome === 'session_lapsed'
   const [word, wrong] = health.running
@@ -723,7 +711,9 @@ function HyperpureHealthLine({
   } else if (word === 'Stuck') {
     note = 'A statement could not be read — a maintainer has been told'
   } else {
-    note = when ? `${when} · twice a day` : 'Twice a day'
+    note = when
+      ? `${when} · ${readsPerDayPhrase(health.readsPerDay)}`
+      : `Reads ${readsPerDayPhrase(health.readsPerDay)}`
   }
 
   return (

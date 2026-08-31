@@ -14,6 +14,7 @@ import { collapseRuns } from './collapse-runs'
  */
 
 const EMPTY: AggregatorRunSummary = {
+  read: { from: '2026-08-20', to: '2026-08-26', days: 7 },
   days: [],
   cyclesSettled: [],
   supplyOrders: { added: 0, amended: 0 },
@@ -45,6 +46,7 @@ function run(hour: number, over: Partial<AggregatorSyncRunRow> = {}): Aggregator
     detail: null,
     startedBy: 'schedule',
     summary: EMPTY,
+    readsPerDay: 4,
     ...over,
   }
 }

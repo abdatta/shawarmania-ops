@@ -11,12 +11,22 @@
 -- Edge Function carries it onto the run's row in the call it already makes;
 -- the run's row does not exist yet from inside here (design D2).
 --
+-- **This runs after `retire_the_manual_ledger`, deliberately.** That migration
+-- rewrites these two functions by reading their live definitions and doing
+-- textual replaces on them — `manual_ledger_expenses` becomes `expenses`, and
+-- the recorded-day check becomes a drawer-observation check. Ordered before it,
+-- this file's accumulator survived only because its added predicate happened to
+-- be formatted character-for-character like the string that migration searches
+-- for; formatted differently, the rewrite would have raised and the deploy would
+-- have stopped. So the bodies below are written against the schema that exists
+-- after the retirement, and nothing rewrites them afterwards.
+--
 -- **This is the money path, and the accumulator is write-only bookkeeping.**
 -- It reads what was already read and appends. No branch below it reads any of
 -- it. Delete every accumulator line and this function writes byte-identical
--- rows — asserted directly by `aggregator-run-summary.test.ts`, which runs a
--- fixture cycle through both and diffs `aggregator_channel_days`,
--- `manual_ledger_expenses` and `aggregator_cycle_reconciliations`.
+-- rows — asserted directly by `45_a_run_says_what_moved.sql`, which runs a
+-- fixture cycle through a frozen copy of the pre-change function and diffs
+-- `aggregator_channel_days`, `expenses` and `aggregator_cycle_reconciliations`.
 --
 -- Money inside the summary is the same `bigint` integer paise the columns hold,
 -- never formatted and never divided. Rupees happen at the display edge.
@@ -29,7 +39,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
 declare
   v_outlet uuid;
   v_channel text;
@@ -69,14 +79,18 @@ declare
   v_tolerance constant bigint := 100;
   v_synced_from date;
   v_deductions_skipped int := 0;
-  -- ── The movement accumulator (#48) ──────────────────────────────────────
+  -- The movement accumulator (#48).
+  --
   -- Append-only bookkeeping over reads this function already makes. NOTHING
   -- below branches on any of these: delete every line touching them and this
-  -- function writes byte-identical rows, which is the invariant the
-  -- byte-identical test in `supabase/tests` asserts directly.
+  -- function writes byte-identical rows, which is the invariant
+  -- `45_a_run_says_what_moved.sql` asserts directly.
   v_moved jsonb := '[]'::jsonb;
   v_settled jsonb := '[]'::jsonb;
   v_unwritten jsonb := '[]'::jsonb;
+  v_read_from date;
+  v_read_to date;
+  v_read_days int := 0;
   v_prior_recon record;
   v_recon_had boolean;
 begin
@@ -261,7 +275,6 @@ begin
         'computed_paise', v_computed,
         'stated_payout_paise', v_stated_payout));
     end if;
-
     if abs(v_difference) > v_tolerance and v_accepted_by is null then
       update public.aggregator_channel_days set settlement_state = 'disputed'
        where outlet_id = v_outlet and channel = v_channel
@@ -290,6 +303,20 @@ begin
     from jsonb_array_elements(coalesce(p_payload -> 'orders', '[]'::jsonb)) o
    group by 1;
 
+  /*
+   * The window this run considered, which is what makes "nothing moved" mean
+   * something. A run that looked at seven days and found none of them changed
+   * has said far more than one that only says "nothing", and after the write
+   * commits there is nothing left to work it out from: the payload is gone.
+   *
+   * Counted from the boundary forward, because a day before the sync was
+   * switched on is not considered — the loop skips it before reading anything.
+   */
+  select min(business_date), max(business_date), count(*)
+    into v_read_from, v_read_to, v_read_days
+    from ingest_days
+   where business_date >= v_synced_from;
+
   v_origin := case when v_state = 'settled' then 'settlement' else 'daily_reader' end;
   for v_day in select * from ingest_days order by business_date loop
     if v_day.business_date < v_synced_from then continue; end if;
@@ -306,7 +333,7 @@ begin
     end if;
 
     -- Past the `continue` above, so a settled day this run may not touch
-    -- contributes nothing — which is true rather than an omission (design D3).
+    -- contributes nothing, which is true rather than an omission (design D3).
     if not v_had then
       v_moved := v_moved || jsonb_build_array(jsonb_build_object(
         'business_date', v_day.business_date,
@@ -392,21 +419,35 @@ begin
   select string_agg(i.business_date::text, ', ' order by i.business_date) into v_unrecorded
     from ingest_days i
    where i.business_date >= v_synced_from
-     and not exists (select 1 from public.manual_ledger_days d
-                      where d.outlet_id = v_outlet and d.business_date = i.business_date);
+     and not exists (select 1 from public.drawer_observations observation
+                      join public.outlets outlet on outlet.id = observation.outlet_id
+                     where observation.outlet_id = v_outlet
+                       and public.app_business_date(
+                         observation.counted_at - case when observation.is_legacy_imprecise
+                           then interval '1 microsecond' else interval '0' end,
+                         outlet.business_day_cutover) = i.business_date);
+  -- The same dates, as data rather than prose, for the run's own summary.
+  -- The predicate is the one directly above, so the sentence the owner reads
+  -- and the list the history renders cannot disagree about which days are
+  -- waiting on a count.
   select coalesce(jsonb_agg(i.business_date order by i.business_date), '[]'::jsonb)
     into v_unwritten
     from ingest_days i
    where i.business_date >= v_synced_from
-     and not exists (select 1 from public.manual_ledger_days d
-                      where d.outlet_id = v_outlet and d.business_date = i.business_date);
+     and not exists (select 1 from public.drawer_observations observation
+                      join public.outlets outlet on outlet.id = observation.outlet_id
+                     where observation.outlet_id = v_outlet
+                       and public.app_business_date(
+                         observation.counted_at - case when observation.is_legacy_imprecise
+                           then interval '1 microsecond' else interval '0' end,
+                         outlet.business_day_cutover) = i.business_date);
 
   select count(*) into v_deductions_skipped
     from jsonb_array_elements(coalesce(p_payload -> 'deductions', '[]'::jsonb)) d
    where (d ->> 'spent_on')::date < v_synced_from
      and public.expense_category_reserved_owner(coalesce(nullif(d ->> 'category', ''), 'Other')) is null;
 
-  insert into public.manual_ledger_expenses
+  insert into public.expenses
     (outlet_id, business_date, category, is_cash, amount_paise, description,
      source_system, source_ref, recorded_by)
   select v_outlet, (d ->> 'spent_on')::date,
@@ -420,7 +461,7 @@ begin
                 business_date = excluded.business_date,
                 description = excluded.description,
                 category = excluded.category
-  where public.manual_ledger_expenses.voided_at is null;
+  where public.expenses.voided_at is null;
 
   insert into public.aggregator_cycle_deductions
     (outlet_id, channel, kind, period_start, period_end, amount_paise,
@@ -456,16 +497,20 @@ begin
     'difference_paise', v_difference,
     -- Carried out to the caller, which folds it onto the run's row. The run
     -- does not exist yet from in here (design D2), so this is as close to the
-    -- writes as the record can get — and it is the close half that matters:
+    -- writes as the record can get, and it is the close half that matters:
     -- the diff was taken while both sides were still known.
     'summary', jsonb_build_object(
       'version', 1,
+      'read', case
+        when v_read_days = 0 then null
+        else jsonb_build_object('from', v_read_from, 'to', v_read_to, 'days', v_read_days)
+      end,
       'days', v_moved,
       'cycles_settled', v_settled,
       'supply_orders', jsonb_build_object('added', 0, 'amended', 0),
       'dates_without_a_recorded_day', v_unwritten));
 end;
-$$;
+$body$;
 
 -- ---------------------------------------------------------------------------
 -- The supplier's side of the same question.
@@ -483,7 +528,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = ''
-as $ingest$
+as $body$
 declare
   v_outlet uuid;
   v_source_system text;
@@ -527,9 +572,11 @@ begin
   -- dated to it, so money that left an in-period payout lands inside the period
   -- the ledger covers rather than in one it does not.
   select least(
-           (select min(business_date) from public.manual_ledger_days
+           (select min(business_date) from public.bills
              where outlet_id = v_outlet),
-           (select min(business_date) from public.manual_ledger_expenses
+           (select min(business_date) from public.expenses
+             where outlet_id = v_outlet),
+           (select min(business_date) from public.aggregator_channel_days
              where outlet_id = v_outlet))
     into v_books_open;
 
@@ -550,13 +597,13 @@ begin
 
     select amount_paise, business_date, description, category, shared_cost, voided_at
       into v_prior
-      from public.manual_ledger_expenses
+      from public.expenses
      where outlet_id = v_outlet
        and source_system = v_source_system
        and source_ref = v_order.order_ref;
     v_prior_had := found;
 
-    insert into public.manual_ledger_expenses
+    insert into public.expenses
       (outlet_id, business_date, category, is_cash, amount_paise, description,
        source_system, source_ref, shared_cost, recorded_by)
     values (v_outlet, v_business_date, p_payload ->> 'category', false,
@@ -568,7 +615,7 @@ begin
                   description = excluded.description,
                   category = excluded.category,
                   shared_cost = excluded.shared_cost
-    where public.manual_ledger_expenses.voided_at is null;
+    where public.expenses.voided_at is null;
 
     if not v_prior_had then
       v_added := v_added + 1;
@@ -588,9 +635,12 @@ begin
     'orders_written', v_written,
     'summary', jsonb_build_object(
       'version', 1,
+      -- A statement is not a window of business days, so this reader has no
+      -- range to report. Its own count of orders is below.
+      'read', null,
       'days', '[]'::jsonb,
       'cycles_settled', '[]'::jsonb,
       'supply_orders', jsonb_build_object('added', v_added, 'amended', v_amended),
       'dates_without_a_recorded_day', '[]'::jsonb));
 end;
-$ingest$;
+$body$;

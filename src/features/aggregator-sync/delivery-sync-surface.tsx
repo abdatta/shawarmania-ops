@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router'
 
 import { Badge } from '@/components/ui/badge'
 import { LoadingBlock } from '@/components/ui/loading'
+import { useOutletScope } from '@/features/outlet-scope'
 import { cn } from '@/lib/cn'
 
 import { AggregatorSyncSurface } from './aggregator-sync-surface'
@@ -52,17 +53,64 @@ export function DeliverySyncSurface() {
     swiggy: useSwiggyChannelConfig(),
   }
 
-  // Both channels' counts, read here rather than inside the mounted surface,
-  // because the switch has to say what is waiting behind the segment nobody
-  // has selected. They are the same shared reads the tab badge makes, so
-  // arriving from the shell costs no extra request.
-  const counts: Record<DeliveryChannel, readonly { needing: number }[] | null> = {
+  /*
+   * Both channels' waiting work, per outlet, read here rather than inside the
+   * mounted channel — this container is the only place that may know about both.
+   * They are the same shared reads the tab badge makes, so arriving from the
+   * shell costs no extra request.
+   */
+  const counts: Record<DeliveryChannel, readonly { outletId: string; needing: number }[] | null> = {
     zomato: useNeedsYouCounts(),
     swiggy: useSwiggyNeedsYouCounts(),
   }
   const known = DELIVERY_CHANNELS.every((channel) => counts[channel] !== null)
-  const waiting = (channel: DeliveryChannel) =>
+
+  /** One channel's waiting work at one outlet: a single cell of the grid. */
+  const waitingAt = (channel: DeliveryChannel, outletId: string | null) =>
+    (outletId && counts[channel]?.find((entry) => entry.outletId === outletId)?.needing) || 0
+
+  /** One outlet's waiting work across every channel this surface reaches. */
+  const waitingForOutlet = (outletId: string) =>
+    DELIVERY_CHANNELS.reduce((sum, channel) => sum + waitingAt(channel, outletId), 0)
+
+  /** One channel's waiting work everywhere, for the arrival rule alone. */
+  const waitingForChannel = (channel: DeliveryChannel) =>
     counts[channel]?.reduce((sum, entry) => sum + entry.needing, 0) ?? 0
+
+  /*
+   * The outlet scope lives HERE rather than inside the channel, and that is what
+   * makes the two controls one system instead of two.
+   *
+   * **They nest, outlet first.** The navigation badge counts every channel at
+   * every outlet; each outlet chip carries that outlet's share of it across both
+   * channels; and the channel switch below carries the SELECTED outlet's share
+   * broken down per channel. So each row decomposes the row above it, and the
+   * reader can follow one number down to the work.
+   *
+   * The alternative reading — chips scoped to the selected channel, segments
+   * totalled across outlets — is equally consistent and was built first. It is
+   * wrong for one reason: everything else beneath the chips is already scoped to
+   * the chosen outlet, so a chip whose number changed when you switched channel
+   * tabs was the one control on the page that did not mean what it looked like.
+   */
+  const { outletId, selector: outletSelector } = useOutletScope({
+    badgeFor: (candidate, selected) => {
+      const count = waitingForOutlet(candidate)
+      return (
+        <Badge
+          data-testid={`delivery-outlet-needing-${candidate}`}
+          count={count}
+          // The chip already names the outlet, so the label does not repeat it.
+          label={zomatoAttentionLabel(count)}
+          // A selected chip is filled with `--primary`, which is the badge's own
+          // colour, so an unswapped badge sits invisibly on top of it. Inverting
+          // to the same asserted pair the other way round is what attendance's
+          // chips already do, and it is the contrast the validator checks.
+          className={selected ? 'bg-on-primary text-primary' : ''}
+        />
+      )
+    },
+  })
 
   const named = isDeliveryChannel(routeSegment) ? routeSegment : null
 
@@ -81,7 +129,7 @@ export function DeliverySyncSurface() {
   const selected: DeliveryChannel | null = (() => {
     if (named !== null) return named
     if (!known) return null
-    const withWork = DELIVERY_CHANNELS.filter((channel) => waiting(channel) > 0)
+    const withWork = DELIVERY_CHANNELS.filter((channel) => waitingForChannel(channel) > 0)
     return withWork.length === 1 ? (withWork[0] ?? null) : DELIVERY_CHANNELS[0]
   })()
 
@@ -117,11 +165,13 @@ export function DeliverySyncSurface() {
       key={selected}
       config={configs[selected]}
       heading="Delivery"
+      outletId={outletId}
+      outletSelector={outletSelector}
       channelSwitch={
         <ChannelSwitch
           selected={selected}
           configs={configs}
-          waiting={waiting}
+          waiting={(channel) => waitingAt(channel, outletId)}
           onChoose={(channel) => void navigate(pathFor(channel))}
         />
       }
@@ -137,6 +187,10 @@ export function DeliverySyncSurface() {
  * chips' semantics, because this switches between two independent accounts
  * rather than two lenses on one dataset. So each segment carries its own count,
  * readable without selecting it (design D11).
+ *
+ * **The counts are the selected outlet's**, because this control sits beneath
+ * the outlet chips and everything beneath them is scoped to the chosen outlet.
+ * Together the two segments add up to the chip above that is filled in.
  */
 function ChannelSwitch({
   selected,

@@ -25,6 +25,43 @@ export function readRunOrigin(value: unknown): RunOrigin | null {
     : null
 }
 
+/**
+ * Whether the caller said anything at all about how the run began.
+ *
+ * **Absent and null mean the same thing here, deliberately.** The runner omits
+ * the key when it has no trigger context — run from a laptop, say — and the
+ * honest reading of that is "it did not say", which renders as a blank origin.
+ * Treating an explicit null as a *wrong* answer instead would turn a serialiser
+ * that writes nulls for undefined into a boundary that 400s every run and stops
+ * the sync recording itself at all: the exact silence this record exists to end.
+ */
+export function saidHowItBegan(value: unknown): boolean {
+  return value !== undefined && value !== null
+}
+
+/**
+ * The most reads a day anybody could plausibly have scheduled.
+ *
+ * Every five minutes. Past that the runner has misparsed its own cron, and a
+ * wrong cadence is worse than none: the surface would tell the owner the sync
+ * runs 1,440 times a day and quietly derive a nonsense lockout from it. The
+ * column's check constraint holds the same ceiling.
+ */
+export const MAX_READS_PER_DAY = 288
+
+/**
+ * How often the runner says it is scheduled, or null where it did not say.
+ *
+ * Not believed blindly: the runner parses its own workflow cron, and a parse is
+ * a thing that can go wrong. A value outside the sane range is dropped rather
+ * than stored, so the surface falls back to its own constant instead of
+ * repeating a number nobody could have meant.
+ */
+export function readReadsPerDay(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return null
+  return value > 0 && value <= MAX_READS_PER_DAY ? value : null
+}
+
 export interface RunDayFigures {
   revenue_paise: number | null
   commission_paise: number | null
@@ -47,8 +84,24 @@ export interface RunCycleSettled {
   stated_payout_paise: number | null
 }
 
+/** The window of business days a run considered, or null if it read none. */
+export interface RunRead {
+  from: string
+  to: string
+  days: number
+}
+
 export interface RunSummary {
   version: 1
+  /**
+   * What the run LOOKED AT, as against what it changed.
+   *
+   * Without it "nothing moved" is a shrug: a run that considered seven days and
+   * found none of them changed has said something, and one that reached no data
+   * at all has said something else. The payload is gone by the time anybody
+   * asks, so the window is recorded with the rest.
+   */
+  read: RunRead | null
   days: RunDayMovement[]
   cycles_settled: RunCycleSettled[]
   supply_orders: { added: number; amended: number }
@@ -66,6 +119,7 @@ export interface RunSummary {
 export function emptySummary(): RunSummary {
   return {
     version: 1,
+    read: null,
     days: [],
     cycles_settled: [],
     supply_orders: { added: 0, amended: 0 },
@@ -96,6 +150,16 @@ export function mergeSummaries(results: readonly unknown[]): RunSummary {
     const summary = (result as { summary?: unknown } | null)?.summary
     if (!summary || typeof summary !== 'object') continue
     const part = summary as Record<string, unknown>
+
+    // One run may ingest several cycles, so the window it considered spans all
+    // of them: the earliest day any cycle reached to the latest, and the days
+    // added up. Cycles for one outlet and channel do not overlap.
+    const read = part['read'] as Record<string, unknown> | null | undefined
+    if (read && typeof read['from'] === 'string' && typeof read['to'] === 'string') {
+      const from = merged.read && merged.read.from < read['from'] ? merged.read.from : read['from']
+      const to = merged.read && merged.read.to > read['to'] ? merged.read.to : read['to']
+      merged.read = { from, to, days: (merged.read?.days ?? 0) + asCount(read['days']) }
+    }
 
     merged.days.push(...(asArray(part['days']) as RunDayMovement[]))
     merged.cycles_settled.push(...(asArray(part['cycles_settled']) as RunCycleSettled[]))

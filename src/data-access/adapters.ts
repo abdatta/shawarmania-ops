@@ -2073,7 +2073,7 @@ export interface DataAdapters {
 /**
  * One thing that happened, rather than one time the job ran.
  *
- * The sync runs twice a day against every outlet, so a row per run would be
+ * The sync runs four times a day against every outlet, so a row per run would be
  * roughly a hundred and twenty rows a month of which nearly all say nothing
  * changed — and a log nobody reads is the same as no log. The health line above
  * the list carries "it ran, it was fine"; this list carries only what moved.
@@ -2164,6 +2164,14 @@ export interface AggregatorSyncRunRow {
   /** How it began, or null for a run recorded before that was recorded. */
   startedBy: 'schedule' | 'owner' | null
   summary: AggregatorRunSummary | null
+  /**
+   * The cadence THIS run ran under, not today's.
+   *
+   * Which is the point of recording it per run: after a schedule changes, an
+   * older row keeps saying what was true when it happened rather than being
+   * retold under the new number.
+   */
+  readsPerDay: number | null
 }
 
 /**
@@ -2204,7 +2212,23 @@ export interface AggregatorRunCycleSettled {
  * Money is integer paise, exactly as the columns hold it. Rupees happen at the
  * display edge and nowhere before it.
  */
+/** The window of business days a run considered, or null if it read none. */
+export interface AggregatorRunRead {
+  from: string
+  to: string
+  days: number
+}
+
 export interface AggregatorRunSummary {
+  /**
+   * What the run LOOKED AT, which is what makes "nothing moved" a sentence.
+   *
+   * A run that considered seven days and found none of them changed has said
+   * something; a run that reached no data at all has said something else. The
+   * payload is gone by the time anybody asks, so it is recorded rather than
+   * derived, for the same reason the movements are.
+   */
+  read: AggregatorRunRead | null
   days: AggregatorRunDayMovement[]
   cyclesSettled: AggregatorRunCycleSettled[]
   supplyOrders: { added: number; amended: number }
@@ -2241,6 +2265,15 @@ export interface AggregatorSyncHealth {
   hasSession: boolean
   /** Null until an outlet is switched on; the surface says so rather than showing nil. */
   syncedFrom: string | null
+  /**
+   * How often the reader is scheduled, as the runner itself reported it.
+   *
+   * Parsed by the runner from its own workflow cron, because it is the only
+   * thing that knows: it runs under that schedule and the file is in its
+   * checkout. Null where nothing has reported yet, and the surface then falls
+   * back to its own constant rather than guessing a cadence from timings.
+   */
+  readsPerDay: number | null
 }
 
 /**
@@ -2270,6 +2303,15 @@ export interface HyperpureHealth {
   running: boolean
   hasSession: boolean
   sessionExpiresAt: string | null
+  /**
+   * How often the reader is scheduled, as the runner itself reported it.
+   *
+   * Parsed by the runner from its own workflow cron, because it is the only
+   * thing that knows: it runs under that schedule and the file is in its
+   * checkout. Null where nothing has reported yet, and the surface then falls
+   * back to its own constant rather than guessing a cadence from timings.
+   */
+  readsPerDay: number | null
 }
 
 /**

@@ -482,6 +482,7 @@ export type Database = {
           id: string
           outcome: string
           outlet_id: string
+          reads_per_day: number | null
           rehearsal: boolean
           started_at: string
           started_by: string | null
@@ -495,6 +496,7 @@ export type Database = {
           id?: string
           outcome: string
           outlet_id: string
+          reads_per_day?: number | null
           rehearsal?: boolean
           started_at: string
           started_by?: string | null
@@ -508,6 +510,7 @@ export type Database = {
           id?: string
           outcome?: string
           outlet_id?: string
+          reads_per_day?: number | null
           rehearsal?: boolean
           started_at?: string
           started_by?: string | null
@@ -4231,6 +4234,7 @@ export type Database = {
           p_detail: string
           p_outcome: string
           p_outlet_id: string
+          p_reads_per_day?: number
           p_rehearsal?: boolean
           p_started_at: string
           p_started_by?: string

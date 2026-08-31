@@ -35,19 +35,24 @@
 
 ## 3. Sync repo — how a run began
 
-- [ ] 3.1 **NOT DONE — needs the owner's go-ahead, see below.** Post the run's origin from the runner's own trigger context (schedule versus dispatch) in `abdatta/shawarmania-sync`, on every path that opens a run row.
+- [x] 3.1 Post the run's origin from the runner's own trigger context (schedule versus dispatch) in `abdatta/shawarmania-sync`, on every path that opens a run row. **Done — `2ae8418` in that repo, committed and not pushed.** `GITHUB_EVENT_NAME` is the whole derivation, resolved once in `ops.mjs` and spread into the body, so all three doors that open a run row carry it and a fourth added later cannot forget.
 - [x] 3.2 Confirm no free text crosses the boundary — the value is one of the two constrained words, validated server-side. **Done on this side of the boundary**: `ingest-aggregator-cycle` refuses an unknown `started_by` with a 400 before it reaches the database, `parseHyperpureRunRecord` refuses it the same way, and the check constraint refuses it again. Proved by `src/lib/hyperpure-run-record.test.ts` and `45_a_run_says_what_moved.sql`.
-- [ ] 3.3 **NOT DONE — blocked on 3.1.** Sectional check: a scheduled run and a dispatched run recorded against a branch ref land with different origins, verified by reading the rows.
+- [ ] 3.3 Sectional check: a scheduled run and a dispatched run recorded against a branch ref land with different origins, verified by reading the rows.
 
-> **Why section 3 stopped.** 3.1 is a commit to `abdatta/shawarmania-sync`, a
-> separate private repository, and a change there is a change to what runs
-> against the live merchant accounts twice a day. That is the owner's call to
-> authorise, not one to take on the way past. Everything this repo owes is
-> done and deployable ahead of it: the column accepts either word, the boundary
-> refuses anything else, and a run that posts nothing records `started_by` null
-> and renders honestly coarse — the same way every pre-#48 run does
-> permanently. The history is complete without it except that scheduled runs
-> will not yet be told apart from ones the owner asked for.
+> **What is done and what is not.** The derivation is pinned by five tests in the
+> sync repo — a scheduled run, a dispatched run, all three doors carrying it, and
+> the two silent cases — and three of the five were proved to fail with the
+> change reverted. What is *not* done is the live half: reading real
+> `aggregator_sync_runs` rows back after a real dispatch. That needs the commit
+> pushed, because a workflow only runs from the remote, and pushing changes what
+> reads the live merchant accounts twice a day. Both repos are committed and
+> unpushed, waiting on a deploy window.
+>
+> **Nothing breaks if the two land apart.** The ops side takes either word and
+> reads an absent one as "the runner did not say"; the sync side omits the key
+> where it does not know. So the app can ship first and every run renders a blank
+> origin until the runner catches up, or the runner can ship first and post a
+> word nothing reads yet.
 
 ## 4. Reading the history
 
@@ -94,12 +99,11 @@
 
 - [x] 9.1 **Gate (#48):** Zomato and Swiggy are one **Delivery** entry whose switch hides no waiting work — the entry's badge is the sum, each channel carries its own count without being selected, the channel is in the route so a link opens on it, and one channel's session, repair and history still cannot touch the other's; and every run the sync has made is readable on that surface, newest first, loaded in pages as the owner scrolls — the ones that moved figures, the ones that moved nothing, the ones that failed, the ones the owner asked for and the one happening right now; a run that moved something says what moved in ₹ and from → to, a run that failed says why in the words Needs you already speaks, and a later success stops the nagging without erasing the failures it healed; consecutive runs telling an identical story collapse to one line carrying its count and span, expandable, and never collapse across an outcome change, a run that moved a figure, a run the owner asked for, a channel or a day; and the four-role demo walkthrough still walks.
 
-  **Met, with one clause qualified.** *"The ones the owner asked for"* renders and
-  never collapses, and is proved end to end against the demo; against **live**
-  data it will read as unattributed until the sync repo posts `started_by`
-  (task 3.1, not done — see section 3). Everything on this side is in place: the
-  column takes either word, the boundary refuses anything else, and a run that
-  posts nothing renders honestly coarse rather than guessed at.
+  **Met.** *"The ones the owner asked for"* renders and never collapses, proved
+  end to end against the demo; and since `2ae8418` in `abdatta/shawarmania-sync`
+  the runner posts the word that makes it true against live data too. The one
+  thing still unverified is the round trip itself — a real dispatch writing a
+  real row — which needs both commits pushed (task 3.3).
 
 - [x] 9.2 Suite gates: lint, typecheck, format:check, unit, build, e2e, contrast, `test:db`, `test:rls` — all green, per the CI workflow file rather than a docs checklist.
 
@@ -133,10 +137,15 @@
     passes from the main checkout. The two Edge modules this change did add,
     `run-summary.ts` and `hyperpure-run-record.ts`, were type-checked directly
     with `deno check` and are clean.
-  - **The sync repo has not been changed** (task 3.1). Until it posts
-    `started_by`, every live run records null there and the history says nothing
-    about how it began rather than guessing — which is exactly what a pre-#48
-    run does permanently.
+  - **The sync repo is changed but unpushed** (`2ae8418`). The derivation is
+    unit-pinned on both sides; what has not happened is a real dispatched run
+    writing a real row and being read back, because a workflow only runs from
+    the remote. Until both are pushed, live runs record null and the history
+    says nothing about how they began rather than guessing — which is what a
+    pre-#48 run does permanently, so nothing reads wrongly in the meantime.
+  - **The two repos can land in either order.** The ops boundary takes either
+    word and reads an absent one as "did not say"; the runner omits the key
+    where it does not know. Neither half depends on the other having shipped.
   - **`e2e` flaked once** on `counter.spec.ts › saves and records a food-first
     order`, a test on the counter tablet that this change does not touch. It
     passed alone and the whole suite passed on re-run.

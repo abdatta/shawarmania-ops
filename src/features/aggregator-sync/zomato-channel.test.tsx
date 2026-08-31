@@ -161,8 +161,11 @@ describe('the Zomato sync surface', () => {
   it('inverts the badge on the chosen outlet, which is filled with the badge colour', async () => {
     await renderSurface(OUTLET_KALYANI_ID)
 
-    const chosen = await screen.findByTestId(`zomato-needing-${OUTLET_KALYANI_ID}`)
-    const other = screen.getByTestId(`zomato-needing-${OUTLET_KANCHRAPARA_ID}`)
+    // `delivery-outlet-needing-…` rather than `zomato-needing-…`: since #48 the
+    // chip counts every channel at that outlet, so it belongs to the Delivery
+    // surface rather than to whichever channel happens to be selected.
+    const chosen = await screen.findByTestId(`delivery-outlet-needing-${OUTLET_KALYANI_ID}`)
+    const other = screen.getByTestId(`delivery-outlet-needing-${OUTLET_KANCHRAPARA_ID}`)
 
     // A selected chip is filled with `--primary`, which is also the badge's own
     // background. Left alone the badge disappears into the chip and only its
@@ -247,7 +250,11 @@ describe('the Zomato sync surface', () => {
      * `now` is a parameter for the same reason it is not read during render: a
      * component that consults a clock while rendering can disagree with itself.
      */
-    const at = (iso: string, outcome: AggregatorSyncHealth['lastOutcome']) =>
+    const at = (
+      iso: string,
+      outcome: AggregatorSyncHealth['lastOutcome'],
+      readsPerDay: number | null = 4,
+    ) =>
       ({
         outletId: OUTLET_KALYANI_ID,
         lastRunAt: iso,
@@ -256,6 +263,7 @@ describe('the Zomato sync surface', () => {
         awaitingOneTimePassword: null,
         hasSession: true,
         syncedFrom: '2026-08-01',
+        readsPerDay,
       }) satisfies AggregatorSyncHealth
 
     const now = Date.parse('2026-08-18T12:00:00Z')
@@ -272,6 +280,25 @@ describe('the Zomato sync surface', () => {
     expect(readAgainInHours(at(hoursAgo(0.2), 'reconciliation_failed'), now)).toBeNull()
     // And neither does a sync that has never run.
     expect(readAgainInHours(at(hoursAgo(0.2), null), now)).toBeNull()
+
+    /*
+     * **The window is one read interval, from the cadence the runner reported.**
+     *
+     * It used to be a constant six hours, which was one interval while the
+     * readers ran four times a day and silently became half of one when they
+     * did not — so the button unlocked while the portal still had nothing new.
+     * The rule it means to express is "there is nothing new until the next
+     * scheduled read", and now it says that.
+     */
+    expect(readAgainInHours(at(hoursAgo(7), 'ok', 2), now)).toBe(5)
+    expect(readAgainInHours(at(hoursAgo(13), 'ok', 2), now)).toBeNull()
+    expect(readAgainInHours(at(hoursAgo(1.5), 'ok', 12), now)).toBe(1)
+    expect(readAgainInHours(at(hoursAgo(2.5), 'ok', 12), now)).toBeNull()
+
+    // A runner that said nothing falls back to the app's own constant rather
+    // than unlocking immediately or locking forever.
+    expect(readAgainInHours(at(hoursAgo(1), 'ok', null), now)).toBe(5)
+    expect(readAgainInHours(at(hoursAgo(7), 'ok', null), now)).toBeNull()
   })
 
   it('sends a possible duplicate to the exact day it is about', async () => {

@@ -113,6 +113,25 @@ describe('the run history', () => {
     expect(moved.map((node) => node.textContent).join(' ')).toMatch(/₹/)
   })
 
+  it('lets a quiet run say what it looked at, and lets a failed one stay quiet', async () => {
+    await renderChannel('zomato', OUTLET_KALYANI_ID)
+    const list = await history()
+
+    // "Nothing moved" on its own is a shrug. What makes it a report is the
+    // window: seven days considered, none of them changed.
+    const read = within(list).getAllByTestId('run-read')
+    expect(read.length).toBeGreaterThan(0)
+    expect(read[0]?.textContent).toMatch(/^Read \d+ days?, /)
+
+    // And a run that never reached the portal claims no window. The write
+    // contract only builds a summary on the path that got through, so a failure
+    // saying it had read a week would be the surface inventing the work.
+    const stormCard = within(list)
+      .getByRole('button', { name: /9 reads/i })
+      .closest('div')
+    expect(stormCard?.querySelector('[data-testid="run-read"]')).toBeNull()
+  })
+
   it('collapses a failure storm into one line that carries its count and opens', async () => {
     const user = userEvent.setup()
     await renderChannel('zomato', OUTLET_KALYANI_ID)

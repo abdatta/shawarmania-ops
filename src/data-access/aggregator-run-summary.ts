@@ -1,5 +1,6 @@
 import type {
   AggregatorRunCycleSettled,
+  AggregatorRunRead,
   AggregatorRunDayFigures,
   AggregatorRunDayMovement,
   AggregatorRunSummary,
@@ -81,6 +82,15 @@ function cycle(value: unknown): AggregatorRunCycleSettled | null {
   }
 }
 
+function read(value: unknown): AggregatorRunRead | null {
+  const held = record(value)
+  const from = date(held?.['from'])
+  const to = date(held?.['to'])
+  const days = paise(held?.['days'])
+  if (!from || !to || days === null || days <= 0) return null
+  return { from, to, days }
+}
+
 function list(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
 }
@@ -96,6 +106,7 @@ export function parseRunSummary(stored: Stored): AggregatorRunSummary | null {
 
   const supply = record(held['supply_orders'])
   return {
+    read: read(held['read']),
     days: list(held['days'])
       .map(day)
       .filter((entry): entry is AggregatorRunDayMovement => entry !== null),
