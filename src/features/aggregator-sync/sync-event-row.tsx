@@ -1,4 +1,4 @@
-﻿import { useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { Link } from 'react-router'
 
@@ -264,7 +264,7 @@ export function SyncEventRow({
                       <Money paise={row.event.typed.amountPaise} />
                       <span className="text-content-muted">
                         {' '}
-                        Â· {shortDate(row.event.typed.businessDate)} Â·{' '}
+                        · {shortDate(row.event.typed.businessDate)} ·{' '}
                         {row.event.typed.note ?? 'no note'}
                       </span>
                     </>
@@ -277,7 +277,7 @@ export function SyncEventRow({
                       <Money paise={row.event.synced.amountPaise} />
                       <span className="text-content-muted">
                         {' '}
-                        Â· {shortDate(row.event.synced.businessDate)} Â·{' '}
+                        · {shortDate(row.event.synced.businessDate)} ·{' '}
                         {row.event.synced.note ?? 'no note'}
                       </span>
                     </>

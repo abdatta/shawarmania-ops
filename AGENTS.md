@@ -49,6 +49,7 @@ Two consequences follow from that sentence, and they outrank convenience everywh
 
 - Shawarmania brand values live **only** in the brand token layer (`brand.*`). Components consume semantic tokens (`surface`, `content`, `primary`, `danger`…). A franchise re-skin must be a one-file change.
 - Never use raw hex values in a component.
+- **Source files are UTF-8 with no byte-order mark.** A BOM is the fingerprint of a tool that round-tripped the file through another encoding, and the symptom the owner sees is mojibake in visible copy — `·` arriving as `Â·`. If you find a BOM on a file you are editing, strip it and check the file's non-ASCII characters before committing.
 - **Light and dark are both first-class.** Every UI change is checked in both, and the contrast validator gates both. A token that passes in one and fails in the other is a failure.
 - This is an ops portal, not the marketing site. Density, legibility, and speed beat expressiveness. See [Design System](docs/DESIGN_SYSTEM.md) for the contrast rules — some brand colours fail AA and have prescribed substitutes.
 - **If a change alters a surface's layout, that surface's shimmer is reshaped in the same change.** A placeholder reserves the shape of what is arriving; when the arriving shape moves and the placeholder does not, the surface reflows again and nothing automated will say so.
