@@ -295,6 +295,38 @@ reads like the rows beside it rather than being the only one carrying a year.
 would be a real figure from the database and a fiction about the shop, which is
 the trade this change refuses everywhere else.
 
+### 1b. Carrying August made the drawer's history long enough to page, and that exposed a read
+
+Not a decision so much as a consequence worth recording, because the next person
+to read the carry-over will want to know why a #11 file changed in a #12 commit.
+
+Before this change each outlet held **three** drawer observations. The Recent
+counts list pages at ten, so it never paged: there was no second page, and the
+first page's reads never had to cover more than three counts. Carrying August
+took each outlet to nineteen. The list pages now, and the first page has to
+account for eleven counts.
+
+`getState` was reading the newest **sixty** cash movements at the outlet, ordered
+by instant and scoped to nothing, and deriving each card's own movements by
+filtering that array. `listObservations` — the code that serves every page after
+the first — already did the correct thing, scoping a page's movements to that
+page's observations. So the first page could be wrong while every later page was
+right.
+
+The failure is not a slow screen. A card's own movements feed its `Collected` and
+`Left`, and they feed the carry-forward the next card's stored opening is measured
+against. Drop a collection out of the window and the carry-forward comes out too
+high by exactly that collection, so the surface **reports an opening break that
+does not exist** — measured at ₹2,000 against a ₹2,000 collection. In a surface
+whose stated promise is to report a discrepancy and never repair it, inventing one
+is the same failure wearing the opposite coat.
+
+Fixed here rather than deferred, on the precedent of
+`demo-counter-is-the-real-counter`, which fixed the two counter defects that
+mounting the real shell exposed and said so. The scope rule that keeps this from
+becoming a habit: a change fixes what its own data or its own surface made
+reachable, and nothing else.
+
 ### 2. Expenses are promoted by rename, and the empty table is dropped
 
 `manual_ledger_expenses` becomes `expenses`, taking its policies, indexes,

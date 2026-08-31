@@ -656,3 +656,91 @@ describe('the counts beside the figures come from the grouped reads', () => {
     ).rejects.toThrow(/future/i)
   })
 })
+
+/**
+ * The first page of counts, and the reads behind it.
+ *
+ * `listObservations` scopes a page's movements to that page's observations.
+ * `getState` — the FIRST page — used to read the newest sixty movements at the
+ * outlet instead, ordered by instant and scoped to nothing. So a burst of
+ * spends could push an older row's own collection out of that window, and the
+ * row found no movements of its own: `Collected` understated, `Left`
+ * overstated, and the carry-forward computed against a counted total that had
+ * not had its collection deducted — **which reported an opening break that did
+ * not exist.**
+ *
+ * The fixture is the bug's own shape, which is why it is this size: four counts
+ * each carrying a collection, then sixty unattached spends recorded afterwards,
+ * so every collection falls outside a newest-sixty window and none falls outside
+ * a read scoped by observation. Under the previous code all four rows report a
+ * fabricated break; under this one, none does.
+ *
+ * It is volume-dependent by nature and cannot be shrunk: with few rows the wrong
+ * read and the right one return the same answer, which is exactly why this went
+ * unnoticed. Unreachable in production until `retire-the-manual-ledger` (#12)
+ * carried August across and took each outlet from three counts to nineteen.
+ */
+describe('the first page of counts reads its own movements, not a sample of recent ones', () => {
+  it('reports no break where none exists, with sixty spends sitting on top', async () => {
+    const owner = await signIn(EMAILS.superAdmin)
+
+    const collectionPaise = 200_000
+    const recordedIds: string[] = []
+    for (let count = 0; count < 4; count += 1) {
+      const { data, error } = await owner.rpc('record_drawer_observation', {
+        p_outlet_id: OUTLETS.kanchrapara,
+        p_counted_at: freshInstant(),
+        p_counted_total_paise: 500_000,
+        p_certain: true,
+        p_away_reason: 'REST probe, deliberately off site',
+        // The collection is the observation's OWN movement, which is the whole
+        // point: it is what the carry-forward deducts.
+        p_cash_out_paise: collectionPaise,
+        p_cash_out_kind: 'collection',
+      })
+      expect(error).toBeNull()
+      recordedIds.push((data as unknown as { id: string }).id)
+    }
+
+    // Sixty, exactly filling the window the old read used. Each is trivial in
+    // rupees and recorded at `now()`, so all sixty are newer than every
+    // collection above.
+    for (let batch = 0; batch < 6; batch += 1) {
+      const results = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          owner.rpc('record_drawer_cash_out', {
+            p_outlet_id: OUTLETS.kanchrapara,
+            p_amount_paise: 100,
+            p_kind: 'spend',
+            p_reason: 'Probe · window filler',
+            p_away_reason: 'REST probe, deliberately off site',
+          }),
+        ),
+      )
+      for (const result of results) expect(result.error).toBeNull()
+    }
+
+    const drawer = createSupabaseCashDrawerAdapter(owner)
+    const state = await drawer.getState(OUTLETS.kanchrapara)
+
+    const mine = state.recentObservations.filter((row) => recordedIds.includes(row.id))
+    expect(mine).toHaveLength(4)
+
+    for (const observation of mine) {
+      // Each row's own collection is present, so `Collected` and `Left` are the
+      // figures that were actually recorded.
+      expect(observation.ownCashOut.reduce((sum, movement) => sum + movement.amountPaise, 0)).toBe(
+        collectionPaise,
+      )
+      // And no break is invented. Every one of these openings came from the
+      // command's own carry-forward, so a reported break here could only be the
+      // read's arithmetic missing a collection.
+      expect(observation.openingBreakPaise).toBeNull()
+    }
+
+    // The count beside the paise agrees with it: both are the movements since
+    // the last count, and they used to come from different bounds.
+    expect(state.cashOutSinceCount).toBe(60)
+    expect(state.cashOutSincePaise).toBe(60 * 100)
+  })
+})

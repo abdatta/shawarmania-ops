@@ -111,3 +111,37 @@ every existing record untouched.
 
 - **WHEN** a source row would carry across without its recording account
 - **THEN** the migration raises rather than writing an unattributed row
+
+## MODIFIED Requirements
+
+### Requirement: The opening is stored per observation, and a break is reported rather than repaired
+
+Each observation SHALL store its opening rather than deriving it from earlier
+rows at read time. Where a stored opening disagrees with the previous
+observation's carry-forward, the surface SHALL report the discrepancy and SHALL
+NOT silently replace either figure.
+
+**A break SHALL NOT be invented.** The carry-forward it is measured against is
+the previous observation's counted total less that observation's **own** cash
+movement, so it SHALL be computed from a complete reading of that observation's
+movements — never from a sample of the outlet's recent ones. A movement missing
+from such a sample raises the carry-forward and reports a break of exactly that
+movement's amount where none exists, which is the same fabrication the
+report-never-repair rule exists to prevent, arriving from the other direction.
+
+For the same reason, the figures a count presents for itself — the amount
+collected from it and the amount left after it — SHALL come from that
+observation's own movements rather than from a recent-movement sample, and the
+count of movements since the last observation SHALL be bounded by that
+observation's instant rather than by the same sample, so it cannot disagree with
+the total shown beside it.
+
+#### Scenario: An adjusted earlier count leaves later openings alone
+
+- **WHEN** an adjustment changes an earlier observation's counted total
+- **THEN** no later observation's stored opening changes, and the surface reports the break
+
+#### Scenario: A burst of spends does not invent a break on an earlier count
+
+- **WHEN** the first page of counts is read at an outlet where many cash movements have been recorded since those counts
+- **THEN** every count on that page shows the amount actually collected from it, and no break is reported for a count whose stored opening agrees with its predecessor's carry-forward

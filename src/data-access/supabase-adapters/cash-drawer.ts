@@ -352,22 +352,61 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
         rows: row.rows,
       }))
 
-      const cashOutRows = await client
-        .from('drawer_cash_out')
-        .select('*')
-        .eq('outlet_id', outletId)
-        .order('occurred_at', { ascending: false })
-        .limit(60)
-      if (cashOutRows.error) refuse(cashOutRows.error)
-
-      const adjustments = await client
-        .from('drawer_observation_adjustments')
-        .select('*')
-        .eq('outlet_id', outletId)
-        .order('adjusted_at', { ascending: false })
+      /**
+       * **Two reads, because they answer two different questions**, and one of
+       * them used to answer both wrongly.
+       *
+       * This was a single read of the newest sixty movements at the outlet, and
+       * `listObservations` two hundred lines below already did it correctly —
+       * so the first page could lie while every later page told the truth. The
+       * sixty were ordered by instant across the whole outlet rather than scoped
+       * to the observations on the page, so a burst of spends could push an
+       * older row's own collection out of the window. Nothing failed; the row
+       * simply found no movements of its own, and **that is the shape of the
+       * bug worth stating**: `Collected` understated, `Left` overstated, and —
+       * because a carry-forward is the previous count less its own movements —
+       * `openingBreakPaise` computed against a figure that was too high and
+       * **reported a break that did not exist**. A fabricated discrepancy
+       * warning, in the one surface whose promise is to report and never invent.
+       *
+       * Unreachable in production until `retire-the-manual-ledger` (#12): each
+       * outlet held three counts, fewer than one page, so the list never paged
+       * and the window never had to stretch. Carrying August took each outlet to
+       * nineteen.
+       *
+       * So: the page's movements by observation, which is bounded by the page
+       * and served by `drawer_cash_out_observation_idx`; and the movements since
+       * the last count by instant, which is what `cashOutSinceCount` actually
+       * asks and is bounded by how recently the drawer was counted.
+       */
+      const observationIds = observations.map((row) => row.id)
+      const [pageMovements, sinceMovements, adjustments] = await Promise.all([
+        client
+          .from('drawer_cash_out')
+          .select('*')
+          .eq('outlet_id', outletId)
+          .in('observation_id', observationIds),
+        client
+          .from('drawer_cash_out')
+          .select('id, observation_id')
+          .eq('outlet_id', outletId)
+          .gt('occurred_at', last.counted_at),
+        // Scoped to the page for the same reason, and it had no bound at all:
+        // every adjustment the outlet had ever recorded, on every drawer open.
+        client
+          .from('drawer_observation_adjustments')
+          .select('*')
+          .eq('outlet_id', outletId)
+          .in(
+            'observation_id',
+            observations.slice(0, DRAWER_HISTORY_PAGE).map((row) => row.id),
+          ),
+      ])
+      if (pageMovements.error) refuse(pageMovements.error)
+      if (sinceMovements.error) refuse(sinceMovements.error)
       if (adjustments.error) refuse(adjustments.error)
 
-      const movements = cashOutRows.data ?? []
+      const movements = pageMovements.data ?? []
       const ownOf = (observationId: string) =>
         movements.filter((row) => row.observation_id === observationId)
 
@@ -508,8 +547,11 @@ export function createSupabaseCashDrawerAdapter(client: Client): CashDrawerAdapt
         receiptsByDay,
         cashExpensesByDay,
         cashOutSincePaise: Number(cashOut.data ?? 0),
-        cashOutSinceCount: movements.filter(
-          (row) => row.occurred_at > last.counted_at && row.observation_id !== last.id,
+        // Its own read, by instant: the movements since the last count are not
+        // the page's movements, and counting them out of the page's array is
+        // what made this figure disagree with the paise beside it.
+        cashOutSinceCount: (sinceMovements.data ?? []).filter(
+          (row) => row.observation_id !== last.id,
         ).length,
         daysCovered: daysCoveredBy([receiptsByDay, cashExpensesByDay]),
         recentObservations: recent,
