@@ -18,5 +18,5 @@
 ## 4. Verification
 
 - [x] 4.1 Reset the local database and pass `test:db`, `test:rls`, `test:e2e:auth`, regenerated-type parity, and a direct create-order response-loss replay proof.
-- [ ] 4.2 Pass `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run functions:typecheck`, `npm test`, `npm run contrast`, `npm run build`, and `npm run test:e2e`.
+- [x] 4.2 Pass `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run functions:typecheck`, `npm test`, `npm run contrast`, `npm run build`, and `npm run test:e2e`.
 - [x] 4.3 **PHASE GATE — production replay repair:** prove an accepted create-order response can be lost and retried with the identical envelope, yielding `replay`, one order and line set, no second number, and no `arithmetic_invalid` or needs-attention state.
