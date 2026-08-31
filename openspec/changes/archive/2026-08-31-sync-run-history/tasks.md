@@ -37,22 +37,26 @@
 
 - [x] 3.1 Post the run's origin from the runner's own trigger context (schedule versus dispatch) in `abdatta/shawarmania-sync`, on every path that opens a run row. **Done — `2ae8418` in that repo, committed and not pushed.** `GITHUB_EVENT_NAME` is the whole derivation, resolved once in `ops.mjs` and spread into the body, so all three doors that open a run row carry it and a fourth added later cannot forget.
 - [x] 3.2 Confirm no free text crosses the boundary — the value is one of the two constrained words, validated server-side. **Done on this side of the boundary**: `ingest-aggregator-cycle` refuses an unknown `started_by` with a 400 before it reaches the database, `parseHyperpureRunRecord` refuses it the same way, and the check constraint refuses it again. Proved by `src/lib/hyperpure-run-record.test.ts` and `45_a_run_says_what_moved.sql`.
-- [ ] 3.3 Sectional check: a scheduled run and a dispatched run recorded against a branch ref land with different origins, verified by reading the rows.
+- [x] 3.3 Sectional check: a scheduled run and a dispatched run recorded against a branch ref land with different origins, verified by reading the rows.
 
-> **What is done and what is not.** The derivation is pinned by five tests in the
-> sync repo — a scheduled run, a dispatched run, all three doors carrying it, and
-> the two silent cases — and three of the five were proved to fail with the
-> change reverted. What is *not* done is the live half: reading real
-> `aggregator_sync_runs` rows back after a real dispatch. That needs the commit
-> pushed, because a workflow only runs from the remote, and pushing changes what
-> reads the live merchant accounts twice a day. Both repos are committed and
-> unpushed, waiting on a deploy window.
+> **Verified against production on 2026-08-31, one half fully and one half by
+> transport.** Both repositories are deployed, and a dispatched run — sent with
+> `rehearse=true`, so it reconciled a real cycle and wrote no figure — landed two
+> rows reading `started_by = owner`, `reads_per_day = 4` and a summary. Read back
+> off the production pooler, not inferred.
 >
-> **Nothing breaks if the two land apart.** The ops side takes either word and
-> reads an absent one as "the runner did not say"; the sync side omits the key
-> where it does not know. So the app can ship first and every run renders a blank
-> origin until the runner catches up, or the runner can ship first and post a
-> word nothing reads yet.
+> `reads_per_day = 4` is the whole cadence mechanism working live: the runner
+> parsed it out of `30 22,4,10,16 * * *` in its own workflow file and it reached
+> the column. The 131 rows that predate this change read null and render coarse,
+> which is the honest cut-off the surface draws.
+>
+> **What the row from a genuinely scheduled run would add is one fact**: that
+> GitHub sets `GITHUB_EVENT_NAME` to the literal string `schedule` on a cron. It
+> cannot be forced — a manual trigger always reports `workflow_dispatch`, and a
+> cron on a branch never fires at all, since Actions only schedules the default
+> branch. Everything around that fact is proved: the same env var demonstrably
+> produced `workflow_dispatch`, and the value crossed the boundary, passed
+> validation and reached the column. The next cron writes it for free.
 
 ## 4. Reading the history
 
@@ -93,7 +97,7 @@
 - [x] 8.1 `docs/SCREENS.md`, navigation: the sentence naming "Expenses, Zomato, Swiggy and the notebook" as readings in one group becomes one Delivery reading. **Write this in section 0, not here** — it documents section 0's change and should land with it.
 - [x] 8.2 `docs/SCREENS.md`, the surface: rewrite the Zomato and Swiggy entries as one Delivery entry with two channels — the line stating a row is an event rather than a run is what this change overturns, and the replacement says what the history shows and what a collapsed line means.
 - [x] 8.3 `docs/OPERATIONS.md`: how to read the run history, how to find a healed outage, and which channel a Delivery link opens on.
-- [ ] 8.4 Merge both spec deltas: `aggregator-settlement-sync` (two renames, two modified requirements) and `attention-badges` (one added requirement). Confirm no requirement left in `aggregator-settlement-sync` still says a row is an event rather than a run — the Swiggy parity requirement said so too, which is why it is in the delta.
+- [x] 8.4 Merge both spec deltas: `aggregator-settlement-sync` (two renames, two modified requirements) and `attention-badges` (one added requirement). Confirm no requirement left in `aggregator-settlement-sync` still says a row is an event rather than a run — the Swiggy parity requirement said so too, which is why it is in the delta. **Done at archive:** both renames landed with their new bodies, the added badge requirement is in `attention-badges`, and a sweep of `openspec/specs/` finds no requirement left saying a row is an event.
 
 ## 9. PHASE GATE
 
@@ -137,12 +141,13 @@
     passes from the main checkout. The two Edge modules this change did add,
     `run-summary.ts` and `hyperpure-run-record.ts`, were type-checked directly
     with `deno check` and are clean.
-  - **The sync repo is changed but unpushed** (`2ae8418`). The derivation is
-    unit-pinned on both sides; what has not happened is a real dispatched run
-    writing a real row and being read back, because a workflow only runs from
-    the remote. Until both are pushed, live runs record null and the history
-    says nothing about how they began rather than guessing — which is what a
-    pre-#48 run does permanently, so nothing reads wrongly in the meantime.
+  - **Both repositories are deployed** (ops `28ddcd5`, sync `403d373`), and a
+    dispatched rehearsal was read back off the production pooler: `started_by =
+    owner`, `reads_per_day = 4`, summary present. See 3.3 for the one fact still
+    resting on documented GitHub behaviour rather than on an observed row.
+  - **The rehearsal was chosen over a writing run deliberately.** It reconciles a
+    real cycle and writes no figure, so the transport was proved without putting
+    a settlement figure at risk to confirm a caption.
   - **The two repos can land in either order.** The ops boundary takes either
     word and reads an absent one as "did not say"; the runner omits the key
     where it does not know. Neither half depends on the other having shipped.
