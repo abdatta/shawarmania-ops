@@ -175,6 +175,106 @@ select is(
   1::bigint,
   'its parent and captured line commit together');
 
+-- A response can disappear after the transaction commits. The tablet retains
+-- the identical create envelope and sends it again; by then its line ids exist
+-- because the first call wrote them. Replay must consult the compact receipt
+-- before create-only collision validation sees those committed rows.
+create temporary table pg_temp.create_replay_case as
+select
+  'a1000000-0000-4000-a000-000000000091'::uuid as command_id,
+  'a2000000-0000-4000-a000-000000000091'::uuid as order_id,
+  'a3000000-0000-4000-a000-000000000091'::uuid as line_id,
+  now() as created_at,
+  public.app_business_date(now(), time '04:00') as business_date;
+
+select is(
+  public.create_billing_order(
+    command_id, 1,
+    public.billing_payload_hash(pg_temp.order_payload(order_id,line_id,business_date)),
+    created_at, '90000000-0000-4000-a000-000000000001',
+    pg_temp.order_payload(order_id,line_id,business_date)
+  ) ->> 'status',
+  'accepted',
+  'the response-loss fixture first commits its create order')
+from pg_temp.create_replay_case;
+
+create temporary table pg_temp.create_replay_result as
+select public.create_billing_order(
+    command_id, 1,
+    public.billing_payload_hash(pg_temp.order_payload(order_id,line_id,business_date)),
+    created_at, '90000000-0000-4000-a000-000000000001',
+    pg_temp.order_payload(order_id,line_id,business_date)
+  ) as result
+from pg_temp.create_replay_case;
+
+select is(
+  result ->> 'status',
+  'replay',
+  'an exact create-order retry replays after its committed response is lost')
+from pg_temp.create_replay_result;
+
+select is(
+  result ->> 'orderId',
+  'a2000000-0000-4000-a000-000000000091',
+  'create-order replay returns the originally accepted order identity')
+from pg_temp.create_replay_result;
+
+select is(
+  (result ->> 'orderNumber')::bigint,
+  2::bigint,
+  'create-order replay returns the originally allocated daily number')
+from pg_temp.create_replay_result;
+
+select is(
+  public.create_billing_order(
+    command_id, 1,
+    public.billing_payload_hash(jsonb_set(
+      pg_temp.order_payload(order_id,line_id,business_date),
+      '{totalPaise}', '0'::jsonb)),
+    created_at, '90000000-0000-4000-a000-000000000001',
+    jsonb_set(pg_temp.order_payload(order_id,line_id,business_date),
+      '{totalPaise}', '0'::jsonb)
+  ) ->> 'status',
+  'identity_conflict',
+  'a reused create command identity conflicts before changed arithmetic is considered')
+from pg_temp.create_replay_case;
+
+select is(
+  (select count(*) from public.orders
+    where id = 'a2000000-0000-4000-a000-000000000091'),
+  1::bigint,
+  'response-loss replay leaves exactly one order')
+from pg_temp.create_replay_result;
+
+select is(
+  (select count(*) from public.order_items
+    where order_id = 'a2000000-0000-4000-a000-000000000091'),
+  1::bigint,
+  'response-loss replay leaves exactly the original line set')
+from pg_temp.create_replay_result;
+
+select is(
+  public.create_billing_order(
+    'a1000000-0000-4000-a000-000000000092', 1,
+    public.billing_payload_hash(pg_temp.order_payload(
+      'a2000000-0000-4000-a000-000000000092',
+      'a3000000-0000-4000-a000-000000000092',
+      public.app_business_date(now(), time '04:00'))),
+    now(), '90000000-0000-4000-a000-000000000001',
+    pg_temp.order_payload(
+      'a2000000-0000-4000-a000-000000000092',
+      'a3000000-0000-4000-a000-000000000092',
+      public.app_business_date(now(), time '04:00'))
+  ) ->> 'status',
+  'accepted',
+  'a distinct create command succeeds immediately after the replay');
+
+select is(
+  (select order_number from public.orders
+    where id = 'a2000000-0000-4000-a000-000000000092'),
+  3::bigint,
+  'the replay consumes no second daily order number');
+
 reset role;
 select is(
   (select last_number from public.bill_number_counters

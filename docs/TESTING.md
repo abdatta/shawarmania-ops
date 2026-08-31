@@ -192,7 +192,10 @@ End-to-end, with the network genuinely disabled rather than mocked away.
 - Drop the backend before local commit → the composer stays; drop it after local
   commit → the composer clears and the command remains not sent yet.
 - Let the server commit and lose only the response → replay returns the same
-  result and consumes no second bill number.
+  result and consumes no second bill or order number. The create-order case
+  must retry after its original line rows exist, return the original order id
+  and number, leave one order and line set, and never become
+  `arithmetic_invalid` or needs attention.
 - Direct Mark Paid cannot drain during its six-second Undo window, and Undo
   restores lines, customer and exact tender allocation.
 - Create → revise → pay/cancel remains dependency ordered while an unrelated

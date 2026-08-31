@@ -98,6 +98,12 @@ can be paid a second time.
 **Exact command receipts.** The server claims the command UUID with its type,
 version, immutable creation time and canonical payload hash. Exact retry returns
 the original result; changed content under that UUID is `identity_conflict`.
+That receipt is consulted before any validation whose answer can change because
+the first attempt committed — for example, create-order line identities exist
+after the order lands. Otherwise a lost accepted response could make the exact
+retry look like a new collision. The receipt needs no customer or line payload:
+the canonical hash plus command, scope and time identities are enough to decide
+replay versus conflict.
 
 **Bill numbers are assigned by the server, never the client.** Two offline tablets cannot safely agree on the next number in a sequence. Until a bill syncs, the UI shows a clearly provisional local reference; the real per-outlet number arrives with the server's response. Showing a fake number that later changes would be worse than showing an honest placeholder.
 

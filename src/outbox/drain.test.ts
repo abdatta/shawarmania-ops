@@ -34,6 +34,43 @@ function command(commandId: string, orderId: string): BillingCommand {
   }
 }
 
+function createOrderCommand(
+  commandId: string,
+  orderId: string,
+): Extract<BillingCommand, { type: 'create_order' }> {
+  return {
+    commandId,
+    schemaVersion: 1,
+    tabletId: 'tablet-1',
+    shiftId: 'shift-1',
+    type: 'create_order',
+    createdAt: '2026-08-11T12:00:00.000Z',
+    payload: {
+      orderId,
+      businessDate: '2026-08-11',
+      customerId: null,
+      customerName: null,
+      customerPhone: null,
+      subtotalPaise: 13_900,
+      discountPaise: 0,
+      taxPaise: 0,
+      totalPaise: 13_900,
+      pricingMode: 'no_tax',
+      lines: [
+        {
+          id: crypto.randomUUID(),
+          menuItemId: null,
+          itemName: 'Classic Chicken Shawarma',
+          unitPricePaise: 13_900,
+          quantity: 1,
+          lineTotalPaise: 13_900,
+        },
+      ],
+    },
+    payloadHash: commandId.replaceAll('-', '').padEnd(64, 'b').slice(0, 64),
+  }
+}
+
 async function accept(
   store: BillingDeliveryStore,
   serverCommand: BillingCommand,
@@ -158,6 +195,63 @@ describe('BillingDrainCoordinator', () => {
     expect(await database.envelopes.get(unrelated.commandId)).toBeUndefined()
     expect(reachability).toHaveBeenCalledWith(false)
     expect(reachability).toHaveBeenCalledWith(true)
+    await coordinator.stop()
+    database.close()
+  })
+
+  it('resolves a retained create order when its committed response replays', async () => {
+    const database = new BillingDeliveryDatabase(databaseName())
+    const store = new BillingDeliveryStore(database)
+    const retained = createOrderCommand(crypto.randomUUID(), crypto.randomUUID())
+    await accept(store, retained, retained.payload.orderId)
+    let nowMs = 10_000
+    let committed = false
+    const execute = vi.fn(async () => {
+      if (!committed) {
+        committed = true
+        // The server committed, but its accepted response never reached the
+        // outbox. The immutable envelope therefore remains for exact replay.
+        throw new TypeError('response lost after commit')
+      }
+      return {
+        status: 'replay' as const,
+        commandId: retained.commandId,
+        orderId: retained.payload.orderId,
+        orderNumber: 8,
+      }
+    })
+    const coordinator = new BillingDrainCoordinator({
+      store,
+      tabletId: 'tablet-1',
+      ownerId: 'tab-a',
+      locks: null,
+      now: () => nowMs,
+      random: () => 0.5,
+      isVisible: () => true,
+      execute,
+    })
+
+    await expect(coordinator.runOnce()).resolves.toBe(0)
+    expect(await database.envelopes.get(retained.commandId)).toMatchObject({
+      state: 'retrying',
+      attemptCount: 1,
+      nextAttemptAtMs: 11_000,
+    })
+
+    nowMs = 11_000
+    await expect(coordinator.runOnce()).resolves.toBe(1)
+    expect(execute).toHaveBeenCalledTimes(2)
+    expect(await database.envelopes.get(retained.commandId)).toBeUndefined()
+    expect(await database.results.get(retained.commandId)).toMatchObject({
+      result: { status: 'replay', orderNumber: 8 },
+      refusedTrace: null,
+    })
+    expect(
+      await database.envelopes
+        .where('[tabletId+state]')
+        .equals(['tablet-1', 'needs_attention'])
+        .count(),
+    ).toBe(0)
     await coordinator.stop()
     database.close()
   })
