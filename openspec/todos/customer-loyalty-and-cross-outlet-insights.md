@@ -39,8 +39,10 @@ history merely because both are keyed by the same global customer.
 - #32 provides the non-enumerable global identity and keeps transaction RLS intact.
 - #33 links immutable outlet-owned orders and bills to customer identity without
   putting spend totals on the global profile.
-- #13 will provide the owner-level reporting boundary where a business-wide
-  insight could eventually live.
+- The owner-level reporting boundary where a business-wide insight could
+  eventually live was to be #13's. That change was withdrawn on 2026-08-31 and
+  its surfaces deleted, so this note would have to establish that boundary
+  itself.
 
 ## Open questions
 
@@ -60,7 +62,8 @@ history merely because both are keyed by the same global customer.
 A real loyalty offer or repeat-customer decision whose value requires activity
 across outlets, with the audience and privacy boundary decided first.
 
-**Dependencies when seeded**: `global-customer-identity` (#32), `billing-live`
-(#10), and likely `owner-console-live` (#13) for owner-only insights. Interacts
+**Dependencies when seeded**: `global-customer-identity` (#32) and
+`billing-live` (#10). It also named `owner-console-live` (#13) for owner-only
+insights; that change was withdrawn on 2026-08-31. Interacts
 with [`data-retention-policy`](./data-retention-policy.md) and
 [`bill-digital-share`](./bill-digital-share.md).

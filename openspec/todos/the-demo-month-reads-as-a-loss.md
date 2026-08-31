@@ -39,14 +39,27 @@ construction, so a careless change fails loudly rather than quietly — which is
 the good news.
 
 The surface itself is `demo`-gated. Nobody is being shown a wrong figure about a
-real shop, and the live P&L is `owner-console-live` (#13)'s to build against real
-data.
+real shop.
+
+## Superseded on 2026-08-31: there is no P&L to balance
+
+This note's whole trigger was **#13 `owner-console-live`**, on the reasoning that
+balancing the demo month belonged in the change that made the real one. **#13 was
+withdrawn and the P&L deleted** — `#51 navigation-groups-and-surface-cull`
+removes the surface, and `profit-estimates` with it. See
+[`owner-console-was-withdrawn.md`](./owner-console-was-withdrawn.md).
+
+So the wrong figure this note reports stops existing rather than gets fixed: with
+no P&L screen, the demo month cannot read as a loss anywhere.
+
+**What survives is the underlying fixture shape**, and it is worth keeping,
+because it is not really about profit: the demo's expenses cover a notebook month
+while its bills cover a few days, so any figure spanning both periods is
+comparing unlike things. The Ledger's monthly view reads the same fixtures. That
+is the version of this problem to check for.
 
 ## Trigger to promote
 
-**#13 `owner-console-live`**, which is where the P&L stops being demo data and
-starts being the owner's own. Balancing the demo month is worth doing in the same
-change that makes the real one, because both need the same question answered:
-what period does this figure cover, and does it contain a wage run.
-
-Sooner if the walkthrough is shown to somebody whose opinion matters before then.
+Somebody reads the demo Ledger over a month and the figure looks wrong, or the
+walkthrough is shown to somebody whose opinion matters. **Not** #13, which no
+longer exists.

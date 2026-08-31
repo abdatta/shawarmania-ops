@@ -31,4 +31,7 @@ Nothing in the current operation requires a tax breakup, and getting GST wrong i
 
 The business registers for GST, a customer requires a tax invoice, or a franchise agreement makes it a requirement for an outlet.
 
-**Dependencies when seeded**: `billing-live` (#10). Likely interacts with `owner-console-live` (#13), which owns reports and export.
+**Dependencies when seeded**: `billing-live` (#10). It also named
+`owner-console-live` (#13) for reports and export; that change was withdrawn on
+2026-08-31 and there is now no report or export surface anywhere in the app, so
+this note owns whatever presentation it needs.

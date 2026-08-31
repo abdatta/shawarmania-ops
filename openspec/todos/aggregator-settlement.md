@@ -61,4 +61,8 @@ Still open:
 
 **Directly-paid supply bills**: tracked separately in `supply-bills-paid-outside-the-payout.md` — a purchase paid by transfer rather than through a payout is known only to the supplier, and is entered by hand until a supplier-portal reader exists.
 
-**Dependencies when seeded**: `owner-console-live` (#13), which owns the P&L and reports.
+**Dependencies when seeded**: none outstanding. This named `owner-console-live`
+(#13), which owned the P&L and reports; that change was withdrawn on 2026-08-31
+and the P&L deleted with it (see `owner-console-was-withdrawn.md`). Nothing this
+note needs was unique to the console — a reconciled payout lands in the Ledger,
+which already reads from recorded rows.
