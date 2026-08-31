@@ -1,6 +1,6 @@
 # Navigation Outgrows A Flat List
 
-**Type**: Design gap · **Status**: Open · **Area**: Shell
+**Type**: Design gap · **Status**: Promoted — `#51 navigation-groups-and-surface-cull`, 31 Aug 2026 · **Area**: Shell
 
 ## What the owner sees
 
@@ -59,3 +59,23 @@ blast radius.
 
 The next surface promoted into navigation, or the first time somebody cannot find
 a tab they know exists.
+
+## How it was answered
+
+Promoted as `#51 navigation-groups-and-surface-cull` on 31 Aug 2026, by both
+halves at once: sixteen entries became **nine surfaces under four top-level
+entries**, because seven of the sixteen were demonstration screens the business
+decided not to build.
+
+Each of the four difficulties above was answered rather than dodged. **The list
+is not one role's** — entries sharing a label must declare the same group, so
+a senior role's placement cannot silently override a junior's. **The order is
+meaningful** — `nav.order` survives, its uniqueness rule narrowed from
+per-role to per-sibling-set. **One entry already sits inside another** — path
+nesting stays for ungrouped entries and is deliberately not applied inside a
+group, so Expenses is drawn as the Ledger's sibling in Finances rather than
+indented under it twice. **A bottom bar has a hard ceiling** — that ceiling is
+now stated in `app-shell` as five entries with no horizontal scrolling.
+
+Grouping is metadata, not addresses: no surface moved, so no link the owner
+already held stopped working.

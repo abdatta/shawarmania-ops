@@ -48,6 +48,31 @@ A concrete operational need, stated by the business, in one of these shapes:
 fires, and expect the consumption basis and the raw-materials rule to come back
 as part of that change rather than separately.
 
+## Superseded on 31 Aug 2026: shelved became deleted
+
+This note said shelving was "a documentation act, not a deletion: the surface
+stays behind its demo gate, the `inventory-ledger` capability spec stays where it
+is." **That is no longer true, and the reasoning above is what made it change.**
+
+`#51 navigation-groups-and-surface-cull` deleted the Stock surface, its movement
+ledger, its gate entries, its routes and its tests, and removed the
+`inventory-ledger` spec whole. The argument was that `demo` is for a surface
+somebody intends to promote, and this note is a five-month-old statement that
+nobody does — so the gate was recording a plan that had already been abandoned,
+and every future refactor was paying to carry it.
+
+`profit-estimates` went in the same change, which completes the withdrawal this
+note started: the consumption basis was already withdrawn by #12 for want of
+movements, and the purchase basis went with the owner console (see
+[`owner-console-was-withdrawn.md`](owner-console-was-withdrawn.md)).
+
+**The database was not touched.** `inventory_movements`, its append-only
+constraint and its derived-quantity trigger keep their policies and their
+enumerated isolation coverage, and are recorded in `docs/LIMITATIONS.md` as a
+table with no reader. So the trigger conditions below still work the way they
+always did — what returns is the surfaces and the spec, not the model. The spec
+text is in git history at `openspec/specs/inventory-ledger/spec.md`.
+
 ## What to do when reading old material
 
 Archived changes and their specs describe inventory as forthcoming, and they are
