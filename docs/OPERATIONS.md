@@ -515,8 +515,8 @@ shows its date in the place an ordinary one shows its date and time.
 Zomato revenue and Hyperpure expenses are read automatically twice a day and can
 no longer be typed. The day the automation is blocked — Zomato changed an API,
 blocking got aggressive, a CI policy changed — a person recovers the period by
-uploading the operator's own statement, on **Super Admin → Ledger → Zomato →
-Upload a statement**. The file is parsed by the same code the robot uses, so this
+uploading the operator's own statement, on **Super Admin → Ledger → Delivery →
+Zomato → Upload a statement**. The file is parsed by the same code the robot uses, so this
 path is exercised on every scheduled run, not only when it is needed.
 
 Three files, each downloaded from the operator's own portal and recognised by
@@ -553,6 +553,52 @@ then does a code box appear — at the moment Zomato has actually sent one, not
 before. If nothing is wrong at all, the screen says you are still signed in and
 starts nothing. The manual upload above stays valid in every state for the day
 even the fallback path is wanted.
+
+## Reading the run history *(#48)*
+
+**Super Admin → Delivery** is one entry for both restaurant channels. The badge
+on it is the sum across them; the switch at the top of the surface shows each
+channel's share without being selected, so nothing is waiting invisibly behind
+the channel that is not on screen. The channel is in the address
+(`…/ledger/delivery/zomato`), which is what makes a link to one of them land on
+it — and where exactly one channel has work waiting, opening the entry opens on
+that channel. The old `…/ledger/zomato` and `…/ledger/swiggy` links still work
+and redirect.
+
+Beneath **Needs you**, **What has happened** is the history: every run the sync
+has made for the selected channel and outlet, newest first, loading a page at a
+time as you scroll. Reading it:
+
+- **A row is a run**, not a summary of a day. The ones that moved figures say
+  what moved, in rupees and from → to, on the row itself — `12 Aug revised
+  ₹9,410.00 → ₹9,286.50`, `Week 3–9 Aug paid ₹10,642.70`, `3 Hyperpure orders
+  added`. Nothing has to be expanded to see a figure.
+- **A collapsed line stands for several runs** that told an identical story, and
+  it always says how many and over what span — `3 reads · 5:15 am–11:15 pm`.
+  Tap it to see each run's time. Runs never collapse across a change of outcome,
+  a run that moved a figure, a run you asked for, a channel, or a day, so a line
+  never claims a continuity that did not happen.
+- **A run you asked for is always its own line**, marked `you asked`. Four taps
+  of **Read now** are four lines, however identical, because you will look for
+  yours by its time.
+
+**Finding a healed outage.** A repair takes the matter out of *Needs you* and
+clears the badge, and it deliberately leaves the failures alone. So when the
+question is "what happened last Tuesday", scroll the history to that day: a
+session that died overnight reads as one `Signed out` line carrying the count of
+reads that failed while it was out, followed by the run that fixed it. That
+evidence is the reason a row is a run — nothing else in the app records it, and
+the badge is designed to stop mentioning it the moment it is resolved.
+
+**Runs older than the summaries.** Below a marked line, the history reaches runs
+recorded before it kept track of what they changed. They say when they ran and
+how they went and nothing more, and that is permanent: what a run changed can
+only be worked out while it is running, because once a figure is written a day
+restated identically is indistinguishable from a day that moved.
+
+**Rehearsals never appear.** A rehearsal reads a real cycle and throws the
+writes away, so it says nothing about the figures and is not part of this
+record.
 
 ## First production deploy
 

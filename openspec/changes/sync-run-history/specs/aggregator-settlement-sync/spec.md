@@ -43,11 +43,13 @@ moved nothing SHALL say so in one line. A failed run SHALL say why, in the same
 vocabulary offered to the owner as an action. A run under way SHALL read as under
 way.
 
-**What a run changed SHALL be recorded as the run writes it**, in the same
-transaction as the writes it describes, and SHALL NOT be derived after the fact.
+**What a run changed SHALL be determined by the write itself** — inside the
+transaction that performs the writes, while both the stored figure and the
+incoming one are still known — and SHALL be carried onto the run's record. It
+SHALL NOT be derived from stored figures after that transaction has committed.
 Once a write commits, a figure restated identically is indistinguishable from a
 figure touched, so a summary derived later cannot tell movement from repetition.
-Money in that record SHALL be integer paise. Recording the summary SHALL NOT
+Money in that record SHALL be integer paise. Determining the summary SHALL NOT
 alter any figure the run writes.
 
 **A run SHALL record how it began** — to schedule, or because the owner asked —

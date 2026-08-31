@@ -90,7 +90,14 @@ describe('the Zomato sync surface', () => {
     // find out. Both figures are shown, and both are spoken: a screen reader
     // told only that a day was revised has been told less than the screen says.
     const revised = await screen.findByRole('button', { name: /revised from .* to /i })
-    expect(revised).toHaveAttribute('aria-expanded', 'false')
+
+    // Stronger than it was, since #48 made the row a run rather than an event:
+    // there is nothing to open at all. The figures ARE the row — visible as
+    // `12 Aug revised ₹9,410.00 → ₹9,286.50` beneath the tag, and spoken as a
+    // sentence, because an arrow is not read aloud as anything.
+    expect(revised).not.toHaveAttribute('aria-expanded')
+    const card = revised.closest('div')
+    expect(card?.querySelector('[data-testid="run-moved"]')?.textContent).toMatch(/→/)
   })
 
   it('stops a resolved week asking for a decision, and keeps it on the page', async () => {
@@ -111,7 +118,11 @@ describe('the Zomato sync surface', () => {
     // Resolved, not deleted: "this week did not add up in July" is worth being
     // able to find later, and removing the row would remove the only record that
     // it ever did not.
-    await waitFor(() => expect(sectionHolding(/does not add up/i)).toMatch(/what changed/i), {
+    // Into "What you decided" — where the merged derived list's decisions went
+    // when the list retired into Needs you above and the run history below
+    // (#48). A dismissed pair and an accepted difference are what a person
+    // concluded, which no run can reproduce.
+    await waitFor(() => expect(sectionHolding(/does not add up/i)).toMatch(/what you decided/i), {
       timeout: 8_000,
     })
 

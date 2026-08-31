@@ -2,9 +2,12 @@ import type {
   AggregatorSyncAdapter,
   AggregatorSyncEventRow,
   AggregatorSyncHealth,
+  AggregatorSyncRunPage,
+  AggregatorSyncRunRow,
   HyperpureHealth,
 } from '../adapters'
 import type { Role } from '@/session/session'
+import { seedRunHistory } from './aggregator-run-history'
 import type { DemoStore } from './store'
 
 /**
@@ -49,6 +52,8 @@ function eventId(): string {
 interface OutletSyncState {
   health: AggregatorSyncHealth
   events: AggregatorSyncEventRow[]
+  /** Every run this channel has made at this outlet, newest first (#48). */
+  runs: AggregatorSyncRunRow[]
   /** Set while a repair is under way, so the code field knows what to expect. */
   pendingLogin: boolean
 }
@@ -205,6 +210,7 @@ export function createMockAggregatorSyncAdapter(
         syncedFrom: day(16),
       },
       events: seedFor(outletId, healthy, at, day, channel),
+      runs: seedRunHistory({ outletId, channel, at, day }),
       pendingLogin: false,
     })
   }
@@ -247,6 +253,48 @@ export function createMockAggregatorSyncAdapter(
     async listEvents(outletId) {
       // Newest first: the thing that just happened is the thing being looked for.
       return [...stateFor(outletId).events].sort((a, b) => b.at.localeCompare(a.at))
+    },
+
+    /**
+     * The history of runs, paged exactly as the live adapter pages it (#48).
+     *
+     * Keyset on `startedAt` rather than an index, so the demo exercises the same
+     * boundary the real one does — including a collapsed group straddling a page
+     * edge, which is the case the grouping function is most likely to get wrong.
+     *
+     * A run under way is synthesised at the top while this outlet's health says
+     * it is reading, rather than baked into the fixture. That way tapping Read
+     * now actually produces the row, which is the story, and the health line and
+     * the history cannot disagree about whether something is happening.
+     */
+    async listRuns(outletId, options = {}): Promise<AggregatorSyncRunPage> {
+      const state = stateFor(outletId)
+      const limit = options.limit ?? 25
+      const inFlight: AggregatorSyncRunRow[] = state.health.running
+        ? [
+            {
+              id: `${channel}-${outletId}-run-now`,
+              outletId,
+              channel,
+              startedAt: state.health.lastRunAt ?? now().toISOString(),
+              finishedAt: null,
+              outcome: 'ok',
+              detail: null,
+              startedBy: 'owner',
+              summary: null,
+            },
+          ]
+        : []
+
+      const all = [...inFlight, ...state.runs]
+      const from = options.before
+        ? all.filter((row) => row.startedAt < (options.before as string))
+        : all
+      const page = from.slice(0, limit)
+      return {
+        runs: page,
+        before: page.length < limit ? null : (page[page.length - 1]?.startedAt ?? null),
+      }
     },
 
     async markNotDuplicate(outletId, eventId) {

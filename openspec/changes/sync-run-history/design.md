@@ -88,11 +88,42 @@ day touched, and a first measurement looks like every other row. The question
 "what did this run change" stops being answerable the moment the transaction
 ends.
 
-### D2. The summary is computed inside `ingest_aggregator_cycle`, in the same transaction
+### D2. The summary is computed inside `ingest_aggregator_cycle`, in the transaction that writes
 
 The loop already has `v_existing` and the incoming figures. It accumulates
-movements into a local jsonb and folds it into the run's row in the same
-transaction as the writes it describes.
+movements into a local jsonb and returns them with the rest of the cycle's
+result.
+
+**Amended during apply, and the amendment is worth reading.** This decision, and
+the requirement written from it, both said the summary is *folded into the run's
+row* in the same transaction as the writes. It cannot be, and the reason is
+structural rather than a shortcut: `ingest_aggregator_cycle` is one RPC per
+cycle and **the run's row does not exist yet while it runs**.
+`record_aggregator_sync_run` is called afterwards by the Edge Function, once,
+covering every cycle, and each RPC is its own transaction. Nothing knew the run
+id at ingest time before this change and nothing does after it.
+
+So the boundary moves by one step and the load-bearing property is kept whole:
+
+- **The diff is computed inside the writing transaction**, from `v_existing` and
+  the incoming figures, while both sides are still known. This is the whole of
+  the argument — after the write commits, a day restated identically is
+  indistinguishable from a day touched.
+- The cycle **returns** its movements, and the Edge Function carries them onto
+  the run's record in the call it already makes.
+
+What is given up is only that the run row and the figures commit together, and
+its consequence is one already present today: an ingest that commits and a run
+record that then fails leaves writes with no run row, which is exactly what
+happens now and is already logged loudly. What is *not* given up is the reason
+the recording exists — the summary is never derived from stored figures after
+the fact.
+
+The alternative was opening the run row before the cycles and passing its id
+in, which makes it literally atomic and rewrites the run lifecycle: an open row
+that a crashed function never closes reads as "Reading" forever and disables
+Read now, where today a crash leaves no row. That is #46's territory and the
+proposal put it out of scope.
 
 **This is the money-path edit and it carries the change's real risk.**
 Mitigations, all mandatory:
@@ -122,10 +153,23 @@ summarises as nothing moved, which is true.
 ### D4. `origin` is posted by the runner, never inferred
 
 The runner knows its own trigger context; a client looking at timestamps does
-not. Two words wide. The column is **not** named `trigger` (reserved) — the name
-is settled in tasks, with `origin` the working candidate and `started_by` the
-alternative if `origin` collides with `aggregator_channel_days.origin` in
-readers' heads.
+not. Two words wide.
+
+**Settled during apply: the column is `started_by text`, and its two values are
+`schedule` and `owner`.** Not `trigger`, which is reserved. Not `origin`, and
+the collision this decision anticipated is real rather than theoretical:
+`aggregator_channel_days.origin` already exists in the same domain, is read
+through the same adapter file, and holds four values that all name *where a
+figure came from* — `daily_reader`, `settlement`, `supplied_by_hand`,
+`legacy_typed`. A second `origin` a table away, meaning something else entirely,
+would be read as the same kind of thing.
+
+`started_by` carries one known trap and the column comment names it: everywhere
+else in this schema a `_by` column holds a uuid (`accepted_by`, `recorded_by`).
+This one holds a word. It is still the best name available, because it is the
+plain English answer to what the column records — the schedule started this run,
+or the owner did — and the check constraint makes a uuid impossible rather than
+merely unexpected.
 
 *Rejected: inferring "the owner asked for it" from proximity to a dispatch.* Two
 scheduled runs and one manual run inside the same minute are indistinguishable
@@ -308,12 +352,30 @@ is the same thing every pre-change run does permanently.
 
 ## Open Questions
 
-- The column name for how a run started, and its two values.
-- What `outlet_id` an account-level Hyperpure run carries, and whether it shows
-  on both outlets' lists or one. This also decides whether the Zomato/Hyperpure
-  pairing the proposal declined becomes cheap later.
-- Where dismissed duplicate pairs and accepted differences live once the merged
-  derived list retires. They are decisions, not runs, and they must not simply
-  vanish.
-- Whether a collapsed group's span reads as times within a day or as dates once
-  it crosses one.
+- ~~The column name for how a run started, and its two values.~~ Settled in D4:
+  `started_by`, holding `schedule` or `owner`.
+
+- ~~Where dismissed duplicate pairs and accepted differences live once the merged
+  derived list retires.~~ **Settled during apply: a third section, `What you
+  decided`, between *Needs you* and the history.** It carries exactly the
+  resolved rows that record a DECISION — a dismissed duplicate pair and an
+  accepted difference — and nothing else. A settled week and a revised day were
+  resolved rows too, and both are now runs that say what moved and by how much,
+  so listing them here as well would be the same fact twice under two headings.
+  It reads from the events the surface already has, so nothing new is fetched
+  and nothing vanished.
+
+- ~~Whether a collapsed group's span reads as times within a day or as dates
+  once it crosses one.~~ **Settled by the collapse rule itself: it cannot cross
+  one.** A day boundary breaks a group, so a span is always two times within one
+  day — `3 reads · 5:15 am–11:15 pm` — and the date is on the rail above it. The
+  question dissolved rather than being answered.
+
+- **Still open: what `outlet_id` an account-level Hyperpure run carries**, and
+  whether its rows appear on both outlets' feeds or one. Untouched by this
+  change, which is why it is still here: Hyperpure runs are recorded on the
+  `hyperpure` channel and the history reads one restaurant channel at a time, so
+  none of them appear in it. What a Hyperpure read *moved* does reach the
+  history — the supply-order counts ride the Zomato run that towed them — and
+  that is the half the owner asked for. This also still decides whether the
+  Zomato/Hyperpure pairing the proposal declined becomes cheap later.

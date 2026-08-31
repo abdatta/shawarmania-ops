@@ -1,13 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 import type {
+  AggregatorRunOutcome,
   AggregatorSyncAdapter,
   AggregatorSyncEvent,
   AggregatorSyncEventRow,
   AggregatorSyncHealth,
+  AggregatorSyncRunPage,
   HyperpureHealth,
   StatementUploadResult,
 } from '../adapters'
+import { parseRunSummary } from '../aggregator-run-summary'
 import type { Database } from '../database.types'
 
 /**
@@ -70,6 +73,12 @@ function describeUpload(
 const DUPLICATE_DAYS = 4
 const DUPLICATE_FLOOR_PAISE = 5_000
 const DUPLICATE_FRACTION = 0.02
+
+/**
+ * One screenful and a bit, so the sentinel has something to reach for without
+ * the first page carrying a month nobody scrolled to.
+ */
+const RUN_PAGE = 25
 
 export function createSupabaseAggregatorSyncAdapter(
   client: SupabaseClient<Database>,
@@ -348,10 +357,80 @@ export function createSupabaseAggregatorSyncAdapter(
     return rows.sort((a, b) => b.at.localeCompare(a.at))
   }
 
+  /**
+   * The history of runs, newest first, a page at a time (#48).
+   *
+   * One query. It rides `aggregator_sync_runs_outlet_started_idx`, which is
+   * `(outlet_id, started_at desc)` and already exists — this change adds no
+   * index and no table.
+   *
+   * **Keyset, not offset.** A run arriving while somebody is scrolling shifts
+   * every offset by one and duplicates a row across the boundary; continuing
+   * from the oldest `started_at` already shown cannot.
+   *
+   * **No count query.** The list ends when a page comes back short, because
+   * counting a year of runs to render the first screen is exactly what
+   * pagination is for.
+   *
+   * **Every outcome, and runs still going.** The events read asks for two of
+   * the five words the check constraint permits, so a run refused over money
+   * and a run holding for a code have both been invisible. There is no filter
+   * on outcome here at all.
+   *
+   * **And no healing.** `events()` drops failures older than the newest `ok`
+   * run and should keep doing so: that is what stops *Needs you* asking for a
+   * repair that has already happened. Doing it here would delete the record of
+   * an outage at the moment the outage ended.
+   */
+  async function runs(
+    outletId: string,
+    options: { before?: string | null; limit?: number } = {},
+  ): Promise<AggregatorSyncRunPage> {
+    const limit = options.limit ?? RUN_PAGE
+    let query = client
+      .from('aggregator_sync_runs')
+      .select(
+        'id, outlet_id, channel, started_at, finished_at, outcome, detail, started_by, summary',
+      )
+      .eq('outlet_id', outletId)
+      .eq('channel', channel)
+      // A rehearsal wrote nothing, so it reports nothing about the figures.
+      // Stated as a decision here rather than inherited quietly, in a list that
+      // otherwise claims to show everything.
+      .eq('rehearsal', false)
+      .order('started_at', { ascending: false })
+      .limit(limit)
+
+    if (options.before) query = query.lt('started_at', options.before)
+
+    const { data, error } = await query
+    if (error) throw new Error('Could not read the run history')
+
+    const rows = (data ?? []).map((row) => ({
+      id: row.id,
+      outletId: row.outlet_id,
+      channel: row.channel,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      outcome: row.outcome as AggregatorRunOutcome,
+      detail: row.detail,
+      startedBy: (row.started_by ?? null) as 'schedule' | 'owner' | null,
+      summary: parseRunSummary(row.summary),
+    }))
+
+    return {
+      runs: rows,
+      // A short page is the end of the history. A full one may or may not be,
+      // and asking once more is cheaper than counting.
+      before: rows.length < limit ? null : (rows[rows.length - 1]?.startedAt ?? null),
+    }
+  }
+
   return {
     getHealth: health,
     getHyperpureHealth: hyperpureHealth,
     listEvents: events,
+    listRuns: runs,
 
     async countNeedsOwner() {
       /*

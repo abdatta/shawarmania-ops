@@ -484,6 +484,8 @@ export type Database = {
           outlet_id: string
           rehearsal: boolean
           started_at: string
+          started_by: string | null
+          summary: Json | null
         }
         Insert: {
           channel: string
@@ -495,6 +497,8 @@ export type Database = {
           outlet_id: string
           rehearsal?: boolean
           started_at: string
+          started_by?: string | null
+          summary?: Json | null
         }
         Update: {
           channel?: string
@@ -506,6 +510,8 @@ export type Database = {
           outlet_id?: string
           rehearsal?: boolean
           started_at?: string
+          started_by?: string | null
+          summary?: Json | null
         }
         Relationships: [
           {
@@ -4227,6 +4233,8 @@ export type Database = {
           p_outlet_id: string
           p_rehearsal?: boolean
           p_started_at: string
+          p_started_by?: string
+          p_summary?: Json
         }
         Returns: string
       }

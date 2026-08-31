@@ -86,13 +86,20 @@ values
    pg_temp.ledger_day(28), pg_temp.ledger_day(22), -18800,
    'zomato', 'TDS::22675834::20260719');
 
+-- Both runs carry how they began and what they changed (#48), so the isolation
+-- helper below can assert on those two columns by name rather than on a row
+-- count that would pass just as well with them empty.
 insert into public.aggregator_sync_runs
-  (outlet_id, channel, started_at, finished_at, outcome, detail)
+  (outlet_id, channel, started_at, finished_at, outcome, detail, started_by, summary)
 values
   (:'KAL', 'zomato', now() - interval '2 hours', now() - interval '2 hours' + interval '40 seconds',
-   'ok', null),
+   'ok', null, 'schedule',
+   jsonb_build_object('version', 1, 'days',
+     jsonb_build_array(jsonb_build_object('business_date', pg_temp.ledger_day(3),
+                                          'movement', 'revised')))),
   (:'KPA', 'zomato', now() - interval '2 hours', now() - interval '2 hours' + interval '35 seconds',
-   'session_lapsed', 'the Zomato session is no longer valid');
+   'session_lapsed', 'the Zomato session is no longer valid', 'owner',
+   jsonb_build_object('version', 1, 'days', '[]'::jsonb));
 
 insert into public.outlet_channel_sync (outlet_id, channel, synced_from)
 values (:'KAL', 'zomato', pg_temp.ledger_day(-3)),
@@ -165,6 +172,19 @@ begin
     into n;
   return next is(n, 0::bigint,
     format('%s reads no sync run at %s outlet', persona, whose));
+
+  -- The two columns #48 added, by name. The row count above already covers
+  -- them — a policy is a rule about rows, so new columns on an existing row are
+  -- protected by construction — and this asserts it rather than assuming it,
+  -- because "the policy already covers it" is exactly the sentence that is
+  -- wrong the one time it matters.
+  execute format(
+    'select count(*) from public.aggregator_sync_runs
+      where outlet_id = %L and (started_by is not null or summary is not null)', p_outlet)
+    into n;
+  return next is(n, 0::bigint,
+    format('%s reads neither how a run began nor what it changed at %s outlet',
+      persona, whose));
 
   execute format(
     'select count(*) from public.outlet_channel_sync where outlet_id = %L', p_outlet)

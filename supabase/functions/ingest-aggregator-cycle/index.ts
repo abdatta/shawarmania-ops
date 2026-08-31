@@ -1,5 +1,6 @@
 import { serviceClient } from '../_shared/authority.ts'
 import { json, preflight, readJson, str } from '../_shared/http.ts'
+import { emptySummary, mergeSummaries, readRunOrigin } from '../_shared/run-summary.ts'
 
 /**
  * The door the aggregator readers post settlement through.
@@ -110,6 +111,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const declared = str(body['outcome']) as Outcome | undefined
   const outlets = permittedOutlets()
 
+  /*
+   * How the run began, from the process that ran it.
+   *
+   * The runner knows its own trigger context — a timed workflow against a
+   * dispatched one — and a client looking at timestamps does not: two scheduled
+   * runs and one the owner asked for inside the same minute are
+   * indistinguishable by time, and this record exists to be believed.
+   *
+   * Constrained to the two words rather than passed through. Free text here
+   * would be rendered to the owner by a surface that cannot check it, and the
+   * database would refuse it anyway — this turns that refusal into a legible
+   * 400 instead of a run that failed to record itself.
+   */
+  const startedBy = body['started_by'] === undefined ? null : readRunOrigin(body['started_by'])
+  if (body['started_by'] !== undefined && startedBy === null) {
+    return json({ error: 'unknown_started_by' }, 400)
+  }
+
   if (!outletId || !outlets.includes(outletId)) {
     return json({ error: 'outlet_not_permitted' }, 403)
   }
@@ -137,7 +156,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
    */
   const rehearsing = body['rehearse'] === true
 
-  const finish = async (outcome: Outcome, detail: string | null, status: number, extra = {}) => {
+  /**
+   * What this run changed, carried from the transactions that changed it.
+   *
+   * Each cycle worked its own movements out while it still held both the stored
+   * figure and the incoming one; afterwards a day restated identically is
+   * indistinguishable from a day touched, so this is the only chance to know.
+   * A run that ingested no cycles carries the empty summary rather than null —
+   * null means "recorded before #48", which is a different sentence.
+   *
+   * **A rehearsal writes nothing, so it summarises nothing.** Its cycles report
+   * what they would have moved, and carrying that onto the run would put
+   * movements the ledger never saw into the history.
+   */
+  const summaryFor = (results: readonly unknown[]) =>
+    rehearsing ? emptySummary() : mergeSummaries(results)
+
+  const finish = async (
+    outcome: Outcome,
+    detail: string | null,
+    status: number,
+    extra: Record<string, unknown> = {},
+    results: readonly unknown[] = [],
+  ) => {
     const { error } = await service.rpc('record_aggregator_sync_run', {
       p_outlet_id: outletId,
       p_channel: channel,
@@ -145,6 +186,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       p_outcome: outcome,
       p_detail: detail,
       p_rehearsal: rehearsing,
+      p_started_by: startedBy ?? undefined,
+      p_summary: summaryFor(results),
     })
     if (error) {
       // The run's own record failing is not a reason to lose the answer, but it
@@ -175,7 +218,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     if (error) {
       console.error('a cycle was refused by the write contract', error)
-      return await finish('shape_changed', error.message, 422, { results })
+      // The cycles that already committed still moved figures, so what they
+      // moved is recorded even though the run as a whole failed.
+      return await finish('shape_changed', error.message, 422, { results }, results)
     }
 
     results.push(data)
@@ -190,8 +235,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       `${unreconciled} cycle(s) did not reconcile against the payout the portal states it made`,
       200,
       { results },
+      results,
     )
   }
 
-  return await finish('ok', null, 200, { results })
+  return await finish('ok', null, 200, { results }, results)
 })

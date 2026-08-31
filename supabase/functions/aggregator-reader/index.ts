@@ -204,6 +204,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         p_outcome: parsed.value.outcome,
         p_detail: parsed.value.detail,
         p_rehearsal: false,
+        p_started_by: parsed.value.startedBy ?? undefined,
+        p_summary: parsed.value.summary,
       })
       if (error) {
         console.error('could not record the Hyperpure run', { code: error.code })

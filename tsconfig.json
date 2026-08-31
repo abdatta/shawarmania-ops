@@ -16,6 +16,12 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true,
 
+    // Edge Function modules import each other with the extension Deno requires,
+    // and `src/lib/hyperpure-run-record.test.ts` pulls one of them into this
+    // program to test it. Safe with `noEmit`, which this project already sets:
+    // nothing is written, so no `.ts` specifier can survive into output.
+    "allowImportingTsExtensions": true,
+
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,

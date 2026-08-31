@@ -18,6 +18,7 @@ import { cn } from '@/lib/cn'
 
 import type { AggregatorChannelConfig } from './channel-config'
 import { needsOwner } from './needs-you-count'
+import { RunHistory } from './run-history'
 import { SyncEventRow } from './sync-event-row'
 
 /**
@@ -134,6 +135,17 @@ export function AggregatorSyncSurface({
    * same data would disagree, and React is entitled to render whenever it likes.
    */
   const [readAgainIn, setReadAgainIn] = useState<number | null>(null)
+  /**
+   * Bumped when a run finishes or the owner does something, so the history
+   * re-reads from its first page.
+   *
+   * Deliberately not tied to `refresh`, which polls every 700ms while a run is
+   * going: a list that reset itself twice a second would be unscrollable while
+   * anything was happening. The two moments the history can actually have
+   * changed are a run ending and an action landing.
+   */
+  const [historyKey, setHistoryKey] = useState(0)
+  const historyChanged = useCallback(() => setHistoryKey((key) => key + 1), [])
 
   /**
    * When this channel's reconnect was dispatched, or null.
@@ -217,6 +229,9 @@ export function AggregatorSyncSurface({
       if (wasRunning.current) {
         wasRunning.current = false
         attentionChanged()
+        // A run that just finished is a new line at the top of the history, and
+        // the one it replaces read as under way.
+        historyChanged()
       }
       return
     }
@@ -225,7 +240,7 @@ export function AggregatorSyncSurface({
       void refresh().catch(() => undefined)
     }, 700)
     return () => clearInterval(timer)
-  }, [health?.running, hyperpure?.running, refresh, config.showsHyperpure])
+  }, [health?.running, hyperpure?.running, refresh, config.showsHyperpure, historyChanged])
 
   const act = async (action: () => Promise<void>) => {
     setBusy(true)
@@ -237,6 +252,7 @@ export function AggregatorSyncSurface({
       // not reconcile should take the number away, and the number is on the
       // other side of the screen from the button that cleared it.
       attentionChanged()
+      historyChanged()
     } catch {
       setError('That did not go through. Try again in a moment.')
     } finally {
@@ -311,7 +327,18 @@ export function AggregatorSyncSurface({
 
   const waiting = health?.awaitingOneTimePassword ?? null
   const actionable = events?.filter((row) => needsOwner(row)) ?? []
-  const rest = events?.filter((row) => !needsOwner(row)) ?? []
+  /**
+   * Resolved rows that record a DECISION rather than a write.
+   *
+   * The history below covers everything a run did. These two are the rows a run
+   * cannot reproduce, because the run is not what settled them — the owner is.
+   */
+  const decided =
+    events?.filter(
+      (row) =>
+        row.resolvedAt !== null &&
+        (row.event.kind === 'possible-duplicate-expense' || row.event.kind === 'week-disputed'),
+    ) ?? []
 
   /**
    * Who is signed out, collapsed into ONE repair per family.
@@ -439,17 +466,48 @@ export function AggregatorSyncSurface({
             </section>
           )}
 
+          {/*
+            The decisions the owner has already taken.
+
+            The merged derived list retired into two halves: anything still
+            unresolved is above in Needs you, and the runs are below. A dismissed
+            duplicate pair and an accepted difference are neither — they are
+            decisions, and they must not simply vanish when the list that carried
+            them does. They are the only rows here a run cannot reproduce: a run
+            says what it wrote, and these say what a person concluded about it.
+
+            Only the two that were decided. A settled week and a revised day
+            were also resolved rows, and both are now runs that say what moved
+            and by how much, so listing them here as well would be the same fact
+            twice under two headings.
+          */}
+          {decided.length > 0 && (
+            <section className="space-y-2">
+              <h2 className="text-xs font-medium uppercase tracking-wide text-content-muted">
+                What you decided
+              </h2>
+              {decided.map((row) => (
+                <Row key={row.id} row={row} />
+              ))}
+            </section>
+          )}
+
           <section className="space-y-2">
             <h2 className="text-xs font-medium uppercase tracking-wide text-content-muted">
-              What changed
+              What has happened
             </h2>
-            {rest.length === 0 ? (
-              <Card className="p-4 text-sm text-content-muted">
-                Nothing yet. The line above says when it last ran.
-              </Card>
-            ) : (
-              rest.map((row) => <Row key={row.id} row={row} />)
-            )}
+            {/*
+              Keyed, so switching channel or outlet — or a run finishing — gives
+              a fresh list rather than one that has to unpick itself. A history
+              that could outlive its own subject is a history that can splice two
+              of them together.
+            */}
+            <RunHistory
+              key={`${config.channel}:${outletId}:${historyKey}`}
+              adapter={adapter}
+              outletId={outletId!}
+              channelLabel={config.label}
+            />
           </section>
         </div>
       )}

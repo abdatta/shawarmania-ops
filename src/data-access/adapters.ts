@@ -2140,6 +2140,89 @@ export interface AggregatorSyncEventRow {
 }
 
 /**
+ * What one run of the sync did (#48).
+ *
+ * **A row on the history is a run**, which overturns the founding rule that a
+ * row is an event. What makes that survivable is compression and laziness: runs
+ * telling an identical story collapse to one line, and the list loads a page at
+ * a time. Anything that wants a person keeps its louder home in *Needs you*.
+ *
+ * `summary` is null for a run recorded before summaries were, which is not the
+ * same as a run that changed nothing — that one carries an empty summary. The
+ * surface says the two differently, and an honest cut-off line says where
+ * recording begins.
+ */
+export interface AggregatorSyncRunRow {
+  id: string
+  outletId: string
+  channel: string
+  startedAt: string
+  /** Null while the run is still going. There is no separate flag to disagree. */
+  finishedAt: string | null
+  outcome: AggregatorRunOutcome
+  detail: string | null
+  /** How it began, or null for a run recorded before that was recorded. */
+  startedBy: 'schedule' | 'owner' | null
+  summary: AggregatorRunSummary | null
+}
+
+/**
+ * Every word the run table's own check constraint permits.
+ *
+ * All five, deliberately. The events read asked for two of them, so a run
+ * refused over money and a run holding for a code both appeared as nothing at
+ * all — which is the absence this change exists to close.
+ */
+export type AggregatorRunOutcome =
+  'ok' | 'session_lapsed' | 'awaiting_one_time_password' | 'shape_changed' | 'reconciliation_failed'
+
+/** One business day's figures, as the run found them or left them. */
+export interface AggregatorRunDayFigures {
+  revenuePaise: number | null
+  commissionPaise: number | null
+  netPaise: number | null
+}
+
+export interface AggregatorRunDayMovement {
+  businessDate: string
+  movement: 'first_measured' | 'revised'
+  /** Null for a first measurement: there was no figure to come from. */
+  from: AggregatorRunDayFigures | null
+  to: AggregatorRunDayFigures
+}
+
+export interface AggregatorRunCycleSettled {
+  cycleStart: string
+  cycleEnd: string
+  computedPaise: number
+  statedPayoutPaise: number | null
+}
+
+/**
+ * What a run moved, as the write contract recorded it at the time.
+ *
+ * Money is integer paise, exactly as the columns hold it. Rupees happen at the
+ * display edge and nowhere before it.
+ */
+export interface AggregatorRunSummary {
+  days: AggregatorRunDayMovement[]
+  cyclesSettled: AggregatorRunCycleSettled[]
+  supplyOrders: { added: number; amended: number }
+  datesWithoutARecordedDay: string[]
+}
+
+/** One page of history, and whether asking again could bring more. */
+export interface AggregatorSyncRunPage {
+  runs: AggregatorSyncRunRow[]
+  /**
+   * Pass to the next call to continue. Null when the page came back short,
+   * which is how the list ends — there is no count query, because counting the
+   * whole history to render the first screen is the thing pagination is for.
+   */
+  before: string | null
+}
+
+/**
  * Whether the sync is running, quiet, or waiting on somebody.
  *
  * `awaitingOneTimePassword` is deliberately not a kind of `sessionLapsed`. One
@@ -2207,6 +2290,27 @@ export interface AggregatorSyncAdapter {
    */
   getHyperpureHealth(): Promise<HyperpureHealth>
   listEvents(outletId: string): Promise<AggregatorSyncEventRow[]>
+  /**
+   * The history of runs, newest first, a page at a time (#48).
+   *
+   * **Healing does not apply here, and that split is the point.** `listEvents`
+   * and the badge keep the newest-run-wins rule: one successful run ends every
+   * failure older than it, because they were symptoms of one dead session and
+   * the owner should stop being asked. Applied to history that rule deletes the
+   * record of an outage at the moment the outage ends — so a session that died
+   * at 4:10 am and was repaired at noon still shows all nine failed reads.
+   *
+   * Rehearsals are excluded. A rehearsal writes nothing, so it reports nothing
+   * about the figures; that is a decision here rather than an inherited filter.
+   *
+   * `before` continues from the oldest run of the previous page, keyed on
+   * `started_at` rather than an offset, so a run arriving mid-scroll cannot
+   * shift a boundary and duplicate a row.
+   */
+  listRuns(
+    outletId: string,
+    options?: { before?: string | null; limit?: number },
+  ): Promise<AggregatorSyncRunPage>
   /**
    * How many things want the owner, per outlet they can reach.
    *
