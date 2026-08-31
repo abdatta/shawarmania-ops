@@ -78,36 +78,37 @@ test('the console’s low-stock count is the stock the manager can see', async (
   await expect(page.getByText('Low stock')).toHaveCount(1)
 })
 
-test('the comparison states its basis and recomputes when it changes', async ({ page }) => {
+test('the comparison states its basis, and offers no second one', async ({ page }) => {
   await openDemo(page, 'demo/owner/comparison')
 
   await expect(page.getByText('Shawarmania Kalyani')).toBeVisible()
   await expect(page.getByText('Shawarmania Kanchrapara')).toBeVisible()
 
-  const note = page.getByTestId('comparison-basis-note')
-  await expect(note).toContainText('Cash basis')
-  const before = await page.getByTestId('comparison-total-profit').innerText()
+  await expect(page.getByTestId('comparison-basis-note')).toContainText(
+    'Cash-basis operating estimate',
+  )
+  await expect(page.getByTestId('comparison-total-profit')).toBeVisible()
 
-  await page.getByTestId('comparison-basis').selectOption('consumption')
-  await expect(note).toContainText('Consumption basis')
-  await expect(note).toContainText('never both subtracted')
-  await expect(page.getByTestId('comparison-total-profit')).not.toHaveText(before)
+  // `retire-the-manual-ledger` (#12) withdrew the consumption basis: inventory is
+  // shelved, so it cannot be computed, and a named basis that returns nothing is
+  // worse than one honestly offered. The claim that matters is the negative one —
+  // no control implies a second basis exists.
+  await expect(page.getByTestId('comparison-basis')).toHaveCount(0)
 })
 
 test('profit is never shown without the basis it was computed on', async ({ page }) => {
   await openDemo(page, 'demo/owner/pnl')
 
   const figure = page.getByTestId('pnl-profit')
-  await expect(figure).toHaveAttribute('data-basis', 'consumption')
-  await expect(page.getByTestId('pnl-profit-basis')).toContainText('Consumption basis')
+  await expect(figure).toHaveAttribute('data-basis', 'cash')
+  await expect(page.getByTestId('pnl-profit-basis')).toContainText('Cash-basis operating estimate')
 
   // And the working adds up to the figure, so the number can be checked.
   const sales = paiseFrom(await page.getByText('Sales', { exact: true }).locator('..').innerText())
   expect(sales).toBeGreaterThan(0)
 
-  await page.getByTestId('pnl-basis').selectOption('cash')
-  await expect(figure).toHaveAttribute('data-basis', 'cash')
-  await expect(page.getByTestId('pnl-profit-basis')).toContainText('Cash basis')
+  // One basis, and nothing that offers another.
+  await expect(page.getByTestId('pnl-basis')).toHaveCount(0)
 })
 
 test('reports summarise a period and produce no file of invented revenue', async ({ page }) => {

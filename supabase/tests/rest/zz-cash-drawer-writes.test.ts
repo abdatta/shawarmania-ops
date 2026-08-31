@@ -124,7 +124,7 @@ afterAll(async () => {
   // forged actor.
   const owner = await signIn(EMAILS.superAdmin)
   const { error: withdrawError } = await owner
-    .from('manual_ledger_expenses')
+    .from('expenses')
     .update({ voided_at: new Date().toISOString(), voided_reason: 'probe cleanup' })
     .in('category', [PROBE_EXPENSE, PROBE_DRAWER_EXPENSE])
     .is('voided_at', null)
@@ -434,7 +434,7 @@ describe('expenses are read where they are written', () => {
     // own session rather than the service role, so the insert policy is
     // exercised too.
     const { data: profile } = await owner.auth.getUser()
-    const { error: writeError } = await owner.from('manual_ledger_expenses').insert({
+    const { error: writeError } = await owner.from('expenses').insert({
       outlet_id: OUTLETS.kalyani,
       business_date: businessDate,
       category: PROBE_EXPENSE,
@@ -454,7 +454,7 @@ describe('expenses are read where they are written', () => {
     expect(viewError).toBeNull()
     expect(viaView).toHaveLength(1)
     expect(viaView?.[0]?.is_cash).toBe(true)
-    expect(viaView?.[0]?.source_table).toBe('manual_ledger_expenses')
+    expect(viaView?.[0]?.source_table).toBe('expenses')
 
     // 2. The Ledger day carries it. This is the card that read "Nothing
     //    recorded" — the assertion the owner's screenshot is of.
@@ -551,7 +551,7 @@ describe('the counts beside the figures come from the grouped reads', () => {
     // A cash expense inside the interval, written the way the live Expenses
     // surface writes one. On the tree the drawer reported nought expenses
     // whatever this row said.
-    const { error: expenseError } = await owner.from('manual_ledger_expenses').insert({
+    const { error: expenseError } = await owner.from('expenses').insert({
       outlet_id: OUTLETS.kanchrapara,
       business_date: resolveBusinessDate(new Date(), '04:00'),
       category: PROBE_DRAWER_EXPENSE,

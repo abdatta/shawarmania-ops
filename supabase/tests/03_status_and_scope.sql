@@ -53,8 +53,9 @@ select is((select count(*) from public.outlets), 0::bigint,
   'deactivated admin reads no outlet row');
 
 select throws_ok($q$
-  insert into public.expenses (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
-  values ('00000000-0000-4000-a000-000000000001', current_date, 'other', 1000, 'cash',
+  insert into public.expenses
+    (outlet_id, business_date, category, amount_paise, is_cash, recorded_by)
+  values ('00000000-0000-4000-a000-000000000001', current_date, 'Other', 1000, true,
           '10000000-0000-4000-a000-000000000008')
 $q$, '42501', null, 'deactivated admin cannot write');
 
@@ -112,8 +113,8 @@ select is(
 
 select is((select count(*) from public.bills), 0::bigint,
   'employee reads no bills');
-select is((select count(*) from public.expenses), 0::bigint,
-  'employee reads no expenses');
+select is((select count(*) from public.expenses), 3::bigint,
+  'employee reads their outlet expenses');
 select is((select count(*) from public.menu_items), 0::bigint,
   'employee has no menu surface');
 
@@ -206,18 +207,6 @@ $q$, '42501', null, 'no client can un-remove a tablet');
 select throws_ok($q$
   select count(*) from public.bill_number_counters
 $q$, '42501', null, 'the bill number counters are invisible to clients');
-
-select throws_ok($q$
-  insert into public.daily_cash_records
-    (outlet_id, business_date, opening_cash_paise, cash_sales_paise, cash_expenses_paise,
-     cash_withdrawn_paise, expected_closing_paise, actual_closing_paise, difference_paise, closed_by)
-  values ('00000000-0000-4000-a000-000000000001', current_date, 0, 0, 0, 0, 0, 0, 0,
-          '10000000-0000-4000-a000-000000000002')
-$q$, '42501', null, 'no client can insert a daily cash record directly');
-
-select throws_ok($q$
-  update public.daily_cash_records set actual_closing_paise = actual_closing_paise + 1
-$q$, '42501', null, 'no client can edit a closed day');
 
 -- An FA cannot touch outlets; only the Super Admin manages them.
 select is(

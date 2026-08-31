@@ -207,13 +207,13 @@ export function createSupabaseAggregatorSyncAdapter(
         .order('business_date', { ascending: false })
         .limit(20),
       client
-        .from('manual_ledger_expenses')
+        .from('expenses')
         .select('id, business_date, amount_paise, description')
         .eq('outlet_id', outletId)
         .is('source_system', null)
         .is('voided_at', null),
       client
-        .from('manual_ledger_expenses')
+        .from('expenses')
         .select('id, business_date, amount_paise, description, created_at')
         .eq('outlet_id', outletId)
         .eq('source_system', channel)

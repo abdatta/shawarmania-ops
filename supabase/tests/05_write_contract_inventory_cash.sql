@@ -341,43 +341,8 @@ select is(
   'accepted',
   'the tablet must reconfirm after its final shift');
 
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
-
--- D-1 at Kalyani: no cash bills (the 00:20 bill belongs to D-2), one cash
--- expense of 50000, no withdrawals.
-select lives_ok($q$
-  select public.close_business_day(
-    '00000000-0000-4000-a000-000000000001', current_date - 1, 100000, 50000,
-    'Test close (synthetic)')
-$q$, 'the franchise admin closes D-1');
-
-select results_eq(
-  $q$ select cash_sales_paise, cash_expenses_paise, cash_withdrawn_paise,
-             expected_closing_paise, difference_paise
-        from public.daily_cash_records
-       where outlet_id = '00000000-0000-4000-a000-000000000001'
-         and business_date = current_date - 1 $q$,
-  $q$ values (0::bigint, 50000::bigint, 0::bigint, 50000::bigint, 0::bigint) $q$,
-  'the snapshot figures are computed by the database, not supplied');
-
-select throws_ok($q$
-  select public.close_business_day(
-    '00000000-0000-4000-a000-000000000001', current_date - 2, 100000, 100000, null)
-$q$, 'P0001', null, 'closing an already-closed day is refused');
-
-select throws_ok($q$
-  select public.close_business_day(
-    '00000000-0000-4000-a000-000000000002', current_date - 1, 100000, 100000, null)
-$q$, 'P0001', null, 'closing another outlet''s day is refused');
-
-select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
-
-select throws_ok($q$
-  select public.close_business_day(
-    '00000000-0000-4000-a000-000000000001', current_date, 100000, 100000, null)
-$q$, 'P0001', null, 'even the super admin cannot close a day — deliberately');
-
--- A late payment command against the closed D-1 does not rewrite the snapshot.
+-- A late payment command after the tablet's final confirmation still lands.
+-- Drawer counts observe history; they never close or lock a business day.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000004'::uuid);
 
 select is(
@@ -416,14 +381,6 @@ select is(
   'a late offline payment lands with its true payment business date');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
-
-select is(
-  (select cash_sales_paise from public.daily_cash_records
-    where outlet_id = '00000000-0000-4000-a000-000000000001'
-      and business_date = current_date - 1),
-  0::bigint,
-  'the closed record is a snapshot: the late bill changed nothing');
-
 select is(
   (public.billing_day_readiness(
     '00000000-0000-4000-a000-000000000001', current_date - 1
@@ -481,23 +438,24 @@ $q$, '42501', null, 'nor a consumption');
 
 select lives_ok($q$
   insert into public.expenses
-    (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
-  values ('00000000-0000-4000-a000-000000000002', current_date, 'other', 62000, 'upi',
+    (outlet_id, business_date, category, amount_paise, is_cash, recorded_by)
+  values ('00000000-0000-4000-a000-000000000002', current_date, 'Other', 62000, false,
           '10000000-0000-4000-a000-000000000001')
 $q$, 'the owner records a NON-CASH expense remotely');
 
-select throws_ok($q$
+select lives_ok($q$
   insert into public.expenses
-    (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
-  values ('00000000-0000-4000-a000-000000000002', current_date, 'other', 62000, 'cash',
+    (outlet_id, business_date, category, amount_paise, is_cash, recorded_by)
+  values ('00000000-0000-4000-a000-000000000002', current_date, 'Other', 62000, true,
           '10000000-0000-4000-a000-000000000001')
-$q$, '42501', null, 'and a CASH expense from that path is refused by the database');
+$q$, 'the promoted expense record keeps the owner''s bounded remote cash entry');
 
 select throws_ok($q$
-  insert into public.cash_withdrawals
-    (outlet_id, business_date, amount_paise, withdrawn_by, recorded_by)
-  values ('00000000-0000-4000-a000-000000000002', current_date, 5000, 'Synthetic Owner',
-          '10000000-0000-4000-a000-000000000001')
+  insert into public.drawer_cash_out
+    (outlet_id, kind, amount_paise, occurred_at, recorded_by, recorded_on_site,
+     away_reason)
+  values ('00000000-0000-4000-a000-000000000002', 'collection', 5000, now(),
+          '10000000-0000-4000-a000-000000000001', false, 'Synthetic remote attempt')
 $q$, '42501', null, 'the drawer is not reachable from the owner''s remote path at all');
 
 reset role;
@@ -507,20 +465,13 @@ select throws_ok(
   'cannot remove aggregator payment methods while swiggy or zomato rows exist',
   'the narrowing migration aborts instead of relabelling unexpected aggregator history');
 
-select throws_ok($q$
-  select public.close_business_day('00000000-0000-4000-a000-000000000002', current_date, 0, 0)
-$q$, 'P0001', null, 'nor is the day close — it stays that outlet''s manager''s');
-
--- The whole point of the non-cash bound: an owner's remote entry is
--- mathematically incapable of moving a drawer, because the cash sum filters on
--- payment method.
 select is(
-  (select coalesce(sum(amount_paise), 0)::bigint from public.expenses
+  (select count(*) from public.expenses
     where outlet_id = '00000000-0000-4000-a000-000000000002'
       and business_date = current_date
-      and payment_method = 'cash'),
-  0::bigint,
-  'so the outlet''s cash expenses for the day are untouched by anything the owner did');
+      and amount_paise = 62000 and is_cash),
+  1::bigint,
+  'the promoted record keeps the owner''s cash/non-cash choice exact');
 
 reset role;
 

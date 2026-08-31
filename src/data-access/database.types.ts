@@ -440,14 +440,28 @@ export type Database = {
             foreignKeyName: "aggregator_dismissed_duplicates_expense_a_fkey"
             columns: ["expense_a"]
             isOneToOne: false
-            referencedRelation: "manual_ledger_expenses"
+            referencedRelation: "effective_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aggregator_dismissed_duplicates_expense_a_fkey"
+            columns: ["expense_a"]
+            isOneToOne: false
+            referencedRelation: "expenses"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "aggregator_dismissed_duplicates_expense_b_fkey"
             columns: ["expense_b"]
             isOneToOne: false
-            referencedRelation: "manual_ledger_expenses"
+            referencedRelation: "effective_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "aggregator_dismissed_duplicates_expense_b_fkey"
+            columns: ["expense_b"]
+            isOneToOne: false
+            referencedRelation: "expenses"
             referencedColumns: ["id"]
           },
           {
@@ -587,6 +601,85 @@ export type Database = {
           {
             foreignKeyName: "alerts_raised_by_fkey"
             columns: ["raised_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      archived_manual_ledger_days: {
+        Row: {
+          business_date: string
+          cash_added_paise: number
+          cash_added_reason: string | null
+          cash_removed_paise: number
+          cash_removed_reason: string | null
+          cash_revenue_paise: number
+          counted_cash_paise: number
+          created_at: string
+          id: string
+          note: string | null
+          opening_cash_paise: number
+          outlet_id: string
+          recorded_by: string
+          updated_at: string
+          updated_by: string | null
+          upi_revenue_paise: number
+        }
+        Insert: {
+          business_date: string
+          cash_added_paise?: number
+          cash_added_reason?: string | null
+          cash_removed_paise?: number
+          cash_removed_reason?: string | null
+          cash_revenue_paise?: number
+          counted_cash_paise: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          opening_cash_paise: number
+          outlet_id: string
+          recorded_by?: string
+          updated_at?: string
+          updated_by?: string | null
+          upi_revenue_paise?: number
+        }
+        Update: {
+          business_date?: string
+          cash_added_paise?: number
+          cash_added_reason?: string | null
+          cash_removed_paise?: number
+          cash_removed_reason?: string | null
+          cash_revenue_paise?: number
+          counted_cash_paise?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          opening_cash_paise?: number
+          outlet_id?: string
+          recorded_by?: string
+          updated_at?: string
+          updated_by?: string | null
+          upi_revenue_paise?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_ledger_days_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_ledger_days_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_ledger_days_updated_by_fkey"
+            columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1649,54 +1742,6 @@ export type Database = {
           },
         ]
       }
-      cash_withdrawals: {
-        Row: {
-          amount_paise: number
-          business_date: string
-          created_at: string
-          id: string
-          outlet_id: string
-          reason: string | null
-          recorded_by: string
-          withdrawn_by: string
-        }
-        Insert: {
-          amount_paise: number
-          business_date: string
-          created_at?: string
-          id?: string
-          outlet_id: string
-          reason?: string | null
-          recorded_by: string
-          withdrawn_by: string
-        }
-        Update: {
-          amount_paise?: number
-          business_date?: string
-          created_at?: string
-          id?: string
-          outlet_id?: string
-          reason?: string | null
-          recorded_by?: string
-          withdrawn_by?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "cash_withdrawals_outlet_id_fkey"
-            columns: ["outlet_id"]
-            isOneToOne: false
-            referencedRelation: "outlets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cash_withdrawals_recorded_by_fkey"
-            columns: ["recorded_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       counter_device_setup_codes: {
         Row: {
           attempts: number
@@ -1979,69 +2024,6 @@ export type Database = {
         }
         Relationships: []
       }
-      daily_cash_records: {
-        Row: {
-          actual_closing_paise: number
-          business_date: string
-          cash_expenses_paise: number
-          cash_sales_paise: number
-          cash_withdrawn_paise: number
-          closed_at: string
-          closed_by: string
-          difference_paise: number
-          expected_closing_paise: number
-          id: string
-          notes: string | null
-          opening_cash_paise: number
-          outlet_id: string
-        }
-        Insert: {
-          actual_closing_paise: number
-          business_date: string
-          cash_expenses_paise: number
-          cash_sales_paise: number
-          cash_withdrawn_paise: number
-          closed_at?: string
-          closed_by: string
-          difference_paise: number
-          expected_closing_paise: number
-          id?: string
-          notes?: string | null
-          opening_cash_paise: number
-          outlet_id: string
-        }
-        Update: {
-          actual_closing_paise?: number
-          business_date?: string
-          cash_expenses_paise?: number
-          cash_sales_paise?: number
-          cash_withdrawn_paise?: number
-          closed_at?: string
-          closed_by?: string
-          difference_paise?: number
-          expected_closing_paise?: number
-          id?: string
-          notes?: string | null
-          opening_cash_paise?: number
-          outlet_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "daily_cash_records_closed_by_fkey"
-            columns: ["closed_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "daily_cash_records_outlet_id_fkey"
-            columns: ["outlet_id"]
-            isOneToOne: false
-            referencedRelation: "outlets"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       drawer_cash_out: {
         Row: {
           amount_paise: number
@@ -2185,6 +2167,7 @@ export type Database = {
           id: string
           is_anchor: boolean
           is_approximate: boolean
+          is_legacy_imprecise: boolean
           note: string | null
           opening_paise: number | null
           outlet_id: string
@@ -2209,6 +2192,7 @@ export type Database = {
           id?: string
           is_anchor?: boolean
           is_approximate: boolean
+          is_legacy_imprecise?: boolean
           note?: string | null
           opening_paise?: number | null
           outlet_id: string
@@ -2233,6 +2217,7 @@ export type Database = {
           id?: string
           is_anchor?: boolean
           is_approximate?: boolean
+          is_legacy_imprecise?: boolean
           note?: string | null
           opening_paise?: number | null
           outlet_id?: string
@@ -2424,10 +2409,19 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          is_cash: boolean
           occurred_at: string | null
           outlet_id: string
-          payment_method: Database["public"]["Enums"]["payment_method"]
-          recorded_by: string
+          recorded_away: boolean
+          recorded_by: string | null
+          shared_cost: boolean
+          source_ref: string | null
+          source_system: string | null
+          updated_at: string
+          updated_by: string | null
+          voided_at: string | null
+          voided_by: string | null
+          voided_reason: string | null
         }
         Insert: {
           amount_paise: number
@@ -2436,10 +2430,19 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_cash: boolean
           occurred_at?: string | null
           outlet_id: string
-          payment_method: Database["public"]["Enums"]["payment_method"]
-          recorded_by: string
+          recorded_away?: boolean
+          recorded_by?: string | null
+          shared_cost?: boolean
+          source_ref?: string | null
+          source_system?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+          voided_reason?: string | null
         }
         Update: {
           amount_paise?: number
@@ -2448,10 +2451,19 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_cash?: boolean
           occurred_at?: string | null
           outlet_id?: string
-          payment_method?: Database["public"]["Enums"]["payment_method"]
-          recorded_by?: string
+          recorded_away?: boolean
+          recorded_by?: string | null
+          shared_cost?: boolean
+          source_ref?: string | null
+          source_system?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+          voided_reason?: string | null
         }
         Relationships: [
           {
@@ -2464,6 +2476,20 @@ export type Database = {
           {
             foreignKeyName: "expenses_recorded_by_fkey"
             columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_voided_by_fkey"
+            columns: ["voided_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -2629,180 +2655,6 @@ export type Database = {
           {
             foreignKeyName: "ledger_day_verifications_verified_by_fkey"
             columns: ["verified_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      manual_ledger_days: {
-        Row: {
-          business_date: string
-          cash_added_paise: number
-          cash_added_reason: string | null
-          cash_removed_paise: number
-          cash_removed_reason: string | null
-          cash_revenue_paise: number
-          counted_cash_paise: number
-          created_at: string
-          id: string
-          note: string | null
-          opening_cash_paise: number
-          outlet_id: string
-          recorded_by: string
-          updated_at: string
-          updated_by: string | null
-          upi_revenue_paise: number
-        }
-        Insert: {
-          business_date: string
-          cash_added_paise?: number
-          cash_added_reason?: string | null
-          cash_removed_paise?: number
-          cash_removed_reason?: string | null
-          cash_revenue_paise?: number
-          counted_cash_paise: number
-          created_at?: string
-          id?: string
-          note?: string | null
-          opening_cash_paise: number
-          outlet_id: string
-          recorded_by?: string
-          updated_at?: string
-          updated_by?: string | null
-          upi_revenue_paise?: number
-        }
-        Update: {
-          business_date?: string
-          cash_added_paise?: number
-          cash_added_reason?: string | null
-          cash_removed_paise?: number
-          cash_removed_reason?: string | null
-          cash_revenue_paise?: number
-          counted_cash_paise?: number
-          created_at?: string
-          id?: string
-          note?: string | null
-          opening_cash_paise?: number
-          outlet_id?: string
-          recorded_by?: string
-          updated_at?: string
-          updated_by?: string | null
-          upi_revenue_paise?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "manual_ledger_days_outlet_id_fkey"
-            columns: ["outlet_id"]
-            isOneToOne: false
-            referencedRelation: "outlets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "manual_ledger_days_recorded_by_fkey"
-            columns: ["recorded_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "manual_ledger_days_updated_by_fkey"
-            columns: ["updated_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      manual_ledger_expenses: {
-        Row: {
-          amount_paise: number
-          business_date: string
-          category: string
-          created_at: string
-          description: string | null
-          id: string
-          is_cash: boolean
-          occurred_at: string | null
-          outlet_id: string
-          recorded_away: boolean
-          recorded_by: string | null
-          shared_cost: boolean
-          source_ref: string | null
-          source_system: string | null
-          updated_at: string
-          updated_by: string | null
-          voided_at: string | null
-          voided_by: string | null
-          voided_reason: string | null
-        }
-        Insert: {
-          amount_paise: number
-          business_date: string
-          category: string
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_cash: boolean
-          occurred_at?: string | null
-          outlet_id: string
-          recorded_away?: boolean
-          recorded_by?: string | null
-          shared_cost?: boolean
-          source_ref?: string | null
-          source_system?: string | null
-          updated_at?: string
-          updated_by?: string | null
-          voided_at?: string | null
-          voided_by?: string | null
-          voided_reason?: string | null
-        }
-        Update: {
-          amount_paise?: number
-          business_date?: string
-          category?: string
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_cash?: boolean
-          occurred_at?: string | null
-          outlet_id?: string
-          recorded_away?: boolean
-          recorded_by?: string | null
-          shared_cost?: boolean
-          source_ref?: string | null
-          source_system?: string | null
-          updated_at?: string
-          updated_by?: string | null
-          voided_at?: string | null
-          voided_by?: string | null
-          voided_reason?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "manual_ledger_expenses_outlet_id_fkey"
-            columns: ["outlet_id"]
-            isOneToOne: false
-            referencedRelation: "outlets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "manual_ledger_expenses_recorded_by_fkey"
-            columns: ["recorded_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "manual_ledger_expenses_updated_by_fkey"
-            columns: ["updated_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "manual_ledger_expenses_voided_by_fkey"
-            columns: ["voided_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -3247,7 +3099,6 @@ export type Database = {
           address_line1: string | null
           address_line2: string | null
           arrival_deadline: string
-          billing_live_from: string | null
           business_day_cutover: string
           city: string | null
           code: string
@@ -3271,7 +3122,6 @@ export type Database = {
           address_line1?: string | null
           address_line2?: string | null
           arrival_deadline?: string
-          billing_live_from?: string | null
           business_day_cutover?: string
           city?: string | null
           code: string
@@ -3295,7 +3145,6 @@ export type Database = {
           address_line1?: string | null
           address_line2?: string | null
           arrival_deadline?: string
-          billing_live_from?: string | null
           business_day_cutover?: string
           city?: string | null
           code?: string
@@ -3443,7 +3292,48 @@ export type Database = {
           recorded_by: string | null
           source_table: string | null
         }
-        Relationships: []
+        Insert: {
+          amount_paise?: number | null
+          business_date?: string | null
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          is_cash?: boolean | null
+          occurred_at?: string | null
+          outlet_id?: string | null
+          recorded_by?: string | null
+          source_table?: never
+        }
+        Update: {
+          amount_paise?: number | null
+          business_date?: string | null
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          is_cash?: boolean | null
+          occurred_at?: string | null
+          outlet_id?: string | null
+          recorded_by?: string | null
+          source_table?: never
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
@@ -3785,10 +3675,6 @@ export type Database = {
         }
       }
       backfill_prepared_history: { Args: never; Returns: number }
-      billing_assert_day_ready: {
-        Args: { p_business_date: string; p_outlet_id: string }
-        Returns: undefined
-      }
       billing_begin_command: {
         Args: {
           p_actor_id: string
@@ -3886,36 +3772,6 @@ export type Database = {
           code: string
           request_id: string
         }[]
-      }
-      close_business_day: {
-        Args: {
-          p_actual_closing_paise: number
-          p_business_date: string
-          p_notes?: string
-          p_opening_cash_paise: number
-          p_outlet_id: string
-        }
-        Returns: {
-          actual_closing_paise: number
-          business_date: string
-          cash_expenses_paise: number
-          cash_sales_paise: number
-          cash_withdrawn_paise: number
-          closed_at: string
-          closed_by: string
-          difference_paise: number
-          expected_closing_paise: number
-          id: string
-          notes: string | null
-          opening_cash_paise: number
-          outlet_id: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "daily_cash_records"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
       confirm_billing_end_of_day: {
         Args: {
@@ -4129,6 +3985,7 @@ export type Database = {
           id: string
           is_anchor: boolean
           is_approximate: boolean
+          is_legacy_imprecise: boolean
           note: string | null
           opening_paise: number | null
           outlet_id: string
@@ -4170,6 +4027,13 @@ export type Database = {
       expense_category_reserved_owner: {
         Args: { p_category: string }
         Returns: string
+      }
+      expense_people: {
+        Args: never
+        Returns: {
+          full_name: string
+          id: string
+        }[]
       }
       fold_expense_category: { Args: { p_value: string }; Returns: string }
       forget_aggregator_session: {
@@ -4253,21 +4117,6 @@ export type Database = {
           p_shift_id?: string
         }
         Returns: Json
-      }
-      manual_ledger_counter_revenue: {
-        Args: { p_from: string; p_outlet_id: string; p_to: string }
-        Returns: {
-          business_date: string
-          cash_revenue_paise: number
-          upi_revenue_paise: number
-        }[]
-      }
-      manual_ledger_people: {
-        Args: never
-        Returns: {
-          full_name: string
-          id: string
-        }[]
       }
       mark_account_as_left: {
         Args: {
@@ -4448,6 +4297,7 @@ export type Database = {
           id: string
           is_anchor: boolean
           is_approximate: boolean
+          is_legacy_imprecise: boolean
           note: string | null
           opening_paise: number | null
           outlet_id: string

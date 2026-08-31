@@ -107,16 +107,10 @@ export {
 } from './category-match'
 export {
   cashBasisProfitPaise,
-  consumptionBasisProfitPaise,
-  inventoryConsumedPaise,
-  nonRawMaterialExpensesPaise,
   profitEstimate,
   PROFIT_BASIS_DESCRIPTIONS,
   PROFIT_BASIS_LABELS,
-  rawMaterialExpensesPaise,
-  RAW_MATERIALS_CATEGORY,
   totalExpensesPaise,
-  type ConsumedMovement,
   type ExpenseAmount,
   type ProfitBasis,
   type ProfitEstimate,

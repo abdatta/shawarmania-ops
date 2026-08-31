@@ -55,17 +55,13 @@ returns date language sql stable as $$
   select public.app_business_date(now(), time '04:00') - back
 $$;
 
--- A day the owner recorded, and a figure an earlier read already wrote.
---
--- This used to be one row carrying a typed Zomato figure, because the
+-- A figure an earlier read already wrote. This used to be one notebook row
+-- carrying a typed Zomato figure, because the
 -- interesting rollback was of the supersede. Typed Zomato figures no longer
 -- exist, so the interesting rollback is now of a settling run replacing what an
 -- earlier read wrote: the same property, a figure moved aside and a moment
--- stamped, reached by the path that still happens.
-insert into public.manual_ledger_days
-  (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
-values (:'KAL'::uuid, pg_temp.ledger_day(3), 500000, 500000, :'OWNER'::uuid);
-
+-- stamped, reached by the path that still happens. Drawer counts are now an
+-- independent history and are not needed to rehearse a channel cycle.
 insert into public.aggregator_channel_days
   (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
    settlement_state, origin)
@@ -238,7 +234,7 @@ select is(
 );
 
 select is(
-  (select count(*)::int from public.manual_ledger_expenses
+  (select count(*)::int from public.expenses
     where outlet_id = :'KAL'::uuid and source_system = 'zomato'),
   0,
   'no synced expense was left behind'

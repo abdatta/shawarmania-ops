@@ -25,6 +25,20 @@ describe('the demo scenario dataset', () => {
     }
   })
 
+  it('carries a legacy count on a date before the first bill without fabricating its hour', () => {
+    const store = createDemoStore()
+    const legacy = store.drawerObservations.find((row) => row.is_legacy_imprecise)
+    expect(legacy).toBeDefined()
+
+    const firstBillAt = store.bills
+      .filter((bill) => bill.outlet_id === legacy?.outlet_id)
+      .map((bill) => bill.created_at)
+      .sort()[0]
+
+    expect((legacy?.counted_at ?? '') < (firstBillAt ?? '')).toBe(true)
+    expect(legacy?.is_approximate).toBe(false)
+  })
+
   it('numbers every outlet’s bills from one, independently and without gaps', () => {
     const store = createDemoStore()
 
@@ -67,53 +81,6 @@ describe('the demo scenario dataset', () => {
       )
       expect(item?.outlet_id).toBe(movement.outlet_id)
     }
-  })
-
-  it('closes yesterday at both outlets, short at one and exact at the other', () => {
-    const store = createDemoStore()
-    const yesterday = store.businessDate(1)
-
-    const closed = store.tradingOutletIds.map((outletId) => {
-      const record = store.dailyCashRecords.find(
-        (candidate) => candidate.outlet_id === outletId && candidate.business_date === yesterday,
-      )
-      expect(record).toBeDefined()
-      return record
-    })
-
-    // The awkward state and the calm one, so a difference reads as a difference
-    // rather than as how the app always looks (design D2).
-    expect(closed.some((record) => record?.difference_paise !== 0)).toBe(true)
-    expect(closed.some((record) => record?.difference_paise === 0)).toBe(true)
-  })
-
-  it('keeps a closed day’s figures free of the bill that arrived after it', () => {
-    const store = createDemoStore()
-    const yesterday = store.businessDate(1)
-
-    const record = store.dailyCashRecords.find(
-      (candidate) =>
-        candidate.outlet_id === DEMO_OUTLET_ID && candidate.business_date === yesterday,
-    )
-    const late = store.bills.find(
-      (bill) =>
-        bill.outlet_id === DEMO_OUTLET_ID &&
-        bill.business_date === yesterday &&
-        bill.synced_at > bill.created_at,
-    )
-
-    expect(late).toBeDefined()
-    // The snapshot is what was counted. Recomputing would have folded the late
-    // bill in, which is precisely what a closed day must never do.
-    const recomputed = store.bills
-      .filter(
-        (bill) =>
-          bill.outlet_id === DEMO_OUTLET_ID &&
-          bill.business_date === yesterday &&
-          bill.payment_method === 'cash',
-      )
-      .reduce((running, bill) => running + bill.total_paise, 0)
-    expect(record?.cash_sales_paise).toBe(recomputed - (late?.total_paise ?? 0))
   })
 
   it('gives each outlet its own menu rows rather than sharing one set', () => {

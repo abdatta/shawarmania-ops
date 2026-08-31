@@ -1,6 +1,6 @@
 # Raw Materials Is Identified By A Word Nobody Types
 
-**Type**: Design gap · **Status**: Open · **Area**: Reporting
+**Type**: Design gap · **Status**: Closed 31 Aug 2026, dissolved · **Area**: Reporting
 
 ## The expectation
 
@@ -44,12 +44,18 @@ which asks nobody but is wrong for a category used both ways.
 
 ## Trigger to promote
 
-**Dissolved on 26 Aug 2026, not fixed.** Inventory is shelved
-(`openspec/todos/inventory-is-shelved.md`), so there are no movements to count
-and the consumption basis cannot be computed at all.
-`retire-the-manual-ledger` (#12) therefore withdraws the basis rather than
-repairing a matcher that feeds it, which is the alternative this note called more
-expensive than waiting and which shelving has made free.
+**Closed 31 Aug 2026, dissolved rather than fixed.**
+
+What dissolved it: `retire-the-manual-ledger` (#12) **withdrew the consumption
+basis**, which was the only thing the `raw_materials` match fed. Inventory is
+shelved (`openspec/todos/inventory-is-shelved.md`), so there are no movements to
+count and a consumption figure cannot be computed at all; leaving a basis that
+silently matched nothing would have been the dishonest half of this note's own
+complaint. The profit figure now names one basis and offers no control implying
+a second one exists, so there is no matcher left to be wrong.
+
+This is the alternative the note called more expensive than waiting. Shelving
+inventory made it free.
 
 Nothing here needs doing. If inventory ever returns, this note returns with it,
 and the fix is part of that change: match against the free-text category snapshot

@@ -4,11 +4,11 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Card, CardBody, CardTitle } from '@/components/ui/card'
 import { LoadingList } from '@/components/ui/loading'
 import { useAdapters } from '@/data-access'
-import type { ManualLedgerExpense } from '@/data-access/adapters'
+import type { ExpenseRecord } from '@/data-access/adapters'
 import { resolveBusinessDate } from '@/domain'
 import { BillingCounter } from '@/features/billing/billing-counter'
 import { SyncIndicator } from '@/features/billing/counter-status'
-import { ExpenseList } from '@/features/manual-ledger/expense-list'
+import { ExpenseList } from '@/features/expenses/expense-list'
 import { getSurface, isRenderable } from '@/gates/registry'
 import { useCounterDevice } from '@/session/counter-context'
 import type { CounterShift } from '@/session/counter-session'
@@ -168,16 +168,16 @@ function BillingPanel() {
  * will refuse is worse than not offering it.
  */
 function CounterExpenses({ shift }: { shift: CounterShift }) {
-  const { manualLedger, outlets } = useAdapters()
-  const [expenses, setExpenses] = useState<ManualLedgerExpense[] | null>(null)
+  const { expenses: expensesAdapter, outlets } = useAdapters()
+  const [expenses, setExpenses] = useState<ExpenseRecord[] | null>(null)
   const [businessDate, setBusinessDate] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(
     async (date: string) => {
-      setExpenses(await manualLedger.listRecentExpenses(shift.outletId, [date]))
+      setExpenses(await expensesAdapter.listRecentExpenses(shift.outletId, [date]))
     },
-    [manualLedger, shift.outletId],
+    [expensesAdapter, shift.outletId],
   )
 
   useEffect(() => {

@@ -217,23 +217,26 @@ each record carries whether they were inside that outlet's geofence, with a
 reason required and stored where they were not. A drawer write is never refused
 for distance.
 
-**The manual ledger's two tables answer differently, and the difference is the
-point.** The **day record** reaches owners and managers and stops: no outlet
-staff branch exists on any verb, at any outlet, including their own. That is a
-stronger claim than ordinary outlet isolation and is asserted directly in
-`supabase/tests/21_manual_ledger.sql` rather than inherited from the cross-outlet
-sweep, with `supabase/tests/01_schema_coverage.sql` pinning the absence of a
-staff predicate as a catalog fact so a later migration fails by name.
+**The manual ledger had two tables that answered differently, and the difference
+outlived it.** The **day record** reached owners and managers and stopped: no
+outlet staff branch existed on any verb, at any outlet, including their own. That
+was a stronger claim than ordinary outlet isolation, and it protected two things.
+On the **write** side, the drawer: an account that could set the counted cash,
+the opening cash or the cash removed could make any drawer reconcile, and the
+nightly count is the only control the business has over cash. On the **read**
+side, history and aggregates — any past business date, any month's total, the
+other outlet, and every figure net of commission, none of which can be observed
+from behind a counter. It did **not** protect the takings of a shift somebody
+worked at the outlet they worked it in; see [Limitations](LIMITATIONS.md) for why
+the system does not claim that.
 
-It protects two different things. On the **write** side, the drawer: an account
-that could set the counted cash, the opening cash or the cash removed could make
-any drawer reconcile, and the nightly count is the only control the business has
-over cash. On the **read** side, history and aggregates — any past business date,
-any month's total, the other outlet, and every figure net of commission, none of
-which can be observed from behind a counter. It does **not** protect the takings
-of a shift somebody worked at the outlet they worked it in; see
-[Limitations](LIMITATIONS.md) for why the system does not claim that, and why the
-policy refuses that row anyway.
+`retire-the-manual-ledger` (#12) removed that table's write path entirely — the
+surviving rows are a client-dark archive no role may read — and the same line
+now runs through the **drawer** and the **derived Ledger**, which outlet staff do
+not reach at all. `supabase/tests/21_manual_ledger.sql` asserts the retirement
+directly rather than inheriting it from the cross-outlet sweep, and
+`supabase/tests/01_schema_coverage.sql` pins the absence as a catalog fact so a
+later migration fails by name.
 
 The **expense record** is the opposite: everyone at the outlet reads every row,
 whoever recorded it, so the surface can show at a glance which rows are yours to
@@ -252,12 +255,11 @@ expense is not caught by the drawer count**, because an invented expense lowers
 expected cash and the count still matches; the controls are attribution and the
 withdrawal trace, not the count.
 
-**The owner writing cash figures there is not precedent for the drawer.** It is
-allowed only because no real cash record exists yet to corrupt, and the bound in
-the paragraph above is untouched by it. See
-[Limitations](LIMITATIONS.md#the-manual-ledger-is-a-stopgap-with-a-stated-exit)
-for the capability's stated exit, which belongs to `retire-the-manual-ledger`
-(#12).
+**No surface accepts a typed cash figure for a trading day.** The owner could
+write one into the notebook only because no real cash record existed yet to
+corrupt; that allowance ended with the notebook. See
+[Limitations](LIMITATIONS.md#the-manual-ledger-was-a-stopgap-and-it-is-discharged)
+for the stopgap and how it was discharged.
 
 Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to a set-up tablet and a live shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it. A bill accepted after its operator remotely left is therefore review work for that outlet's Franchise Admin or the Super Admin, never an alert for the next biller. Their append-only decision qualifies the immutable original attribution; it does not rewrite it.
 

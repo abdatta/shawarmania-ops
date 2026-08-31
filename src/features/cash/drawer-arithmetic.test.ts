@@ -43,6 +43,7 @@ function stateWith(overrides: Partial<DrawerState> = {}): DrawerState {
       expectedPaise: 895000,
       differencePaise: 0,
       countedTotalPaise: 895000,
+      isLegacyImprecise: false,
       isApproximate: false,
       toleranceMinutes: 15,
       recordedBy: 'p1',

@@ -284,23 +284,19 @@ $$, $$ values
   ('expense_categories_name_not_blank'),
   ('expense_category_operations_before_not_blank'),
   ('expense_category_operations_after_not_blank'),
-  ('expenses_category_not_blank'),
-  -- The manual ledger (#36), temporary: both go when the capability does.
-  --
-  -- The note is OPTIONAL, like a customer's name, and for the same reason — it
-  -- exists to explain a cash difference and most days have none to explain. What
-  -- is refused is a note that occupies the field and says nothing.
+  -- The notebook archive keeps its source constraints as part of the immutable
+  -- evidence. The archive has no client grants or policies.
   ('manual_ledger_days_note_not_blank'),
   -- Free-text category now carries the required identity. The note is optional,
   -- but present whitespace still says nothing and is refused.
-  ('manual_ledger_expenses_category_not_blank'),
-  ('manual_ledger_expenses_description_not_blank'),
+  ('expenses_category_not_blank'),
+  ('expenses_description_not_blank'),
   -- A void reason is OPTIONAL [owner, 2026-08-09], on the same reasoning as
   -- `attendance_approval_reason_not_blank`: demanding one on the fastest
   -- correction path collects a column of "mistake", and the moment and the
   -- account already answer what the trace is for. What is refused is a reason
   -- that occupies the field and says nothing.
-  ('manual_ledger_expenses_void_reason_not_blank'),
+  ('expenses_void_reason_not_blank'),
   ('counter_device_setup_codes_label_not_blank'),
   -- A sync run's detail is OPTIONAL: a run that succeeded has nothing to explain,
   -- and the outcome column already says which of the four things happened. What
@@ -313,7 +309,7 @@ $$, $$ values
   -- does not say who issued it. A blank either side would make a synced row
   -- indistinguishable from a hand-entered one, which is the distinction the
   -- duplicate signal rests on.
-  ('manual_ledger_expenses_source_not_blank'),
+  ('expenses_source_not_blank'),
   ('aggregator_cycle_deductions_source_not_blank'),
   -- A one-time password is OPTIONAL on its own request: the row is created when
   -- the owner asks to reconnect, minutes before there is a code to put in it,
@@ -338,7 +334,7 @@ $$, $$ values
   ('drawer_cash_out_reason_not_blank')
  $$, 'every not-blank constraint in the schema is accounted for, and no others exist');
 
--- The manual ledger's two cash-movement reasons are blank-checked too, under
+-- The archived notebook's two cash-movement reasons are blank-checked too, under
 -- names the pattern above does not match: each constraint does two jobs at once
 -- (a reason is REQUIRED when cash moved, and is never blank when present), so
 -- naming either of them `_not_blank` would describe half of it. Named here so

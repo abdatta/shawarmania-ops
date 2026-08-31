@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import { inventoryConsumedPaise } from '@/domain'
-
 import { createMockAttendanceAdapter } from './attendance'
 import { createMockInsightsAdapter } from './insights'
 import { createDemoStore, DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID, type DemoStore } from './store'
@@ -24,6 +22,18 @@ describe('mock insights adapter', () => {
       }),
     }
   }
+
+  it('marks the cash-basis estimate as a ceiling while a commission is undetermined', async () => {
+    const { store, adapter } = asOwner()
+    const summary = await adapter.periodSummary(
+      DEMO_OUTLET_ID,
+      { from: store.businessDate(3), to: store.today },
+      'cash',
+    )
+
+    expect(summary?.profit.basis).toBe('cash')
+    expect(summary?.profit.isCeiling).toBe(true)
+  })
 
   const asManagerOf = (outletId: string) => {
     const store = createDemoStore()
@@ -131,43 +141,6 @@ describe('mock insights adapter', () => {
       store.alerts.filter((alert) => alert.outlet_id === DEMO_OUTLET_ID && alert.status === 'open')
         .length,
     )
-  })
-
-  it('computes the two profit bases differently over the same period', async () => {
-    const { store, adapter } = asOwner()
-    const period = { from: store.businessDate(3), to: store.today }
-
-    const cash = await adapter.periodSummary(DEMO_OUTLET_ID, period, 'cash')
-    const consumption = await adapter.periodSummary(DEMO_OUTLET_ID, period, 'consumption')
-
-    expect(cash?.profit.basis).toBe('cash')
-    expect(consumption?.profit.basis).toBe('consumption')
-    expect(cash?.profit.profitPaise).not.toBe(consumption?.profit.profitPaise)
-
-    // The consumption basis prices the ledger; the cash basis does not look at
-    // it at all. Restated here so a mock that stopped reading movements fails.
-    expect(cash?.profit.consumedPaise).toBe(0)
-    expect(consumption?.profit.consumedPaise).toBeGreaterThan(0)
-  })
-
-  it('prices consumption from the ledger of the outlet it belongs to', async () => {
-    const { store, adapter } = asOwner()
-    const period = { from: store.businessDate(3), to: store.today }
-    const summary = await adapter.periodSummary(DEMO_OUTLET_ID, period, 'consumption')
-
-    const expected = inventoryConsumedPaise(
-      store.inventoryMovements
-        .filter((movement) => movement.outlet_id === DEMO_OUTLET_ID)
-        .map((movement) => ({
-          movementType: movement.movement_type,
-          quantityDelta: movement.quantity_delta,
-          purchaseCostPaise:
-            store.inventoryItems.find((item) => item.id === movement.inventory_item_id)
-              ?.purchase_cost_paise ?? 0,
-        })),
-    )
-
-    expect(summary?.profit.consumedPaise).toBe(expected)
   })
 
   it('covers every day of a period, including one with no trade', async () => {

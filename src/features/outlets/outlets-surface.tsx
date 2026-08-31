@@ -73,7 +73,6 @@ interface Draft {
   phone: string
   businessDayCutover: string
   arrivalDeadline: string
-  billingLiveFrom: string
 }
 
 const EMPTY_DRAFT: Draft = {
@@ -88,7 +87,6 @@ const EMPTY_DRAFT: Draft = {
   phone: '',
   businessDayCutover: '04:00',
   arrivalDeadline: '13:00',
-  billingLiveFrom: '',
 }
 
 /** `04:00:00` from Postgres, `04:00` in a time input. */
@@ -156,7 +154,6 @@ function toDraft(outlet: Tables<'outlets'>): Draft {
     phone: outlet.phone ?? '',
     businessDayCutover: toTimeInput(outlet.business_day_cutover),
     arrivalDeadline: toTimeInput(outlet.arrival_deadline),
-    billingLiveFrom: outlet.billing_live_from ?? '',
   }
 }
 
@@ -318,10 +315,7 @@ export function OutletsSurface() {
 
     await run(async () => {
       if (editing) {
-        await adapter.updateOutlet(editing.id, {
-          ...toPayload(draft),
-          billingLiveFrom: draft.billingLiveFrom || null,
-        })
+        await adapter.updateOutlet(editing.id, toPayload(draft))
       } else {
         await adapter.createOutlet(toPayload(draft))
       }
@@ -561,12 +555,6 @@ function OutletCard({
         Staff may check in within {formatMetres(outlet.geofence_radius_m)} of this point. The day
         rolls over at {toTimeInput(outlet.business_day_cutover)}, and staff are expected by{' '}
         {toTimeInput(outlet.arrival_deadline)}.
-      </p>
-
-      <p className="text-xs text-content-muted" data-testid={`billing-live-${handle}`}>
-        {outlet.billing_live_from
-          ? `Counter revenue feeds the ledger from ${outlet.billing_live_from}.`
-          : 'Counter revenue is not feeding the ledger yet.'}
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -875,22 +863,6 @@ function OutletFormSheet({
             time.
           </p>
         </Field>
-
-        {editing && (
-          <Field label="Counter billing starts on (optional)" id="outlet-billing-live-from">
-            <Input
-              id="outlet-billing-live-from"
-              type="date"
-              value={draft.billingLiveFrom}
-              onChange={(event) => set({ billingLiveFrom: event.target.value })}
-            />
-            <p className="text-xs text-content-muted">
-              Choose a future trading date only after this outlet&rsquo;s menu and tablet are ready.
-              From that day, Cash and UPI in the ledger come from settled counter bills. Zomato and
-              Swiggy stay typed. The date cannot be changed once that trading day starts.
-            </p>
-          </Field>
-        )}
 
         {!editing && (
           <p className="rounded-lg border border-border bg-surface-raised p-2 text-xs text-content-muted">

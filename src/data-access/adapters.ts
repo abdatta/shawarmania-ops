@@ -81,8 +81,6 @@ export interface NewOutlet {
 export type OutletPatch = Partial<
   NewOutlet & {
     isActive: boolean
-    /** First business date whose Cash/UPI revenue comes from counter bills. */
-    billingLiveFrom: string | null
   }
 >
 
@@ -1171,7 +1169,7 @@ export interface BillingBill {
   voidReason: Tables<'bills'>['void_reason']
   voidedAt: Tables<'bills'>['voided_at']
   /** The actor stamped by the database when the immutable bill was cancelled. */
-  voidedBy: LedgerActor | null
+  voidedBy: ExpenseActor | null
 }
 
 export type BillingAttributionOutcome = 'confirmed_original' | 'assigned_other' | 'operator_unknown'
@@ -1701,15 +1699,31 @@ export interface InventoryAdapter {
 // ─────────────────────────────────────────────────────────────────────────────
 // Expenses: what the outlet spent, and how.
 
+/** Who touched an expense row, resolved through the least-privilege people RPC. */
+export interface ExpenseActor {
+  id: string
+  name: string | null
+}
+
 export interface ExpenseRecord {
   id: string
   outletId: string
   businessDate: string
   category: string
+  /** Whether this expense left the cash drawer. */
+  isCash: boolean
   amountPaise: number
-  paymentMethod: PaymentMethod
-  description: string | null
+  note: string | null
+  occurredAt: string | null
   createdAt: string
+  updatedAt: string
+  recordedBy: ExpenseActor | null
+  source: { system: string; ref: string } | null
+  updatedBy: ExpenseActor | null
+  recordedAway: boolean
+  voidedAt: string | null
+  voidedBy: ExpenseActor | null
+  voidedReason: string | null
 }
 
 export interface NewExpense {
@@ -1718,9 +1732,11 @@ export interface NewExpense {
   category: string
   /** Integer paise. Rupees are converted at the input boundary, never here. */
   amountPaise: number
-  paymentMethod: PaymentMethod
-  description?: string | null
+  isCash: boolean
+  note?: string | null
 }
+
+export type ExpensePatch = Partial<Pick<NewExpense, 'category' | 'isCash' | 'amountPaise' | 'note'>>
 
 export class ExpenseActionError extends DataActionError {
   constructor(code: string, message: string) {
@@ -1732,7 +1748,11 @@ export class ExpenseActionError extends DataActionError {
 export interface ExpensesAdapter {
   /** One outlet's expenses for one business date, most recent first. */
   listExpenses(outletId: string, businessDate: string): Promise<ExpenseRecord[]>
+  /** Several requested business dates, newest date first. */
+  listRecentExpenses(outletId: string, businessDates: readonly string[]): Promise<ExpenseRecord[]>
   createExpense(expense: NewExpense): Promise<ExpenseRecord>
+  updateExpense(id: string, patch: ExpensePatch): Promise<ExpenseRecord>
+  voidExpense(id: string, reason?: string | null): Promise<ExpenseRecord>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1768,93 +1788,6 @@ export interface ExpenseCategoriesAdapter {
   merge(from: string, into: string): Promise<ExpenseCategoryMoveResult>
   retire(name: string): Promise<void>
   listOperations(): Promise<ExpenseCategoryOperation[]>
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Daily cash: the number a human signs their name to.
-
-/** A withdrawal from the drawer during the day. */
-export interface CashWithdrawalRecord {
-  id: string
-  amountPaise: number
-  withdrawnBy: string
-  reason: string | null
-  createdAt: string
-}
-
-/**
- * A bill that reached the server after its business day had been closed.
- *
- * The closed figures do not move — that is what "a closed day is a snapshot"
- * means — so the arrival has to surface somewhere, and it surfaces here.
- */
-export interface ReconciliationException {
-  billId: string
-  billNumber: number
-  businessDate: string
-  totalPaise: number
-  paymentMethod: PaymentMethod | 'mixed'
-  /** When it was rung, and when it landed. The gap is the whole problem. */
-  createdAt: string
-  syncedAt: string
-}
-
-/**
- * One outlet's cash day.
- *
- * **Every derived figure is computed here, never supplied by the caller.** The
- * `close_business_day` contract requires the database to compute them
- * server-side inside the transaction that writes the record, and a mock that
- * accepted them from a screen would be teaching the opposite.
- */
-export interface DailyCashDay {
-  outletId: string
-  businessDate: string
-  openingCashPaise: number
-  /** Settled bills paid in cash for this date. No other method contributes. */
-  cashSalesPaise: number
-  /** Expenses paid in cash for this date. A UPI expense does not appear here. */
-  cashExpensesPaise: number
-  cashWithdrawnPaise: number
-  expectedClosingPaise: number
-  withdrawals: CashWithdrawalRecord[]
-  /** Non-null once the day has been closed: the snapshot, exactly as stored. */
-  closed: Tables<'daily_cash_records'> | null
-  /** Bills that arrived after this day was closed. Empty unless it was. */
-  exceptions: ReconciliationException[]
-}
-
-export interface NewWithdrawal {
-  outletId: string
-  businessDate: string
-  amountPaise: number
-  withdrawnBy: string
-  reason?: string | null
-}
-
-export interface CloseDayInput {
-  outletId: string
-  businessDate: string
-  /** The only two numbers a person supplies. Everything else is derived. */
-  actualClosingPaise: number
-  notes?: string | null
-}
-
-export class DailyCashActionError extends DataActionError {
-  constructor(code: string, message: string) {
-    super(code, message)
-    this.name = 'DailyCashActionError'
-  }
-}
-
-export interface DailyCashAdapter {
-  getDay(outletId: string, businessDate: string): Promise<DailyCashDay>
-  recordWithdrawal(withdrawal: NewWithdrawal): Promise<DailyCashDay>
-  /**
-   * Close the day. Refused for a date already closed — one record per outlet per
-   * business date — and the stored figures are never recomputed afterwards.
-   */
-  closeDay(input: CloseDayInput): Promise<Tables<'daily_cash_records'>>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2041,80 +1974,6 @@ export interface InsightsAdapter {
   ): Promise<OutletComparisonRow[]>
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Manual ledger: the temporary owner-only notebook (#36).
-//
-// **This section is designed to be deleted**, along with
-// `src/features/manual-ledger/`, `mock/manual-ledger.ts`,
-// `supabase-adapters/manual-ledger.ts`, one registry entry, one route and two
-// tables. It exists because nothing else recorded August 2026 while the counter
-// was trading, and the month cannot be reconstructed from memory afterwards.
-//
-// It is deliberately NOT a partial `ExpensesAdapter` or `DailyCashAdapter`.
-// `cash-is-counted-not-closed` (#11) replaces the drawer model outright rather
-// than filling those in, and `retire-the-manual-ledger` (#12) carries these rows
-// across and deletes this section. Writing into the old shapes now would build
-// against a model that is being removed.
-
-/** One trading day at one outlet, exactly as stored. Nothing here is derived. */
-export interface ManualLedgerDay {
-  outletId: string
-  businessDate: string
-  /** Stored, never derived from the previous day's count — see design D2. */
-  openingCashPaise: number
-  /** Negative is legitimate: a cash refund is recorded by lowering this. */
-  cashRevenuePaise: number
-  upiRevenuePaise: number
-  zomatoRevenuePaise: number
-  cashAddedPaise: number
-  cashAddedReason: string | null
-  cashRemovedPaise: number
-  cashRemovedReason: string | null
-  countedCashPaise: number
-  /**
-   * The commission actually charged on this day, in paise. Never a rate [owner,
-   * 2026-08-17]: the take swings between roughly 24% and 35% day to day, so a
-   * percentage was an estimate wearing the clothes of an exact figure. Typed off
-   * the statement, or read from Zomato where the day is synced.
-   *
-   * **`null` means undetermined**, not nought. Zomato's Order History shows today's
-   * orders but carries no commission and no payout, so a day read tonight knows
-   * what came in and cannot know what was kept until its week closes. A channel
-   * that sold nothing is charged nought, which is known and therefore not null.
-   */
-  zomatoCommissionPaise: number | null
-  /** Optional, unlike an expense description: it explains a cash difference. */
-  note: string | null
-  /**
-   * Who first recorded this day, and who last corrected it. Frozen and stamped
-   * respectively, both by the database. The reading names both where they
-   * differ, so a day the owner recorded and a manager later fixed does not read
-   * as though the owner entered the figures now on screen (design D6).
-   */
-  recordedBy: LedgerActor
-  updatedBy: LedgerActor | null
-  /**
-   * Where this day's Zomato figures came from, where the sync covers it. Null on
-   * every day recorded before the sync, and on every day at an outlet it does
-   * not cover, which is what keeps a historical month computing exactly as it
-   * was recorded.
-   *
-   * It carries no figures of its own. Since commission became an amount, a synced
-   * day and a typed day store the same two numbers in the same two columns, and
-   * duplicating them here would be inviting the copy to disagree with the
-   * original.
-   */
-  zomatoSettlement: ZomatoSettlement | null
-  /**
-   * Swiggy's measured reading for the date, on the same terms. Where present it
-   * is authoritative over any legacy typed figure in the day's own columns,
-   * because a portal read is evidence and a memory is not; where absent — an
-   * outlet Swiggy does not cover, or a date before its first read — the typed
-   * columns stand exactly as they always did.
-   */
-  swiggySettlement: ChannelSettlement | null
-}
-
 /**
  * A day's measured Zomato figures, and where they came from.
  *
@@ -2175,218 +2034,6 @@ export interface ZomatoSettlement {
  */
 export type ChannelSettlement = ZomatoSettlement
 
-/** Settled counter allocations that replace typed Cash/UPI after go-live. */
-export interface ManualLedgerCounterRevenue {
-  cashRevenuePaise: number
-  upiRevenuePaise: number
-}
-
-/**
- * Who touched a ledger row, as the surface names them.
- *
- * The name is resolved separately from the row, because `profiles` is not
- * readable by everyone who may now read an expense — an Employee sees nobody
- * through it, and nobody at an outlet sees an owner. `manual_ledger_people()`
- * answers exactly these names and nothing else. A null name is a person the
- * caller genuinely cannot resolve rather than an error, and the surface says
- * "someone" rather than inventing one.
- */
-export interface LedgerActor {
-  id: string
-  name: string | null
-}
-
-export interface ManualLedgerExpense {
-  id: string
-  outletId: string
-  businessDate: string
-  category: string
-  /** The only question this ledger asks of an expense: did it leave the drawer? */
-  isCash: boolean
-  amountPaise: number
-  /** Optional detail beyond the category, such as a quantity. */
-  note: string | null
-  /**
-   * When the money actually left, where that differs from when the row was
-   * typed. Null on a row that never stated one.
-   *
-   * Carried here so a client filtering rows into a drawer interval uses the same
-   * `coalesce(occurredAt, createdAt)` the database's interval readers use. On
-   * `createdAt` alone the two would part company the first time somebody
-   * backdates an expense, and the drawer's expenses breakdown would list a row
-   * its own total does not contain (design D3).
-   */
-  occurredAt: string | null
-  createdAt: string
-  updatedAt: string
-  /**
-   * Frozen at insert. Naming it is what makes "your own rows" legible.
-   *
-   * **Null on a row no person recorded**, which is a row the sync wrote from an
-   * aggregator's own deduction record. Naming an account there would put
-   * somebody's name on a purchase they never entered; `source` says where it
-   * came from instead.
-   */
-  recordedBy: LedgerActor | null
-  /**
-   * Where this row came from, when it came from a machine. Null on every row a
-   * person entered, which is what the possible-duplicate signal compares.
-   */
-  source: { system: string; ref: string } | null
-  /** Null until somebody corrects the row, so an untouched row names one party. */
-  updatedBy: LedgerActor | null
-  /**
-   * Recorded by an account holding no live assignment at this outlet. Stamped
-   * once, never derived on read: an assignment that ends later must not rewrite
-   * what was true when the row was written. The surface shows it **only on a
-   * drawer expense**, where it explains why expected cash moved without anybody
-   * at the outlet spending it (design D9).
-   */
-  recordedAway: boolean
-  /** Set together, by the database. A voided row is visible and stops counting. */
-  voidedAt: string | null
-  voidedBy: LedgerActor | null
-  /** Optional [owner, 2026-08-09]. The trace answers who and when without it. */
-  voidedReason: string | null
-}
-
-/**
- * The day form's payload. Upserted on `(outlet, business date)` — design D6.
- *
- * Attribution is absent by construction: `recorded_by` defaults from the session
- * and is frozen, `updated_by` is stamped by the guard and refused from a caller.
- * A form that could name either would be asserting something the database is
- * about to overrule.
- *
- * The two Swiggy figures are absent by the same argument that froze Zomato's,
- * one stage later: Swiggy's measured reading arrives through its channel-day
- * row, and a form field would invite typing over it. The columns remain on the
- * table carrying their typed history, so an old month still computes exactly as
- * it was recorded — they are simply no longer writable from here.
- */
-export type ManualLedgerDayInput = Omit<
-  ManualLedgerDay,
-  'recordedBy' | 'updatedBy' | 'zomatoSettlement' | 'swiggySettlement'
->
-
-/**
- * A day as the reading functions want it: the figures, plus the settlements where
- * they exist. Optional so that a caller holding only what a form can write still
- * type-checks — a form cannot write a settlement, and the database refuses one
- * from any signed-in session whatever the types allow. The legacy Swiggy figures
- * are optional for the mirror reason: present only when reading a row that still
- * carries its typed history.
- */
-export type ManualLedgerDayFigures = ManualLedgerDayInput & {
-  zomatoSettlement?: ZomatoSettlement | null
-  swiggySettlement?: ChannelSettlement | null
-  /** Typed history only; never written by this app any more. */
-  /** Typed history only; `null` meant undetermined then and still does. */
-  /**
-   * False on a day that has aggregator figures but no cash count — the "day nobody
-   * counted", surfaced so its figures still show and total. Absent means
-   * counted, so every existing day and form payload needs no change.
-   */
-  counted?: boolean
-}
-
-/**
- * The measured channel readings for one date, independently of a manual ledger
- * row. A cash count is not a prerequisite for either channel to report sales.
- */
-export interface ManualLedgerChannelFigures {
-  zomato: ZomatoSettlement | null
-  swiggy: ChannelSettlement | null
-}
-
-export interface NewManualLedgerExpense {
-  outletId: string
-  businessDate: string
-  category: string
-  isCash: boolean
-  /** Integer paise. Rupees are converted at the input boundary, never here. */
-  amountPaise: number
-  note?: string | null
-}
-
-export type ManualLedgerExpensePatch = Partial<
-  Pick<NewManualLedgerExpense, 'category' | 'isCash' | 'amountPaise' | 'note'>
->
-
-/** Everything a month reading needs, unaggregated. The maths is not the adapter's. */
-export interface ManualLedgerMonth {
-  // Figures rather than full days: the month reading needs only the figures, and
-  // typing it this way lets a date with aggregator figures but no cash count join
-  // the list without a ledger row behind it (the "day nobody counted").
-  days: ManualLedgerDayFigures[]
-  expenses: ManualLedgerExpense[]
-}
-
-export class ManualLedgerActionError extends DataActionError {
-  constructor(code: string, message: string) {
-    super(code, message)
-    this.name = 'ManualLedgerActionError'
-  }
-}
-
-export interface ManualLedgerAdapter {
-  getDay(outletId: string, businessDate: string): Promise<ManualLedgerDay | null>
-  /**
-   * Both channels' figures for a date, whether or not anyone counted the cash.
-   * `getDay` returns null on a day with no cash count, but the sync writes each
-   * channel to its own table. This virtual reading keeps either (or both) portal
-   * figures visible instead of claiming that nothing arrived.
-   */
-  getDayFigures(outletId: string, businessDate: string): Promise<ManualLedgerChannelFigures | null>
-  /** Null before this outlet's billing-live date; zeroes are meaningful after it. */
-  getCounterRevenue(
-    outletId: string,
-    businessDate: string,
-  ): Promise<ManualLedgerCounterRevenue | null>
-  /**
-   * The most recent day row BEFORE this date at this outlet, or null on an
-   * outlet's first tracked day.
-   *
-   * Serves two jobs that must not be conflated: it supplies the form's defaults,
-   * and it is what the opening-cash chain is checked against. Both are reads —
-   * nothing here writes a repaired figure, because a stored figure the owner
-   * entered is evidence and a recomputed one is not (design D2).
-   */
-  getPreviousDay(outletId: string, businessDate: string): Promise<ManualLedgerDay | null>
-  upsertDay(day: ManualLedgerDayInput): Promise<ManualLedgerDay>
-  /** A day typed against the wrong date. There is no history here to protect. */
-  deleteDay(outletId: string, businessDate: string): Promise<void>
-  listExpenses(outletId: string, businessDate: string): Promise<ManualLedgerExpense[]>
-  /**
-   * Expenses across several business days at once, newest day first — what the
-   * staff surface opens on.
-   *
-   * The caller resolves the dates from the outlet's own cutover, because "the
-   * last two business days" is a question about an outlet's clock rather than
-   * about the calendar. **The window is a presentation default and not a
-   * boundary**: no policy carries a date predicate on reads, and an older
-   * expense asked for by id is still returned (design D2).
-   */
-  listRecentExpenses(
-    outletId: string,
-    businessDates: readonly string[],
-  ): Promise<ManualLedgerExpense[]>
-  createExpense(expense: NewManualLedgerExpense): Promise<ManualLedgerExpense>
-  updateExpense(id: string, patch: ManualLedgerExpensePatch): Promise<ManualLedgerExpense>
-  /**
-   * Withdraw an expense. It replaces `deleteExpense`, because once several
-   * people write here a row that can vanish without trace defeats the reason to
-   * open the surface up at all.
-   *
-   * The reason is optional [owner, 2026-08-09]: the database stamps who and
-   * when, which is what the trace exists to answer, and demanding a sentence on
-   * the fastest correction path collects a column of "mistake".
-   */
-  voidExpense(id: string, reason?: string | null): Promise<ManualLedgerExpense>
-  /** One outlet, one month, as `YYYY-MM`. One outlet at a time — design D9. */
-  getMonth(outletId: string, month: string): Promise<ManualLedgerMonth>
-}
-
 /** The bag of domain adapters a session provider supplies to its tree. */
 export interface DataAdapters {
   outlets: OutletsAdapter
@@ -2400,13 +2047,9 @@ export interface DataAdapters {
   inventory: InventoryAdapter
   expenses: ExpensesAdapter
   expenseCategories: ExpenseCategoriesAdapter
-  dailyCash: DailyCashAdapter
   alerts: AlertsAdapter
   insights: InsightsAdapter
   addressLookup: AddressLookupAdapter
-  /** Temporary (#36). Removed by `retire-the-manual-ledger` (#12), which carries
-   *  these rows into the live records and archives the day table. */
-  manualLedger: ManualLedgerAdapter
   /** The drawer as a continuous balance, observed at instants (#11). */
   cashDrawer: CashDrawerAdapter
   /** The per-day and per-month reading, derived on read with nothing typed in (#11). */
@@ -2773,6 +2416,8 @@ export interface DrawerObservationRecord {
   expectedPaise: number | null
   differencePaise: number | null
   countedTotalPaise: number
+  /** Historical count whose hour was never recorded; distinct from approximation. */
+  isLegacyImprecise: boolean
   isApproximate: boolean
   toleranceMinutes: number
   recordedBy: string
@@ -3156,6 +2801,7 @@ export interface LedgerStatementMonthDay {
   closingPaise: number | null
   state: 'counted' | 'carried' | 'not-tracked-yet'
   countedAt: string | null
+  isLegacyImprecise: boolean
   differencePaise: number | null
   observationCoversDays: number | null
 }

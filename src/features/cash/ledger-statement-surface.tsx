@@ -558,7 +558,9 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
               <span className="block text-xs">
                 {entry.state === 'counted' ? (
                   <>
-                    counted {entry.countedAt ? formatTime(entry.countedAt) : ''}
+                    {entry.isLegacyImprecise
+                      ? 'counted · hour was never recorded'
+                      : `counted ${entry.countedAt ? formatTime(entry.countedAt) : ''}`}
                     {entry.differencePaise === 0
                       ? ' · matched'
                       : entry.differencePaise !== null
@@ -681,8 +683,10 @@ function TimelineRow({ event, index }: { event: LedgerDrawerEvent; index: number
     >
       <p className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-bold uppercase tracking-wide text-content">
-          Count · {formatTime(observation.countedAt)}
-          {observation.isApproximate && ' (approximate)'}
+          {observation.isLegacyImprecise
+            ? 'Count · hour was never recorded'
+            : `Count · ${formatTime(observation.countedAt)}`}
+          {!observation.isLegacyImprecise && observation.isApproximate && ' (approximate)'}
         </span>
         {!observation.onSite && <span className="text-xs text-content-muted">recorded away</span>}
       </p>
@@ -773,10 +777,7 @@ function TimelineRow({ event, index }: { event: LedgerDrawerEvent; index: number
 /**
  * A label and its amount, with the quiet detail as a sub-line.
  *
- * Deliberately the notebook's own `Row`, reimplemented here rather than imported:
- * `features/manual-ledger` is a stopgap whose whole folder goes when
- * `retire-the-manual-ledger` (#12) lands, and a surface that outlives it must not
- * make that deletion a breakage somewhere else.
+ * A compact money row shared within this derived statement.
  */
 function Row({
   label,
@@ -894,7 +895,7 @@ function DrawerStateTag({ state }: { state: 'counted' | 'carried' | 'not-tracked
  * The first day of the month `months` back from a business date.
  *
  * Computed here rather than imported from `features/manual-ledger`, whose whole
- * folder goes when #12 lands — the same reasoning that moved `PeriodBar` into
+ * folder went when #12 landed — the same reasoning that moved `PeriodBar` into
  * `components/ui` in the first place.
  */
 function monthsBackFrom(businessDate: string, months: number): string {

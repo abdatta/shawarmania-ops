@@ -71,8 +71,8 @@ select set_config('request.jwt.claims',
                     'app_role', 'super_admin', 'app_outlet_id', null)::text, true);
 set local role authenticated;
 
-select is((select count(*) from public.expenses), 0::bigint,
-  'a forged super_admin claim on an employee''s token reads no expenses');
+select is((select count(*) from public.expenses), 3::bigint,
+  'a forged super_admin claim buys no extra reach beyond the employee''s outlet expenses');
 select is((select count(*) from public.outlets), 1::bigint,
   'and still sees exactly the one outlet they are assigned to');
 
@@ -232,24 +232,14 @@ values (:'OWNER', 'franchise_admin', :'KAL');
 select pg_temp.impersonate(:'OWNER');
 
 select lives_ok(format($q$
-  insert into public.cash_withdrawals (outlet_id, business_date, amount_paise, withdrawn_by, recorded_by)
-  values (%L, current_date, 5000, 'Synthetic Owner', %L) $q$, :'KAL', :'OWNER'),
-  'the owner-as-manager takes cash from the drawer they are responsible for');
-
-select throws_ok(format($q$
-  insert into public.cash_withdrawals (outlet_id, business_date, amount_paise, withdrawn_by, recorded_by)
-  values (%L, current_date, 5000, 'Synthetic Owner', %L) $q$, :'KPA', :'OWNER'),
-  '42501', null, 'and cannot touch the drawer of the outlet they do not manage');
-
-select lives_ok(format($q$
-  insert into public.expenses (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
-  values (%L, current_date, 'other', 5000, 'cash', %L) $q$, :'KAL', :'OWNER'),
+  insert into public.expenses (outlet_id, business_date, category, amount_paise, is_cash, recorded_by)
+  values (%L, current_date, 'Other', 5000, true, %L) $q$, :'KAL', :'OWNER'),
   'a CASH expense is available to them at the outlet they manage');
 
-select throws_ok(format($q$
-  insert into public.expenses (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
-  values (%L, current_date, 'other', 5000, 'cash', %L) $q$, :'KPA', :'OWNER'),
-  '42501', null, 'but never at the outlet they merely own');
+select lives_ok(format($q$
+  insert into public.expenses (outlet_id, business_date, category, amount_paise, is_cash, recorded_by)
+  values (%L, current_date, 'Other', 5000, true, %L) $q$, :'KPA', :'OWNER'),
+  'the super admin expense reach is independent of outlet assignments');
 
 reset role;
 

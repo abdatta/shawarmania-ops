@@ -9,11 +9,11 @@ import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
 import type { PeriodSummary } from '@/data-access/adapters'
-import { resolveBusinessDate, type ProfitBasis } from '@/domain'
+import { resolveBusinessDate } from '@/domain'
 import { useSession } from '@/session/context'
 
 import { describePeriod, isPeriodKey, periodFor, PERIOD_KEYS, PERIOD_LABELS } from './period'
-import { BasisPicker, ProfitFigure } from './profit-figure'
+import { ProfitFigure } from './profit-figure'
 
 /**
  * Profit and loss — one component, two roles.
@@ -24,9 +24,7 @@ import { BasisPicker, ProfitFigure } from './profit-figure'
  * surface established: the permission difference is visible rather than
  * asserted, and the refusal behind it is the adapter's.
  *
- * **The basis is stated in words beside the figure, always.** That is not a
- * formatting choice — cash basis and consumption basis answer different
- * questions, and a profit figure without its basis is not an answer.
+ * The one available cash basis is stated beside every figure.
  */
 export function PnlSurface() {
   const session = useSession()
@@ -36,7 +34,6 @@ export function PnlSurface() {
   const [outletId, setOutletId] = useState<string | null>(session.outletId)
   const [today, setToday] = useState<string | null>(null)
   const [periodKey, setPeriodKey] = useState<'today' | 'week' | 'month'>('week')
-  const [basis, setBasis] = useState<ProfitBasis>('consumption')
   const [summary, setSummary] = useState<PeriodSummary | null>()
 
   // A manager's outlet is decided by their session and is not theirs to change.
@@ -76,13 +73,13 @@ export function PnlSurface() {
   useEffect(() => {
     if (!outletId || !today) return
     let active = true
-    void insights.periodSummary(outletId, periodFor(periodKey, today), basis).then((result) => {
+    void insights.periodSummary(outletId, periodFor(periodKey, today), 'cash').then((result) => {
       if (active) setSummary(result)
     })
     return () => {
       active = false
     }
-  }, [insights, outletId, today, periodKey, basis])
+  }, [insights, outletId, today, periodKey])
 
   const period = today ? periodFor(periodKey, today) : null
 
@@ -136,8 +133,6 @@ export function PnlSurface() {
             ))}
           </Select>
         </div>
-
-        <BasisPicker id="pnl-basis" value={basis} onChange={setBasis} />
       </div>
 
       {summary === undefined ? (
@@ -179,26 +174,16 @@ export function PnlSurface() {
               <ul className="space-y-1 text-xs">
                 {summary.expensesByCategory.map((total) => (
                   <li key={total.category} className="flex items-baseline justify-between">
-                    <span className="text-content-muted">
-                      {total.category.replace(/_/g, ' ')}
-                      {total.category === 'raw_materials' && basis === 'consumption' && (
-                        <span className="ml-1 font-semibold text-content">
-                          — not subtracted on this basis
-                        </span>
-                      )}
-                    </span>
+                    <span className="text-content-muted">{total.category.replace(/_/g, ' ')}</span>
                     <Money paise={total.amountPaise} />
                   </li>
                 ))}
               </ul>
             )}
-            {basis === 'consumption' && (
-              <p className="border-t border-border pt-2 text-xs text-content-muted">
-                On the consumption basis, stock bought is not subtracted — the stock{' '}
-                <strong className="text-content">used</strong> is, at what it cost. Counting both
-                would charge this period for the same food twice.
-              </p>
-            )}
+            <p className="border-t border-border pt-2 text-xs text-content-muted">
+              Equipment and other capital purchases recorded as drawer spends do not enter this
+              operating estimate.
+            </p>
           </Card>
         </div>
       )}

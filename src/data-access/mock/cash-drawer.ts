@@ -280,6 +280,7 @@ function toObservation(
     expectedPaise: row.expected_paise,
     differencePaise: row.difference_paise,
     countedTotalPaise: row.counted_total_paise,
+    isLegacyImprecise: row.is_legacy_imprecise,
     isApproximate: row.is_approximate,
     toleranceMinutes: row.tolerance_minutes,
     recordedBy: row.recorded_by,
@@ -600,6 +601,7 @@ export function createMockCashDrawerAdapter(
         counted_at: input.countedAt,
         recorded_at: now,
         is_anchor: isAnchor,
+        is_legacy_imprecise: false,
         opening_paise: openingPaise,
         expected_paise: expectedPaise,
         difference_paise:

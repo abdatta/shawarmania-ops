@@ -128,7 +128,7 @@ declare v_date date;
 begin
   select public.app_business_date(p_at, o.business_day_cutover) into v_date
     from public.outlets o where o.id = p_outlet;
-  insert into public.manual_ledger_expenses
+  insert into public.expenses
     (outlet_id, business_date, category, amount_paise, is_cash, occurred_at, recorded_by)
   values (p_outlet, v_date, p_category, p_paise, p_cash, p_at, p_by);
 end;

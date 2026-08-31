@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { DataAdapters, ManualLedgerExpense } from '@/data-access/adapters'
+import type { DataAdapters, ExpenseRecord } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
 import { OUTLET_KALYANI_ID, outletFixtures } from '@/data-access/mock/fixtures/outlets'
@@ -25,7 +25,7 @@ function expense(
   businessDate: string,
   amountPaise: number,
   options: { isCash?: boolean; voided?: boolean } = {},
-): ManualLedgerExpense {
+): ExpenseRecord {
   return {
     id,
     outletId: OUTLET_KALYANI_ID,
@@ -49,7 +49,7 @@ function expense(
 
 function adaptersFor(
   role: Role,
-  rowsFor: (dates: readonly string[]) => ManualLedgerExpense[],
+  rowsFor: (dates: readonly string[]) => ExpenseRecord[],
 ): { adapters: DataAdapters; listRecentExpenses: ReturnType<typeof vi.fn> } {
   const base = createMockAdapters(role)
   const listRecentExpenses = vi.fn(async (_outletId: string, dates: readonly string[]) =>
@@ -59,7 +59,7 @@ function adaptersFor(
     listRecentExpenses,
     adapters: {
       ...base,
-      manualLedger: { ...base.manualLedger, listRecentExpenses },
+      expenses: { ...base.expenses, listRecentExpenses },
     },
   }
 }
@@ -121,10 +121,10 @@ describe('the outlet expenses surface', () => {
 
   it('records from an empty past day against the day on screen', async () => {
     const base = adaptersFor('franchise_admin', () => [])
-    const createExpense = vi.fn(base.adapters.manualLedger.createExpense)
+    const createExpense = vi.fn(base.adapters.expenses.createExpense)
     const adapters: DataAdapters = {
       ...base.adapters,
-      manualLedger: { ...base.adapters.manualLedger, createExpense },
+      expenses: { ...base.adapters.expenses, createExpense },
     }
     renderExpenses('franchise_admin', adapters)
 

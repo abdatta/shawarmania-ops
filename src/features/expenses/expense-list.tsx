@@ -14,23 +14,14 @@ import { LoadingList } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
-import { DataActionError, type LedgerActor, type ManualLedgerExpense } from '@/data-access/adapters'
+import { DataActionError, type ExpenseActor, type ExpenseRecord } from '@/data-access/adapters'
 import { formatBusinessDate, formatDateTime, normalizeCategory, rupeesToPaise } from '@/domain'
 
 import { Field } from './field'
 
 /**
- * The manual ledger's expense list and its form — **one component, mounted by
- * two surfaces.**
- *
- * This was a region inside `ledger-day.tsx`, which is 1,400 lines built around
- * the day row: the opening-cash chain, the live drawer difference, every figure
- * card. Outlet staff hold no day row at all, so the intuitive shape — the ledger
- * opened to them with revenue and drawer stripped by role — would have meant a
- * role check in front of every figure on that component, each one a place a
- * figure leaks later. Extraction is the honest version of the same instinct:
- * real reuse of the part both readers share, and no role branching in the large
- * file (design D7).
+ * The shared expense list and entry form, used by the outlet screen, counter and
+ * drawer breakdown.
  *
  * **It owns the writing, not the reading.** The parent loads the rows and calls
  * `onChanged` to reload, because the day surface derives its whole drawer
@@ -54,7 +45,7 @@ export interface ExpenseListViewer {
 }
 
 export interface ExpenseListProps {
-  expenses: ManualLedgerExpense[] | null
+  expenses: ExpenseRecord[] | null
   outletId: string
   /** What a newly recorded expense is dated. */
   businessDate: string
@@ -86,7 +77,7 @@ interface ExpenseDraft {
 const BLANK_EXPENSE: ExpenseDraft = { category: '', amount: '', isCash: true, note: '' }
 
 /** "someone" rather than a blank, for a name the reader genuinely cannot resolve. */
-function nameOf(actor: LedgerActor | null): string {
+function nameOf(actor: ExpenseActor | null): string {
   return actor?.name ?? 'someone'
 }
 
@@ -101,15 +92,15 @@ export function ExpenseList({
   emptyTitle,
   onChanged,
 }: ExpenseListProps) {
-  const { manualLedger: adapter, expenseCategories: categoriesAdapter } = useAdapters()
+  const { expenses: adapter, expenseCategories: categoriesAdapter } = useAdapters()
 
   const [categories, setCategories] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState<ManualLedgerExpense | null>(null)
+  const [editing, setEditing] = useState<ExpenseRecord | null>(null)
   const [draft, setDraft] = useState<ExpenseDraft>(BLANK_EXPENSE)
-  const [withdrawing, setWithdrawing] = useState<ManualLedgerExpense | null>(null)
+  const [withdrawing, setWithdrawing] = useState<ExpenseRecord | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
 
   async function loadCategories() {
@@ -124,7 +115,7 @@ export function ExpenseList({
    * A withdrawn row is final for everybody, including the owner: a correction
    * after withdrawal is a new expense.
    */
-  function mayChange(expense: ManualLedgerExpense): boolean {
+  function mayChange(expense: ExpenseRecord): boolean {
     if (expense.voidedAt !== null) return false
     if (viewer.mayTouchAnyRow) return true
     // A row no person recorded is nobody's own row, so nobody may change it here.

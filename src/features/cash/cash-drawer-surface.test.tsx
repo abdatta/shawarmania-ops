@@ -1049,6 +1049,7 @@ describe('the count history is a paged list of disclosures', () => {
       expectedPaise: 895_000,
       differencePaise: 0,
       countedTotalPaise: 895_000,
+      isLegacyImprecise: false,
       isApproximate: true,
       toleranceMinutes: 15,
       recordedBy: 'someone',

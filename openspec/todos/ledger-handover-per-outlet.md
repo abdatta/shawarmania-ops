@@ -1,7 +1,7 @@
 # The Ledger Handover Still Has To Be Done, Outlet By Outlet
 
-**Area:** Billing / Ledger · **Raised:** 12 Aug 2026 · **Type:** Operational
-rollout, not a code change
+**Area:** Billing / Ledger · **Raised:** 12 Aug 2026 · **Closed:** 31 Aug 2026,
+as unnecessary · **Type:** Operational rollout, not a code change
 
 ## What is outstanding
 
@@ -66,10 +66,32 @@ no sync covers them, before and after. **Cash in and out and the counted drawer 
 longer do:** `cash-is-counted-not-closed` (#11) gives them a live record, and the
 notebook keeps its own rows only as history for #12 to carry across.
 
-**Update, 26 Aug 2026: this act is being dissolved rather than performed.**
-`billing_live_from` controls exactly one thing, whether the manual ledger form
-asks for typed Cash and UPI at that outlet. Bills are rung and stored either way,
-at both outlets, today. The derived statement built by
-`cash-is-counted-not-closed` (#11) reads `bills` directly and consults the flag
-nowhere, and #12 drops the column with the form it served. Nothing above needs to
-be done at either outlet; this page closes when #12 lands.
+**Closed 31 Aug 2026. The act became unnecessary; it was never performed.**
+
+`retire-the-manual-ledger` (#12) landed and dropped `outlets.billing_live_from`,
+its guard function and both its triggers. Nothing above was done at either
+outlet, and nothing above will be.
+
+The reason is worth stating plainly so a future reader is not left wondering
+whether a rollout was quietly skipped. **A handover moves an outlet from one of
+two records to the other. #12 removed the second record, so there is no longer
+anything to hand over from.** `billing_live_from` controlled exactly one thing —
+whether the manual ledger form asked for typed Cash and UPI at that outlet.
+Bills were rung and stored either way, at both outlets, from 12 Aug (Kalyani) and
+14 Aug (Kanchrapara). The derived statement built by `cash-is-counted-not-closed`
+(#11) read `bills` directly and consulted the flag nowhere. So the flag's only
+reader retired with the form it served, and the date it would have carried no
+longer means anything.
+
+What this page was really protecting is still protected, by something better than
+a date: the parallel run. Both outlets rang bills alongside a hand-written record
+for the whole of August, the two were compared before #12 was drafted, and the
+carry-over preserved the hand-written figures rather than discarding them — the
+notebook's own receipts are what a carried day's expected cash is built from,
+precisely because the counter was not billing for the first half of the month.
+The disagreements between the two records were not reconciled away; they are on
+screen, beside the day's bills.
+
+The consequence this page was honest about — that no automated gate asserted the
+handover happened — is discharged rather than inherited. There is nothing left to
+assert.

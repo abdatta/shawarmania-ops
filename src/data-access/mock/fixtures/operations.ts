@@ -191,7 +191,7 @@ export interface ExpenseSeed {
   time: string
   category: Tables<'expenses'>['category']
   amountPaise: number
-  paymentMethod: Tables<'expenses'>['payment_method']
+  paymentMethod: Tables<'bills'>['payment_method']
   description?: string
 }
 
@@ -200,16 +200,26 @@ export interface ExpenseSeed {
  * exists to demonstrate — only cash reaches the drawer — cannot be shown by a
  * day where everything was cash.
  *
- * Every outlet carries a `raw_materials` row, because the P&L's basis toggle
- * has nothing to demonstrate without one: cash basis subtracts it, consumption
- * basis subtracts the stock it bought instead, and the difference between the
- * two figures is the whole point of the control (design D5).
+ * **The words are the ones a person would type**, not the identifiers of the
+ * closed list that free-text categories replaced in
+ * `expense-categories-grow-from-use`. `seed.sql` has said so since that change;
+ * these fixtures had not caught up, and it stopped being invisible when
+ * `retire-the-manual-ledger` (#12) promoted one expense record and the counter
+ * tablet began listing these rows beside the ones staff type themselves. A demo
+ * that greets its reader with `raw_materials` is teaching a vocabulary the app
+ * does not use.
+ *
+ * Every outlet carries a food-purchase row, because it is the largest recurring
+ * cost the month has and a breakdown without one reads like somebody else's
+ * shop. It no longer exists to feed a basis toggle: #12 withdrew the
+ * consumption basis, because inventory is shelved and a basis that cannot be
+ * computed is worse than one honestly offered.
  */
 export const expenseSeeds: ExpenseSeed[] = [
   {
     daysAgo: 3,
     time: '09:10',
-    category: 'raw_materials',
+    category: 'Chicken',
     amountPaise: 90000,
     paymentMethod: 'cash',
     description: 'Chicken from Nadia Poultry',
@@ -217,7 +227,7 @@ export const expenseSeeds: ExpenseSeed[] = [
   {
     daysAgo: 3,
     time: '18:00',
-    category: 'other',
+    category: 'Other',
     amountPaise: 15000,
     paymentMethod: 'cash',
     description: 'Tea for the evening shift',
@@ -225,7 +235,7 @@ export const expenseSeeds: ExpenseSeed[] = [
   {
     daysAgo: 2,
     time: '09:10',
-    category: 'raw_materials',
+    category: 'Chicken',
     amountPaise: 100000,
     paymentMethod: 'cash',
     description: 'Chicken and vegetables from the morning market',
@@ -233,7 +243,7 @@ export const expenseSeeds: ExpenseSeed[] = [
   {
     daysAgo: 2,
     time: '11:30',
-    category: 'packaging',
+    category: 'Packaging',
     amountPaise: 40000,
     paymentMethod: 'upi',
     description: 'Boxes',
@@ -241,7 +251,7 @@ export const expenseSeeds: ExpenseSeed[] = [
   {
     daysAgo: 1,
     time: '09:15',
-    category: 'raw_materials',
+    category: 'Chicken',
     amountPaise: 150000,
     paymentMethod: 'cash',
     description: 'Chicken and vegetables from the morning market',
@@ -249,7 +259,7 @@ export const expenseSeeds: ExpenseSeed[] = [
   {
     daysAgo: 1,
     time: '11:00',
-    category: 'electricity',
+    category: 'Electricity',
     amountPaise: 120000,
     paymentMethod: 'upi',
     description: 'Monthly bill',
@@ -257,7 +267,7 @@ export const expenseSeeds: ExpenseSeed[] = [
   {
     daysAgo: 1,
     time: '17:30',
-    category: 'other',
+    category: 'Other',
     amountPaise: 20000,
     paymentMethod: 'cash',
     description: 'Tea for the evening shift',
@@ -273,7 +283,7 @@ export const expenseSeeds: ExpenseSeed[] = [
      */
     daysAgo: 0,
     time: '09:05',
-    category: 'raw_materials',
+    category: 'Chicken',
     amountPaise: 260000,
     paymentMethod: 'cash',
     description: 'Weekend delivery from Nadia Poultry — chicken for three days',
@@ -281,7 +291,7 @@ export const expenseSeeds: ExpenseSeed[] = [
   {
     daysAgo: 0,
     time: '10:20',
-    category: 'packaging',
+    category: 'Packaging',
     amountPaise: 85000,
     paymentMethod: 'upi',
     description: 'Boxes and napkins',
@@ -289,7 +299,7 @@ export const expenseSeeds: ExpenseSeed[] = [
   {
     daysAgo: 0,
     time: '13:10',
-    category: 'maintenance',
+    category: 'Maintenance',
     amountPaise: 45000,
     paymentMethod: 'cash',
     description: 'New regulator for the grill',
@@ -300,7 +310,7 @@ export const expenseSeeds: ExpenseSeed[] = [
     outletId: OUTLET_KANCHRAPARA_ID,
     daysAgo: 3,
     time: '09:40',
-    category: 'raw_materials',
+    category: 'Chicken',
     amountPaise: 45000,
     paymentMethod: 'cash',
     description: 'Chicken from the morning market',
@@ -309,7 +319,7 @@ export const expenseSeeds: ExpenseSeed[] = [
     outletId: OUTLET_KANCHRAPARA_ID,
     daysAgo: 2,
     time: '09:40',
-    category: 'raw_materials',
+    category: 'Chicken',
     amountPaise: 45000,
     paymentMethod: 'cash',
     description: 'Chicken and vegetables',
@@ -318,7 +328,7 @@ export const expenseSeeds: ExpenseSeed[] = [
     outletId: OUTLET_KANCHRAPARA_ID,
     daysAgo: 1,
     time: '09:30',
-    category: 'raw_materials',
+    category: 'Chicken',
     amountPaise: 70000,
     paymentMethod: 'cash',
     description: 'Chicken from the morning market',
@@ -327,7 +337,7 @@ export const expenseSeeds: ExpenseSeed[] = [
     outletId: OUTLET_KANCHRAPARA_ID,
     daysAgo: 1,
     time: '16:00',
-    category: 'packaging',
+    category: 'Packaging',
     amountPaise: 40000,
     paymentMethod: 'upi',
     description: 'Boxes',
@@ -336,7 +346,7 @@ export const expenseSeeds: ExpenseSeed[] = [
     outletId: OUTLET_KANCHRAPARA_ID,
     daysAgo: 0,
     time: '09:20',
-    category: 'raw_materials',
+    category: 'Chicken',
     amountPaise: 55000,
     paymentMethod: 'cash',
     description: 'Chicken and vegetables',
@@ -345,7 +355,7 @@ export const expenseSeeds: ExpenseSeed[] = [
     outletId: OUTLET_KANCHRAPARA_ID,
     daysAgo: 0,
     time: '12:00',
-    category: 'electricity',
+    category: 'Electricity',
     amountPaise: 60000,
     paymentMethod: 'upi',
     description: 'Monthly bill',

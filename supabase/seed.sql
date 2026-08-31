@@ -554,7 +554,7 @@ values
    'Classic Chicken Shawarma', 13900, 1, 13900);
 
 -- ---------------------------------------------------------------------------
--- Expenses and withdrawals for the reconciled day. Only cash rows feed the
+-- Expenses for the derived drawer. Only cash rows feed the
 -- drawer; the UPI electricity bill deliberately does not.
 --
 -- Categories are free text since `expense-categories-grow-from-use`, and every
@@ -564,29 +564,23 @@ values
 -- vocabulary.
 
 insert into public.expenses
-  (outlet_id, business_date, category, description, amount_paise, payment_method, recorded_by)
+  (outlet_id, business_date, category, description, amount_paise, is_cash, recorded_by)
 values
   ('00000000-0000-4000-a000-000000000001', current_date - 2, 'Chicken',
-   'Chicken and vegetables (synthetic)', 150000, 'cash', '10000000-0000-4000-a000-000000000002'),
+   'Chicken and vegetables (synthetic)', 150000, true, '10000000-0000-4000-a000-000000000002'),
   ('00000000-0000-4000-a000-000000000001', current_date - 2, 'Electricity',
-   'Monthly electricity bill (synthetic)', 80000, 'upi', '10000000-0000-4000-a000-000000000002'),
+   'Monthly electricity bill (synthetic)', 80000, false, '10000000-0000-4000-a000-000000000002'),
   ('00000000-0000-4000-a000-000000000001', current_date - 1, 'Staff wages',
-   'Advance to staff (synthetic)', 50000, 'cash', '10000000-0000-4000-a000-000000000002'),
+   'Advance to staff (synthetic)', 50000, true, '10000000-0000-4000-a000-000000000002'),
   ('00000000-0000-4000-a000-000000000002', current_date - 2, 'Packaging',
-   'Pita and packaging (synthetic)', 10000, 'cash', '10000000-0000-4000-a000-000000000003'),
+   'Pita and packaging (synthetic)', 10000, true, '10000000-0000-4000-a000-000000000003'),
   -- The owner's remote entry: recorded by the Super Admin, at an outlet they
   -- hold no assignment at, non-cash by necessity — `expenses_insert` refuses
   -- `cash` from that branch, so this row cannot move Kanchrapara's drawer
   -- (multi-outlet-people, design D8).
   ('00000000-0000-4000-a000-000000000002', current_date - 1, 'Platform fee',
-   'Aggregator platform fee, paid centrally (synthetic)', 62000, 'upi',
+   'Aggregator platform fee, paid centrally (synthetic)', 62000, false,
    '10000000-0000-4000-a000-000000000001');
-
-insert into public.cash_withdrawals
-  (outlet_id, business_date, amount_paise, reason, withdrawn_by, recorded_by)
-values
-  ('00000000-0000-4000-a000-000000000001', current_date - 2, 50000,
-   'Owner draw (synthetic)', 'Synthetic Owner', '10000000-0000-4000-a000-000000000002');
 
 -- ---------------------------------------------------------------------------
 -- Attendance. Coordinates are synthetic offsets around the placeholder
@@ -686,62 +680,6 @@ values
    '10000000-0000-4000-a000-000000000003', null,
    ((current_date - 2) + time '15:22') at time zone 'Asia/Kolkata',
    22.94503, 88.43305, 16);
-
--- ---------------------------------------------------------------------------
--- Close D-2 at both outlets. Seeds run as the database owner, not through
--- close_business_day() (there is no session); the figures are computed here
--- the same way the RPC computes them, and the CHECK constraints hold them to
--- the invariant. Kalyani's drawer is deliberately ₹5 short.
-
-do $$
-declare
-  v_outlet uuid;
-  v_fa uuid;
-  v_opening bigint;
-  v_short bigint;
-  v_sales bigint;
-  v_expenses bigint;
-  v_withdrawn bigint;
-  v_expected bigint;
-begin
-  for v_outlet, v_fa, v_opening, v_short in
-    select * from (values
-      ('00000000-0000-4000-a000-000000000001'::uuid,
-       '10000000-0000-4000-a000-000000000002'::uuid, 200000::bigint, 500::bigint),
-      ('00000000-0000-4000-a000-000000000002'::uuid,
-       '10000000-0000-4000-a000-000000000003'::uuid, 150000::bigint, 0::bigint)
-    ) as t (outlet_id, fa, opening, short)
-  loop
-    select coalesce(sum(bp.amount_paise), 0) into v_sales
-      from public.bill_payments bp
-      join public.bills b
-        on b.id = bp.bill_id and b.outlet_id = bp.outlet_id
-     where b.outlet_id = v_outlet and b.business_date = current_date - 2
-       and bp.method = 'cash' and b.status = 'settled';
-
-    select coalesce(sum(amount_paise), 0) into v_expenses
-      from public.expenses
-     where outlet_id = v_outlet and business_date = current_date - 2
-       and payment_method = 'cash';
-
-    select coalesce(sum(amount_paise), 0) into v_withdrawn
-      from public.cash_withdrawals
-     where outlet_id = v_outlet and business_date = current_date - 2;
-
-    v_expected := v_opening + v_sales - v_expenses - v_withdrawn;
-
-    insert into public.daily_cash_records
-      (outlet_id, business_date, opening_cash_paise, cash_sales_paise,
-       cash_expenses_paise, cash_withdrawn_paise, expected_closing_paise,
-       actual_closing_paise, difference_paise, closed_by, closed_at, notes)
-    values
-      (v_outlet, current_date - 2, v_opening, v_sales, v_expenses, v_withdrawn,
-       v_expected, v_expected - v_short, -v_short, v_fa,
-       ((current_date - 1) + time '01:00') at time zone 'Asia/Kolkata',
-       case when v_short > 0 then 'Drawer short (synthetic)' else 'Clean close (synthetic)' end);
-  end loop;
-end;
-$$;
 
 -- ---------------------------------------------------------------------------
 -- An alert thread: Franchise Admin raises, Super Admin responds.

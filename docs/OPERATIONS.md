@@ -7,8 +7,9 @@
 > any associated email is an alternate sign-in, and every live Super Admin
 > requires one as a future recovery/security foundation. Forgotten passwords
 > for every role use an admin-issued one-time link. Counter tablets are set up
-> with a one-time code and open a shift through a two-device handshake. Menu
-> and opening cash float are still to come, and the steps below say which.
+> with a one-time code and open a shift through a two-device handshake. Menu is
+> still to come, and the steps below say which. There is no opening cash float to
+> set: an outlet's first drawer count is its anchor.
 
 ## Environments
 
@@ -391,20 +392,17 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    keeps that outlet preselected. Later assignment changes keep the same
    account. A pending link is replaced transactionally; an activated person
    gets no code unless an admin explicitly chooses **New code**.
-8. **Set the opening cash float** for the first business day. *(Not built —
-   `cash-is-counted-not-closed` (#11), which takes it once per outlet as the
-   anchor for that outlet's first drawer observation; every later opening is the
-   previous observation's carry-forward. Meanwhile the float is typed as the
-   first day's opening cash in the manual ledger, step 10.)*
+8. **Count the drawer once, on the Cash drawer screen.** That first count is the
+   outlet's anchor: it carries no opening, no expected total and no difference,
+   because there is nothing before it to compare against. Every later opening is
+   the previous count's carry-forward. There is no opening float to set anywhere
+   else, and no screen asks for one.
 9. **Verify isolation before going live** — sign in as the new Franchise Admin and confirm no other outlet is visible anywhere. This is a real step, not a formality: it is the last point at which a misconfiguration is cheap to fix.
-10. **Start the manual ledger for the outlet** (Super Admin → Ledger). *(Temporary
-   — #36, and this step disappears when `retire-the-manual-ledger` (#12) lands.)* This remains the record of
-   aggregator trade, expenses and drawer facts, so it is a step rather than a
-   suggestion. On the first day, count the
-   drawer and type that as **opening cash**, and type both aggregator commission
-   rates — nothing is inherited, because there is no earlier day to inherit from.
-   Every later day offers the previous day's count and rates and needs only the
-   four channel figures, the expenses as they happen, and the count at close.
+10. **Confirm the outlet reads on the derived Ledger.** Nothing is started or
+   switched on: the Ledger assembles each day from bills, expenses, aggregator
+   figures, drawer cash out and observations, so a date nobody has touched still
+   renders in full. Check that yesterday reads, and that the outlet appears in
+   the switcher.
 11. **Shadow billing before taking customer money.** Open a real tablet shift,
    ring direct and handover payments with test amounts, force it offline and back
    online, verify exactly one server bill per payment, and correct both an
@@ -416,33 +414,28 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    manager void the test bills with reasons. Also rehearse Leave counter while
    offline: the later sale must settle once under the old operator with an
    After operator left marker, never under the incoming operator.
-12. **Schedule the ledger handover** (Super Admin → Outlets → Edit → **Counter
-   billing starts on**) for a business date that has not started. From that date
-   the ledger removes typed Cash and UPI and labels their settled bill totals
-   **from counter**. Keep typing cash movements, expenses and the drawer count;
-   Zomato and Swiggy are sourced readings and have no ledger money fields.
+12. **Take customer money.** There is no handover step to schedule any more.
+   The Outlets form no longer offers a counter-billing start date, because there
+   is no second record to hand over from: bills are the Cash and UPI of every
+   trading day from the first one the outlet rings.
 
 Roll billing out at **Kalyani first**, because it has the first tablet. Trade one
 full business day and close it cleanly before repeating setup and handover at
 Kanchrapara.
 
-**The shakedown is a parallel run, not a shadow test.** Kalyani's tablet has been
-taking real customer money since 12 Aug 2026, and **every bill it rings is also
-written down by hand**. That is deliberate: the bugs worth finding are the ones a
-real queue of customers produces, and the hand-written record is the second copy
-that makes it safe to look for them. It continues until the two records agree
-over enough trading to trust the system.
+**The shakedown was a parallel run, not a shadow test.** Kalyani's tablet took
+real customer money from 12 Aug 2026, and every bill it rang was also written
+down by hand. That was deliberate: the bugs worth finding are the ones a real
+queue of customers produces, and the hand-written record was the second copy that
+made it safe to look for them. It ran until the two records agreed over enough
+trading to trust the system.
 
-So **the promotion is the ledger handover, not the first bill**, and step 12 is
-the only irreversible step on this page. Do not set `billing_live_from` at either
-outlet until its real menu, its parallel run and its Cash/UPI reconciliation have
-passed. An outlet whose bills turn out to be wrong after its ledger has handed
-over has no second record left to compare against.
-
-**This handover is owed rather than done.** `billing-live` (#10) built all of it
-and closed without performing it, so no automated gate asserts it happened;
-[`openspec/todos/ledger-handover-per-outlet.md`](../openspec/todos/ledger-handover-per-outlet.md)
-tracks where each outlet stands.
+**The parallel run ended on 2026-08-31**, when `retire-the-manual-ledger` (#12)
+carried the hand-written rows into the live records and removed the second one.
+The per-outlet handover it was building towards never had to be performed: a
+handover moves an outlet from one of two records to the other, and there is now
+only one. A new outlet therefore has no parallel run to complete — it opens on
+the live records directly, which is what steps 8 to 12 above describe.
 
 ## Counting the drawer *(the live nightly job — #11)*
 
@@ -490,63 +483,30 @@ sums all of them by the same path as a single evening.
 stops accepting work. A bill that lands after a count is reported beside it, and
 you either accept it or count again.
 
-## Recording a trading day by hand *(temporary — #36)*
+## Recording a trading day by hand
 
-The notebook, for the trading period before each outlet's tablet existed. **It has
-left the primary navigation** and lives at `Ledger → Notebook` as the fallback
-for the derived Ledger, one tap from it; `retire-the-manual-ledger` (#12) carries its rows across and removes it.
-Two or three minutes per outlet, from a phone.
+**There is no longer a way to do this, and that is the point.** The notebook
+(#36) was the hand-typed record of the trading period before each outlet's
+tablet existed. `retire-the-manual-ledger` (#12) carried its rows into the drawer
+and the one expense record and removed the surface, so no screen accepts a typed
+cash figure, opening float or aggregator amount for a trading day any more.
 
-1. **Super Admin → Ledger**, pick the outlet, leave it on **One day** and today.
-2. **Check the opening cash it offers.** It is the previous recorded day's count.
-   If the drawer really started somewhere else, change it — and if the screen
-   reports a gap between the two, correct whichever day is wrong rather than
-   overwriting the figure to make the warning go away. That warning is the whole
-   reason the opening is stored per day.
-3. **Record cash and UPI.** Before this outlet's billing handover, type
-   Cash and UPI. From the scheduled date those values are labelled **from
-   counter** and cannot be typed; check them against the tablet's settled bills.
-   **Neither aggregator can be typed.** Their blocks are readings — gross,
-   commission, net and a source/state chip — filled by the sync or accepted
-   operator evidence. A commission not yet known reads "not known yet" rather
-   than nought.
-4. **Record each expense under the words the month should group by.** Category
-   is free text with business-wide suggestions; type a new one when the existing
-   list does not fit. Add an optional Note only when the category needs detail.
-   Mark it cash only if it came out of this drawer.
-5. **Cash added and cash withdrawn, each with a reason.** Banking, a float
-   top-up, an owner drawing. **Equipment bought with drawer cash goes in Cash
-   withdrawn, not in expenses** — the drawer is genuinely lighter, and recording
-   it as an expense would double-count it while recording it nowhere would make
-   the day read short.
-6. **Count the drawer and type it.** The difference appears as you type. If it
-   does not balance, write a note saying what you found.
-7. **Save.** The form gives way to a reading of what you just stored: the revenue
-   side with each channel's commission and what actually arrived, including the
-   aggregator readings, and the drawer below it.
+What used to be typed here is now recorded where it happens:
 
-At the tablet, **Finish day** is a separate online boundary: use it only after
-the activity rail has no open orders. Its sheet drains again and names anything
-still sending, needing attention, open on the server, or unable to reach the
-server, together with the resolution. A recent editable payment is advisory and
-can be reviewed or deliberately left behind by finishing now. Once the hard
-blockers clear, it ends the shift and records the date's confirmation. A refusal
-is work to resolve, never a prompt to clear site data.
+- **Cash and UPI** come from settled bills at the counter.
+- **The drawer** is counted on the Cash drawer screen — see *Counting the
+  drawer* above — and every later opening is the previous count's carry-forward.
+- **Cash added and cash withdrawn** are drawer cash out, signed: a collection is
+  positive, a top-up is negative, and equipment bought with drawer cash is a
+  spend with its reason, never an expense.
+- **Expenses** are recorded on the Expenses screen by whoever spent the money.
+- **Aggregator trade** arrives from the sync, or from an operator statement when
+  the sync is blocked — see the section below.
 
-To correct a day later, open it and press **Edit**. It opens as a reading, so the
-figures cannot be nudged by a stray tap on the way past; every field comes back
-exactly as it was stored, and **Cancel** writes nothing. Saving changes that day
-alone.
-
-The rules behind any section — why a rate is stored per day, why a fridge is cash
-out rather than an expense — are on the **ⓘ** beside that section's title. Nothing
-is hidden that you need in order to type a figure; what is hidden is what you only
-need to read once.
-
-At month end, switch to **The month**: revenue by channel with each aggregator net
-of its own daily commission, expenses by category with every line behind the total,
-and a cash-basis operating profit estimate. It is an *operating* figure — equipment
-is deliberately not recorded here — and the screen says so.
+Reading a day, including every date that predates the tablets, is the derived
+**Ledger**. Carried dates render through the same reader as yesterday and say
+that their hour was never recorded, rather than showing a plausible time nobody
+wrote down.
 
 ## Bringing a period in by hand when the sync is blocked *(#43)*
 

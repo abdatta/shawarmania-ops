@@ -50,9 +50,6 @@ function toColumns(patch: OutletPatch): TablesUpdate<'outlets'> {
     ...(patch.arrivalDeadline !== undefined && {
       arrival_deadline: patch.arrivalDeadline,
     }),
-    ...(patch.billingLiveFrom !== undefined && {
-      billing_live_from: patch.billingLiveFrom,
-    }),
     ...(patch.isActive !== undefined && { is_active: patch.isActive }),
   }
 }

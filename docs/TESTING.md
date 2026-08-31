@@ -119,20 +119,22 @@ Pure functions over integer paise, so they are trivially testable and there is n
   and again in the rendered output — because the helper can be right while the
   component quietly renders something else.
 - The legacy day-close arithmetic in `src/domain/cash.test.ts` is left in place
-  and still passes. `daily_cash_records` is written by nothing and #12 drops both.
+  and still passes, although `daily_cash_records` and `cash_withdrawals` are gone:
+  the functions are pure and cost nothing to keep, and the drawer's own arithmetic
+  is asserted separately in `src/domain/drawer.test.ts`.
 - Cash difference sign convention — short is negative, over is positive. Assert it explicitly; it is exactly the kind of thing that silently inverts.
 - P&L in both modes, with an explicit test that the two do **not** double-count raw materials.
 - Formatting: paise → Indian-grouped rupees (`₹1,23,456`), including zero and negative values.
-- Aggregator commission in the manual ledger *(temporary — #36)*:
+- Aggregator commission:
   `(stated × bp + 5000) / 10000` with integer division, asserted to round half up
   **and to round symmetrically about zero** — truncation toward zero on a refunded
   day would leave a month a paisa out. Applied **per day** and summed, with an
   explicit test that one rate applied to a month's total gives a *different*
   answer, so the bug the per-day design forecloses cannot be reintroduced by
   moving the commission out of the loop.
-- The manual ledger's month reconciling exactly against its own expenses by
-  category — the guarantee that no category or marker is quietly excluded from the
-  profit estimate.
+- The derived month reconciling exactly against its own expenses by category —
+  the guarantee that no category or marker is quietly excluded from the profit
+  estimate.
 - Swiggy daily gross: a timestamped Finance detail must derive pre-tax gross as
   `Total Customer Paid - GST Collected`, or as zero for the explicit
   cancelled/no-GST shape; missing/duplicate/malformed
@@ -169,15 +171,17 @@ For **every** outlet-scoped table, with sessions for each role:
 
 **A new outlet-scoped table without a case in this suite is an incomplete change.** The suite enforces this itself: it enumerates the tables from the database catalog and fails, naming the table, on any it cannot classify as outlet-scoped, child-scoped, or tenancy-root, or that lacks Row-Level Security — nobody has to remember.
 
-**Owner-only tables need a case the sweep cannot express.** The manual ledger's
-two tables *(temporary — #36)* carry `outlet_id`, so the enumeration finds them
-and proves the ordinary claim: nobody reads across outlets. The real claim is
-stronger — an outlet role is refused its **own** outlet's rows, at every verb —
-and `supabase/tests/21_manual_ledger.sql` asserts it directly for a Franchise
-Admin, a Biller and an Employee. `01_schema_coverage.sql` backs it with catalog
-facts: every one of the eight policies names `app_is_owner()`, and **none** names
-an outlet-role predicate, so a later migration that quietly adds a manager branch
-fails by name rather than in whichever test somebody remembered to write.
+**A table nobody may reach needs a case the sweep cannot express.** The retired
+notebook's day rows survive as `archived_manual_ledger_days`, which carries
+`outlet_id` and would otherwise be classified as an ordinary outlet-scoped table.
+The claim about it is stronger and different: it has **no policy and no runtime
+grant at all**, so every role is refused at every verb, and an insert is refused
+behind the grant by a trigger. `supabase/tests/21_manual_ledger.sql` asserts that
+directly, together with the estate the retirement removed — the two dead cash
+tables, `close_business_day()`, `billing_assert_day_ready()`, the closed-day shift
+guard and `outlets.billing_live_from` — so a later migration that quietly brings
+one back fails by name rather than in whichever test somebody remembered to
+write.
 
 ### 3. The offline path
 
@@ -434,12 +438,14 @@ What it establishes, and each figure is measured rather than estimated:
 - **The mid-day boundary is worth ₹4,640 of fiction in one month.** Placing a
   22:00 count on every real trading date, ₹740 at Kalyani (4 bills, 3 dates) and
   ₹3,900 at Kanchrapara (21 bills, 8 dates) was rung *after* the count.
-  `close_business_day()` would have called all of it a shortfall on drawers that
-  were never short.
-- **The notebook and the counter already disagree** on the dates both cover, by
-  ₹10,150 at Kalyani, and the notebook has no row at all for ten dates the tablet
-  billed. That belongs to #12's carry-over, and it is why the derived reader is not
-  asked to reconcile the two.
+  The day-close model would have called all of it a shortfall on drawers that
+  were never short, which is why it was removed rather than made real.
+- **The notebook and the counter already disagreed** on the dates both cover, by
+  ₹10,150 at Kalyani, and the notebook had no row at all for ten dates the tablet
+  billed. #12's carry-over did not reconcile them: a carried day's expected figure
+  uses the notebook's own receipts, because the counter was not billing for the
+  first half of the month, and the day's bills are listed beside it so the
+  disagreement stays visible.
 - **A negative cash-out already occurs in production**, once at each outlet — so
   decision 5's claim that it needs no concept of its own is replayed against real
   rows rather than invented ones.

@@ -10,18 +10,15 @@ import { MyShiftSurface } from '@/features/billing/my-shift-surface'
 import { OpenOrdersSurface } from '@/features/billing/open-orders-surface'
 import { ShiftUnlock } from '@/features/billing/shift-unlock'
 import { CashDrawerSurface } from '@/features/cash/cash-drawer-surface'
-import { DailyCashSurface } from '@/features/cash/daily-cash-surface'
 import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface'
 import { DevicesSurface } from '@/features/counter/devices-surface'
 import { ExpenseCategoriesSurface } from '@/features/expense-categories/expense-categories-surface'
-import { ExpensesSurface } from '@/features/expenses/expenses-surface'
 import { OutletExpensesSurface } from '@/features/expenses/outlet-expenses-surface'
 import { ComparisonSurface } from '@/features/insights/comparison-surface'
 import { OutletDayView } from '@/features/insights/outlet-day-view'
 import { PnlSurface } from '@/features/insights/pnl-surface'
 import { ReportsSurface } from '@/features/insights/reports-surface'
 import { InventorySurface } from '@/features/inventory/inventory-surface'
-import { ManualLedgerSurface } from '@/features/manual-ledger/manual-ledger-surface'
 import { MovementLedger } from '@/features/inventory/movement-ledger'
 import { MenuSurface } from '@/features/menu/menu-surface'
 import { OutletsSurface } from '@/features/outlets/outlets-surface'
@@ -155,25 +152,6 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
-    path: 'expenses',
-    element: (
-      <GatedSurface path="expenses">
-        <ExpensesSurface />
-      </GatedSurface>
-    ),
-  },
-  {
-    // The old day-close screen. Its gate is `hidden` from #11, so this resolves
-    // for nobody — and the route stays because that change drops and renames
-    // nothing. `retire-the-manual-ledger` (#12) removes both.
-    path: 'cash',
-    element: (
-      <GatedSurface path="cash">
-        <DailyCashSurface />
-      </GatedSurface>
-    ),
-  },
-  {
     // The drawer as a continuous balance (#11). One path, two roles: what
     // differs between a Super Admin and an assigned Franchise Admin is decided
     // by `app_may_reach_drawer()` in the database, not by this screen.
@@ -185,10 +163,8 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
-    // The derived Ledger (#11) owns `ledger`, because it is the Ledger. The
-    // manual form is a child of it at `ledger/notebook`, which is what makes the
-    // sidebar's nesting true: Expenses, Zomato, Swiggy and the notebook are all
-    // readings inside one group rather than children of a deprecated form.
+    // The derived Ledger owns `ledger`; expenses and channel readings are its
+    // neighbouring operational views.
     path: 'ledger',
     element: (
       <GatedSurface path="ledger">
@@ -197,20 +173,7 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
-    // The manual ledger (#36) — temporary, and the fallback for the reading
-    // above until `retire-the-manual-ledger` (#12) carries its rows across.
-    path: 'ledger/notebook',
-    element: (
-      <GatedSurface path="ledger/notebook">
-        <ManualLedgerSurface />
-      </GatedSurface>
-    ),
-  },
-  {
-    // The manual ledger's expense list, alone, for the people who spend the
-    // money (the-ledger-opens-to-the-outlet). Under `ledger/` rather than at
-    // `expenses`, which `admin-expenses` already owns and which is #11's live
-    // expense record — a different thing that outlives this one.
+    // One canonical expense list for every role that can record outlet spend.
     path: 'ledger/expenses',
     element: (
       <GatedSurface path="ledger/expenses">

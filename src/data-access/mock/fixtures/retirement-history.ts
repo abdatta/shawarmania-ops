@@ -1,8 +1,8 @@
 import type { Tables } from '../../database.types'
 
 /**
- * The manual ledger's demo month (#36) — **temporary, and deleted with the
- * capability**.
+ * Historical expense and aggregator readings retained after the notebook was
+ * retired. They keep the four-role demo's month internally consistent.
  *
  * Thin on purpose. The registry contract requires every surface to have a mock
  * behind it and the four-role walkthrough is a standing gate, so this exists to
@@ -22,13 +22,18 @@ import type { Tables } from '../../database.types'
  * Dates are `daysAgo` offsets materialised by the store, so the demo month is
  * always the month somebody is looking at it in.
  *
- * **Today carries no expenses either**, for the same reason it carries no day
- * row: the staff surface opens on today and yesterday, and the first thing
- * somebody does there is record what they just bought. A today already full of
- * rows would never show that. Yesterday's rows are what the surface opens on,
- * and they are attributed across all four roles so the list shows what it is now
- * for — every row at the outlet, with the ones you may still fix legible at a
- * glance.
+ * **These carry no rows for today**, because the staff surface opens on today
+ * and yesterday and the rows a reader is meant to study are yesterday's:
+ * attributed across all four roles, so the list shows what it is now for — every
+ * row at the outlet, with the ones you may still fix legible at a glance.
+ *
+ * Today is not empty, though, and that is `expenseSeeds`' doing rather than an
+ * oversight: three purchases land on the counter's own trading day so the
+ * tablet's panel demonstrates a list somebody is adding to, not only the empty
+ * state. Before `retire-the-manual-ledger` (#12) the tablet read a different
+ * table from the one those rows lived in and showed the empty state instead — a
+ * split that also meant the drawer subtracted expenses the tablet could not
+ * list. One record ended both.
  */
 
 export interface ManualLedgerDaySeed {
@@ -64,7 +69,7 @@ export interface ManualLedgerDaySeed {
 
 export interface ManualLedgerExpenseSeed {
   daysAgo: number
-  category: Tables<'manual_ledger_expenses'>['category']
+  category: Tables<'expenses'>['category']
   isCash: boolean
   amountPaise: number
   note?: string

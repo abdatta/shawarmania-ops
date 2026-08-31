@@ -3,7 +3,6 @@ import {
   isLowStock,
   profitEstimate,
   shiftBusinessDate,
-  type ConsumedMovement,
   type ExpenseAmount,
   type ProfitBasis,
 } from '@/domain'
@@ -29,21 +28,16 @@ import type { DemoStore } from './store'
  * The mock insights adapter — the owner's figures, derived from the rows the
  * other surfaces write.
  *
- * **Nothing here is authored.** Sales are the bills, expenses are the expense
- * rows, consumption is the ledger, and a closed day's cash figures are the
- * snapshot taken when somebody counted the drawer. That is the whole reason the
+ * **Nothing here is authored.** Counter sales are settled bills, channel sales
+ * are their net recorded figures, expenses are the canonical expense rows, and
+ * a counted day's cash figures come from its drawer observation. That is why the
  * demo dataset reconciles: there is no second place for a figure to come from
  * (design D4).
  *
  * Two contracts from `docs/DATA_MODEL.md` are mirrored deliberately:
  *
- *  - **a closed day is not recomputed.** Its cash sales, cash expenses and
- *    difference come off `daily_cash_records`, so the bill that arrived after
- *    the close does not silently move a signed-off number. Sales, which nobody
- *    signed, are the bills — and the gap between the two is the reconciliation
- *    exception, not a bug.
- *  - **raw materials are counted once**, which is `src/domain/pnl.ts`'s job and
- *    is why the profit here is always computed on a basis the caller named.
+ *  - **a counted drawer is not recomputed.** Its expected figure and difference
+ *    remain the observation's; later writes continue in the next interval.
  *
  * The cross-outlet boundary mirrors the policy #13 relies on: only the Super
  * Admin reads more than one outlet, and asking for somebody else's returns
@@ -90,7 +84,10 @@ export function createMockInsightsAdapter(
 
   const expensesOn = (outletId: string, businessDate: string) =>
     store.expenses.filter(
-      (expense) => expense.outlet_id === outletId && expense.business_date === businessDate,
+      (expense) =>
+        expense.outlet_id === outletId &&
+        expense.business_date === businessDate &&
+        expense.voided_at === null,
     )
 
   /**
@@ -152,24 +149,6 @@ export function createMockInsightsAdapter(
       .sort((a, b) => b.amountPaise - a.amountPaise)
   }
 
-  /** The stock that left the kitchen in a period, priced from its own item. */
-  function consumedMovements(outletId: string, dates: readonly string[]): ConsumedMovement[] {
-    return store.inventoryMovements
-      .filter(
-        (movement) => movement.outlet_id === outletId && dates.includes(movement.business_date),
-      )
-      .map((movement) => {
-        const item = store.inventoryItems.find(
-          (candidate) => candidate.id === movement.inventory_item_id,
-        )
-        return {
-          movementType: movement.movement_type,
-          quantityDelta: movement.quantity_delta,
-          purchaseCostPaise: item?.purchase_cost_paise ?? 0,
-        }
-      })
-  }
-
   function toExpenseAmounts(expenses: readonly Tables<'expenses'>[]): ExpenseAmount[] {
     return expenses.map((expense) => ({
       category: expense.category,
@@ -203,14 +182,9 @@ export function createMockInsightsAdapter(
             0,
           ),
           cashExpensesPaise: expenses
-            .filter((expense) => expense.payment_method === 'cash')
+            .filter((expense) => expense.is_cash && expense.voided_at === null)
             .reduce((running, expense) => running + expense.amount_paise, 0),
-          cashWithdrawnPaise: store.withdrawals
-            .filter(
-              (withdrawal) =>
-                withdrawal.outlet_id === outletId && withdrawal.business_date === businessDate,
-            )
-            .reduce((running, withdrawal) => running + withdrawal.amount_paise, 0),
+          cashWithdrawnPaise: 0,
         })
 
     const roster = await attendance.listOutletDay([outletId], businessDate)
@@ -258,15 +232,26 @@ export function createMockInsightsAdapter(
 
     const bills = dates.flatMap((date) => settledBills(outletId, date))
     const expenses = dates.flatMap((date) => expensesOn(outletId, date))
+    const channels = store.aggregatorChannelDays.filter(
+      (row) => row.outlet_id === outletId && dates.includes(row.business_date),
+    )
+    const salesPaise =
+      bills.reduce((running, bill) => running + bill.total_paise, 0) +
+      channels.reduce(
+        (running, row) => running + row.revenue_paise - (row.commission_paise ?? 0),
+        0,
+      )
 
     const days: PeriodDay[] = dates.map((date) => {
       const counted = countedOn(outletId, date)
+      const channelNet = channels
+        .filter((row) => row.business_date === date)
+        .reduce((running, row) => running + row.revenue_paise - (row.commission_paise ?? 0), 0)
       return {
         businessDate: date,
-        salesPaise: settledBills(outletId, date).reduce(
-          (running, bill) => running + bill.total_paise,
-          0,
-        ),
+        salesPaise:
+          settledBills(outletId, date).reduce((running, bill) => running + bill.total_paise, 0) +
+          channelNet,
         dayClosed: counted !== null,
         cashDifferencePaise: counted ? counted.difference_paise : null,
       }
@@ -275,15 +260,15 @@ export function createMockInsightsAdapter(
     return {
       outletId,
       period: range,
-      salesPaise: bills.reduce((running, bill) => running + bill.total_paise, 0),
+      salesPaise,
       billCount: bills.length,
       salesByMethod: salesByMethod(bills),
       expensesByCategory: expensesByCategory(expenses),
       expensesPaise: expenses.reduce((running, expense) => running + expense.amount_paise, 0),
       profit: profitEstimate(basis, {
-        salesPaise: bills.reduce((running, bill) => running + bill.total_paise, 0),
+        salesPaise,
         expenses: toExpenseAmounts(expenses),
-        movements: consumedMovements(outletId, dates),
+        isCeiling: channels.some((row) => row.revenue_paise !== 0 && row.commission_paise === null),
       }),
       days,
     }

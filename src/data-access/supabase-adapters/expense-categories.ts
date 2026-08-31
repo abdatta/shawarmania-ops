@@ -64,22 +64,15 @@ export function createSupabaseExpenseCategoriesAdapter(
 
       return Promise.all(
         (data ?? []).map(async (row): Promise<ExpenseCategorySuggestion> => {
-          const [ledger, expenses] = await Promise.all([
-            client
-              .from('manual_ledger_expenses')
-              .select('*', { count: 'exact', head: true })
-              .eq('category', row.name),
-            client
-              .from('expenses')
-              .select('*', { count: 'exact', head: true })
-              .eq('category', row.name),
-          ])
-          if (ledger.error) throw categoryError(ledger.error)
+          const expenses = await client
+            .from('expenses')
+            .select('*', { count: 'exact', head: true })
+            .eq('category', row.name)
           if (expenses.error) throw categoryError(expenses.error)
           return {
             id: row.id,
             name: row.name,
-            ledgerUsageCount: ledger.count ?? 0,
+            ledgerUsageCount: 0,
             expenseUsageCount: expenses.count ?? 0,
             createdAt: row.created_at,
           }

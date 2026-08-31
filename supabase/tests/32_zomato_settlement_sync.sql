@@ -5,8 +5,7 @@
 -- The claim here is stronger and the sweep cannot express it — **no outlet role
 -- reaches these rows at all, at any outlet, including their own.** They carry
 -- settlement money, the decisions taken about it, and the record of what the
--- automation did, and they answer the same way `manual_ledger_days` already
--- does.
+-- automation did, and outlet staff cannot type any of them.
 --
 -- The constraints are exercised by hand-crafted violations for the reason the
 -- ledger's own file gives: this capability's only value is that the figures in it
@@ -99,16 +98,8 @@ insert into public.outlet_channel_sync (outlet_id, channel, synced_from)
 values (:'KAL', 'zomato', pg_temp.ledger_day(-3)),
        (:'KPA', 'zomato', pg_temp.ledger_day(-3));
 
--- A synced day at each outlet, so the column assertions below have something
--- real to be refused.
--- Two rows now rather than one, because the drawer and the measurement are two
--- different records: the day a person keeps, and the figure nobody may type.
-insert into public.manual_ledger_days
-  (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
-values
-  (:'KAL', pg_temp.ledger_day(2), 0, 0, :'OWNER'),
-  (:'KPA', pg_temp.ledger_day(2), 0, 0, :'OWNER');
-
+-- A synced channel day at each outlet gives the column assertions below a real
+-- row to refuse. Drawer observations are independent records.
 insert into public.aggregator_channel_days
   (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
    settlement_state, origin)
@@ -315,12 +306,9 @@ select * from pg_temp.day_column_unreadable('employee_kalyani', :'EMPLOYEE_KAL',
 select * from pg_temp.day_column_unreadable('employee_kalyani', :'EMPLOYEE_KAL',
   'superseded_revenue_paise');
 
--- A plain typed day with no settlement figures at all, so the refusals below
--- exercise the guard rather than the state machine or a CHECK.
+-- A second settled channel day exercises the guard rather than a state-machine
+-- transition or a CHECK.
 select pg_temp.unimpersonate();
-insert into public.manual_ledger_days
-  (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
-values (:'KAL', pg_temp.ledger_day(3), 0, 0, :'OWNER');
 insert into public.aggregator_channel_days
   (outlet_id, channel, business_date, revenue_paise, commission_paise, net_paise,
    settlement_state, origin)
@@ -362,16 +350,6 @@ select * from pg_temp.figure_column_unwritable('the owner', :'OWNER',
   'settlement_state', '''settled''');
 select * from pg_temp.figure_column_unwritable('the owner', :'OWNER',
   'revenue_paise', '95000');
-
-select pg_temp.impersonate(:'FA_KAL');
-select lives_ok(
-  format($q$
-    update public.manual_ledger_days set counted_cash_paise = 123400
-     where outlet_id = %L and business_date = %L $q$,
-    :'KAL', pg_temp.ledger_day(2)),
-  'while the same manager still corrects the drawer on the same row, so the '
-  'refusal above is about the figure and not about the row');
-reset role;
 
 -- `42501` rather than `P0001`: the owner is refused the whole table rather than
 -- refused these columns on a table they may otherwise write. There is no longer
@@ -667,7 +645,7 @@ select lives_ok(
 
 -- No recorder: a synced row was recorded by nobody, and naming an account would
 -- be a lie with somebody's name on it.
-insert into public.manual_ledger_expenses
+insert into public.expenses
   (outlet_id, business_date, category, is_cash, amount_paise, description,
    source_system, source_ref)
 values (:'KAL', pg_temp.ledger_day(4), 'Other', false, 374777,
@@ -675,7 +653,7 @@ values (:'KAL', pg_temp.ledger_day(4), 'Other', false, 374777,
 
 select throws_ok(
   format($q$
-    insert into public.manual_ledger_expenses
+    insert into public.expenses
       (outlet_id, business_date, category, is_cash, amount_paise, description,
        source_system, source_ref, recorded_by)
     values (%L, %L, 'Other', false, 374777,
@@ -686,7 +664,7 @@ select throws_ok(
 
 select throws_ok(
   format($q$
-    insert into public.manual_ledger_expenses
+    insert into public.expenses
       (outlet_id, business_date, category, is_cash, amount_paise, description,
        source_system, source_ref)
     values (%L, %L, 'Other', false, 374777,
@@ -702,7 +680,7 @@ select throws_ok(
 -- collide with itself.
 select lives_ok(
   format($q$
-    insert into public.manual_ledger_expenses
+    insert into public.expenses
       (outlet_id, business_date, category, is_cash, amount_paise, description, recorded_by)
     values (%L, %L, 'Other', false, 374777, 'Hyperpure, paid online', %L),
            (%L, %L, 'Other', false, 374777, 'Hyperpure, paid online', %L) $q$,
@@ -713,7 +691,7 @@ select lives_ok(
 
 select throws_ok(
   format($q$
-    insert into public.manual_ledger_expenses
+    insert into public.expenses
       (outlet_id, business_date, category, is_cash, amount_paise, description,
        source_system, recorded_by)
     values (%L, %L, 'Other', false, 100, 'x', 'zomato', %L) $q$,

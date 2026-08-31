@@ -399,7 +399,7 @@ describe('the event lines the surface renders', () => {
   it('pairs a typed expense with a sourced twin inside the tolerance window', async () => {
     const { adapter } = clientForTables({
       aggregator_sync_runs: NO_FAILURES,
-      manual_ledger_expenses: (filters) =>
+      expenses: (filters) =>
         filters.includes('source_system=null')
           ? {
               data: [
@@ -440,7 +440,7 @@ describe('the event lines the surface renders', () => {
   it('does not pair expenses outside the amount or date windows', async () => {
     const { adapter } = clientForTables({
       aggregator_sync_runs: NO_FAILURES,
-      manual_ledger_expenses: (filters) =>
+      expenses: (filters) =>
         filters.includes('source_system=null')
           ? {
               data: [
@@ -475,7 +475,7 @@ describe('the event lines the surface renders', () => {
   it('never re-raises a pair the owner dismissed', async () => {
     const { adapter } = clientForTables({
       aggregator_sync_runs: NO_FAILURES,
-      manual_ledger_expenses: (filters) =>
+      expenses: (filters) =>
         filters.includes('source_system=null')
           ? {
               data: [

@@ -8,10 +8,10 @@ import { formatBusinessDate } from '@/domain'
  * Which period a surface is about, and the steps either side of it.
  *
  * Built for the manual ledger and moved here when billing history wanted the
- * same bar. The move is the point: `features/manual-ledger` is a stopgap whose
- * whole folder goes when billing, expenses and cash are live, so a surface that
- * outlives it cannot import its controls from there without making that
- * deletion a breakage somewhere else.
+ * same bar. The move is the point, and it paid off: `features/manual-ledger` was
+ * a stopgap, its whole folder went when `retire-the-manual-ledger` (#12) landed,
+ * and the surfaces that outlived it kept this control because it had already
+ * stopped living there.
  *
  * The shape is the attendance range picker's, deliberately: a bordered strip, a
  * step at each end, and the period itself in the middle. Surfaces that ask

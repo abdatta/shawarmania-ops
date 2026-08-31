@@ -110,7 +110,6 @@ export function createMockOutletsAdapter(): OutletsAdapter {
         geofence_radius_m: 150,
         business_day_cutover: outlet.businessDayCutover ?? '04:00:00',
         arrival_deadline: outlet.arrivalDeadline ?? '13:00:00',
-        billing_live_from: null,
         // A new outlet is unlinked from any aggregator until it is deliberately connected.
         zomato_res_id: null,
         hyperpure_delivery: false,
@@ -144,9 +143,6 @@ export function createMockOutletsAdapter(): OutletsAdapter {
         }),
         ...(patch.arrivalDeadline !== undefined && {
           arrival_deadline: patch.arrivalDeadline,
-        }),
-        ...(patch.billingLiveFrom !== undefined && {
-          billing_live_from: patch.billingLiveFrom,
         }),
         ...(patch.isActive !== undefined && { is_active: patch.isActive }),
       })

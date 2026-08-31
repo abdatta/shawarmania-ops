@@ -135,12 +135,9 @@ select is(
   0,
   'every paise column on the new tables is bigint');
 
--- The additive rule, from the other side: the two nullable instants exist, so
--- no row already stored was broken.
+-- The promoted expense record retains its nullable historical instant.
 select col_is_null('public', 'expenses', 'occurred_at',
   'expenses.occurred_at is nullable');
-select col_is_null('public', 'manual_ledger_expenses', 'occurred_at',
-  'manual_ledger_expenses.occurred_at is nullable');
 
 -- Every pre-existing expense row still reads back through the coalesce, which is
 -- what makes the new interval membership safe on old data.
@@ -148,16 +145,6 @@ select is(
   (select count(*) from public.expenses where coalesce(occurred_at, created_at) is null),
   0::bigint,
   'every existing expense resolves an instant through coalesce(occurred_at, created_at)');
-
--- The two dead tables. Production holds zero rows in each (read-only query,
--- 2026-08-26 and 2026-08-27); the SEED holds synthetic rows, so what is asserted
--- here is the thing this change could actually break: that nothing in the drawer
--- path writes them. Captured now, compared at the end of the file.
-create temporary table pg_temp_dead_counts as
-select (select count(*) from public.cash_withdrawals) as withdrawals,
-       (select count(*) from public.daily_cash_records) as day_records;
--- Read back while impersonating, so the role needs the grant.
-grant select on pg_temp_dead_counts to authenticated;
 
 -- ===========================================================================
 -- 2. The anchor. An outlet's first observation carries no arithmetic at all.
@@ -213,18 +200,18 @@ select throws_ok(
 select pg_temp.unimpersonate();
 
 insert into public.expenses
-  (outlet_id, business_date, category, description, amount_paise, payment_method,
+  (outlet_id, business_date, category, description, amount_paise, is_cash,
    recorded_by, occurred_at)
 values
   -- Inside the SECOND interval, t(5) to t(3).
   (:'KAL', public.app_business_date(now(), time '04:00'), 'utilities',
-   'Gas, before the second count', 90000, 'cash', :'OWNER', pg_temp.t(4.5)),
+   'Gas, before the second count', 90000, true, :'OWNER', pg_temp.t(4.5)),
   -- Same interval, but UPI: it must move no drawer figure at all.
   (:'KAL', public.app_business_date(now(), time '04:00'), 'packaging',
-   'Bags, by UPI', 30000, 'upi', :'OWNER', pg_temp.t(4.5)),
+   'Bags, by UPI', 30000, false, :'OWNER', pg_temp.t(4.5)),
   -- Inside the THIRD interval, t(3) to t(1).
   (:'KAL', public.app_business_date(now(), time '04:00'), 'utilities',
-   'Gas, after the second count', 40000, 'cash', :'OWNER', pg_temp.t(2.5));
+   'Gas, after the second count', 40000, true, :'OWNER', pg_temp.t(2.5));
 
 -- A standalone collection inside the second interval, positive: cash left.
 insert into public.drawer_cash_out
@@ -574,13 +561,13 @@ grant select on pg_temp_kpa_before to authenticated;
 -- One cash expense on each side of the intervening cutovers, so the sum has to
 -- cross a business date to be right.
 insert into public.expenses
-  (outlet_id, business_date, category, description, amount_paise, payment_method,
+  (outlet_id, business_date, category, description, amount_paise, is_cash,
    recorded_by, occurred_at)
 values
   (:'KPA', public.app_business_date(pg_temp.t(30), time '04:00'), 'utilities',
-   'Gas, the evening after the count', 60000, 'cash', :'OWNER', pg_temp.t(30)),
+   'Gas, the evening after the count', 60000, true, :'OWNER', pg_temp.t(30)),
   (:'KPA', public.app_business_date(pg_temp.t(10), time '04:00'), 'utilities',
-   'Gas, two evenings later', 20000, 'cash', :'OWNER', pg_temp.t(10));
+   'Gas, two evenings later', 20000, true, :'OWNER', pg_temp.t(10));
 
 select pg_temp.impersonate(:'OWNER');
 create temporary table pg_temp_kpa as
@@ -926,24 +913,6 @@ select is(
   (select count(*) from public.drawer_observations where outlet_id = :'KAL'),
   3::bigint,
   'and verification changed no drawer figure, because it freezes nothing');
-
--- ===========================================================================
--- 12. The dead tables, after everything above.
---
--- Decision 16's revert story in one assertion: three observations, six cash
--- movements, an edit, an adjustment and two verifications later, neither table
--- this change leaves behind has moved.
-
-select pg_temp.unimpersonate();
-
-select is(
-  (select count(*) from public.cash_withdrawals),
-  (select withdrawals from pg_temp_dead_counts),
-  'the whole drawer path wrote nothing to cash_withdrawals');
-select is(
-  (select count(*) from public.daily_cash_records),
-  (select day_records from pg_temp_dead_counts),
-  'nor to daily_cash_records: both are left in place, dead, for #12 to drop');
 
 select * from finish();
 rollback;

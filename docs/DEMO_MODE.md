@@ -60,14 +60,17 @@ walkthrough must no longer offer a day close — the model it demonstrated does 
 exist any more, and a demo of it would teach the wrong thing to the one audience
 that has not seen the new surface.
 
-**Two `live` surfaces may deliberately answer the same question at once.** During
-#11's overlap the derived **Ledger** (`owner-ledger-statement`) and the manual
-**Ledger** form (`owner-manual-ledger`) are both `live` and both genuinely work —
-the manual one simply has no navigation entry. That is honest, and it is better
-than a switch: **the fallback is a tab, not a runtime toggle**, so the owner can
-open one business date in each and compare them, which is the two-day acceptance
-test they asked for with no engineering behind it. `retire-the-manual-ledger`
-(#12) removes the second entry.
+**Two `live` surfaces may deliberately answer the same question at once, for as
+long as one is being proved against the other.** During #11's overlap the derived
+**Ledger** (`owner-ledger-statement`) and the manual **Ledger** form
+(`owner-manual-ledger`) were both `live` and both genuinely worked — the manual
+one simply had no navigation entry. That was honest, and better than a switch:
+**the fallback was a tab, not a runtime toggle**, so the owner could open one
+business date in each and compare them, which is the two-day acceptance test they
+asked for with no engineering behind it. `retire-the-manual-ledger` (#12) ended
+the overlap once that comparison had been made on real trading days: the manual
+entry is gone from the registry entirely, not set to `hidden`, because its route
+and its surface are gone too.
 
 The owner Swiggy sync tab is live because its browser-free production reader
 has completed a no-write rehearsal and a successful scheduled write from the

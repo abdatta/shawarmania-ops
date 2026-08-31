@@ -134,6 +134,25 @@ describe('the day renders in full even when nothing was recorded', () => {
   })
 })
 
+describe('a carried notebook count stays in the derived reader', () => {
+  it('renders a pre-bill date through the same surface without inventing an hour', async () => {
+    const user = userEvent.setup()
+    renderLedger()
+
+    await screen.findByTestId('ledger-drawer')
+    for (let step = 0; step < 7; step += 1) {
+      await user.click(screen.getByTestId('statement-step-back'))
+    }
+
+    await waitFor(() =>
+      expect(screen.getByTestId('ledger-drawer')).toHaveTextContent(/hour was never recorded/i),
+    )
+    expect(screen.getByTestId('ledger-revenue')).toBeInTheDocument()
+    expect(screen.getByTestId('ledger-expenses')).toBeInTheDocument()
+    expect(screen.getByTestId('revenue-total')).toBeInTheDocument()
+  })
+})
+
 describe('the drawer names its float and its closing balance differently', () => {
   it('never uses one word for both, and says the float is not the next opening', async () => {
     const user = userEvent.setup()

@@ -12,14 +12,10 @@ import { createSupabaseCashDrawerAdapter } from './cash-drawer'
 import { createSupabaseCounterAdapter } from './counter'
 import { createSupabaseCustomersAdapter } from './customers'
 import { createSupabaseExpenseCategoriesAdapter } from './expense-categories'
+import { createSupabaseExpensesAdapter } from './expenses'
 import { createSupabaseLedgerStatementAdapter } from './ledger-statement'
-import { createSupabaseManualLedgerAdapter } from './manual-ledger'
 import { createSupabaseMenuAdapter } from './menu'
-import {
-  createSupabaseDailyCashAdapter,
-  createSupabaseExpensesAdapter,
-  createSupabaseInventoryAdapter,
-} from './operations'
+import { createSupabaseInventoryAdapter } from './operations'
 import { createSupabaseOutletsAdapter } from './outlets'
 import { createSupabaseAlertsAdapter, createSupabaseInsightsAdapter } from './oversight'
 import type { CounterDeviceSession } from '@/session/counter-session'
@@ -52,24 +48,15 @@ export function createSupabaseAdapters(
     // directory is REAL from today, because the boundary that protects it is.
     // The billing surfaces that call it are still `demo`-gated (#31, #10).
     customers: createSupabaseCustomersAdapter(client),
-    // Nor these. Stock is shelved (openspec/todos/inventory-is-shelved.md),
-    // expenses are already live through the manual ledger, and the cash close is
-    // removed rather than made real by `cash-is-counted-not-closed` (#11).
-    // See supabase-adapters/operations.ts.
+    // Stock remains shelved (openspec/todos/inventory-is-shelved.md).
     inventory: createSupabaseInventoryAdapter(),
-    expenses: createSupabaseExpensesAdapter(),
+    expenses: createSupabaseExpensesAdapter(client),
     expenseCategories: createSupabaseExpenseCategoriesAdapter(client),
-    dailyCash: createSupabaseDailyCashAdapter(),
     // Alerts are `demo`-gated, so nothing calls this one. Insights is the
     // exception: `owner-dashboard` is `live` and does call it — and `null` is
     // its honest answer until #13. See supabase-adapters/oversight.ts.
     alerts: createSupabaseAlertsAdapter(),
     insights: createSupabaseInsightsAdapter(),
-    // Real from the day it ships, unlike the three above it: the manual ledger
-    // is a stopgap precisely because nothing else records August (#36), so a
-    // stub would defeat the point. It goes when `retire-the-manual-ledger` (#12)
-    // carries its rows across.
-    manualLedger: createSupabaseManualLedgerAdapter(client),
     // Real from the day they ship, and both `live` in the registry (#11). The
     // drawer never had a live surface to be a stub for: `daily_cash_records` has
     // never held a production row, so there is no previous behaviour to preserve

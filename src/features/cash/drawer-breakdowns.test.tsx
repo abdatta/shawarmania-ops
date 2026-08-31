@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { DataAdapters, DrawerState, ManualLedgerExpense } from '@/data-access/adapters'
+import type { DataAdapters, DrawerState, ExpenseRecord } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
 import { OUTLET_KALYANI_ID } from '@/data-access/mock/fixtures/outlets'
@@ -40,6 +40,7 @@ function drawerState(overrides: Partial<DrawerState> = {}): DrawerState {
       expectedPaise: 100000,
       differencePaise: 0,
       countedTotalPaise: 100000,
+      isLegacyImprecise: false,
       isApproximate: true,
       toleranceMinutes: 15,
       recordedBy: 'person-1',
@@ -89,7 +90,7 @@ function context(overrides: Partial<BreakdownContext> = {}): BreakdownContext {
 }
 
 let nextExpense = 0
-function expense(overrides: Partial<ManualLedgerExpense> = {}): ManualLedgerExpense {
+function expense(overrides: Partial<ExpenseRecord> = {}): ExpenseRecord {
   nextExpense += 1
   return {
     id: `expense-${nextExpense}`,
@@ -115,11 +116,11 @@ function expense(overrides: Partial<ManualLedgerExpense> = {}): ManualLedgerExpe
 
 function renderWith(
   node: (adapters: DataAdapters) => React.ReactElement,
-  rows: ManualLedgerExpense[] = [],
+  rows: ExpenseRecord[] = [],
 ) {
   const adapters = createMockAdapters('franchise_admin')
   const listRecentExpenses = vi.fn(async () => rows)
-  adapters.manualLedger.listRecentExpenses = listRecentExpenses
+  adapters.expenses.listRecentExpenses = listRecentExpenses
   return {
     adapters,
     listRecentExpenses,
@@ -333,7 +334,7 @@ describe('Cash Expenses opens the expense list, by business date', () => {
       ),
       rows,
     )
-    const createExpense = vi.spyOn(adapters.manualLedger, 'createExpense')
+    const createExpense = vi.spyOn(adapters.expenses, 'createExpense')
 
     const group = await screen.findByTestId('expenses-day-2026-08-28')
     await user.click(within(group).getByRole('button', { name: /add expense/i }))

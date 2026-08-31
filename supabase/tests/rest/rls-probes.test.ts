@@ -345,12 +345,14 @@ describe('a person assigned to two outlets', () => {
     expect(data?.every((row) => row.person_id === PERSONAS.twoOutlets.sub)).toBe(true)
   })
 
-  it('is still only an Employee at each, so no manager surface opens anywhere', async () => {
-    for (const table of ['expenses', 'inventory_items', 'daily_cash_records'] as const) {
-      const { data, error } = await split.from(table).select('id')
-      expect(error).toBeNull()
-      expect(data).toEqual([])
-    }
+  it('gets the staff expense surface at both outlets but no manager inventory surface', async () => {
+    const expenses = await split.from('expenses').select('id')
+    expect(expenses.error).toBeNull()
+    expect(expenses.data).toHaveLength(5)
+
+    const inventory = await split.from('inventory_items').select('id')
+    expect(inventory.error).toBeNull()
+    expect(inventory.data).toEqual([])
   })
 
   it('reads no colleague’s attendance at either outlet', async () => {
@@ -401,8 +403,7 @@ describe('a Franchise Admin session, hand-crafting requests for the other outlet
       business_date: resolveBusinessDate(new Date(), '04:00'),
       category: 'other',
       amount_paise: 1000,
-      payment_method: 'cash',
-      recorded_by: PERSONAS.faKalyani.sub,
+      is_cash: true,
     })
     expect(error).not.toBeNull()
     expect(error?.code).toBe('42501')
@@ -426,25 +427,6 @@ describe('a Franchise Admin session, hand-crafting requests for the other outlet
       .single()
     expect(item?.price_paise).toBe(13900)
   })
-
-  it('the daily cash record of the other outlet is invisible', async () => {
-    const { data, error } = await fa
-      .from('daily_cash_records')
-      .select('*')
-      .eq('outlet_id', OUTLETS.kanchrapara)
-    expect(error).toBeNull()
-    expect(data).toEqual([])
-  })
-
-  it('closing another outlet’s day over RPC is refused', async () => {
-    const { error } = await fa.rpc('close_business_day', {
-      p_outlet_id: OUTLETS.kanchrapara,
-      p_business_date: '2020-01-01',
-      p_opening_cash_paise: 0,
-      p_actual_closing_paise: 0,
-    })
-    expect(error).not.toBeNull()
-  })
 })
 
 describe('the Super Admin session', () => {
@@ -454,17 +436,6 @@ describe('the Super Admin session', () => {
     expect(error).toBeNull()
     const distinct = new Set(data?.map((row) => row.outlet_id))
     expect(distinct).toEqual(new Set([OUTLETS.kalyani, OUTLETS.kanchrapara]))
-  })
-
-  it('cannot close a business day — day close belongs to the Franchise Admin', async () => {
-    const sa = (await signIn(PERSONAS.superAdmin.email)).client
-    const { error } = await sa.rpc('close_business_day', {
-      p_outlet_id: OUTLETS.kalyani,
-      p_business_date: '2020-01-01',
-      p_opening_cash_paise: 0,
-      p_actual_closing_paise: 0,
-    })
-    expect(error).not.toBeNull()
   })
 })
 
@@ -489,8 +460,7 @@ describe('a deactivated account with a still-valid session', () => {
       business_date: resolveBusinessDate(new Date(), '04:00'),
       category: 'other',
       amount_paise: 1000,
-      payment_method: 'cash',
-      recorded_by: PERSONAS.deactivatedFa.sub,
+      is_cash: true,
     })
     expect(error?.code).toBe('42501')
   })
@@ -1059,197 +1029,43 @@ describe('deliberately closed surfaces', () => {
     expect(error).not.toBeNull()
     expect(error?.code).toBe('42501')
   })
-
-  it('no client can insert a daily cash record directly', async () => {
-    const fa = (await signIn(PERSONAS.faKalyani.email)).client
-    const { error } = await fa.from('daily_cash_records').insert({
-      outlet_id: OUTLETS.kalyani,
-      business_date: '2030-01-01',
-      opening_cash_paise: 0,
-      cash_sales_paise: 0,
-      cash_expenses_paise: 0,
-      cash_withdrawn_paise: 0,
-      expected_closing_paise: 0,
-      actual_closing_paise: 0,
-      difference_paise: 0,
-      closed_by: PERSONAS.faKalyani.sub,
-    })
-    expect(error?.code).toBe('42501')
-  })
 })
 
-/**
- * The manual ledger (#36) — **temporary, and these probes go with it.**
- *
- * The pgTAP file proves the policies exhaustively with simulated claims. What
- * this layer adds is the half those cannot reach: a real token, minted by the
- * real Auth service, carrying nothing but `sub`, over HTTP. If the deployed stack
- * ever resolved authority from a claim rather than from a live assignment, the
- * pgTAP suite would still pass and this would not.
- *
- * The claims are stronger than cross-outlet isolation, and after
- * `the-ledger-opens-to-the-outlet` there are two of them: **outlet staff are
- * refused their own outlet's DAY row at every verb** — which protects the drawer
- * on the write side, and past days and month aggregates on the read side — while
- * **the expense record admits everyone at the outlet**. Every write attempted
- * here is a denied one, so these probes leave the seeded database untouched.
- */
-describe('the manual ledger over HTTP', () => {
-  const YESTERDAY = '2026-08-03'
-
-  const STAFF_ROLES = [
-    { name: 'a Biller', persona: PERSONAS.billerKalyani },
-    { name: 'an Employee', persona: PERSONAS.employeeKalyani },
-  ] as const
-
-  for (const role of STAFF_ROLES) {
-    it(`${role.name} reads no day row, at their own outlet`, async () => {
-      const client = (await session(role.persona.email)).client
-
-      // Not an error: a policy that excludes rows returns none. Named outlet
-      // explicitly — the shape that leaks if the outlet is left implicit.
-      const days = await client
-        .from('manual_ledger_days')
-        .select('*')
-        .eq('outlet_id', OUTLETS.kalyani)
-      expect(days.error).toBeNull()
-      expect(days.data).toEqual([])
-    })
-
-    it(`${role.name} cannot write the day record at their own outlet`, async () => {
-      const client = (await session(role.persona.email)).client
-
-      const day = await client.from('manual_ledger_days').insert({
-        outlet_id: OUTLETS.kalyani,
-        business_date: YESTERDAY,
-        opening_cash_paise: 0,
-        counted_cash_paise: 0,
-      })
-      expect(day.error?.code).toBe('42501')
-    })
-
-    it(`${role.name} may read their own outlet's expenses, and no other's`, async () => {
-      const client = (await session(role.persona.email)).client
-
-      // Permitted rather than populated: nothing seeds these tables, so what
-      // this asserts is the absence of a refusal. The row-level answers are
-      // 21_manual_ledger.sql's job.
-      const mine = await client
-        .from('manual_ledger_expenses')
-        .select('*')
-        .eq('outlet_id', OUTLETS.kalyani)
+describe('the promoted expense record over HTTP', () => {
+  for (const persona of [PERSONAS.billerKalyani, PERSONAS.employeeKalyani]) {
+    it(`${persona.email} reads only the assigned outlet's expenses`, async () => {
+      const client = (await session(persona.email)).client
+      const mine = await client.from('expenses').select('*').eq('outlet_id', OUTLETS.kalyani)
       expect(mine.error).toBeNull()
-
-      const theirs = await client
-        .from('manual_ledger_expenses')
-        .select('*')
-        .eq('outlet_id', OUTLETS.kanchrapara)
+      const theirs = await client.from('expenses').select('*').eq('outlet_id', OUTLETS.kanchrapara)
       expect(theirs.error).toBeNull()
       expect(theirs.data).toEqual([])
     })
 
-    it(`${role.name} cannot record an expense at an outlet they are not at`, async () => {
-      const client = (await session(role.persona.email)).client
-
-      const expense = await client.from('manual_ledger_expenses').insert({
+    it(`${persona.email} cannot record at another outlet`, async () => {
+      const client = (await session(persona.email)).client
+      const result = await client.from('expenses').insert({
         outlet_id: OUTLETS.kanchrapara,
-        business_date: YESTERDAY,
+        business_date: resolveBusinessDate(new Date(), '04:00'),
         category: 'Other',
         is_cash: false,
         amount_paise: 100,
-        description: 'smuggled',
       })
-      expect(expense.error?.code).toBe('42501')
-    })
-
-    it(`${role.name} cannot record an expense against a day that has closed`, async () => {
-      const client = (await session(role.persona.email)).client
-
-      // The guard's rule rather than a policy's, so the code is P0001 and not
-      // 42501. A different refusal from the one above, asserted separately —
-      // a test that accepted either would keep passing while the policy
-      // silently opened.
-      const expense = await client.from('manual_ledger_expenses').insert({
-        outlet_id: OUTLETS.kalyani,
-        business_date: YESTERDAY,
-        category: 'Other',
-        is_cash: false,
-        amount_paise: 100,
-        description: 'noticed the next morning',
-      })
-      expect(expense.error?.code).toBe('P0001')
+      expect(result.error?.code).toBe('42501')
     })
   }
 
-  it('a Franchise Admin reads the full ledger at the outlet they manage', async () => {
-    const client = (await session(PERSONAS.faKalyani.email)).client
-
-    for (const table of ['manual_ledger_days', 'manual_ledger_expenses'] as const) {
-      const mine = await client.from(table).select('*').eq('outlet_id', OUTLETS.kalyani)
-      expect(mine.error).toBeNull()
-
-      // And nothing at the outlet they do not manage.
-      const theirs = await client.from(table).select('*').eq('outlet_id', OUTLETS.kanchrapara)
-      expect(theirs.error).toBeNull()
-      expect(theirs.data).toEqual([])
-    }
-  })
-
-  it('a Franchise Admin cannot write the ledger at an outlet they do not manage', async () => {
-    const client = (await session(PERSONAS.faKalyani.email)).client
-
-    const day = await client.from('manual_ledger_days').insert({
-      outlet_id: OUTLETS.kanchrapara,
-      business_date: YESTERDAY,
-      opening_cash_paise: 0,
-      counted_cash_paise: 0,
-    })
-    expect(day.error?.code).toBe('42501')
-  })
-
-  it('nobody deletes an expense, whatever their role', async () => {
-    // The grant is revoked, so this is refused before any policy is consulted —
-    // which is why the owner is in this list beside everybody else.
-    for (const persona of [
-      PERSONAS.superAdmin,
-      PERSONAS.faKalyani,
-      PERSONAS.billerKalyani,
-      PERSONAS.employeeKalyani,
-    ]) {
-      const client = (await session(persona.email)).client
-      const removed = await client
-        .from('manual_ledger_expenses')
-        .delete()
-        .eq('outlet_id', OUTLETS.kalyani)
-      expect(removed.error?.code, persona.email).toBe('42501')
-    }
-  })
-
-  it('an owner reads both tables at both outlets', async () => {
+  it('an owner may read both outlets', async () => {
     const owner = (await session(PERSONAS.superAdmin.email)).client
-
-    // Zero rows is the right answer on a fresh reset — nothing seeds these
-    // tables. What matters is that the read is permitted rather than refused,
-    // which is the difference the probes above turn on.
     for (const outlet of [OUTLETS.kalyani, OUTLETS.kanchrapara]) {
-      const days = await owner.from('manual_ledger_days').select('*').eq('outlet_id', outlet)
-      expect(days.error).toBeNull()
-
-      const expenses = await owner
-        .from('manual_ledger_expenses')
-        .select('*')
-        .eq('outlet_id', outlet)
-      expect(expenses.error).toBeNull()
+      const result = await owner.from('expenses').select('*').eq('outlet_id', outlet)
+      expect(result.error).toBeNull()
     }
   })
 
-  it('a deactivated owner-role session is refused without waiting for token expiry', async () => {
-    // The deactivated persona is a Franchise Admin, so this probe is about the
-    // `app_account_active()` half rather than the `app_is_owner()` half — but it
-    // is the half that cannot be proved by ending an assignment, because the
-    // schema refuses to end the last live owner.
-    const client = (await session(PERSONAS.deactivatedFa.email)).client
-    const { error, data } = await client.from('manual_ledger_days').select('*')
-    expect(error === null ? data : []).toEqual([])
+  it('the archive is absent from the generated client contract and closed over REST', async () => {
+    const owner = (await session(PERSONAS.superAdmin.email)).client
+    const result = await owner.from('archived_manual_ledger_days' as 'expenses').select('*')
+    expect(result.error?.code).toBe('42501')
   })
 })

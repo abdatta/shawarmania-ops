@@ -6,7 +6,7 @@
 --
 --   * `drawer_cash_expenses_paise()` and the derived Ledger read
 --     `public.expenses`, which nothing writes and never has — every live
---     Expenses surface writes `manual_ledger_expenses`. Measured on production
+--     Expenses surface writes `expenses`. Measured on production
 --     2026-08-28: 0 rows against 118. So the Ledger said "Nothing recorded" on
 --     days with real expenses, and the drawer's expected balance was overstated
 --     by every cash expense since the last count, which turns into a
@@ -79,7 +79,7 @@ select ok(
   'bypassed and any session reads every outlet''s expenses through it');
 
 -- A notebook cash expense, written the way the live Expenses surface writes one.
-insert into public.manual_ledger_expenses
+insert into public.expenses
   (outlet_id, business_date, category, amount_paise, is_cash, occurred_at, recorded_by)
 values
   (:'KAL', current_date, 'Gas cylinder', 90000, true, pg_temp.t(30), :'OWNER');
@@ -98,12 +98,12 @@ select is(
 
 select is(
   (select source_table from public.effective_expenses where category = 'Gas cylinder'),
-  'manual_ledger_expenses',
+  'expenses',
   'the view says which side a row came from, so #12 can watch the second '
   'branch empty out');
 
 -- A voided expense is a row somebody withdrew.
-insert into public.manual_ledger_expenses
+insert into public.expenses
   (outlet_id, business_date, category, amount_paise, is_cash, occurred_at,
    recorded_by, voided_at, voided_by, voided_reason)
 values
@@ -132,7 +132,7 @@ select is(
   'the count that follows is not short by it');
 
 -- Only cash moves the drawer, which is unchanged and must stay unchanged.
-insert into public.manual_ledger_expenses
+insert into public.expenses
   (outlet_id, business_date, category, amount_paise, is_cash, occurred_at, recorded_by)
 values
   (:'KAL', current_date, 'Supplier by UPI', 500000, false, pg_temp.t(31), :'OWNER');

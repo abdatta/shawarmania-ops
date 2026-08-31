@@ -29,10 +29,11 @@ returns date language sql stable as $$
   select public.app_business_date(now(), time '04:00') - back
 $$;
 
--- A recorded day, so the books have an opening the fallback can find.
-insert into public.manual_ledger_days
-  (outlet_id, business_date, opening_cash_paise, counted_cash_paise, recorded_by)
-values (:'KAL', pg_temp.day(30), 500000, 500000,
+-- A canonical expense establishes the earliest live book date the fallback can
+-- find. The notebook archive is deliberately not a runtime input.
+insert into public.expenses
+  (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
+values (:'KAL', pg_temp.day(30), 'Other', false, 100,
         '10000000-0000-4000-a000-000000000001');
 
 -- ---------------------------------------------------------------------------
@@ -68,13 +69,13 @@ select is(
   'and supplied by hand a third time');
 
 select is(
-  (select count(*) from public.manual_ledger_expenses
+  (select count(*) from public.expenses
     where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-1'),
   1::bigint,
   'and the ledger holds exactly one row for it, keyed on the order number');
 
 select is(
-  (select shared_cost from public.manual_ledger_expenses
+  (select shared_cost from public.expenses
     where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-1'),
   true,
   'marked shared, because both kitchens draw on one Hyperpure inventory');
@@ -86,13 +87,13 @@ select is(
   'a corrected figure for the same order is accepted');
 
 select is(
-  (select amount_paise from public.manual_ledger_expenses
+  (select amount_paise from public.expenses
     where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-1'),
   925000::bigint,
   'and it moves the one row rather than adding another');
 
 select is(
-  (select count(*) from public.manual_ledger_expenses
+  (select count(*) from public.expenses
     where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-1'),
   1::bigint,
   'still one row');
@@ -102,7 +103,7 @@ select is(
 
 select pg_temp.ingest(pg_temp.hyperpure_payload('ZHPWB27-OR-2', 300000, pg_temp.day(5)));
 select is(
-  (select business_date from public.manual_ledger_expenses
+  (select business_date from public.expenses
     where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-2'),
   pg_temp.day(5),
   'an order is dated by its invoice date, the day the goods arrived');
@@ -110,7 +111,7 @@ select is(
 -- Invoiced before the books open (day 30 is the earliest recorded day here).
 select pg_temp.ingest(pg_temp.hyperpure_payload('ZHPWB27-OR-3', 141990, pg_temp.day(40)));
 select is(
-  (select business_date from public.manual_ledger_expenses
+  (select business_date from public.expenses
     where outlet_id = :'KAL'::uuid and source_ref = 'ZHPWB27-OR-3'),
   pg_temp.day(30),
   'an order invoiced before the books open lands on the opening date, so a cost '
@@ -128,7 +129,7 @@ select pg_temp.ingest(jsonb_build_object(
     jsonb_build_object('order_ref', 'ZHPWB27-OR-B', 'invoice_date', pg_temp.day(5),
                        'amount_paise', 300000))));
 select is(
-  (select count(*) from public.manual_ledger_expenses
+  (select count(*) from public.expenses
     where outlet_id = :'KAL'::uuid and source_ref in ('ZHPWB27-OR-A', 'ZHPWB27-OR-B')),
   2::bigint,
   'two similar purchases on nearby days are two rows, because the key is the '

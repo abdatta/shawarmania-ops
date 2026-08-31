@@ -30,7 +30,7 @@ describe('an expense recorded the way the app records one is visible to both rea
 
     const before = await adapters.ledgerStatement.getDay(OUTLET_KALYANI_ID, businessDate)
 
-    await adapters.manualLedger.createExpense({
+    await adapters.expenses.createExpense({
       outletId: OUTLET_KALYANI_ID,
       businessDate,
       category: 'Gas cylinder',
@@ -52,7 +52,7 @@ describe('an expense recorded the way the app records one is visible to both rea
 
     const before = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
 
-    await adapters.manualLedger.createExpense({
+    await adapters.expenses.createExpense({
       outletId: OUTLET_KALYANI_ID,
       businessDate,
       category: 'Gas cylinder',
@@ -79,7 +79,7 @@ describe('an expense recorded the way the app records one is visible to both rea
 
     const before = await adapters.cashDrawer.getState(OUTLET_KALYANI_ID)
 
-    await adapters.manualLedger.createExpense({
+    await adapters.expenses.createExpense({
       outletId: OUTLET_KALYANI_ID,
       businessDate,
       category: 'Supplier by UPI',
@@ -98,7 +98,7 @@ describe('an expense recorded the way the app records one is visible to both rea
     const adapters = createMockAdapters('super_admin')
     const businessDate = '2026-08-20'
 
-    const created = await adapters.manualLedger.createExpense({
+    const created = await adapters.expenses.createExpense({
       outletId: OUTLET_KALYANI_ID,
       businessDate,
       category: 'Entered twice',
@@ -110,7 +110,7 @@ describe('an expense recorded the way the app records one is visible to both rea
     const withIt = await adapters.ledgerStatement.getDay(OUTLET_KALYANI_ID, businessDate)
     expect(withIt.expenses.rows.map((row) => row.label)).toContain('Entered twice')
 
-    await adapters.manualLedger.voidExpense(created.id, 'entered twice')
+    await adapters.expenses.voidExpense(created.id, 'entered twice')
 
     const withoutIt = await adapters.ledgerStatement.getDay(OUTLET_KALYANI_ID, businessDate)
     // A withdrawn row stays on the record and must not reach a total.

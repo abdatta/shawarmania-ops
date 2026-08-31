@@ -19,12 +19,15 @@ Applied everywhere, without exception:
 ## Tenancy and identity
 
 **`outlets`** — the isolation unit.
-`id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `arrival_deadline` (`time`, default `13:00`), `billing_live_from` (nullable `date`), `is_active`, `created_at`.
+`id`, `code` (short slug, e.g. `kalyani`), `name`, `location_label`, `address_line1`, `address_line2`, `city`, `district`, `pincode`, `phone`, `latitude`, `longitude`, `geofence_radius_m` (default 150), `business_day_cutover` (`time`, default `04:00`), `arrival_deadline` (`time`, default `13:00`), `is_active`, `created_at`.
 
 Coordinates and radius exist for attendance verification. The cutover time is what makes cross-midnight trade reconcile correctly.
-`billing_live_from` is the explicit per-outlet handover after which the temporary
-ledger reads Cash and UPI from bills. It must be scheduled for a business date
-that has not begun and becomes immutable once it starts.
+
+There is no `billing_live_from`. It was the per-outlet handover after which the
+temporary ledger read Cash and UPI from bills, and it went with the ledger in
+`retire-the-manual-ledger` (#12): with one record of a trading day there is no
+second one to hand over from, and a column nothing reads is a question a form
+keeps asking.
 
 
 **The one table a client may delete from.** `outlets_delete` lets the Super Admin remove an outlet, and sixteen foreign keys — not one of which cascades — mean the delete succeeds only while nothing anywhere references it. There is no bookkeeping column and no maintained list: the check *is* the live referential state, so an outlet whose staff and stock have been moved elsewhere becomes deletable on its own with nothing to re-mark. A deactivated account still counts as a reference. `public.outlet_reference_counts(uuid)` reads the foreign-key set from the catalog and reports what is still attached, so a table added later is covered without anyone editing it.
@@ -314,20 +317,20 @@ retiring a suggestion must not invalidate the rows that used it.
 merge and records how much history moved in each expense table.
 
 **`effective_expenses`** — a view, and **the only relation a live surface should
-read for expenses**. It unions `expenses` with the un-voided rows of
-`manual_ledger_expenses`, normalising `payment_method = 'cash'` and `is_cash` to
-one `is_cash` boolean and carrying a `source_table` so the second branch can be
-watched emptying out.
+read for expenses**. It is now the un-voided rows of `expenses` and nothing else.
 
-It exists because `expenses` has never held a row and nothing writes it: expenses
-went live in #36 and #38 against the notebook table, which is what every live
-Expenses surface still writes. The derived Ledger and the drawer both read
-`expenses` directly when they shipped, so the Ledger reported *"Nothing
-recorded"* on days with real expenses and **the drawer's expected balance was
-overstated by every cash expense since the last count**, which would have
-surfaced as a shortfall at the next count. `retire-the-manual-ledger` (#12)
-carries the rows across, after which the second branch is empty and the view may
-be deleted without touching a caller.
+It exists because there were once two expense tables. The original `expenses`
+never held a row: expenses went live in #36 and #38 against the notebook's
+`manual_ledger_expenses`, which is what every live Expenses surface wrote, while
+the derived Ledger and the drawer read `expenses` directly. So the Ledger
+reported *"Nothing recorded"* on days with real expenses and **the drawer's
+expected balance was overstated by every cash expense since the last count**,
+which would have surfaced as a shortfall at the next count. The view named the
+live record wherever it lived until `retire-the-manual-ledger` (#12) made that
+one place: the empty table was dropped and the notebook's was **renamed** to
+`expenses`, carrying its policies, indexes, triggers and every row, with nothing
+copied. The view survives the promotion because callers name it, and because
+"un-voided" is still worth saying once rather than in every caller.
 
 It is a `security_invoker` view, like `effective_bill_payments`. Without that it
 would run as its owner, RLS on the base tables would be bypassed, and any
@@ -596,8 +599,8 @@ ever pollute the one interval it sits in. It cannot ripple through a month. A
 ₹500 shortfall is recorded as a variance on the observation that found it and is
 not carried forward as phantom cash.
 
-**The opening is stored per row and never recomputed on read**, exactly as
-`manual_ledger_days.opening_cash_paise` is and for the same stated reason:
+**The opening is stored per row and never recomputed on read**, exactly as the
+retired notebook's own opening was and for the same stated reason:
 correcting Tuesday must not silently move every row after it. Where a stored
 opening disagrees with the previous observation's carry-forward, **the surface
 reports the break and repairs nothing.** Note that this is the opposite of the
@@ -686,47 +689,27 @@ A reconciliation exception is derived the same way — a payment or occurrence
 instant inside an already-observed interval that arrived after the observation was
 recorded. Only the human act of acknowledging one is stored.
 
-### Superseded, and left in place
+### Superseded, and removed
 
-**`cash_withdrawals`** — `id`, `outlet_id`, `business_date`, `amount_paise`,
-`reason`, `withdrawn_by`, `recorded_by`, `created_at`.
+`cash_withdrawals` and `daily_cash_records` were the day-close model: a signed-off
+snapshot of a business date's cash, and the withdrawals that fed it. Neither ever
+held a production row — verified by read-only query on 2026-08-26, again on
+08-27, and asserted inside `retire-the-manual-ledger` (#12)'s own transaction
+before it dropped them. `cash-is-counted-not-closed` (#11) deliberately dropped
+and renamed nothing, which was its entire revert story: one edit to
+`src/gates/registry.ts` and a deploy, with no data to recover. #12 spent that
+revert on purpose, once the drawer had produced real counts at both outlets.
 
-**`daily_cash_records`** — `id`, `outlet_id`, `business_date`,
-`opening_cash_paise`, `cash_sales_paise`, `cash_expenses_paise`,
-`cash_withdrawn_paise`, `expected_closing_paise`, `actual_closing_paise`,
-`difference_paise`, `closed_by`, `closed_at`, `notes`.
+`close_business_day()` went with them, and so did
+`billing_assert_day_ready()`, which had exactly one caller. The question it
+answered — whether a business date's billing is complete — is real, but it
+cannot gate counting cash at 22:00 with orders open and tablets live, and no
+day-level seal was ever performed by anybody. It was **not re-homed**; it retired
+with its caller. The closed-day guard on `counter_shifts` went too: a counted
+drawer is an observation, not a lock on the business day, so a shift may be
+opened on any date.
 
-Both tables and `close_business_day()` still exist and are **written by nothing**.
-`cash-is-counted-not-closed` (#11) drops and renames nothing, which is its entire
-revert story: a revert is one edit to `src/gates/registry.ts` and a deploy, with
-no data to recover. Neither table has ever held a production row (verified by
-read-only query on 2026-08-26 and again on 2026-08-27), and
-`retire-the-manual-ledger` (#12) removes them after asserting that.
-
-`billing_assert_day_ready()` had exactly one caller, `close_business_day()`. The
-question it answers — whether a business date's billing is complete — is real,
-but it cannot gate counting cash at 22:00 with orders open and tablets live, and
-no day-level seal has ever been performed by anybody. It is **not re-homed**; it
-retires with its caller in #12.
-
-## The manual ledger (temporary, #36)
-
-Two tables that exist because billing, expenses and the drawer were not live
-while August 2026 was trading. Billing now replaces their Cash/UPI inputs one
-outlet/date at a time; aggregator trade, expenses and drawer facts remain here.
-**Both are designed to be dropped**, by
-`retire-the-manual-ledger` (#12), which first carries their rows into the live
-records (see
-[Limitations](LIMITATIONS.md#the-manual-ledger-is-a-stopgap-with-a-stated-exit)).
-The `manual_ledger_` prefix is what makes that removal, and any accidental
-reference from a live surface, greppable.
-
-**`manual_ledger_days`** — `id`, `outlet_id`, `business_date`,
-`opening_cash_paise`, `cash_revenue_paise`, `upi_revenue_paise`,
-`cash_added_paise`, `cash_added_reason`,
-`cash_removed_paise`, `cash_removed_reason`, `counted_cash_paise`,
-`note`, `recorded_by`, `updated_by`, `created_at`,
-`updated_at`. `unique (outlet_id, business_date)`.
+## Aggregator channel days
 
 Commission is an **exact amount in paise, never a rate** [owner, 2026-08-17]. The
 measured take moves between roughly 24% and 35% day to day, because the charge is
@@ -735,12 +718,6 @@ plus a payment fee plus tax on all of it: Zomato publishes 14% for an order whos
 real take was 37.8%. A stored percentage was therefore an estimate in the shape of
 an exact figure. A channel's **net is revenue less commission and is not stored**,
 because a third column could disagree with the two it is derived from.
-
-**Neither aggregator's figures are on this row.** They live in
-`aggregator_channel_days`, because this row cannot exist without an opening
-balance and a drawer count, yet a day nobody counted must still show what an
-aggregator stated. A day-row write carrying a removed Zomato or Swiggy money
-field is refused rather than silently discarding it.
 
 **`aggregator_channel_days`** — `id`, `outlet_id`, `channel`, `business_date`
 (`unique (outlet_id, channel, business_date)`), `revenue_paise`,
@@ -757,36 +734,39 @@ present only where settling moved the figures, `created_at`, `updated_at`.
 insert/update/delete grant, not a disabled control: only the ingest path writes,
 so a hand-crafted request and a missing form field are refused by one rule. The
 owner reads across outlets; an assigned Franchise Admin reads only their
-outlet's daily aggregate, while Biller and Employee read none. A figure can
-exist here for a business date that has no `manual_ledger_days` row, which is the
-"day nobody counted" the sync now records instead of refusing.
+outlet's daily aggregate, while Biller and Employee read none.
 
-**`manual_ledger_expenses`** — `id`, `outlet_id`, `business_date`, `category`
-(the same normalised free-text snapshot used by `expenses`), `is_cash`,
-`amount_paise`, `description` (an optional Note, refused blank when present),
-`recorded_by`, `recorded_away`, `updated_by`, `voided_at`, `voided_by`,
-`voided_reason`, `created_at`, `updated_at`.
+These figures were always on their own table rather than on the notebook's day
+row, because that row could not exist without an opening balance and a drawer
+count, yet a day nobody counted must still show what an aggregator stated. That
+independence is why the notebook could retire without an aggregator figure
+moving: nothing here was ever carried, converted or re-keyed.
+
+**Commission is applied per day**, then summed — never a rate on a month's
+total, because each day's commission is its own measured figure. A day whose
+commission is still undetermined makes the month a **ceiling** and the surface
+says so.
+
+## Expenses
+
+**`expenses`** — `id`, `outlet_id`, `business_date`, `category`
+(a normalised free-text snapshot), `is_cash`, `amount_paise`, `description` (an
+optional Note, refused blank when present), `occurred_at`, `recorded_by`,
+`recorded_away`, `source_system`, `source_ref`, `shared_cost`, `updated_by`,
+`voided_at`, `voided_by`, `voided_reason`, `created_at`, `updated_at`.
+
+**This is the notebook's table under the canonical name.** There were two expense
+tables until `retire-the-manual-ledger` (#12): an original `expenses` from #7 that
+never held a row, and `manual_ledger_expenses`, which held all of them and had
+outgrown the other — free text categories instead of an enum, void with its actor
+and reason, a last corrector, a supply origin and the recorded-from-away marker.
+Migrating rows from the richer table into the poorer one would have lost exactly
+what had to survive, so #12 dropped the empty one and **renamed** the real one.
+No row was copied, every identity was preserved, and the migration asserted row
+for row that nothing changed across the rename.
 
 Seven properties are load-bearing and easy to undo by accident:
 
-- **Only live counter revenue is aggregated in the database.**
-  `manual_ledger_counter_revenue()` groups settled bill-payment allocations by
-  payment business date under RLS and excludes void bills. Expected cash, the
-  difference, net aggregator revenue and the monthly estimate remain in
-  `src/features/manual-ledger/ledger.ts`, so the rounding rule still has exactly
-  one implementation.
-- **Typed Cash/UPI is refused after go-live.** Ledger rows continue storing zero
-  in those temporary columns because the same row still owns the drawer and
-  aggregator inputs; the adapter replaces them from the allocation read model.
-- **`opening_cash_paise` and both `_commission_bp` columns are stored per day,
-  not derived.** This is the opposite of the `daily_cash_records` treatment above
-  and for the same underlying reason: correcting day 3's count must not silently
-  move day 4 through day 31. The cost is that the chain can break, and the
-  surface reports the break rather than repairing it.
-- **Commission is an exact amount, applied per day**, then summed — never a rate
-  on a month's total, because each day's commission is its own measured figure.
-  A day whose commission is still undetermined makes the month a **ceiling** and
-  the surface says so.
 - **Hyperpure is a reserved category** (#43). A person may not type it, nor any
   near-spelling of it — `reserved_expense_categories` names it and the folded,
   squashed, contained match refuses "hyper pure" and "Hyperpure Goods" alike, so
@@ -798,7 +778,8 @@ Seven properties are load-bearing and easy to undo by accident:
   `shared_cost` marks a purchase booked once against its delivery outlet but drawn
   on by both kitchens from one inventory. A payout recovery of such a purchase is
   reconciliation only and writes no expense, because the supplier's own statement
-  already recorded it.
+  already recorded it. A machine-sourced row carries its source identity **instead
+  of** a recorder, rather than falsely naming a human.
 - **There is no capital marker, deliberately.** Capital spending is not recorded
   here at all, so the monthly figure is a cash-basis *operating* estimate and the
   surface says so. Equipment paid for from the drawer is recorded as cash taken
@@ -813,16 +794,14 @@ Seven properties are load-bearing and easy to undo by accident:
   a cash basis. Nothing regresses — a credit purchase is unrecorded today and
   stays unrecorded — but the month understates when goods arrive and overstates
   when they are paid for. Its own change if the owner starts buying on terms.
-- **An expense is withdrawn, never deleted.** `DELETE` is revoked from
-  `manual_ledger_expenses` and a `reject_mutation()` trigger refuses it behind
-  the grant, so a service-side mistake is refused too. A withdrawn row keeps
-  `voided_at` and `voided_by`; `voided_reason` is **optional**, on the same
-  reasoning as `attendance_approval_reason` — demanding one on the fastest
-  correction path collects a column of "mistake". The three travel together under
-  checks shaped like `attendance_approval_complete`: actor and time both present
-  or both absent, a reason only beside a void, and never blank. `manual_ledger_days`
-  keeps `DELETE`, because a day typed against the wrong date is a mistake with no
-  story worth keeping and only owners and managers reach that table.
+- **An expense is withdrawn, never deleted.** `DELETE` is revoked from `expenses`
+  and a `reject_mutation()` trigger refuses it behind the grant, so a service-side
+  mistake is refused too. A withdrawn row keeps `voided_at` and `voided_by`;
+  `voided_reason` is **optional**, on the same reasoning as
+  `attendance_approval_reason` — demanding one on the fastest correction path
+  collects a column of "mistake". The three travel together under checks shaped
+  like `attendance_approval_complete`: actor and time both present or both absent,
+  a reason only beside a void, and never blank.
 - **`recorded_away` is stamped at insert, never derived on read.** True when the
   recording account held no live assignment at that outlet at the moment it wrote
   the row. Deriving it from today's assignments would make a manager's old rows
@@ -830,36 +809,50 @@ Seven properties are load-bearing and easy to undo by accident:
   up as a fact about then. It is frozen afterwards for the same reason
   `recorded_by` is, and the surface shows it only on a drawer expense, where it
   explains why expected cash moved without anybody at the outlet spending it.
+- **Only cash expenses reach a drawer figure**, by
+  `coalesce(occurred_at, created_at)`, so a spend before a count and one after it
+  land on opposite sides of that count. `occurred_at` is nullable and never a
+  required field.
 
-Negative revenue is permitted (a cash refund lowers that day's cash revenue);
-negative opening cash, drawer count and cash movements are refused, as are a
-future business date, a blank movement reason, a blank expense description and a
-commission rate outside 0–10000 basis points.
+A blank expense description and a future business date are refused, as is a
+negative amount.
 
-**The two tables answer differently under RLS, and the difference is the point.**
-`manual_ledger_days` reaches owners and Franchise Admins at outlets from
-`app_outlets_for('franchise_admin')`, and carries **no outlet-staff branch on any
-verb** — a stronger claim than ordinary outlet isolation, protecting the drawer on
-the write side and past days, month aggregates, the other outlet and every
-commission-net figure on the read side.
-`manual_ledger_expenses` additionally admits `app_has_role_at('biller', …)` and
-`app_has_role_at('employee', …)`, who read every row at their outlet and correct
-only their own. **No select policy carries a date predicate**: the surface's
-two-day window is a presentation default, and enforcing it would cost a
+**RLS.** Owners and Franchise Admins reach an outlet's rows through
+`app_outlets_for('franchise_admin')`; `app_has_role_at('biller', …)` and
+`app_has_role_at('employee', …)` additionally read every row at their outlet and
+correct only their own. **No select policy carries a date predicate**: the
+surface's two-day window is a presentation default, and enforcing it would cost a
 correlated subquery to protect a row that is not a revenue figure. The staff date
 limits — record on the current business day, correct only while that day is still
-running — live in `manual_ledger_guard()` instead, because both resolve the
-outlet's own cutover through `app_business_date`.
+running — live in the row guard instead, because both resolve the outlet's own
+cutover through `app_business_date`. An owner and a manager are deliberately not
+held to that window: they step or pick to any past business date and record
+against the day on screen.
 
-`manual_ledger_people()` is a `security definer` read returning display names,
-and only display names, for accounts that wrote in a ledger the caller may
-already read. It exists because `profiles` cannot answer that question for the
-readers this capability added: its select policy needs a shared outlet assignment
-and a caller whose role is `franchise_admin` or `biller`, so an Employee sees
-nobody and nobody at an outlet sees an owner — whose assignment carries no outlet
-at all, and who recorded most of the rows already stored. Its predicates mirror
-the row policies deliberately, and `supabase/tests/21_manual_ledger.sql` asserts
-the two agree rather than trusting that they do.
+`expense_people()` is a `security definer` read returning display names, and only
+display names, for accounts that wrote expenses the caller may already read. It
+exists because `profiles` cannot answer that question for the readers this
+capability added: its select policy needs a shared outlet assignment and a caller
+whose role is `franchise_admin` or `biller`, so an Employee sees nobody and
+nobody at an outlet sees an owner — whose assignment carries no outlet at all,
+and who recorded most of the rows already stored. Its predicates mirror the row
+policies deliberately, and `supabase/tests/21_manual_ledger.sql` asserts the two
+agree rather than trusting that they do.
+
+## The archived notebook
+
+**`archived_manual_ledger_days`** — the forty day rows the manual-ledger stopgap
+(#36) accumulated while August 2026 was trading, under an explicit archive name.
+`retire-the-manual-ledger` (#12) carried each counted row into a drawer
+observation and each cash movement into drawer cash out, then renamed this table
+rather than dropping it: a carry-over is a transformation, and a transformation
+can be wrong in a way nobody notices for a month. Keeping the source costs
+nothing and is the only thing that makes the carry-over checkable afterwards.
+
+It stays in `public`, with RLS enabled, **no policy, no runtime grant** and a
+`reject_mutation()` trigger, so no role can read or change it and no application
+query names it. Moving forty rows into a second schema would have added a restore
+path without adding protection.
 
 ## Operator restaurant mappings
 

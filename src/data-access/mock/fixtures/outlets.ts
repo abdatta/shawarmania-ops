@@ -41,7 +41,6 @@ export const outletFixtures: Tables<'outlets'>[] = [
     geofence_radius_m: 150,
     business_day_cutover: '04:00:00',
     arrival_deadline: '13:00:00',
-    billing_live_from: null,
     zomato_res_id: '21917311',
     hyperpure_delivery: false,
     is_active: true,
@@ -74,7 +73,6 @@ export const outletFixtures: Tables<'outlets'>[] = [
     // one-deadline-per-outlet limitation instead of the rule
     // (docs/LIMITATIONS.md).
     arrival_deadline: '20:00:00',
-    billing_live_from: null,
     zomato_res_id: '22675834',
     hyperpure_delivery: true,
     is_active: true,
@@ -104,7 +102,6 @@ export const outletFixtures: Tables<'outlets'>[] = [
     geofence_radius_m: 150,
     business_day_cutover: '04:00:00',
     arrival_deadline: '13:00:00',
-    billing_live_from: null,
     // Already closed, so the demo starts where the delete action is offered.
     // Nothing is rostered here, nobody's account points at it, and no day was
     // ever traded — which is exactly the precondition that makes deleting it

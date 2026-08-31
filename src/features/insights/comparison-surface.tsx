@@ -9,15 +9,8 @@ import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters } from '@/data-access'
 import type { OutletComparisonRow } from '@/data-access/adapters'
-import {
-  describeDifference,
-  formatPaise,
-  PROFIT_BASIS_LABELS,
-  resolveBusinessDate,
-  type ProfitBasis,
-} from '@/domain'
+import { describeDifference, formatPaise, PROFIT_BASIS_LABELS, resolveBusinessDate } from '@/domain'
 
-import { BasisPicker } from './profit-figure'
 import { describePeriod, isPeriodKey, periodFor, PERIOD_KEYS, PERIOD_LABELS } from './period'
 
 /**
@@ -33,7 +26,6 @@ export function ComparisonSurface() {
   const { outlets, insights } = useAdapters()
 
   const [periodKey, setPeriodKey] = useState<'today' | 'week' | 'month'>('week')
-  const [basis, setBasis] = useState<ProfitBasis>('cash')
   const [today, setToday] = useState<string | null>(null)
   const [rows, setRows] = useState<OutletComparisonRow[]>()
 
@@ -63,7 +55,7 @@ export function ComparisonSurface() {
       const result = await insights.comparison(
         list.map((outlet) => outlet.id),
         periodFor(periodKey, today),
-        basis,
+        'cash',
       )
       if (active) setRows(result)
     })()
@@ -71,7 +63,7 @@ export function ComparisonSurface() {
     return () => {
       active = false
     }
-  }, [outlets, insights, today, periodKey, basis])
+  }, [outlets, insights, today, periodKey])
 
   const period = today ? periodFor(periodKey, today) : null
 
@@ -104,7 +96,7 @@ export function ComparisonSurface() {
         title="Compare outlets"
         subtitle={
           period
-            ? `${describePeriod(period)} · ${PROFIT_BASIS_LABELS[basis]}`
+            ? `${describePeriod(period)} · ${PROFIT_BASIS_LABELS.cash}`
             : 'Side by side over a period'
         }
       />
@@ -131,7 +123,6 @@ export function ComparisonSurface() {
             ))}
           </Select>
         </div>
-        <BasisPicker id="comparison-basis" value={basis} onChange={setBasis} />
       </div>
 
       {rows === undefined ? (
@@ -155,15 +146,12 @@ export function ComparisonSurface() {
           {rows.length > 0 && (
             <div className="mt-3 space-y-2 text-xs text-content-muted">
               <p data-testid="comparison-basis-note">
-                <strong className="text-content">{PROFIT_BASIS_LABELS[basis]}.</strong>{' '}
-                {basis === 'cash'
-                  ? 'Profit here is sales minus everything spent, including stock bought.'
-                  : 'Profit here is sales minus running costs minus the stock actually used — so food bought and food used are never both subtracted.'}
+                <strong className="text-content">{PROFIT_BASIS_LABELS.cash}.</strong> Profit here is
+                sales less recorded operating expenses.
               </p>
               <p>
-                Every figure is summed from the bills, expenses and stock movements each outlet
-                recorded. A day that has been closed contributes what was counted and signed off,
-                never a recomputation of it.
+                Every figure is summed from the bills, expenses and drawer observations each outlet
+                recorded.
               </p>
             </div>
           )}

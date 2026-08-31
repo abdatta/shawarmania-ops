@@ -43,9 +43,7 @@ export function createMockExpenseCategoriesAdapter(
 
   function moveCounts(name: string): ExpenseCategoryMoveResult {
     return {
-      ledgerRowsMoved: store.manualLedgerExpenses.filter(
-        (row) => row.category.toLocaleLowerCase() === name.toLocaleLowerCase(),
-      ).length,
+      ledgerRowsMoved: 0,
       expenseRowsMoved: store.expenses.filter(
         (row) => row.category.toLocaleLowerCase() === name.toLocaleLowerCase(),
       ).length,
@@ -87,9 +85,6 @@ export function createMockExpenseCategoriesAdapter(
         : { ledgerRowsMoved: 0, expenseRowsMoved: 0 }
       source.name = next
       if (rewriteHistory) {
-        for (const row of store.manualLedgerExpenses) {
-          if (row.category.toLocaleLowerCase() === before.toLocaleLowerCase()) row.category = next
-        }
         for (const row of store.expenses) {
           if (row.category.toLocaleLowerCase() === before.toLocaleLowerCase()) row.category = next
         }
@@ -119,11 +114,6 @@ export function createMockExpenseCategoriesAdapter(
         throw new DataActionError('bad_merge', 'Choose two different existing categories.')
       }
       const counts = moveCounts(source.name)
-      for (const row of store.manualLedgerExpenses) {
-        if (row.category.toLocaleLowerCase() === source.name.toLocaleLowerCase()) {
-          row.category = target.name
-        }
-      }
       for (const row of store.expenses) {
         if (row.category.toLocaleLowerCase() === source.name.toLocaleLowerCase()) {
           row.category = target.name

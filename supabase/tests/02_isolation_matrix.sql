@@ -204,8 +204,8 @@ select is((select count(*) from public.attendance
               and outlet_id = '00000000-0000-4000-a000-000000000001'
               and business_date between current_date - 40 and current_date), 1::bigint,
   'while the same read at their own outlet returns the day worked there');
-select is((select count(*) from public.daily_cash_records), 1::bigint,
-  'fa_kalyani sees the Kalyani closed day');
+select is((select count(*) from public.expenses), 3::bigint,
+  'fa_kalyani sees the three seeded Kalyani expenses');
 select is((select count(*) from public.outlets), 1::bigint,
   'fa_kalyani sees exactly their own outlet row');
 
@@ -241,9 +241,9 @@ select is((select count(*) from public.outlets), 2::bigint,
   'two_outlets reads both outlet rows, because they work at both');
 select is((select count(*) from public.assignments), 2::bigint,
   'two_outlets sees both of their own assignments and nobody else''s');
--- Still an Employee at both: no manager surface opens anywhere.
-select is((select count(*) from public.expenses), 0::bigint,
-  'two_outlets reads no expenses at either outlet');
+-- Expenses are an outlet-wide staff surface, even for an Employee.
+select is((select count(*) from public.expenses), 5::bigint,
+  'two_outlets reads expenses at both assigned outlets and nowhere else');
 select is((select count(*) from public.inventory_items), 0::bigint,
   'two_outlets reads no stock at either outlet');
 
@@ -256,8 +256,8 @@ reset role;
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002'::uuid);
 
 select throws_ok($q$
-  insert into public.expenses (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
-  values ('00000000-0000-4000-a000-000000000002', current_date, 'other', 1000, 'cash',
+  insert into public.expenses (outlet_id, business_date, category, amount_paise, is_cash, recorded_by)
+  values ('00000000-0000-4000-a000-000000000002', current_date, 'Other', 1000, true,
           '10000000-0000-4000-a000-000000000002')
 $q$, '42501', null, 'fa_kalyani cannot insert an expense carrying the other outlet''s id');
 
@@ -274,9 +274,11 @@ select throws_ok($q$
 $q$, '42501', null, 'fa_kalyani cannot record a movement at the other outlet');
 
 select throws_ok($q$
-  insert into public.cash_withdrawals (outlet_id, business_date, amount_paise, withdrawn_by, recorded_by)
-  values ('00000000-0000-4000-a000-000000000002', current_date, 1000, 'X',
-          '10000000-0000-4000-a000-000000000002')
+  insert into public.drawer_cash_out
+    (outlet_id, kind, amount_paise, occurred_at, recorded_by,
+     recorded_on_site, away_reason)
+  values ('00000000-0000-4000-a000-000000000002', 'collection', 1000, now(),
+          '10000000-0000-4000-a000-000000000002', false, 'Synthetic cross-outlet attempt')
 $q$, '42501', null, 'fa_kalyani cannot record a withdrawal at the other outlet');
 
 select throws_ok($q$
@@ -312,8 +314,8 @@ $q$, '42501', null, 'fa_kalyani cannot write attendance at the other outlet');
 
 -- Attribution cannot be forged even inside the right outlet.
 select throws_ok($q$
-  insert into public.expenses (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
-  values ('00000000-0000-4000-a000-000000000001', current_date, 'other', 1000, 'cash',
+  insert into public.expenses (outlet_id, business_date, category, amount_paise, is_cash, recorded_by)
+  values ('00000000-0000-4000-a000-000000000001', current_date, 'Other', 1000, true,
           '10000000-0000-4000-a000-000000000003')
 $q$, '42501', null, 'fa_kalyani cannot record an expense as someone else');
 

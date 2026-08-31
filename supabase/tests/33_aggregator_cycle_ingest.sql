@@ -82,12 +82,20 @@ $$;
 create function pg_temp.recorded_day(p_outlet uuid, d date)
 returns void language plpgsql as $$
 begin
-  insert into public.manual_ledger_days
-    (outlet_id, business_date, opening_cash_paise, counted_cash_paise,
-     cash_revenue_paise, recorded_by)
-  values (p_outlet, d, 500000, 500000, 0,
-          '10000000-0000-4000-a000-000000000001')
-  on conflict (outlet_id, business_date) do nothing;
+  insert into public.drawer_observations
+    (outlet_id, counted_at, recorded_at, is_anchor, opening_paise,
+     expected_paise, difference_paise, counted_total_paise, is_approximate,
+     recorded_by, recorded_on_site, away_reason)
+  select p_outlet, ((d + time '20:00') at time zone 'Asia/Kolkata'),
+         ((d + time '20:00') at time zone 'Asia/Kolkata'), false,
+         500000, 500000, 0, 500000, false,
+         '10000000-0000-4000-a000-000000000001', false, 'Synthetic test count'
+   where not exists (
+     select 1 from public.drawer_observations observation
+     join public.outlets outlet on outlet.id = observation.outlet_id
+      where observation.outlet_id = p_outlet
+        and public.app_business_date(
+          observation.counted_at, outlet.business_day_cutover) = d);
 end;
 $$;
 
@@ -214,7 +222,7 @@ select is(
   'the same cycle read again is accepted again');
 
 select is(
-  (select count(*) from public.manual_ledger_days where outlet_id = :'KAL'::uuid),
+  (select count(*) from public.drawer_observations where outlet_id = :'KAL'::uuid),
   2::bigint,
   'and creates no second row for a day it already wrote');
 
@@ -296,8 +304,11 @@ select is(
   'ok', 'and is rewritten when the week pays');
 
 select is(
-  (select count(*) from public.manual_ledger_days
-    where outlet_id = :'KPA'::uuid and business_date = pg_temp.day(12)),
+  (select count(*) from public.drawer_observations observation
+    join public.outlets outlet on outlet.id = observation.outlet_id
+    where observation.outlet_id = :'KPA'::uuid
+      and public.app_business_date(observation.counted_at, outlet.business_day_cutover)
+          = pg_temp.day(12)),
   1::bigint,
   'in place, staying one row per outlet per business date');
 
@@ -553,15 +564,18 @@ select is(
 
 select results_eq(
   format($$select business_date, is_cash, source_system
-             from public.manual_ledger_expenses
+             from public.expenses
             where outlet_id = %L and source_ref = 'HP-88213'$$, :'KAL'),
   $$values (public.app_business_date(now(), time '04:00') - 41, false, 'zomato')$$,
   'the supply bill lands on its purchase date, not on the payout that collected '
   'it eleven days later, and is non-cash because it never passed the drawer');
 
 select is(
-  (select count(*) from public.manual_ledger_days
-    where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(41)),
+  (select count(*) from public.drawer_observations observation
+    join public.outlets outlet on outlet.id = observation.outlet_id
+    where observation.outlet_id = :'KAL'::uuid
+      and public.app_business_date(observation.counted_at, outlet.business_day_cutover)
+          = pg_temp.day(41)),
   0::bigint,
   'and dating an expense to a day creates no ledger day row for it');
 
@@ -575,7 +589,10 @@ select results_eq(
   'cycle that paid it');
 
 select is(
-  (select count(*) from public.manual_ledger_days where business_date = date '1970-01-01'),
+  (select count(*) from public.drawer_observations observation
+    join public.outlets outlet on outlet.id = observation.outlet_id
+    where public.app_business_date(observation.counted_at, outlet.business_day_cutover)
+          = date '1970-01-01'),
   0::bigint,
   'and the epoch date the aggregator renders for it never reaches the ledger');
 
@@ -602,7 +619,7 @@ select is(
   )) ->> 'outcome', 'ok', 'the same deductions arrive again on the next run');
 
 select is(
-  (select count(*) from public.manual_ledger_expenses
+  (select count(*) from public.expenses
     where outlet_id = :'KAL'::uuid and source_ref = 'HP-88213'),
   1::bigint,
   'and update in place rather than doubling the month''s costs');
@@ -614,7 +631,7 @@ select set_config('request.jwt.claims',
   json_build_object('sub', :'OWNER', 'role', 'authenticated')::text, true);
 set local role authenticated;
 
-update public.manual_ledger_expenses set voided_at = now()
+update public.expenses set voided_at = now()
  where outlet_id = :'KAL'::uuid and source_ref = 'HP-88213';
 
 reset role;
@@ -633,7 +650,7 @@ select is(
   )) ->> 'outcome', 'ok', 'a later run carrying a withdrawn deduction is accepted');
 
 select is(
-  (select amount_paise from public.manual_ledger_expenses
+  (select amount_paise from public.expenses
     where outlet_id = :'KAL'::uuid and source_ref = 'HP-88213'),
   374777::bigint,
   'but does not resurrect it: the owner withdrew that row for a reason');
@@ -714,8 +731,11 @@ select is(
   'a day row to live on');
 
 select is(
-  (select count(*) from public.manual_ledger_days
-    where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(60)),
+  (select count(*) from public.drawer_observations observation
+    join public.outlets outlet on outlet.id = observation.outlet_id
+    where observation.outlet_id = :'KAL'::uuid
+      and public.app_business_date(observation.counted_at, outlet.business_day_cutover)
+          = pg_temp.day(60)),
   0::bigint,
   'while still no day row is invented for it, because a fabricated opening '
   'balance and a drawer count of zero would reconcile and mean nothing');
@@ -767,8 +787,11 @@ select is(
   'but the day behind the boundary gains no measured figure at all');
 
 select is(
-  (select count(*) from public.manual_ledger_days
-    where outlet_id = :'KAL'::uuid and business_date = pg_temp.day(50)),
+  (select count(*) from public.drawer_observations observation
+    join public.outlets outlet on outlet.id = observation.outlet_id
+    where observation.outlet_id = :'KAL'::uuid
+      and public.app_business_date(observation.counted_at, outlet.business_day_cutover)
+          = pg_temp.day(50)),
   1::bigint,
   'while the day the owner recorded behind it is left exactly where it was');
 
@@ -877,7 +900,7 @@ select is(
   'leave the payout and the sum still counts it');
 
 select is(
-  (select count(*) from public.manual_ledger_expenses where source_ref = 'HPREC-1'),
+  (select count(*) from public.expenses where source_ref = 'HPREC-1'),
   0::bigint,
   'and the recovery writes no expense, because the supplier''s own statement '
   'already recorded that purchase');
@@ -925,7 +948,7 @@ select is(
   'the second outlet''s slice of the same purchase reconciles too');
 
 select is(
-  (select count(*) from public.manual_ledger_expenses
+  (select count(*) from public.expenses
     where source_ref in ('HPREC-1', 'HPREC-2')),
   0::bigint,
   'and neither outlet gains an expense, so one purchase recovered in slices '
@@ -954,7 +977,7 @@ select is(
   'an advertising deduction reconciles');
 
 select is(
-  (select count(*) from public.manual_ledger_expenses where source_ref = 'ADS-1'),
+  (select count(*) from public.expenses where source_ref = 'ADS-1'),
   1::bigint,
   'and still becomes an expense, because no other origin sees it');
 
@@ -986,7 +1009,7 @@ select is(
   'cycle still reconciles');
 
 select is(
-  (select count(*) from public.manual_ledger_expenses where source_ref = 'HPREC-OLD'),
+  (select count(*) from public.expenses where source_ref = 'HPREC-OLD'),
   0::bigint,
   'and writes no expense, because it is a collection Hyperpure already recorded');
 
@@ -1000,7 +1023,7 @@ select is(
  * reservation exists to prevent, so the refusal has to survive one.
  */
 select throws_ok(
-  format($$insert into public.manual_ledger_expenses
+  format($$insert into public.expenses
              (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
            values (%L, public.app_business_date(now(), time '04:00'), 'Hyperpure',
                    false, 100000, null)$$,
@@ -1009,7 +1032,7 @@ select throws_ok(
   'a person may not type the reserved category at all');
 
 select throws_ok(
-  format($$insert into public.manual_ledger_expenses
+  format($$insert into public.expenses
              (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
            values (%L, public.app_business_date(now(), time '04:00'), 'hyper pure',
                    false, 100000, null)$$,
@@ -1018,7 +1041,7 @@ select throws_ok(
   'nor a differently spaced spelling of it');
 
 select throws_ok(
-  format($$insert into public.manual_ledger_expenses
+  format($$insert into public.expenses
              (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
            values (%L, public.app_business_date(now(), time '04:00'), 'HyperPure Goods',
                    false, 100000, null)$$,
@@ -1028,7 +1051,7 @@ select throws_ok(
   'usually created by accident');
 
 select lives_ok(
-  format($$insert into public.manual_ledger_expenses
+  format($$insert into public.expenses
              (outlet_id, business_date, category, is_cash, amount_paise,
               source_system, source_ref, recorded_by)
            values (%L, public.app_business_date(now(), time '04:00'), 'Hyperpure',
@@ -1038,7 +1061,7 @@ select lives_ok(
   'of reserving it');
 
 select is(
-  (select count(*) from public.manual_ledger_expenses where source_ref = 'ORDER-OWNED-1'),
+  (select count(*) from public.expenses where source_ref = 'ORDER-OWNED-1'),
   1::bigint,
   'and that row is really there, so the owning path was not silently dropped '
   'along with the relayed ones');

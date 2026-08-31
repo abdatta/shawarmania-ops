@@ -87,43 +87,29 @@ amend it, so an amount collected that was typed wrong is corrected by recording
 another count rather than by editing the movement. The Last Left reading says so
 in words instead of offering a field that would do nothing.
 
-## In demo mode the drawer's expense breakdown lists fewer rows than it totals
+## The manual ledger was a stopgap, and it is discharged
 
-The Cash Expenses breakdown lists rows from the notebook — the table every live
-Expenses surface writes — while its totals come from `effective_expenses`, the
-union of that notebook and `public.expenses`. **In production the two agree
-exactly**, because `public.expenses` has never held a row (measured 2026-08-28,
-and the reason `effective_expenses` exists at all).
+**Closed 2026-08-31 by `retire-the-manual-ledger` (#12).** The notebook (#36)
+existed because billing, expenses and the drawer were not live while August 2026
+was trading, and it said from the day it landed that it was designed to be
+dropped. #12 dropped it: every counted day became a drawer observation marked as
+an hour that was never recorded, every cash movement became drawer cash out, the
+expense half was promoted by rename to the one `expenses` table, and the forty
+source day rows survive read-only under an archive name no role may reach. The
+per-outlet `billing_live_from` handover went with it — with one record of a
+trading day there is nothing to hand over from.
 
-The demo store populates *both* arrays, so a demo group can state a subtotal
-larger than the rows it lists. That is a fixture fact rather than a surface one:
-it predates this change — the demo's own Expenses tab has never been able to show
-those rows either, while the drawer's expected balance has always subtracted
-them. `retire-the-manual-ledger` (#12) carries the notebook rows across and
-collapses the union, after which the question disappears rather than being
-answered.
-
-## The manual ledger is a stopgap with a stated exit
-
-Billing records Cash and UPI at each counter, and `cash-is-counted-not-closed`
-(#11) gives the drawer a live record, but until `retire-the-manual-ledger` (#12)
-lands, the notebook still holds the trading period before each outlet's tablet
-existed. The
-**Ledger** surface (#36) therefore remains the place for aggregator trade,
-expenses and drawer facts. Each outlet changes over on an explicit future-only
-`billing_live_from`: from that day its Cash and UPI values are read from settled
-bills once, while earlier dates and an unpromoted outlet remain hand-typed. It is
-deliberately small: two tables, no workflow, no sign-off and no correction
-history.
-
-It is no longer owner-only. `the-ledger-opens-to-the-outlet` gave the **day
-record** to managers at the outlets they are assigned to, and the **expense
-record** to everyone at the outlet, because the person who spends the money was
-the one person who could not write it down. What that opened, and what it
-deliberately did not, is in
+While it stood it was no longer owner-only. `the-ledger-opens-to-the-outlet` gave
+the **day record** to managers at the outlets they are assigned to, and the
+**expense record** to everyone at the outlet, because the person who spends the
+money was the one person who could not write it down. What that opened, and what
+it deliberately did not, is in
 [Roles and permissions](ROLES_AND_PERMISSIONS.md).
 
-Seven bounds worth knowing, because each is a decision:
+Seven bounds are worth keeping, because each was a decision and most of them
+outlived the notebook — the ones about expenses and the month now describe the
+promoted `expenses` table, and the one about the stored opening now describes the
+drawer:
 
 - **The month's figure is a cash-basis _operating_ estimate.** Capital spending
   is not recorded here at all, by owner decision, so nothing in it accounts for
@@ -131,20 +117,20 @@ Seven bounds worth knowing, because each is a decision:
   rupee went. Where equipment was paid for out of the drawer it is recorded as
   cash taken out with its reason, which keeps that day's count reconciling
   without entering the month's expenses.
-- **Opening cash is stored per day**, offered from the previous recorded day and
-  editable. Correcting an old day therefore changes only that day. The price is
-  that the chain can break — a day's stored opening may disagree with the previous
-  day's count — and the surface reports that
-  without repairing it, because a figure somebody counted is evidence and a
-  recomputed one is not.
+- **An opening is stored, never recomputed on read**, which the drawer inherited
+  from the notebook. Correcting an old count therefore changes only that count.
+  The price is that the chain can break — a stored opening may disagree with the
+  previous count — and the surface reports that without repairing it, because a
+  figure somebody counted is evidence and a recomputed one is not. The notebook's
+  chain really did break in August, at both outlets, and the carry-over reported
+  every break rather than tidying it away.
 - **No consumption-basis profit**, because no stock is valued here. Raw materials
   are taken as zero on hand at the start of tracking, by owner decision.
-- **It grants the owner no authority that survives it.** They may type cash
-  figures into this notebook only because no real drawer record exists yet to
-  corrupt. #11 decided its own boundary on its own merits, and decided it the
-  other way, so nothing here became precedent — it decides its own boundary on its own merits. That an outlet
-  staff role may record a drawer expense here is likewise no precedent for the
-  live expense record, whose grants are `outlet-expenses`' own to decide.
+- **It granted the owner no authority that survived it.** They could type cash
+  figures into the notebook only because no real drawer record existed yet to
+  corrupt. #11 decided its own boundary on its own merits and decided it the other
+  way, so nothing there became precedent; the notebook's write path is now gone
+  and no surface accepts a typed cash figure for a trading day.
 - **A worked shift's own takings are not treated as confidential; history and
   aggregates are.** Owner decision, 2026-08-08, and it extends no further than
   that sentence. A staff member stands where the sales happen: the counter tablet
@@ -182,13 +168,13 @@ Seven bounds worth knowing, because each is a decision:
   names a person who confirmed it from their own phone rather than one whose name
   was picked off a grid at the counter.
 
-**Its exit belongs to `retire-the-manual-ledger` (#12)**, and is that change's
-whole purpose: it must first carry every recorded day and expense row into the
-live records, asserting inside the migration that the carried data reproduces
-totals established before it ran. The rows are
-the value here; the surface is not. Dropping the tables without the carry-over
-does not satisfy the removal, and the `manual-ledger` capability spec says so as
-a testable requirement.
+**The exit was the carry-over, not the drop.** #12 had to move every recorded day
+and expense row into the live records first, asserting inside its own transaction
+that the carried data reproduced totals established before it ran — and that a
+day's carried count, its cash out and the following opening reproduce the
+notebook's own arithmetic. The rows were the value here; the surface was not.
+Dropping the tables without the carry-over would not have satisfied the removal,
+and the `manual-ledger` capability spec said so as a testable requirement.
 
 ## Expense double-counting is warned about, not prevented
 

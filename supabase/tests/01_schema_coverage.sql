@@ -273,34 +273,21 @@ select is(
 );
 
 -- ---------------------------------------------------------------------------
--- 7. What the manual ledger's two tables reach, as a catalog fact.
---
--- These tables carry `outlet_id`, so section 2 classifies them outlet-scoped and
--- the sweep in 02 proves the ordinary cross-outlet claim about them. Neither
--- notices the claim that matters here, which `the-ledger-opens-to-the-outlet`
--- changed from "no outlet role has any access at all" to something sharper: the
--- **day** table reaches managers and stops, while the **expense** table reaches
--- everyone at the outlet.
---
--- Stated as catalog facts on the same terms the global customer table is, so a
--- later migration that widens either table fails by name here rather than in
--- whichever test somebody remembered to write. What the branches actually permit
--- is proved in 21_manual_ledger.sql.
+-- 7. The promoted expense record stays live; the notebook archive stays dark.
 
 select is(
   (select count(*) from pg_policies
     where schemaname = 'public'
-      and tablename in ('manual_ledger_days', 'manual_ledger_expenses')),
-  7::bigint,
-  'the day table carries four policies and the expense table three: delete is '
-  'gone from the expense table, grant and policy together');
+      and tablename = 'expenses'),
+  3::bigint,
+  'the promoted expense table carries select, insert and update policies');
 
 select is(
   coalesce(
     (select string_agg(policyname, ', ' order by policyname)
        from pg_policies
       where schemaname = 'public'
-        and tablename = 'manual_ledger_expenses'
+        and tablename = 'expenses'
         and cmd = 'DELETE'),
     ''),
   '',
@@ -310,55 +297,35 @@ select is(
 select is(
   coalesce(
     (select string_agg(policyname, ', ' order by policyname)
-       from pg_policies
+      from pg_policies
       where schemaname = 'public'
-        and tablename in ('manual_ledger_days', 'manual_ledger_expenses')
+        and tablename = 'expenses'
         and coalesce(qual, '') || coalesce(with_check, '') not like '%app_account_active%'),
     ''),
   '',
-  'every manual-ledger policy still ends access when the account is deactivated');
-
--- **The absence that matters now.** A staff predicate on the day table is how an
--- account that may not touch the drawer acquires the ability to make any drawer
--- reconcile — and it would do so without failing any other test in this suite.
--- The read protection on past days and month aggregates rides on the same
--- predicate (the-ledger-opens-to-the-outlet, design D5).
-select is(
-  coalesce(
-    (select string_agg(policyname, ', ' order by policyname)
-       from pg_policies
-      where schemaname = 'public'
-        and tablename = 'manual_ledger_days'
-        and (coalesce(qual, '') || coalesce(with_check, '') like '%biller%'
-             or coalesce(qual, '') || coalesce(with_check, '') like '%employee%'
-             or coalesce(qual, '') || coalesce(with_check, '') like '%app_outlet_id%'
-             or coalesce(qual, '') || coalesce(with_check, '') like '%app_role()%')),
-    ''),
-  '',
-  'no day-record policy carries a staff predicate of any kind');
-
--- And the presence that matters: every day policy resolves a manager through
--- their assignments rather than through a claim, so ending the assignment ends
--- the reach on the next request.
-select is(
-  coalesce(
-    (select string_agg(policyname, ', ' order by policyname)
-       from pg_policies
-      where schemaname = 'public'
-        and tablename = 'manual_ledger_days'
-        and coalesce(qual, '') || coalesce(with_check, '') not like '%app_outlets_for%'),
-    ''),
-  '',
-  'every day-record policy resolves managers through app_outlets_for');
+  'every expense policy ends access when the account is deactivated');
 
 select is(
   (select count(*) from pg_policies
     where schemaname = 'public'
-      and tablename = 'manual_ledger_expenses'
+      and tablename = 'expenses'
       and coalesce(qual, '') || coalesce(with_check, '') like '%app_has_role_at%'),
   3::bigint,
   'and all three expense policies carry the staff branch, so outlet staff keep '
   'the reach this capability exists to give them');
+
+select is(
+  (select count(*) from pg_policies
+    where schemaname = 'public' and tablename = 'archived_manual_ledger_days'),
+  0::bigint,
+  'the notebook archive has no client policy');
+
+select ok(
+  not has_table_privilege('authenticated', 'public.archived_manual_ledger_days', 'SELECT')
+  and not has_table_privilege('authenticated', 'public.archived_manual_ledger_days', 'INSERT')
+  and not has_table_privilege('authenticated', 'public.archived_manual_ledger_days', 'UPDATE')
+  and not has_table_privilege('authenticated', 'public.archived_manual_ledger_days', 'DELETE'),
+  'the notebook archive grants authenticated clients no verb');
 
 select * from finish();
 rollback;

@@ -313,6 +313,7 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       expectedPaise: row.expected_paise,
       differencePaise: row.difference_paise,
       countedTotalPaise: row.counted_total_paise,
+      isLegacyImprecise: row.is_legacy_imprecise,
       isApproximate: row.is_approximate,
       toleranceMinutes: row.tolerance_minutes,
       recordedBy: row.recorded_by,
@@ -484,6 +485,10 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
             state: day.drawer.state,
             countedAt:
               observation?.kind === 'observation' ? observation.observation.countedAt : null,
+            isLegacyImprecise:
+              observation?.kind === 'observation'
+                ? observation.observation.isLegacyImprecise
+                : false,
             differencePaise:
               observation?.kind === 'observation' ? observation.observation.differencePaise : null,
             observationCoversDays: day.drawer.observationCoversDays,

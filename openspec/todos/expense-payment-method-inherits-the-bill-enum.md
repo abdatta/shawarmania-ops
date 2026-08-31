@@ -55,13 +55,22 @@ the ledger's model, not whether the bill enum can be trimmed further.
 
 ## Trigger to promote
 
-**Re-pointed on 26 Aug 2026**, because the change this named no longer exists and
-its premise no longer holds. The column is already reachable by real users: the
+**Re-pointed on 26 Aug 2026**, because the change this named no longer existed and
+its premise no longer held. The column is already reachable by real users: the
 notebook's expense table has been the live one since #36, and `expenses` was
 never filled. So the cheap window this note assumed has already closed, and a fix
 is a data migration whenever it happens.
 
-The natural home is now `retire-the-manual-ledger` (#12), which renames the real
-expense table and is already touching its schema and its generated types. Doing
-it there costs one more statement in a migration that is running anyway. Doing it
-later means a migration of its own against live rows.
+**Closed 31 Aug 2026. Resolved, not deferred.**
+
+`retire-the-manual-ledger` (#12) dropped the empty `expenses` table — the one
+that carried the inherited `payment_method` enum — and renamed the live record
+into its place. The live record has always used a plain `is_cash` boolean, so
+after the promotion there is no expense column of that enum type anywhere, and no
+migration of live rows was ever needed.
+
+The enum itself survives, correctly, on bills and their payment allocations,
+where a payment method really does have more than two values. What this note
+objected to was an expense inheriting it; that inheritance is gone with the table
+it lived on. Reopens only if a future change puts a payment-method enum back on
+an expense row.

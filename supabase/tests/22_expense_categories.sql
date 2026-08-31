@@ -89,30 +89,19 @@ $q$, '23514', null, 'repeated internal whitespace is refused too');
 
 select throws_ok(
   format($q$
-    insert into public.manual_ledger_expenses
+    insert into public.expenses
       (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
     values (%L, current_date - 10, '', false, 100, %L)
   $q$, :'KAL', :'OWNER'),
-  '23514', null, 'a blank manual-ledger category is refused');
+  '23514', null, 'a blank expense category is refused');
 
-select throws_ok(
-  format($q$
-    insert into public.expenses
-      (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
-    values (%L, current_date - 10, '', 100, 'upi', %L)
-  $q$, :'KAL', :'OWNER'),
-  '23514', null, 'a blank live-expense category is refused');
-
--- Build one row in each expense record under the same source word. The words
+-- Build one row under a source word the seed does not use. The words
 -- here are deliberately ones the seed does not use: these assertions count
 -- rows absolutely, so a category the seed also mints would make them fail for
 -- a reason that has nothing to do with merging.
-insert into public.manual_ledger_expenses
+insert into public.expenses
   (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
 values (:'KAL', current_date - 10, 'Test Poultry', false, 100, :'OWNER');
-insert into public.expenses
-  (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
-values (:'KAL', current_date - 10, 'Test Poultry', 200, 'upi', :'OWNER');
 insert into public.expense_categories (name) values ('Test Larder') on conflict do nothing;
 reset role;
 
@@ -125,32 +114,28 @@ select throws_ok($q$
 $q$, '42501', null, 'a non-owner cannot merge categories');
 reset role;
 
-select is((select count(*) from public.manual_ledger_expenses where category = 'Test Poultry'),
-  1::bigint, 'the refused operations changed no manual-ledger row');
 select is((select count(*) from public.expenses where category = 'Test Poultry'),
-  1::bigint, 'the refused operations changed no live-expense row');
+  1::bigint, 'the refused operations changed no expense row');
 
 select pg_temp.impersonate(:'OWNER');
 select is(
   (select ledger_rows_moved from public.merge_expense_category('Test Poultry', 'Test Larder')),
-  1::bigint,
-  'merge reports the manual-ledger rows it moved');
+  0::bigint,
+  'the retired ledger branch reports zero moved rows');
 reset role;
 
-select is((select count(*) from public.manual_ledger_expenses where category = 'Test Larder'),
-  1::bigint, 'merge rewrites the manual-ledger row');
 select is((select count(*) from public.expenses where category = 'Test Larder'),
-  1::bigint, 'merge rewrites the live-expense row');
+  1::bigint, 'merge rewrites the canonical expense row');
 select is((select count(*) from public.expense_categories where lower(name) = 'test poultry'),
   0::bigint, 'the merged-away suggestion is gone');
 select is((select count(*) from public.expense_category_operations
   where operation = 'merge' and name_before = 'Test Poultry' and name_after = 'Test Larder'
-    and ledger_rows_moved = 1 and expense_rows_moved = 1),
-  1::bigint, 'one durable operation row records both moved counts');
+    and ledger_rows_moved = 0 and expense_rows_moved = 1),
+  1::bigint, 'one durable operation row records the canonical moved count');
 
 select pg_temp.impersonate(:'OWNER');
 insert into public.expense_categories (name) values ('Temporary');
-insert into public.manual_ledger_expenses
+insert into public.expenses
   (outlet_id, business_date, category, is_cash, amount_paise, recorded_by)
 values (:'KAL', current_date - 11, 'Temporary', false, 300, :'OWNER');
 select public.retire_expense_category('Temporary');
@@ -158,7 +143,7 @@ reset role;
 
 select is((select count(*) from public.expense_categories where name = 'Temporary'),
   0::bigint, 'retire removes the suggestion');
-select is((select count(*) from public.manual_ledger_expenses where category = 'Temporary'),
+select is((select count(*) from public.expenses where category = 'Temporary'),
   1::bigint, 'retire changes no recorded expense');
 select is((select count(*) from public.expense_category_operations),
   1::bigint, 'retire writes no operation row because it rewrites no history');

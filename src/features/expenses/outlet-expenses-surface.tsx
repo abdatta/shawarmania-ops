@@ -6,9 +6,9 @@ import { LoadingFigures, LoadingList, LoadingRegion, Shimmer } from '@/component
 import { Money } from '@/components/ui/money'
 import { DayField, PeriodBar } from '@/components/ui/period-bar'
 import { useAdapters } from '@/data-access'
-import type { ManualLedgerExpense } from '@/data-access/adapters'
+import type { ExpenseRecord } from '@/data-access/adapters'
 import { earliestOffered, resolveBusinessDate, shiftBusinessDate } from '@/domain'
-import { ExpenseList } from '@/features/manual-ledger/expense-list'
+import { ExpenseList } from '@/features/expenses/expense-list'
 import { useOutletScope } from '@/features/outlet-scope'
 import { useSession } from '@/session/context'
 import { holdsRole } from '@/session/session'
@@ -66,7 +66,7 @@ const STAFF_SHAPE = {
 } as const
 
 export function OutletExpensesSurface() {
-  const { manualLedger: adapter, outlets } = useAdapters()
+  const { expenses: adapter, outlets } = useAdapters()
   const { outletId, managed, selector: outletSelector } = useOutletScope()
   const session = useSession()
 
@@ -82,7 +82,7 @@ export function OutletExpensesSurface() {
   } | null>(null)
   const [expenseResult, setExpenseResult] = useState<{
     key: string
-    rows: ManualLedgerExpense[]
+    rows: ExpenseRecord[]
   } | null>(null)
   const [errorResult, setErrorResult] = useState<{ key: string; message: string } | null>(null)
 

@@ -39,26 +39,30 @@ describe('demo reset', () => {
 
   it('discards what a walkthrough recorded and leaves the reader where they were', async () => {
     const user = userEvent.setup()
-    renderDemo('/demo/admin/expenses')
+    renderDemo('/demo/admin/ledger/expenses')
 
     // Record something. Expenses is the cheapest write to make and to see.
-    const list = await screen.findByTestId('expense-list')
+    const list = await screen.findByTestId('ledger-expense-list')
     const before = within(list).getAllByRole('listitem').length
 
     await user.click(screen.getByRole('button', { name: 'Add expense' }))
     await user.type(screen.getByLabelText('Expense category'), 'Reset supplies')
     await user.type(screen.getByLabelText('Amount (₹)'), '175')
-    await user.type(screen.getByLabelText('Description (optional)'), 'Reset probe')
+    await user.type(screen.getByLabelText('Note (optional)'), 'Reset probe')
     await user.click(screen.getByRole('button', { name: 'Record expense' }))
-    await waitFor(() => expect(screen.getByTestId('expense-list')).toHaveTextContent('Reset probe'))
+    await waitFor(() =>
+      expect(screen.getByTestId('ledger-expense-list')).toHaveTextContent('Reset probe'),
+    )
 
     await reset(user)
 
     // Gone, and back to exactly the count the walkthrough started from.
     await waitFor(() =>
-      expect(screen.getByTestId('expense-list')).not.toHaveTextContent('Reset probe'),
+      expect(screen.getByTestId('ledger-expense-list')).not.toHaveTextContent('Reset probe'),
     )
-    expect(within(screen.getByTestId('expense-list')).getAllByRole('listitem')).toHaveLength(before)
+    expect(within(screen.getByTestId('ledger-expense-list')).getAllByRole('listitem')).toHaveLength(
+      before,
+    )
 
     // Still on the manager's expenses surface. A reset that sent the reader
     // back to the owner would cost them their place mid-walkthrough.

@@ -6,11 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Chip, ChipRow } from '@/components/ui/chip'
 import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
-import type {
-  DrawerObservationRecord,
-  DrawerState,
-  ManualLedgerExpense,
-} from '@/data-access/adapters'
+import type { DrawerObservationRecord, DrawerState, ExpenseRecord } from '@/data-access/adapters'
 import {
   formatDayTime,
   formatPaise,
@@ -18,7 +14,7 @@ import {
   nextOpeningPaise,
   resolveBusinessDate,
 } from '@/domain'
-import { ExpenseList } from '@/features/manual-ledger/expense-list'
+import { ExpenseList } from '@/features/expenses/expense-list'
 
 /**
  * The two readings behind the balance card's figures.
@@ -123,7 +119,7 @@ export function verdictOf(observation: DrawerObservationRecord): {
 }
 
 /** `coalesce(occurred_at, created_at)` — the instant the drawer arithmetic uses. */
-function instantOf(expense: ManualLedgerExpense): string {
+function instantOf(expense: ExpenseRecord): string {
   return expense.occurredAt ?? expense.createdAt
 }
 
@@ -225,7 +221,9 @@ export function LastLeftBreakdown({
       {observation ? (
         <div className="space-y-3" data-testid="last-left-breakdown">
           <p className="text-sm text-content-muted">
-            {formatDayTime(observation.countedAt)}
+            {observation.isLegacyImprecise
+              ? 'Hour was never recorded'
+              : formatDayTime(observation.countedAt)}
             {observation.recordedByName && ` · by ${observation.recordedByName}`}
           </p>
 
@@ -421,8 +419,8 @@ export function ExpensesBreakdown({
   /** Reload the drawer, so a saved expense moves the expected balance at once. */
   onChanged: () => Promise<void> | void
 }) {
-  const { manualLedger } = useAdapters()
-  const [rows, setRows] = useState<ManualLedgerExpense[] | null>(null)
+  const { expenses: expensesAdapter } = useAdapters()
+  const [rows, setRows] = useState<ExpenseRecord[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const state = context?.state ?? null
@@ -459,7 +457,7 @@ export function ExpensesBreakdown({
   useEffect(() => {
     if (!open || outletId === '' || datesKey === '') return
     let active = true
-    void manualLedger
+    void expensesAdapter
       .listRecentExpenses(outletId, datesKey.split('|'))
       .then((found) => {
         if (!active) return
@@ -472,7 +470,7 @@ export function ExpensesBreakdown({
     return () => {
       active = false
     }
-  }, [manualLedger, open, outletId, datesKey, reloadToken])
+  }, [expensesAdapter, open, outletId, datesKey, reloadToken])
 
   /**
    * What `ExpenseList` calls after it writes: re-read these rows, and re-read

@@ -10,13 +10,11 @@ import { createMockBillingAdapter } from './billing'
 import { createMockCashDrawerAdapter } from './cash-drawer'
 import { createDemoCounter, createMockCounterAdapter, type DemoCounter } from './counter'
 import { createDemoCustomers, createMockCustomersAdapter } from './customers'
-import { createMockDailyCashAdapter } from './daily-cash'
 import { createMockExpensesAdapter } from './expenses'
 import { createMockExpenseCategoriesAdapter } from './expense-categories'
 import { createMockInsightsAdapter } from './insights'
 import { createMockLedgerStatementAdapter } from './ledger-statement'
 import { createMockInventoryAdapter } from './inventory'
-import { createMockManualLedgerAdapter } from './manual-ledger'
 import { createMockMenuAdapter } from './menu'
 import { createMockOutletsAdapter } from './outlets'
 import { personaFixtures } from './fixtures/personas'
@@ -161,24 +159,17 @@ export function createMockAdapters(
     // refuses: only a billing context may resolve a phone at all.
     customers: createMockCustomersAdapter(data.customers, role),
     inventory: createMockInventoryAdapter(store),
-    expenses: createMockExpensesAdapter(store),
-    expenseCategories: createMockExpenseCategoriesAdapter(store, role),
-    dailyCash: createMockDailyCashAdapter(store),
-    // Both enforce the boundary the RLS policies will: only the Super Admin
-    // reads across outlets, and asking for somebody else's returns nothing.
-    alerts: createMockAlertsAdapter(store, role, session),
-    insights: createMockInsightsAdapter(store, attendance, role, session),
-    // The role, the person and their assignments all reach it, because the
-    // ledger's two tables now answer differently for the same caller: the day
-    // record refuses outlet staff everywhere, the expense record admits them at
-    // their own outlet, and "your own rows" needs to know who is asking
-    // (the-ledger-opens-to-the-outlet).
-    manualLedger: createMockManualLedgerAdapter(
+    expenses: createMockExpensesAdapter(
       store,
       role,
       persona.profile.id,
       assignedOutlets(persona.assignments),
     ),
+    expenseCategories: createMockExpenseCategoriesAdapter(store, role),
+    // Both enforce the boundary the RLS policies will: only the Super Admin
+    // reads across outlets, and asking for somebody else's returns nothing.
+    alerts: createMockAlertsAdapter(store, role, session),
+    insights: createMockInsightsAdapter(store, attendance, role, session),
     // Both outlets, because the sync is a cross-outlet surface and the owner is
     // its only reader: the same reach the policies grant.
     aggregatorSync: createMockAggregatorSyncAdapter(store, role, [

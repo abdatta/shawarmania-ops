@@ -910,7 +910,9 @@ export function CashDrawerSurface() {
                 {/* Directly beneath it: these chips qualify that figure. */}
                 <ChipRow data-testid="balance-chips">
                   <Chip icon={Clock} data-testid="last-counted">
-                    {formatDayTime(state.lastObservation.countedAt)}
+                    {state.lastObservation.isLegacyImprecise
+                      ? 'Hour was never recorded'
+                      : formatDayTime(state.lastObservation.countedAt)}
                   </Chip>
                   {!state.lastObservation.onSite && (
                     <Chip tone="neutral" icon={MapPinOff}>
@@ -1986,6 +1988,7 @@ function ObservationRow({
     movement.reason ? [movement.reason] : [],
   )
   const wasRecordedLater =
+    !observation.isLegacyImprecise &&
     formatDayTime(observation.recordedAt) !== formatDayTime(observation.countedAt)
 
   return (
@@ -1996,9 +1999,11 @@ function ObservationRow({
         aria-expanded={open}
         // Named explicitly: read from its own content this announces the three
         // amounts and the verdict as one summary, just as the visible row does.
-        aria-label={`Counted ${formatPaise(observation.countedTotalPaise)} at ${formatDayTime(
-          observation.countedAt,
-        )}, ${verdict.spoken}. Collected ${formatPaise(collected)}. Left ${formatPaise(
+        aria-label={`Counted ${formatPaise(observation.countedTotalPaise)} ${
+          observation.isLegacyImprecise
+            ? 'on a day whose hour was never recorded'
+            : `at ${formatDayTime(observation.countedAt)}`
+        }, ${verdict.spoken}. Collected ${formatPaise(collected)}. Left ${formatPaise(
           left,
         )}. ${open ? 'Hide' : 'Show'} the detail.`}
         className="grid min-h-20 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 p-3 text-left focus-visible:focus-ring"
@@ -2029,7 +2034,9 @@ function ObservationRow({
             )}
           </span>
           <span className="mt-1 block text-sm font-normal text-content-muted">
-            {formatDayTime(observation.countedAt)}
+            {observation.isLegacyImprecise
+              ? 'Hour was never recorded'
+              : formatDayTime(observation.countedAt)}
             {observation.recordedByName && ` · by ${observation.recordedByName}`}
           </span>
         </span>
@@ -2185,7 +2192,12 @@ function ObservationRow({
           )}
 
           <div className="border-t border-border pt-3">
-            {locked ? (
+            {observation.isLegacyImprecise ? (
+              <p className="text-xs text-content-muted">
+                Carried historical count — its recorded figures remain visible and are not restated
+                with an invented hour.
+              </p>
+            ) : locked ? (
               <Button
                 size="phone"
                 variant="secondary"

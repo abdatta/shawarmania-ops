@@ -77,35 +77,12 @@ describe('ComparisonSurface', () => {
     expect(sales[0]).not.toBe(sales[1])
   })
 
-  it('states the period and the basis on screen, and restates them when they change', async () => {
-    const user = userEvent.setup()
+  it('states the one cash basis and offers no second-basis control', async () => {
     renderSurface(<ComparisonSurface />)
 
     await screen.findByText('Shawarmania Kalyani')
     expect(screen.getByTestId('comparison-basis-note')).toHaveTextContent(PROFIT_BASIS_LABELS.cash)
-
-    await user.selectOptions(screen.getByTestId('comparison-basis'), 'consumption')
-    await waitFor(() =>
-      expect(screen.getByTestId('comparison-basis-note')).toHaveTextContent(
-        PROFIT_BASIS_LABELS.consumption,
-      ),
-    )
-    expect(screen.getByTestId('comparison-basis-note')).toHaveTextContent(
-      /food bought and food used are never both subtracted/i,
-    )
-  })
-
-  it('changes the figures when the basis changes', async () => {
-    const user = userEvent.setup()
-    renderSurface(<ComparisonSurface />)
-
-    await screen.findByText('Shawarmania Kalyani')
-    const before = screen.getByTestId('comparison-total-profit').textContent
-
-    await user.selectOptions(screen.getByTestId('comparison-basis'), 'consumption')
-    await waitFor(() =>
-      expect(screen.getByTestId('comparison-total-profit').textContent).not.toBe(before),
-    )
+    expect(screen.queryByTestId('comparison-basis')).not.toBeInTheDocument()
   })
 })
 
@@ -114,26 +91,11 @@ describe('PnlSurface', () => {
     renderSurface(<PnlSurface />)
 
     const figure = await screen.findByTestId('pnl-profit')
-    expect(figure).toHaveAttribute('data-basis', 'consumption')
-    expect(screen.getByTestId('pnl-profit-basis')).toHaveTextContent(
-      PROFIT_BASIS_LABELS.consumption,
-    )
-    expect(screen.getByTestId('pnl-profit-amount')).toBeInTheDocument()
-  })
-
-  it('restates the basis and recomputes the figure when it is switched', async () => {
-    const user = userEvent.setup()
-    renderSurface(<PnlSurface />)
-
-    await screen.findByTestId('pnl-profit')
-    const before = screen.getByTestId('pnl-profit-amount').textContent
-
-    await user.selectOptions(screen.getByTestId('pnl-basis'), 'cash')
-    await waitFor(() =>
-      expect(screen.getByTestId('pnl-profit')).toHaveAttribute('data-basis', 'cash'),
-    )
+    expect(figure).toHaveAttribute('data-basis', 'cash')
     expect(screen.getByTestId('pnl-profit-basis')).toHaveTextContent(PROFIT_BASIS_LABELS.cash)
-    expect(screen.getByTestId('pnl-profit-amount').textContent).not.toBe(before)
+    expect(screen.getByTestId('pnl-profit-amount')).toBeInTheDocument()
+    expect(screen.queryByTestId('pnl-basis')).not.toBeInTheDocument()
+    expect(screen.getByTestId('pnl-profit-ceiling')).toHaveTextContent(/commission/i)
   })
 
   it('shows the working, and it adds up to the figure', async () => {
@@ -148,12 +110,11 @@ describe('PnlSurface', () => {
     expect(amounts.reduce((running, value) => running + value, 0)).toBe(total)
   })
 
-  it('says which expense the consumption basis is not subtracting', async () => {
+  it('states that drawer capital spends stay outside operating profit', async () => {
     renderSurface(<PnlSurface />)
 
     const expenses = await screen.findByTestId('pnl-expenses')
-    expect(expenses).toHaveTextContent(/not subtracted on this basis/i)
-    expect(expenses).toHaveTextContent(/charge this period for the same food twice/i)
+    expect(expenses).toHaveTextContent(/equipment and other capital purchases/i)
   })
 
   it('gives a manager their own outlet without an outlet picker', async () => {

@@ -156,19 +156,10 @@ const defs = {
     state: 'demo',
   },
   /**
-   * The manual ledger (#36) — **`live`, and designed to be deleted**.
-   *
-   * A stopgap with a known end date: nothing else recorded August 2026 while the
-   * counter was trading, and the month cannot be reconstructed from memory
-   * afterwards. `live` rather than `demo` because a
-   * surface whose entire purpose is to capture real figures is useless gated to a
-   * demo, and the notebook it replaces would otherwise be a spreadsheet.
-   *
-   * It carries navigation because the owner opens it nightly; that is the whole
-   * job. `cash-is-counted-not-closed` (#11) takes that navigation entry and
-   * leaves this route live as the fallback, then `retire-the-manual-ledger` (#12)
-   * carries its rows into the live records and removes it. Never before, because
-   * the rows are the value here and the surface is not.
+   * There was a manual ledger here (#36) — `live`, and designed to be deleted.
+   * `retire-the-manual-ledger` (#12) carried its rows into the drawer and the
+   * one expense record and deleted it, entry and all. Not `hidden`: hiding is
+   * for a surface whose route still resolves, and this one's does not.
    */
   /**
    * The drawer as a continuous balance (#11).
@@ -194,12 +185,14 @@ const defs = {
   /**
    * The Ledger, derived on read with **no editable figure on it** (#11).
    *
-   * This entry takes the navigation label the manual ledger had. That form keeps
-   * working at its own route and simply leaves the primary navigation, which is
-   * decision 17: **the fallback is a tab, not a runtime toggle.** Both are `live`
-   * here, honestly — both genuinely work — and the owner can open one business
-   * date in each and compare them, which is the two-day acceptance test they
-   * asked for with no engineering behind it.
+   * This entry took the navigation label the manual ledger had, while that form
+   * kept working at its own route as the fallback — decision 17: **the fallback
+   * is a tab, not a runtime toggle**, so the owner could open one business date
+   * in each and compare them, which was the two-day acceptance test they asked
+   * for with no engineering behind it. `retire-the-manual-ledger` (#12) ended
+   * the overlap once that comparison had been made on real trading days, and
+   * this is now the only reading of a trading day — every date the business has
+   * traded, including the ones that predate the tablets.
    */
   'owner-ledger-statement': {
     role: 'super_admin',
@@ -238,36 +231,6 @@ const defs = {
     role: 'super_admin',
     path: 'ledger/expenses',
     nav: { label: 'Expenses', icon: Wallet, order: 5 },
-    state: 'live',
-  },
-  /**
-   * The manual ledger (#36) — **still `live`, and it keeps a navigation entry.**
-   *
-   * **Two ledger entries during the overlap is the design, not an oversight.**
-   * Decision 17: *"two entries let the owner open both and compare a day, which
-   * is the two-day acceptance test they asked for with no engineering behind
-   * it"*, and the Risks section names the crowding on an already-busy shell as
-   * the accepted cost, temporary until #12.
-   *
-   * `cash-is-counted-not-closed` task 9.2 said to remove this entry, which
-   * contradicts both of those and was followed once. **The fallback is a tab**,
-   * and a tab you have to type a URL to reach is not one: a fallback that is only
-   * reachable by somebody who remembers the route is a fallback nobody uses at
-   * 22:00 when the new surface is behaving oddly.
-   *
-   * What "leaves the primary navigation" means, and all it means: this is no
-   * longer the entry labelled `Ledger`. It sits after the derived statement,
-   * under its own name, so the reader lands on the new reading and the old one is
-   * still one tap away.
-   */
-  'owner-manual-ledger': {
-    role: 'super_admin',
-    // Moved from `ledger` to a child of it. The route changes and that is the
-    // point: this is one reading inside the ledger group now, not the group
-    // itself. An old `…/ledger` bookmark lands on the derived Ledger, which is
-    // the more useful landing place, and this is one tap from there.
-    path: 'ledger/notebook',
-    nav: { label: 'Notebook', icon: NotepadText, order: 7 },
     state: 'live',
   },
   'owner-expense-categories': {
@@ -360,47 +323,6 @@ const defs = {
     state: 'demo',
   },
   /**
-   * The `demo`-gated Expenses screen from the change #11 absorbed — **left exactly
-   * as it was.**
-   *
-   * It demonstrates a design that will never exist: the expense half of
-   * `expenses-and-inventory-live` was already delivered by #36 and #38 against
-   * `manual_ledger_expenses`. So `hidden` is arguably where it belongs, and #11
-   * briefly put it there.
-   *
-   * **Reverted deliberately.** #11's brief was to make expenses *reachable*, not
-   * to change what the walkthrough shows, and this screen is what the walkthrough
-   * has always shown — `src/demo/demo-reset.test.tsx` uses it as the cheapest
-   * write to make and to see. It also carries the label `Expenses` at a lower
-   * order than the live list, and `visibleSurfaces` dedupes by label taking the
-   * lower order: so demo mode keeps this screen and real mode, where it does not
-   * render, gets the live one. One Expenses tab in each, pointing at the surface
-   * that works there. #12 removes this with the rest.
-   */
-  'admin-expenses': {
-    role: 'franchise_admin',
-    path: 'expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 5 },
-    state: 'demo',
-  },
-  /**
-   * The old Daily cash surface — **`hidden`, which is how a day close stops
-   * being a thing that happens.**
-   *
-   * Not deleted, deliberately. `cash-is-counted-not-closed` (#11) drops and
-   * renames nothing (decision 16), so `daily_cash_records`,
-   * `close_business_day()` and this screen are all left in place, dead, and
-   * `retire-the-manual-ledger` (#12) removes them. `hidden` rather than `demo`
-   * because the four-role walkthrough must no longer offer a day close: the model
-   * it demonstrates does not exist any more, and a demo of it would be teaching
-   * the wrong thing to the one audience that has not seen the new surface.
-   */
-  'admin-daily-cash': {
-    role: 'franchise_admin',
-    path: 'cash',
-    state: 'hidden',
-  },
-  /**
    * The surface the badge mechanism was built for: an arrival nobody approves
    * is invisible until somebody queries their pay, and the person who could
    * settle it is rarely already looking at this screen. Since #9 the three homes
@@ -424,7 +346,7 @@ const defs = {
     state: 'live',
   },
   /**
-   * The manager's counterpart to `owner-manual-ledger`, scoped by assignment.
+   * The manager's counterpart to the owner's Ledger, scoped by assignment.
    *
    * The capability was owner-only because production had two Super Admins and
    * no live Franchise Admin at either outlet, so the owners *were* the managers
@@ -461,29 +383,12 @@ const defs = {
   /**
    * The manager's counterpart to `owner-expenses`, and the same component again.
    *
-   * **The order matters and is not arbitrary.** `admin-expenses` below is the
-   * `demo`-gated expense screen from the change #11 absorbed, and it carries the
-   * same `Expenses` label at order 5. `visibleSurfaces` deduplicates by label
-   * and takes the lower order first, so in **demo** mode the walkthrough keeps
-   * the screen it has always shown, and in **real** mode that entry is not
-   * renderable and this one is the door. Both modes end up with exactly one
-   * Expenses tab, pointing at the surface that actually works there.
+   * The same canonical surface is used in demo and live mode.
    */
   'admin-ledger-expenses': {
     role: 'franchise_admin',
     path: 'ledger/expenses',
     nav: { label: 'Expenses', icon: Wallet, order: 8 },
-    state: 'live',
-  },
-  /**
-   * The manager's fallback, and it keeps its entry for the reason
-   * `owner-manual-ledger` gives: the fallback is a tab, and two entries are what
-   * let one business date be opened in each and compared.
-   */
-  'admin-manual-ledger': {
-    role: 'franchise_admin',
-    path: 'ledger/notebook',
-    nav: { label: 'Notebook', icon: NotepadText, order: 10 },
     state: 'live',
   },
   'admin-pnl': {
@@ -601,8 +506,8 @@ const defs = {
     state: 'live',
   },
   /**
-   * What this outlet spent — **the manual ledger's expense list, and nothing
-   * else on it** (the-ledger-opens-to-the-outlet).
+   * What this outlet spent — **the expense list, and nothing else on it**
+   * (the-ledger-opens-to-the-outlet).
    *
    * `live` for the same reason the ledger itself is: it captures real figures
    * against a real trading month, and the alternative is the figure reaching the
@@ -612,13 +517,13 @@ const defs = {
    * mid-shift, not something they go looking for. Behind Menu, because the menu
    * is consulted many times an evening and this a few times a week.
    *
-   * The day record is deliberately NOT reachable from here or anywhere in this
-   * shell: outlet staff hold no policy branch on it at all. The path sits under
-   * `ledger/` for two reasons — `admin-expenses` already owns `expenses` and is
-   * a different thing, and everything this stopgap owns should disappear in one
-   * sweep when `retire-the-manual-ledger` (#12) retires it. Note that #12
-   * promotes this stopgap's expense table to be the real one, by rename, because
-   * it is the richer of the two.
+   * The day record was deliberately NOT reachable from here or anywhere in this
+   * shell, and now it is reachable from nowhere at all: `retire-the-manual-ledger`
+   * (#12) retired it. The path still sits under `ledger/` because
+   * `admin-expenses` already owns `expenses` and is a different thing. #12
+   * promoted this record's table to be the real `expenses`, by rename, because
+   * it was the richer of the two — so this entry outlived the stopgap it was
+   * written as part of.
    */
   /**
    * Navigation retired with `counter-home`'s, and for the same reason: the

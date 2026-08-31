@@ -52,10 +52,15 @@ test.describe('the operations surfaces', () => {
     await page.goBack()
 
     // ── Expenses, cash rows distinguishable from the rest ───────────────────
+    //
+    // One Expenses screen now, in both modes. There used to be two entries under
+    // this label — a `demo`-gated screen the walkthrough showed and the live list
+    // real mode showed — and `retire-the-manual-ledger` (#12) removed the demo
+    // one, so the walkthrough walks the surface that actually records a spend.
     await page.getByRole('link', { name: 'Expenses' }).click()
-    await expect(page.getByTestId('expense-list')).toBeVisible()
+    await expect(page.getByTestId('ledger-expense-list')).toBeVisible()
     // The badge is one visible word; the rest of the sentence is announced only.
-    await expect(page.locator('[data-testid^="cash-"]').first()).toContainText('Cash')
+    await expect(page.locator('[data-testid^="ledger-cash-"]').first()).toContainText('Cash')
     await expect(page.getByTestId('expense-cash-total')).toBeVisible()
 
     // ── The drawer, and a deliberate mismatch on the way out ────────────────
@@ -132,29 +137,21 @@ test.describe('the operations surfaces', () => {
     await page.getByTestId('statement-step-back').click()
     await expect(page.getByTestId('left-is-not-opening')).toContainText('left')
 
-    // **Both readings are reachable as entries** — decision 17's "two entries let
-    // the owner open both and compare a day". The derived one is the entry called
-    // `Ledger`; the notebook keeps its own, nested under it.
+    // **One reading, one entry.** Decision 17 gave the owner two entries so they
+    // could open the derived statement and the notebook on the same day and
+    // compare them; `retire-the-manual-ledger` (#12) ended that overlap once the
+    // comparison had been made, and the `Notebook` entry went with the surface.
     const nav = page.getByRole('navigation', { name: 'Primary' }).first()
     await expect(nav.getByRole('link', { name: 'Ledger', exact: true })).toHaveAttribute(
       'href',
       /\/ledger$/,
     )
-    await expect(nav.getByRole('link', { name: 'Notebook' })).toHaveAttribute(
-      'href',
-      /\/ledger\/notebook$/,
-    )
-    // And recording an expense is reachable, which #11 briefly took away.
-    //
-    // In DEMO mode this is the `demo`-gated screen the walkthrough has always
-    // shown; in real mode that entry does not render and the live expense list
-    // takes the tab. Either way there is exactly one, and it points at a surface
-    // that works in the mode it is offered in. `src/gates/registry.test.ts`
-    // asserts both halves.
+    await expect(nav.getByRole('link', { name: 'Notebook' })).toHaveCount(0)
+    // And recording an expense is reachable, which #11 briefly took away. There
+    // is exactly one Expenses entry, in both modes, pointing at the one surface
+    // that records a spend — #12 removed the `demo`-gated second screen that
+    // used to carry this label. `src/gates/registry.test.ts` asserts that.
     await expect(nav.getByRole('link', { name: 'Expenses' })).toHaveCount(1)
-
-    await page.goto('demo/admin/ledger/notebook')
-    await expect(page.getByTestId('ledger-view')).toBeVisible()
   })
 
   test('records a movement and a stock item’s figure follows its ledger', async ({ page }) => {
@@ -221,7 +218,7 @@ for (const viewport of VIEWPORTS) {
       for (const [path, anchor] of [
         ['menu', 'menu-list'],
         ['inventory', 'stock-list'],
-        ['expenses', 'expense-list'],
+        ['ledger/expenses', 'ledger-expense-list'],
         // `cash` was here until #11 made the day-close screen `hidden`. Both of
         // its replacements are walked instead, in both themes on both viewports.
         ['drawer', 'drawer-balance'],

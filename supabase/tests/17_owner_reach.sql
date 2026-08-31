@@ -148,41 +148,26 @@ select is(
   'the manual entry names the owner as the person who typed it in');
 
 -- ---------------------------------------------------------------------------
--- 2. Where the reach stops: the drawer.
---
--- The boundary the UI reads through `managed` and states on the screen rather
--- than discovering by refusal. `cash-is-counted-not-closed` (#11) moves it: the
--- owner will reach every outlet's drawer, with geofence evidence on each record
--- instead of a refusal. Until #11 lands, this is what the database says, and
--- these assertions are expected to be rewritten by it rather than deleted.
+-- 2. The owner reaches expenses everywhere, while raw drawer writes stay shut.
 
 select throws_ok(
   format($q$
-    insert into public.cash_withdrawals
-      (outlet_id, business_date, amount_paise, withdrawn_by, recorded_by)
-    values (%L, current_date, 5000, 'Synthetic Owner', %L) $q$,
+    insert into public.drawer_cash_out
+      (outlet_id, kind, amount_paise, occurred_at, recorded_by,
+       recorded_on_site, away_reason)
+    values (%L, 'collection', 5000, now(), %L, false, 'Synthetic remote attempt') $q$,
     :'KPA', :'OWNER'),
   '42501',
   null,
-  'the owner cannot record a withdrawal at an outlet they are not assigned to');
+  'raw drawer writes stay closed; the command owns their evidence');
 
-select throws_ok(
-  format($q$ select public.close_business_day(%L, current_date, 100000) $q$, :'KPA'),
-  null,
-  null,
-  'the owner cannot close a day at an outlet they are not assigned to');
-
--- A cash expense from the same session is refused too, so nothing on the remote
--- path can move that outlet's drawer by another door.
-select throws_ok(
+select lives_ok(
   format($q$
     insert into public.expenses
-      (outlet_id, business_date, category, amount_paise, payment_method, recorded_by)
-    values (%L, current_date, 'other', 5000, 'cash', %L) $q$,
+      (outlet_id, business_date, category, amount_paise, is_cash, recorded_by)
+    values (%L, current_date, 'Other', 5000, true, %L) $q$,
     :'KPA', :'OWNER'),
-  '42501',
-  null,
-  'the owner cannot record a cash expense at an outlet they are not assigned to');
+  'the owner records a cash expense at an outlet without an assignment');
 
 select * from finish();
 rollback;

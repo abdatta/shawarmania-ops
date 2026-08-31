@@ -1,7 +1,5 @@
 import {
   billTotals,
-  differencePaise,
-  expectedClosingPaise,
   instantOnBusinessDay,
   lineTotalPaise,
   movementDelta,
@@ -29,18 +27,13 @@ import {
   type BillSeed,
 } from './fixtures/billing'
 import { alertSeeds } from './fixtures/alerts'
-import { manualLedgerDaySeeds, manualLedgerExpenseSeeds } from './fixtures/manual-ledger'
+import { manualLedgerDaySeeds, manualLedgerExpenseSeeds } from './fixtures/retirement-history'
 import { menuCategoryFixtures, menuItemFixtures } from './fixtures/menu'
 import {
-  CLOSED_DAYS_AGO,
   expenseSeeds,
   inventoryItemFixtures,
-  MISCOUNT_DAYS_AGO,
-  MISCOUNT_OUTLET_ID,
-  MISCOUNT_PAISE,
   movementSeeds,
   OPENING_CASH_PAISE,
-  withdrawalSeeds,
 } from './fixtures/operations'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
 import { personaFixtures } from './fixtures/personas'
@@ -130,16 +123,12 @@ export interface DemoStore {
   inventoryItems: Tables<'inventory_items'>[]
   /** Owned by the inventory adapter. Append-only: the ledger is the truth. */
   inventoryMovements: Tables<'inventory_movements'>[]
-  /** Owned by the expenses adapter. Read by the daily-cash and insights adapters. */
+  /** Owned by the expenses adapter and read by the drawer, ledger and insights. */
   expenses: Tables<'expenses'>[]
   /** Business-wide suggestions, shared by both expense records. */
   expenseCategories: Tables<'expense_categories'>[]
   /** Owner curation history. */
   expenseCategoryOperations: Tables<'expense_category_operations'>[]
-  /** Owned by the daily-cash adapter. */
-  withdrawals: Tables<'cash_withdrawals'>[]
-  /** Owned by the daily-cash adapter. A record here is a signed-off snapshot. */
-  dailyCashRecords: Tables<'daily_cash_records'>[]
   /** Owned by the alerts adapter. */
   alerts: Tables<'alerts'>[]
   /** Owned by the alerts adapter. Append-only: a response is never edited. */
@@ -148,15 +137,6 @@ export interface DemoStore {
    *  (#11) replaces this with a per-outlet opening anchor, after which every
    *  opening is the previous observation's carry-forward. */
   readonly openingCashPaise: number
-  /**
-   * Owned by the manual-ledger adapter (#36), and **temporary**: both slices go
-   * when that capability is retired. Kept here rather than inside the mock
-   * adapter so a role switch does not restart the demo month, which is the same
-   * reason every other slice lives here.
-   */
-  manualLedgerDays: Tables<'manual_ledger_days'>[]
-  /** Owned by the manual-ledger adapter (#36). Temporary. */
-  manualLedgerExpenses: Tables<'manual_ledger_expenses'>[]
   /**
    * A channel's measured figures, on their own table so a figure can exist for a
    * date with no day row. Written only by the sync in production; the mock seeds
@@ -207,12 +187,6 @@ const LEDGER_RECORDERS: Record<'owner' | 'manager' | 'biller' | 'employee', stri
   manager: MANAGER_ID,
   biller: personaFixtures.biller.profile.id,
   employee: personaFixtures.employee.profile.id,
-}
-
-/** When each outlet counted its drawer yesterday. */
-const CLOSE_TIME: Record<string, string> = {
-  [OUTLET_KALYANI_ID]: '22:30',
-  [OUTLET_KANCHRAPARA_ID]: '22:00',
 }
 
 function outletById(id: string) {
@@ -701,7 +675,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     business_date: businessDate(seed.daysAgo),
     category: seed.category,
     amount_paise: seed.amountPaise,
-    payment_method: seed.paymentMethod,
+    is_cash: seed.paymentMethod === 'cash',
     description: seed.description ?? null,
     created_at: notLaterThanNow(instantAt(businessDate(seed.daysAgo), seed.time)),
     // The fixture knows the time, so it states it. That is what puts a demo
@@ -714,100 +688,16 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     // disagreeing about the same money is how a demo stops being believed.
     occurred_at: notLaterThanNow(instantAt(businessDate(seed.daysAgo), seed.time)),
     recorded_by: MANAGER_ID,
+    recorded_away: false,
+    shared_cost: false,
+    source_system: null,
+    source_ref: null,
+    updated_at: notLaterThanNow(instantAt(businessDate(seed.daysAgo), seed.time)),
+    updated_by: null,
+    voided_at: null,
+    voided_by: null,
+    voided_reason: null,
   }))
-
-  const withdrawals: Tables<'cash_withdrawals'>[] = withdrawalSeeds.map((seed, index) => ({
-    id: `dc000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
-    outlet_id: seed.outletId ?? DEMO_OUTLET_ID,
-    business_date: businessDate(seed.daysAgo),
-    amount_paise: seed.amountPaise,
-    reason: seed.reason ?? null,
-    withdrawn_by: seed.withdrawnBy,
-    recorded_by: MANAGER_ID,
-    created_at: instantAt(businessDate(seed.daysAgo), seed.time),
-  }))
-
-  /**
-   * The days that were counted and signed off — at Kalyani, one of them with a
-   * mismatch.
-   *
-   * The figures are computed here from the same rows the surface derives from,
-   * with **the late bill deliberately excluded**: it had not arrived when the
-   * drawer was counted, and a closed day is a snapshot that nothing recomputes.
-   * That exclusion is the entire reconciliation exception, and hard-coding these
-   * numbers instead would produce a demo the real system could not reproduce.
-   */
-  const dailyCashRecords: Tables<'daily_cash_records'>[] = tradingOutletIds.flatMap(
-    (outletId, outletIndex) =>
-      CLOSED_DAYS_AGO.map((daysAgo, dayIndex) => {
-        const date = businessDate(daysAgo)
-        const closeTime = CLOSE_TIME[outletId]
-        if (!closeTime) throw new Error(`No demo close time for outlet ${outletId}.`)
-        const closedAt = instantAt(date, closeTime)
-
-        const closedCashSales = bills
-          .filter(
-            (bill) =>
-              bill.outlet_id === outletId &&
-              bill.business_date === date &&
-              bill.status === 'settled' &&
-              // Rung before the close; anything that landed afterwards is the
-              // exception, not part of the signed-off figure.
-              bill.synced_at <= closedAt,
-          )
-          .reduce(
-            (running, bill) =>
-              running +
-              (
-                billPayments.get(bill.id) ?? [
-                  { method: bill.payment_method, amountPaise: bill.total_paise },
-                ]
-              )
-                .filter((payment) => payment.method === 'cash')
-                .reduce((sum, payment) => sum + payment.amountPaise, 0),
-            0,
-          )
-        const closedCashExpenses = expenses
-          .filter(
-            (expense) =>
-              expense.outlet_id === outletId &&
-              expense.business_date === date &&
-              expense.payment_method === 'cash',
-          )
-          .reduce((running, expense) => running + expense.amount_paise, 0)
-        const closedWithdrawn = withdrawals
-          .filter(
-            (withdrawal) => withdrawal.outlet_id === outletId && withdrawal.business_date === date,
-          )
-          .reduce((running, withdrawal) => running + withdrawal.amount_paise, 0)
-
-        const closedExpected = expectedClosingPaise({
-          openingCashPaise: OPENING_CASH_PAISE,
-          cashSalesPaise: closedCashSales,
-          cashExpensesPaise: closedCashExpenses,
-          cashWithdrawnPaise: closedWithdrawn,
-        })
-        const miscount =
-          outletId === MISCOUNT_OUTLET_ID && daysAgo === MISCOUNT_DAYS_AGO ? MISCOUNT_PAISE : 0
-        const closedActual = closedExpected + miscount
-
-        return {
-          id: `dd000000-0000-4000-a00${outletIndex}-${String(dayIndex + 1).padStart(12, '0')}`,
-          outlet_id: outletId,
-          business_date: date,
-          opening_cash_paise: OPENING_CASH_PAISE,
-          cash_sales_paise: closedCashSales,
-          cash_expenses_paise: closedCashExpenses,
-          cash_withdrawn_paise: closedWithdrawn,
-          expected_closing_paise: closedExpected,
-          actual_closing_paise: closedActual,
-          difference_paise: differencePaise(closedActual, closedExpected),
-          notes: miscount === 0 ? null : 'Counted twice. Short by the same amount both times.',
-          closed_at: closedAt,
-          closed_by: MANAGER_ID,
-        }
-      }),
-  )
 
   // ── Alerts ───────────────────────────────────────────────────────────────
 
@@ -833,12 +723,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     })),
   )
 
-  // ── The manual ledger's demo month (#36, temporary) ───────────────────────
-  //
-  // One outlet only. The month view reads one outlet at a time (design D9), and a
-  // second fabricated outlet would double the fixture for nothing observable.
-
-  const manualLedgerExpenses: Tables<'manual_ledger_expenses'>[] = manualLedgerExpenseSeeds.map(
+  // The richer expense history that used to be the notebook's expense half is
+  // now part of the one promoted expense record.
+  const promotedExpenseSeeds: Tables<'expenses'>[] = manualLedgerExpenseSeeds.map(
     (seed, index) => ({
       id: `de000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
       outlet_id: DEMO_OUTLET_ID,
@@ -872,6 +759,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       shared_cost: seed.sharedCost ?? false,
     }),
   )
+  expenses.push(...promotedExpenseSeeds)
 
   /**
    * The settlement columns for one seeded day, chosen by how old it is.
@@ -970,30 +858,6 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     return base
   }
 
-  const manualLedgerDays: Tables<'manual_ledger_days'>[] = manualLedgerDaySeeds.map(
-    (seed, index) => ({
-      id: `dd000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
-      outlet_id: DEMO_OUTLET_ID,
-      business_date: businessDate(seed.daysAgo),
-      opening_cash_paise: seed.openingCashPaise,
-      cash_revenue_paise: seed.cashRevenuePaise,
-      upi_revenue_paise: seed.upiRevenuePaise,
-      cash_added_paise: seed.cashAddedPaise ?? 0,
-      cash_added_reason: seed.cashAddedReason ?? null,
-      cash_removed_paise: seed.cashRemovedPaise ?? 0,
-      cash_removed_reason: seed.cashRemovedReason ?? null,
-      counted_cash_paise: seed.countedCashPaise,
-      note: seed.note ?? null,
-      recorded_by: OWNER_ID,
-      created_at: instantAt(businessDate(seed.daysAgo), '23:00'),
-      updated_at: instantAt(businessDate(seed.daysAgo), '23:00'),
-      // One day carries a manager's correction, so the "recorded by X, last
-      // corrected by Y" reading appears in the walkthrough rather than only in a
-      // test (design D6).
-      updated_by: seed.correctedByManager ? MANAGER_ID : null,
-    }),
-  )
-
   // The measured figures, on their own table, keyed to the same dates. A day and
   // its figure are two rows now, so the "day nobody recorded" the sync writes has
   // somewhere to live and the drawer count is never invented to hold a figure.
@@ -1010,7 +874,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     .filter((row): row is Tables<'aggregator_channel_days'> => row !== null)
 
   const categoryNames = new Map<string, string>()
-  for (const row of [...expenses, ...manualLedgerExpenses]) {
+  for (const row of expenses) {
     const name = normalizeCategory(row.category)
     if (!categoryNames.has(name.toLocaleLowerCase())) {
       categoryNames.set(name.toLocaleLowerCase(), name)
@@ -1025,39 +889,6 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       created_at: new Date().toISOString(),
     }))
   const expenseCategoryOperations: Tables<'expense_category_operations'>[] = []
-
-  // The same drift guard the inventory fixtures get, for the same reason: a demo
-  // whose drawer does not add up is a demo the real system cannot reproduce, and
-  // the arithmetic here is exactly what the surface will show.
-  for (const [index, seed] of manualLedgerDaySeeds.entries()) {
-    const row = manualLedgerDays[index]
-    if (!row) throw new Error(`Demo fixture drift: manual ledger day ${index} was not built.`)
-    // A withdrawn expense stops counting, here as everywhere else. Leaving it in
-    // would make the demo's drawer disagree with the surface reading it, which
-    // is precisely the drift this guard exists to catch.
-    const cashExpenses = manualLedgerExpenses
-      .filter(
-        (expense) =>
-          expense.business_date === row.business_date &&
-          expense.is_cash &&
-          expense.voided_at === null,
-      )
-      .reduce((running, expense) => running + expense.amount_paise, 0)
-    const expected = expectedClosingPaise({
-      openingCashPaise: row.opening_cash_paise,
-      cashSalesPaise: row.cash_revenue_paise + row.cash_added_paise,
-      cashExpensesPaise: cashExpenses,
-      cashWithdrawnPaise: row.cash_removed_paise,
-    })
-    const difference = differencePaise(row.counted_cash_paise, expected)
-    const declared = seed.expectedDifferencePaise ?? 0
-    if (difference !== declared) {
-      throw new Error(
-        `Demo fixture drift: the manual ledger day ${row.business_date} is out by ${difference} ` +
-          `paise but declares ${declared}. Fix the fixture, not this check.`,
-      )
-    }
-  }
 
   // -- The drawer (#11) -----------------------------------------------------
   //
@@ -1096,7 +927,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
   /** Cash expenses in `(from, to]`, by occurrence instant. */
   const drawerCashExpenses = (from: string | null, to: string): number =>
     expenses
-      .filter((row) => row.outlet_id === DEMO_OUTLET_ID && row.payment_method === 'cash')
+      .filter((row) => row.outlet_id === DEMO_OUTLET_ID && row.is_cash)
       .filter((row) => {
         const at = row.occurred_at ?? row.created_at
         return (from === null || at > from) && at <= to
@@ -1114,10 +945,11 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
    * nought matches, a negative is short, a positive is over.
    */
   const countPlan = [
-    // The anchor. No opening, no expected total, no difference — the drawer
-    // begins at what was counted, and every earlier date reads `not tracked yet`.
-    { daysAgo: 4, time: '22:30', anchor: true, countedPaise: 145000, collectPaise: 0 },
-    // An ordinary night that balanced, with a collection leaving a small float.
+    // The first ordinary count follows the carried notebook anchor below.
+    { daysAgo: 4, time: '22:30', outBy: 0, collectPaise: 0 },
+    // An ordinary night that balanced, with a collection taken off the top. The
+    // drawer stays deliberately stocked: the last night of this month pays
+    // ₹14,500 of wages in cash, and a drawer emptied here could not.
     { daysAgo: 3, time: '22:20', outBy: 0, collectPaise: 50000 },
     // Counted at 22:15 and typed at 23:04 — approximate, recorded away, and
     // genuinely short. Nothing explains it, which is the case the surface must
@@ -1136,15 +968,18 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     { daysAgo: 1, time: '22:00', outBy: -20000, collectPaise: -100000 },
   ] as const
 
-  // A spend, well before the first count so it sits in no settled interval's
-  // arithmetic and demonstrates only what it is for: drawer cash that bought
-  // something and stays out of the month's operating figure.
+  // A spend, on the carried legacy day and so before the first interval the
+  // drawer settles. It sits in no settled interval's arithmetic and demonstrates
+  // only what it is for: drawer cash that bought something and stays out of the
+  // month's operating figure. It moved back a day when the carried notebook
+  // count became the anchor; left where it was it would have landed inside the
+  // first settled interval and needed a ₹65,000 drawer to survive.
   drawerCashOut.push({
     id: drawerOut(90),
     outlet_id: DEMO_OUTLET_ID,
     kind: 'spend',
     amount_paise: 4000000,
-    occurred_at: instantAt(businessDate(5), '18:40'),
+    occurred_at: instantAt(businessDate(7), '18:40'),
     recorded_by: MANAGER_ID,
     observation_id: null,
     reason: 'Chest freezer for the prep counter',
@@ -1154,51 +989,87 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     recorded_distance_m: null,
     recorded_on_site: true,
     away_reason: null,
-    created_at: instantAt(businessDate(5), '18:40'),
+    created_at: instantAt(businessDate(7), '18:40'),
+  })
+
+  // A date before the demo's first bill, carried through the same observation
+  // reader as yesterday. The source recorded the business date and the count,
+  // never an hour; the boundary instant is storage machinery and must not be
+  // presented as a remembered time of day.
+  const legacyBusinessDate = businessDate(7)
+  const legacyBoundary = new Date(
+    new Date(`${businessDate(6)}T04:00:00+05:30`).getTime() - 1,
+  ).toISOString()
+  drawerObservations.push({
+    id: drawerObs(0),
+    outlet_id: DEMO_OUTLET_ID,
+    counted_at: legacyBoundary,
+    recorded_at: legacyBoundary,
+    is_anchor: true,
+    is_legacy_imprecise: true,
+    opening_paise: null,
+    expected_paise: null,
+    difference_paise: null,
+    // The notebook's last count, in the same family as the rest of its demo
+    // month (₹15,000 to ₹25,700). It has to carry the drawer through the days
+    // that follow, whose cash expenses now sit in this same record: the last of
+    // them pays ₹14,500 of wages in cash, which a ₹1,450 drawer could not.
+    counted_total_paise: 2_570_000,
+    is_approximate: false,
+    tolerance_minutes: 0,
+    recorded_by: MANAGER_ID,
+    corrected_by: null,
+    recorded_lat: null,
+    recorded_lng: null,
+    recorded_accuracy_m: null,
+    recorded_distance_m: null,
+    recorded_on_site: false,
+    away_reason: 'Carried from the manual ledger; recording location and hour were not captured.',
+    note: `Carried count for ${legacyBusinessDate}`,
+    created_at: legacyBoundary,
+    updated_at: legacyBoundary,
   })
 
   countPlan.forEach((plan, index) => {
     const countedAt = instantAt(businessDate(plan.daysAgo), plan.time)
     const recordedTime = 'recordedTime' in plan ? plan.recordedTime : undefined
     const recordedAt = instantAt(businessDate(plan.daysAgo), recordedTime ?? plan.time)
-    const previous = drawerObservations.at(-1) ?? null
-    const anchor = 'anchor' in plan && plan.anchor === true
+    // The carried notebook count is seeded above and is the anchor, so every
+    // plan below opens on the one before it. There is no anchor branch here any
+    // more: the books open at the notebook's last count, not at the first count
+    // this app took.
+    const previous = drawerObservations.at(-1)
+    if (!previous) {
+      throw new Error('Demo fixture drift: the carried notebook count must be seeded first.')
+    }
 
-    let openingPaise: number | null = null
-    let expectedPaise: number | null = null
-    let countedPaise: number
-
-    if (anchor || previous === null) {
-      countedPaise = 'countedPaise' in plan ? plan.countedPaise : 0
-    } else {
-      // `next opening = counted − that observation's OWN cash out` (design D3),
-      // read from the link rather than a time window.
-      openingPaise =
-        previous.counted_total_paise -
-        drawerCashOut
-          .filter((movement) => movement.observation_id === previous.id)
-          .reduce((sum, movement) => sum + movement.amount_paise, 0)
-
-      // The previous observation's own cash out is already inside `openingPaise`,
-      // and this observation's own collection does not exist yet — which is the
-      // same rule the drift check below has to state explicitly: an observation's
-      // own cash out is in neither its expected total nor its counted total.
-      const cashOutInInterval = drawerCashOut
-        .filter((movement) => movement.observation_id !== previous.id)
-        .filter(
-          (movement) =>
-            movement.occurred_at > previous.counted_at && movement.occurred_at <= countedAt,
-        )
+    // `next opening = counted − that observation's OWN cash out` (design D3),
+    // read from the link rather than a time window.
+    const openingPaise =
+      previous.counted_total_paise -
+      drawerCashOut
+        .filter((movement) => movement.observation_id === previous.id)
         .reduce((sum, movement) => sum + movement.amount_paise, 0)
 
-      expectedPaise =
-        openingPaise +
-        drawerCashIn(previous.counted_at, countedAt) -
-        drawerCashExpenses(previous.counted_at, countedAt) -
-        cashOutInInterval
+    // The previous observation's own cash out is already inside `openingPaise`,
+    // and this observation's own collection does not exist yet — which is the
+    // same rule the drift check below has to state explicitly: an observation's
+    // own cash out is in neither its expected total nor its counted total.
+    const cashOutInInterval = drawerCashOut
+      .filter((movement) => movement.observation_id !== previous.id)
+      .filter(
+        (movement) =>
+          movement.occurred_at > previous.counted_at && movement.occurred_at <= countedAt,
+      )
+      .reduce((sum, movement) => sum + movement.amount_paise, 0)
 
-      countedPaise = expectedPaise + ('outBy' in plan ? plan.outBy : 0)
-    }
+    const expectedPaise =
+      openingPaise +
+      drawerCashIn(previous.counted_at, countedAt) -
+      drawerCashExpenses(previous.counted_at, countedAt) -
+      cashOutInInterval
+
+    const countedPaise = expectedPaise + plan.outBy
 
     const id = drawerObs(index + 1)
     drawerObservations.push({
@@ -1206,11 +1077,11 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       outlet_id: DEMO_OUTLET_ID,
       counted_at: countedAt,
       recorded_at: recordedAt,
-      is_anchor: anchor,
-      // All three null together on the anchor, which has no interval at all.
+      is_anchor: false,
+      is_legacy_imprecise: false,
       opening_paise: openingPaise,
       expected_paise: expectedPaise,
-      difference_paise: expectedPaise === null ? null : countedPaise - expectedPaise,
+      difference_paise: countedPaise - expectedPaise,
       counted_total_paise: countedPaise,
       is_approximate: recordedTime !== undefined,
       tolerance_minutes: 15,
@@ -1222,7 +1093,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       recorded_distance_m: null,
       recorded_on_site: 'onSite' in plan ? plan.onSite : true,
       away_reason: 'awayReason' in plan ? plan.awayReason : null,
-      note: anchor ? 'the books open here' : null,
+      note: null,
       created_at: recordedAt,
       updated_at: recordedAt,
     })
@@ -1376,13 +1247,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     expenses,
     expenseCategories,
     expenseCategoryOperations,
-    withdrawals,
-    dailyCashRecords,
     alerts,
     alertResponses,
     openingCashPaise: OPENING_CASH_PAISE,
-    manualLedgerDays,
-    manualLedgerExpenses,
     aggregatorChannelDays,
     drawerObservations,
     drawerCashOut,

@@ -8,7 +8,7 @@ import { createDemoData, createMockAdapters } from '@/data-access/mock'
 import { ExpenseCategoriesSurface } from './expense-categories-surface'
 
 describe('ExpenseCategoriesSurface', () => {
-  it('states both history counts before a merge and explains the result in its log', async () => {
+  it('states the canonical expense count before a merge and explains the result in its log', async () => {
     const user = userEvent.setup()
     const data = createDemoData()
     const adapters = createMockAdapters('super_admin', data)
@@ -20,23 +20,20 @@ describe('ExpenseCategoriesSurface', () => {
 
     const list = await screen.findByTestId('expense-category-list')
     const source = within(list)
-      .getByRole('heading', { name: 'maintenance' })
+      .getByRole('heading', { name: 'Maintenance' })
       .closest('[data-testid^="category-"]')
     expect(source).not.toBeNull()
     await user.click(within(source as HTMLElement).getByRole('button', { name: /merge/i }))
 
-    expect(screen.getByText(/1 manual-ledger rows/i)).toBeInTheDocument()
-    expect(screen.getByText(/1 expense rows/i)).toBeInTheDocument()
+    expect(screen.getByText('2 expense rows')).toBeInTheDocument()
     expect(screen.getByText(/there is no undo/i)).toBeInTheDocument()
     await user.selectOptions(screen.getByRole('combobox'), 'Chicken')
     await user.click(screen.getByRole('button', { name: 'Merge permanently' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      '1 ledger rows and 1 expense rows moved',
-    )
+    expect(await screen.findByRole('status')).toHaveTextContent('2 expense rows moved')
     await waitFor(() => {
       expect(screen.getByTestId('category-operation-log')).toHaveTextContent(
-        'Merged maintenance → Chicken',
+        'Merged Maintenance → Chicken',
       )
     })
   })

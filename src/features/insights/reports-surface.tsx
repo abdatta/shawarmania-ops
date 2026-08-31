@@ -10,16 +10,10 @@ import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
 import type { PeriodDay, PeriodSummary } from '@/data-access/adapters'
-import {
-  describeDifference,
-  formatBusinessDate,
-  formatPaise,
-  resolveBusinessDate,
-  type ProfitBasis,
-} from '@/domain'
+import { describeDifference, formatBusinessDate, formatPaise, resolveBusinessDate } from '@/domain'
 
 import { describePeriod, isPeriodKey, periodFor, PERIOD_KEYS, PERIOD_LABELS } from './period'
-import { BasisPicker, ProfitFigure } from './profit-figure'
+import { ProfitFigure } from './profit-figure'
 
 /**
  * Period reports: what a period came to, day by day and in total.
@@ -42,7 +36,6 @@ export function ReportsSurface() {
   // busier than it was — so a month-long default opens on a wall of zeros
   // before the first figure a reader is looking for.
   const [periodKey, setPeriodKey] = useState<'today' | 'week' | 'month'>('week')
-  const [basis, setBasis] = useState<ProfitBasis>('cash')
   const [summary, setSummary] = useState<PeriodSummary | null>()
 
   useEffect(() => {
@@ -64,13 +57,13 @@ export function ReportsSurface() {
   useEffect(() => {
     if (!outletId || !today) return
     let active = true
-    void insights.periodSummary(outletId, periodFor(periodKey, today), basis).then((result) => {
+    void insights.periodSummary(outletId, periodFor(periodKey, today), 'cash').then((result) => {
       if (active) setSummary(result)
     })
     return () => {
       active = false
     }
-  }, [insights, outletId, today, periodKey, basis])
+  }, [insights, outletId, today, periodKey])
 
   const period = today ? periodFor(periodKey, today) : null
 
@@ -149,8 +142,6 @@ export function ReportsSurface() {
             ))}
           </Select>
         </div>
-
-        <BasisPicker id="report-basis" value={basis} onChange={setBasis} />
       </div>
 
       {summary === undefined ? (

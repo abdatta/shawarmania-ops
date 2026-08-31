@@ -78,7 +78,7 @@ export function ExpenseCategoriesSurface() {
           : await adapter.merge(action.category.name, normalized)
       setResult(
         `${action.kind === 'rename' ? 'Renamed' : 'Merged'} ${action.category.name}. ` +
-          `${moved.ledgerRowsMoved} ledger rows and ${moved.expenseRowsMoved} expense rows moved.`,
+          `${moved.expenseRowsMoved} expense rows moved.`,
       )
       setAction(null)
       setTarget('')
@@ -109,8 +109,6 @@ export function ExpenseCategoriesSurface() {
   }
 
   const source = action?.category
-  const movedLedger =
-    action?.kind === 'rename' && !rewriteHistory ? 0 : (source?.ledgerUsageCount ?? 0)
   const movedExpenses =
     action?.kind === 'rename' && !rewriteHistory ? 0 : (source?.expenseUsageCount ?? 0)
 
@@ -151,7 +149,7 @@ export function ExpenseCategoriesSurface() {
                 <div>
                   <h2 className="font-semibold text-content">{category.name}</h2>
                   <p className="text-xs text-content-muted">
-                    Ledger {category.ledgerUsageCount} · Expenses {category.expenseUsageCount}
+                    Expenses {category.expenseUsageCount}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-1">
@@ -207,8 +205,8 @@ export function ExpenseCategoriesSurface() {
                   {operation.nameAfter}
                 </p>
                 <p className="text-xs text-content-muted">
-                  {operation.ledgerRowsMoved} ledger rows · {operation.expenseRowsMoved} expense
-                  rows · {formatDateTime(operation.performedAt)} · account {operation.performedBy}
+                  {operation.expenseRowsMoved} expense rows ·{' '}
+                  {formatDateTime(operation.performedAt)} · account {operation.performedBy}
                 </p>
               </li>
             ))}
@@ -276,8 +274,8 @@ export function ExpenseCategoriesSurface() {
             )}
 
             <p className="rounded-xl border border-warning bg-surface-raised p-3 text-sm text-content">
-              This will move <strong>{movedLedger} manual-ledger rows</strong> and{' '}
-              <strong>{movedExpenses} expense rows</strong>. There is no undo in the app.
+              This will move <strong>{movedExpenses} expense rows</strong>. There is no undo in the
+              app.
             </p>
           </form>
         )}
@@ -288,7 +286,7 @@ export function ExpenseCategoriesSurface() {
         title="Retire this category?"
         consequence={
           retiring
-            ? `${retiring.name} disappears from suggestions. Its ${retiring.ledgerUsageCount} ledger rows and ${retiring.expenseUsageCount} expense rows keep that text. There is no undo in the app.`
+            ? `${retiring.name} disappears from suggestions. Its ${retiring.expenseUsageCount} expense rows keep that text. There is no undo in the app.`
             : ''
         }
         confirmLabel="Retire it"
