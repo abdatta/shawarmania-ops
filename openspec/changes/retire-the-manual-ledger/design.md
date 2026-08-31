@@ -255,6 +255,46 @@ is less work now and it means the derived reading has a permanent branch on
 "before the notebook ended", which is the sort of seam that is still there in
 three years.
 
+### 1a. A carried count shows the date it has, and does not narrate the hour it lacks
+
+The first cut marked a carried observation with the sentence *"Hour was never
+recorded"*, in the place an ordinary observation renders its date and time. On
+the ledger that read acceptably, because both ledger readings are scoped to one
+business date and name it above the row. On the **drawer** it did not: that
+surface opens on a balance rather than a date, its Recent counts list pages
+backwards into August, and the sentence displaced the one fact that would have
+placed the row. Several carried counts in a row were mutually
+indistinguishable.
+
+The owner put it plainly on the day of the release: the date *was* recorded, so
+show it — an absent time says the rest by itself, next to rows that all carry
+one. That is the better instinct, and it is the same instinct the rest of this
+change runs on: state what was recorded, and let what is missing be visibly
+missing rather than announced.
+
+So the three drawer-side readings show the date, and the two ledger readings show
+neither the date nor the sentence: the date is already above them, and `Count`
+with no time after it is the whole of what there is to say.
+
+**The trap is that the date may not be read off the instant.** A carried
+observation's `counted_at` is the outlet's cutover boundary, which by construction
+falls on the *following* calendar day — a count recorded for 05 August is stored
+at 06 August 03:59:59.999999. Formatting that instant yields a date that is
+wrong by a day on every carried row and looks entirely plausible, which is the
+worst combination available. The date must come from the business date resolved
+through the outlet's own cutover, and where the cutover has not yet loaded the
+date is omitted rather than assumed from the 04:00 default that both outlets
+happen to use — an assumption that is correct today is exactly what would keep a
+wrong one from being noticed later.
+
+The year follows the rule the counts list and the breakdown groups already
+follow: dropped for the current year, kept for an older one. A carried row then
+reads like the rows beside it rather than being the only one carrying a year.
+
+**Rejected: showing the boundary instant's time behind a "carried" chip.** It
+would be a real figure from the database and a fiction about the shop, which is
+the trade this change refuses everywhere else.
+
 ### 2. Expenses are promoted by rename, and the empty table is dropped
 
 `manual_ledger_expenses` becomes `expenses`, taking its policies, indexes,

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   describeCutover,
   formatBusinessDate,
+  formatBusinessDateShort,
   formatDate,
   formatDateTime,
   formatDayTime,
@@ -155,6 +156,28 @@ describe('formatBusinessDate', () => {
   it('rejects anything that is not a YYYY-MM-DD date', () => {
     expect(() => formatBusinessDate('2026-07-25T00:00:00Z')).toThrow(TypeError)
     expect(() => formatBusinessDate('25-07-2026')).toThrow(TypeError)
+  })
+})
+
+describe('formatBusinessDateShort', () => {
+  const now = '2026-08-31T12:00:00+05:30'
+
+  it('drops this year, because a year repeated down a list is what the reader knows', () => {
+    expect(formatBusinessDateShort('2026-08-05', now)).toBe('05 Aug')
+  })
+
+  it('keeps another year, because that is the part they do not know', () => {
+    expect(formatBusinessDateShort('2025-12-31', now)).toBe('31 Dec 2025')
+  })
+
+  it('applies no offset, so a business date cannot slip a day', () => {
+    // The whole reason this is parsed and formatted in UTC: running a calendar
+    // label through +05:30 moves it.
+    expect(formatBusinessDateShort('2026-01-01', now)).toBe('01 Jan')
+  })
+
+  it('rejects anything that is not a YYYY-MM-DD date', () => {
+    expect(() => formatBusinessDateShort('2026-07-25T00:00:00Z', now)).toThrow(TypeError)
   })
 })
 

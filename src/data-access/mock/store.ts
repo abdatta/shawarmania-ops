@@ -965,7 +965,18 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     },
     // A thin drawer topped up: the collection is NEGATIVE, which is cash added.
     // Same table, same kind, no reason — the sign is the whole difference.
-    { daysAgo: 1, time: '22:00', outBy: -20000, collectPaise: -100000 },
+    //
+    // It also carries the one note in the month, which is what a note is for:
+    // recording what the counter found without claiming it explains the ₹200.
+    // The carried row used to hold the only note here, and its note in
+    // production is the notebook's own — usually nothing.
+    {
+      daysAgo: 1,
+      time: '22:00',
+      outBy: -20000,
+      collectPaise: -100000,
+      note: 'Counted twice. Two ₹100 notes short both times.',
+    },
   ] as const
 
   // A spend, on the carried legacy day and so before the first interval the
@@ -994,9 +1005,11 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
 
   // A date before the demo's first bill, carried through the same observation
   // reader as yesterday. The source recorded the business date and the count,
-  // never an hour; the boundary instant is storage machinery and must not be
-  // presented as a remembered time of day.
-  const legacyBusinessDate = businessDate(7)
+  // never an hour, so the surface shows that date and no time of day. **The
+  // boundary instant below is storage machinery and is a day later than the
+  // business date by construction** — the reader resolves the date through the
+  // outlet's cutover rather than formatting this, which is what keeps a carried
+  // row off by nothing instead of off by one.
   const legacyBoundary = new Date(
     new Date(`${businessDate(6)}T04:00:00+05:30`).getTime() - 1,
   ).toISOString()
@@ -1025,7 +1038,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     recorded_distance_m: null,
     recorded_on_site: false,
     away_reason: 'Carried from the manual ledger; recording location and hour were not captured.',
-    note: `Carried count for ${legacyBusinessDate}`,
+    // Null, like almost every carried row in production: the notebook's own note
+    // is what lands here, and the date is on the row itself now.
+    note: null,
     created_at: legacyBoundary,
     updated_at: legacyBoundary,
   })
@@ -1093,7 +1108,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       recorded_distance_m: null,
       recorded_on_site: 'onSite' in plan ? plan.onSite : true,
       away_reason: 'awayReason' in plan ? plan.awayReason : null,
-      note: null,
+      note: 'note' in plan ? plan.note : null,
       created_at: recordedAt,
       updated_at: recordedAt,
     })

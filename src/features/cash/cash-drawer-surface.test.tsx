@@ -1099,6 +1099,81 @@ describe('the count history is a paged list of disclosures', () => {
 })
 
 /**
+ * A carried count has a date. It is the hour that was never recorded, and the
+ * Drawer is not scoped to a date the way the Ledger is — so if the row does not
+ * say which day it belongs to, nothing on screen does.
+ */
+describe('a carried count says which day it belongs to', () => {
+  /**
+   * **The trap this guards.** A carried observation's instant is the outlet's
+   * cutover boundary, which falls on the FOLLOWING calendar day: the notebook's
+   * 05 Aug count is stored at 06 Aug 03:59:59.999999 IST. Formatting that
+   * instant prints a date that is a day late and looks entirely plausible, so
+   * the assertion below is specifically that the row says 05 Aug and not 06.
+   */
+  // Business date 2026-08-05, stored at that date's own cutover boundary — the
+  // last microsecond before 04:00 on the 6th, which is how the carry-over places
+  // every one of them. The assertions below use literal dates rather than the
+  // formatter the component uses, so a broken formatter cannot satisfy them.
+  const cutoverBoundary = new Date('2026-08-06T04:00:00+05:30').getTime() - 1
+
+  function carriedObservation(): DrawerObservationRecord {
+    return {
+      id: 'carried-1',
+      outletId: 'outlet',
+      countedAt: new Date(cutoverBoundary).toISOString(),
+      recordedAt: new Date(cutoverBoundary).toISOString(),
+      isAnchor: false,
+      openingPaise: 145_000,
+      expectedPaise: 895_000,
+      differencePaise: 0,
+      countedTotalPaise: 895_000,
+      isLegacyImprecise: true,
+      isApproximate: false,
+      toleranceMinutes: 0,
+      recordedBy: 'someone',
+      recordedByName: 'Demo Manager',
+      correctedBy: null,
+      correctedByName: null,
+      onSite: false,
+      awayReason: 'Carried from the manual ledger.',
+      note: null,
+      ownCashOut: [],
+      adjustments: [],
+      openingBreakPaise: null,
+    }
+  }
+
+  it('names its business date, not the day its boundary instant falls on', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const carried = carriedObservation()
+    const patched: DataAdapters = {
+      ...adapters,
+      cashDrawer: {
+        ...adapters.cashDrawer,
+        getState: async (outletId: string) => ({
+          ...(await adapters.cashDrawer.getState(outletId)),
+          recentObservations: [carried],
+        }),
+      },
+    }
+
+    renderDrawer(patched)
+    await waitFor(() => expect(screen.getByTestId('recent-counts')).toBeInTheDocument())
+
+    const row = screen.getByTestId(`observation-${carried.id}`)
+    expect(row).toHaveTextContent('05 Aug')
+    // The day the stored instant actually falls on. Showing it would be wrong
+    // on every carried row the notebook produced.
+    expect(row).not.toHaveTextContent('06 Aug')
+    // No hour, and no sentence explaining the missing hour either: the date
+    // standing alone is what says it [owner, 2026-08-31].
+    expect(row.textContent).not.toMatch(/\d{1,2}:\d{2}\s?(am|pm)/i)
+    expect(row.textContent).not.toMatch(/never recorded/i)
+  })
+})
+
+/**
  * The count as a tally, which is the shape the arithmetic already has: what
  * should be there, what was there, what is being taken, what stays.
  */

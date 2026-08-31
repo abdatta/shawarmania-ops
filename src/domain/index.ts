@@ -66,6 +66,7 @@ export {
   describeCutover,
   earliestOffered,
   formatBusinessDate,
+  formatBusinessDateShort,
   formatDate,
   formatDateTime,
   formatDayTime,

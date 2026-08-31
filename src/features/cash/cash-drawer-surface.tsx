@@ -61,6 +61,7 @@ import {
   LastLeftBreakdown,
   ReceiptsBreakdown,
   breakdownContext,
+  legacyCountDay,
   verdictOf,
 } from './drawer-breakdowns'
 import {
@@ -911,7 +912,10 @@ export function CashDrawerSurface() {
                 <ChipRow data-testid="balance-chips">
                   <Chip icon={Clock} data-testid="last-counted">
                     {state.lastObservation.isLegacyImprecise
-                      ? 'Hour was never recorded'
+                      ? legacyCountDay(
+                          state.lastObservation.countedAt,
+                          outlet?.business_day_cutover ?? null,
+                        )
                       : formatDayTime(state.lastObservation.countedAt)}
                   </Chip>
                   {!state.lastObservation.onSite && (
@@ -1049,6 +1053,7 @@ export function CashDrawerSurface() {
                 <ObservationRow
                   key={observation.id}
                   observation={observation}
+                  cutover={outlet?.business_day_cutover ?? null}
                   locked={observation.id !== newestId}
                   onAdjust={() => {
                     setAdjustingId(observation.id)
@@ -1345,6 +1350,7 @@ export function CashDrawerSurface() {
         open={sheet === 'left'}
         onClose={() => closeIfCurrent('left')}
         observation={state?.lastObservation ?? null}
+        cutover={outlet?.business_day_cutover ?? null}
         // The same edit, from a second doorway. It swaps sheets rather than
         // stacking them: two bottom sheets over each other on a phone is one
         // sheet nobody can read, and the edit sheet is where the fields live.
@@ -1971,11 +1977,14 @@ function Figure({
  */
 function ObservationRow({
   observation,
+  cutover,
   locked,
   onAdjust,
   onEdit,
 }: {
   observation: DrawerObservationRecord
+  /** The outlet's cutover, so a carried count can say which day it belongs to. */
+  cutover: string | null
   locked: boolean
   onAdjust: () => void
   onEdit: () => void
@@ -1990,6 +1999,9 @@ function ObservationRow({
   const wasRecordedLater =
     !observation.isLegacyImprecise &&
     formatDayTime(observation.recordedAt) !== formatDayTime(observation.countedAt)
+  const legacyDay = observation.isLegacyImprecise
+    ? legacyCountDay(observation.countedAt, cutover)
+    : null
 
   return (
     <Card className="overflow-hidden p-0" data-testid={`observation-${observation.id}`}>
@@ -2001,7 +2013,7 @@ function ObservationRow({
         // amounts and the verdict as one summary, just as the visible row does.
         aria-label={`Counted ${formatPaise(observation.countedTotalPaise)} ${
           observation.isLegacyImprecise
-            ? 'on a day whose hour was never recorded'
+            ? (legacyDay ?? 'on a carried day')
             : `at ${formatDayTime(observation.countedAt)}`
         }, ${verdict.spoken}. Collected ${formatPaise(collected)}. Left ${formatPaise(
           left,
@@ -2035,7 +2047,7 @@ function ObservationRow({
           </span>
           <span className="mt-1 block text-sm font-normal text-content-muted">
             {observation.isLegacyImprecise
-              ? 'Hour was never recorded'
+              ? legacyCountDay(observation.countedAt, cutover)
               : formatDayTime(observation.countedAt)}
             {observation.recordedByName && ` · by ${observation.recordedByName}`}
           </span>
@@ -2194,8 +2206,8 @@ function ObservationRow({
           <div className="border-t border-border pt-3">
             {observation.isLegacyImprecise ? (
               <p className="text-xs text-content-muted">
-                Carried historical count — its recorded figures remain visible and are not restated
-                with an invented hour.
+                Carried historical count. Its figures are the ones that were written down, and there
+                is no later moment to correct them against.
               </p>
             ) : locked ? (
               <Button

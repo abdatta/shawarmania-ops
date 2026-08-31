@@ -504,9 +504,11 @@ What used to be typed here is now recorded where it happens:
   the sync is blocked — see the section below.
 
 Reading a day, including every date that predates the tablets, is the derived
-**Ledger**. Carried dates render through the same reader as yesterday and say
-that their hour was never recorded, rather than showing a plausible time nobody
-wrote down.
+**Ledger**. Carried dates render through the same reader as yesterday, showing
+the date they were recorded for and **no time of day** — the notebook never
+captured an hour, and a plausible one nobody wrote down would be worse than
+none. On the Drawer, where the list is not scoped to a date, a carried count
+shows its date in the place an ordinary one shows its date and time.
 
 ## Bringing a period in by hand when the sync is blocked *(#43)*
 

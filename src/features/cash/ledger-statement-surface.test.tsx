@@ -135,7 +135,7 @@ describe('the day renders in full even when nothing was recorded', () => {
 })
 
 describe('a carried notebook count stays in the derived reader', () => {
-  it('renders a pre-bill date through the same surface without inventing an hour', async () => {
+  it('renders a pre-bill date through the same surface, with no hour and no apology', async () => {
     const user = userEvent.setup()
     renderLedger()
 
@@ -144,9 +144,21 @@ describe('a carried notebook count stays in the derived reader', () => {
       await user.click(screen.getByTestId('statement-step-back'))
     }
 
-    await waitFor(() =>
-      expect(screen.getByTestId('ledger-drawer')).toHaveTextContent(/hour was never recorded/i),
-    )
+    // The count reads `Count` and stops there. **Scoped to the observation
+    // block on purpose**: this date also carries a drawer spend, which has a
+    // real recorded instant and rightly shows it, so asserting across the whole
+    // section would pass on the wrong row's time.
+    const observation = await waitFor(() => {
+      const row = document.querySelector('[data-testid^="timeline-observation-"]')
+      if (!row) throw new Error('no observation rendered')
+      return row as HTMLElement
+    })
+    expect(observation).toHaveTextContent(/Count/)
+    // No hour, in any of the forms this app writes one.
+    expect(observation.textContent).not.toMatch(/\d{1,2}:\d{2}\s?(am|pm)/i)
+    // And it does not say so in words either: the missing time is the fact.
+    expect(observation.textContent).not.toMatch(/never recorded/i)
+
     expect(screen.getByTestId('ledger-revenue')).toBeInTheDocument()
     expect(screen.getByTestId('ledger-expenses')).toBeInTheDocument()
     expect(screen.getByTestId('revenue-total')).toBeInTheDocument()

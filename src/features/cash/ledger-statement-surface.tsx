@@ -558,8 +558,13 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
               <span className="block text-xs">
                 {entry.state === 'counted' ? (
                   <>
+                    {/*
+                      The date leads this row already, and a carried count has
+                      no time to put after `counted` — which is the whole of
+                      what it has to say. It used to say so in words as well.
+                    */}
                     {entry.isLegacyImprecise
-                      ? 'counted · hour was never recorded'
+                      ? 'counted'
                       : `counted ${entry.countedAt ? formatTime(entry.countedAt) : ''}`}
                     {entry.differencePaise === 0
                       ? ' · matched'
@@ -683,9 +688,11 @@ function TimelineRow({ event, index }: { event: LedgerDrawerEvent; index: number
     >
       <p className="flex items-baseline justify-between gap-2">
         <span className="text-xs font-bold uppercase tracking-wide text-content">
-          {observation.isLegacyImprecise
-            ? 'Count · hour was never recorded'
-            : `Count · ${formatTime(observation.countedAt)}`}
+          {/*
+            This page is one business date and says so above, so a carried
+            count needs nothing here but the word: no time is the fact.
+          */}
+          {observation.isLegacyImprecise ? 'Count' : `Count · ${formatTime(observation.countedAt)}`}
           {!observation.isLegacyImprecise && observation.isApproximate && ' (approximate)'}
         </span>
         {!observation.onSite && <span className="text-xs text-content-muted">recorded away</span>}

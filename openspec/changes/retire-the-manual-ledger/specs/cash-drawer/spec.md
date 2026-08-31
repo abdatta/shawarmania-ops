@@ -1,6 +1,6 @@
 ## ADDED Requirements
 
-### Requirement: A carried legacy observation states that its hour was never recorded
+### Requirement: A carried legacy observation shows its date and no hour
 
 An observation created by carrying a historical hand-recorded day SHALL be a
 first-class observation, participating in the same interval arithmetic and the
@@ -9,8 +9,24 @@ ordinary approximate marker.
 
 A legacy observation SHALL NOT be presented with a time of day and SHALL NOT
 carry a rupee tolerance, because the instant it is placed at is a boundary chosen
-by the carry-over rather than a moment anybody observed. Its marker SHALL state
-plainly, on the record, that the hour was never captured.
+by the carry-over rather than a moment anybody observed.
+
+**It SHALL show the date it does have, and SHALL NOT say in words that the hour
+is missing** [owner, 2026-08-31]. Every other count on the same list carries a
+date and a time; a carried one carrying only a date says what it has and what it
+does not by the shape of the row. A sentence saying so as well spent the line
+that the date should have been on, which is how the drawer's own history came to
+show carried counts that could not be placed in time at all.
+
+**The date SHALL be the business date resolved through the outlet's own
+cutover**, never the calendar date of the stored instant. Those differ by a day
+for every carried row by construction: the instant is the cutover boundary, so a
+count recorded for 05 August is stored at 06 August 03:59:59.999999. Formatting
+the instant produces a date that is wrong and plausible at once.
+
+Where the cutover is not yet known to the reader, the date SHALL be omitted
+rather than assumed from the default every outlet currently uses — an assumption
+that is right today is what makes a wrong one impossible to notice later.
 
 **The counted figure SHALL be converted, not copied.** The historical record
 counted the drawer after the collection was taken, while an observation counts it
@@ -20,15 +36,31 @@ the following opening SHALL be the source row's counted cash. A migration SHALL
 assert this identity per row.
 
 The source row's cash removed SHALL become cash out of kind `spend` where it
-carried a reason and `collection` where it did not, at the same instant. A source
-row's cash added SHALL become a **negative** cash out of kind `collection` at the
-same instant, retaining its original reason, so the arithmetic closes and the
-explanation survives without a bespoke shape.
+carried a reason and `collection` where it did not, at the same instant, recorded
+as **that observation's own** movement so it reduces the following opening.
+
+A source row's cash added SHALL become a **negative** cash out of kind
+`collection` at the same instant, retaining its original reason, and SHALL NOT be
+recorded as the observation's own movement. The historical record placed cash
+added among the day's inflows and compared the count against them, so the count
+already holds it; treating it as the observation's own would raise the following
+opening by that amount and charge the same amount to the difference a second
+time.
 
 #### Scenario: A carried day renders without a time
 
-- **WHEN** a legacy observation is shown on the ledger or the drawer surface
-- **THEN** it shows its date and its figures, states that the hour was never recorded, and shows no time of day and no tolerance
+- **WHEN** a legacy observation is shown on a surface that is not already scoped to one date
+- **THEN** it shows its business date and its figures, with no time of day, no tolerance, and no sentence about the missing hour
+
+#### Scenario: A carried day on a surface that already names the date
+
+- **WHEN** a legacy observation is shown on a reading of one business date
+- **THEN** it shows its figures with no time of day, and does not repeat the date the page already carries
+
+#### Scenario: The date is the business date, not the boundary instant's
+
+- **WHEN** a legacy observation for business date 2026-08-05 is stored at the 04:00 cutover boundary, 2026-08-06 03:59:59.999999
+- **THEN** the surface shows 05 Aug and never 06 Aug
 
 #### Scenario: A legacy observation anchors the balance like any other
 

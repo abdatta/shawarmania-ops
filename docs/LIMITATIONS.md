@@ -92,8 +92,8 @@ in words instead of offering a field that would do nothing.
 **Closed 2026-08-31 by `retire-the-manual-ledger` (#12).** The notebook (#36)
 existed because billing, expenses and the drawer were not live while August 2026
 was trading, and it said from the day it landed that it was designed to be
-dropped. #12 dropped it: every counted day became a drawer observation marked as
-an hour that was never recorded, every cash movement became drawer cash out, the
+dropped. #12 dropped it: every counted day became a drawer observation carrying its date
+and no time of day, every cash movement became drawer cash out, the
 expense half was promoted by rename to the one `expenses` table, and the forty
 source day rows survive read-only under an archive name no role may reach. The
 per-outlet `billing_live_from` handover went with it — with one record of a

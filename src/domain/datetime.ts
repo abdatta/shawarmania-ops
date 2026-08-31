@@ -160,6 +160,31 @@ export function formatBusinessDate(businessDate: string): string {
   }).format(new Date(`${businessDate}T00:00:00Z`))
 }
 
+/**
+ * The same business date, with **this year's year dropped**.
+ *
+ * The rule `formatDayTime` already follows for an instant, applied to a
+ * business date: a year repeated down every row of a list is the part the
+ * reader already knows, while an older year is the part they need. Kept here
+ * rather than beside its callers because the count history and the drawer's
+ * breakdown groups both label days and must not drift apart on how.
+ */
+export function formatBusinessDateShort(
+  businessDate: string,
+  now: Date | string = new Date(),
+): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) {
+    throw new TypeError(`Expected a YYYY-MM-DD business date, got "${businessDate}"`)
+  }
+  const sameYear = businessDate.slice(0, 4) === yearFormat.format(toDate(now))
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'UTC',
+    day: '2-digit',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  }).format(new Date(`${businessDate}T00:00:00Z`))
+}
+
 const partsFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: OUTLET_TIME_ZONE,
   year: 'numeric',

@@ -8,6 +8,7 @@ import { Money } from '@/components/ui/money'
 import { useAdapters } from '@/data-access'
 import type { DrawerObservationRecord, DrawerState, ExpenseRecord } from '@/data-access/adapters'
 import {
+  formatBusinessDateShort,
   formatDayTime,
   formatPaise,
   formatTime,
@@ -44,14 +45,7 @@ import { ExpenseList } from '@/features/expenses/expense-list'
  */
 function businessDateLabel(businessDate: string, today: string): string {
   if (businessDate === today) return 'Today'
-  const at = new Date(`${businessDate}T00:00:00Z`)
-  const sameYear = businessDate.slice(0, 4) === today.slice(0, 4)
-  return new Intl.DateTimeFormat('en-IN', {
-    timeZone: 'UTC',
-    day: '2-digit',
-    month: 'short',
-    ...(sameYear ? {} : { year: 'numeric' }),
-  }).format(at)
+  return formatBusinessDateShort(businessDate, `${today}T00:00:00Z`)
 }
 
 /**
@@ -144,6 +138,25 @@ export function breakdownContext(
   }
 }
 
+/**
+ * The day a carried count belongs to, with **no time and no apology for it**.
+ *
+ * A carried observation's instant is the outlet's cutover boundary rather than
+ * a moment anybody witnessed, so it may never be formatted directly: the
+ * notebook's 05 Aug count is stored at 06 Aug 03:59:59.999999, and printing that
+ * instant's date is a day late on every carried row. The business date resolved
+ * through the outlet's own cutover is the recorded fact, and it is the only one
+ * of the two that is true.
+ *
+ * The label used to read "Hour was never recorded", which said out loud what the
+ * missing time already says — and said it instead of the date, which was known
+ * all along [owner, 2026-08-31].
+ */
+export function legacyCountDay(countedAt: string, cutover: string | null): string | null {
+  if (!cutover) return null
+  return formatBusinessDateShort(resolveBusinessDate(countedAt, cutover))
+}
+
 /** One line of the reading: a label left, a figure right, down one column. */
 function Row({
   label,
@@ -198,11 +211,19 @@ export function LastLeftBreakdown({
   open,
   onClose,
   observation,
+  cutover,
   onFix,
 }: {
   open: boolean
   onClose: () => void
   observation: DrawerObservationRecord | null
+  /**
+   * The outlet's `business_day_cutover`, needed to say which day a carried
+   * count belongs to. Null while the outlet has not arrived, and the date is
+   * then omitted rather than guessed at 04:00 — every outlet uses that today,
+   * which is exactly what would make a wrong one hard to notice.
+   */
+  cutover: string | null
   /** Swap this reading for the edit sheet on the same count. */
   onFix: () => void
 }) {
@@ -222,7 +243,7 @@ export function LastLeftBreakdown({
         <div className="space-y-3" data-testid="last-left-breakdown">
           <p className="text-sm text-content-muted">
             {observation.isLegacyImprecise
-              ? 'Hour was never recorded'
+              ? legacyCountDay(observation.countedAt, cutover)
               : formatDayTime(observation.countedAt)}
             {observation.recordedByName && ` · by ${observation.recordedByName}`}
           </p>
