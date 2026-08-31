@@ -67,7 +67,6 @@ This alphabetical list maps every capability required now. For planned work, rea
 - [`identity-and-access`](identity-and-access/spec.md) — admin-provisioned four-role accounts, username or private-email sign-in, assignment-derived authority, and immediate deactivation.
 - [`inventory-ledger`](inventory-ledger/spec.md) — an append-only stock-movements truth with a database-maintained current-quantity cache and correction-by-new-entry history.
 - [`ledger-statement`](ledger-statement/spec.md) — a trading day derived on every read and never stored: revenue by channel, the drawer ordered by instant, no editable field, and an unconfirmed balance that says so.
-- [`manual-ledger`](manual-ledger/spec.md) — temporary hand-entered outlet takings, expenses, and drawer reconciliation, with correct per-day aggregator commissions and a guarded retirement path.
 - [`menu-management`](menu-management/spec.md) — outlet menus with role-bounded availability and deliberate non-retroactive price changes.
 - [`order-lifecycle`](order-lifecycle/spec.md) — editable counter orders with daily customer-facing numbers, ownership, terminal states, attributed cancellation, and day-close participation.
 - [`outlet-alerts`](outlet-alerts/spec.md) — categorised, prioritised outlet-to-owner issues with response threads, one-step status progression, and an owner-only cross-outlet inbox.
