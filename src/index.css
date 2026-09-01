@@ -124,3 +124,20 @@
     0 0 0 2px var(--color-focus-ring),
     0 0 0 3px var(--color-focus-ring-outer);
 }
+
+/*
+ * The navigation card's own scroller, with no scrollbar drawn (#51).
+ *
+ * A visible one drew a grey line straight across the card's bottom edge and
+ * undid its rounded corners. Neither production group overflows a phone, so
+ * this only ever matters to a wide role set on a narrow device — where a
+ * horizontal drag is the affordance and the line was pure cost.
+ */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

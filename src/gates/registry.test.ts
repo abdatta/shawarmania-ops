@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { isRenderable, surfaces, visibleSurfaces } from './registry'
+import {
+  GROUPED_SHELL_ROLES,
+  isRenderable,
+  NAV_GROUPS,
+  navTree,
+  surfaces,
+  visibleSurfaces,
+} from './registry'
 
 describe('gate registry', () => {
   it('covers all three states across both modes', () => {
@@ -24,12 +31,18 @@ describe('gate registry', () => {
     //
     // **The Biller is excluded, and its absence is the assertion below.** A
     // counter tablet has no navigation at all, so it has no first tab to check.
+    //
+    // Asked of the tree rather than the flat list since #51: `nav.order` is
+    // unique per sibling set now, so the flat list's order is only meaningful
+    // among things actually drawn beside each other. The home is the first
+    // **top-level** entry, which is the property that was always meant.
     for (const role of ['super_admin', 'franchise_admin', 'employee'] as const) {
       for (const mode of ['demo', 'real'] as const) {
-        const visible = visibleSurfaces([role], mode)
-        expect(visible.length, `${role}/${mode}`).toBeGreaterThan(0)
-        expect(visible[0]?.path, `${role}/${mode}`).toBe('')
-        expect(visible[0]?.state, `${role}/${mode}`).toBe('live')
+        const first = navTree(visibleSurfaces([role], mode))[0]
+        expect(first, `${role}/${mode}`).toBeDefined()
+        expect(first?.kind, `${role}/${mode}`).toBe('surface')
+        expect(first?.kind === 'surface' && first.surface.path, `${role}/${mode}`).toBe('')
+        expect(first?.kind === 'surface' && first.surface.state, `${role}/${mode}`).toBe('live')
       }
     }
   })
@@ -86,27 +99,165 @@ describe('gate registry', () => {
     }
   })
 
-  it('orders navigation by declared order', () => {
-    for (const role of ['super_admin', 'franchise_admin', 'biller', 'employee'] as const) {
-      const orders = surfaces
-        .filter((surface) => surface.role === role && surface.nav)
-        .sort((a, b) => (a.nav?.order ?? 0) - (b.nav?.order ?? 0))
-        .map((surface) => surface.nav?.order ?? 0)
-      const sorted = [...orders].sort((a, b) => a - b)
-      expect(orders).toEqual(sorted)
-      // Orders are unique within a role — ties would make nav order arbitrary.
-      expect(new Set(orders).size).toBe(orders.length)
+  /**
+   * **`nav.order` is unique per sibling set, not per role** (#51).
+   *
+   * It was per role until navigation grew a second level. It now sorts an entry
+   * against the things it is drawn beside — the other top-level entries and the
+   * groups when ungrouped, the rest of its group when grouped — so Billing and
+   * Outlets are both `1` in different drawers and neither is ambiguous. A
+   * collision *inside* one drawer is still a defect, and that is what this
+   * asserts.
+   */
+  it('orders each sibling set uniquely, and repeats across drawers are not collisions', () => {
+    // Every role set a personal session can actually produce. Checking against
+    // roles rather than the raw registry is the point: two entries only collide
+    // if some real reader is shown both at once.
+    const sessions = [
+      ['super_admin', 'franchise_admin'],
+      ['franchise_admin'],
+      ['franchise_admin', 'employee'],
+      ['employee'],
+    ] as const
+
+    for (const roles of sessions) {
+      for (const mode of ['real', 'demo'] as const) {
+        const tree = navTree(visibleSurfaces([...roles], mode, [...roles]))
+
+        const top = tree.map((node) => node.order)
+        expect([...top].sort((a, b) => a - b)).toEqual(top)
+        expect(new Set(top).size).toBe(top.length)
+
+        for (const node of tree) {
+          if (node.kind !== 'group') continue
+          const inside = node.children.map((child) => child.nav?.order ?? 0)
+          expect([...inside].sort((a, b) => a - b)).toEqual(inside)
+          expect(new Set(inside).size).toBe(inside.length)
+        }
+      }
+    }
+
+    // And the repeat the old rule would have called a defect really is one:
+    // Billing sits at 1 in Finances while Outlets sits at 1 in Setup.
+    const owner = navTree(visibleSurfaces(['super_admin', 'franchise_admin'], 'real'))
+    const at = (groupLabel: string, label: string) => {
+      const node = owner.find(
+        (candidate) => candidate.kind === 'group' && candidate.group.label === groupLabel,
+      )
+      if (node?.kind !== 'group') return undefined
+      return node.children.find((child) => child.nav?.label === label)?.nav?.order
+    }
+    expect(at('Finances', 'Billing')).toBe(1)
+    expect(at('Setup', 'Outlets')).toBe(1)
+  })
+
+  /**
+   * `visibleSurfaces` dedupes by label and the more senior role's entry wins.
+   * Without this, `owner-people` could sit in Setup while `admin-people` sat in
+   * Finances, the owner's would silently win, and the two readers would hold
+   * different maps of one application while the code claimed a single source.
+   */
+  it('draws one door in one place, whichever shell it is drawn in', () => {
+    const byLabel = new Map<string, Set<string>>()
+    for (const surface of surfaces) {
+      if (!surface.nav || !GROUPED_SHELL_ROLES.includes(surface.role)) continue
+      const seen = byLabel.get(surface.nav.label) ?? new Set<string>()
+      seen.add(surface.nav.group ?? '(top level)')
+      byLabel.set(surface.nav.label, seen)
+    }
+
+    for (const [label, placements] of byLabel) {
+      expect(
+        [...placements],
+        `${label} is drawn in ${[...placements].join(' and ')} depending on the role`,
+      ).toHaveLength(1)
     }
   })
 
-  it('puts the owner’s Billing directly above Drawer', () => {
+  /**
+   * The other half of the same rule: a shell that draws no groups declares
+   * none. The Employee's three entries would gain a group that could never hold
+   * more than one child, and the counter tablet has no navigation at all — so a
+   * `group` on either would be swallowed in silence, which is the one outcome
+   * that is not acceptable.
+   */
+  it('never puts a group on an entry in a shell that draws none', () => {
+    for (const surface of surfaces) {
+      if (GROUPED_SHELL_ROLES.includes(surface.role)) continue
+      expect(surface.nav?.group, `${surface.id} carries a group its shell cannot draw`).toBe(
+        undefined,
+      )
+    }
+  })
+
+  it('folds the owner’s sixteen entries into four top-level ones', () => {
+    // The gate, stated as a test: Overview, Finances, Attendance, Setup. The
+    // production owner holds no manager assignment, so `Today` is not theirs.
+    const tree = navTree(
+      visibleSurfaces(['super_admin', 'franchise_admin'], 'real', ['super_admin']),
+    )
+    expect(
+      tree.map((node) => (node.kind === 'group' ? node.group.label : node.surface.nav?.label)),
+    ).toEqual(['Overview', 'Finances', 'Attendance', 'Setup'])
+
+    const finances = tree.find((node) => node.kind === 'group' && node.group.id === 'finances')
+    const setup = tree.find((node) => node.kind === 'group' && node.group.id === 'setup')
+    expect(finances?.kind === 'group' && finances.children.map((c) => c.nav?.label)).toEqual([
+      'Billing',
+      'Drawer',
+      'Expenses',
+      'Ledger',
+    ])
+    expect(setup?.kind === 'group' && setup.children.map((c) => c.nav?.label)).toEqual([
+      'Outlets',
+      'People',
+      'Delivery',
+      'Menu',
+      'Tablets',
+    ])
+  })
+
+  it('draws no group whose children this session cannot open', () => {
+    // A group is built from what `visibleSurfaces` already narrowed, so an
+    // empty heading is not reachable by construction — asserted because the
+    // alternative is a heading promising a room that is not there.
+    for (const node of navTree([])) {
+      expect(node).toBeUndefined()
+    }
+    expect(navTree([])).toEqual([])
+
+    // An Employee reaches nothing in either group, and is shown neither.
+    const staff = navTree(visibleSurfaces(['employee'], 'real'))
+    expect(staff.every((node) => node.kind === 'surface')).toBe(true)
+    expect(staff.map((node) => node.kind === 'surface' && node.surface.nav?.label)).toEqual([
+      'Home',
+      'My attendance',
+      'Expenses',
+    ])
+  })
+
+  it('never lets a group take a child’s icon', () => {
+    // `Wallet` is Expenses's and `Banknote` is the Drawer's; a group wearing
+    // either would read as one of the entries inside it.
+    for (const group of Object.values(NAV_GROUPS)) {
+      const children = surfaces.filter((surface) => surface.nav?.group === group.id)
+      expect(children.some((child) => child.nav?.icon === group.icon)).toBe(false)
+    }
+  })
+
+  it('puts the owner’s Billing directly above Drawer, inside Finances', () => {
     // The owner opens Billing to read what the outlet took, which is asked far
-    // more often than People, Compare or Alerts — the three it used to sit
-    // behind at order 12. Adjacency to Drawer is the point rather than a
-    // particular number: the two are read together, a day's takings and what
-    // should be in the drawer against them.
-    const nav = visibleSurfaces(['super_admin'], 'real').map((surface) => surface.nav?.label)
-    expect(nav.indexOf('Billing')).toBe(nav.indexOf('Drawer') - 1)
+    // more often than People — one of the entries it used to sit behind.
+    // Adjacency to Drawer is the point rather than a particular number: the two
+    // are read together, a day's takings and what should be in the drawer
+    // against them. Both are in Finances since #51, so the adjacency is now a
+    // fact about that group rather than about the whole bar.
+    const finances = navTree(visibleSurfaces(['super_admin'], 'real')).find(
+      (node) => node.kind === 'group' && node.group.id === 'finances',
+    )
+    const labels =
+      finances?.kind === 'group' ? finances.children.map((child) => child.nav?.label) : []
+    expect(labels.indexOf('Billing')).toBe(labels.indexOf('Drawer') - 1)
   })
 
   it('gives a reachable role its surfaces but not its home', () => {

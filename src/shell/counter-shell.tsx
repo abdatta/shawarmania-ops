@@ -54,6 +54,16 @@ export function CounterShell({
 
   const base =
     session.mode === 'demo' ? `/demo/${ROLE_SEGMENTS.biller}` : `/${ROLE_SEGMENTS.biller}`
+  /**
+   * The flat list, deliberately — this shell does not call `navTree`.
+   *
+   * That would be a silent swallow if a Biller entry ever carried a group, so
+   * the registry forbids one instead: `GROUPED_SHELL_ROLES` names the shells
+   * that draw groups, the Biller is not among them, and `registry.test.ts`
+   * fails the build if any entry outside those shells declares a `group`. The
+   * assertion is cheaper than the machinery, and it is the honest answer here —
+   * a counter tablet has no navigation to put a group in.
+   */
   const items = visibleSurfaces(heldRoles(session), session.mode)
 
   return (

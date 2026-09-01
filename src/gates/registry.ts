@@ -3,10 +3,12 @@ import {
   Banknote,
   Bike,
   CalendarCheck,
+  Coins,
   Home,
   KeyRound,
   LayoutDashboard,
   NotepadText,
+  Settings2,
   Store,
   TabletSmartphone,
   UserRound,
@@ -56,6 +58,75 @@ export type AttentionSourceId =
   // channel's resolution can neither create nor clear the other's badge.
   | 'swiggy-needs-you'
 
+/**
+ * The navigation groups — **headings with surfaces under them, and no surface
+ * of their own** (#51).
+ *
+ * Sixteen flat entries is a bottom bar the owner has to scroll sideways, with
+ * roughly half of it off the right edge and nothing saying it is there. A tab
+ * you must remember exists and scroll to find is not navigation.
+ *
+ * **A group is metadata on a surface, not an address.** `/owner/finances` does
+ * not exist and should not: neither Finances nor Setup is a place anybody can
+ * stand. Re-pathing was rejected because it would re-home eight live routes the
+ * owner has on their phone to buy an address nobody would open. Every surface
+ * keeps the path it has, so every link already in circulation still resolves —
+ * only where an entry is *drawn* changes.
+ */
+export type NavGroupId = 'finances' | 'setup'
+
+export interface NavGroup {
+  id: NavGroupId
+  label: string
+  icon: LucideIcon
+  /**
+   * Sorted against the ungrouped top-level entries on **one scale**, so a group
+   * takes its place among them rather than being pushed to one end.
+   */
+  order: number
+}
+
+/**
+ * `Coins` for Finances and `Settings2` for Setup (owner decision, 2026-09-01).
+ *
+ * Neither may take a child's icon: `Wallet` is Expenses's and `Banknote` is the
+ * Drawer's, so either would read as one of the entries inside it rather than as
+ * the drawer holding them.
+ *
+ * **Finances rather than Sales**, because it holds Expenses, which is money
+ * out. **Setup** is the things you change when something changes, rather than
+ * the things you read every evening.
+ *
+ * A group's order is the same for every role, unlike a surface's. If a manager
+ * ever needs Setup ahead of Attendance while the owner does not, this is what
+ * has to give.
+ */
+export const NAV_GROUPS: Record<NavGroupId, NavGroup> = {
+  finances: { id: 'finances', label: 'Finances', icon: Coins, order: 3 },
+  setup: { id: 'setup', label: 'Setup', icon: Settings2, order: 5 },
+}
+
+/**
+ * The shells that draw navigation groups at all.
+ *
+ * The Super Admin's and the Franchise Admin's do; the Employee's and the
+ * Biller's do not, and that is a decision about those shells rather than an
+ * omission. **The Employee shell carries three entries** — Home, My attendance,
+ * Expenses — so folding one of them behind a heading would cost a tap to reach
+ * a group that could never hold more than one child. **The counter tablet has
+ * no navigation at all**: no tabs, no account menu, no sign-out, because
+ * personal navigation on shared hardware offers whoever is standing at it
+ * somebody else's screens.
+ *
+ * `registry.test.ts` holds both halves of this to account: a role that is not
+ * here declares no group on any entry, and among the roles that are, two
+ * entries sharing a label agree on their group. Together those are what stop a
+ * senior role's placement silently overriding a junior role's different one —
+ * `visibleSurfaces` dedupes by label and the senior wins, so without them the
+ * two readers would hold different maps of one application.
+ */
+export const GROUPED_SHELL_ROLES: readonly Role[] = ['super_admin', 'franchise_admin']
+
 interface SurfaceDefInput {
   /** Which role's shell mounts this surface. */
   role: Role
@@ -67,8 +138,23 @@ interface SurfaceDefInput {
    * `attention` names where a count of work waiting for the reader comes from.
    * The shell renders whatever number that source reports and knows nothing
    * about what is being counted.
+   *
+   * `group` names the heading this entry is drawn under. It changes nothing
+   * about the surface's address — see `NavGroupId`.
+   *
+   * **`order` is unique per sibling set, not per role** (#51). It sorts an
+   * entry against the entries it is drawn beside: the other top-level entries
+   * and the groups when it is ungrouped, the rest of its group when it is
+   * grouped. So Billing and Outlets are both `1` in different drawers, and a
+   * repeat across two groups is not the collision a repeat inside one is.
    */
-  nav?: { label: string; icon: LucideIcon; order: number; attention?: AttentionSourceId }
+  nav?: {
+    label: string
+    icon: LucideIcon
+    order: number
+    group?: NavGroupId
+    attention?: AttentionSourceId
+  }
   state: GateState
 }
 
@@ -99,7 +185,7 @@ const defs = {
   'owner-outlets': {
     role: 'super_admin',
     path: 'outlets',
-    nav: { label: 'Outlets', icon: Store, order: 2 },
+    nav: { label: 'Outlets', icon: Store, order: 1, group: 'setup' },
     state: 'live',
   },
   /**
@@ -110,7 +196,7 @@ const defs = {
   'owner-people': {
     role: 'super_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 10 },
+    nav: { label: 'People', icon: Users, order: 2, group: 'setup' },
     state: 'live',
   },
   /**
@@ -124,7 +210,7 @@ const defs = {
   'owner-billing-history': {
     role: 'super_admin',
     path: 'billing-history',
-    nav: { label: 'Billing', icon: ReceiptText, order: 3 },
+    nav: { label: 'Billing', icon: ReceiptText, order: 1, group: 'finances' },
     state: 'live',
   },
   /**
@@ -151,7 +237,7 @@ const defs = {
   'owner-cash-drawer': {
     role: 'super_admin',
     path: 'drawer',
-    nav: { label: 'Drawer', icon: Banknote, order: 4 },
+    nav: { label: 'Drawer', icon: Banknote, order: 2, group: 'finances' },
     state: 'live',
   },
   /**
@@ -174,7 +260,7 @@ const defs = {
     // on the notebook rendered three live surfaces as children of the one being
     // retired.
     path: 'ledger',
-    nav: { label: 'Ledger', icon: NotepadText, order: 6 },
+    nav: { label: 'Ledger', icon: NotepadText, order: 4, group: 'finances' },
     state: 'live',
   },
   /**
@@ -202,7 +288,7 @@ const defs = {
   'owner-expenses': {
     role: 'super_admin',
     path: 'ledger/expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 5 },
+    nav: { label: 'Expenses', icon: Wallet, order: 3, group: 'finances' },
     state: 'live',
   },
   'owner-expense-categories': {
@@ -234,7 +320,13 @@ const defs = {
     // which of its addresses is open — and navigation needs an entry point it
     // can build a link to, which a path carrying `:channel` is not.
     path: 'ledger/delivery',
-    nav: { label: 'Delivery', icon: Bike, order: 8, attention: 'delivery-needs-you' },
+    nav: {
+      label: 'Delivery',
+      icon: Bike,
+      order: 3,
+      group: 'setup',
+      attention: 'delivery-needs-you',
+    },
     // Live [owner, 2026-08-18 for Zomato; #47 for Swiggy]. The ledger already
     // fills itself from both; this is the page that says when each last ran,
     // what moved, and what wants a decision — including the Reconnect the owner
@@ -296,7 +388,7 @@ const defs = {
     nav: {
       label: 'Today',
       icon: LayoutDashboard,
-      order: 1,
+      order: 2,
       attention: 'counter-request-waiting',
     },
     state: 'live',
@@ -304,7 +396,7 @@ const defs = {
   'admin-menu': {
     role: 'franchise_admin',
     path: 'menu',
-    nav: { label: 'Menu', icon: UtensilsCrossed, order: 3 },
+    nav: { label: 'Menu', icon: UtensilsCrossed, order: 4, group: 'setup' },
     state: 'live',
   },
   /**
@@ -319,7 +411,7 @@ const defs = {
     nav: {
       label: 'Attendance',
       icon: CalendarCheck,
-      order: 7,
+      order: 4,
       attention: 'attendance-waiting',
     },
     state: 'live',
@@ -327,7 +419,7 @@ const defs = {
   'admin-billing-history': {
     role: 'franchise_admin',
     path: 'billing-history',
-    nav: { label: 'Billing', icon: ReceiptText, order: 2 },
+    nav: { label: 'Billing', icon: ReceiptText, order: 1, group: 'finances' },
     state: 'live',
   },
   /**
@@ -356,13 +448,13 @@ const defs = {
   'admin-cash-drawer': {
     role: 'franchise_admin',
     path: 'drawer',
-    nav: { label: 'Drawer', icon: Banknote, order: 6 },
+    nav: { label: 'Drawer', icon: Banknote, order: 2, group: 'finances' },
     state: 'live',
   },
   'admin-ledger-statement': {
     role: 'franchise_admin',
     path: 'ledger',
-    nav: { label: 'Ledger', icon: NotepadText, order: 9 },
+    nav: { label: 'Ledger', icon: NotepadText, order: 4, group: 'finances' },
     state: 'live',
   },
   /**
@@ -373,7 +465,7 @@ const defs = {
   'admin-ledger-expenses': {
     role: 'franchise_admin',
     path: 'ledger/expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 8 },
+    nav: { label: 'Expenses', icon: Wallet, order: 3, group: 'finances' },
     state: 'live',
   },
   /**
@@ -389,7 +481,7 @@ const defs = {
   'admin-devices': {
     role: 'franchise_admin',
     path: 'devices',
-    nav: { label: 'Tablets', icon: TabletSmartphone, order: 14 },
+    nav: { label: 'Tablets', icon: TabletSmartphone, order: 5, group: 'setup' },
     state: 'live',
   },
   /**
@@ -400,7 +492,7 @@ const defs = {
   'admin-people': {
     role: 'franchise_admin',
     path: 'people',
-    nav: { label: 'People', icon: Users, order: 11 },
+    nav: { label: 'People', icon: Users, order: 2, group: 'setup' },
     state: 'live',
   },
 
@@ -527,7 +619,7 @@ const defs = {
   'staff-attendance': {
     role: 'employee',
     path: 'my-attendance',
-    nav: { label: 'My attendance', icon: CalendarCheck, order: 2 },
+    nav: { label: 'My attendance', icon: CalendarCheck, order: 6 },
     state: 'live',
   },
   /**
@@ -542,7 +634,7 @@ const defs = {
   'staff-expenses': {
     role: 'employee',
     path: 'ledger/expenses',
-    nav: { label: 'Expenses', icon: Wallet, order: 3 },
+    nav: { label: 'Expenses', icon: Wallet, order: 7 },
     state: 'live',
   },
   'staff-profile': {
@@ -632,4 +724,69 @@ export function visibleSurfaces(
   }
 
   return out
+}
+
+/**
+ * One top-level navigation node: either a surface, or a group with children.
+ *
+ * The shells draw this rather than the flat list, so the phone bar and the rail
+ * cannot disagree about what is a group or what is inside one.
+ */
+export type NavNode =
+  | { kind: 'surface'; order: number; surface: Surface }
+  | { kind: 'group'; order: number; group: NavGroup; children: Surface[] }
+
+/**
+ * Fold the flat navigation into its two levels (#51).
+ *
+ * Takes what `visibleSurfaces` returned — already deduplicated by label and
+ * already narrowed to this session and mode — so a group here can only ever
+ * hold entries the reader may actually open. That is what makes a group's
+ * badge safe: it cannot count work behind a door this reader has not got.
+ *
+ * **A group appears only when at least one of its children is visible.** An
+ * empty heading is worse than no heading: it promises a room that is not
+ * there.
+ *
+ * **Groups and ungrouped surfaces sort against each other on one scale**, so
+ * Finances takes its place between Today and Attendance rather than being
+ * pushed to one end. Inside a group, children sort among themselves.
+ *
+ * **Path-derived nesting is deliberately not applied inside a group.** Expenses
+ * lives under the Ledger's path and is drawn as its sibling in Finances,
+ * because two levels of structure over four entries is one more than the reader
+ * needs. The shell still indents a nested entry that is *not* in a group, which
+ * is what keeps the rail's existing behaviour for anything ungrouped.
+ */
+export function navTree(items: readonly Surface[]): NavNode[] {
+  const nodes: NavNode[] = []
+  const groups = new Map<NavGroupId, NavNode & { kind: 'group' }>()
+
+  for (const surface of items) {
+    const groupId = surface.nav?.group
+    if (!groupId) {
+      nodes.push({ kind: 'surface', order: surface.nav?.order ?? 0, surface })
+      continue
+    }
+
+    let node = groups.get(groupId)
+    if (!node) {
+      const group = NAV_GROUPS[groupId]
+      node = { kind: 'group', order: group.order, group, children: [] }
+      groups.set(groupId, node)
+      nodes.push(node)
+    }
+    node.children.push(surface)
+  }
+
+  for (const node of groups.values()) {
+    node.children.sort((a, b) => (a.nav?.order ?? 0) - (b.nav?.order ?? 0))
+  }
+
+  return nodes.sort((a, b) => a.order - b.order)
+}
+
+/** Every surface a node leads to — one for a surface, all its children for a group. */
+export function nodeSurfaces(node: NavNode): readonly Surface[] {
+  return node.kind === 'surface' ? [node.surface] : node.children
 }

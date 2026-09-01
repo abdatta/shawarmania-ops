@@ -333,3 +333,72 @@ allows. It stays a tab.
 
 - **Whether attention reads are hoisted** into one shared read per source as part
   of this change or noted as a todo.
+
+## Decisions taken during implementation
+
+Two questions the folder deliberately left open, answered here so the reasoning
+survives the session that made it.
+
+### Attention reads were already hoisted; nothing to do (task 4.4)
+
+**Decision: leave one hook instance per badge, and seed no todo, because the
+duplication the open question worried about is not there.**
+
+The concern was that the rail and the phone bar are both in the DOM with one
+hidden by CSS, so every badged surface runs its count twice, and group sums
+would add two more. That is true of the *hook instances* and false of the
+*reads*: `useSharedRead` in `src/features/attention/attention.ts` already keys a
+single store and a single in-flight request off the **adapter object**, and
+every source hook goes through it — `useWaitingAttention`,
+`useCounterRequestAttention` and the three delivery hooks without exception. Its
+own doc comment names this case: *"the phone shell renders its navigation twice
+… left alone that is three requests for one answer."*
+
+So a group's probe component costs a `useSyncExternalStore` subscription and a
+render, not a second network read. The sum across Setup makes **zero** further
+requests, because Delivery's own badge is reading the same store. Hoisting would
+buy nothing and would mean moving state out of the components that consume it.
+
+The spec's timing property is unchanged and was checked rather than assumed:
+counts are read on mount, re-read on `visibilitychange` when the app returns to
+the foreground, and re-read on `attentionChanged()` after a surface does some of
+the work. **There is no timer anywhere in the path.**
+
+*(The one thing this leaves standing: two hook instances per source do
+subscribe. That is a component tree fact, not a data-access one, and it costs a
+Set entry.)*
+
+### The Tablets button gives Tablets a per-outlet address (task 5.5)
+
+**Decision: give Tablets a per-outlet address — `devices/:outletId` — rather
+than seeding `outlet-scope.tsx` from the URL.**
+
+The requirement is that tablet administration opened from an outlet card
+*"opens on that outlet's tablets"*, and the sketch's link to the shared page
+with its picker still on it is explicitly not the answer.
+
+Scope-from-URL was the tempting option, because `outlet-scope.tsx` is shared by
+several surfaces and one general fix would serve them all. It was rejected for
+this change on two grounds. It changes behaviour for **every** surface that uses
+the scope picker, including ones this change has no business touching and no
+gate to verify — the Drawer, the Ledger, Delivery and Expenses all pick their
+outlet the same way, and a general seeding rule would have to answer what
+happens when a remembered outlet and a URL disagree, on four surfaces, in one
+navigation change. And the address it produces would be a query parameter on a
+shared path, which is a weaker thing to hold than a route: it does not survive
+being tidied out of a copied link, and nothing in the router asserts it.
+
+A per-outlet route is smaller and stronger. `devices/:outletId` resolves against
+the `devices` gate the way `ledger/delivery/:channel` resolves against
+`ledger/delivery` — the precedent is already in `surfaces.tsx`, so this is the
+existing pattern rather than a new one. The bare `devices` path keeps working
+exactly as it does today, picker and all, so no link anybody holds changes
+meaning and the owner's own Tablets entry is untouched.
+
+**What this deliberately does not do** is make the address the authority on
+scope. The parameter seeds the picker; the picker still shows what the reader
+may reach, and an outlet the caller cannot read is refused by the database as it
+always was. The route is a starting position, not a grant.
+
+The general scope-from-URL fix stays worth doing and is recorded as a todo, with
+the four surfaces it would touch named.

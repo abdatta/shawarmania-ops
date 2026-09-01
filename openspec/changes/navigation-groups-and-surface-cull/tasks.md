@@ -19,32 +19,32 @@ Nothing in `src/` currently knows what a navigation group is.
 
 ## 2. Groups In The Registry
 
-- [ ] 2.1 Add `NavGroupId`, `NavGroup` and a `NAV_GROUPS` record to `src/gates/registry.ts` for `finances` and `setup`, each with label, icon and order. Finances takes `Coins` and Setup takes `Settings2`; `Wallet` is Expenses's and `Banknote` is the Drawer's, so neither can label the group that contains them.
-- [ ] 2.2 Add `group?: NavGroupId` to the `nav` block and assign every entry: Finances takes Billing, Drawer, Expenses, Ledger; Setup takes Outlets, People, Delivery, Menu, Tablets; Overview, Attendance and My attendance stay top-level. Do this for the owner's and the manager's entries alike, so label dedup cannot produce a grouped and an ungrouped copy of one door.
-- [ ] 2.3 Restore navigation to `admin-devices` inside Setup, so a Franchise Admin reaches Tablets while the owner reaches it through Setup too.
-- [ ] 2.4 Add `navTree(items)` returning top-level nodes that are either a surface or a group with sorted children, with groups and ungrouped surfaces sorted against each other on one scale, and a group appearing only when at least one child is visible in this session and mode.
-- [ ] 2.5 Re-set `nav.order` so it is unique **per sibling set** rather than per role, and rewrite the uniqueness test in `src/gates/registry.test.ts` to assert that — a collision inside one group is still a defect, a repeat across two groups is not.
-- [ ] 2.6 Add a test that entries sharing a navigation label agree on their group, so a senior role's placement cannot silently win over a junior role's different one.
-- [ ] 2.7 Decide `src/shell/counter-shell.tsx`: either route it through `navTree`, or assert in the registry that a Biller entry never carries a group. A silent swallow is not acceptable either way.
+- [x] 2.1 Add `NavGroupId`, `NavGroup` and a `NAV_GROUPS` record to `src/gates/registry.ts` for `finances` and `setup`, each with label, icon and order. Finances takes `Coins` and Setup takes `Settings2`; `Wallet` is Expenses's and `Banknote` is the Drawer's, so neither can label the group that contains them.
+- [x] 2.2 Add `group?: NavGroupId` to the `nav` block and assign every entry: Finances takes Billing, Drawer, Expenses, Ledger; Setup takes Outlets, People, Delivery, Menu, Tablets; Overview, Attendance and My attendance stay top-level. Do this for the owner's and the manager's entries alike, so label dedup cannot produce a grouped and an ungrouped copy of one door.
+- [x] 2.3 Restore navigation to `admin-devices` inside Setup, so a Franchise Admin reaches Tablets while the owner reaches it through Setup too.
+- [x] 2.4 Add `navTree(items)` returning top-level nodes that are either a surface or a group with sorted children, with groups and ungrouped surfaces sorted against each other on one scale, and a group appearing only when at least one child is visible in this session and mode.
+- [x] 2.5 Re-set `nav.order` so it is unique **per sibling set** rather than per role, and rewrite the uniqueness test in `src/gates/registry.test.ts` to assert that — a collision inside one group is still a defect, a repeat across two groups is not.
+- [x] 2.6 Add a test that entries sharing a navigation label agree on their group, so a senior role's placement cannot silently win over a junior role's different one.
+- [x] 2.7 Decide `src/shell/counter-shell.tsx`: either route it through `navTree`, or assert in the registry that a Biller entry never carries a group. A silent swallow is not acceptable either way.
 
 ## 3. Two-Level Navigation In The Shell
 
-- [ ] 3.1 Draw the rail from `navTree`: group rows identical in height, weight, casing and lit colour to Overview and Attendance, with a chevron as the only difference, children indented under a hairline, sections open by default and collapsible.
-- [ ] 3.2 Draw the phone bar from `navTree`: four tabs, and a group tab that opens a rounded card above the bar inside the bar's own block, with a tail positioned by tab index pointing at the tab that opened it.
-- [ ] 3.3 Build the card's entries as bar tabs one size smaller — 56px tall, icon 18px, 11px label, against the bar's 64px and 20px — icon over label and the same lit colour. Not pills and not a segmented control: both were tried and rejected, because the second row must read as navigation rather than as a filter.
-- [ ] 3.4 Draw the card as `rounded-2xl` with a one-pixel border, `bg-surface-raised` and a soft shadow, **inside the bar's own block** so no page content shows through the gap between card and bar, and hide its scrollbar so it does not cut the bottom edge.
-- [ ] 3.5 Draw the tail as a 12px square rotated 45° with only its bottom and right borders, positioned at `((index + 0.5) / count) * 100%` of the bar width, so it needs no measurement and stays correct when the card scrolls sideways.
-- [ ] 3.6 Seed the open group from the address, re-seed it only when the reader crosses into or out of a group, and refuse to close a group the reader is standing inside.
-- [ ] 3.7 Reserve the taller bottom padding whether or not a group is open, so opening one shifts nothing.
-- [ ] 3.8 Light a group tab whenever the reader is inside it, open or shut, and keep lighting only the most specific entry among its children.
-- [ ] 3.9 Verify the group control carries an accessible name and an accurate `aria-expanded`, and that a shut group's children are genuinely absent from the page rather than hidden.
+- [x] 3.1 Draw the rail from `navTree`: group rows identical in height, weight, casing and lit colour to Overview and Attendance, with a chevron as the only difference, children indented under a hairline, sections open by default and collapsible.
+- [x] 3.2 Draw the phone bar from `navTree`: four tabs, and a group tab that opens a rounded card above the bar inside the bar's own block, with a tail positioned by tab index pointing at the tab that opened it.
+- [x] 3.3 Build the card's entries as bar tabs one size smaller — 56px tall, icon 18px, 11px label, against the bar's 64px and 20px — icon over label and the same lit colour. Not pills and not a segmented control: both were tried and rejected, because the second row must read as navigation rather than as a filter.
+- [x] 3.4 Draw the card as `rounded-2xl` with a one-pixel border, `bg-surface-raised` and a soft shadow, **inside the bar's own block** so no page content shows through the gap between card and bar, and hide its scrollbar so it does not cut the bottom edge.
+- [x] 3.5 Draw the tail as a 12px square rotated 45° with only its bottom and right borders, positioned at `((index + 0.5) / count) * 100%` of the bar width, so it needs no measurement and stays correct when the card scrolls sideways.
+- [x] 3.6 Seed the open group from the address, re-seed it only when the reader crosses into or out of a group, and refuse to close a group the reader is standing inside.
+- [x] 3.7 Reserve the taller bottom padding whether or not a group is open, so opening one shifts nothing.
+- [x] 3.8 Light a group tab whenever the reader is inside it, open or shut, and keep lighting only the most specific entry among its children.
+- [x] 3.9 Verify the group control carries an accessible name and an accurate `aria-expanded`, and that a shut group's children are genuinely absent from the page rather than hidden.
 
 ## 4. Waiting Work Survives Being Folded Away
 
-- [ ] 4.1 Badge a collapsed group with the sum of its children's attention counts, and show nothing when that sum is zero.
-- [ ] 4.2 Show each child's own count and no sum once the group is open, so no waiting item is counted twice on screen.
-- [ ] 4.3 Add a test that Delivery's waiting work is readable from a shut Setup — the regression this rule exists to prevent.
-- [ ] 4.4 Decide whether attention reads are hoisted into one shared read per source, or left as one hook instance per badge with a todo naming the duplication. Either way, confirm counts are still read on render and on return to the foreground and never polled.
+- [x] 4.1 Badge a collapsed group with the sum of its children's attention counts, and show nothing when that sum is zero.
+- [x] 4.2 Show each child's own count and no sum once the group is open, so no waiting item is counted twice on screen.
+- [x] 4.3 Add a test that Delivery's waiting work is readable from a shut Setup — the regression this rule exists to prevent.
+- [x] 4.4 Decide whether attention reads are hoisted into one shared read per source, or left as one hook instance per badge with a todo naming the duplication. Either way, confirm counts are still read on render and on return to the foreground and never polled.
 
 ## 5. Outlets For Managers, And The Outlet Card
 
