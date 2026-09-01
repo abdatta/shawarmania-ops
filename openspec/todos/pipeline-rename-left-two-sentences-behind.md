@@ -61,10 +61,12 @@ Already wired into the two changes that edit these capabilities, so this does
 not wait on somebody thinking to read the backlog:
 
 - **`extended-offline-billing` (#34), task 3.5** takes the `app-shell` half. It
-  modifies that capability anyway.
-- **`multiple-billing-devices` (#35), task 3.6** takes the `counter-billing`
+  modifies that capability anyway, and its delta already restates the Counter
+  workspace paragraph in the corrected vocabulary.
+- **`multiple-billing-devices` (#35), task 3.8** takes the `counter-billing`
   half, and the `app-shell` half too if #34 did not. #35 depends on #34, so
-  ordinarily #34 goes first and #35 only has the scenario left to correct.
+  ordinarily #34 goes first and #35 only has the scenario left to correct — its
+  delta already carries that corrected scenario.
 
 Whichever of the two runs last closes this note. If both are reordered or
 dropped, the trigger falls back to the next change touching either capability.

@@ -1,61 +1,148 @@
 ## ADDED Requirements
 
-### Requirement: A complete verified generation can bootstrap the counter offline
-After a successful online hydration, the enrolled device SHALL atomically persist the device/outlet identity, daily grant bounds, cutover, menu snapshot, open-order projections, cache provenance, and schema version needed to reconstruct that counter. An offline restart SHALL use only a complete compatible generation for that same device and outlet.
+### Requirement: A complete resume record can reopen the counter after a cold start
 
-#### Scenario: App restarts during an extended outage
-- **WHEN** the enrolled device restarts without a backend response before its cached verified daily grant expires
-- **THEN** the app reconstructs the constrained counter from its newest complete compatible generation and clearly marks it offline
+After a successful online counter load the tablet SHALL persist, as one unit,
+the facts it would otherwise ask the server for at startup: its own tablet
+identity, label and outlet; the live shift's identity, operator name, opened
+time, business date and expiry; the outlet cutover; the menu it is selling from;
+the outlet pipeline and this shift's bills as the server last returned them; the
+exact-phone customer results this tablet resolved; the instant of that successful
+read with the server time observed at it and the device clock beside it; and a
+schema version.
 
-#### Scenario: Cached generation is incomplete or incompatible
-- **WHEN** the app cannot read a complete supported generation for the current device
-- **THEN** it refuses new offline billing, preserves pending commands, and requires online recovery
+A resume record SHALL become readable only once every part of it has committed.
+A cold start with no backend response SHALL use the newest complete record whose
+schema this build supports and whose tablet is this installation, and no other.
 
-### Requirement: Offline resumption never extends daily authorization
-Offline billing SHALL be available only within the explicit bounds of a daily grant previously created by online credential verification. It SHALL stop new commands at cutoff and SHALL require online authentication and fresh hydration for a new business day.
+#### Scenario: The tablet is reloaded during an outage
 
-#### Scenario: Cutoff arrives during an outage
-- **WHEN** the cached grant reaches its outlet cutoff while the backend remains unavailable
-- **THEN** the app stops accepting new billing commands, retains historical pending work, and requires online re-sign-in
+- **WHEN** a set-up tablet holding an approved shift is closed, updated or reloaded and no backend response arrives
+- **THEN** the same counter reopens from its newest complete resume record, marked offline with the time of its last successful read
 
-### Requirement: Offline projections disclose provenance and freshness
-Every surface using persisted server data SHALL show that the device is offline and the time of its last successful hydration. It SHALL NOT label cached menu, customer, order, or bill state as current server truth.
+#### Scenario: The record is incomplete or too new to read
 
-#### Scenario: Operator views a cached menu
-- **WHEN** billing resumes offline from a verified generation
-- **THEN** the menu remains usable with a persistent offline banner and visible last-sync provenance
+- **WHEN** no complete record exists for this tablet, or its schema is unsupported by this build
+- **THEN** the tablet opens no new billing work, retains every envelope and resume record unchanged, and shows unsent and needs-attention status with the path back online
 
-### Requirement: Device-owned order state is reconstructed from immutable commands
-The offline counter SHALL derive each open order by reducing the device's accepted local command chain over its last authoritative projection using integer-paise arithmetic and optimistic versions. It SHALL NOT allocate an official bill number locally.
+#### Scenario: The record belongs to another tablet
 
-#### Scenario: Offline order is edited and paid after restart
-- **WHEN** the device resumes offline, revises one of its open orders, and accepts full payment
-- **THEN** the reconstructed order reflects the local chain, the payment receives a provisional reference, and the official bill is deferred to server acceptance
+- **WHEN** a resume record names a tablet other than this installation
+- **THEN** it SHALL NOT open a counter, whatever else it contains
 
-### Requirement: Offline exact-phone reuse is narrowly cached
-The device MAY reuse a customer result only for the exact normalized phone previously resolved online on that device and SHALL label it cached. It SHALL NOT expose directory browse, prefix search, or another customer's cached result, and an unknown number SHALL remain unresolved until sync.
+### Requirement: Resuming offline never creates or extends authority
 
-#### Scenario: Previously resolved phone is entered offline
-- **WHEN** the operator enters the exact full phone of a cached customer during an outage
-- **THEN** the app may offer the cached form autofill with offline provenance and the same replacement warning
+The counter SHALL open offline only inside the bounds of a shift already
+approved online by its named operator. It SHALL stop accepting new commands at
+the earlier of that shift's stored expiry and the outlet cutover, and SHALL
+require the backend and the operator's own phone before any further shift.
 
-#### Scenario: New phone is entered offline
-- **WHEN** the phone has no exact cached result
-- **THEN** the app permits optional form snapshots but explains that customer identity will be resolved on sync
+Commands created offline SHALL carry the real tablet identity, the real shift
+identity and their own immutable creation time, and the server SHALL remain the
+only authority on whether each is accepted.
 
-### Requirement: Reconnection preserves evidence before refreshing truth
-On restored backend reachability, the device SHALL verify device/grant status, preserve every local envelope, deliver eligible dependency chains idempotently, quarantine explicit conflicts, and then replace cached projections with authoritative results.
+#### Scenario: Expiry passes during an outage
 
-#### Scenario: Twenty commands accumulated through restart
-- **WHEN** the device reconnects with twenty valid pending commands, including a lost response replay
-- **THEN** each effect lands exactly once, conflicts remain explicit, and the refreshed projections reconcile to server results
+- **WHEN** the stored shift expiry or the outlet cutover is reached while the backend is still unreachable
+- **THEN** new commands stop, existing work is retained with its status visible, and the tablet asks for the backend and the operator's phone rather than continuing
 
-### Requirement: Offline state cannot satisfy business-day sign-off
-An offline device SHALL NOT create or imply a device-day settlement seal. It
-SHALL reconnect, verify device status, deliver or explicitly resolve every local
-command for the date, end its grant, and obtain the server seal before #12 may
-sign that date off.
+#### Scenario: A tampered record cannot buy authority
 
-#### Scenario: Cutoff passes while commands remain offline
-- **WHEN** the outlet reaches cutoff with locally accepted commands not yet reconciled
-- **THEN** new billing stops and the date remains visibly blocked from sign-off until online reconciliation and sealing complete
+- **WHEN** a resume record is altered on the device to claim a longer shift, and its commands later reach the server
+- **THEN** the server validates the real shift and refuses whatever falls outside it, exactly as it refuses any other delayed command
+
+### Requirement: Remembered data is labelled with the read it came from
+
+Every surface reading persisted server data SHALL show that the tablet is
+offline and the time of its last successful read, and SHALL NOT present a
+remembered menu, pipeline, bill or customer result as current server truth. The
+outlet pipeline SHALL be presented as of that read, because an offline tablet
+cannot learn of another tablet's work or of a manager clearing a stranded order.
+
+The tablet SHALL show the last observed server time beside its own clock when
+the two materially disagree, and SHALL warn rather than correcting either.
+
+#### Scenario: The counter is read after resuming
+
+- **WHEN** an operator uses the menu, the pipeline and this shift's bills after a cold start
+- **THEN** all three are usable, all three state the read they came from, and a persistent offline line carries that time
+
+#### Scenario: A manager cleared an order during the outage
+
+- **WHEN** a manager cancels a stranded open order while the tablet is offline, and the tablet later acts on it
+- **THEN** the command is refused as not open, the refusal names that order, and the rail corrects itself at the next successful read
+
+### Requirement: Every counter command survives the cold start
+
+Create, revise, mark prepared, reprepare, pay, take a payment back, cancel after
+payment, correct a tender, cancel, and record an expense SHALL each be available
+after an offline cold start, SHALL be composed from the resume record overlaid
+with this tablet's own durable envelopes, and SHALL follow the existing
+dependency, integer-paise and locally-refused-before-minting rules unchanged.
+
+No bill number SHALL be allocated locally. An unsent bill SHALL carry its short
+local reference and the words not sent yet, and no surface SHALL call it
+provisional.
+
+#### Scenario: An order is prepared, paid and corrected after a restart
+
+- **WHEN** the tablet resumes offline, marks one of its open orders prepared, accepts payment and then corrects the tender inside the edit window
+- **THEN** each is a separate immutable envelope chained in order, the bill reads not sent yet with its local reference, and the bill number is deferred to server acceptance
+
+#### Scenario: A second restart mid-outage
+
+- **WHEN** the tablet is closed and reopened again with work already captured offline
+- **THEN** every envelope, dependency and local resolution is intact and the counter reopens on the same shift
+
+### Requirement: Exact-phone reuse is the only offline customer identity
+
+The tablet MAY reuse a customer result only for the exact normalized full phone
+it resolved online, SHALL label it as remembered, and SHALL carry the same
+replacement warning. It SHALL NOT offer directory browse, prefix search or
+another customer's remembered result, and an unrecognised number SHALL remain
+unresolved until sync.
+
+#### Scenario: A known phone is entered offline
+
+- **WHEN** the operator enters the exact full phone of a customer this tablet resolved earlier in the shift
+- **THEN** the form may be autofilled, labelled as remembered, with the ordinary replacement warning
+
+#### Scenario: A new phone is entered offline
+
+- **WHEN** the phone has no exact remembered result
+- **THEN** the optional form snapshot is accepted and the surface explains that customer identity resolves on sync
+
+### Requirement: The day cannot be finished offline
+
+Finish Day SHALL require authoritative server state, so an offline attempt SHALL
+open the readiness sheet, state that the day cannot be finished without the
+backend, and name what is waiting. The tablet SHALL NOT record, imply or
+substitute for its end-of-day confirmation offline.
+
+#### Scenario: Finish Day is attempted during an outage
+
+- **WHEN** an operator chooses Finish day with no backend reachable
+- **THEN** the sheet explains that server state is unavailable, lists the local work outstanding, and offers no completion
+
+#### Scenario: Readiness keeps naming the tablet
+
+- **WHEN** the business date is evaluated for readiness while this tablet has offline work and no confirmation
+- **THEN** the tablet is reported as outstanding until it reconnects, drains and confirms online
+
+### Requirement: Reconnect re-resolves before it drains, and refreshes last
+
+On restored backend reachability the tablet SHALL first re-resolve its own
+status and shift, SHALL stop ordinary delivery and new work if it learns it was
+removed while retaining every envelope on the device, SHALL otherwise drain in
+dependency order so each command resolves exactly once, and SHALL only then
+replace remembered projections with authoritative reads.
+
+#### Scenario: Twenty commands drain after an extended outage
+
+- **WHEN** the tablet reconnects holding twenty valid pending commands across the order and payment lifecycle, one of which lost its first response
+- **THEN** every effect lands exactly once, the replay resolves to its original result, refusals arrive as refusals with their ancestry, and the refreshed reads replace what was remembered
+
+#### Scenario: Reconnect reveals the tablet was removed
+
+- **WHEN** the first successful response after the outage reports the tablet removed
+- **THEN** ordinary delivery and new work stop, every envelope stays on the device, and the surface says plainly that this tablet no longer serves the counter

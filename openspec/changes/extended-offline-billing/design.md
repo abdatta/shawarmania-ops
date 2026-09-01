@@ -1,144 +1,202 @@
 ## Context
 
-Billing V1 durably saves every accepted command and survives transient connection
-loss, but after a reload it requires online authentication and current server
-reads before reopening the counter. That is an intentional launch boundary, not
-the final offline promise. This change expands the already-proven local store and
-command protocol so the one enrolled device at each outlet can reconstruct its
-current daily counter offline.
+### What already works, and is not rebuilt here
 
-Daily operator authentication remains online-only and expires at outlet cutoff.
-The device's long-lived machine session and a cached grant are not permission to
-start another business day. Server RLS and command validation remain the final
-authority for every delayed write.
+Four things this change would otherwise have had to invent already exist, and
+naming them is most of the scoping:
+
+- **The app itself is cached.** `vite-plugin-pwa` precaches the build and serves
+  `index.html` as the navigation fallback, so a reload with no network already
+  gets the application. What it does not get is a counter.
+- **The outbox is durable and ordered.** `src/outbox/` holds immutable envelopes,
+  their dependency edges, their server results and their attributed local
+  resolutions, with one drain leader and bounded backoff. It already survives a
+  restart; `billing-delivery` says so.
+- **The overlay is already the counter's reader.** The live adapter composes what
+  the server last returned with this tablet's projectable envelopes, for orders
+  and for bills, precisely so accepted work cannot flicker back into being
+  unpaid. Offline resumption does not need a second reducer. It needs the
+  **server side** of that composition to still exist after a cold start.
+- **Readiness is already a server answer that names tablets.**
+  `billing_day_readiness` reports open orders, live shifts, and missing or stale
+  end-of-day confirmations per participating tablet, and
+  `confirm_billing_end_of_day` refuses while anything is unsent. Nothing offline
+  may weaken that, and nothing here needs to change it.
+
+### What actually blocks the counter
+
+`useRealSession` resolves the tablet by asking the backend. With no answer the
+resolution is `indeterminate`, and on a first load — which is what a cold start
+is — that becomes `unavailable`, so `CounterRoot` renders `UnconfirmedSession`.
+That single branch is the boundary, and `menu-management` states its consequence
+as a deliberate V1 scenario. This change replaces that scenario rather than
+adding beside it.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Resume the current verified counter after browser/app restart without a backend.
-- Keep direct payment and unpaid-order work usable for the rest of that grant.
-- Make cached provenance, pending state, and reconciliation risk unmistakable.
-- Reconnect through the existing exactly-once, versioned command protocol.
+- Reopen the *same* approved counter after a cold start with no backend.
+- Keep every counter command available for the rest of that shift.
+- Make remembered data unmistakably remembered, with the time it was read.
+- Reconnect through the existing exactly-once command protocol, unchanged.
 
 **Non-Goals:**
 
-- Offline credential verification or a grant beyond cutoff.
-- Multiple active counter devices at one outlet.
-- Peer-to-peer sync, local official bill-number allocation, or global-directory browse.
+- Offline credential verification, a new shift offline, or any extension past
+  expiry or cutover.
+- A privileged recovery upload, an order transfer, or an optimistic-version
+  conflict contract. All three were cut on 2026-08-09.
+- Peer-to-peer sync between tablets, or local allocation of a bill number.
+- Multiple tablets at one outlet, which is #35.
 
 ## Decisions
 
-### Offline bootstrap uses one atomic verified-state generation
+### The tablet keeps one resume record, written whole
 
-After each successful online hydration, Dexie stores a generation containing the
-device/outlet identity, grant ID and bounds, server-observed time, cutover,
-menu snapshot/version, known open-order projections/versions, cached exact-phone
-results, and schema version. A generation becomes active only after every required
-record commits. Offline startup uses the newest complete compatible generation.
+After a successful online counter load the tablet writes, in one Dexie
+transaction, everything it would otherwise have asked the server for at startup:
+its own tablet id, label and outlet; the live shift's id, operator name, opened
+time, business date and expiry; the outlet's cutover; the menu it is selling
+from; the outlet pipeline and this shift's bills as the server last returned
+them; the exact-phone customer results this tablet resolved; the instant of that
+successful read, the server time observed with it and the device clock beside it;
+and a schema version. A resume record becomes readable only once every part of it
+has committed, and a cold start uses the newest complete record for the same
+tablet.
 
-Updating independent caches in place was rejected because a crash could combine
-a new menu with old grant/order metadata. Service-worker response caching alone
-was rejected because it cannot express transactional domain versions or provenance.
+Updating each cache independently was rejected because a crash between two writes
+can pair a new menu with a stale shift, and that failure would be both silent and
+financial. Relying on service-worker response caching alone was rejected because
+a cached HTTP response cannot express a shift's expiry, an outlet's cutover, or
+the read time a person has to be shown.
 
-### Cached grant state opens UI but never replaces server authorization
+### A resume record opens the UI; it never opens authority
 
-Offline restart is allowed only when the stored device matches the installation,
-the cached grant was successfully issued to an eligible operator on that device,
-and local time remains before its explicit cutoff. Commands continue to carry the
-real device/grant IDs and original timestamps; the server later verifies the
-immutable grant and revocation facts exactly as in #33.
+The counter opens offline only when the stored tablet is this installation, the
+record is complete and its schema is supported, the shift has not ended, and the
+device clock is before both the stored expiry and the outlet cutover. Every
+command still carries the real tablet id, shift id and its own immutable creation
+time, and the server still validates the shift, the tablet's removal state and
+the historical-validity rules in `billing-command-contract` when the command
+finally arrives.
 
-A browser-side role token or custom authority claim was rejected because authority
-is assignment rows, not token state. Cryptographically signing a second offline
-credential was rejected for now because it would not solve undetectable revocation
-or local clock tampering and would duplicate server authorization. Tampering can
-at most open local UI; it cannot make the backend accept an unauthorized command.
+A signed offline credential was rejected: it would not make removal detectable
+offline, would not fix a wrong clock, and would duplicate an authority the
+database already holds. The honest property is the one that matters — tampering
+with the record can open a screen, and cannot make the backend accept a single
+command it would otherwise refuse.
 
-### Offline data is an explicit projection, never silent current truth
+### Remembered data is labelled, and the pipeline says whose truth it is
 
-Every offline screen carries a persistent banner with last successful sync time.
-Menu lines show the cached menu generation. Open orders combine their last server
-projection with this device's accepted local command chain. Cached customer matches
-are used only after the exact same normalized full phone was resolved online and
-are labelled cached; an unknown number remains unresolved until sync.
+A persistent line states that the tablet is offline and when it last read
+successfully. The menu grid, the pipeline and the bill list each read as of that
+time.
 
-Pretending all customer lookups are available offline was rejected because it
-would create a browsable copy of global PII and cannot know a number first seen at
-another outlet. Blocking all offline customer details was rejected because they
-are optional snapshots and previously resolved exact matches can be reused safely.
+The pipeline is **outlet-wide** since #45, which matters here: offline, this
+tablet can refresh only its own work. Another tablet's card, and a manager's
+cancellation of a stranded order, cannot reach it. That is tolerable precisely
+because ordinary action on another tablet's order is already refused — the loss
+is freshness on cards this counter could never act on. The rail says as of when,
+and reconnect replaces it wholesale.
 
-### Local command reduction reconstructs device-owned open orders
+Discarding the remembered pipeline at reconnect before draining was rejected,
+because it can hide unsent work behind a screen that looks empty.
 
-A pure reducer applies accepted local create/revise/cancel/pay commands over the
-cached server projection using the same integer-paise and version rules as the
-domain adapter. It never invents official bill numbers. Paid commands show a
-provisional reference until server acceptance. Rejected/quarantined ancestors
-block only their descendants.
+### Customer identity is reused only where it was already resolved
 
-A separate mutable offline database was rejected because it would create two
-sources of truth. Replaying immutable commands makes restart deterministic and
-keeps exact reconciliation evidence.
+An exact normalized full phone this tablet resolved online may be offered again
+offline, labelled as remembered, with the same replacement warning. A phone with
+no such result stays unresolved, and the order carries its optional form snapshot
+until sync, which is what the snapshot is for.
 
-### Cutoff is a hard local and server boundary
+Caching enough to answer any lookup was rejected because it would put a browsable
+copy of a global directory on counter hardware, which `global-customer-identity`
+exists to prevent, and because it cannot know a number first seen at the other
+outlet anyway.
 
-The app stores the explicit grant expiry/cutoff and stops accepting new commands
-when reached. Offline startup after that point shows pending/recovery status only.
-The next operator must reconnect, authenticate, and hydrate a new generation.
-Historical commands remain deliverable under #33 grant validation.
+### Nothing may say "provisional"
 
-Grace periods and offline PIN renewal were rejected because the owner explicitly
-requires online re-sign-in after cutoff. Client-clock rollback remains detectable
-at sync through received time and grant bounds and cannot create valid server work.
+`counter-billing` forbids the word outright: a queued bill carries a short local
+reference and the words **not sent yet**, and its number arrives when it does.
+Offline resumption inherits that verbatim. A bill composed after a cold start is
+identical in this respect to one composed during a drop, and no new vocabulary
+enters billing.
 
-### Reconnection refreshes, drains, then reconciles projections
+### The stop is the earlier of two known instants
 
-On a real backend response the app refreshes device/grant status, freezes ordinary
-drain if revoked, delivers dependency chains, then fetches authoritative menu,
-orders, bills, and customer matches needed by the visible work. Exact replay is
-success; optimistic/idempotency conflicts follow V1 quarantine/correction flows.
+New work ends at the earlier of the stored shift expiry and the outlet cutover,
+evaluated against the device clock. Beyond it the tablet shows unsent and
+needs-attention status and the path back: reconnect, and the operator's phone.
 
-Discarding the offline projection before delivery was rejected because it can
-hide unsent work. Merging conflicting order versions was rejected because money
-edits require explicit operator action.
+A grace period and an offline re-approval were both rejected — the owner's rule
+is that a counter opens by a named person entering a code on their own phone, and
+an offline tablet cannot do that. Clock skew is already a recorded limitation;
+this change adds the two facts needed to see it, the last observed server time
+and the device time beside it, and warns rather than correcting. A rolled-back
+clock can open local UI early and still produces commands the server rejects
+against real shift bounds.
 
-### An offline device cannot declare the day settled
+### Finish Day is refused offline, in words
 
-Extended capture does not weaken the #10/#33 finish-day contract. The device must
-reconnect, verify registration, drain or explicitly resolve every command for the
-date, end its grant, and receive the server seal. Until then #12 sign-off remains
-blocked even if the local UI currently appears empty.
+`billing-delivery` requires Finish Day to obtain authoritative server state
+before enabling completion, and `billing-command-contract` requires the
+end-of-day confirmation to be recorded online with nothing unsent. Offline,
+neither is possible. The sheet therefore opens, states that the day cannot be
+finished without the backend, and names what is waiting.
 
-An offline local seal was rejected because another device cannot verify it and a
-later accepted command would make it stale. Treating cutoff as an automatic seal
-was rejected because cutoff expires authority but does not prove delivery.
+Letting the tablet record a local end-of-day was rejected for the reason the
+server contract already implies: a confirmation is invalidated by any later
+accepted command, so one made offline is a claim a subsequent drain can falsify.
+Treating cutover as an automatic finish was rejected because cutover ends
+authority and proves nothing about delivery.
+
+### Reconnect re-resolves, drains, then refreshes
+
+On a real response the tablet re-resolves its own status and shift first, so a
+removal is learned before anything else happens. If it was removed, ordinary
+delivery and new work stop and the envelopes stay on the device — there is no
+privileged upload, by decision. Otherwise the drain runs in dependency order and
+each command resolves exactly as it does today: accepted, exact replay,
+correctable refusal, or terminal refusal moved to needs attention with its
+ancestry intact. Only then are the remembered projections replaced by
+authoritative reads.
+
+An order a manager cancelled during the outage refuses the tablet's later command
+as not open, which is the existing contract and needs nothing new — the operator
+sees the refusal named against that order, and re-rings it if the food was made.
 
 ## Risks / Trade-offs
 
-- **Device is revoked while fully offline** -> it may keep capturing local work,
-  but the backend grants no access and accepts only eligible pre-revocation work
-  through authenticated recovery; the banner shows revocation cannot be checked.
-- **Local clock is wrong** -> display the last server-observed time/skew warning,
-  stop at the locally known cutoff, and let server grant bounds reject invalid work.
-- **Persisted customer facts increase PII exposure** -> cache only exact lookups
-  actually used on that device, encrypt-at-rest only if the platform can protect
-  keys meaningfully, exclude payloads from logs, and add a documented retention cap.
-- **A schema update cannot read an old generation** -> keep compatible readers
-  through the pending-command horizon and refuse offline billing rather than erase it.
-- **Extended outage delays cash sign-off** -> show the device as an explicit
-  blocker and require reconnect/reconciliation; correctness outranks convenience.
+- **The tablet is removed while it is offline.** It keeps capturing, and none of
+  that is accepted after removal. This is the existing bargain, recorded in
+  `docs/LIMITATIONS.md`; what this change adds is a longer window in which it can
+  happen, and an honest line saying removal cannot be checked while offline.
+- **A wrong clock opens a counter that should have stopped.** Bounded by server
+  validation of the real shift, and made visible by showing last server time
+  against device time.
+- **Remembered customer facts are PII on counter hardware.** Restricted to exact
+  results this tablet actually used, excluded from logs and telemetry, and capped
+  by a stated retention. `docs/SECURITY_AND_PRIVACY.md` carries it.
+- **A build cannot read an older resume record.** It refuses to resume rather than
+  erasing one, and no resume-record migration touches a pending envelope.
+- **A long outage delays the end-of-day confirmation.** Correct and intended:
+  readiness keeps naming the tablet until it reconnects, and no local state may
+  substitute for that.
 
 ## Migration Plan
 
-1. Add generation stores and compatible readers without enabling offline bootstrap.
-2. Hydrate and verify generations during ordinary V1 online sessions.
-3. Exercise restart, extended outage, cutoff, clock skew, update, and reconnect in
-   a test outlet with one device.
-4. Enable offline bootstrap per outlet; retain a remote gate that can return the
-   device to V1 online-resume behavior without deleting local work.
+1. Add the resume-record stores and their readers, writing records during
+   ordinary online sessions with the offline fallback still disabled.
+2. Verify a written record against a live counter's own reads.
+3. Exercise cold start, extended capture, a second restart, expiry, cutover,
+   clock skew, an application update across the record's schema, lost responses,
+   and a removal learned at reconnect, on one tablet at a test outlet.
+4. Enable the fallback, keeping a switch that returns the tablet to today's
+   online-resume behaviour without deleting a single envelope or record.
 
-Rollback disables offline bootstrap but keeps all generation and command data so
-V1 can drain it after online sign-in.
+Rollback disables the fallback only. Every envelope drains afterwards through the
+existing path once somebody is online.
 
 ## Open Questions
 

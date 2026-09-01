@@ -71,6 +71,10 @@ touched the surrounding policies five times.
 tablet-per-outlet constraint, which is the same index this fix has to reshape,
 so doing both at once costs one migration instead of two on the same invariant.
 
+**#35 has taken it**, as of its 2026-09-01 revision: tasks 1.1 and 3.7 carry the
+unproven-setup state and its injected failure, and the `counter-device-sessions`
+delta carries the requirement text. Task 3.7 closes this note.
+
 Sooner if a setup ever actually fails this way, or if tablets start being set up
 often enough that a rare failure becomes a likely one — a second outlet opening,
 or hardware being replaced on any regular basis.

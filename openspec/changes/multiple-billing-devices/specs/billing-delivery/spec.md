@@ -1,15 +1,31 @@
 ## ADDED Requirements
 
-### Requirement: Local queues remain isolated by physical device
-Each billing device SHALL retain and drain only its own local envelopes. Device health reporting MAY publish non-PII aggregate state but SHALL NOT copy payloads or make one device responsible for another device's queue.
+### Requirement: A queue belongs to one tablet and never to its outlet
 
-#### Scenario: One device is offline
-- **WHEN** one same-outlet device loses connectivity while another remains online
-- **THEN** each continues from its own state and the online device neither drains nor exposes the offline device's command payloads
+Each tablet SHALL retain and drain only its own envelopes, dependency edges,
+results and local resolutions. No tablet SHALL become responsible for, or gain
+visibility of, another tablet's queue, and correction, discard and drain SHALL
+remain available only on the tablet that created the work.
 
-### Requirement: Revoked-device results do not block other devices
-Server refusal or recovery of one revoked device's commands SHALL NOT stop unrelated delivery from another active same-outlet device.
+Telemetry MAY publish non-identifying aggregate state per tablet and SHALL NOT
+copy payloads or customer facts anywhere, for monitoring or otherwise.
 
-#### Scenario: Revoked queue enters recovery
-- **WHEN** an admin recovers eligible work from one revoked device
-- **THEN** other active devices continue ordinary billing and delivery independently
+#### Scenario: One tablet is offline
+
+- **WHEN** one tablet at an outlet loses connectivity while the other keeps trading
+- **THEN** each drains from its own store, the online tablet neither delivers nor displays the offline tablet's commands, and neither counter is blocked by the other
+
+#### Scenario: A refusal stops one chain and no other tablet
+
+- **WHEN** a command is permanently refused on one tablet
+- **THEN** its descendants stop on that tablet alone, and the other tablet's unrelated chains keep draining
+
+### Requirement: Removing one tablet does not disturb another's delivery
+
+Refusal of a removed tablet's commands, and the handling of the work left on it,
+SHALL NOT stop or delay delivery from any other active tablet at the same outlet.
+
+#### Scenario: One tablet is removed mid-service
+
+- **WHEN** an admin removes one of two tablets while both hold unsent work
+- **THEN** the removed tablet's requests are refused at the database and its envelopes stay on the device, while the other tablet continues billing and draining without interruption
