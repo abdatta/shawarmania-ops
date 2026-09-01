@@ -614,6 +614,38 @@ test.describe('the counter', () => {
 })
 
 test.describe('the counter offline', () => {
+  test('walks cold-start provenance, capture, Finish Day refusal and reconnect', async ({
+    page,
+  }) => {
+    await page.goto('demo/biller')
+    await page.getByRole('button', { name: 'Close and resume offline' }).click()
+
+    await expect(page.getByTestId('offline-resume-status')).toContainText(
+      'Offline · last successful read',
+    )
+    await expect(page.getByTestId('menu-as-of')).toBeVisible()
+    await expect(page.getByTestId('pipeline-as-of')).toBeVisible()
+    await expect(page.getByTestId('bills-as-of')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Hand over' })).toBeDisabled()
+
+    await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+    await recordPaid(page)
+    await expect(page.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Finish day' }).click()
+    const finishDialog = page.getByRole('dialog', { name: 'Finish day' })
+    await expect(finishDialog.getByText('Finish Day is unavailable offline')).toBeVisible()
+    await expect(finishDialog.getByRole('button', { name: 'Keep billing' })).toBeVisible()
+    await expect(finishDialog.getByRole('button', { name: /finish day/i })).toHaveCount(0)
+    await finishDialog.getByRole('button', { name: 'Keep billing' }).click()
+
+    await page.getByRole('button', { name: 'Reconnect and drain' }).click()
+    await expect(page.getByTestId('offline-resume-status')).toHaveCount(0)
+    await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'synced', {
+      timeout: 15_000,
+    })
+  })
+
   test('accumulates, escalates, and drains when the connection returns', async ({
     page,
     context,

@@ -39,8 +39,10 @@ import {
   BillingDeliveryStoreError,
   BillingDrainCoordinator,
   BillingUnsentReporter,
+  counterResumeStopAt,
   type BillingDeliveryEnvelopeRecord,
   type BillingLockManager,
+  type CounterResumeCoordinator,
 } from '@/outbox'
 import type { CounterDeviceSession } from '@/session/counter-session'
 
@@ -278,6 +280,7 @@ async function requireAccepted(
 export function createSupabaseBillingAdapter(
   client: SupabaseClient<Database>,
   counterSession: CounterDeviceSession | null = null,
+  resumeCoordinator?: CounterResumeCoordinator,
 ): BillingAdapter {
   const commands = createSupabaseBillingCommandAdapter(client)
   const orderCache = new Map<string, BillingOrder>()
@@ -306,6 +309,10 @@ export function createSupabaseBillingAdapter(
     sync: { kind: 'synced', pending: 0 },
   }
 
+  for (const order of counterSession?.offlineResume?.pipeline ?? []) {
+    orderCache.set(order.id, structuredClone(order))
+  }
+
   const notify = () => {
     for (const listener of [...listeners]) listener()
   }
@@ -326,7 +333,12 @@ export function createSupabaseBillingAdapter(
     if (
       state.shift === null ||
       state.shift.id !== counterSession.shift.id ||
-      Date.parse(counterSession.shift.expiresAt) <= Date.now()
+      Math.min(
+        Date.parse(counterSession.shift.expiresAt),
+        counterSession.offlineResume
+          ? counterResumeStopAt(counterSession.offlineResume)
+          : Number.POSITIVE_INFINITY,
+      ) <= Date.now()
     ) {
       throw new BillingActionError(
         'no_shift',
@@ -594,6 +606,7 @@ export function createSupabaseBillingAdapter(
       )
     } else {
       orders = (data as unknown as OrderReadRow[]).map(orderView)
+      if (pipelineOnly) resumeCoordinator?.notePipeline(outletId, orders)
       for (const [id, cached] of orderCache) {
         if (cached.outletId === outletId) orderCache.delete(id)
       }
@@ -663,6 +676,7 @@ export function createSupabaseBillingAdapter(
         ),
       ),
     )
+    if (filters.counterShiftId) resumeCoordinator?.noteBills(filters.counterShiftId, serverBills)
     const pendingBillIds = new Set(
       database
         ? (await database.envelopes.toArray()).flatMap((envelope) => {
@@ -865,10 +879,11 @@ export function createSupabaseBillingAdapter(
   async function startRuntime(): Promise<void> {
     if (!counterSession || !store || !database || deliverySubscription) return
     const tabletId = counterSession.device.deviceId
-    deliverySubscription = liveQuery(() =>
-      database.envelopes.where('tabletId').equals(tabletId).toArray(),
-    ).subscribe({
-      next: (envelopes) => {
+    deliverySubscription = liveQuery(async () => ({
+      envelopes: await database.envelopes.where('tabletId').equals(tabletId).toArray(),
+      expenses: await database.expenseEnvelopes.where('tabletId').equals(tabletId).toArray(),
+    })).subscribe({
+      next: ({ envelopes, expenses }) => {
         const queued = envelopes
           .filter((envelope) => envelope.type === 'pay_now')
           .map((envelope) => {
@@ -891,7 +906,7 @@ export function createSupabaseBillingAdapter(
           queued,
           sync: {
             ...deliverySync(
-              envelopes.length,
+              envelopes.length + expenses.length,
               envelopes.some((envelope) => envelope.state === 'needs_attention'),
             ),
           },
@@ -900,6 +915,16 @@ export function createSupabaseBillingAdapter(
       },
       error: () => undefined,
     })
+
+    // Reconnection must resolve the tablet and shift before any ordinary
+    // delivery. The session hook listens for `online`; its successful server
+    // resolution replaces this adapter, and only that fresh adapter drains.
+    if (counterSession.offlineResume) {
+      deliveryReachable = false
+      state = { ...state, sync: deliverySync(state.sync.pending) }
+      notify()
+      return
+    }
 
     const lockManager: BillingLockManager | null =
       typeof navigator !== 'undefined' && navigator.locks
@@ -1009,7 +1034,11 @@ export function createSupabaseBillingAdapter(
       const needsAttentionCount = envelopes.filter(
         (envelope) => envelope.state === 'needs_attention',
       ).length
-      const unsentCount = envelopes.length - needsAttentionCount
+      const unsentExpenseCount = await store.database.expenseEnvelopes
+        .where('tabletId')
+        .equals(session.device.deviceId)
+        .count()
+      const unsentCount = envelopes.length - needsAttentionCount + unsentExpenseCount
 
       let openOrderCount = 0
       let editablePaymentCount = 0
@@ -1494,8 +1523,14 @@ export function createSupabaseBillingAdapter(
         // The counter's durable command log is sufficient to keep a newly
         // accepted payment editable while the backend is unreachable. Other
         // failures still surface instead of silently presenting partial data.
-        if (typeof navigator === 'undefined' || navigator.onLine) throw cause
-        serverBills = []
+        if (
+          !counterSession?.offlineResume &&
+          (typeof navigator === 'undefined' || navigator.onLine)
+        )
+          throw cause
+        serverBills = counterSession?.offlineResume?.bills
+          ? structuredClone(counterSession.offlineResume.bills)
+          : []
       }
       const bills = (await overlayDurableBills(shiftId, serverBills, known)).sort((a, b) =>
         b.paidAt.localeCompare(a.paidAt),

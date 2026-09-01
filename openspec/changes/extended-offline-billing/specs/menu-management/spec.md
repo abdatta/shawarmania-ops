@@ -58,7 +58,7 @@ replace it with the latest menu on the first successful response.
 - **WHEN** the menu loaded successfully and a later refresh receives no backend response
 - **THEN** the counter may continue from that shift's snapshot, marks the screen offline, and snapshots the displayed name and price into each new line
 
-#### Scenario: The app starts with no reachable backend, inside a live shift
+#### Scenario: The app starts with no reachable backend
 - **WHEN** the tablet reloads or starts with no backend response, and holds a complete resume record whose approved shift has not expired
 - **THEN** the counter opens from the persisted menu, labels it with the read it came from, and each new line snapshots the displayed name and price
 

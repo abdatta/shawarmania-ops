@@ -45,6 +45,8 @@ export interface CounterDeviceSession {
   kind: 'counter-device'
   device: CounterDevice
   shift: CounterShift | null
+  /** Present only when the first resolution resumed this approved shift locally. */
+  offlineResume?: CounterResumeRecord
 }
 
 /** Is somebody on the counter right now? */
@@ -53,3 +55,4 @@ export function hasLiveShift(
 ): session is CounterDeviceSession & { shift: CounterShift } {
   return session.shift !== null
 }
+import type { CounterResumeRecord } from '@/outbox'

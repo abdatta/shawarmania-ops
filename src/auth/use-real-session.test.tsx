@@ -28,8 +28,10 @@ const auth = vi.hoisted(() => ({
   signOut: vi.fn(),
   onAuthChange: vi.fn(),
 }))
+const resume = vi.hoisted(() => ({ readCounterResume: vi.fn() }))
 
 vi.mock('@/data-access/auth', () => auth)
+vi.mock('@/outbox', () => resume)
 
 const PROFILE: Profile = {
   id: 'u-1',
@@ -72,6 +74,7 @@ beforeEach(() => {
   auth.loadOwnAssignments.mockResolvedValue([MANAGES_KALYANI])
   auth.loadOwnCounterDevice.mockResolvedValue(null)
   auth.loadCounterShift.mockResolvedValue(null)
+  resume.readCounterResume.mockResolvedValue({ status: 'missing' })
 })
 
 it('ends a human session with a specific reason after a definitive protected-action rejection', async () => {
@@ -177,6 +180,33 @@ describe('useRealSession, resolving a counter tablet', () => {
     await waitFor(() => expect(result.current.state.status).toBe('unavailable'))
     expect(auth.loadOwnProfile).not.toHaveBeenCalled()
     expect(auth.signOut).not.toHaveBeenCalled()
+  })
+
+  it('reopens the same approved counter from a complete same-installation record', async () => {
+    auth.currentUser.mockResolvedValue({ userId: 'device-1', username: 'counter' })
+    auth.loadOwnCounterDevice.mockRejectedValue(new Error('offline'))
+    const record = {
+      tablet: { id: 'device-1', outletId: KALYANI, label: 'Kalyani counter tablet' },
+      shift: {
+        id: 'shift-1',
+        personId: 'u-9',
+        outletId: KALYANI,
+        openedAt: '2026-09-01T12:00:00.000Z',
+        businessDate: '2026-09-01',
+        expiresAt: '2026-09-02T00:00:00.000Z',
+      },
+    }
+    resume.readCounterResume.mockResolvedValue({ status: 'ready', record })
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('counter'))
+
+    const state = result.current.state
+    if (state.status !== 'counter') throw new Error('expected a resumed counter')
+    expect(state.device.device.deviceId).toBe('device-1')
+    expect(state.device.shift?.id).toBe('shift-1')
+    expect(state.device.offlineResume).toBe(record)
+    expect(auth.loadOwnProfile).not.toHaveBeenCalled()
   })
 })
 

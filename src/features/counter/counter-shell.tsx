@@ -12,6 +12,7 @@ import { ExpenseList } from '@/features/expenses/expense-list'
 import { getSurface, isRenderable } from '@/gates/registry'
 import { useCounterDevice } from '@/session/counter-context'
 import type { CounterShift } from '@/session/counter-session'
+import { counterResumeStopAt, hasMaterialClockSkew } from '@/outbox'
 
 import { ShiftRequestScreen } from './shift-request-screen'
 import { FinishDaySheet } from './finish-day-sheet'
@@ -56,6 +57,8 @@ export function CounterShell({
    */
   const [handingOver, setHandingOver] = useState(false)
   const [finishOpen, setFinishOpen] = useState(false)
+  const [boundaryReached, setBoundaryReached] = useState(false)
+  const resume = device.offlineResume
 
   /**
    * Watch for a shift that ended somewhere else — at the cutover, or from the
@@ -64,15 +67,19 @@ export function CounterShell({
   useEffect(() => {
     if (!shift) return
     const unsubscribe = counter.subscribeToDeviceHandshake(device.device.deviceId, onShiftChanged)
+    const stopAt = resume ? counterResumeStopAt(resume) : Date.parse(shift.expiresAt)
     const expiry = window.setTimeout(
-      onShiftChanged,
-      Math.max(0, Date.parse(shift.expiresAt) - Date.now()),
+      () => {
+        setBoundaryReached(true)
+        onShiftChanged()
+      },
+      Math.max(0, stopAt - Date.now()),
     )
     return () => {
       unsubscribe()
       window.clearTimeout(expiry)
     }
-  }, [shift, counter, device.device.deviceId, onShiftChanged])
+  }, [shift, counter, device.device.deviceId, onShiftChanged, resume])
 
   if (!shift || handingOver) {
     return (
@@ -89,6 +96,36 @@ export function CounterShell({
   return (
     <div className="min-h-dvh bg-canvas p-4 text-content">
       <div className="mx-auto max-w-[100rem] space-y-4">
+        {resume && (
+          <div
+            role="status"
+            data-testid="offline-resume-status"
+            className="rounded-xl border-2 border-warning bg-surface p-3 text-sm text-content"
+          >
+            <p className="font-bold">
+              Offline · last successful read{' '}
+              {new Date(resume.lastSuccessfulReadAt).toLocaleString()}
+            </p>
+            <p className="mt-1 text-content-muted">
+              Menu, the outlet pipeline and Bills this shift are remembered as of that read. This
+              tablet cannot check removal while offline. Opening, handing over or leaving a shift
+              needs the connection and the operator&rsquo;s own phone.
+            </p>
+            {hasMaterialClockSkew(resume) && (
+              <p className="mt-1 font-semibold text-warning">
+                Clock warning: server observed {new Date(resume.serverObservedAt).toLocaleString()};
+                this device recorded {new Date(resume.deviceObservedAt).toLocaleString()}. Neither
+                clock was changed.
+              </p>
+            )}
+            {boundaryReached && (
+              <p className="mt-1 font-semibold text-danger">
+                New work has stopped. Reconnect this tablet, then the operator must use their own
+                phone to open the next shift. Unsent and needs-attention work remains here.
+              </p>
+            )}
+          </div>
+        )}
         <header className="flex flex-wrap items-baseline justify-between gap-2">
           <h1 className="text-lg font-semibold">{device.device.label}</h1>
           <div className="flex items-center gap-3">
@@ -99,7 +136,13 @@ export function CounterShell({
             </p>
             <button
               type="button"
-              onClick={() => setHandingOver(true)}
+              onClick={() => {
+                if (!resume) setHandingOver(true)
+              }}
+              disabled={Boolean(resume)}
+              title={
+                resume ? 'Reconnect; handover also needs the incoming operator’s phone.' : undefined
+              }
               className={buttonVariants({ variant: 'secondary', size: 'phone' })}
             >
               Hand over
@@ -119,6 +162,7 @@ export function CounterShell({
         <FinishDaySheet
           open={finishOpen}
           shiftId={shift.id}
+          offline={Boolean(resume)}
           onClose={() => setFinishOpen(false)}
           onFinished={() => {
             setFinishOpen(false)

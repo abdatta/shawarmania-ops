@@ -26,6 +26,7 @@ export function CounterActivityRail({
   onEditOrder,
   onActivityChanged,
   pin,
+  asOf,
 }: {
   refreshKey: number
   editingOrder: BillingOrder | null
@@ -34,6 +35,7 @@ export function CounterActivityRail({
   onActivityChanged: () => void
   /** The docked card, built by the composer that owns the draft it displays. */
   pin: ReactNode
+  asOf?: string
 }) {
   const editing = editingOrder !== null
 
@@ -50,6 +52,14 @@ export function CounterActivityRail({
       */
       className="flex min-h-0 flex-col rounded-xl border border-border bg-surface"
     >
+      {asOf && (
+        <p
+          className="px-3 pt-2 text-xs font-semibold text-content-muted"
+          data-testid="pipeline-as-of"
+        >
+          Outlet pipeline as of {new Date(asOf).toLocaleString()}
+        </p>
+      )}
       {/*
         Pulled `--dock-overhang` past the rail's left border and given it straight
         back as padding, so the content sits exactly where it always did while the

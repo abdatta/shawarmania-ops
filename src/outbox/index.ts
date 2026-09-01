@@ -9,6 +9,7 @@ export {
   type BillingDeliveryLeaseRecord,
   type BillingDeliveryResultRecord,
   type BillingDeliveryTombstoneRecord,
+  type CounterExpenseEnvelopeRecord,
 } from './schema'
 export {
   BillingDeliveryStore,
@@ -18,6 +19,20 @@ export {
   type ResolveBillingAttentionInput,
 } from './store'
 export {
+  COUNTER_RESUME_SCHEMA_VERSION,
+  MATERIAL_CLOCK_SKEW_MS,
+  REMEMBERED_CUSTOMER_LIMIT,
+  REMEMBERED_CUSTOMER_RETENTION_MS,
+  counterResumeStopAt,
+  hasMaterialClockSkew,
+  readCounterResume,
+  retainRememberedCustomers,
+  writeCounterResume,
+  type CounterResumeRead,
+  type CounterResumeRecord,
+  type RememberedCustomerResult,
+} from './resume-record'
+export {
   BILLING_DRAIN_LOCK_NAME,
   MAX_BILLING_RETRY_MS,
   BillingDrainCoordinator,
@@ -26,3 +41,4 @@ export {
   type BillingLockManager,
 } from './drain'
 export { BillingUnsentReporter, type BillingUnsentReporterOptions } from './reporter'
+export { CounterResumeCoordinator } from './resume-coordinator'

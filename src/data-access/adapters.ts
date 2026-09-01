@@ -1559,6 +1559,8 @@ export interface CustomerIdentity {
   phone: string
   /** The saved billing name, which plenty of customers never give. */
   name: string | null
+  /** Set only when an offline counter reused this exact result from its last read. */
+  remembered?: true
 }
 
 /**

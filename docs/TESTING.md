@@ -198,6 +198,18 @@ write.
 End-to-end, with the network genuinely disabled rather than mocked away.
 
 - Go offline, ring up several bills, come back online → **exactly** that many bills land, with no duplicates.
+- After one online approval and complete read, close the app, cut the backend,
+  reopen the same counter, capture mixed order/payment/preparation/unwind/cancel
+  work and one expense, close and reopen again, then reconnect → every effect
+  lands exactly once and the remembered base is replaced only after drain.
+- An incomplete, unsupported or foreign-installation resume row opens no
+  counter, remains stored, and changes no envelope, dependency, result or
+  tombstone.
+- Expiry and cutover are tested independently; whichever is earlier stops new
+  work while retained work and its needs-attention ancestry stay visible.
+- Finish Day offline names local categories and offers only Keep billing; no
+  confirmation row is created or implied, and readiness names the tablet until
+  it drains and confirms online.
 - Reload the page mid-queue → the outbox survives and still drains.
 - Drop the backend before local commit → the composer stays; drop it after local
   commit → the composer clears and the command remains not sent yet.

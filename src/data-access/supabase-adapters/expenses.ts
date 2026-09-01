@@ -9,6 +9,9 @@ import {
   type NewExpense,
 } from '../adapters'
 import type { Database, Tables } from '../database.types'
+import { BillingDeliveryDatabase } from '@/outbox'
+import type { CounterDeviceSession } from '@/session/counter-session'
+import { newUuid } from '@/lib/uuid'
 
 const ALL = '*'
 type People = ReadonlyMap<string, string | null>
@@ -53,9 +56,74 @@ function trimmed(value: string | null | undefined): string | null {
   return text ? text : null
 }
 
-export function createSupabaseExpensesAdapter(client: SupabaseClient<Database>): ExpensesAdapter {
+export function createSupabaseExpensesAdapter(
+  client: SupabaseClient<Database>,
+  counterSession: CounterDeviceSession | null = null,
+): ExpensesAdapter {
+  const database = counterSession ? new BillingDeliveryDatabase() : null
+
+  const optimistic = (id: string, input: NewExpense, createdAt: string): ExpenseRecord => ({
+    id,
+    outletId: input.outletId,
+    businessDate: input.businessDate,
+    category: input.category,
+    isCash: input.isCash,
+    amountPaise: input.amountPaise,
+    note: trimmed(input.note),
+    occurredAt: null,
+    createdAt,
+    updatedAt: createdAt,
+    recordedBy: counterSession?.shift ? { id: counterSession.shift.personId, name: null } : null,
+    source: null,
+    updatedBy: null,
+    recordedAway: false,
+    voidedAt: null,
+    voidedBy: null,
+    voidedReason: null,
+  })
+
+  async function localExpenses(
+    outletId: string,
+    businessDates: readonly string[],
+  ): Promise<ExpenseRecord[]> {
+    if (!database) return []
+    const rows = await database.expenseEnvelopes
+      .where('tabletId')
+      .equals(counterSession!.device.deviceId)
+      .toArray()
+    return rows
+      .filter(
+        (row) => row.input.outletId === outletId && businessDates.includes(row.input.businessDate),
+      )
+      .sort((left, right) => right.createdAtMs - left.createdAtMs)
+      .map((row) => optimistic(row.id, row.input, new Date(row.createdAtMs).toISOString()))
+  }
+
+  async function drainExpenses(): Promise<void> {
+    if (!database || counterSession?.offlineResume) return
+    const rows = await database.expenseEnvelopes
+      .where('tabletId')
+      .equals(counterSession!.device.deviceId)
+      .sortBy('createdAtMs')
+    for (const row of rows) {
+      const { error } = await client.from('expenses').insert({
+        id: row.id,
+        outlet_id: row.input.outletId,
+        business_date: row.input.businessDate,
+        category: row.input.category,
+        is_cash: row.input.isCash,
+        amount_paise: row.input.amountPaise,
+        description: trimmed(row.input.note),
+      })
+      if (error && error.code !== '23505') return
+      await database.expenseEnvelopes.delete(row.id)
+    }
+  }
+
   return {
     async listExpenses(outletId, businessDate) {
+      if (counterSession?.offlineResume) return localExpenses(outletId, [businessDate])
+      await drainExpenses()
       const [{ data, error }, people] = await Promise.all([
         client
           .from('expenses')
@@ -65,11 +133,17 @@ export function createSupabaseExpensesAdapter(client: SupabaseClient<Database>):
           .order('created_at', { ascending: false }),
         readPeople(client),
       ])
-      if (error) throw toExpenseError(error)
-      return (data ?? []).map((row) => toRecord(row, people))
+      const local = await localExpenses(outletId, [businessDate])
+      if (error) {
+        if (counterSession?.offlineResume) return local
+        throw toExpenseError(error)
+      }
+      return [...local, ...(data ?? []).map((row) => toRecord(row, people))]
     },
 
     async listRecentExpenses(outletId, businessDates) {
+      if (counterSession?.offlineResume) return localExpenses(outletId, businessDates)
+      await drainExpenses()
       const [{ data, error }, people] = await Promise.all([
         client
           .from('expenses')
@@ -80,11 +154,27 @@ export function createSupabaseExpensesAdapter(client: SupabaseClient<Database>):
           .order('created_at', { ascending: false }),
         readPeople(client),
       ])
-      if (error) throw toExpenseError(error)
-      return (data ?? []).map((row) => toRecord(row, people))
+      const local = await localExpenses(outletId, businessDates)
+      if (error) {
+        if (counterSession?.offlineResume) return local
+        throw toExpenseError(error)
+      }
+      return [...local, ...(data ?? []).map((row) => toRecord(row, people))]
     },
 
     async createExpense(expense: NewExpense) {
+      if (database && counterSession?.shift && counterSession.offlineResume) {
+        const id = newUuid()
+        const createdAtMs = Date.now()
+        await database.expenseEnvelopes.add({
+          id,
+          tabletId: counterSession.device.deviceId,
+          shiftId: counterSession.shift.id,
+          createdAtMs,
+          input: structuredClone(expense),
+        })
+        return optimistic(id, expense, new Date(createdAtMs).toISOString())
+      }
       const { data, error } = await client
         .from('expenses')
         .insert({

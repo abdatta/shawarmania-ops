@@ -74,8 +74,11 @@ export function ShiftBillList({
               data-testid={`shift-bill-detail-${bill.id}`}
             >
               <ul className="divide-y divide-border">
-                {bill.lines.map((line) => (
-                  <li key={line.menuItemId} className="grid grid-cols-[1fr_auto] gap-x-3 py-2">
+                {bill.lines.map((line, index) => (
+                  <li
+                    key={`${line.menuItemId}-${index}`}
+                    className="grid grid-cols-[1fr_auto] gap-x-3 py-2"
+                  >
                     <div className="min-w-0">
                       <p className="text-sm font-semibold leading-tight text-content">
                         {line.itemName}

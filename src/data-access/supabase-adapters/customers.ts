@@ -3,6 +3,7 @@ import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 import { normalizeIndianPhone, phoneErrorMessage, validateIndianPhone } from '../../../shared/phone'
 import { CustomerActionError, type CustomerIdentity, type CustomersAdapter } from '../adapters'
 import type { Database } from '../database.types'
+import type { CounterResumeCoordinator, CounterResumeRecord } from '@/outbox'
 
 /**
  * The real customer adapter — **connected, and connected through two functions
@@ -19,7 +20,11 @@ import type { Database } from '../database.types'
  * because the boundary it speaks to is real now, and a `*-live` change that had
  * to invent this adapter as well would be doing two jobs at once.
  */
-export function createSupabaseCustomersAdapter(client: SupabaseClient<Database>): CustomersAdapter {
+export function createSupabaseCustomersAdapter(
+  client: SupabaseClient<Database>,
+  resumeCoordinator?: CounterResumeCoordinator,
+  offlineResume?: CounterResumeRecord,
+): CustomersAdapter {
   return {
     async lookupByPhone(phone) {
       // Refused here, before a round trip. The database refuses it too — that
@@ -37,11 +42,23 @@ export function createSupabaseCustomersAdapter(client: SupabaseClient<Database>)
       const { data, error } = await client.rpc('customer_lookup_by_phone', {
         p_phone: validation.phone,
       })
-      if (error) throw toCustomerError(error)
+      if (error) {
+        const remembered = offlineResume?.rememberedCustomers[validation.phone]
+        if (remembered)
+          return {
+            id: remembered.id,
+            phone: remembered.phone,
+            name: remembered.name,
+            remembered: true,
+          }
+        throw toCustomerError(error)
+      }
 
       // Zero rows is the answer "nobody has used this number", not a failure.
       const row = data?.[0]
-      return row ? toIdentity(row) : null
+      const identity = row ? toIdentity(row) : null
+      if (identity) resumeCoordinator?.noteCustomer(identity)
+      return identity
     },
 
     async createOrGet({ phone, name }) {

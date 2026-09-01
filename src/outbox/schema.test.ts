@@ -141,6 +141,55 @@ describe('BillingDeliveryDatabase', () => {
     expect(await database.results.count()).toBe(0)
     expect(await database.tombstones.count()).toBe(0)
     expect(await database.leases.count()).toBe(0)
+    expect(await database.resumeRecords.count()).toBe(0)
+    expect(await database.expenseEnvelopes.count()).toBe(0)
+    database.close()
+  })
+
+  it('adds resume storage to version three without touching delivery evidence', async () => {
+    const name = databaseName('resume-upgrade')
+    const delivery = envelope()
+    const legacy = new Dexie(name)
+    legacy.version(3).stores({
+      envelopes:
+        '&commandId, tabletId, shiftId, outletId, businessDate, type, state, eligibleAtMs, nextAttemptAtMs, [tabletId+state], [chainId+createdAtMs]',
+      dependencies: '&id, commandId, dependsOnCommandId',
+      results: '&commandId, recordedAtMs',
+      tombstones: '&commandId, resolution, recordedAtMs, replacementCommandId',
+      leases: '&name, ownerId, expiresAtMs',
+    })
+    await legacy.open()
+    await legacy.table('envelopes').put(delivery)
+    await legacy.table('dependencies').put({
+      id: dependencyRecordId(delivery.commandId, 'parent-1'),
+      commandId: delivery.commandId,
+      dependsOnCommandId: 'parent-1',
+    })
+    await legacy.table('results').put({
+      commandId: 'parent-1',
+      recordedAtMs: 1,
+      result: { status: 'accepted', commandId: 'parent-1' },
+      refusedTrace: null,
+    })
+    await legacy.table('tombstones').put({
+      commandId: 'old-1',
+      resolution: 'discarded',
+      actorId: 'person-1',
+      reason: 'duplicate',
+      replacementCommandId: null,
+      recordedAtMs: 2,
+    })
+    legacy.close()
+
+    const database = new BillingDeliveryDatabase(name)
+    await database.open()
+
+    expect(await database.envelopes.get(delivery.commandId)).toEqual(delivery)
+    expect(await database.dependencies.count()).toBe(1)
+    expect(await database.results.count()).toBe(1)
+    expect(await database.tombstones.count()).toBe(1)
+    expect(await database.resumeRecords.count()).toBe(0)
+    expect(await database.expenseEnvelopes.count()).toBe(0)
     database.close()
   })
 })

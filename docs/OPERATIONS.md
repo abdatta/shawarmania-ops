@@ -352,6 +352,15 @@ The PWA caches the app shell, which means **a bad deploy can persist on a counte
 
 If a tablet needs forcing onto a new build, closing and reopening the app twice is enough. Do **not** clear site data as a first resort — from `counter-devices-and-offline` (#9) onward that destroys the outbox and any bills waiting in it.
 
+From Billing V2.1, a compatible build also keeps one complete resume record. To
+rehearse it, approve a real test shift online, read the menu/pipeline/bills once,
+close the app, take the backend away and reopen it. The same counter must open
+with every remembered surface labelled by read time. Capture work, close and
+reopen once more, then reconnect: tablet/shift resolution must happen before the
+queue drains, and authoritative reads replace remembered ones only after drain.
+Never clear site data to repair an unsupported record; preserve it and every
+envelope, reconnect, and let a compatible/current build write a fresh record.
+
 ## Onboarding a new franchise outlet
 
 The repeatable path. **If any step here requires a code change, that is a bug** — outlet number seven must be a data operation.
@@ -921,6 +930,12 @@ block remains manually typeable.
 **A counter tablet is lost or stolen** → remove it immediately (Tablets → Remove). Removal is permanent and takes the live shift with it, so nothing further can be rung on it. Any unresolved local bills on it are lost; the confirmation names how many it last reported, but an **out of touch** report is old evidence rather than a current count. Record that uncertainty with the physical cash count and set a replacement up with a fresh code. **Nobody's account is compromised** — a tablet holds no password.
 
 **Bills are not syncing** → check whether Tablets says **unresolved** or **out of touch**, then check the counter's network. Unresolved names the tablet's fresh retained-envelope count; out of touch means even a displayed zero is no longer current evidence. The queue is durable while the device is intact. Bring the counter app to the foreground and wait through a minute heartbeat; do not reinstall or clear site data, because that destroys the outbox.
+
+**The counter resumed offline and has reached expiry or cutover** → do not move
+the clock or clear storage. Restore the backend; the tablet must re-resolve
+itself before delivering. The next operator opens a new shift from their own
+phone. Finish Day remains outstanding until the old tablet drains and confirms
+online.
 
 **Cash does not reconcile** → check for late-synced bills against a closed day (they surface as reconciliation exceptions), then cash expenses recorded under the wrong business date, then withdrawals not recorded.
 

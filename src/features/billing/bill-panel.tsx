@@ -73,9 +73,9 @@ export function BillPanel({
           </p>
         ) : (
           <ul className="divide-y divide-border">
-            {lines.map((line) => (
+            {lines.map((line, index) => (
               <li
-                key={line.menuItemId}
+                key={`${line.menuItemId}-${index}`}
                 data-testid={`bill-line-${line.menuItemId}`}
                 className="flex items-center gap-2 py-2"
               >

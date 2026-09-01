@@ -30,6 +30,7 @@ import { useOnForeground } from '@/features/attention/attention'
 import { newUuid } from '@/lib/uuid'
 import { declareUnsavedWork } from '@/pwa/occupancy'
 import { SessionContext } from '@/session/context'
+import { CounterDeviceContext } from '@/session/counter-context'
 import { validateIndianPhone } from '../../../shared/phone'
 
 import { BillComposerFooter } from './bill-composer-footer'
@@ -120,6 +121,8 @@ function readCounterColumnWidths(): CounterColumnWidths {
 
 export function BillingCounter({ outletId: counterOutletId }: { outletId?: string } = {}) {
   const session = useContext(SessionContext)
+  const counterDevice = useContext(CounterDeviceContext)
+  const resume = counterDevice?.offlineResume
   const { billing, counter, customers, menu: menuAdapter, outlets } = useAdapters()
   const { shift } = useCounterState()
 
@@ -219,7 +222,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       const loadedMenu = await menuAdapter.listMenu(outletId)
       hasMenu.current = true
       setMenu(loadedMenu)
-      setMenuOffline(false)
+      setMenuOffline(Boolean(resume))
       setError((current) =>
         current === 'Could not load the menu. Try again in a moment.' ? null : current,
       )
@@ -232,7 +235,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         setError('Could not load the menu. Try again in a moment.')
       }
     }
-  }, [menuAdapter, outletId])
+  }, [menuAdapter, outletId, resume])
 
   const refreshVisibleData = useCallback(() => {
     void Promise.resolve().then(refreshMenu)
@@ -585,6 +588,11 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       }
     >
       <div className="@container min-h-0 overflow-y-auto">
+        {resume && (
+          <p className="mb-2 text-xs font-semibold text-content-muted" data-testid="menu-as-of">
+            Menu as of {new Date(resume.lastSuccessfulReadAt).toLocaleString()}
+          </p>
+        )}
         {menuOffline && (
           <p
             role="status"
@@ -673,7 +681,11 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
                 <div className="flex gap-2">
                   <UserRoundCheck aria-hidden className="mt-0.5 text-primary" size={20} />
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-content">Returning customer found</p>
+                    <p className="font-semibold text-content">
+                      {visibleCustomerMatch.remembered
+                        ? 'Remembered customer found'
+                        : 'Returning customer found'}
+                    </p>
                     <p className="text-sm text-content-muted">
                       {visibleCustomerMatch.name
                         ? customerName.trim() && customerName.trim() !== visibleCustomerMatch.name
@@ -681,6 +693,12 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
                           : `Fill this order with ${visibleCustomerMatch.name}?`
                         : 'This phone has no saved name.'}
                     </p>
+                    {visibleCustomerMatch.remembered && (
+                      <p className="mt-1 text-xs font-semibold text-content-muted">
+                        Exact phone match from this tablet&rsquo;s last online read. It will be
+                        checked again on sync.
+                      </p>
+                    )}
                     <div className="mt-2 flex gap-2">
                       <Button
                         size="phone"
@@ -711,6 +729,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         ) : (
           <MyShiftSurface
             embedded
+            {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
             refreshKey={billRefresh}
             onActivityChanged={() => setPipelineRefresh((value) => value + 1)}
           />
@@ -737,6 +756,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           className="absolute -left-2.5 top-0 z-20 h-full w-5 cursor-col-resize touch-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
         />
         <CounterActivityRail
+          {...(resume ? { asOf: resume.lastSuccessfulReadAt } : {})}
           refreshKey={pipelineRefresh}
           editingOrder={editingOrder}
           onEditOrder={beginOrderEdit}

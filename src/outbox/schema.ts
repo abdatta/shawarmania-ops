@@ -2,9 +2,11 @@ import Dexie, { type Table, type Transaction } from 'dexie'
 
 import type { BillingCommand, BillingCommandType } from '../../shared/billing-command'
 import type { BillingCommandResult } from '@/domain'
+import type { NewExpense } from '@/data-access/adapters'
+import type { CounterResumeRecord } from './resume-record'
 
 export const BILLING_DELIVERY_DATABASE_NAME = 'shawarmania-billing-delivery'
-export const BILLING_DELIVERY_DATABASE_VERSION = 3
+export const BILLING_DELIVERY_DATABASE_VERSION = 4
 
 export type BillingDeliveryEnvelopeState = 'held' | 'pending' | 'retrying' | 'needs_attention'
 
@@ -67,6 +69,15 @@ export interface BillingDeliveryLeaseRecord {
   expiresAtMs: number
 }
 
+/** A counter expense uses the row UUID itself as its replay identity. */
+export interface CounterExpenseEnvelopeRecord {
+  id: string
+  tabletId: string
+  shiftId: string
+  createdAtMs: number
+  input: NewExpense
+}
+
 export function dependencyRecordId(commandId: string, dependsOnCommandId: string): string {
   return `${commandId}:${dependsOnCommandId}`
 }
@@ -114,6 +125,8 @@ export class BillingDeliveryDatabase extends Dexie {
   results!: Table<BillingDeliveryResultRecord, string>
   tombstones!: Table<BillingDeliveryTombstoneRecord, string>
   leases!: Table<BillingDeliveryLeaseRecord, string>
+  resumeRecords!: Table<CounterResumeRecord, string>
+  expenseEnvelopes!: Table<CounterExpenseEnvelopeRecord, string>
 
   constructor(name = BILLING_DELIVERY_DATABASE_NAME) {
     super(name)
@@ -124,7 +137,7 @@ export class BillingDeliveryDatabase extends Dexie {
       envelopes: '&commandId',
     })
 
-    this.version(BILLING_DELIVERY_DATABASE_VERSION)
+    this.version(3)
       .stores({
         envelopes:
           '&commandId, tabletId, shiftId, outletId, businessDate, type, state, eligibleAtMs, nextAttemptAtMs, [tabletId+state], [chainId+createdAtMs]',
@@ -139,5 +152,19 @@ export class BillingDeliveryDatabase extends Dexie {
           .toCollection()
           .modify((record: Record<string, unknown>) => upgradeLegacyEnvelope(record)),
       )
+
+    // Resume records arrived after the delivery schema was already public.
+    // This version adds one store and deliberately carries no upgrader: opening
+    // a newer build must not read, rewrite or delete any delivery evidence.
+    this.version(BILLING_DELIVERY_DATABASE_VERSION).stores({
+      envelopes:
+        '&commandId, tabletId, shiftId, outletId, businessDate, type, state, eligibleAtMs, nextAttemptAtMs, [tabletId+state], [chainId+createdAtMs]',
+      dependencies: '&id, commandId, dependsOnCommandId',
+      results: '&commandId, recordedAtMs',
+      tombstones: '&commandId, resolution, recordedAtMs, replacementCommandId',
+      leases: '&name, ownerId, expiresAtMs',
+      resumeRecords: '&tabletId, schemaVersion, complete, lastSuccessfulReadAt',
+      expenseEnvelopes: '&id, tabletId, shiftId, createdAtMs',
+    })
   }
 }

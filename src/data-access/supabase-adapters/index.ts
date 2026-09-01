@@ -18,6 +18,7 @@ import { createSupabaseMenuAdapter } from './menu'
 import { createSupabaseOutletsAdapter } from './outlets'
 import { createSupabaseInsightsAdapter } from './oversight'
 import type { CounterDeviceSession } from '@/session/counter-session'
+import { CounterResumeCoordinator } from '@/outbox'
 
 /**
  * The real-adapter factory the real session tree provides. The demo tree must
@@ -28,17 +29,31 @@ export function createSupabaseAdapters(
   counterSession: CounterDeviceSession | null = null,
 ): DataAdapters {
   const client = getSupabaseClient()
+  const resumeCoordinator =
+    counterSession && !counterSession.offlineResume
+      ? new CounterResumeCoordinator(counterSession)
+      : undefined
+  const offlineResume = counterSession?.offlineResume
+  if (counterSession && resumeCoordinator) {
+    void client
+      .rpc('attendance_current_context', { p_outlet_ids: [counterSession.device.outletId] })
+      .then(({ data, error }) => {
+        if (!error && data?.[0]?.server_at) {
+          resumeCoordinator.noteServerTime(data[0].server_at)
+        }
+      })
+  }
   return {
-    outlets: createSupabaseOutletsAdapter(client),
+    outlets: createSupabaseOutletsAdapter(client, resumeCoordinator, offlineResume),
     aggregatorSync: createSupabaseAggregatorSyncAdapter(client),
     swiggySync: createSupabaseSwiggySyncAdapter(client),
     accounts: createSupabaseAccountsAdapter(client),
     attendance: createSupabaseAttendanceAdapter(client),
-    menu: createSupabaseMenuAdapter(client),
+    menu: createSupabaseMenuAdapter(client, resumeCoordinator, offlineResume),
     // Real tablet sessions receive the durable local-first settlement path;
     // personal sessions receive the same authorised manager reads and writes
     // without opening a local queue.
-    billing: createSupabaseBillingAdapter(client, counterSession),
+    billing: createSupabaseBillingAdapter(client, counterSession, resumeCoordinator),
     // Real from the day it ships, like the customer directory and for the same
     // reason: the tablets, the handshake and the shift are what #9 is, and a
     // stub would leave the boundary untested by the only screens that use it.
@@ -46,8 +61,8 @@ export function createSupabaseAdapters(
     // The exception among the not-yet-connected adapters: the global customer
     // directory is REAL from today, because the boundary that protects it is.
     // The billing surfaces that call it are still `demo`-gated (#31, #10).
-    customers: createSupabaseCustomersAdapter(client),
-    expenses: createSupabaseExpensesAdapter(client),
+    customers: createSupabaseCustomersAdapter(client, resumeCoordinator, offlineResume),
+    expenses: createSupabaseExpensesAdapter(client, counterSession),
     expenseCategories: createSupabaseExpenseCategoriesAdapter(client),
     // `owner-dashboard` is `live` and does call this one — and `null` is its
     // honest answer, not a stub refusing. See supabase-adapters/oversight.ts.

@@ -11,6 +11,7 @@ import {
   type NewMenuItemWithCategory,
 } from '../adapters'
 import type { Database, Json, Tables } from '../database.types'
+import type { CounterResumeCoordinator, CounterResumeRecord } from '@/outbox'
 
 function menuError(error: PostgrestError): MenuActionError {
   switch (error.code) {
@@ -71,7 +72,11 @@ function createdPair(value: Json): {
   }
 }
 
-export function createSupabaseMenuAdapter(client: SupabaseClient<Database>): MenuAdapter {
+export function createSupabaseMenuAdapter(
+  client: SupabaseClient<Database>,
+  resumeCoordinator?: CounterResumeCoordinator,
+  offlineResume?: CounterResumeRecord,
+): MenuAdapter {
   async function createItem(item: NewMenuItem) {
     const { data, error } = await client
       .from('menu_items')
@@ -108,13 +113,19 @@ export function createSupabaseMenuAdapter(client: SupabaseClient<Database>): Men
           .order('sort_order')
           .order('name'),
       ])
-      if (categoriesResult.error) throw menuError(categoriesResult.error)
-      if (itemsResult.error) throw menuError(itemsResult.error)
+      if (categoriesResult.error || itemsResult.error) {
+        if (offlineResume?.tablet.outletId === outletId) {
+          return structuredClone(offlineResume.menu)
+        }
+        throw menuError(categoriesResult.error ?? itemsResult.error!)
+      }
       const items = itemsResult.data ?? []
-      return (categoriesResult.data ?? []).map((category) => ({
+      const menu = (categoriesResult.data ?? []).map((category) => ({
         category,
         items: items.filter((item) => item.category_id === category.id),
       }))
+      resumeCoordinator?.noteMenu(outletId, menu)
+      return menu
     },
 
     async createCategory(category: NewMenuCategory) {

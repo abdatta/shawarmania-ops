@@ -12,6 +12,7 @@ import {
   type Profile,
 } from '@/data-access/auth'
 import { forgetRememberedOutlets } from '@/features/remembered-outlet'
+import { readCounterResume } from '@/outbox'
 import type { CounterDeviceSession } from '@/session/counter-session'
 import { onHumanSessionInvalid } from '@/session/human-session-invalid'
 import { deriveSessionScope, type Session } from '@/session/session'
@@ -97,6 +98,32 @@ async function resolveSession(): Promise<Resolution> {
       return { kind: 'counter', device: { kind: 'counter-device', device, shift } }
     }
   } catch {
+    const resumed = await readCounterResume(user.userId).catch(() => ({
+      status: 'missing' as const,
+    }))
+    if (resumed.status === 'ready') {
+      const record = resumed.record
+      return {
+        kind: 'counter',
+        device: {
+          kind: 'counter-device',
+          device: {
+            deviceId: record.tablet.id,
+            outletId: record.tablet.outletId,
+            label: record.tablet.label,
+          },
+          shift: {
+            id: record.shift.id,
+            personId: record.shift.personId,
+            outletId: record.shift.outletId,
+            openedAt: record.shift.openedAt,
+            businessDate: record.shift.businessDate,
+            expiresAt: record.shift.expiresAt,
+          },
+          offlineResume: record,
+        },
+      }
+    }
     return { kind: 'indeterminate' }
   }
 
@@ -173,12 +200,14 @@ export function useRealSession(): RealSession {
       if (document.visibilityState === 'visible') void apply()
     }
     document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('online', apply)
     const interval = window.setInterval(() => void apply(), REVALIDATE_INTERVAL_MS)
     const stopAuthListener = onAuthChange(() => void apply())
 
     return () => {
       cancelled = true
       document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('online', apply)
       window.clearInterval(interval)
       stopAuthListener()
     }

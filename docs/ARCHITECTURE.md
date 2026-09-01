@@ -278,24 +278,34 @@ per-outlet/per-business-date counter and restart after cutover.
 
 Deliberately asymmetric, because the risk is asymmetric:
 
-- **Reads that continue offline inside an already-open shift**: that shift's last
-  successfully loaded menu plus local orders, bills and delivery state.
+- **Reads that continue offline inside an already-approved shift**: one atomic,
+  versioned resume record holds the tablet and shift, outlet cutover, menu,
+  outlet pipeline, this shift's bills, bounded exact-phone results and the last
+  observed clocks. A cold start overlays durable commands onto that remembered
+  server base; it never opens from independently-aged caches.
 - **Writes that work offline**: direct payments; create, revise, cancel and
-  pay-order commands; and tender corrections during the original five-minute
-  window.
+  pay-order commands; preparation/repreparation and payment unwind commands;
+  tender corrections during the original five-minute window; and a new counter
+  expense with its own idempotent row UUID.
 - **Opening a shift is online-only**, and deliberately so: the handshake is a
   conversation between the tablet, the server and somebody else's phone, and
   nothing local can stand in for the person who types the four digits. The cost is
   bounded by the shape of the day — a shift lasts to the outlet's cutover, so the
   connection is needed once an evening rather than continuously, and a shift
   already open survives losing it.
-- **Reloading or starting billing needs the backend and a fresh live shift.** Old
-  queued work may still drain after cutover, but a persisted menu is not authority
-  to open new work after a restart.
+- **Reloading may resume only that same approved shift.** The first failed
+  resolution may use a complete, supported record for this installation while
+  both the stored shift expiry and outlet cutover remain ahead. It opens UI, not
+  authority: the server still validates every delayed command, and opening,
+  handing over or leaving a shift still needs the backend and the operator's
+  phone.
 - **Finish day is online-only.** It first waits until no paid bill remains inside
   its five-minute tender-edit window, then drains the local date, refuses any
   unresolved command or open server order, ends the shift and writes the server
   confirmation under one outlet/date lock.
-- **Everything else is online-only.** Inventory, expenses, cash close, P&L and admin screens are used by managers on phones who can wait for a connection. Making them offline-capable would multiply conflict-resolution complexity for no operational gain.
+- **Everything else is online-only.** Expense correction/withdrawal, inventory,
+  cash operations and admin screens are used by managers on phones who can wait
+  for a connection. Making them offline-capable would multiply conflict
+  resolution for no operational gain.
 
 That line is a design commitment, not an accident. Revisit it in a proposal, not in passing.

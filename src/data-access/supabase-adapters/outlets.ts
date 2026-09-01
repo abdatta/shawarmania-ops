@@ -8,6 +8,7 @@ import {
   type OutletsAdapter,
 } from '../adapters'
 import type { Database, TablesInsert, TablesUpdate } from '../database.types'
+import type { CounterResumeCoordinator, CounterResumeRecord } from '@/outbox'
 
 /**
  * The real outlets adapter.
@@ -88,7 +89,11 @@ function asOutletError(error: { message: string; code?: string }): unknown {
   return error
 }
 
-export function createSupabaseOutletsAdapter(client: SupabaseClient<Database>): OutletsAdapter {
+export function createSupabaseOutletsAdapter(
+  client: SupabaseClient<Database>,
+  resumeCoordinator?: CounterResumeCoordinator,
+  offlineResume?: CounterResumeRecord,
+): OutletsAdapter {
   const table = () => client.from('outlets')
 
   return {
@@ -101,7 +106,11 @@ export function createSupabaseOutletsAdapter(client: SupabaseClient<Database>): 
 
     async getOutlet(id: string) {
       const { data, error } = await table().select('*').eq('id', id).maybeSingle()
-      if (error) throw error
+      if (error) {
+        if (offlineResume?.outlet.id === id) return structuredClone(offlineResume.outlet)
+        throw error
+      }
+      if (data) resumeCoordinator?.noteOutlet(data)
       return data
     },
 

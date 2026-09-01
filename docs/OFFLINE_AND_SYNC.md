@@ -11,14 +11,19 @@ Deliberately asymmetric, because the risk is asymmetric.
 
 | Works offline | Online only |
 |---|---|
-| Direct payment; create, revise, cancel and pay an order; correct tender for five minutes | Opening a shift |
-| Continue with an already-open shift's last loaded menu | Finish day |
-| View this tablet's local orders, bills and delivery state | Inventory, expenses |
+| Direct payment; create, revise, prepare, reprepare, cancel, pay and unwind an order; correct tender for five minutes | Opening, handing over or leaving a shift |
+| Record a new counter expense | Finish day; correct or withdraw an expense |
+| Cold-start the same approved shift from one complete resume record | Inventory |
+| View the remembered menu, outlet pipeline and this shift's bills with their read time | Cash operations |
 | | Profit and loss, reports |
 | | All admin and owner screens |
 | | Attendance, from any device |
 
-**Opening a shift moved to the online-only column with `counter-devices-and-offline`, and that is a real cost.** The handshake is a conversation between the tablet, the server and somebody else's phone: nothing local can stand in for the person who has to type four digits. So a tablet that comes up with no connection cannot open a counter, however much billing it could do once one was open. The mitigation is the shape of the day rather than a feature — a shift lasts until the outlet's cutover, so the connection is needed once an evening rather than continuously, and a shift already open survives the connection dropping afterwards.
+**A new shift remains online-only.** The handshake is a conversation between
+the tablet, the server and the operator's own phone: nothing local can stand in
+for the person who types four digits. After one successful approval, however, a
+complete same-installation resume record may reopen that exact shift through a
+cold start. New work stops at the earlier of its stored expiry and cutover.
 
 Attendance is online-only from every device now, including the counter, because attendance is an RPC that evaluates the geofence server-side at the moment of the claim.
 
@@ -105,7 +110,10 @@ retry look like a new collision. The receipt needs no customer or line payload:
 the canonical hash plus command, scope and time identities are enough to decide
 replay versus conflict.
 
-**Bill numbers are assigned by the server, never the client.** Two offline tablets cannot safely agree on the next number in a sequence. Until a bill syncs, the UI shows a clearly provisional local reference; the real per-outlet number arrives with the server's response. Showing a fake number that later changes would be worse than showing an honest placeholder.
+**Bill numbers are assigned by the server, never the client.** Two offline
+tablets cannot safely agree on the next number in a sequence. Until a bill
+syncs, the UI shows a short local reference and **not sent yet**; it never calls
+the bill provisional. The real per-outlet number arrives with acceptance.
 
 **Totals are computed on the device and validated by the database as one
 aggregate.** Parent, lines, number, state transition and receipt commit in one
@@ -119,11 +127,18 @@ Neither is re-derived at sync or read time.
 only when its immutable creation time falls inside the named tablet shift and
 before tablet removal. Backdating outside those facts is permanent refusal.
 
-**A live screen keeps one shift menu snapshot, but a reload does not open from
-cache.** After at least one successful live read, a transient failure leaves the
-already-open counter usable with a persistent warning. Captured lines retain
-their item-name and price snapshots through every refresh. Starting or resuming
-after reload requires the backend and a fresh approved shift.
+**One complete resume record may open the same shift after reload.** A successful
+authorised load replaces the record in one IndexedDB transaction only after the
+tablet, shift, outlet cutover, menu, outlet pipeline and bills have all arrived.
+Incomplete and unsupported records are retained but refused. The record supplies
+the server side of the existing overlay; envelopes remain the only local command
+log. Remembered surfaces state their read time and reconnect re-resolves the
+tablet before draining, then refreshes authoritative reads last.
+
+**Exact-phone results are the only remembered customer lookup.** The tablet may
+reuse only a complete canonical phone it resolved online itself, labels the
+match remembered, keeps at most 50 results for 24 hours, and writes none to logs
+or telemetry. An unrecognised phone remains unresolved until sync.
 
 **Freshness has two independent triggers.** The screen re-reads menu and
 activity on foreground, and Realtime events for menu, orders and bills are only
@@ -184,6 +199,7 @@ re-close, or automatic recovery path.
 | Tablet dies with unresolved bills | **Data is lost.** IndexedDB is the only copy until sync. Mitigation: the last report is freshness-qualified; once its minute heartbeat ages past 30 minutes the manager sees **out of touch**, even when the last count was zero |
 | Server rejects a bill as malformed | Quarantined, not silently dropped; surfaced to the manager with the reason |
 | Clock skew on the tablet | Both client and server timestamps are stored. Material disagreement is a signal worth surfacing, not something to paper over |
+| App update cannot read the record schema | Resume is refused without deleting the record or any delivery evidence; reconnect remains the recovery path |
 | Two tablets at one outlet | Deferred to `multiple-billing-devices` (#35). The command and number allocators are concurrency-safe, but launch setup permits one active tablet per outlet |
 | Tablet removed while holding a queue | Draining stops and envelopes remain on that tablet. The removal confirmation names what it last reported unresolved, so the admin is told before rather than after |
 | A command is accepted while the pipeline is refreshing | The read consults the outbox before the server, so the acceptance is never lost between them and the order does not return to the counter as unpaid |
@@ -206,7 +222,10 @@ Almost nothing, which is the point.
   server names its order too, so neither the biller nor the manager has to work
   out which one it was about.
 
-**Finish day** is the explicit online boundary. Its readiness sheet first tries
+**Finish day** is the explicit online boundary. Offline it opens the same sheet,
+names unsent and needs-attention categories, explains that authoritative state
+is unavailable, and offers only **Keep billing**—no countdown, retry-as-proof or
+local confirmation. Online, its readiness sheet first tries
 to drain the date, then distinguishes work still sending, work needing human
 attention, open orders and an unreachable server, with a resolution for each.
 Those are hard blockers. A payment still inside its five-minute edit window is

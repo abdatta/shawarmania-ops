@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { Database } from '../database.types'
+import type { CounterResumeRecord } from '@/outbox'
 import { createSupabaseCustomersAdapter } from './customers'
 
 /**
@@ -66,6 +67,26 @@ describe('looking a customer up', () => {
     await expect(adapterWith(fails('PT429')).lookupByPhone('9876543210')).rejects.toThrow(
       /Carry on with the bill/,
     )
+  })
+
+  it('reuses only the exact normalized phone remembered by this tablet', async () => {
+    const rpc = fails('08006')
+    const resume = {
+      rememberedCustomers: {
+        '+919876543210': { ...ROW, rememberedAt: '2026-09-01T12:00:00.000Z' },
+      },
+    } as unknown as CounterResumeRecord
+    const adapter = createSupabaseCustomersAdapter(
+      { rpc } as unknown as SupabaseClient<Database>,
+      undefined,
+      resume,
+    )
+
+    await expect(adapter.lookupByPhone('98765 43210')).resolves.toEqual({
+      ...ROW,
+      remembered: true,
+    })
+    await expect(adapter.lookupByPhone('9876543211')).rejects.toMatchObject({ code: 'failed' })
   })
 })
 

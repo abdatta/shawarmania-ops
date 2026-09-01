@@ -75,8 +75,11 @@ export function OpenOrderCardBody({
 
       {showLines && (
         <ul className="mt-3 space-y-1.5" aria-label={`Items for ${reference}`}>
-          {lines.map((line) => (
-            <li key={line.menuItemId} className="flex items-start gap-2 text-sm text-content">
+          {lines.map((line, index) => (
+            <li
+              key={`${line.menuItemId}-${index}`}
+              className="flex items-start gap-2 text-sm text-content"
+            >
               <span className="min-w-7 rounded-md bg-primary px-1.5 py-0.5 text-center font-black leading-5 text-on-primary">
                 {line.quantity}×
               </span>

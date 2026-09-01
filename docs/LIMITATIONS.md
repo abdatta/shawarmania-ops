@@ -545,7 +545,20 @@ by itself.
 
 ### Clock skew on the counter tablet
 
-Both client and server timestamps are stored. A badly wrong tablet clock can produce a wrong `business_date`, since the business date is resolved on the device at settlement. Material disagreement between the two clocks should be surfaced as a signal. There is no automatic correction — repairing a business date automatically could move revenue between days, which is worse than flagging it.
+The resume record shows the last observed server time beside the device time
+when they materially disagree, but corrects neither. A rolled-back clock can
+keep local UI open too long; it cannot make the server accept work outside the
+real shift. A wrong device clock can still stamp a wrong creation instant, so
+the warning is evidence rather than repair.
+
+### Offline resumption cannot learn removal
+
+A complete resume record can keep the approved counter capturing until the
+earlier of shift expiry and cutover. If an admin removes the tablet during that
+outage, the tablet cannot know until reconnect; every later command is refused
+then and remains on the device. There is deliberately no privileged recovery
+upload. This is a longer exposure window than a tab that merely stayed open,
+bounded by the same shift and cutover and disclosed persistently on the tablet.
 
 ### One active tablet per outlet at launch
 

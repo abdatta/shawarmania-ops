@@ -4,12 +4,15 @@ import Dexie from 'dexie'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { BillDraft, PaymentMethod } from '../adapters'
+import type { BillDraft, BillingOrder, PaymentMethod } from '../adapters'
 import type { Database } from '../database.types'
 import {
   BILLING_DELIVERY_DATABASE_NAME,
   BillingDeliveryDatabase,
+  BillingDrainCoordinator,
   BillingDeliveryStore,
+  COUNTER_RESUME_SCHEMA_VERSION,
+  type CounterResumeRecord,
 } from '@/outbox'
 import type { CounterDeviceSession } from '@/session/counter-session'
 
@@ -256,6 +259,15 @@ describe('the live tablet acceptance boundary', () => {
     })
     await expect(expired.settleBill(draft)).rejects.toMatchObject({ code: 'no_shift' })
 
+    const cutOver = createSupabaseBillingAdapter(clientWithRpc(), {
+      ...session,
+      offlineResume: {
+        shift: { expiresAt: '2099-01-01T00:00:00.000Z' },
+        outletCutoverAt: '2020-01-01T00:00:00.000Z',
+      } as CounterResumeRecord,
+    })
+    await expect(cutOver.settleBill(draft)).rejects.toMatchObject({ code: 'no_shift' })
+
     const billing = createSupabaseBillingAdapter(clientWithRpc(), session)
     await expect(
       billing.saveOrder({
@@ -308,6 +320,64 @@ describe('the live tablet acceptance boundary', () => {
     ])
     expect(dependencies).toHaveLength(2)
     database.close()
+  })
+
+  it('overlays new durable commands onto the persisted server base after a cold start', async () => {
+    const rememberedOrder: BillingOrder = {
+      id: orderInput.clientId,
+      outletId: 'outlet-1',
+      deviceId: session.device.deviceId,
+      orderNumber: 17,
+      localReference: null,
+      businessDate: '2026-08-11',
+      orderedAt: '2026-08-11T12:00:00.000Z',
+      preparedAt: null,
+      status: 'open',
+      creatorId: 'person-1',
+      creatorName: 'Asha',
+      customerName: null,
+      customerPhone: null,
+      lines: draft.lines,
+      totalPaise: 13_900,
+      cancelReason: null,
+      cancelledAt: null,
+      cancelledByName: null,
+      paidAt: null,
+      billId: null,
+    }
+    const resume = {
+      tabletId: session.device.deviceId,
+      schemaVersion: COUNTER_RESUME_SCHEMA_VERSION,
+      complete: true,
+      tablet: {
+        id: session.device.deviceId,
+        label: session.device.label,
+        outletId: session.device.outletId,
+      },
+      shift: { ...session.shift!, operatorName: 'Asha' },
+      outlet: { id: 'outlet-1', business_day_cutover: '04:00' },
+      outletCutover: '04:00',
+      outletCutoverAt: '2099-08-12T00:00:00.000Z',
+      menu: [],
+      pipeline: [rememberedOrder],
+      bills: [],
+      rememberedCustomers: {},
+      lastSuccessfulReadAt: '2026-08-11T12:00:00.000Z',
+      serverObservedAt: '2026-08-11T12:00:00.000Z',
+      deviceObservedAt: '2026-08-11T12:00:00.000Z',
+    } as unknown as CounterResumeRecord
+    const billing = createSupabaseBillingAdapter(offlineClient(), {
+      ...session,
+      offlineResume: resume,
+    })
+
+    await expect(billing.listOpenOrders('outlet-1')).resolves.toMatchObject([
+      { id: rememberedOrder.id, orderNumber: 17, preparedAt: null },
+    ])
+    await billing.markOrderPrepared(rememberedOrder.id, true)
+    await expect(billing.listOpenOrders('outlet-1')).resolves.toMatchObject([
+      { id: rememberedOrder.id, preparedAt: expect.any(String) },
+    ])
   })
 
   it('reports an explicitly offline Finish Day check without waiting for a network timeout', async () => {
@@ -387,6 +457,95 @@ describe('the live tablet acceptance boundary', () => {
       'void_order_payment',
       'set_order_preparation',
     ])
+    database.close()
+  })
+
+  it('drains twenty mixed cold-start commands exactly once with every chain intact', async () => {
+    const resumed = createSupabaseBillingAdapter(offlineClient(), session)
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 2))
+    const nextOrder = (suffix: string) => ({
+      ...orderInput,
+      clientId: `20000000-0000-4000-a000-${suffix.padStart(12, '0')}`,
+    })
+
+    const first = nextOrder('1')
+    await resumed.saveOrder(first)
+    await pause()
+    await resumed.reviseOrder(first.clientId, { ...first, customerName: 'Asha revised' })
+    await pause()
+    await resumed.markOrderPrepared(first.clientId, true)
+    await pause()
+    const firstBill = await resumed.payOrder(first.clientId, [
+      { method: 'cash', amountPaise: 13_900 },
+    ])
+    if (!firstBill) throw new Error('the prepared order should settle locally')
+    await pause()
+    await resumed.correctBillPayment(firstBill.id, 0, [{ method: 'upi', amountPaise: 13_900 }])
+    await pause()
+    await resumed.unpayOrder(first.clientId, firstBill.id, 'Tender correction needed')
+    await pause()
+    await resumed.markOrderPrepared(first.clientId, false)
+    await pause()
+    await resumed.cancelOrder(first.clientId, 'Customer changed their mind')
+
+    const second = nextOrder('2')
+    await pause()
+    await resumed.saveOrder(second)
+    await pause()
+    await resumed.markOrderPrepared(second.clientId, true)
+    await pause()
+    const secondBill = await resumed.payOrder(second.clientId, [
+      { method: 'cash', amountPaise: 13_900 },
+    ])
+    if (!secondBill) throw new Error('the second prepared order should settle locally')
+    await pause()
+    await resumed.cancelPaidOrder(second.clientId, 'Duplicate order')
+
+    const third = nextOrder('3')
+    await pause()
+    await resumed.saveOrder(third)
+    await pause()
+    await resumed.markOrderPrepared(third.clientId, true)
+    await pause()
+    await resumed.markOrderPrepared(third.clientId, false)
+    await pause()
+    await resumed.cancelOrder(third.clientId, 'Kitchen stopped it')
+
+    for (let index = 4; index <= 7; index += 1) {
+      await pause()
+      await resumed.settleBill({
+        ...draft,
+        clientId: `20000000-0000-4000-a000-${String(index).padStart(12, '0')}`,
+        customerName: `Mixed command ${index}`,
+      })
+    }
+
+    const database = new BillingDeliveryDatabase()
+    const store = new BillingDeliveryStore(database)
+    const commands = await database.envelopes.toArray()
+    expect(commands).toHaveLength(20)
+    expect(new Set(commands.map((row) => row.commandId)).size).toBe(20)
+
+    const delivered: string[] = []
+    const drain = new BillingDrainCoordinator({
+      store,
+      tabletId: session.device.deviceId,
+      ownerId: 'twenty-command-test',
+      locks: null,
+      now: () => Date.now() + 60_000,
+      connectivityTarget: null,
+      execute: async (command) => {
+        delivered.push(command.commandId)
+        return { status: 'accepted', commandId: command.commandId }
+      },
+    })
+
+    await expect(drain.runOnce()).resolves.toBe(20)
+    await expect(drain.runOnce()).resolves.toBe(0)
+    expect(delivered).toHaveLength(20)
+    expect(new Set(delivered).size).toBe(20)
+    await expect(database.envelopes.count()).resolves.toBe(0)
+    await drain.stop()
     database.close()
   })
 

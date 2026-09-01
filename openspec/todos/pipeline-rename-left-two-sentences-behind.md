@@ -1,6 +1,6 @@
 # The Pipeline Rename Left Two Sentences Behind
 
-**Type**: Design gap · **Status**: Open · **Area**: Counter billing / Shell
+**Type**: Design gap · **Status**: Open · **Area**: Counter billing
 
 ## Expectation
 
@@ -14,17 +14,9 @@ pipeline — **Preparing** over **Unpaid Prepared Orders**.
 `preparing-order-pipeline` (#45) rewrote that workspace and renamed it
 everywhere user-visible, but its spec delta covered `counter-billing`,
 `order-lifecycle`, `billing-delivery` and `billing-command-contract` only. Two
-sentences describing the same workspace live elsewhere and were never carried
-across, so they now contradict the requirements beside them:
-
-- **`app-shell`, "Billing lifecycle surfaces are gated by context and
-  readiness"** still says the Counter surface combines the composer, **this
-  tablet's open orders** and this shift's bills. The pipeline has been
-  outlet-wide since #45 — another tablet's work is this counter's work, shown
-  with its creator — and the middle column is Bills this shift, not the open
-  orders list. The same paragraph names the resizable pair the
-  "current-bill and activity columns", where `counter-billing` now says "middle
-  and activity".
+sentences describing the same workspace lived elsewhere. The `app-shell`
+sentence was corrected by `extended-offline-billing` (#34); one contradiction
+remains:
 
 - **`counter-billing`, "The composer supports immediate payment and saving an
   order"** has a scenario ending "the order appears in **Open orders**", while
@@ -49,24 +41,17 @@ Found on 2026-08-31 while reviewing the seven archives of 2026-08-30.
 
 ## What would close it
 
-A delta on `app-shell` restating the Counter workspace in the vocabulary
-`counter-billing` now uses — outlet-wide pipeline, middle column, Bills this
-shift — and a one-line correction to the composer scenario so it says Preparing.
-No code changes: the app already behaves the way the corrected sentences would
-describe.
+A one-line correction to the `counter-billing` composer scenario so it says
+Preparing. No code changes: the app already behaves that way.
 
 ## Trigger
 
 Already wired into the two changes that edit these capabilities, so this does
 not wait on somebody thinking to read the backlog:
 
-- **`extended-offline-billing` (#34), task 3.5** takes the `app-shell` half. It
-  modifies that capability anyway, and its delta already restates the Counter
-  workspace paragraph in the corrected vocabulary.
 - **`multiple-billing-devices` (#35), task 3.8** takes the `counter-billing`
-  half, and the `app-shell` half too if #34 did not. #35 depends on #34, so
-  ordinarily #34 goes first and #35 only has the scenario left to correct — its
-  delta already carries that corrected scenario.
+  half. #35 depends on #34 and its delta already carries that corrected
+  scenario.
 
 Whichever of the two runs last closes this note. If both are reordered or
 dropped, the trigger falls back to the next change touching either capability.

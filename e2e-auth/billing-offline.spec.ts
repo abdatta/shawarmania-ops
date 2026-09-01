@@ -204,9 +204,9 @@ test('the real tablet survives network loss and settles each local acceptance ex
 
   await page.getByRole('button', { name: 'Finish day' }).click()
   const finish = page.getByRole('dialog', { name: 'Finish day' })
-  await expect(finish.getByText(/server could not be reached/i)).toBeVisible()
+  await expect(finish.getByText(/authoritative server state is unavailable/i)).toBeVisible()
   await expect(finish.getByText(/actions? still sending/i)).toBeVisible()
-  await expect(finish.getByRole('button', { name: 'Check again' })).toBeVisible()
+  await expect(finish.getByRole('button', { name: 'Check again' })).toHaveCount(0)
   await expect(finish.getByRole('button', { name: 'Keep billing' })).toBeVisible()
   await expect(finish.getByRole('button', { name: /finish day now/i })).toHaveCount(0)
 

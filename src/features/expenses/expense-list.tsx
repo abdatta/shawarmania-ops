@@ -104,8 +104,15 @@ export function ExpenseList({
   const [expanded, setExpanded] = useState<string | null>(null)
 
   async function loadCategories() {
-    const list = await categoriesAdapter.list()
-    setCategories(list.map((category) => category.name))
+    try {
+      const list = await categoriesAdapter.list()
+      setCategories(list.map((category) => category.name))
+    } catch {
+      // Suggestions are convenience, never a write prerequisite. In an
+      // offline-resumed counter the operator may still type the category that
+      // will travel with the durable expense envelope.
+      setCategories([])
+    }
   }
 
   /**

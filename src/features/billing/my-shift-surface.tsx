@@ -26,10 +26,12 @@ export function MyShiftSurface({
   embedded = false,
   refreshKey = 0,
   onActivityChanged,
+  asOf,
 }: {
   embedded?: boolean
   refreshKey?: number
   onActivityChanged?: () => void
+  asOf?: string
 } = {}) {
   const { billing } = useAdapters()
   const { shift } = useCounterState()
@@ -121,9 +123,16 @@ export function MyShiftSurface({
     >
       <div className={embedded ? 'shrink-0' : undefined}>
         {embedded ? (
-          <h3 id="my-shift-title" className="text-sm font-black text-content">
-            Bills this shift
-          </h3>
+          <>
+            <h3 id="my-shift-title" className="text-sm font-black text-content">
+              Bills this shift
+            </h3>
+            {asOf && (
+              <p className="text-xs font-semibold text-content-muted" data-testid="bills-as-of">
+                As of {new Date(asOf).toLocaleString()}
+              </p>
+            )}
+          </>
         ) : (
           <>
             <h1 id="my-shift-title" className="text-2xl font-black text-content">

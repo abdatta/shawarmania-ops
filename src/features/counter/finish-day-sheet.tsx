@@ -11,11 +11,13 @@ export function FinishDaySheet({
   shiftId,
   onClose,
   onFinished,
+  offline = false,
 }: {
   open: boolean
   shiftId: string
   onClose: () => void
   onFinished: () => void
+  offline?: boolean
 }) {
   const { billing } = useAdapters()
   const [readiness, setReadiness] = useState<FinishDayReadiness | null>(null)
@@ -27,7 +29,8 @@ export function FinishDaySheet({
     setChecking(true)
     setError(null)
     try {
-      setReadiness(await billing.inspectFinishDay(shiftId))
+      const answer = await billing.inspectFinishDay(shiftId)
+      setReadiness(offline ? { ...answer, serverReachable: false, canFinish: false } : answer)
     } catch (cause) {
       setReadiness(null)
       setError(
@@ -38,7 +41,7 @@ export function FinishDaySheet({
     } finally {
       setChecking(false)
     }
-  }, [billing, shiftId])
+  }, [billing, shiftId, offline])
 
   useEffect(() => {
     if (!open) return
@@ -86,7 +89,7 @@ export function FinishDaySheet({
                     : 'Finish day'}
               </Button>
             </>
-          ) : (
+          ) : readiness && !readiness.serverReachable ? null : (
             <Button size="phone" onClick={() => void check()} disabled={busy}>
               {checking ? 'Checking again…' : 'Check again'}
             </Button>
@@ -120,14 +123,18 @@ export function FinishDaySheet({
 
           {!readiness.serverReachable && (
             <Blocker
-              title="The server could not be reached"
-              resolution="Reconnect this tablet, then choose Check again. Billing already saved locally stays on this device."
+              title="Finish Day is unavailable offline"
+              resolution="Authoritative server state is unavailable. Keep billing, reconnect this tablet, and return here after every unsent action has drained. No local end-of-day confirmation was created."
             />
           )}
           {readiness.unsentCount > 0 && (
             <Blocker
               title={`${readiness.unsentCount} action${readiness.unsentCount === 1 ? '' : 's'} still sending`}
-              resolution="Keep the tablet online. This sheet sends automatically; choose Check again after the count reaches zero."
+              resolution={
+                readiness.serverReachable
+                  ? 'Keep the tablet online. This sheet sends automatically; choose Check again after the count reaches zero.'
+                  : 'Reconnect this tablet. Delivery resumes after the tablet and shift are confirmed again.'
+              }
             />
           )}
           {readiness.needsAttentionCount > 0 && (

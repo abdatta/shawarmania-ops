@@ -130,6 +130,15 @@ The tablet's own tree has **no navigation, no account menu and no sign-out** sin
 
 **Demo mode mounts this same shell**, rather than a role-shell imitation of it (`demo-counter-is-the-real-counter`). It had drifted into one: the Biller walkthrough was the tab chrome with Counter and Expenses as navigation entries, so Finish Day, Hand over and the shift-request screen — the whole reason the tablet is shaped the way it is — could not be shown to anybody. `/demo/biller` is now a leaf address mounting `CounterShell` behind a synthetic device session, so the Biller has no navigation in either mode and nothing resolves beneath that path, exactly as nothing resolves beneath `/counter`. The demo banner is pinned above it, since the tablet's page scrolls and the banner may not.
 
+**An approved counter cold-starts offline into the same shell.** One persistent
+line names the last successful read; the menu grid, the outlet-wide preparation
+pipeline and Bills this shift each say they are remembered as of that instant.
+The existing sync indicator continues to name unsent work. A material difference
+between the last observed server clock and the device clock shows both and
+corrects neither. The demo's **Close and resume offline** / **Reconnect and
+drain** controls walk this boundary on the shared shell rather than describing
+it in a separate screen.
+
 **Set up this tablet** — one field, and it is not a password. An unconfigured tablet reaches it from the signed-out front door's **Set up this tablet** link; an admin generates a setup code on their own phone and types it here. Nothing personal is entered on a tablet at setup, and nothing personal is entered on it afterwards either.
 
 **Ask to open the counter** — what a set-up tablet shows when nobody is on it. Type the username of the person taking the counter, and the tablet displays a **four-digit confirmation code**, rendered as large as the screen allows because the person approving is standing on the other side reading it off. That is the entire property the code buys: approval is impossible unless you can see the tablet. The tablet holds no secret belonging to that person and learns nothing about them from the response — **an unknown username produces the same code, the same wait and the same two-minute timeout as a real one**, so a counter anybody can reach across cannot be used to discover who works here. One open request per tablet, and the tablet can withdraw its own for the ordinary case of a mistyped name, which takes the card off the person's phone rather than leaving it there to be puzzled over.
@@ -139,6 +148,14 @@ The tablet's own tree has **no navigation, no account menu and no sign-out** sin
 **Tablets** (manager and owner) — the hardware and counter standing at each outlet. Heartbeat time, unresolved count and the oldest unresolved instant remain explicitly **last reported**: a tablet that is off, offline or broken stops moving them and is marked out of touch after 30 minutes. Unresolved includes work needing attention; excluding it would make the drawer look safer when it is not. Beneath that telemetry, a coherent read names the live operator and opening time; if no shift is open it says **Nobody is at this counter**. Billing figures do not appear here: managers read the outlet-day Cash and UPI totals in **Billing → Totals**, while Bills and Open orders already carry their own counts. **Re-read** refreshes the tablet and counter state — there is no subscription or timer on the manager's phone. Setting one up is offered only where there is room for one, because one active tablet per outlet is a database invariant. Removing one is permanent, ends any live shift immediately, and the confirmation names what the tablet last reported unresolved.
 
 **Billing counter** — the heart of the product, and the screen most worth getting right.
+
+After an offline cold start every ordinary counter command remains available,
+including preparation, reprepare, payment unwind, tender correction, cancel and
+a new expense. Exact full phones previously resolved by this tablet may fill a
+remembered customer with the usual replacement warning; no prefix, browse or
+unknown-phone lookup is invented offline. At expiry or cutover new work stops
+and the shell asks for a connection plus the operator's own phone. Hand over and
+Finish Day never gain an offline substitute.
 
 ```
 ┌──────────────────────┬────────────────────┬────────────────────────┐

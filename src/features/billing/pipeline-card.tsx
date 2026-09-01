@@ -199,8 +199,11 @@ export function PipelineCard({
 
       {showItems && order.lines.length > 0 && (
         <ul className="mt-0.5 space-y-0" aria-label={`Items for ${reference}`}>
-          {order.lines.map((line) => (
-            <li key={line.menuItemId} className="flex items-start gap-1.5 text-sm leading-5">
+          {order.lines.map((line, index) => (
+            <li
+              key={`${line.menuItemId}-${index}`}
+              className="flex items-start gap-1.5 text-sm leading-5"
+            >
               <span className="min-w-6 shrink-0 font-black text-content">{line.quantity}×</span>
               <span className="min-w-0 flex-1 font-bold text-content">{line.itemName}</span>
             </li>

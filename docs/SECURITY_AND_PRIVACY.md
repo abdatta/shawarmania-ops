@@ -62,6 +62,14 @@ The isolation test suite asserts this for every outlet-scoped table (see [Testin
 
 **Customer PII is collected at the counter, optionally, under time pressure.** Two consequences: the fields must never block settling a bill, and we should not treat the resulting data as reliable enough to build anything important on.
 
+**Offline customer memory is exact, local and bounded.** A resume record may
+retain only identities returned for complete canonical phones this tablet
+actually resolved online. It offers no browse, prefix or cross-tablet cache,
+labels every reused result remembered, and never writes a phone to logs,
+telemetry, indexes or diagnostics. The local cap is the newest **50 results for
+24 hours**; pruning happens whenever the record is written. This is a device
+retention bound, not the still-open business-wide customer retention policy.
+
 **One customer directory covers the whole business, and that is the sharpest privacy edge in this schema.** Every other personal record here belongs to one outlet, and the isolation policies do the protecting. `customers` belongs to none, so a single wrong grant would expose every customer the business has to any manager's token. Four things hold instead of a policy:
 
 - **No client session holds any privilege on the table.** Not select, not insert — not for a manager, a device, or the owner. The grant is revoked and RLS is enabled with no policy, which says it twice.
@@ -183,6 +191,8 @@ Not in the model at this scale: sophisticated external attackers, insider databa
 
 ## Retention
 
-No automated deletion in v1. Operational history is small and valuable — a year of bills at this volume is trivial data, and the owner will want year-over-year comparison.
+No automated deletion of server operational history in v1. Local remembered
+exact-phone results are the exception: at most 50 for 24 hours on a counter.
+Bills and their audit history remain retained.
 
 Two things to revisit when the business grows: customer PII has no defined retention period, and attendance location data accumulates indefinitely. Both are noted in [Limitations](LIMITATIONS.md) rather than silently deferred. Global customer identity sharpens the first without changing what it collects — a phone and an optional name, exactly as before — because the rows now accumulate in one business-wide list rather than two outlet-sized ones, and a retention rule will have to be written once for the business rather than per outlet. See [`openspec/todos/data-retention-policy.md`](../openspec/todos/data-retention-policy.md).

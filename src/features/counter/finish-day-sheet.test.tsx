@@ -53,12 +53,13 @@ describe('Finish Day readiness sheet', () => {
       canFinish: false,
     })
 
-    expect(await screen.findByText(/server could not be reached/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Finish Day is unavailable offline/i)).toBeInTheDocument()
     expect(screen.getByText(/2 actions still sending/i)).toBeInTheDocument()
     expect(screen.getByText(/1 action needs attention/i)).toBeInTheDocument()
     expect(screen.getByText(/3 open orders/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /finish day now/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /check again/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /check again/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /keep billing/i })).toBeInTheDocument()
   })
 
   it('keeps earlier attribution exceptions informational and financially included', async () => {

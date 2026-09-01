@@ -6,6 +6,8 @@ import { CounterShell } from '@/features/counter/counter-shell'
 import { counterDeviceFixtures, DEMO_COUNTER_DEVICE_ID } from '@/data-access/mock/fixtures/billing'
 import { CounterDeviceContext } from '@/session/counter-context'
 import type { CounterDeviceSession, CounterShift } from '@/session/counter-session'
+import { Button } from '@/components/ui/button'
+import { COUNTER_RESUME_SCHEMA_VERSION, type CounterResumeRecord } from '@/outbox'
 
 /**
  * The demo's counter tablet — **the same shell the enrolled device runs**.
@@ -46,6 +48,21 @@ export function DemoCounter({ banner }: { banner?: ReactNode }) {
         that owns the viewport; the tablet, which does not, gets it here.
       */}
       <div className="sticky top-0 z-40">{banner}</div>
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2">
+        <span className="text-sm font-semibold text-content">Extended-outage walkthrough</span>
+        {session.device.offlineResume ? (
+          <Button size="phone" onClick={session.reconnect}>
+            Reconnect and drain
+          </Button>
+        ) : (
+          <Button size="phone" variant="secondary" onClick={() => void session.resumeOffline()}>
+            Close and resume offline
+          </Button>
+        )}
+        <span className="text-xs text-content-muted">
+          Capture work, resume again if wanted, then reconnect to watch the ordinary queue drain.
+        </span>
+      </div>
       <DemoCounterDelivery />
       <CounterShell shift={session.device.shift} onShiftChanged={session.reread} />
     </CounterDeviceContext.Provider>
@@ -77,9 +94,15 @@ function DemoCounterDelivery() {
  * it. Here the answer comes from the counter adapter's own live-shift read, so
  * the tablet, the Tablets surface and every phone are reading one row.
  */
-function useDemoCounterSession(): { device: CounterDeviceSession; reread: () => void } {
-  const { counter } = useAdapters()
+function useDemoCounterSession(): {
+  device: CounterDeviceSession
+  reread: () => void
+  resumeOffline: () => Promise<void>
+  reconnect: () => void
+} {
+  const { billing, counter, menu, outlets } = useAdapters()
   const [shift, setShift] = useState<CounterShift | null>(null)
+  const [offlineResume, setOfflineResume] = useState<CounterResumeRecord | undefined>()
   const [generation, setGeneration] = useState(0)
   const reread = useCallback(() => setGeneration((count) => count + 1), [])
 
@@ -122,8 +145,60 @@ function useDemoCounterSession(): { device: CounterDeviceSession; reread: () => 
     [counter, device.deviceId, reread],
   )
 
+  const resumeOffline = useCallback(async () => {
+    if (!shift) return
+    const [outlet, rememberedMenu, pipeline, history] = await Promise.all([
+      outlets.getOutlet(device.outletId),
+      menu.listMenu(device.outletId),
+      billing.listOpenOrders(device.outletId),
+      billing.listShiftHistory(shift.id),
+    ])
+    if (!outlet) return
+    const now = new Date().toISOString()
+    setOfflineResume({
+      tabletId: device.deviceId,
+      schemaVersion: COUNTER_RESUME_SCHEMA_VERSION,
+      complete: true,
+      tablet: { id: device.deviceId, label: device.label, outletId: device.outletId },
+      shift: {
+        id: shift.id,
+        personId: shift.personId,
+        operatorName: 'Demo operator',
+        outletId: shift.outletId,
+        openedAt: shift.openedAt,
+        businessDate: shift.businessDate,
+        expiresAt: shift.expiresAt,
+      },
+      outlet,
+      outletCutover: outlet.business_day_cutover,
+      outletCutoverAt: shift.expiresAt,
+      menu: rememberedMenu,
+      pipeline,
+      bills: history.bills,
+      rememberedCustomers: {},
+      lastSuccessfulReadAt: now,
+      serverObservedAt: now,
+      deviceObservedAt: now,
+    })
+  }, [billing, device, menu, outlets, shift])
+
+  const reconnect = useCallback(() => {
+    setOfflineResume(undefined)
+    reread()
+  }, [reread])
+
   return useMemo(
-    () => ({ device: { kind: 'counter-device' as const, device, shift }, reread }),
-    [device, shift, reread],
+    () => ({
+      device: {
+        kind: 'counter-device' as const,
+        device,
+        shift,
+        ...(offlineResume ? { offlineResume } : {}),
+      },
+      reread,
+      resumeOffline,
+      reconnect,
+    }),
+    [device, shift, offlineResume, reread, resumeOffline, reconnect],
   )
 }
