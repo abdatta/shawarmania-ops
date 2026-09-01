@@ -113,7 +113,7 @@ required facts can be empty or unknown proves the serialized key and explicit
 null locally, then proves the same variant reaches the intended function over
 the real HTTP transport and returns the intended row or result.
 
-Surfaces are `hidden`, `demo`, or `live`, declared in one registry (`src/gates/registry.ts`) that navigation and routing derive from. Full detail, including the safety rules that let demo mode ship to production, is in [Demo Mode](DEMO_MODE.md).
+Surfaces are `hidden`, `demo`, or `live`, declared in one registry (`src/gates/registry.ts`) that navigation and routing derive from. A surface the business decides it will never build is **deleted** rather than hidden — gate, route, component and tests together — and its tables are left standing. Full detail, including the safety rules that let demo mode ship to production, is in [Demo Mode](DEMO_MODE.md).
 
 **Navigation and routing derive from the roles a session can *reach*, which is not the same question as the roles it holds** (`owner-reaches-every-outlet`, #28). `heldRoles(session)` is what a person's live assignments confer, and it stays the answer wherever the app *states* somebody's roles — the account menu is the one place that does. `reachableRoles(session)` adds one thing: a session holding the owner role reaches the outlet-level surfaces, at every outlet, holding no assignment at any of them. Three gates read it — the phone shell's navigation, `GatedSurface`, and the role-path check in `RealRoot` — and nothing else does.
 
@@ -121,7 +121,17 @@ Two properties are worth stating because the alternative is a UI that grants its
 
 A navigation entry also **keeps the reader in the shell they are in**: the owner's Attendance is `/owner/attendance`, not `/admin/attendance`. Both role branches mount the same surface routes and the gate resolves a path against reachable roles, so the surface is identical either way — but in demo mode the role lives in the URL, so linking into another role's segment would swap the persona mid-walk. A home is the exception, keeping its own segment, because two homes cannot share one address; only a role the person **holds** contributes one, which is what stops a second dashboard tab appearing on the owner's own shell.
 
+**Navigation is derived from the registry in two levels** (#51). A `nav` entry may declare a `group`, and `NAV_GROUPS` supplies each group's label, icon and order; `navTree(items)` folds what `visibleSurfaces` returned into top-level nodes that are either a surface or a group with sorted children. Both the phone bar and the wide-screen rail draw that tree, so the two cannot disagree about what is a group or what is inside one.
+
+A group is **metadata on a surface, not an address**. Nothing resolves at `/owner/finances` and nothing should: re-pathing would have re-homed eight live routes to buy a page nobody would open, so every surface keeps the path it had and every link already in circulation still resolves. A group appears only when at least one of its children is visible to this session in this mode, so an empty heading cannot be drawn.
+
+Because groups and ungrouped entries sort against each other on one scale, **`nav.order` is unique per sibling set rather than per role**: Billing and Outlets are both `1`, in different drawers. The uniqueness test builds every role set a personal session can produce and checks each drawer of each, so two entries collide only where some real reader is shown both at once.
+
+`GROUPED_SHELL_ROLES` names the shells that draw groups — the Super Admin's and the Franchise Admin's — and carries two rules that are one problem: entries sharing a navigation label declare the same group, so a senior role's placement cannot silently override a junior role's under label dedup; and a shell that draws no groups declares none. The second is why `counter-shell` can keep reading the flat list without a group being swallowed in silence.
+
 A registry entry may also **declare that its surface has work waiting**, by naming a count source. The shell renders whatever number that source reports and knows nothing about what is being counted, so badging a further surface is a registry line plus one hook in `src/features/attention/sources.ts` — never an edit to either shell. The map is keyed by the id union the registry declares, so a source with no entry is dead code and an entry with no source does not compile. Counts are read on mount and again when the app returns to the foreground, never on a timer, and readers sharing an adapter share one request.
+
+**A collapsed group carries the sum across its children and an expanded one carries none**, so the sum and the parts are never both on screen. It reuses the same reads rather than adding any: a source hook is shared through `useSharedRead`, keyed on the adapter, so a group's probe costs a subscription rather than a second request.
 
 ## How a bill flows
 

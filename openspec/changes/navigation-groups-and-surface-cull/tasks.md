@@ -15,7 +15,7 @@ Nothing in `src/` currently knows what a navigation group is.
 - [x] 1.3 Remove the `Compare outlets`, `Profit and loss` and `Reports` buttons and the open-alert chip from `src/features/overview/owner-home.tsx` (~lines 149, 156, 163, 269–273) and the low-stock chip wherever it is raised, then update `owner-home.test.tsx` to assert their absence rather than deleting the assertions.
 - [x] 1.4 Remove the mock adapters, fixtures and demo seed rows that existed only for these screens, and confirm nothing in `src/data-access/` still compiles against a deleted surface.
 - [x] 1.5 Leave every migration untouched. `inventory_movements`, `outlet_alerts`, `alert_responses`, their policies, their grants and their isolation tests all stay, and `npm run test:rls` must still cover them.
-- [ ] 1.6 Record in `docs/LIMITATIONS.md` what these screens used to answer, that the tables survive with no reader, and that retiring them is a later change with a down-migration.
+- [x] 1.6 Record in `docs/LIMITATIONS.md` what these screens used to answer, that the tables survive with no reader, and that retiring them is a later change with a down-migration.
 
 ## 2. Groups In The Registry
 
@@ -78,17 +78,17 @@ does not read it as implementation having started:
 - `openspec/todos/navigation-outgrows-a-flat-list.md` is closed, recording how
   each of its four stated difficulties was answered.
 
-- [ ] 6.1 Verify the four items above still hold when implementation starts, and that nothing added since references `#13`, `openspec/changes/owner-console-live/`, or a spec this change removes.
-- [ ] 6.2 Update `docs/SCREENS.md`, `docs/ROLES_AND_PERMISSIONS.md`, `docs/DEMO_MODE.md`, `docs/ARCHITECTURE.md`, `docs/LIMITATIONS.md` and `docs/TESTING.md`.
-- [ ] 6.3 Run `npm run roadmap:sync` so the board's status cells derive from the folders rather than being hand-stamped.
+- [x] 6.1 Verify the four items above still hold when implementation starts, and that nothing added since references `#13`, `openspec/changes/owner-console-live/`, or a spec this change removes.
+- [x] 6.2 Update `docs/SCREENS.md`, `docs/ROLES_AND_PERMISSIONS.md`, `docs/DEMO_MODE.md`, `docs/ARCHITECTURE.md`, `docs/LIMITATIONS.md` and `docs/TESTING.md`.
+- [x] 6.3 Run `npm run roadmap:sync` so the board's status cells derive from the folders rather than being hand-stamped.
 
 ## 7. Verification And Phase Gate
 
-- [ ] 7.1 Add unit tests for `navTree` grouping and ordering, the group-sum badge, the open-group seeding rules, and the refusal to close a group from inside it.
-- [ ] 7.2 Repair the e2e specs the cull and the restructure touch: `e2e/shell.spec.ts`, `e2e/operations.spec.ts`, `e2e/expenses-and-ledger-reach.spec.ts`, `e2e/owner-console.spec.ts`, `e2e/demo-screens.spec.ts`, `e2e/attendance.spec.ts` and `e2e-auth/auth.spec.ts`.
-- [ ] 7.3 Decide the phone coverage question: add a phone project to `playwright.config.ts` and walk the two-level bar there, or record in `docs/TESTING.md` that it is covered by unit tests only and why.
-- [ ] 7.4 Walk all four roles in demo mode and confirm no route resolves to a deleted screen and no button points at one.
-- [ ] 7.5 Put a badge on the corner of a tab's icon rather than after its label, on both rows, so a count never makes one tab wider than its neighbours; on a rail row it sits at the end.
-- [ ] 7.6 Run `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` and `npm run test:e2e`, then inspect the phone bar, the open card and the rail in light and dark.
-- [ ] 7.7 Run `npm run db:start && npm run db:reset`, then `npm run test:db`, `npm run test:rls` and `npm run test:e2e:auth` — the isolation suite must still pass for the tables this change deliberately left standing.
-- [ ] 7.8 PHASE GATE — the owner's phone shows four navigation entries and every surface they reach is one they still use; tapping a group opens its children in a card anchored to the tab that opened it; a shut Setup still shows that Delivery is waiting, and opening it replaces that sum with the parts; a Franchise Admin reads their own outlets and generates a tablet setup code from the outlet it stands in, while the database refuses them every outlet write; seven surfaces are gone from the codebase with `inventory_movements`, `outlet_alerts` and `alert_responses` untouched and still covered by the isolation suite; and the four-role demo walkthrough still walks.
+- [x] 7.1 Add unit tests for `navTree` grouping and ordering, the group-sum badge, the open-group seeding rules, and the refusal to close a group from inside it.
+- [x] 7.2 Repair the e2e specs the cull and the restructure touch: `e2e/shell.spec.ts`, `e2e/operations.spec.ts`, `e2e/expenses-and-ledger-reach.spec.ts`, `e2e/owner-console.spec.ts`, `e2e/demo-screens.spec.ts`, `e2e/attendance.spec.ts` and `e2e-auth/auth.spec.ts`.
+- [x] 7.3 Decide the phone coverage question: add a phone project to `playwright.config.ts` and walk the two-level bar there, or record in `docs/TESTING.md` that it is covered by unit tests only and why.
+- [x] 7.4 Walk all four roles in demo mode and confirm no route resolves to a deleted screen and no button points at one.
+- [x] 7.5 Put a badge on the corner of a tab's icon rather than after its label, on both rows, so a count never makes one tab wider than its neighbours; on a rail row it sits at the end.
+- [x] 7.6 Run `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` and `npm run test:e2e`, then inspect the phone bar, the open card and the rail in light and dark.
+- [x] 7.7 Run `npm run db:start && npm run db:reset`, then `npm run test:db`, `npm run test:rls` and `npm run test:e2e:auth` — the isolation suite must still pass for the tables this change deliberately left standing.
+- [x] 7.8 PHASE GATE — the owner's phone shows four navigation entries and every surface they reach is one they still use; tapping a group opens its children in a card anchored to the tab that opened it; a shut Setup still shows that Delivery is waiting, and opening it replaces that sum with the parts; a Franchise Admin reads their own outlets and generates a tablet setup code from the outlet it stands in, while the database refuses them every outlet write; seven surfaces are gone from the codebase with `inventory_movements`, `outlet_alerts` and `alert_responses` untouched and still covered by the isolation suite; and the four-role demo walkthrough still walks.

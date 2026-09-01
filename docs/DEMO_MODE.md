@@ -60,6 +60,27 @@ walkthrough must no longer offer a day close — the model it demonstrated does 
 exist any more, and a demo of it would teach the wrong thing to the one audience
 that has not seen the new surface.
 
+**A surface the business decides it will never build is deleted, not hidden**
+(#51). `hidden` is for one whose route still resolves in principle and whose
+return is plausible; these are not coming back, and carrying seven dead screens
+through every future refactor costs more than the one-line reversal is worth.
+Deletion takes the **gate, the route, the component and the tests together**, so
+no half of a withdrawn surface survives the other.
+
+**It does not take the tables.** `inventory_movements`, `outlet_alerts` and
+`alert_responses` keep their schema, their policies and their isolation
+coverage. Dropping a live table is irreversible in a way removing a screen is
+not, so withdrawing a screen stays a decision about the application. A later
+change may retire them once the rows have been confirmed worthless, and it will
+carry a down-migration when it does; until then they are recorded in
+[Limitations](LIMITATIONS.md) so a reader finds a decision rather than an
+apparent oversight.
+
+The seven were `owner-comparison`, `owner-pnl`, `admin-pnl`, `owner-reports`,
+`owner-alerts`, `admin-alerts` and `admin-inventory` with its movement ledger.
+All had been `demo` since the day they landed, so **no real user ever saw a
+navigation entry or a reachable route for any of them.**
+
 **Two `live` surfaces may deliberately answer the same question at once, for as
 long as one is being proved against the other.** During #11's overlap the derived
 **Ledger** (`owner-ledger-statement`) and the manual **Ledger** form
@@ -125,7 +146,7 @@ Demo mode ships to production, because it has to be showable from a deployed URL
 
 ## What the demo dataset starts with
 
-One mutable dataset is built per demo session (`src/data-access/mock/store.ts`) and shared by every mock adapter, so the figures on one screen are the rows behind another: the cash screen's takings *are* the bills the counter rang, a stock item's quantity *is* the sum of the ledger it links to, and the owner console's sales *are* those same bills summed. It is constructed per session rather than as a module singleton, so **demo state resets** and every walkthrough starts from the same place.
+One mutable dataset is built per demo session (`src/data-access/mock/store.ts`) and shared by every mock adapter, so the figures on one screen are the rows behind another: the drawer's takings *are* the bills the counter rang, the Ledger's revenue *is* those same bills plus the recorded channel figures, and the owner console's sales *are* the bills summed. It is constructed per session rather than as a module singleton, so **demo state resets** and every walkthrough starts from the same place.
 
 Nothing in it is authored as a total. Every figure the owner sees is derived at read time from bills, expenses, movements and closed cash records — which is why two screens cannot disagree, and why a fixture that contradicts its own ledger **throws at construction** instead of shipping a demo that cannot answer "why does it say 4 kg?".
 
@@ -138,7 +159,6 @@ Worth knowing before running one:
   but the mock adapter never calls Auth, a mail provider or any real endpoint.
 - **A shift is already open** for Demo Biller at Kalyani, so a walkthrough lands on the counter able to ring a bill. The whole shift lifecycle is walkable from there: **Hand over** on the tablet, **Leave counter** from the holder's phone, and **Finish day** with its readiness sheet — each ending the shift for a recorded reason, and each leaving the tablet on the request screen a real counter shows overnight. **Start again** puts the open shift back. Kanchrapara's shift has ended; no persona stands at that counter.
 - **The full billing day is already coherent.** It includes direct Mark Paid tender capture, a Cash + UPI split, an order paid on handover, a reasoned cancellation, one open order, one payment not sent yet, one command needing attention and a repeat customer found only after their complete phone is entered. Aggregator trade remains in the demo ledger rather than masquerading as a counter tender. The paid examples reuse the same bills counted by Cash and the owner console, so adding lifecycle context does not invent revenue.
-- **Alerts point at things you can go and look at.** The open high-priority one is about the pita bread that is genuinely below its threshold; the acknowledged one is about the drawer that genuinely came up short. An alert about a problem that exists nowhere else in the data is a sentence somebody typed.
 - **Start again** in the demo banner puts everything back. It states what it discards first, and it keeps you on the role you are looking at.
 - **The counter handshake is walkable from both ends in one demo session.** Hand over on the tablet, ask for a shift naming a persona by name, then read the four digits and switch roles to type them in — the request, the code and the shift are session state, so they survive the role switch. The shift that opens is the one bills are then attributed to, so the next sale is rung under whoever just approved it. An unrecognised name behaves exactly like a recognised one: same code, same wait, same timeout, and no card on anybody's phone. Three wrong codes destroy the request, as they do for real.
 - **Tablets agrees with that same counter.** Kalyani's card names the demo shift
@@ -162,9 +182,8 @@ Worth knowing before running one:
   operator's shift, and waits in Admin → Billing for a manager to confirm the
   operator, name another, or record that it cannot be established.
 - **Business dates are relative to today**, resolved through the outlet's own cutover. **Four days traded at each outlet**: the three before today are counted and signed off, and today is open and can be closed during a walkthrough. Four days rather than one is what gives a period report and a comparison something to be a period *of*.
-- **Five things have deliberately gone wrong**, all at Kalyani, because a demo where nothing does demonstrates nothing: one stock item is below its threshold, yesterday's drawer was ₹240 short, a bill for yesterday arrived after that day had been signed off — which the cash screen reports as a reconciliation exception rather than quietly absorbing — arrivals are recorded and waiting for a manager — one of them taken well outside the geofence — and an alert is open at high priority.
-- **Stock consumed corresponds to what the bills sold**, at a food cost of roughly a third of takings. That is what lets the P&L's consumption basis produce a believable figure — a ledger invented independently of the bills makes a shawarma shop appear to lose money on every wrap, which is what it did until the owner console made it visible.
-- **Today carries a bulk delivery**, bought and mostly unused. It is the reason the P&L's basis toggle has something to show: cash basis charges the whole purchase to this period, consumption basis charges only what the kitchen used, and the two figures differ by about ₹1,400. A control whose effect nobody can see teaches nothing.
+- **Things have deliberately gone wrong**, all at Kalyani, because a demo where nothing does demonstrates nothing: yesterday's drawer was ₹240 short, a bill for yesterday arrived after that day had been signed off — which the cash screen reports as a reconciliation exception rather than quietly absorbing — arrivals are recorded and waiting for a manager, one of them taken well outside the geofence, the aggregator sync has work needing the owner, and a counter tablet is holding bills it has not managed to send.
+- **Today carries a bulk delivery**, bought and mostly unused, so the Ledger reads like a shop rather than like a spreadsheet of identical days. It was here to give the P&L's basis toggle something to show; #12 withdrew the toggle and #51 withdrew the P&L, and it earns its place on the Ledger alone.
 - **Every current menu item is non-vegetarian**, because every item the business sells is built on chicken. The vegetarian marker has no live example rather than a fabricated one; create an item from the menu form to see it.
 - **The offline states are reached the way a real tablet reaches them.** There is no "pretend to be offline" control: put the device in aeroplane mode (or use DevTools) and ring bills — the indicator counts up, escalates at five waiting, and drains when the connection returns.
 
@@ -176,23 +195,21 @@ Press **Start again** in the banner first if anybody has used this tab before yo
 
 **1 — The owner, and why any of this exists** (`/demo/owner`)
 
-Both outlets are on one screen. Read the two sales figures aloud: they are different, because the two shops are. Point at Kalyani's attention line — *open alerts*, *items low on stock*, *drawer ₹240 short* — and say that none of it was typed anywhere; each is a count of rows the audience is about to see.
+Both outlets are on one screen. Read the two sales figures aloud: they are different, because the two shops are. Point at Kalyani's attention line — *arrivals waiting for approval*, *drawer ₹240 short* — and say that none of it was typed anywhere; each is a count of rows the audience is about to see.
 
-Tap **Compare outlets**, switch the basis from cash to consumption, and note that the profit changes by about ₹1,400 and that the screen says which basis it is on. The gap is a bulk chicken delivery bought this morning and mostly still in the cold room: cash basis charges the lot to today, consumption basis charges only what was cooked. That control is the difference between "did more money come in than went out" and "did we make money on what we sold", and mixing them is the mistake this business would otherwise make on a spreadsheet.
+**Show the bar itself while you are here.** Four entries, all of them reachable with a thumb. Tap **Setup**: a card opens above the bar with a tail pointing at the tab that opened it, and the count that was sitting on Setup moves onto Delivery inside it. That is the rule worth naming out loud — folding a screen behind a heading must never fold what it is waiting on out of sight, so a shut group carries the sum and an open one shows the parts, and the two are never both on screen.
 
-Go back and open **Alerts**. The high-priority one is about pita bread. Leave it open — you are coming back to it.
+Then open **Outlets** from inside Setup. Each card says what that shop is raising in words — a tablet holding bills it has not sent, a counter with no tablet at all — and carries a **Tablets** button that opens *that* outlet's tablet administration rather than a picker.
 
 Then open **Attendance** from the owner's own navigation — no appointment, no switching, and the address stays inside the owner's shell. Use the outlet selector to move to **Kanchrapara**, the shop this owner holds no assignment at: one arrival is waiting there, and they settle it. The demo's emulated position is at Kalyani, so the rule asks for a reason first and records that the approver was not on site — the same rule the outlet's own manager answers to. Note who is *not* on that roll-call: the owner and the manager are not staff there, so nobody is pretending to record their arrival. Then open **Cash** at the same outlet: the day is all there, and the close and the withdrawal are not, because the drawer comes from the assignment. Switch the selector back to Kalyani, where the owner *is* the manager, and the same screen offers both — which is the whole boundary in one gesture. The outlet you last picked is where the next screen opens, so nobody answers that question twice.
 
 **2 — The manager, where the numbers come from** (Admin in the banner)
 
-**Stock** — pita bread is marked *Low stock*, in words and with an icon. Open its ledger: the quantity on the list is the sum of that ledger, including a packet dropped on the floor last night. This is the row behind the alert you just read.
-
 **Expenses** — today's spending, with the cash rows marked. Only those reach the drawer.
 
 **Cash** — everything above the one input is worked out. Type a figure a couple of hundred short of the expected closing and watch the difference appear *as you type*, in words as well as sign. Then switch the day picker to yesterday: that day is closed, it was ₹240 short, and **a bill arrived after it was signed off** — reported as a reconciliation exception, with the closed figures untouched. That is the single most important thing this app does.
 
-**P&L** — switch the basis. The raw-materials expense is listed and labelled *not subtracted on this basis*, because the stock it bought is subtracted instead.
+**Outlets** — the manager reads the one shop they run, and nothing else. There is no Add, no Edit and no Delete, and that is the database's answer rather than the screen's. The **Tablets** button is the point of the surface: it is the only route to a counter setup code, so this is where a manager whose tablet died starts.
 
 **3 — The counter, which never blocks** (Biller)
 
@@ -257,5 +274,5 @@ When a new surface is added:
 1. Build it against the mock adapter, behind the gate, in a `ui-*` change.
 2. Add its fixtures to the scenario dataset so the numbers still reconcile with everything else. **Give every seed an outlet** — the dataset spans both, and a seed that assumes one is a screen that will be empty for the other.
 3. If the surface shows a derived figure, derive it in the mock from rows already in the store rather than adding a total to a fixture. A fixture that may state its own total is a demo that can show a number the system could not produce.
-4. If the invariant is worth relying on, assert it in `createDemoStore()`. The two there now — a stock quantity equals its own ledger, and each outlet's bill numbers are gapless from 1 — both exist because getting them wrong would be invisible until somebody read two screens in a row.
+4. If the invariant is worth relying on, assert it in `createDemoStore()`. The one there now — each outlet's bill numbers are gapless from 1 — exists because getting it wrong would be invisible until somebody read two screens in a row. A second, that a stock quantity equalled its own ledger, went with the stock surfaces in #51.
 5. Later, swap the adapter and promote the gate in a `*-live` change — **without redesigning the screen**. If that turns out to be impossible, the mock was the wrong shape; fix the mock's shape and record why in the change.

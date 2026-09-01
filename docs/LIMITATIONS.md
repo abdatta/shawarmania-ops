@@ -124,7 +124,7 @@ drawer:
   figure somebody counted is evidence and a recomputed one is not. The notebook's
   chain really did break in August, at both outlets, and the carry-over reported
   every break rather than tidying it away.
-- **No consumption-basis profit**, because no stock is valued here. Raw materials
+- **No profit figure at all**, on any basis: #51 withdrew the estimate with the screens that showed it. No stock is valued here either. Raw materials
   are taken as zero on hand at the start of tracking, by owner decision.
 - **It granted the owner no authority that survived it.** They could type cash
   figures into the notebook only because no real drawer record existed yet to
@@ -279,9 +279,12 @@ purchase paid **directly** rather than through a Zomato payout — the supplier
 alone knows of it, and it is entered by hand until a supplier-portal reader is
 built (`openspec/todos/supply-bills-paid-outside-the-payout.md`).
 
-#12 owns retiring the remaining drawer/manual-day path and #13 owns the complete
-reporting view. Until those changes deliberately integrate aggregator trade,
-neither bill history nor an item-level bill report is a complete revenue record.
+#12 retired the remaining drawer/manual-day path. **There is no complete
+reporting view and none is planned** — #13 `owner-console-live` would have built
+one and was withdrawn (`openspec/todos/owner-console-was-withdrawn.md`). The
+Ledger is where a trading day is read, and it does integrate aggregator trade;
+bill history does not, so neither it nor an item-level bill report is a complete
+revenue record.
 
 ### Payroll is out of scope
 
@@ -637,6 +640,62 @@ Who changed a price, voided a bill, or approved an attendance day is recorded on
 ### Single Supabase project, single region
 
 All outlets share one project. Fine for West Bengal. A backup and restore procedure is documented in [Operations](OPERATIONS.md), but there is no tested disaster-recovery drill until the roadmap's operations work lands.
+
+## Seven screens were deleted, and their tables were not (#51)
+
+The owner reviewed the app against the business as it actually runs and
+concluded that four demonstration screens answer questions nobody at
+Shawarmania asks. `navigation-groups-and-surface-cull` deleted them, along with
+the stock surfaces that had outlived their own shelving decision. All seven had
+been `demo` since the day they landed, so **no real user ever saw a navigation
+entry or a reachable route for any of them.**
+
+### What they used to answer, and what answers it now
+
+- **Compare** — two outlets over a period, side by side. Nothing answers it as a
+  single screen. The owner console shows every outlet's today at once, and the
+  Ledger reads one outlet's day or month; comparing two months is done by
+  reading two.
+- **Profit and loss** — an estimated operating profit for a period, on a named
+  basis. **Nothing answers it, and that is the decision rather than a gap.** The
+  Ledger says what a day took and what it cost from recorded rows; an estimate
+  on top of that is a second number to reconcile. `#12` had already withdrawn
+  the consumption basis for want of stock movements, leaving one basis and no
+  screen honestly able to state it.
+- **Reports** — a period summarised for one outlet. The Ledger's month view is
+  the surviving reading. **There is still no export of any kind**, which is
+  stricter than what Reports promised, not weaker.
+- **Alerts** — a thread a manager raised to the owner, with a status machine and
+  responses. **Nothing reimplements it.** What an outlet is raising is read on
+  that outlet's card in Outlets, derived from rows that already exist — no
+  tablet at the counter, a tablet that has not reported, a tablet holding bills
+  it has not sent. An alert was a sentence somebody typed, which is why it
+  needed a status machine; none of these does, because each resolves itself when
+  the thing it describes stops being true. The thinking is kept in
+  `openspec/todos/outlet-alerts-was-withdrawn.md`.
+- **Stock**, and an item's movement ledger — current quantity, low-stock
+  warnings, and an append-only history. Inventory was already shelved
+  (`openspec/todos/inventory-is-shelved.md`); this removed the surface that
+  decision left standing. Nothing tracks stock, and nothing is planned to.
+
+### Three tables are left standing with no reader
+
+`inventory_movements`, `outlet_alerts` and `alert_responses` keep their schema,
+their policies, their grants and their place in the isolation suite. **This is a
+decision, not an oversight.** Dropping a live table is irreversible in a way
+removing a screen is not, and the owner asked for the screens to go rather than
+for the data to be destroyed — so the withdrawal stays reversible in the way
+that actually matters: the rows were never worth much, and the schema that would
+hold them is exactly as it was.
+
+`supabase/migrations/20260726000006_inventory.sql` and
+`20260726000009_alerts.sql` are untouched, as are the isolation tests that prove
+a manager cannot read the other outlet's rows in either table. A later change
+may retire them once the rows have been confirmed worthless, and it will carry a
+down-migration when it does.
+
+The cost of leaving them is a reader finding tables nothing queries. That is
+what this section is for.
 
 ## Not planned
 

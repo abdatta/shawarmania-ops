@@ -474,9 +474,21 @@ function PhoneBar({
   )
 }
 
-/** The shared shape of a bar tab and a card tab — icon over label. */
+/**
+ * The shared shape of a bar tab and a card tab — icon over label.
+ *
+ * `flex-1` with no minimum wide enough to fight it, so **the tabs share the
+ * bar's width equally**. That is what the tail's `(index + 0.5) / count`
+ * position assumes, and it is what keeps the bar from scrolling sideways for
+ * the session that reaches most: a manager who also works a shift at the other
+ * outlet is shown six top-level entries, and at `4.5rem` each they overflowed a
+ * 375px phone by three pixels. The floor is the app's own phone touch minimum
+ * rather than a number picked to fit — six of those clear the narrowest phone
+ * anybody uses, and with four entries the minimum never binds at all, so
+ * nothing about the common case moves.
+ */
 const TAB =
-  'flex flex-1 shrink-0 flex-col items-center justify-center gap-1 px-1 text-center font-semibold focus-visible:focus-ring'
+  'flex min-w-[var(--size-control-phone)] flex-1 shrink flex-col items-center justify-center gap-1 px-1 text-center font-semibold focus-visible:focus-ring'
 
 function BarTab({
   surface,
@@ -500,7 +512,7 @@ function BarTab({
       className={({ isActive }) =>
         cn(
           TAB,
-          small ? 'h-[56px] min-w-[4rem] text-[0.6875rem]' : 'h-[64px] min-w-[4.5rem] text-xs',
+          small ? 'h-[56px] text-[0.6875rem]' : 'h-[64px] text-xs',
           isActive ? 'text-accent-text' : 'text-content-muted',
         )
       }
@@ -552,11 +564,7 @@ function GroupTab({
       onClick={onToggle}
       aria-expanded={open}
       aria-controls={open ? `nav-card-${node.group.id}` : undefined}
-      className={cn(
-        TAB,
-        'h-[64px] min-w-[4.5rem] text-xs',
-        inside ? 'text-accent-text' : 'text-content-muted',
-      )}
+      className={cn(TAB, 'h-[64px] text-xs', inside ? 'text-accent-text' : 'text-content-muted')}
       data-testid={`nav-group-${node.group.id}`}
     >
       <span className="relative">

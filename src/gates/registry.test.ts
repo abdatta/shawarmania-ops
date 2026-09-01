@@ -157,6 +157,63 @@ describe('gate registry', () => {
    * Finances, the owner's would silently win, and the two readers would hold
    * different maps of one application while the code claimed a single source.
    */
+  /**
+   * `app-shell` says a phone-first shell presents no more than five top-level
+   * entries and that the bar never scrolls sideways to reach one.
+   *
+   * **One session shape produces six**, and it is worth naming rather than
+   * rounding off: a manager who also works a shift at another outlet holds both
+   * a manager assignment and an Employee one, so they get both homes — Today
+   * and Home — plus Finances, Attendance, Setup and My attendance. `design.md`
+   * predicted five for this person and forgot the Employee home; the count is
+   * six and always was. It was **eleven** before this change.
+   *
+   * Losing Home is not the fix: it is where the check-in button lives, and it
+   * is the one action their manager role cannot do for them. Which of the six
+   * should fold is a product question for the owner, recorded in
+   * `openspec/todos/six-tabs-for-one-person.md`.
+   *
+   * What is fixed here is the harm the requirement is actually about. The bar
+   * shares its width equally with a floor of one phone touch target, so six
+   * entries clear the narrowest phone anybody uses instead of overflowing a
+   * 375px one by three pixels.
+   */
+  it('never puts more entries in the bar than it can hold without scrolling', () => {
+    // The narrowest viewport this app supports, and the touch minimum a tab may
+    // not go below — both from docs/DESIGN_SYSTEM.md, in px at the 14px root.
+    const NARROWEST = 320
+    const TOUCH = 44
+
+    const sessions = [
+      ['super_admin', 'franchise_admin'],
+      ['franchise_admin'],
+      ['franchise_admin', 'employee'],
+      ['employee'],
+    ] as const
+
+    for (const roles of sessions) {
+      for (const mode of ['real', 'demo'] as const) {
+        const count = navTree(visibleSurfaces([...roles], mode, [...roles])).length
+        expect(
+          count * TOUCH,
+          `${roles.join('+')}/${mode} overflows the narrowest phone`,
+        ).toBeLessThanOrEqual(NARROWEST)
+      }
+    }
+  })
+
+  it('gives the production owner four top-level entries and the Employee three', () => {
+    const count = (roles: readonly string[], held: readonly string[]) =>
+      navTree(visibleSurfaces(roles as never, 'real', held as never)).length
+
+    expect(count(['super_admin', 'franchise_admin'], ['super_admin'])).toBe(4)
+    expect(count(['franchise_admin'], ['franchise_admin'])).toBe(4)
+    expect(count(['employee'], ['employee'])).toBe(3)
+    // The two that exceed four, both by holding a second home.
+    expect(count(['super_admin', 'franchise_admin'], ['super_admin', 'franchise_admin'])).toBe(5)
+    expect(count(['franchise_admin', 'employee'], ['franchise_admin', 'employee'])).toBe(6)
+  })
+
   it('draws one door in one place, whichever shell it is drawn in', () => {
     const byLabel = new Map<string, Set<string>>()
     for (const surface of surfaces) {

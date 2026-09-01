@@ -402,3 +402,54 @@ always was. The route is a starting position, not a grant.
 
 The general scope-from-URL fix stays worth doing and is recorded as a todo, with
 the four surfaces it would touch named.
+
+### A closed outlet's card offers no Tablets button
+
+Found by driving it rather than by reading it, and worth recording because the
+reasoning is not obvious from either half on its own.
+
+`devices/:outletId` seeds the scope picker, and the picker validates what it is
+given against the outlets the reader can actually see — which is
+`listOutlets()`, active only. A closed outlet is therefore dropped on arrival
+and the surface falls back to its default, so the button said *this shop's
+tablets* and delivered a different shop's, silently.
+
+**The fix is to not offer it.** A shop that is not trading has no counter to
+administer, and a control that goes somewhere other than where it says is worse
+than no control. Widening the picker to accept closed outlets was rejected: the
+picker's exclusion is right everywhere else it is used, and loosening a shared
+rule to rescue one button is the wrong direction.
+
+The card still says what a closed outlet is raising, because that is text rather
+than a promise about where a tap goes.
+
+### The "five tabs" count above was wrong, and one session gets six
+
+The section *"'My attendance' is not a fifth tab"* closes by saying the one
+case producing five is a manager who also works at another outlet. **It is six**,
+and the miss is worth recording because the correction was found by measuring
+rather than by reading.
+
+That person holds a Franchise Admin assignment and an Employee one, so they hold
+*two homes* — and a home belongs to a role you hold. Their bar is Home · Today ·
+Finances · Attendance · Setup · My attendance. The reasoning above counted the
+manager's Today and forgot the Employee's Home.
+
+Nothing else exceeds four: the owner sees Overview, Finances, Attendance, Setup;
+a manager sees Today and the same three; an Employee sees three. An owner who
+also runs a shop sees five, for the same two-homes reason.
+
+**What was fixed** is the harm the requirement is about. At the bar's previous
+per-tab minimum of `4.5rem`, six tabs overflowed a 375px phone by three pixels —
+so the one session shape with the most to reach was the one that had to scroll
+to reach it. The tabs now share the bar's width equally with a floor of one
+phone touch target, which clears the narrowest phone anybody uses and changes
+nothing for four tabs, where the minimum never binds.
+
+**What was not fixed** is the count, because every way to reduce it is a product
+decision the owner has not been asked. The Employee home cannot go — it holds
+the check-in button, the one action their manager role cannot do for them — and
+the alternatives change what every reader sees to fix what one reader sees. It
+is recorded in `openspec/todos/six-tabs-for-one-person.md`, and
+`registry.test.ts` now pins every shape's count and asserts the width property
+for all of them, so neither can drift further in silence.

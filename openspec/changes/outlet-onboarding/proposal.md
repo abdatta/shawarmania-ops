@@ -1,6 +1,6 @@
 # Proposal: outlet-onboarding
 
-> **Model**: Opus · **Wave**: F · **Depends on**: #13 · **Gate**: a third outlet is created, staffed, tablet-enrolled and verified isolated **entirely through the UI, with zero code changes**; the runbook in `docs/OPERATIONS.md` matches what actually happened.
+> **Model**: Opus · **Wave**: F · **Depends on**: #51 · **Gate**: a third outlet is created, staffed, tablet-enrolled and verified isolated **entirely through the UI, with zero code changes**; the runbook in `docs/OPERATIONS.md` matches what actually happened.
 
 ## Why
 

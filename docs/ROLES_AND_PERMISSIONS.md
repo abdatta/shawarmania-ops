@@ -35,8 +35,8 @@ allowed to make a just-started assignment end on the previous day.
 
 | Role | Scope | Device | Primary job |
 |---|---|---|---|
-| **Super Admin** | All outlets | Own phone | Runs the business; compares outlets; manages outlets and admins |
-| **Franchise Admin** | An outlet they are assigned to | Own phone | Runs one shop; menu, stock, expenses, cash, staff |
+| **Super Admin** | All outlets | Own phone | Runs the business; reads every outlet; manages outlets and admins |
+| **Franchise Admin** | An outlet they are assigned to | Own phone | Runs one shop; menu, expenses, cash, staff, its counter tablet |
 | **Biller** | An outlet they are assigned to | Shared counter tablet | Rings up customers |
 | **Employee** | Own records only | Own phone | Marks attendance |
 
@@ -99,8 +99,9 @@ assignment cannot be ended by anyone, including its holder.
 | Capability | Super Admin | Franchise Admin | Biller | Employee |
 |---|---|---|---|---|
 | **Outlets** |
-| View outlet list | ✓ all | R own | — | — |
+| View outlet list | ✓ all | R the outlets their live assignments name | — | — |
 | Create / edit / deactivate outlet | ✓ | — | — | — |
+| Capture an outlet's position | ✓ | — | — | — |
 | Delete an outlet | ✓ closed, and only while nothing references it | — | — | — |
 | **People** |
 | Manage Franchise Admins | ✓ other accounts only | — | — | — |
@@ -124,9 +125,6 @@ assignment cannot be ended by anyone, including its holder.
 | Browse, search by prefix, or count the directory | — | — | — | — |
 | Read the directory | ✓ | — | — | — |
 | Edit or delete a customer | — | — | — | — |
-| **Inventory** |
-| View stock and low-stock warnings | R all | ✓ own outlet | — | — |
-| Record movements | — | ✓ own outlet | — | — |
 | **Expenses** |
 | View | R all | ✓ own outlet | — | — |
 | Record | — | ✓ own outlet | — | — |
@@ -150,12 +148,6 @@ assignment cannot be ended by anyone, including its holder.
 | Read a day or a month | ✓ any outlet | ✓ own outlets | — | — |
 | Verify a day | ✓ any outlet | ✓ own outlets | — | — |
 | Type any figure on it | — | — | — | — |
-| **Profit and loss** |
-| View outlet P&L | R all | R own outlet | — | — |
-| Compare outlets | ✓ | — | — | — |
-| **Alerts** |
-| Raise an alert | — | ✓ own outlet | — | — |
-| View and respond | ✓ all | R own alerts | — | — |
 | **Manual ledger** (temporary, #36) |
 | Read a day or a month | ✓ all | R own outlets | — | — |
 | Record and correct days | ✓ all | ✓ own outlets | — | — |
@@ -260,6 +252,25 @@ write one into the notebook only because no real cash record existed yet to
 corrupt; that allowance ended with the notebook. See
 [Limitations](LIMITATIONS.md#the-manual-ledger-was-a-stopgap-and-it-is-discharged)
 for the stopgap and how it was discharged.
+
+### A Franchise Admin reads their outlets, and writes none of them
+
+They had no Outlets surface at all until #51, and the gap became a hole in the
+same change: Tablets stopped being a top-level entry, and `admin-devices` is the
+only place a counter setup code is minted. Without a door to the outlet the
+tablet stands in, a manager whose tablet died had no route to the one repair
+they cannot make anywhere else — so the surface exists for the counter, not for
+the outlet record.
+
+**It reads, and the database is what makes that true.** `outlets_select` already
+gave them the outlets their live assignments name and no others; `outlets_insert`,
+`outlets_update` and `outlets_delete` already carried an owner-only check. So
+nothing about authority moved — what was added is a screen and the proof: the
+isolation suite now closes and deletes an outlet as a manager, by a request that
+never went near a screen, and watches both touch no rows.
+
+The surface offering fewer buttons is courtesy. **A control's absence is not a
+permission**, and this table is the boundary.
 
 Two deliberate asymmetries worth noting. **The Super Admin cannot create bills** — billing is a counter action tied to a set-up tablet and a live shift, and letting the owner ring up a sale from their phone would corrupt attribution and cash reconciliation. **The Biller only sees their own shift's bills**, not the outlet's whole history; reviewing the day is a manager's job, and it keeps a shared tablet from exposing the outlet's takings to whoever is standing at it. A bill accepted after its operator remotely left is therefore review work for that outlet's Franchise Admin or the Super Admin, never an alert for the next biller. Their append-only decision qualifies the immutable original attribution; it does not rewrite it.
 

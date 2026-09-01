@@ -644,15 +644,23 @@ function OutletCard({
           code for a manager** — `admin-devices` is where one is minted and
           nowhere else. It carries the outlet in the address, so it opens on this
           shop's tablets rather than on a picker the reader has to set.
+
+          **Not offered for a closed outlet.** A closed outlet is never in the
+          scope picker, so the address would be dropped on arrival and the
+          reader would land on a different shop's tablets without being told.
+          A button that goes somewhere other than where it says is worse than no
+          button, and a shop that is not trading has no counter to administer.
         */}
-        <Link
-          to={tabletsHref}
-          className={buttonVariants({ variant: 'secondary', size: 'phone' })}
-          data-testid={`tablets-${handle}`}
-        >
-          <TabletSmartphone aria-hidden size={16} />
-          Tablets
-        </Link>
+        {outlet.is_active && (
+          <Link
+            to={tabletsHref}
+            className={buttonVariants({ variant: 'secondary', size: 'phone' })}
+            data-testid={`tablets-${handle}`}
+          >
+            <TabletSmartphone aria-hidden size={16} />
+            Tablets
+          </Link>
+        )}
         {mayWrite && (
           <>
             <Button variant={surveyed ? 'secondary' : 'primary'} size="phone" onClick={onCapture}>

@@ -5,14 +5,18 @@ import { E2E_ORIGIN } from '../ports'
 /**
  * The demo milestone's own gate: **a single uninterrupted walkthrough of all
  * four roles, with internally consistent mock data** — a busy trading day whose
- * bills, stock movements, cash close and alert all reconcile with each other.
+ * bills and drawer counts reconcile with each other.
  *
  * The reconciliation assertions here deliberately compare figures reached
- * through *different adapters*: the owner console reads `insights`, the cash
- * screen reads `dailyCash`, and the stock list reads `inventory`. Two screens
- * agreeing because they call the same method proves nothing; two screens
- * agreeing across two derivations is the property the whole scenario dataset
- * exists to have.
+ * through *different adapters*: the owner console reads `insights` and the
+ * drawer reads `cashDrawer`. Two screens agreeing because they call the same
+ * method proves nothing; two screens agreeing across two derivations is the
+ * property the whole scenario dataset exists to have.
+ *
+ * **It was a good deal larger before #51.** Compare, P&L, Reports and the alert
+ * thread were all walked here, and all four are deleted — what is left is the
+ * console, the outlet day view, and the cross-outlet reconciliation that was
+ * always the point of the file.
  */
 
 /** `₹1,234` → 123400 paise, so figures can be compared rather than string-matched. */
@@ -68,62 +72,6 @@ test('the console’s cash difference is the one the drawer recorded', async ({ 
   )
 })
 
-test('the console’s low-stock count is the stock the manager can see', async ({ page }) => {
-  await openDemo(page, 'demo/owner')
-  const attention = page.locator('[data-testid^="attention-"]').first()
-  await expect(attention).toContainText('low on stock')
-
-  // The chip says one item; the manager's list has exactly one marked.
-  await openDemo(page, 'demo/admin/inventory')
-  await expect(page.getByText('Low stock')).toHaveCount(1)
-})
-
-test('the comparison states its basis, and offers no second one', async ({ page }) => {
-  await openDemo(page, 'demo/owner/comparison')
-
-  await expect(page.getByText('Shawarmania Kalyani')).toBeVisible()
-  await expect(page.getByText('Shawarmania Kanchrapara')).toBeVisible()
-
-  await expect(page.getByTestId('comparison-basis-note')).toContainText(
-    'Cash-basis operating estimate',
-  )
-  await expect(page.getByTestId('comparison-total-profit')).toBeVisible()
-
-  // `retire-the-manual-ledger` (#12) withdrew the consumption basis: inventory is
-  // shelved, so it cannot be computed, and a named basis that returns nothing is
-  // worse than one honestly offered. The claim that matters is the negative one —
-  // no control implies a second basis exists.
-  await expect(page.getByTestId('comparison-basis')).toHaveCount(0)
-})
-
-test('profit is never shown without the basis it was computed on', async ({ page }) => {
-  await openDemo(page, 'demo/owner/pnl')
-
-  const figure = page.getByTestId('pnl-profit')
-  await expect(figure).toHaveAttribute('data-basis', 'cash')
-  await expect(page.getByTestId('pnl-profit-basis')).toContainText('Cash-basis operating estimate')
-
-  // And the working adds up to the figure, so the number can be checked.
-  const sales = paiseFrom(await page.getByText('Sales', { exact: true }).locator('..').innerText())
-  expect(sales).toBeGreaterThan(0)
-
-  // One basis, and nothing that offers another.
-  await expect(page.getByTestId('pnl-basis')).toHaveCount(0)
-})
-
-test('reports summarise a period and produce no file of invented revenue', async ({ page }) => {
-  await openDemo(page, 'demo/owner/reports')
-
-  await expect(page.getByTestId('report-sales')).toBeVisible()
-  await expect(page.getByTestId('report-days')).toBeVisible()
-  await expect(page.getByTestId('export-unavailable')).toContainText('cannot be exported')
-
-  // Absent, not disabled: there is nothing to press, which is what makes
-  // exporting fabricated figures impossible by construction.
-  await expect(page.getByRole('button', { name: /export|download/i })).toHaveCount(0)
-  await expect(page.locator('a[download]')).toHaveCount(0)
-})
-
 test('an outlet opens read-only, and says so', async ({ page }) => {
   await openDemo(page, 'demo/owner')
   await page.locator('[data-testid^="open-outlet-"]').first().click()
@@ -131,77 +79,14 @@ test('an outlet opens read-only, and says so', async ({ page }) => {
   await expect(page).toHaveURL(/\/demo\/owner\/outlet\//)
   await expect(page.getByTestId('read-only-notice')).toContainText('not working in it')
   await expect(page.getByTestId('outlet-day-sales')).toBeVisible()
-  await expect(page.getByTestId('outlet-day-stock')).toContainText('Pita bread')
-})
+  await expect(page.getByTestId('outlet-day-attendance')).toBeVisible()
 
-test('an alert raised by the manager reaches the owner and is worked through', async ({ page }) => {
-  await openDemo(page, 'demo/admin/alerts')
-
-  await page.getByTestId('raise-alert').click()
-  await page.getByLabel('Subject').fill('Freezer is not holding temperature')
-  await page.getByLabel('What happened').fill('It read −4 this morning. Nothing thrown away yet.')
-  await page.getByLabel('How urgent').selectOption('urgent')
-  await page.getByRole('button', { name: 'Raise it' }).click()
-
-  await expect(page.getByTestId('alert-list')).toContainText('Freezer is not holding temperature')
-
-  // Flip roles in the banner — the demonstration the proposal asks for, and
-  // the reason the demo's data outlives a role switch.
-  //
-  // Client-side throughout: a full page load would legitimately start a fresh
-  // demo, since the dataset is built per mount. That is the documented
-  // behaviour of a reload, and it is not what flipping roles does.
-  await page
-    .getByRole('navigation', { name: 'Demo role switcher' })
-    .getByRole('link', { name: 'Owner' })
-    .click()
-  await expect(page.getByRole('heading', { name: 'All outlets' })).toBeVisible()
-  await page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('link', { name: 'Alerts' })
-    .first()
-    .click()
-  await expect(page).toHaveURL(/\/demo\/owner\/alerts$/)
-
-  const raised = page.getByTestId('alert-list').getByText('Freezer is not holding temperature')
-  await expect(raised).toBeVisible()
-  await raised.click()
-
-  // Replying does not move it along.
-  await page.getByTestId('alert-reply').fill('Call the engineer this morning.')
-  await page.getByRole('button', { name: 'Send reply' }).click()
-  await expect(page.getByTestId('alert-responses')).toContainText('Call the engineer this morning.')
-  await expect(page.getByTestId('alert-detail')).toContainText('Status — Open')
-
-  // Acknowledgement cannot be skipped.
-  await expect(page.getByTestId('set-status-closed')).toHaveCount(0)
-  await page.getByTestId('set-status-acknowledged').click()
-  await page.getByTestId('set-status-resolved').click()
-  await page.getByTestId('set-status-closed').click()
-
-  await expect(page.getByTestId('alert-terminal')).toContainText('closed')
-  await expect(page.getByTestId('set-status-open')).toHaveCount(0)
-})
-
-test('start again puts the scenario back and keeps the reader in place', async ({ page }) => {
-  await openDemo(page, 'demo/admin/alerts')
-  const before = await page.getByTestId('alert-list').locator('> li').count()
-
-  await page.getByTestId('raise-alert').click()
-  await page.getByLabel('Subject').fill('Reset probe')
-  await page.getByLabel('What happened').fill('Raised to be discarded.')
-  await page.getByRole('button', { name: 'Raise it' }).click()
-  await expect(page.getByTestId('alert-list')).toContainText('Reset probe')
-
-  await page.getByTestId('demo-reset').click()
-  await expect(page.getByText('Start the demo again?')).toBeVisible()
-  await page.getByRole('button', { name: 'Discard and start again' }).click()
-
-  await expect(page.getByTestId('alert-list')).not.toContainText('Reset probe')
-  await expect(page.getByTestId('alert-list').locator('> li')).toHaveCount(before)
-  // Same role, same surface — a reset that sent the reader back to the owner
-  // would cost them their place mid-walkthrough.
-  await expect(page).toHaveURL(/\/demo\/admin\/alerts$/)
+  // #51 took the low-stock and open-alerts cards with their surfaces, and the
+  // link to Reports with it. Asserted as absence, because a card pointing at a
+  // screen that no longer exists is the regression worth staying fixed against.
+  await expect(page.getByTestId('outlet-day-stock')).toHaveCount(0)
+  await expect(page.getByTestId('outlet-day-alerts')).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /over a period/i })).toHaveCount(0)
 })
 
 test('the whole owner walk stays inside the app origin', async ({ page, baseURL }) => {
@@ -213,12 +98,11 @@ test('the whole owner walk stays inside the app origin', async ({ page, baseURL 
 
   for (const path of [
     'demo/owner',
-    'demo/owner/comparison',
-    'demo/owner/pnl',
-    'demo/owner/reports',
-    'demo/owner/alerts',
-    'demo/admin/pnl',
-    'demo/admin/alerts',
+    'demo/owner/outlets',
+    'demo/owner/drawer',
+    'demo/owner/ledger',
+    'demo/admin',
+    'demo/admin/outlets',
   ]) {
     await openDemo(page, path)
   }
@@ -237,10 +121,8 @@ const VIEWPORTS = [
 
 const OWNER_SURFACES = [
   { path: 'demo/owner', testId: 'outlet-scope' },
-  { path: 'demo/owner/comparison', testId: 'comparison-basis-note' },
-  { path: 'demo/owner/pnl', testId: 'pnl-profit-basis' },
-  { path: 'demo/owner/reports', testId: 'export-unavailable' },
-  { path: 'demo/owner/alerts', testId: 'alert-list' },
+  { path: 'demo/owner/outlets', testId: 'outlet-list' },
+  { path: 'demo/owner/billing-history', testId: 'manager-bill-list' },
 ] as const
 
 for (const viewport of VIEWPORTS) {

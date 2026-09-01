@@ -26,6 +26,9 @@ const BASE_URL = `${ORIGIN}${BASE_PATH}`
  * worker only exists in a real build, and the offline gate is the whole point
  * of this suite.
  */
+/** The one spec whose subject is the phone bar, and which only it runs. */
+const PHONE_ONLY = /phone-navigation\.spec\.ts/
+
 export default defineConfig({
   testDir: './e2e',
   // Above Playwright's 30s default: the offline specs install a service worker
@@ -45,8 +48,19 @@ export default defineConfig({
 
   projects: [
     // The counter tablet is the device that matters most for the offline path.
-    { name: 'tablet', use: { ...devices['Galaxy Tab S4 landscape'] } },
-    { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
+    { name: 'tablet', use: { ...devices['Galaxy Tab S4 landscape'] }, testIgnore: PHONE_ONLY },
+    { name: 'desktop', use: { ...devices['Desktop Chrome'] }, testIgnore: PHONE_ONLY },
+    /**
+     * The owner's actual phone (#51).
+     *
+     * Both projects above run at tablet and desktop width, where navigation is
+     * the rail and its sections are open by default — so before this, the
+     * two-level bottom bar, which is the thing that change was asked for, had
+     * no browser coverage at all. It is **scoped to one spec** rather than
+     * added as a third full run: what is width-dependent here is the bar, and
+     * multiplying 250 tests by 1.5 to prove it would be paid on every push.
+     */
+    { name: 'phone', use: { ...devices['Pixel 7'] }, testMatch: PHONE_ONLY },
   ],
 
   webServer: {

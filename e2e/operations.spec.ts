@@ -3,13 +3,17 @@ import { expect, test, type Page } from '@playwright/test'
 import { E2E_ORIGIN } from '../ports'
 
 /**
- * The manager's four operational surfaces, walked the way a demo walks them.
+ * The manager's operational surfaces, walked the way a demo walks them.
  *
- * The gate for `ui-outlet-operations` is that menu, inventory, expenses and a
- * full day-close are all walkable — **including a low-stock warning and a
- * deliberate cash mismatch**. A screen that has only ever been seen balancing
- * has not been reviewed, so both awkward states are asserted rather than hoped
- * for.
+ * The gate for `ui-outlet-operations` was that menu, inventory, expenses and a
+ * full day-close are all walkable, **including a deliberate cash mismatch** — a
+ * screen that has only ever been seen balancing has not been reviewed, so the
+ * awkward state is asserted rather than hoped for.
+ *
+ * Two of those four are no longer here. #11 replaced the day close with a
+ * counted drawer and a derived Ledger, and #51 deleted Stock outright, which
+ * takes the low-stock warning with it. What survives is the mismatch, which was
+ * always the assertion that mattered.
  */
 
 const VIEWPORTS = [
@@ -24,7 +28,7 @@ async function setTheme(page: Page, theme: 'light' | 'dark') {
 }
 
 test.describe('the operations surfaces', () => {
-  test('walks menu, stock, expenses and a drawer count', async ({ page, baseURL }) => {
+  test('walks menu, expenses and a drawer count', async ({ page, baseURL }) => {
     const origin = new URL(baseURL ?? E2E_ORIGIN).origin
     const violations: string[] = []
     page.on('request', (request) => {
@@ -38,18 +42,6 @@ test.describe('the operations surfaces', () => {
     await expect(page.getByTestId('menu-list')).toBeVisible()
     await expect(page.getByText('Classic Chicken Shawarma')).toBeVisible()
     await expect(page.getByText('OFF', { exact: true })).toBeVisible()
-
-    // ── Stock, with the low-stock warning on screen ──────────────────────────
-    await page.getByRole('link', { name: 'Stock' }).click()
-    await expect(page.getByTestId('stock-list')).toBeVisible()
-    await expect(page.getByText('Pita bread')).toBeVisible()
-    await expect(page.getByText('Low stock')).toBeVisible()
-
-    // The movements behind a figure, at their own address.
-    await page.getByRole('link', { name: 'Movements' }).first().click()
-    await expect(page.getByRole('table')).toBeVisible()
-    await expect(page.getByRole('columnheader', { name: 'Left' })).toBeVisible()
-    await page.goBack()
 
     // ── Expenses, cash rows distinguishable from the rest ───────────────────
     //
@@ -154,32 +146,6 @@ test.describe('the operations surfaces', () => {
     await expect(nav.getByRole('link', { name: 'Expenses' })).toHaveCount(1)
   })
 
-  test('records a movement and a stock item’s figure follows its ledger', async ({ page }) => {
-    await page.goto('demo/admin/inventory')
-    const chicken = page
-      .getByTestId('stock-list')
-      .getByRole('listitem')
-      .filter({ hasText: 'Chicken' })
-
-    // Read the starting figure rather than pinning it: the scenario's stock is
-    // chosen so the ledger reconciles with the bills that consumed it, and it
-    // moves when the trade does. What is asserted is that recording 2.5 kg used
-    // takes the figure down by 2.5 — and that the ledger says the same.
-    const started = Number(/([\d.]+) kg/.exec((await chicken.innerText()) ?? '')?.[1])
-    expect(started).toBeGreaterThan(2.5)
-    const expected = `${Math.round((started - 2.5) * 1000) / 1000} kg`
-
-    await chicken.getByRole('button', { name: 'Record' }).click()
-    await page.getByLabel('What happened').selectOption('used')
-    await page.getByLabel(/How much/).fill('2.5')
-    await page.getByRole('button', { name: 'Record movement' }).click()
-
-    await expect(chicken).toContainText(expected)
-
-    await chicken.getByRole('link', { name: 'Movements' }).click()
-    await expect(page.getByRole('table')).toContainText(expected)
-  })
-
   test('a Biller has no menu page, and the counter answers what it used to', async ({ page }) => {
     // The read-only Menu screen is retired: the Counter's own menu column carries
     // every item, price and availability marker, permanently, beside the bill.
@@ -217,7 +183,7 @@ for (const viewport of VIEWPORTS) {
 
       for (const [path, anchor] of [
         ['menu', 'menu-list'],
-        ['inventory', 'stock-list'],
+        ['outlets', 'outlet-list'],
         ['ledger/expenses', 'ledger-expense-list'],
         // `cash` was here until #11 made the day-close screen `hidden`. Both of
         // its replacements are walked instead, in both themes on both viewports.

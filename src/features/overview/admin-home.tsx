@@ -12,10 +12,13 @@ import { useOutletScope } from '@/features/outlet-scope'
  * The Franchise Admin home: the outlet at a glance.
  *
  * Still a placeholder, deliberately. The operational surfaces behind it — Menu,
- * Stock, Expenses, Cash — are walkable in demo now, but this surface is `live`,
- * so filling it with mock-derived figures would put fabricated numbers in front
- * of a real manager. It gets its real dashboard when those figures become real
- * (#11, #13).
+ * Expenses, the Drawer, the Ledger — are live now, but this surface has never
+ * had figures of its own, and filling it with mock-derived ones would put
+ * fabricated numbers in front of a real manager.
+ *
+ * **Nothing on the roadmap is going to fill it.** #13 would have, and was
+ * withdrawn (`openspec/todos/owner-console-was-withdrawn.md`). A manager reads
+ * their outlet in the Ledger and the Drawer, from recorded rows.
  */
 export function AdminHome() {
   const { outlets } = useAdapters()

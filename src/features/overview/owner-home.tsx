@@ -30,8 +30,10 @@ import { useSession } from '@/session/context'
  * one's figures. In demo mode that adapter returns the scenario; in real mode it
  * returns `null`, because there are no real bills yet, and the card says so
  * rather than rendering a zero that would read as *you took nothing today*.
- * `owner-console-live` (#13) replaces one adapter and this screen lights up
- * (design D3).
+ * The seam is still exactly one adapter wide, which is what makes the screen
+ * mode-blind — but no roadmap change is coming to swap it: #13 would have, and
+ * was withdrawn (`openspec/todos/owner-console-was-withdrawn.md`). The absence
+ * is the honest state, stated on the card, for as long as it lasts (design D3).
  */
 
 const ALL_OUTLETS = 'all'

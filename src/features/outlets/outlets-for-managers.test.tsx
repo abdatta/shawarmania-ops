@@ -104,6 +104,18 @@ describe('the owner’s outlets', () => {
     }
   })
 
+  it('offers no Tablets button on an outlet that is not trading', async () => {
+    renderAs('super_admin')
+
+    await screen.findByTestId('outlet-list')
+    // A closed outlet is never in the scope picker, so the address would be
+    // dropped on arrival and the reader would land on another shop's tablets
+    // without being told. A button that goes somewhere other than where it says
+    // is worse than no button.
+    expect(screen.getByTestId('tablets-kalyani')).toBeInTheDocument()
+    expect(screen.queryByTestId('tablets-demo-mistake')).toBeNull()
+  })
+
   it('reaches each outlet’s own tablets, not a shared page', async () => {
     renderAs('super_admin')
 

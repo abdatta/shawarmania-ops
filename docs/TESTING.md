@@ -88,7 +88,7 @@ version.
 
 | Layer | Tool | Covers |
 |---|---|---|
-| Domain unit tests | Vitest | Money maths, expected cash, business-date resolution, P&L, geofence distance |
+| Domain unit tests | Vitest | Money maths, expected cash, business-date resolution, geofence distance |
 | Database policy tests | pgTAP (`supabase/tests/`) + REST probes | RLS isolation and the write contract, on every outlet-scoped table |
 | Identity migration/tooling | Vitest + local rehearsal + deployment probe | Canonical namespace, private approval seal, permanent dual sign-in, drift refusal, password/session/history preservation, rollback, fail-closed publication |
 | Component tests | Vitest + Testing Library | Interactive components, especially the billing surface |
@@ -97,6 +97,16 @@ version.
 | Architecture boundaries | ESLint | Only `data-access` imports Supabase; `domain` imports nothing |
 
 The last two rows are worth stating explicitly. They enforce rules that would otherwise depend on reviewer memory, and rules enforced by memory decay. Both fail the build with a message naming the file and what to do instead.
+
+### Playwright runs three projects, and the third exists for one screen
+
+`tablet` and `desktop` run every spec. **`phone` runs one**, `e2e/phone-navigation.spec.ts`, and the other two skip it.
+
+The reason is a gap #51 would otherwise have shipped with. Both existing projects run at widths where navigation is the left rail, whose sections are open by default — so every e2e spec in the repo exercises the rail and none had ever drawn the bottom bar. The two-level phone bar is the thing that change was actually asked for: a card anchored to the tab that opened it, a group that will not shut under the reader standing in it, and a sum that becomes its parts when the group opens. Unit tests cover all of it in jsdom, where both rows are in the document at once and neither is laid out — which is precisely where a geometry bug lives.
+
+**It is scoped to one spec rather than added as a third full run.** What is width-dependent here is the bar; multiplying every other spec by 1.5 to prove it would be a cost paid on every push for coverage the other two already have. If a second genuinely phone-shaped behaviour appears, it belongs in that spec or beside it, and the pattern extends by adding to `PHONE_ONLY`.
+
+What that spec measures rather than counts: the bar's own `scrollWidth` against its `clientWidth`, so *"every entry is reachable without scrolling sideways"* is an assertion instead of a promise; and the tail's centre against the centre of the tab it points at, so the fraction that positions it cannot drift.
 
 ## The three suites that matter
 
