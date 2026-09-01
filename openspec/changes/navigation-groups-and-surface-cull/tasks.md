@@ -5,16 +5,16 @@ approved on 2026-08-31 and then deleted from the working tree on the owner's
 instruction, so this change is a rebuild from `design.md` rather than a tidy-up.
 Nothing in `src/` currently knows what a navigation group is.
 
-- [ ] 0.1 Read `design.md` end to end before writing code — in particular its **Geometry** section, which carries every measurement the sketch had, and its rejected alternatives, which are two visual approaches already tried and turned down by the owner. Rediscovering either wastes a session.
-- [ ] 0.2 Look at the six reference screenshots and their notes at `C:/Users/iamro/Code/shawarmania-ops-nav-sketch/` if that folder still exists. It is outside the repository and outside git, so it may be gone; `design.md` is sufficient without it, and its absence is not a blocker.
+- [x] 0.1 Read `design.md` end to end before writing code — in particular its **Geometry** section, which carries every measurement the sketch had, and its rejected alternatives, which are two visual approaches already tried and turned down by the owner. Rediscovering either wastes a session.
+- [x] 0.2 Look at the six reference screenshots and their notes at `C:/Users/iamro/Code/shawarmania-ops-nav-sketch/` if that folder still exists. It is outside the repository and outside git, so it may be gone; `design.md` is sufficient without it, and its absence is not a blocker.
 
 ## 1. Cull The Demonstration Surfaces
 
-- [ ] 1.1 Delete the gate entries `owner-comparison`, `owner-pnl`, `admin-pnl`, `owner-reports`, `owner-alerts`, `admin-alerts` and `admin-inventory` from `src/gates/registry.ts`, and their route entries plus the `inventory/:itemId` movement-ledger route from `src/routes/surfaces.tsx`. Keep `owner-outlet-view` at `outlet/:outletId` — it is the `Open` button on every outlet card.
-- [ ] 1.2 Delete `src/features/alerts/`, `src/features/inventory/`, and the comparison, P&L and reports surfaces in `src/features/insights/` with their tests. Keep `outlet-day-view.tsx`; keep `period.ts` and `profit-figure.tsx` only if the day view still uses them, and delete them if it does not.
-- [ ] 1.3 Remove the `Compare outlets`, `Profit and loss` and `Reports` buttons and the open-alert chip from `src/features/overview/owner-home.tsx` (~lines 149, 156, 163, 269–273) and the low-stock chip wherever it is raised, then update `owner-home.test.tsx` to assert their absence rather than deleting the assertions.
-- [ ] 1.4 Remove the mock adapters, fixtures and demo seed rows that existed only for these screens, and confirm nothing in `src/data-access/` still compiles against a deleted surface.
-- [ ] 1.5 Leave every migration untouched. `inventory_movements`, `outlet_alerts`, `alert_responses`, their policies, their grants and their isolation tests all stay, and `npm run test:rls` must still cover them.
+- [x] 1.1 Delete the gate entries `owner-comparison`, `owner-pnl`, `admin-pnl`, `owner-reports`, `owner-alerts`, `admin-alerts` and `admin-inventory` from `src/gates/registry.ts`, and their route entries plus the `inventory/:itemId` movement-ledger route from `src/routes/surfaces.tsx`. Keep `owner-outlet-view` at `outlet/:outletId` — it is the `Open` button on every outlet card.
+- [x] 1.2 Delete `src/features/alerts/`, `src/features/inventory/`, and the comparison, P&L and reports surfaces in `src/features/insights/` with their tests. Keep `outlet-day-view.tsx`; keep `period.ts` and `profit-figure.tsx` only if the day view still uses them, and delete them if it does not.
+- [x] 1.3 Remove the `Compare outlets`, `Profit and loss` and `Reports` buttons and the open-alert chip from `src/features/overview/owner-home.tsx` (~lines 149, 156, 163, 269–273) and the low-stock chip wherever it is raised, then update `owner-home.test.tsx` to assert their absence rather than deleting the assertions.
+- [x] 1.4 Remove the mock adapters, fixtures and demo seed rows that existed only for these screens, and confirm nothing in `src/data-access/` still compiles against a deleted surface.
+- [x] 1.5 Leave every migration untouched. `inventory_movements`, `outlet_alerts`, `alert_responses`, their policies, their grants and their isolation tests all stay, and `npm run test:rls` must still cover them.
 - [ ] 1.6 Record in `docs/LIMITATIONS.md` what these screens used to answer, that the tables survive with no reader, and that retiring them is a later change with a down-migration.
 
 ## 2. Groups In The Registry

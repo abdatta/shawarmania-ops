@@ -1,13 +1,5 @@
-import {
-  BarChart3,
-  Bell,
-  FileText,
-  Hourglass,
-  Package,
-  Store,
-  TrendingUp,
-  TriangleAlert,
-} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { Hourglass, Store, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 
@@ -143,30 +135,6 @@ export function OwnerHome() {
           {shown.map((row) => (
             <OutletCard key={row.outlet.id} figures={row} base={base} />
           ))}
-
-          <nav aria-label="Period views" className="flex flex-wrap gap-2 pt-1">
-            <Link
-              to={`${base}/comparison`}
-              className={buttonVariants({ variant: 'secondary', size: 'phone' })}
-            >
-              <BarChart3 aria-hidden size={16} />
-              Compare outlets
-            </Link>
-            <Link
-              to={`${base}/pnl`}
-              className={buttonVariants({ variant: 'secondary', size: 'phone' })}
-            >
-              <TrendingUp aria-hidden size={16} />
-              Profit and loss
-            </Link>
-            <Link
-              to={`${base}/reports`}
-              className={buttonVariants({ variant: 'secondary', size: 'phone' })}
-            >
-              <FileText aria-hidden size={16} />
-              Reports
-            </Link>
-          </nav>
         </div>
       )}
     </div>
@@ -262,17 +230,8 @@ function AttentionRow({
   // Today's difference is null by construction until somebody counts the
   // drawer, so the figure worth surfacing is the last closed day's.
   const difference = previous?.dayClosed ? previous.cashDifferencePaise : null
-  const items: { key: string; icon: typeof Bell; label: string; to?: string }[] = []
+  const items: { key: string; icon: LucideIcon; label: string; to?: string }[] = []
 
-  if (summary.openAlertCount > 0) {
-    items.push({
-      key: 'alerts',
-      icon: Bell,
-      label:
-        summary.openAlertCount === 1 ? '1 open alert' : `${summary.openAlertCount} open alerts`,
-      to: `${base}/alerts`,
-    })
-  }
   if (summary.waitingApprovalCount > 0) {
     items.push({
       key: 'attendance',
@@ -284,17 +243,6 @@ function AttentionRow({
           ? '1 arrival waiting for approval'
           : `${summary.waitingApprovalCount} arrivals waiting for approval`,
       to: `${base}/attendance`,
-    })
-  }
-  if (summary.lowStockCount > 0) {
-    items.push({
-      key: 'stock',
-      icon: Package,
-      label:
-        summary.lowStockCount === 1
-          ? '1 item low on stock'
-          : `${summary.lowStockCount} items low on stock`,
-      to: `${base}/outlet/${outletId}`,
     })
   }
   if (difference !== null && difference !== 0) {

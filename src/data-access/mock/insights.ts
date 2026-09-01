@@ -1,27 +1,14 @@
-import {
-  expectedClosingPaise,
-  isLowStock,
-  profitEstimate,
-  shiftBusinessDate,
-  type ExpenseAmount,
-  type ProfitBasis,
-} from '@/domain'
+import { expectedClosingPaise, shiftBusinessDate } from '@/domain'
 
 import type {
   AppRole,
   AttendanceAdapter,
-  CategoryTotal,
   InsightsAdapter,
-  InsightsPeriod,
   MethodTotal,
-  OutletComparisonRow,
   OutletDaySummary,
   PaymentMethod,
-  PeriodDay,
-  PeriodSummary,
 } from '../adapters'
 import type { Tables } from '../database.types'
-import { outletFixtures } from './fixtures/outlets'
 import type { DemoStore } from './store'
 
 /**
@@ -39,29 +26,16 @@ import type { DemoStore } from './store'
  *  - **a counted drawer is not recomputed.** Its expected figure and difference
  *    remain the observation's; later writes continue in the next interval.
  *
- * The cross-outlet boundary mirrors the policy #13 relies on: only the Super
- * Admin reads more than one outlet, and asking for somebody else's returns
- * nothing rather than throwing — an excluded row is what RLS produces.
+ * The cross-outlet boundary mirrors the policies the real adapter will rely on:
+ * only the Super Admin reads more than one outlet, and asking for somebody
+ * else's returns nothing rather than throwing — an excluded row is what RLS
+ * produces.
+ *
+ * **It answers one question since #51**, where it answered three. The period
+ * summary and the two-outlet comparison went with the screens that asked them.
  */
 
 const METHOD_ORDER: PaymentMethod[] = ['cash', 'upi']
-
-function outletNameOf(outletId: string): string {
-  return outletFixtures.find((outlet) => outlet.id === outletId)?.name ?? 'Unknown outlet'
-}
-
-/** Business dates from `from` to `to` inclusive. Dates, never timestamps. */
-function datesInPeriod(period: InsightsPeriod): string[] {
-  const dates: string[] = []
-  let cursor = period.from
-  // A period is a handful of days in this product; a bounded walk is clearer
-  // than date arithmetic and cannot drift across a cutover.
-  for (let guard = 0; guard < 400 && cursor <= period.to; guard += 1) {
-    dates.push(cursor)
-    cursor = shiftBusinessDate(cursor, 1)
-  }
-  return dates
-}
 
 export function createMockInsightsAdapter(
   store: DemoStore,
@@ -139,23 +113,6 @@ export function createMockInsightsAdapter(
     })).filter((total) => total.amountPaise > 0)
   }
 
-  function expensesByCategory(expenses: readonly Tables<'expenses'>[]): CategoryTotal[] {
-    const totals = new Map<Tables<'expenses'>['category'], number>()
-    for (const expense of expenses) {
-      totals.set(expense.category, (totals.get(expense.category) ?? 0) + expense.amount_paise)
-    }
-    return [...totals.entries()]
-      .map(([category, amountPaise]) => ({ category, amountPaise }))
-      .sort((a, b) => b.amountPaise - a.amountPaise)
-  }
-
-  function toExpenseAmounts(expenses: readonly Tables<'expenses'>[]): ExpenseAmount[] {
-    return expenses.map((expense) => ({
-      category: expense.category,
-      amountPaise: expense.amount_paise,
-    }))
-  }
-
   async function day(outletId: string, businessDate: string): Promise<OutletDaySummary> {
     const bills = settledBills(outletId, businessDate)
     const expenses = expensesOn(outletId, businessDate)
@@ -201,18 +158,6 @@ export function createMockInsightsAdapter(
       expectedCashPaise,
       dayClosed: counted !== null,
       cashDifferencePaise: counted ? counted.difference_paise : null,
-      lowStockCount: store.inventoryItems.filter(
-        (item) =>
-          item.outlet_id === outletId &&
-          item.is_active &&
-          isLowStock({
-            currentQuantity: item.current_quantity,
-            lowStockThreshold: item.low_stock_threshold,
-          }),
-      ).length,
-      openAlertCount: store.alerts.filter(
-        (alert) => alert.outlet_id === outletId && alert.status === 'open',
-      ).length,
       checkedInCount: roster.filter((record) => record.checkIn !== null).length,
       // The same derivation the surfaces use: an arrival with no approval, held
       // at `absent` by the trigger, is a day waiting for a manager.
@@ -223,90 +168,10 @@ export function createMockInsightsAdapter(
     }
   }
 
-  async function period(
-    outletId: string,
-    range: InsightsPeriod,
-    basis: ProfitBasis,
-  ): Promise<PeriodSummary> {
-    const dates = datesInPeriod(range)
-
-    const bills = dates.flatMap((date) => settledBills(outletId, date))
-    const expenses = dates.flatMap((date) => expensesOn(outletId, date))
-    const channels = store.aggregatorChannelDays.filter(
-      (row) => row.outlet_id === outletId && dates.includes(row.business_date),
-    )
-    const salesPaise =
-      bills.reduce((running, bill) => running + bill.total_paise, 0) +
-      channels.reduce(
-        (running, row) => running + row.revenue_paise - (row.commission_paise ?? 0),
-        0,
-      )
-
-    const days: PeriodDay[] = dates.map((date) => {
-      const counted = countedOn(outletId, date)
-      const channelNet = channels
-        .filter((row) => row.business_date === date)
-        .reduce((running, row) => running + row.revenue_paise - (row.commission_paise ?? 0), 0)
-      return {
-        businessDate: date,
-        salesPaise:
-          settledBills(outletId, date).reduce((running, bill) => running + bill.total_paise, 0) +
-          channelNet,
-        dayClosed: counted !== null,
-        cashDifferencePaise: counted ? counted.difference_paise : null,
-      }
-    })
-
-    return {
-      outletId,
-      period: range,
-      salesPaise,
-      billCount: bills.length,
-      salesByMethod: salesByMethod(bills),
-      expensesByCategory: expensesByCategory(expenses),
-      expensesPaise: expenses.reduce((running, expense) => running + expense.amount_paise, 0),
-      profit: profitEstimate(basis, {
-        salesPaise,
-        expenses: toExpenseAmounts(expenses),
-        isCeiling: channels.some((row) => row.revenue_paise !== 0 && row.commission_paise === null),
-      }),
-      days,
-    }
-  }
-
   return {
     async outletDay(outletId, businessDate) {
       if (!mayRead(outletId)) return null
       return day(outletId, businessDate)
-    },
-
-    async periodSummary(outletId, range, basis) {
-      if (!mayRead(outletId)) return null
-      return period(outletId, range, basis)
-    },
-
-    async comparison(outletIds, range, basis): Promise<OutletComparisonRow[]> {
-      const readable = outletIds.filter(mayRead)
-
-      return Promise.all(
-        readable.map(async (outletId) => {
-          const summary = await period(outletId, range, basis)
-          const closedDays = summary.days.filter((entry) => entry.dayClosed)
-
-          return {
-            outletId,
-            outletName: outletNameOf(outletId),
-            salesPaise: summary.salesPaise,
-            expensesPaise: summary.expensesPaise,
-            profitPaise: summary.profit.profitPaise,
-            // Only closed days have a counted drawer to differ from. A period
-            // with none has no answer, which is different from an answer of nil.
-            cashDifferencePaise: closedDays.length
-              ? closedDays.reduce((running, entry) => running + (entry.cashDifferencePaise ?? 0), 0)
-              : null,
-          }
-        }),
-      )
     },
   }
 }

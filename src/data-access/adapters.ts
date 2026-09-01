@@ -1,10 +1,4 @@
-import type {
-  BillingCommandResult,
-  MovementType,
-  ProfitBasis,
-  ProfitEstimate,
-  SyncStateKind,
-} from '@/domain'
+import type { BillingCommandResult, SyncStateKind } from '@/domain'
 import type { PositionReading } from '@/lib/geolocation'
 
 import type { BillingCommand } from '../../shared/billing-command'
@@ -1605,98 +1599,6 @@ export interface CustomersAdapter {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Stock: the ledger, and the cache the ledger maintains.
-
-export type InventoryUnit = Tables<'inventory_items'>['unit']
-
-/**
- * One stock item as a list needs it.
- *
- * `currentQuantity` is **derived from the movements**, never a column a client
- * writes: `openspec/specs/inventory-ledger/spec.md` makes the ledger the truth
- * and the quantity a cache the database maintains from it, and an adapter that
- * let a caller set it directly would be handing back the inversion the spec
- * exists to prevent.
- */
-export interface InventoryItemSummary {
-  id: string
-  outletId: string
-  name: string
-  unit: InventoryUnit
-  currentQuantity: number
-  lowStockThreshold: number
-  /** `currentQuantity <= lowStockThreshold`, resolved once so two screens agree. */
-  isLow: boolean
-  purchaseCostPaise: number
-  isActive: boolean
-  lastUpdatedAt: string
-}
-
-/** One row of an item's ledger, with the quantity it left behind. */
-export interface InventoryMovementRecord {
-  id: string
-  inventoryItemId: string
-  movementType: MovementType
-  /** Signed: added is positive, used and wasted negative, a correction as given. */
-  quantityDelta: number
-  /** The item's quantity after this movement — what makes a ledger readable. */
-  quantityAfter: number
-  note: string | null
-  businessDate: string
-  createdAt: string
-}
-
-export interface NewInventoryItem {
-  outletId: string
-  name: string
-  unit: InventoryUnit
-  lowStockThreshold: number
-  purchaseCostPaise?: number
-}
-
-export type InventoryItemPatch = Partial<{
-  name: string
-  lowStockThreshold: number
-  purchaseCostPaise: number
-  isActive: boolean
-}>
-
-export interface NewMovement {
-  inventoryItemId: string
-  movementType: MovementType
-  /**
-   * A magnitude for added / used / wasted — the sign comes from the kind of
-   * movement, so nobody counting stock has to remember a minus. A correction
-   * takes the signed value as given, because its direction is the point.
-   */
-  quantity: number
-  note?: string | null
-  businessDate: string
-}
-
-export class InventoryActionError extends DataActionError {
-  constructor(code: string, message: string) {
-    super(code, message)
-    this.name = 'InventoryActionError'
-  }
-}
-
-export interface InventoryAdapter {
-  listItems(outletId: string): Promise<InventoryItemSummary[]>
-  getItem(id: string): Promise<InventoryItemSummary | null>
-  /** One item's movements, most recent first. */
-  listMovements(inventoryItemId: string): Promise<InventoryMovementRecord[]>
-  createItem(item: NewInventoryItem): Promise<InventoryItemSummary>
-  updateItem(id: string, patch: InventoryItemPatch): Promise<InventoryItemSummary>
-  /**
-   * Append a movement. There is deliberately no update and no delete: a
-   * mistaken entry is corrected by a further movement carrying a note, and the
-   * original stays visible. History is corrected, never edited.
-   */
-  recordMovement(movement: NewMovement): Promise<InventoryItemSummary>
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Expenses: what the outlet spent, and how.
 
 /** Who touched an expense row, resolved through the least-privilege people RPC. */
@@ -1791,81 +1693,6 @@ export interface ExpenseCategoriesAdapter {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Alerts: what one outlet needs the owner to know about.
-
-export type AlertCategory = Tables<'alerts'>['category']
-export type AlertPriorityValue = Tables<'alerts'>['priority']
-export type AlertStatusValue = Tables<'alerts'>['status']
-
-/** One response on an alert's thread. Append-only: a response is never edited. */
-export interface AlertResponseRecord {
-  id: string
-  message: string
-  /** Snapshotted so the thread reads without a second lookup per row. */
-  responderName: string
-  createdAt: string
-}
-
-export interface AlertSummary {
-  id: string
-  outletId: string
-  /**
-   * Carried on the row rather than joined by the screen. The owner's inbox is
-   * cross-outlet, and an alert whose outlet the reader has to work out from
-   * context is an alert they will act on for the wrong shop.
-   */
-  outletName: string
-  category: AlertCategory
-  priority: AlertPriorityValue
-  status: AlertStatusValue
-  subject: string
-  message: string
-  raisedBy: string
-  raisedByName: string
-  createdAt: string
-  responseCount: number
-}
-
-export interface AlertDetail extends AlertSummary {
-  responses: AlertResponseRecord[]
-}
-
-export interface NewAlert {
-  outletId: string
-  category: AlertCategory
-  priority: AlertPriorityValue
-  subject: string
-  message: string
-}
-
-/** A refusal from the alerts path — an illegal transition, or a blank field. */
-export class AlertActionError extends DataActionError {
-  constructor(code: string, message: string) {
-    super(code, message)
-    this.name = 'AlertActionError'
-  }
-}
-
-export interface AlertsAdapter {
-  /**
-   * Alerts the caller may see, ordered so that what needs attention is found
-   * first. The Super Admin gets every outlet's; anybody else gets their own
-   * outlet's, and naming another outlet returns nothing rather than throwing —
-   * a policy that excludes rows is what RLS does.
-   */
-  listAlerts(options?: { outletId?: string }): Promise<AlertSummary[]>
-  getAlert(id: string): Promise<AlertDetail | null>
-  raiseAlert(alert: NewAlert): Promise<AlertSummary>
-  /** Add to the thread. Deliberately does not move the status (design D8). */
-  respond(alertId: string, message: string): Promise<AlertDetail>
-  /**
-   * Move the alert along. Only the transitions `src/domain/alerts.ts` permits;
-   * anything else is refused by name rather than accepted silently.
-   */
-  setStatus(alertId: string, status: AlertStatusValue): Promise<AlertSummary>
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Insights: the owner's derived figures.
 
 /** An inclusive range of business dates. Dates, never timestamps. */
@@ -1904,8 +1731,6 @@ export interface OutletDaySummary {
   dayClosed: boolean
   /** Null while the day is open — nobody has counted it yet. */
   cashDifferencePaise: number | null
-  lowStockCount: number
-  openAlertCount: number
   /**
    * Arrivals recorded today. A recorded arrival is a claim, not a settled day —
    * `waitingApprovalCount` is how many of them still count for nothing.
@@ -1915,63 +1740,22 @@ export interface OutletDaySummary {
   waitingApprovalCount: number
 }
 
-/** One day inside a period, for the shape of a run rather than its total. */
-export interface PeriodDay {
-  businessDate: string
-  salesPaise: number
-  dayClosed: boolean
-  cashDifferencePaise: number | null
-}
-
-export interface PeriodSummary {
-  outletId: string
-  period: InsightsPeriod
-  salesPaise: number
-  billCount: number
-  salesByMethod: MethodTotal[]
-  expensesByCategory: CategoryTotal[]
-  expensesPaise: number
-  /**
-   * The profit and the working behind it, **on the basis that was asked for**.
-   * There is no basis-free variant: a figure whose basis the caller never chose
-   * is a figure a surface cannot honestly label (design D5).
-   */
-  profit: ProfitEstimate
-  days: PeriodDay[]
-}
-
-/** One outlet's row on the comparison. */
-export interface OutletComparisonRow {
-  outletId: string
-  outletName: string
-  salesPaise: number
-  expensesPaise: number
-  profitPaise: number
-  /** Summed over the closed days in the period; null if none were closed. */
-  cashDifferencePaise: number | null
-}
-
 /**
- * The owner's derived figures.
+ * The owner's derived figures — **one outlet's day, and nothing wider**.
  *
- * Every method may answer `null` — **which is a real answer, not a failure**.
+ * It answered three questions until #51: a day, a period summary carrying an
+ * estimated profit, and a comparison of two outlets. The last two went with the
+ * screens that asked them, because the business does not ask them: the Ledger
+ * says what a day took and what it cost from recorded rows, and an estimate on
+ * top of that is a second number to reconcile rather than an answer.
+ *
+ * `outletDay` may answer `null` — **which is a real answer, not a failure**.
  * `owner-dashboard` is a `live` surface, so this adapter's Supabase
- * implementation is genuinely called today and genuinely has nothing to report
- * until `owner-console-live` (#13) gives it real bills. The console renders the
- * outlet with the absence stated rather than a fabricated zero (design D3).
+ * implementation is genuinely called today. The console renders the outlet with
+ * the absence stated rather than a fabricated zero (design D3).
  */
 export interface InsightsAdapter {
   outletDay(outletId: string, businessDate: string): Promise<OutletDaySummary | null>
-  periodSummary(
-    outletId: string,
-    period: InsightsPeriod,
-    basis: ProfitBasis,
-  ): Promise<PeriodSummary | null>
-  comparison(
-    outletIds: readonly string[],
-    period: InsightsPeriod,
-    basis: ProfitBasis,
-  ): Promise<OutletComparisonRow[]>
 }
 
 /**
@@ -2044,10 +1828,8 @@ export interface DataAdapters {
   /** Tablets, and the handshake that opens a shift on one (#9). */
   counter: CounterAdapter
   customers: CustomersAdapter
-  inventory: InventoryAdapter
   expenses: ExpensesAdapter
   expenseCategories: ExpenseCategoriesAdapter
-  alerts: AlertsAdapter
   insights: InsightsAdapter
   addressLookup: AddressLookupAdapter
   /** The drawer as a continuous balance, observed at instants (#11). */

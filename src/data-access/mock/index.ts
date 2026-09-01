@@ -4,7 +4,6 @@ import { createMockAddressLookupAdapter } from './address-lookup'
 import { createMockAggregatorSyncAdapter } from './aggregator-sync'
 import { DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID } from './store'
 import { createDemoAccounts, createMockAccountsAdapter } from './accounts'
-import { createMockAlertsAdapter } from './alerts'
 import { createMockAttendanceAdapter } from './attendance'
 import { createMockBillingAdapter } from './billing'
 import { createMockCashDrawerAdapter } from './cash-drawer'
@@ -14,7 +13,6 @@ import { createMockExpensesAdapter } from './expenses'
 import { createMockExpenseCategoriesAdapter } from './expense-categories'
 import { createMockInsightsAdapter } from './insights'
 import { createMockLedgerStatementAdapter } from './ledger-statement'
-import { createMockInventoryAdapter } from './inventory'
 import { createMockMenuAdapter } from './menu'
 import { createMockOutletsAdapter } from './outlets'
 import { personaFixtures } from './fixtures/personas'
@@ -158,7 +156,6 @@ export function createMockAdapters(
     // The role reaches the customer mock so it refuses everybody the database
     // refuses: only a billing context may resolve a phone at all.
     customers: createMockCustomersAdapter(data.customers, role),
-    inventory: createMockInventoryAdapter(store),
     expenses: createMockExpensesAdapter(
       store,
       role,
@@ -168,7 +165,6 @@ export function createMockAdapters(
     expenseCategories: createMockExpenseCategoriesAdapter(store, role),
     // Both enforce the boundary the RLS policies will: only the Super Admin
     // reads across outlets, and asking for somebody else's returns nothing.
-    alerts: createMockAlertsAdapter(store, role, session),
     insights: createMockInsightsAdapter(store, attendance, role, session),
     // Both outlets, because the sync is a cross-outlet surface and the owner is
     // its only reader: the same reach the policies grant.

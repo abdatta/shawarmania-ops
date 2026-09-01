@@ -72,36 +72,37 @@ describe('demo reset', () => {
 
   it('is the only thing that discards a walkthrough — a role switch is not', async () => {
     const user = userEvent.setup()
-    renderDemo('/demo/admin/alerts')
+    renderDemo('/demo/admin/ledger/expenses')
 
-    await screen.findByTestId('alert-list')
-    await user.click(screen.getByTestId('raise-alert'))
-    await user.type(screen.getByLabelText('Subject'), 'Freezer is not holding temperature')
-    await user.type(screen.getByLabelText('What happened'), 'It read −4 this morning.')
-    await user.click(screen.getByRole('button', { name: 'Raise it' }))
+    await screen.findByTestId('ledger-expense-list')
+    await user.click(screen.getByRole('button', { name: 'Add expense' }))
+    await user.type(screen.getByLabelText('Expense category'), 'Freezer repair')
+    await user.type(screen.getByLabelText('Amount (₹)'), '900')
+    await user.type(screen.getByLabelText('Note (optional)'), 'It read minus four this morning')
+    await user.click(screen.getByRole('button', { name: 'Record expense' }))
     await waitFor(() =>
-      expect(screen.getByTestId('alert-list')).toHaveTextContent(
-        'Freezer is not holding temperature',
+      expect(screen.getByTestId('ledger-expense-list')).toHaveTextContent(
+        'It read minus four this morning',
       ),
     )
 
     // Flip to the owner. Several mocks are built per role, so the adapters are
-    // rebuilt here — and the dataset beneath them must not be, or *"raise it as
-    // the manager, answer it as the owner"* would show an empty inbox.
+    // rebuilt here — and the dataset beneath them must not be, or *"record it as
+    // the manager, read it as the owner"* would show an empty list.
     await user.click(screen.getByRole('link', { name: 'Owner' }))
-    await user.click(screen.getAllByRole('link', { name: 'Alerts' })[0]!)
+    await user.click(screen.getAllByRole('link', { name: 'Expenses' })[0]!)
 
     await waitFor(() =>
-      expect(screen.getByTestId('alert-list')).toHaveTextContent(
-        'Freezer is not holding temperature',
+      expect(screen.getByTestId('ledger-expense-list')).toHaveTextContent(
+        'It read minus four this morning',
       ),
     )
 
-    // And the reset still clears it, from the role that did not raise it.
+    // And the reset still clears it, from the role that did not record it.
     await reset(user)
     await waitFor(() =>
-      expect(screen.getByTestId('alert-list')).not.toHaveTextContent(
-        'Freezer is not holding temperature',
+      expect(screen.getByTestId('ledger-expense-list')).not.toHaveTextContent(
+        'It read minus four this morning',
       ),
     )
   })

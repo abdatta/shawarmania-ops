@@ -53,16 +53,6 @@ export {
   type NearbyCashBill,
 } from './drawer'
 export {
-  formatDelta,
-  formatQuantity,
-  isLowStock,
-  movementDelta,
-  QUANTITY_DECIMALS,
-  roundQuantity,
-  sumQuantities,
-  type MovementType,
-} from './inventory'
-export {
   describeCutover,
   earliestOffered,
   formatBusinessDate,
@@ -106,23 +96,3 @@ export {
   type CategoryMatch,
   type CategoryMatchReason,
 } from './category-match'
-export {
-  cashBasisProfitPaise,
-  profitEstimate,
-  PROFIT_BASIS_DESCRIPTIONS,
-  PROFIT_BASIS_LABELS,
-  totalExpensesPaise,
-  type ExpenseAmount,
-  type ProfitBasis,
-  type ProfitEstimate,
-  type ProfitInputs,
-} from './pnl'
-export {
-  ALERT_PRIORITY_ORDER,
-  ALERT_STATUS_LABELS,
-  alertAttentionRank,
-  canTransition,
-  nextStatuses,
-  type AlertPriority,
-  type AlertStatus,
-} from './alerts'

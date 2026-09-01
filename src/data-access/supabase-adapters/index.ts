@@ -15,9 +15,8 @@ import { createSupabaseExpenseCategoriesAdapter } from './expense-categories'
 import { createSupabaseExpensesAdapter } from './expenses'
 import { createSupabaseLedgerStatementAdapter } from './ledger-statement'
 import { createSupabaseMenuAdapter } from './menu'
-import { createSupabaseInventoryAdapter } from './operations'
 import { createSupabaseOutletsAdapter } from './outlets'
-import { createSupabaseAlertsAdapter, createSupabaseInsightsAdapter } from './oversight'
+import { createSupabaseInsightsAdapter } from './oversight'
 import type { CounterDeviceSession } from '@/session/counter-session'
 
 /**
@@ -48,14 +47,10 @@ export function createSupabaseAdapters(
     // directory is REAL from today, because the boundary that protects it is.
     // The billing surfaces that call it are still `demo`-gated (#31, #10).
     customers: createSupabaseCustomersAdapter(client),
-    // Stock remains shelved (openspec/todos/inventory-is-shelved.md).
-    inventory: createSupabaseInventoryAdapter(),
     expenses: createSupabaseExpensesAdapter(client),
     expenseCategories: createSupabaseExpenseCategoriesAdapter(client),
-    // Alerts are `demo`-gated, so nothing calls this one. Insights is the
-    // exception: `owner-dashboard` is `live` and does call it — and `null` is
-    // its honest answer until #13. See supabase-adapters/oversight.ts.
-    alerts: createSupabaseAlertsAdapter(),
+    // `owner-dashboard` is `live` and does call this one — and `null` is its
+    // honest answer, not a stub refusing. See supabase-adapters/oversight.ts.
     insights: createSupabaseInsightsAdapter(),
     // Real from the day they ship, and both `live` in the registry (#11). The
     // drawer never had a live surface to be a stub for: `daily_cash_records` has

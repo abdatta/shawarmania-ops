@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import { sumQuantities } from '@/domain'
-
 import { createDemoStore, DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID } from './store'
 
 /**
@@ -59,30 +57,6 @@ describe('the demo scenario dataset', () => {
     expect(new Set(ones.map((bill) => bill.outlet_id)).size).toBe(store.tradingOutletIds.length)
   })
 
-  it('keeps every item’s stored quantity equal to the sum of its own ledger', () => {
-    const store = createDemoStore()
-
-    for (const item of store.inventoryItems) {
-      const fromLedger = sumQuantities(
-        store.inventoryMovements
-          .filter((movement) => movement.inventory_item_id === item.id)
-          .map((movement) => movement.quantity_delta),
-      )
-      expect(fromLedger).toBe(item.current_quantity)
-    }
-  })
-
-  it('records each movement against the outlet of the item it moves', () => {
-    const store = createDemoStore()
-
-    for (const movement of store.inventoryMovements) {
-      const item = store.inventoryItems.find(
-        (candidate) => candidate.id === movement.inventory_item_id,
-      )
-      expect(item?.outlet_id).toBe(movement.outlet_id)
-    }
-  })
-
   it('gives each outlet its own menu rows rather than sharing one set', () => {
     const store = createDemoStore()
 
@@ -103,19 +77,5 @@ describe('the demo scenario dataset', () => {
       const item = store.menuItems.find((candidate) => candidate.id === line.menu_item_id)
       expect(item?.outlet_id).toBe(bill?.outlet_id)
     }
-  })
-
-  it('leaves the low stock at one outlet only', () => {
-    const store = createDemoStore()
-
-    const lowByOutlet = new Map<string, number>()
-    for (const item of store.inventoryItems) {
-      if (item.current_quantity <= item.low_stock_threshold) {
-        lowByOutlet.set(item.outlet_id, (lowByOutlet.get(item.outlet_id) ?? 0) + 1)
-      }
-    }
-
-    expect(lowByOutlet.get(DEMO_OUTLET_ID)).toBeGreaterThan(0)
-    expect(lowByOutlet.get(DEMO_SECOND_OUTLET_ID) ?? 0).toBe(0)
   })
 })

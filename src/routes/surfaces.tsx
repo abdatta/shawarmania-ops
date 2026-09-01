@@ -1,7 +1,6 @@
 import { Navigate, type RouteObject } from 'react-router'
 
 import { AccountsSurface } from '@/features/accounts/accounts-surface'
-import { AlertsSurface } from '@/features/alerts/alerts-surface'
 import { MyAttendance } from '@/features/attendance/my-attendance'
 import { OutletAttendance } from '@/features/attendance/outlet-attendance'
 import { BillingCounter } from '@/features/billing/billing-counter'
@@ -14,12 +13,7 @@ import { LedgerStatementSurface } from '@/features/cash/ledger-statement-surface
 import { DevicesSurface } from '@/features/counter/devices-surface'
 import { ExpenseCategoriesSurface } from '@/features/expense-categories/expense-categories-surface'
 import { OutletExpensesSurface } from '@/features/expenses/outlet-expenses-surface'
-import { ComparisonSurface } from '@/features/insights/comparison-surface'
 import { OutletDayView } from '@/features/insights/outlet-day-view'
-import { PnlSurface } from '@/features/insights/pnl-surface'
-import { ReportsSurface } from '@/features/insights/reports-surface'
-import { InventorySurface } from '@/features/inventory/inventory-surface'
-import { MovementLedger } from '@/features/inventory/movement-ledger'
 import { MenuSurface } from '@/features/menu/menu-surface'
 import { OutletsSurface } from '@/features/outlets/outlets-surface'
 import { RoleHome } from '@/features/overview/role-home'
@@ -133,24 +127,6 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
-    path: 'inventory',
-    element: (
-      <GatedSurface path="inventory">
-        <InventorySurface />
-      </GatedSurface>
-    ),
-  },
-  {
-    // The ledger has its own address so "why does it say 4 kg?" can be settled
-    // by sending a link — which is how that question actually gets asked.
-    path: 'inventory/:itemId',
-    element: (
-      <GatedSurface path="inventory">
-        <MovementLedger />
-      </GatedSurface>
-    ),
-  },
-  {
     // The drawer as a continuous balance (#11). One path, two roles: what
     // differs between a Super Admin and an assigned Franchise Admin is decided
     // by `app_may_reach_drawer()` in the database, not by this screen.
@@ -202,8 +178,8 @@ export const roleSurfaceRoutes: RouteObject[] = [
   {
     // The channel is in the route, so a badge, a link or a returning reader
     // lands on the channel the work is actually on. Gated against the parent
-    // pattern, the way `inventory/:itemId` already is: the gate is a question
-    // about the surface, not about which of its addresses is being opened.
+    // pattern: the gate is a question about the surface, not about which of its
+    // addresses is being opened.
     path: 'ledger/delivery/:channel',
     element: (
       <GatedSurface path="ledger/delivery">
@@ -232,41 +208,6 @@ export const roleSurfaceRoutes: RouteObject[] = [
     element: (
       <GatedSurface path="devices">
         <DevicesSurface />
-      </GatedSurface>
-    ),
-  },
-  {
-    // One path, two roles again: `admin-alerts` raises and `owner-alerts` is
-    // the cross-outlet inbox, and the same component serves both because the
-    // difference between them is the adapter's, not the screen's.
-    path: 'alerts',
-    element: (
-      <GatedSurface path="alerts">
-        <AlertsSurface />
-      </GatedSurface>
-    ),
-  },
-  {
-    path: 'pnl',
-    element: (
-      <GatedSurface path="pnl">
-        <PnlSurface />
-      </GatedSurface>
-    ),
-  },
-  {
-    path: 'reports',
-    element: (
-      <GatedSurface path="reports">
-        <ReportsSurface />
-      </GatedSurface>
-    ),
-  },
-  {
-    path: 'comparison',
-    element: (
-      <GatedSurface path="comparison">
-        <ComparisonSurface />
       </GatedSurface>
     ),
   },

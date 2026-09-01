@@ -1,26 +1,19 @@
-import { Bell, Eye, Package, TriangleAlert, Users } from 'lucide-react'
+import { Eye, TriangleAlert, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 
 import { EmptyState } from '@/components/layout/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
-import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { LoadingFigures } from '@/components/ui/loading'
 import { Money } from '@/components/ui/money'
 import { Select } from '@/components/ui/select'
 import { useAdapters, type Tables } from '@/data-access'
-import type {
-  AlertSummary,
-  AttendanceRecord,
-  InventoryItemSummary,
-  OutletDaySummary,
-} from '@/data-access/adapters'
+import type { AttendanceRecord, OutletDaySummary } from '@/data-access/adapters'
 import {
   describeDifference,
   formatBusinessDate,
   formatPaise,
-  formatQuantity,
   resolveBusinessDate,
   shiftBusinessDate,
 } from '@/domain'
@@ -38,14 +31,12 @@ import { useSession } from '@/session/context'
 export function OutletDayView() {
   const session = useSession()
   const { outletId } = useParams()
-  const { outlets, insights, inventory, alerts, attendance } = useAdapters()
+  const { outlets, insights, attendance } = useAdapters()
 
   const [outlet, setOutlet] = useState<Tables<'outlets'> | null>(null)
   const [businessDate, setBusinessDate] = useState<string | null>(null)
   const [today, setToday] = useState<string | null>(null)
   const [summary, setSummary] = useState<OutletDaySummary | null>(null)
-  const [lowStock, setLowStock] = useState<InventoryItemSummary[]>([])
-  const [openAlerts, setOpenAlerts] = useState<AlertSummary[]>([])
   const [roster, setRoster] = useState<AttendanceRecord[]>([])
   const [loaded, setLoaded] = useState(false)
 
@@ -78,16 +69,12 @@ export function OutletDayView() {
     let active = true
 
     void (async () => {
-      const [day, items, raised, day0] = await Promise.all([
+      const [day, day0] = await Promise.all([
         insights.outletDay(outletId, businessDate),
-        inventory.listItems(outletId),
-        alerts.listAlerts({ outletId }),
         attendance.listOutletDay([outletId], businessDate),
       ])
       if (!active) return
       setSummary(day)
-      setLowStock(items.filter((item) => item.isLow))
-      setOpenAlerts(raised.filter((alert) => alert.status === 'open'))
       setRoster(day0.filter((record) => record.checkIn !== null))
       setLoaded(true)
     })()
@@ -95,7 +82,7 @@ export function OutletDayView() {
     return () => {
       active = false
     }
-  }, [insights, inventory, alerts, attendance, outletId, businessDate])
+  }, [insights, attendance, outletId, businessDate])
 
   if (loaded && !outlet) {
     return (
@@ -147,9 +134,9 @@ export function OutletDayView() {
       )}
 
       {!loaded ? (
-        // The day's four cards: the figures, then low stock, open alerts and
-        // who checked in.
-        <LoadingFigures label="this outlet’s day" rows={[5, 3, 3, 3]} />
+        // The day's two cards: the figures, then who checked in. It was four
+        // until #51 took low stock and open alerts away with their surfaces.
+        <LoadingFigures label="this outlet’s day" rows={[5, 3]} />
       ) : summary === null ? (
         <EmptyState title="This outlet’s figures are not available yet — the console is not connected to live trading data." />
       ) : (
@@ -201,52 +188,6 @@ export function OutletDayView() {
             )}
           </Card>
 
-          <Card className="space-y-2" data-testid="outlet-day-stock">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-content">
-              <Package aria-hidden size={16} />
-              Low stock
-            </h2>
-            {lowStock.length === 0 ? (
-              <p className="text-xs text-content-muted">Nothing is at its threshold.</p>
-            ) : (
-              <ul className="space-y-1 text-xs">
-                {lowStock.map((item) => (
-                  <li key={item.id} className="flex items-baseline justify-between gap-3">
-                    <span className="text-content">{item.name}</span>
-                    <span className="text-content-muted">
-                      {formatQuantity(item.currentQuantity, item.unit)} — threshold{' '}
-                      {formatQuantity(item.lowStockThreshold, item.unit)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-
-          <Card className="space-y-2" data-testid="outlet-day-alerts">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-content">
-              <Bell aria-hidden size={16} />
-              Open alerts
-            </h2>
-            {openAlerts.length === 0 ? (
-              <p className="text-xs text-content-muted">Nothing has been raised from here.</p>
-            ) : (
-              <ul className="space-y-1 text-xs">
-                {openAlerts.map((alert) => (
-                  <li key={alert.id}>
-                    <Link
-                      to={`${base}/alerts`}
-                      className="font-semibold text-accent-text underline underline-offset-2"
-                    >
-                      {alert.subject}
-                    </Link>{' '}
-                    <span className="text-content-muted">— {alert.priority} priority</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-
           <Card className="space-y-2" data-testid="outlet-day-attendance">
             <h2 className="flex items-center gap-2 text-sm font-bold text-content">
               <Users aria-hidden size={16} />
@@ -267,13 +208,6 @@ export function OutletDayView() {
               </ul>
             )}
           </Card>
-
-          <Link
-            to={`${base}/reports`}
-            className={buttonVariants({ variant: 'secondary', size: 'phone' })}
-          >
-            See this outlet over a period
-          </Link>
         </div>
       )}
     </div>

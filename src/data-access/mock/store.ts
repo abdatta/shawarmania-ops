@@ -2,11 +2,9 @@ import {
   billTotals,
   instantOnBusinessDay,
   lineTotalPaise,
-  movementDelta,
   normalizeCategory,
   resolveBusinessDate,
   shiftBusinessDate,
-  sumQuantities,
 } from '@/domain'
 
 import type { Tables } from '../database.types'
@@ -26,15 +24,9 @@ import {
   DEMO_OPEN_SHIFT_ID,
   type BillSeed,
 } from './fixtures/billing'
-import { alertSeeds } from './fixtures/alerts'
 import { manualLedgerDaySeeds, manualLedgerExpenseSeeds } from './fixtures/retirement-history'
 import { menuCategoryFixtures, menuItemFixtures } from './fixtures/menu'
-import {
-  expenseSeeds,
-  inventoryItemFixtures,
-  movementSeeds,
-  OPENING_CASH_PAISE,
-} from './fixtures/operations'
+import { expenseSeeds, OPENING_CASH_PAISE } from './fixtures/operations'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
 import { personaFixtures } from './fixtures/personas'
 
@@ -46,9 +38,9 @@ import { personaFixtures } from './fixtures/personas'
  * generalises: an account deactivated on Access has to read as deactivated on
  * Staff in the same walkthrough. The operational surfaces need far more of it —
  * the cash screen's takings must be the bills the counter actually rang, and the
- * inventory list's quantity must be the sum of the ledger it links to. Anyone
- * looking at two screens in a row notices figures that do not correspond, which
- * is the classic way a demo stops being convincing (docs/DEMO_MODE.md).
+ * Ledger's figures must be the rows the other surfaces wrote. Anyone looking at
+ * two screens in a row notices figures that do not correspond, which is the
+ * classic way a demo stops being convincing (docs/DEMO_MODE.md).
  *
  * **Both trading outlets are materialised here**, because the owner console
  * compares them and a second outlet invented separately would contradict the
@@ -119,20 +111,12 @@ export interface DemoStore {
    * which is what `(outlet_id, bill_number)` unique means.
    */
   billNumbers: Map<string, number>
-  /** Owned by the inventory adapter. */
-  inventoryItems: Tables<'inventory_items'>[]
-  /** Owned by the inventory adapter. Append-only: the ledger is the truth. */
-  inventoryMovements: Tables<'inventory_movements'>[]
   /** Owned by the expenses adapter and read by the drawer, ledger and insights. */
   expenses: Tables<'expenses'>[]
   /** Business-wide suggestions, shared by both expense records. */
   expenseCategories: Tables<'expense_categories'>[]
   /** Owner curation history. */
   expenseCategoryOperations: Tables<'expense_category_operations'>[]
-  /** Owned by the alerts adapter. */
-  alerts: Tables<'alerts'>[]
-  /** Owned by the alerts adapter. Append-only: a response is never edited. */
-  alertResponses: Tables<'alert_responses'>[]
   /** What was in the drawer when the day started. `cash-is-counted-not-closed`
    *  (#11) replaces this with a per-outlet opening anchor, after which every
    *  opening is the previous observation's carry-forward. */
@@ -624,49 +608,6 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     })
   }
 
-  // ── Stock ────────────────────────────────────────────────────────────────
-
-  const inventoryItems = structuredClone(inventoryItemFixtures)
-  const inventoryMovements: Tables<'inventory_movements'>[] = movementSeeds.map((seed, index) => {
-    const item = inventoryItems.find((candidate) => candidate.id === seed.itemId)
-    if (!item) throw new Error(`No demo inventory item: ${seed.itemId}`)
-    return {
-      id: `da000000-0000-4000-a000-${String(index + 1).padStart(12, '0')}`,
-      // Read from the item rather than restated on the seed: a movement that
-      // claimed a different outlet from the item it moves would be a row the
-      // database's own foreign keys could not produce.
-      outlet_id: item.outlet_id,
-      inventory_item_id: seed.itemId,
-      movement_type: seed.movementType,
-      quantity_delta: movementDelta(seed.movementType, seed.quantity),
-      note: seed.note ?? null,
-      business_date: businessDate(seed.daysAgo),
-      created_at: instantAt(businessDate(seed.daysAgo), '10:00'),
-      recorded_by: MANAGER_ID,
-      unit_cost_paise: null,
-    }
-  })
-
-  /**
-   * The ledger is the truth and the quantity is a cache of it — so a fixture
-   * whose stored quantity does not equal its own movements is a demo that
-   * cannot answer "why does it say 4 kg?". Caught here, at construction, rather
-   * than discovered on screen.
-   */
-  for (const item of inventoryItems) {
-    const fromLedger = sumQuantities(
-      inventoryMovements
-        .filter((movement) => movement.inventory_item_id === item.id)
-        .map((movement) => movement.quantity_delta),
-    )
-    if (fromLedger !== item.current_quantity) {
-      throw new Error(
-        `Demo fixture drift: ${item.name} stores ${item.current_quantity} ${item.unit} but its ` +
-          `movements sum to ${fromLedger}. The ledger is the truth — fix the fixture.`,
-      )
-    }
-  }
-
   // ── Expenses and the drawer ──────────────────────────────────────────────
 
   const expenses: Tables<'expenses'>[] = expenseSeeds.map((seed, index) => ({
@@ -698,30 +639,6 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     voided_by: null,
     voided_reason: null,
   }))
-
-  // ── Alerts ───────────────────────────────────────────────────────────────
-
-  const alerts: Tables<'alerts'>[] = alertSeeds.map((seed) => ({
-    id: seed.id,
-    outlet_id: seed.outletId,
-    raised_by: seed.raisedBy,
-    category: seed.category,
-    priority: seed.priority,
-    status: seed.status,
-    subject: seed.subject,
-    message: seed.message,
-    created_at: instantAt(businessDate(seed.daysAgo), seed.time),
-  }))
-
-  const alertResponses: Tables<'alert_responses'>[] = alertSeeds.flatMap((seed) =>
-    (seed.responses ?? []).map((response) => ({
-      id: response.id,
-      alert_id: seed.id,
-      responder_profile_id: response.responderId,
-      message: response.message,
-      created_at: instantAt(businessDate(response.daysAgo), response.time),
-    })),
-  )
 
   // The richer expense history that used to be the notebook's expense half is
   // now part of the one promoted expense record.
@@ -1257,13 +1174,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     billingCommands,
     billingQueueSeeds,
     billNumbers,
-    inventoryItems,
-    inventoryMovements,
     expenses,
     expenseCategories,
     expenseCategoryOperations,
-    alerts,
-    alertResponses,
     openingCashPaise: OPENING_CASH_PAISE,
     aggregatorChannelDays,
     drawerObservations,

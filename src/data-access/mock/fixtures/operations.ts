@@ -2,185 +2,22 @@ import type { Tables } from '../../database.types'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from './outlets'
 
 /**
- * Stock, expenses and the cash float — a manager's demo day, at each of the two
+ * Expenses and the cash float — a manager's demo day, at each of the two
  * trading outlets.
  *
- * Two things here are deliberate awkwardness rather than oversight, because a
+ * **It held the stock ledger too until #51**, which deleted the Stock surface
+ * along with the low-stock item that gave its treatment a subject.
+ *
+ * One thing here is deliberate awkwardness rather than oversight, because a
  * screen that has only ever been seen going well has not been reviewed:
+ * **yesterday closed with a real mismatch**, and a bill for yesterday arrived
+ * after it closed (see fixtures/billing.ts), so the reconciliation exception is
+ * visible without anybody staging it.
  *
- *  - **one item is at or below its threshold**, so the low-stock treatment is on
- *    screen from the moment the surface opens;
- *  - **yesterday closed with a real mismatch**, and a bill for yesterday arrived
- *    after it closed (see fixtures/billing.ts), so the reconciliation exception
- *    is visible without anybody staging it.
- *
- * **Both belong to Kalyani, and Kanchrapara is deliberately fine** (design D2).
- * The comparison screen exists to answer "which shop is doing better, and why",
- * and two outlets with identical shapes make that unreadable — a difference is
- * only legible against something that is not different.
- *
- * Movements are seeds with a `daysAgo` offset, materialised by the store. The
- * items' stored quantities are written out too — the schema has the column and
- * a fixture must satisfy it — and the store asserts on construction that each
- * one equals the sum of its own ledger. A demo where the list and the ledger
- * disagreed would make "why does it say 4 kg?" unanswerable, which is the exact
- * question the ledger exists for.
+ * **It belongs to Kalyani, and Kanchrapara is deliberately fine** (design D2).
+ * Two outlets with identical shapes make the console unreadable — a difference
+ * is only legible against something that is not different.
  */
-
-export const INVENTORY_CHICKEN_ID = 'd9000000-0000-4000-a000-000000000001'
-/** The one at its threshold: the low-stock treatment has to have a subject. */
-export const INVENTORY_PITA_ID = 'd9000000-0000-4000-a000-000000000002'
-export const INVENTORY_MAYO_ID = 'd9000000-0000-4000-a000-000000000003'
-export const INVENTORY_CHEESE_ID = 'd9000000-0000-4000-a000-000000000004'
-export const INVENTORY_PACKAGING_ID = 'd9000000-0000-4000-a000-000000000005'
-
-const KPA_CHICKEN_ID = 'd9000000-0000-4000-a001-000000000001'
-const KPA_PITA_ID = 'd9000000-0000-4000-a001-000000000002'
-const KPA_MAYO_ID = 'd9000000-0000-4000-a001-000000000003'
-const KPA_PACKAGING_ID = 'd9000000-0000-4000-a001-000000000005'
-
-const LAST_UPDATED = '2026-07-26T00:00:00+00:00'
-
-function stockItem(
-  outletId: string,
-  id: string,
-  name: string,
-  unit: Tables<'inventory_items'>['unit'],
-  currentQuantity: number,
-  lowStockThreshold: number,
-  purchaseCostPaise: number,
-): Tables<'inventory_items'> {
-  return {
-    id,
-    outlet_id: outletId,
-    name,
-    unit,
-    current_quantity: currentQuantity,
-    low_stock_threshold: lowStockThreshold,
-    purchase_cost_paise: purchaseCostPaise,
-    is_active: true,
-    last_updated_at: LAST_UPDATED,
-  }
-}
-
-export const inventoryItemFixtures: Tables<'inventory_items'>[] = [
-  // ── Kalyani ──────────────────────────────────────────────────────────────
-  stockItem(OUTLET_KALYANI_ID, INVENTORY_CHICKEN_ID, 'Chicken', 'kg', 15.7, 5, 24000),
-  // 6 packets against a threshold of 10 — low, and visibly so.
-  stockItem(OUTLET_KALYANI_ID, INVENTORY_PITA_ID, 'Pita bread', 'packet', 6, 10, 4500),
-  stockItem(OUTLET_KALYANI_ID, INVENTORY_MAYO_ID, 'Mayonnaise', 'litre', 4.6, 4, 18000),
-  stockItem(OUTLET_KALYANI_ID, INVENTORY_CHEESE_ID, 'Cheese slices', 'packet', 9.9, 6, 22000),
-  stockItem(OUTLET_KALYANI_ID, INVENTORY_PACKAGING_ID, 'Packaging boxes', 'piece', 179, 100, 800),
-
-  // ── Kanchrapara — nothing short, nothing wasted ──────────────────────────
-  stockItem(OUTLET_KANCHRAPARA_ID, KPA_CHICKEN_ID, 'Chicken', 'kg', 6.6, 5, 24000),
-  stockItem(OUTLET_KANCHRAPARA_ID, KPA_PITA_ID, 'Pita bread', 'packet', 13, 10, 4500),
-  stockItem(OUTLET_KANCHRAPARA_ID, KPA_MAYO_ID, 'Mayonnaise', 'litre', 4.1, 3, 18000),
-  stockItem(OUTLET_KANCHRAPARA_ID, KPA_PACKAGING_ID, 'Packaging boxes', 'piece', 175, 100, 800),
-]
-
-export interface MovementSeed {
-  itemId: string
-  /** Business days back from today. 0 is today. */
-  daysAgo: number
-  /** Magnitude for added / used / wasted; signed for a correction. */
-  movementType: Tables<'inventory_movements'>['movement_type']
-  quantity: number
-  note?: string
-}
-
-/**
- * **Stock is consumed on the days that traded, in the quantities those bills
- * imply, at a food cost of roughly a third of takings.**
- *
- * That correspondence is not decoration. The P&L's consumption basis prices
- * this ledger against the bills, so a ledger invented independently of them
- * produces a demo where a shawarma shop appears to lose money on every wrap —
- * and a stock movement on a day the counter rang nothing is the first thing
- * anyone comparing two screens would notice. Both were true here until the
- * owner console made them visible (ui-owner-console-and-demo, verification).
- *
- * Deliveries land on the first day; consumption follows the trade.
- */
-export const movementSeeds: MovementSeed[] = [
-  // Chicken — the biggest line, and roughly 0.35 kg per wrap sold.
-  { itemId: INVENTORY_CHICKEN_ID, daysAgo: 3, movementType: 'added', quantity: 15 },
-  { itemId: INVENTORY_CHICKEN_ID, daysAgo: 3, movementType: 'used', quantity: 1.4 },
-  { itemId: INVENTORY_CHICKEN_ID, daysAgo: 2, movementType: 'used', quantity: 1.5 },
-  { itemId: INVENTORY_CHICKEN_ID, daysAgo: 1, movementType: 'used', quantity: 2.8 },
-  // The weekend delivery the day-0 expense paid for — most of it still in the
-  // cold room, which is the whole reason the two profit bases disagree.
-  { itemId: INVENTORY_CHICKEN_ID, daysAgo: 0, movementType: 'added', quantity: 10.8 },
-  { itemId: INVENTORY_CHICKEN_ID, daysAgo: 0, movementType: 'used', quantity: 4.4 },
-
-  // Pita bread — including the wastage, which is why it is short. Ends at 6.
-  { itemId: INVENTORY_PITA_ID, daysAgo: 3, movementType: 'added', quantity: 24 },
-  { itemId: INVENTORY_PITA_ID, daysAgo: 3, movementType: 'used', quantity: 3 },
-  { itemId: INVENTORY_PITA_ID, daysAgo: 2, movementType: 'used', quantity: 3 },
-  { itemId: INVENTORY_PITA_ID, daysAgo: 1, movementType: 'used', quantity: 4 },
-  {
-    itemId: INVENTORY_PITA_ID,
-    daysAgo: 1,
-    movementType: 'wasted',
-    quantity: 2,
-    note: 'Packet split on the floor during the evening rush.',
-  },
-  { itemId: INVENTORY_PITA_ID, daysAgo: 0, movementType: 'used', quantity: 6 },
-
-  // Mayonnaise — carries the correction, so the ledger shows how history is
-  // fixed without being edited. Ends at 4.6.
-  { itemId: INVENTORY_MAYO_ID, daysAgo: 3, movementType: 'added', quantity: 7 },
-  { itemId: INVENTORY_MAYO_ID, daysAgo: 3, movementType: 'used', quantity: 0.3 },
-  { itemId: INVENTORY_MAYO_ID, daysAgo: 2, movementType: 'used', quantity: 0.3 },
-  { itemId: INVENTORY_MAYO_ID, daysAgo: 1, movementType: 'used', quantity: 0.5 },
-  { itemId: INVENTORY_MAYO_ID, daysAgo: 0, movementType: 'used', quantity: 0.8 },
-  {
-    itemId: INVENTORY_MAYO_ID,
-    daysAgo: 0,
-    movementType: 'correction',
-    quantity: -0.5,
-    note: 'Recounted after the delivery — half a litre less than the sheet said.',
-  },
-
-  // Cheese slices — only the mozzarella wrap uses them. Ends at 9.9.
-  { itemId: INVENTORY_CHEESE_ID, daysAgo: 3, movementType: 'added', quantity: 12 },
-  { itemId: INVENTORY_CHEESE_ID, daysAgo: 3, movementType: 'used', quantity: 0.4 },
-  { itemId: INVENTORY_CHEESE_ID, daysAgo: 2, movementType: 'used', quantity: 0.3 },
-  { itemId: INVENTORY_CHEESE_ID, daysAgo: 1, movementType: 'used', quantity: 0.6 },
-  { itemId: INVENTORY_CHEESE_ID, daysAgo: 0, movementType: 'used', quantity: 0.8 },
-
-  // Packaging — one box per bill, near enough. Ends at 179.
-  { itemId: INVENTORY_PACKAGING_ID, daysAgo: 3, movementType: 'added', quantity: 250 },
-  { itemId: INVENTORY_PACKAGING_ID, daysAgo: 3, movementType: 'used', quantity: 12 },
-  { itemId: INVENTORY_PACKAGING_ID, daysAgo: 2, movementType: 'used', quantity: 14 },
-  { itemId: INVENTORY_PACKAGING_ID, daysAgo: 1, movementType: 'used', quantity: 17 },
-  { itemId: INVENTORY_PACKAGING_ID, daysAgo: 0, movementType: 'used', quantity: 28 },
-
-  // ── Kanchrapara — smaller quantities, no wastage, no corrections ─────────
-  { itemId: KPA_CHICKEN_ID, daysAgo: 3, movementType: 'added', quantity: 10 },
-  { itemId: KPA_CHICKEN_ID, daysAgo: 3, movementType: 'used', quantity: 0.4 },
-  { itemId: KPA_CHICKEN_ID, daysAgo: 2, movementType: 'used', quantity: 0.7 },
-  { itemId: KPA_CHICKEN_ID, daysAgo: 1, movementType: 'used', quantity: 1.2 },
-  { itemId: KPA_CHICKEN_ID, daysAgo: 0, movementType: 'used', quantity: 1.1 },
-
-  { itemId: KPA_PITA_ID, daysAgo: 3, movementType: 'added', quantity: 20 },
-  { itemId: KPA_PITA_ID, daysAgo: 3, movementType: 'used', quantity: 1 },
-  { itemId: KPA_PITA_ID, daysAgo: 2, movementType: 'used', quantity: 2 },
-  { itemId: KPA_PITA_ID, daysAgo: 1, movementType: 'used', quantity: 2 },
-  { itemId: KPA_PITA_ID, daysAgo: 0, movementType: 'used', quantity: 2 },
-
-  { itemId: KPA_MAYO_ID, daysAgo: 3, movementType: 'added', quantity: 5 },
-  { itemId: KPA_MAYO_ID, daysAgo: 3, movementType: 'used', quantity: 0.1 },
-  { itemId: KPA_MAYO_ID, daysAgo: 2, movementType: 'used', quantity: 0.2 },
-  { itemId: KPA_MAYO_ID, daysAgo: 1, movementType: 'used', quantity: 0.3 },
-  { itemId: KPA_MAYO_ID, daysAgo: 0, movementType: 'used', quantity: 0.3 },
-
-  { itemId: KPA_PACKAGING_ID, daysAgo: 3, movementType: 'added', quantity: 190 },
-  { itemId: KPA_PACKAGING_ID, daysAgo: 3, movementType: 'used', quantity: 2 },
-  { itemId: KPA_PACKAGING_ID, daysAgo: 2, movementType: 'used', quantity: 3 },
-  { itemId: KPA_PACKAGING_ID, daysAgo: 1, movementType: 'used', quantity: 5 },
-  { itemId: KPA_PACKAGING_ID, daysAgo: 0, movementType: 'used', quantity: 5 },
-]
 
 export interface ExpenseSeed {
   /** Defaults to Kalyani, where the persona manager works. */
@@ -274,12 +111,11 @@ export const expenseSeeds: ExpenseSeed[] = [
   },
   {
     /**
-     * **A bulk delivery, and the reason the P&L's basis toggle has something to
-     * show.** Bought today, most of it still in the cold room: the cash basis
-     * charges the whole ₹2,600 to this period, the consumption basis charges
-     * only what the kitchen actually used. With purchases and consumption in
-     * step the two bases land within a few rupees of each other, and a control
-     * whose effect nobody can see teaches nothing.
+     * **A bulk delivery: one day carrying three days of chicken.** It was here
+     * to give the P&L's basis toggle something to show, and both the toggle
+     * (#12) and the P&L (#51) have since gone. It stays because the Ledger
+     * still reads better for it — a shop does not buy in even daily amounts,
+     * and a month of identical purchases is a month nobody would recognise.
      */
     daysAgo: 0,
     time: '09:05',

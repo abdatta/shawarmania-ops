@@ -72,10 +72,10 @@ export function PhoneShell({
    * navigation entry wins, and only it.**
    *
    * `NavLink` matches by prefix unless told otherwise, which is right for a
-   * surface whose sub-paths belong to it — Stock stays lit on one item's
-   * movement ledger, because `inventory/:itemId` is Stock. It is wrong the
-   * moment a sub-path has a navigation entry of its own: `ledger/zomato` is not
-   * the Ledger, and lighting both told the reader they were in two places.
+   * surface whose sub-paths belong to it — Delivery stays lit on one channel's
+   * page, because `ledger/delivery/:channel` is Delivery. It is wrong the
+   * moment a sub-path has a navigation entry of its own: `ledger/expenses` is
+   * not the Ledger, and lighting both told the reader they were in two places.
    *
    * Derived from the entries themselves rather than declared per surface, so the
    * next nested entry cannot forget to do it.

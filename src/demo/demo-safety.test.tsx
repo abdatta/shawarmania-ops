@@ -118,18 +118,6 @@ describe('demo mode safety', () => {
       isVeg: true,
     })
 
-    const stock = await adapters.inventory.listItems(outletId)
-    const firstStock = stock[0]
-    if (!firstStock) throw new Error('fixtures must contain a stock item')
-    await adapters.inventory.listMovements(firstStock.id)
-    await adapters.inventory.getItem(firstStock.id)
-    await adapters.inventory.recordMovement({
-      inventoryItemId: firstStock.id,
-      movementType: 'used',
-      quantity: 1,
-      businessDate: today,
-    })
-
     await adapters.expenses.listExpenses(outletId, today)
     await adapters.expenses.createExpense({
       outletId,
@@ -162,25 +150,10 @@ describe('demo mode safety', () => {
       { method: 'upi', amountPaise: firstItem.price_paise },
     ])
 
-    // The owner's own adapters. `insights` reads across both outlets and
-    // `alerts` writes, so between them they cover the two shapes that would
-    // leak if a demo session ever reached Supabase.
-    const period = { from: today, to: today }
+    // The owner's own adapter, which reads a shop the caller does not stand in
+    // — the shape that would leak if a demo session ever reached Supabase.
     await adapters.insights.outletDay(outletId, today)
-    await adapters.insights.periodSummary(outletId, period, 'cash')
-    await adapters.insights.comparison([outletId, OUTLET_KANCHRAPARA_ID], period, 'cash')
-
-    await adapters.alerts.listAlerts()
-    const raised = await adapters.alerts.raiseAlert({
-      outletId,
-      category: 'other',
-      priority: 'normal',
-      subject: 'Demo alert',
-      message: 'Raised while proving the demo cannot reach the network.',
-    })
-    await adapters.alerts.getAlert(raised.id)
-    await adapters.alerts.respond(raised.id, 'Seen.')
-    await adapters.alerts.setStatus(raised.id, 'acknowledged')
+    await adapters.insights.outletDay(OUTLET_KANCHRAPARA_ID, today)
 
     expect(fetchSpy).not.toHaveBeenCalled()
   })

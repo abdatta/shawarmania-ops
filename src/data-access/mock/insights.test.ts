@@ -5,9 +5,13 @@ import { createMockInsightsAdapter } from './insights'
 import { createDemoStore, DEMO_OUTLET_ID, DEMO_SECOND_OUTLET_ID, type DemoStore } from './store'
 
 /**
- * The three things the owner's figures have to be true about, because #13 will
- * have to make them true in SQL: they are summed from rows rather than supplied,
- * a closed day reports its snapshot, and only the owner reads across outlets.
+ * The three things the owner's figures have to be true about, because a real
+ * adapter would have to make them true in SQL: they are summed from rows rather
+ * than supplied, a counted day reports its snapshot, and only the owner reads
+ * across outlets.
+ *
+ * The period summary and the two-outlet comparison were covered here until #51
+ * deleted the screens that asked for them.
  */
 describe('mock insights adapter', () => {
   const asOwner = (): {
@@ -22,18 +26,6 @@ describe('mock insights adapter', () => {
       }),
     }
   }
-
-  it('marks the cash-basis estimate as a ceiling while a commission is undetermined', async () => {
-    const { store, adapter } = asOwner()
-    const summary = await adapter.periodSummary(
-      DEMO_OUTLET_ID,
-      { from: store.businessDate(3), to: store.today },
-      'cash',
-    )
-
-    expect(summary?.profit.basis).toBe('cash')
-    expect(summary?.profit.isCeiling).toBe(true)
-  })
 
   const asManagerOf = (outletId: string) => {
     const store = createDemoStore()
@@ -123,67 +115,10 @@ describe('mock insights adapter', () => {
     expect(day?.cashDifferencePaise).toBeNull()
   })
 
-  it('counts the low stock and the open alerts the other surfaces show', async () => {
-    const { store, adapter } = asOwner()
-    const kalyani = await adapter.outletDay(DEMO_OUTLET_ID, store.today)
-    const kanchrapara = await adapter.outletDay(DEMO_SECOND_OUTLET_ID, store.today)
-
-    expect(kalyani?.lowStockCount).toBe(
-      store.inventoryItems.filter(
-        (item) =>
-          item.outlet_id === DEMO_OUTLET_ID && item.current_quantity <= item.low_stock_threshold,
-      ).length,
-    )
-    expect(kalyani?.lowStockCount).toBeGreaterThan(0)
-    expect(kanchrapara?.lowStockCount).toBe(0)
-
-    expect(kalyani?.openAlertCount).toBe(
-      store.alerts.filter((alert) => alert.outlet_id === DEMO_OUTLET_ID && alert.status === 'open')
-        .length,
-    )
-  })
-
-  it('covers every day of a period, including one with no trade', async () => {
-    const { store, adapter } = asOwner()
-    // Wider than the days the scenario trades on, so the period genuinely
-    // contains a blank one — a report that silently dropped quiet days would
-    // make a week look busier than it was.
-    const period = { from: store.businessDate(6), to: store.today }
-    const summary = await adapter.periodSummary(DEMO_OUTLET_ID, period, 'cash')
-
-    expect(summary?.days).toHaveLength(7)
-    expect(summary?.days.map((day) => day.businessDate)).toEqual(
-      Array.from({ length: 7 }, (_, index) => store.businessDate(6 - index)),
-    )
-    expect(summary?.days.some((day) => day.salesPaise === 0)).toBe(true)
-    expect(summary?.days.some((day) => day.salesPaise > 0)).toBe(true)
-    expect(summary?.days.reduce((running, day) => running + day.salesPaise, 0)).toBe(
-      summary?.salesPaise,
-    )
-  })
-
-  it('compares outlets, and only the ones the caller may read', async () => {
-    const { store, adapter } = asOwner()
-    const period = { from: store.businessDate(1), to: store.today }
-
-    const rows = await adapter.comparison(store.tradingOutletIds, period, 'cash')
-    expect(rows).toHaveLength(2)
-    expect(rows.map((row) => row.outletId).sort()).toEqual([...store.tradingOutletIds].sort())
-    expect(rows.every((row) => row.outletName.length > 0)).toBe(true)
-    // The two outlets are deliberately different sizes, so the screen that
-    // compares them has something to show.
-    expect(rows[0]?.salesPaise).not.toBe(rows[1]?.salesPaise)
-  })
-
   it('refuses a manager the other outlet’s figures, by excluding them', async () => {
     const { store, adapter } = asManagerOf(DEMO_OUTLET_ID)
-    const period = { from: store.businessDate(1), to: store.today }
 
     expect(await adapter.outletDay(DEMO_OUTLET_ID, store.today)).not.toBeNull()
     expect(await adapter.outletDay(DEMO_SECOND_OUTLET_ID, store.today)).toBeNull()
-    expect(await adapter.periodSummary(DEMO_SECOND_OUTLET_ID, period, 'cash')).toBeNull()
-
-    const rows = await adapter.comparison(store.tradingOutletIds, period, 'cash')
-    expect(rows.map((row) => row.outletId)).toEqual([DEMO_OUTLET_ID])
   })
 })

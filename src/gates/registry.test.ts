@@ -175,10 +175,9 @@ describe('gate registry', () => {
     expect(delivery).toMatchObject({
       role: 'super_admin',
       // The gate's path is the surface, and the channel is a parameter beneath
-      // it — `ledger/delivery/:channel` resolves against this entry, the way
-      // `inventory/:itemId` resolves against `inventory`. Navigation needs an
-      // entry point it can build a link to, and a path carrying `:channel` is
-      // not one.
+      // it — `ledger/delivery/:channel` resolves against this entry. Navigation
+      // needs an entry point it can build a link to, and a path carrying
+      // `:channel` is not one.
       path: 'ledger/delivery',
       state: 'live',
     })

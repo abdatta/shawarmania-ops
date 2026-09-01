@@ -1,7 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
 import {
-  BarChart3,
-  Bell,
   Banknote,
   Bike,
   CalendarCheck,
@@ -9,10 +7,8 @@ import {
   KeyRound,
   LayoutDashboard,
   NotepadText,
-  Package,
   Store,
   TabletSmartphone,
-  TrendingUp,
   UserRound,
   Users,
   UtensilsCrossed,
@@ -117,18 +113,6 @@ const defs = {
     nav: { label: 'People', icon: Users, order: 10 },
     state: 'live',
   },
-  'owner-comparison': {
-    role: 'super_admin',
-    path: 'comparison',
-    nav: { label: 'Compare', icon: BarChart3, order: 11 },
-    state: 'demo',
-  },
-  'owner-alerts': {
-    role: 'super_admin',
-    path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 12 },
-    state: 'demo',
-  },
   /**
    * What the outlet took, **directly above what should be in its drawer**.
    *
@@ -142,23 +126,6 @@ const defs = {
     path: 'billing-history',
     nav: { label: 'Billing', icon: ReceiptText, order: 3 },
     state: 'live',
-  },
-  /**
-   * Profit and loss, and period reports — **deliberately without navigation
-   * entries**. Six tabs is already as much as a bottom bar holds on a phone,
-   * and both of these answer a question somebody asks while looking at today's
-   * figures: they are reached from the console, which is where that question
-   * gets asked (design D14).
-   */
-  'owner-pnl': {
-    role: 'super_admin',
-    path: 'pnl',
-    state: 'demo',
-  },
-  'owner-reports': {
-    role: 'super_admin',
-    path: 'reports',
-    state: 'demo',
   },
   /**
    * There was a manual ledger here (#36) — `live`, and designed to be deleted.
@@ -263,10 +230,9 @@ const defs = {
   'owner-delivery-sync': {
     role: 'super_admin',
     // The surface's address; the channel is a parameter beneath it, resolved
-    // against this pattern the way `inventory/:itemId` resolves against
-    // `inventory`. A gate is a question about the surface, not about which of
-    // its addresses is open — and navigation needs an entry point it can build
-    // a link to, which a path carrying `:channel` is not.
+    // against this pattern. A gate is a question about the surface, not about
+    // which of its addresses is open — and navigation needs an entry point it
+    // can build a link to, which a path carrying `:channel` is not.
     path: 'ledger/delivery',
     nav: { label: 'Delivery', icon: Bike, order: 8, attention: 'delivery-needs-you' },
     // Live [owner, 2026-08-18 for Zomato; #47 for Swiggy]. The ledger already
@@ -341,12 +307,6 @@ const defs = {
     nav: { label: 'Menu', icon: UtensilsCrossed, order: 3 },
     state: 'live',
   },
-  'admin-inventory': {
-    role: 'franchise_admin',
-    path: 'inventory',
-    nav: { label: 'Stock', icon: Package, order: 4 },
-    state: 'demo',
-  },
   /**
    * The surface the badge mechanism was built for: an arrival nobody approves
    * is invisible until somebody queries their pay, and the person who could
@@ -415,18 +375,6 @@ const defs = {
     path: 'ledger/expenses',
     nav: { label: 'Expenses', icon: Wallet, order: 8 },
     state: 'live',
-  },
-  'admin-pnl': {
-    role: 'franchise_admin',
-    path: 'pnl',
-    nav: { label: 'P&L', icon: TrendingUp, order: 12 },
-    state: 'demo',
-  },
-  'admin-alerts': {
-    role: 'franchise_admin',
-    path: 'alerts',
-    nav: { label: 'Alerts', icon: Bell, order: 13 },
-    state: 'demo',
   },
   /**
    * The tablets standing at this outlet's counter (#9).

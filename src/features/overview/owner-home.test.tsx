@@ -20,7 +20,7 @@ import { OwnerHome } from './owner-home'
  * The owner console. Two things carry these tests: the figures on it are the
  * rows behind them, and an outlet whose figures cannot be resolved is still
  * listed with the absence stated — because the real adapter answers `null`
- * today and will until #13.
+ * today.
  */
 
 const ownerSession: Session = {
@@ -89,20 +89,42 @@ describe('OwnerHome — the console', () => {
     renderConsole()
 
     const kalyani = await screen.findByTestId(`attention-${OUTLET_KALYANI_ID}`)
-    expect(kalyani).toHaveTextContent(/open alert/i)
-    expect(kalyani).toHaveTextContent(/low on stock/i)
+    expect(kalyani).toHaveTextContent(/waiting for approval/i)
     // Yesterday's mismatch, surfaced on the console — today's difference is
     // null until somebody counts, so an owner would otherwise have to go
     // looking for it outlet by outlet.
     expect(kalyani).toHaveTextContent(/short/i)
 
-    // The quiet outlet. It carries one low-priority alert on purpose, so the
-    // owner's inbox is genuinely cross-outlet — but nothing is short and
-    // nothing has run down, which is what makes Kalyani's row read as a
-    // problem rather than as how the app always looks.
+    // The quiet outlet: nothing is short and nothing is unsettled, which is
+    // what makes Kalyani's row read as a problem rather than as how the app
+    // always looks.
     const kanchrapara = await screen.findByTestId(`attention-${OUTLET_KANCHRAPARA_ID}`)
-    expect(kanchrapara).not.toHaveTextContent(/low on stock/i)
     expect(kanchrapara).not.toHaveTextContent(/short|over/i)
+  })
+
+  /**
+   * #51 deleted Alerts and Stock. Asserted as absence rather than by deleting
+   * the assertions, because a chip pointing at a surface that no longer exists
+   * is exactly the regression this change has to stay fixed against.
+   */
+  it('offers no route to a surface this change deleted', async () => {
+    renderConsole()
+
+    await screen.findByTestId(`attention-${OUTLET_KALYANI_ID}`)
+
+    for (const gone of [/open alert/i, /low on stock/i]) {
+      expect(screen.queryByText(gone)).not.toBeInTheDocument()
+    }
+    for (const gone of ['Compare outlets', 'Profit and loss', 'Reports']) {
+      expect(screen.queryByRole('link', { name: gone })).not.toBeInTheDocument()
+    }
+    for (const href of ['/alerts', '/pnl', '/reports', '/comparison']) {
+      expect(
+        [...document.querySelectorAll('a[href]')].some((link) =>
+          link.getAttribute('href')?.endsWith(href),
+        ),
+      ).toBe(false)
+    }
   })
 
   it('says plainly when an outlet needs nothing at all', async () => {
@@ -111,16 +133,13 @@ describe('OwnerHome — the console', () => {
       ...base,
       insights: {
         ...base.insights,
-        // A day with nothing wrong with it. The scenario deliberately has no
-        // such outlet — every one of them carries at least an alert — so the
-        // calm copy needs staging to be reviewed at all.
+        // A day with nothing wrong with it, staged so the calm copy is
+        // reviewed at all.
         async outletDay(outletId, businessDate) {
           const real = await base.insights.outletDay(outletId, businessDate)
           return (
             real && {
               ...real,
-              lowStockCount: 0,
-              openAlertCount: 0,
               checkedInCount: 2,
               // An arrival nobody has approved needs attention, so the calm copy
               // needs a day where every arrival is settled too.
