@@ -2,7 +2,16 @@ import { basename, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 export function edgeFunctionTypeEntrypoints(root = resolve(process.cwd(), 'supabase/functions')) {
-  return [resolve(root, '_shared', 'restaurant-mappings.ts')]
+  // Both are dependency-free by design, which is what makes them checkable at
+  // all: a function body importing the Supabase client cannot resolve here, so
+  // the gate covers the shared modules that decide things rather than the
+  // handlers that call them. `run-outcome.ts` chooses the word a run records —
+  // and `tsc` cannot see it either, because the app project excludes
+  // `supabase/functions`, so without this line it is typechecked by nothing.
+  return [
+    resolve(root, '_shared', 'restaurant-mappings.ts'),
+    resolve(root, '_shared', 'run-outcome.ts'),
+  ]
 }
 
 export function checkEdgeFunctionTypes(entries = edgeFunctionTypeEntrypoints()) {

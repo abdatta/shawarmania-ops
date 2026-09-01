@@ -53,6 +53,49 @@ export function readAgainAfterHours(readsPerDay: number | null): number {
   return 24 / (readsPerDay ?? READS_PER_DAY_FALLBACK)
 }
 
+/**
+ * How far past its own cadence a channel may drift before it has stopped.
+ *
+ * One and a half intervals. One cries wolf: GitHub's scheduler runs late, the
+ * sync repository's own workflow comments put it at ten or fifteen minutes, and
+ * observed runs drift further under load. Two is a whole missed read plus a whole
+ * grace period — twelve hours at four reads a day, which is most of the outage
+ * this exists to shorten. One and a half is longer than any lateness observed and
+ * still fires BEFORE the following read is due, so the surface says "a read was
+ * due and did not happen" while that is still news rather than history.
+ */
+const OVERDUE_INTERVALS = 1.5
+
+/**
+ * Whether a channel has stopped running, judged against its own reported cadence.
+ *
+ * **This is the one thing on this surface that cannot be recorded.** Every other
+ * fact about a run is posted by the process that ran it; a channel that has
+ * stopped has no such process, because the thing that would report the silence is
+ * the thing that is missing. So it is read from the clock, from two recorded
+ * facts and nothing else.
+ *
+ * Derived from the cadence rather than a constant for the reason
+ * `READS_PER_DAY_FALLBACK` exists at all: a number in this repository describing
+ * crons in another one went stale silently for weeks. Since #48 the runner
+ * reports its own cadence with every run, so this threshold moves when the
+ * schedule does and nobody has to remember to move it.
+ *
+ * A channel that has never run is NOT overdue. `Never run` is a truer sentence
+ * about it, and it is not a fault.
+ */
+export function hasGoneQuiet(
+  lastRunAt: string | null,
+  readsPerDay: number | null,
+  now: number = Date.now(),
+): boolean {
+  if (!lastRunAt) return false
+  const elapsed = new Date(lastRunAt).getTime()
+  if (!Number.isFinite(elapsed)) return false
+  const hours = (now - elapsed) / 3_600_000
+  return hours > readAgainAfterHours(readsPerDay) * OVERDUE_INTERVALS
+}
+
 /** The Asia/Kolkata calendar day an instant falls on, as `YYYY-MM-DD`. */
 export function kolkataDay(instant: string): string {
   return new Intl.DateTimeFormat('en-CA', {

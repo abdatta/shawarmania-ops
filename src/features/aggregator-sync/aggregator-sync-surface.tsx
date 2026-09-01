@@ -17,7 +17,7 @@ import { cn } from '@/lib/cn'
 import type { AggregatorChannelConfig } from './channel-config'
 import { needsOwner } from './needs-you-count'
 import { RunHistory } from './run-history'
-import { readAgainAfterHours, readsPerDayPhrase, whenItRan } from './when'
+import { hasGoneQuiet, readAgainAfterHours, readsPerDayPhrase, whenItRan } from './when'
 import { SyncEventRow } from './sync-event-row'
 
 /**
@@ -69,6 +69,62 @@ export function readAgainInHours(health: AggregatorSyncHealth, now = Date.now())
   const since = (now - new Date(health.lastRunAt).getTime()) / 3_600_000
   if (!Number.isFinite(since) || since >= window) return null
   return Math.max(1, Math.ceil(window - since))
+}
+
+/**
+ * The word a channel's health line shows, and whether it is a fault.
+ *
+ * **Exported for the same reason `readAgainInHours` is: the precedence is the
+ * part worth testing, and a chain of ternaries inside a component is the part
+ * hardest to reach.** Ordered most specific first.
+ *
+ * `Overdue` is the LEAST specific thing on this list and sits second to last
+ * deliberately. A channel that is stuck is also, eventually, overdue; letting
+ * that win would replace the sentence naming the actual fault with one that
+ * merely notes its consequence.
+ *
+ * Until 2026-09-01 there was no `Overdue` at all: `All quiet` was the word for
+ * every `ok`, however old, so a channel that read four minutes ago and one that
+ * read four days ago rendered identically and the only difference was a
+ * timestamp in the grey line below — which a reader had to convert, compare
+ * against a cadence, and disbelieve the green word above. Every failure that
+ * posts nothing at all lands here: a disabled workflow, a job that dies before
+ * it can report, a cold Vault, a repository out of Actions minutes.
+ */
+export function channelHealthWord(
+  health: AggregatorSyncHealth,
+  now = Date.now(),
+): readonly [string, boolean] {
+  if (health.running) return ['Reading', false] as const
+  if (health.lastOutcome === null) return ['Never run', false] as const
+  if (health.lastOutcome !== 'ok') return ['Stuck', true] as const
+  // A channel not switched on here has no schedule to be late against.
+  if (health.syncedFrom && hasGoneQuiet(health.lastRunAt, health.readsPerDay, now)) {
+    return ['Overdue', true] as const
+  }
+  return ['All quiet', false] as const
+}
+
+/**
+ * The same question for Hyperpure, which picks its word from a different chain.
+ *
+ * It rides Zomato's login but files its own runs, so it can fall silent on its
+ * own and needs its own overdue clause rather than inheriting Zomato's verdict.
+ * A lapsed session still outranks everything below it, because that is the one
+ * state on this line the owner can fix themselves.
+ */
+export function hyperpureHealthWord(
+  health: HyperpureHealth,
+  now = Date.now(),
+): readonly [string, boolean] {
+  if (health.running) return ['Reading', false] as const
+  if (!health.hasSession || health.lastOutcome === 'session_lapsed') {
+    return ['Session ended', true] as const
+  }
+  if (health.lastOutcome === 'shape_changed') return ['Stuck', true] as const
+  if (health.lastOutcome === null) return ['Never run', false] as const
+  if (hasGoneQuiet(health.lastRunAt, health.readsPerDay, now)) return ['Overdue', true] as const
+  return ['All quiet', false] as const
 }
 
 export function AggregatorSyncSurface({
@@ -620,17 +676,7 @@ function HealthLine({
   onRun: () => void
 }) {
   const when = health.lastRunAt ? whenItRan(health.lastRunAt) : null
-
-  // No status dot. A round mark in the primary colour is what a badge looks
-  // like everywhere else in this app, and a badge means exactly one thing here:
-  // somebody is waiting on you.
-  const [word, wrong] = health.running
-    ? (['Reading', false] as const)
-    : health.lastOutcome === 'ok'
-      ? (['All quiet', false] as const)
-      : health.lastOutcome === null
-        ? (['Never run', false] as const)
-        : (['Stuck', true] as const)
+  const [word, wrong] = channelHealthWord(health)
 
   return (
     <Card className="flex flex-wrap items-center justify-between gap-3 p-3">
@@ -642,9 +688,14 @@ function HealthLine({
           <p className="text-xs text-content-muted">
             {!health.syncedFrom
               ? `Not switched on here yet`
-              : when
-                ? `${when} · ${readsPerDayPhrase(health.readsPerDay)}`
-                : `Reads ${readsPerDayPhrase(health.readsPerDay)}`}
+              : word === 'Overdue'
+                ? // What is wrong, then when it was last right. A reader who sees
+                  // `Overdue` needs to know a read was MISSED, not merely that one
+                  // happened a while ago, which is all a timestamp alone says.
+                  `A read was due · last ran ${when}`
+                : when
+                  ? `${when} · ${readsPerDayPhrase(health.readsPerDay)}`
+                  : `Reads ${readsPerDayPhrase(health.readsPerDay)}`}
           </p>
         </div>
       </div>
@@ -691,15 +742,7 @@ function HyperpureHealthLine({
   const when = health.lastRunAt ? whenItRan(health.lastRunAt) : null
 
   const stale = !health.hasSession || health.lastOutcome === 'session_lapsed'
-  const [word, wrong] = health.running
-    ? (['Reading', false] as const)
-    : stale
-      ? (['Session ended', true] as const)
-      : health.lastOutcome === 'shape_changed'
-        ? (['Stuck', true] as const)
-        : health.lastOutcome === 'ok'
-          ? (['All quiet', false] as const)
-          : (['Never run', false] as const)
+  const [word, wrong] = hyperpureHealthWord(health)
 
   let note: string
   if (health.running) {
@@ -710,6 +753,8 @@ function HyperpureHealthLine({
     note = 'Upload the Hyperpure account statement below to bring its figures in'
   } else if (word === 'Stuck') {
     note = 'A statement could not be read — a maintainer has been told'
+  } else if (word === 'Overdue') {
+    note = `A read was due · last ran ${when}`
   } else {
     note = when
       ? `${when} · ${readsPerDayPhrase(health.readsPerDay)}`

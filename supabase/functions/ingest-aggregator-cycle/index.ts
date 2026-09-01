@@ -7,6 +7,13 @@ import {
   readRunOrigin,
   saidHowItBegan,
 } from '../_shared/run-summary.ts'
+import {
+  AGGREGATOR_OUTCOMES,
+  type AggregatorOutcome,
+  decideRunOutcome,
+  declaredDegradation,
+  reachedNoData,
+} from '../_shared/run-outcome.ts'
 
 /**
  * The door the aggregator readers post settlement through.
@@ -56,16 +63,11 @@ const CONTRACT_VERSION = 1
  */
 const CHANNELS: readonly string[] = ['zomato', 'swiggy']
 
-type Outcome =
-  'ok' | 'session_lapsed' | 'awaiting_one_time_password' | 'shape_changed' | 'reconciliation_failed'
-
-const OUTCOMES: readonly Outcome[] = [
-  'ok',
-  'session_lapsed',
-  'awaiting_one_time_password',
-  'shape_changed',
-  'reconciliation_failed',
-]
+// The vocabulary and the choice between its words live together in
+// `_shared/run-outcome.ts`, where `npm test` can reach them. `Outcome` stays as a
+// local alias so the rest of this file reads as it did.
+type Outcome = AggregatorOutcome
+const OUTCOMES = AGGREGATOR_OUTCOMES
 
 /**
  * Constant-time comparison, so a wrong secret cannot be discovered a character
@@ -186,6 +188,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
    * **A rehearsal writes nothing, so it summarises nothing.** Its cycles report
    * what they would have moved, and carrying that onto the run would put
    * movements the ledger never saw into the history.
+   *
+   * **Since a run may now fall short and still write, this field is also what
+   * says how far short it fell.** A degraded run carrying an empty summary saved
+   * nothing; one carrying movements saved that much. There is deliberately no
+   * sixth outcome word for the difference: the outcome names the fault, which is
+   * what routes it to a person, and completeness is already recorded here — by
+   * the write, inside its own transaction, which is the only moment it is
+   * knowable at all.
    */
   const summaryFor = (results: readonly unknown[]) =>
     rehearsing ? emptySummary() : mergeSummaries(results)
@@ -216,12 +226,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json({ outcome, rehearsal: rehearsing, ...extra }, status)
   }
 
-  // A run that reached no data at all still reports itself. It writes nothing
-  // for those dates and never a zero, because a zero is indistinguishable from a
-  // day with no orders.
-  if (declared && declared !== 'ok') {
-    return await finish(declared, str(body['detail']) ?? null, 200)
+  const declaredDetail = str(body['detail']) ?? null
+
+  /*
+   * A declared degradation is a statement about the READ, and it no longer
+   * decides what happens to the write.
+   *
+   * This used to return here whatever else the request carried, so a runner had
+   * two sentences available to it — "I wrote this" or "I failed" — and a run that
+   * read six settled weeks and could not read the open one had to pick one and
+   * lie with it. On 2026-08-31 the Swiggy reader spent eighteen hours picking the
+   * second, discarding every settled week behind one changed operation.
+   *
+   * With no cycles the behaviour is exactly what it was: a run that reached no
+   * data still reports itself, writes nothing for those dates and never a zero,
+   * because a zero is indistinguishable from a day with no orders.
+   */
+  if (reachedNoData(declared, cycles.length)) {
+    return await finish(declared as Outcome, declaredDetail, 200)
   }
+
+  // `ok` alongside cycles declares nothing: a caller cannot assert that a run
+  // succeeded over what its own writes did. `declaredDegradation` is where that
+  // is decided, and where it is tested.
+  const degraded = declaredDegradation(declared)
 
   const results: unknown[] = []
   let unreconciled = 0
@@ -248,15 +276,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
   }
 
-  if (unreconciled > 0) {
-    return await finish(
-      'reconciliation_failed',
-      `${unreconciled} cycle(s) did not reconcile against the payout the portal states it made`,
-      200,
-      { results },
-      results,
-    )
-  }
-
-  return await finish('ok', null, 200, { results }, results)
+  // One word for a run that reached its writes, chosen by the precedence in
+  // `_shared/run-outcome.ts` rather than by which branch here happens to run
+  // first. What the run nonetheless moved rides on its summary.
+  const { outcome, detail } = decideRunOutcome({
+    degradation: degraded,
+    degradationDetail: declaredDetail,
+    unreconciled,
+  })
+  return await finish(outcome, detail, 200, { results }, results)
 })
