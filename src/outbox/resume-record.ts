@@ -8,7 +8,7 @@ import type { Tables } from '@/data-access/database.types'
 
 import { BillingDeliveryDatabase } from './schema'
 
-export const COUNTER_RESUME_SCHEMA_VERSION = 1
+export const COUNTER_RESUME_SCHEMA_VERSION = 2
 export const REMEMBERED_CUSTOMER_RETENTION_MS = 24 * 60 * 60 * 1000
 export const REMEMBERED_CUSTOMER_LIMIT = 50
 export const MATERIAL_CLOCK_SKEW_MS = 2 * 60 * 1000
@@ -30,15 +30,18 @@ export interface CounterResumeRecord {
   shift: {
     id: string
     personId: string
-    operatorName: string
     outletId: string
     openedAt: string
     businessDate: string
+    /**
+     * The outlet's next cutover, authored by `app_next_cutover` when the shift
+     * opened. This IS the outlet cutover for this shift — the server's own
+     * `loadCounterShift` treats it as such — so the record keeps no second copy
+     * to disagree with. The raw `HH:MM:SS` remains on `outlet`.
+     */
     expiresAt: string
   }
   outlet: Tables<'outlets'>
-  outletCutover: string
-  outletCutoverAt: string
   menu: MenuCategoryWithItems[]
   pipeline: BillingOrder[]
   bills: BillingBill[]
@@ -63,7 +66,7 @@ function isCompleteRecord(value: unknown): value is CounterResumeRecord {
     row.shift?.id &&
     row.shift?.expiresAt &&
     row.outlet?.id &&
-    row.outletCutoverAt &&
+    row.outlet?.business_day_cutover &&
     Array.isArray(row.menu) &&
     Array.isArray(row.pipeline) &&
     Array.isArray(row.bills) &&
@@ -74,8 +77,15 @@ function isCompleteRecord(value: unknown): value is CounterResumeRecord {
   )
 }
 
+/**
+ * Where new work stops: the earlier of the shift's expiry and the outlet
+ * cutover. They are one instant, not two — `counter_shifts.expires_at` is
+ * inserted as `app_next_cutover(now(), cutover)` and `loadCounterShift` admits
+ * a shift only while it is ahead — so this reads the value the server itself
+ * uses rather than recomputing the cutover from `HH:MM:SS` beside it.
+ */
 export function counterResumeStopAt(record: CounterResumeRecord): number {
-  return Math.min(Date.parse(record.shift.expiresAt), Date.parse(record.outletCutoverAt))
+  return Date.parse(record.shift.expiresAt)
 }
 
 export function hasMaterialClockSkew(record: CounterResumeRecord): boolean {
@@ -92,13 +102,22 @@ export async function readCounterResume(
 ): Promise<CounterResumeRead> {
   const raw = await database.resumeRecords.get(installationId)
   if (!raw) return { status: 'missing' }
+  // Version before shape: a record this build cannot read is unsupported, not
+  // malformed, however little of it a newer writer left recognisable.
+  if ((raw as Partial<CounterResumeRecord>).schemaVersion !== COUNTER_RESUME_SCHEMA_VERSION) {
+    return { status: 'unsupported' }
+  }
   if (!isCompleteRecord(raw)) return { status: 'incomplete' }
-  if (raw.schemaVersion !== COUNTER_RESUME_SCHEMA_VERSION) return { status: 'unsupported' }
   if (raw.tabletId !== installationId || raw.tablet.id !== installationId) {
     return { status: 'foreign' }
   }
   if (counterResumeStopAt(raw) <= nowMs) return { status: 'expired' }
-  return { status: 'ready', record: structuredClone(raw) }
+  // Retention is enforced on the way out as well as the way in. Pruning only
+  // on write would let a record that stopped being rewritten keep serving
+  // phone numbers past the cap that `docs/SECURITY_AND_PRIVACY.md` states.
+  const record = structuredClone(raw)
+  record.rememberedCustomers = retainRememberedCustomers(record.rememberedCustomers, nowMs)
+  return { status: 'ready', record }
 }
 
 export async function writeCounterResume(

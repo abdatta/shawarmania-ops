@@ -23,7 +23,22 @@ Deliberately asymmetric, because the risk is asymmetric.
 the tablet, the server and the operator's own phone: nothing local can stand in
 for the person who types four digits. After one successful approval, however, a
 complete same-installation resume record may reopen that exact shift through a
-cold start. New work stops at the earlier of its stored expiry and cutover.
+cold start. New work stops at the earlier of its stored expiry and cutover —
+which is one instant, not two: `counter_shifts.expires_at` is authored by
+`app_next_cutover` when the shift opens, and the tablet reads that stored value
+rather than recomputing a cutover of its own.
+
+A resume record answers a **cold start** only. A tablet already trading with a
+server-resolved shift keeps that session through a failed revalidation; it does
+not fall back to remembered projections because one request blinked.
+
+**A counter expense recorded offline is queued like a billing command**, with
+its own row identity so a lost response replays as delivered rather than as a
+second expense, and it is sent by the same scheduled, mutually excluded drain —
+not by a surface happening to read a list. A *refusal* is treated as an answer:
+the tablet stops resending, keeps the server's words, shows the entry as
+needing attention rather than as still sending, and offers to discard it, so a
+row the server will never accept cannot block the end of the day forever.
 
 Attendance is online-only from every device now, including the counter, because attendance is an RPC that evaluates the geofence server-side at the moment of the claim.
 

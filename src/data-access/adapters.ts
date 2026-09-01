@@ -1628,6 +1628,12 @@ export interface ExpenseRecord {
   voidedAt: string | null
   voidedBy: ExpenseActor | null
   voidedReason: string | null
+  /**
+   * Set only on a counter expense still held on the tablet. Absent means the
+   * server has this row. `needs_attention` means the server *answered* and
+   * refused it, so retrying alone will never clear it.
+   */
+  delivery?: { state: 'pending' | 'needs_attention'; refusal: string | null }
 }
 
 export interface NewExpense {
@@ -1657,6 +1663,12 @@ export interface ExpensesAdapter {
   createExpense(expense: NewExpense): Promise<ExpenseRecord>
   updateExpense(id: string, patch: ExpensePatch): Promise<ExpenseRecord>
   voidExpense(id: string, reason?: string | null): Promise<ExpenseRecord>
+  /**
+   * Discard a counter expense the server refused, so it stops blocking the end
+   * of the day. Only a `needs_attention` row can be discarded, and only from
+   * the tablet holding it; every other caller is a no-op.
+   */
+  discardRefusedExpense?(id: string): Promise<void>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

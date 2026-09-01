@@ -67,8 +67,10 @@ retain only identities returned for complete canonical phones this tablet
 actually resolved online. It offers no browse, prefix or cross-tablet cache,
 labels every reused result remembered, and never writes a phone to logs,
 telemetry, indexes or diagnostics. The local cap is the newest **50 results for
-24 hours**; pruning happens whenever the record is written. This is a device
-retention bound, not the still-open business-wide customer retention policy.
+24 hours**, applied both when the record is written and when it is read, so a
+record that stopped being rewritten cannot keep serving numbers past the bound.
+This is a device retention bound, not the still-open business-wide customer
+retention policy.
 
 **One customer directory covers the whole business, and that is the sharpest privacy edge in this schema.** Every other personal record here belongs to one outlet, and the isolation policies do the protecting. `customers` belongs to none, so a single wrong grant would expose every customer the business has to any manager's token. Four things hold instead of a policy:
 

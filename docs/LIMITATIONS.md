@@ -551,6 +551,17 @@ keep local UI open too long; it cannot make the server accept work outside the
 real shift. A wrong device clock can still stamp a wrong creation instant, so
 the warning is evidence rather than repair.
 
+### A resumed counter fills in over several seconds
+
+Every remembered read runs its request first and falls back to the resume record
+only once the browser has given up on it, so after a cold start the menu, the
+pipeline and Bills this shift arrive around seven seconds in rather than at
+once — measured against the local stack, and the operator watches loading
+placeholders until then. Serving the record first would be faster and less
+honest: the tablet would stop trying the server it is supposed to prefer. The
+cost is a slow open, not a wrong one, and Finish Day pays it twice because it
+drains and probes before it answers.
+
 ### Offline resumption cannot learn removal
 
 A complete resume record can keep the approved counter capturing until the

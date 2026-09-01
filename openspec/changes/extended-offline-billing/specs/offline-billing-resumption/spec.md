@@ -4,16 +4,23 @@
 
 After a successful online counter load the tablet SHALL persist, as one unit,
 the facts it would otherwise ask the server for at startup: its own tablet
-identity, label and outlet; the live shift's identity, operator name, opened
-time, business date and expiry; the outlet cutover; the menu it is selling from;
-the outlet pipeline and this shift's bills as the server last returned them; the
-exact-phone customer results this tablet resolved; the instant of that successful
-read with the server time observed at it and the device clock beside it; and a
-schema version.
+identity, label and outlet; the live shift's identity, opened time, business
+date and expiry; the outlet row it is trading under, cutover included; the menu
+it is selling from; the outlet pipeline and this shift's bills as the server
+last returned them; the exact-phone customer results this tablet resolved; the
+instant of that successful read with the server time observed at it and the
+device clock beside it; and a schema version.
 
 A resume record SHALL become readable only once every part of it has committed.
 A cold start with no backend response SHALL use the newest complete record whose
 schema this build supports and whose tablet is this installation, and no other.
+A resume record SHALL NOT name the operator: the tablet is never told a person's
+name, and a record cannot hold a fact its writer has never read.
+
+Only a **first** resolution may open a counter from a record. A tablet that has
+already resolved its shift against the server keeps that session when a later
+revalidation fails, because remembered projections are the answer to a cold
+start and never to a blink.
 
 #### Scenario: The tablet is reloaded during an outage
 
@@ -34,8 +41,12 @@ schema this build supports and whose tablet is this installation, and no other.
 
 The counter SHALL open offline only inside the bounds of a shift already
 approved online by its named operator. It SHALL stop accepting new commands at
-the earlier of that shift's stored expiry and the outlet cutover, and SHALL
-require the backend and the operator's own phone before any further shift.
+the earlier of that shift's stored expiry and the outlet cutover — one instant,
+not two, because `counter_shifts.expires_at` is authored as
+`app_next_cutover(now(), cutover)` and the server admits a shift only while it
+is ahead. The client SHALL read that stored instant rather than recomputing a
+cutover beside it. A further shift SHALL require the backend and the operator's
+own phone.
 
 Commands created offline SHALL carry the real tablet identity, the real shift
 identity and their own immutable creation time, and the server SHALL remain the
@@ -111,6 +122,32 @@ unresolved until sync.
 
 - **WHEN** the phone has no exact remembered result
 - **THEN** the optional form snapshot is accepted and the surface explains that customer identity resolves on sync
+
+### Requirement: A queued expense is delivered on a schedule and can be let go
+
+An expense recorded on a tablet with no reachable backend SHALL be held on the
+device and SHALL be sent by the same scheduled, mutually excluded drain that
+delivers billing commands — never as a side effect of a surface reading a list.
+It SHALL carry its own row identity, so a lost response replays as delivered
+rather than as a second expense, and the queue SHALL reach the server in the
+order the counter made it.
+
+A refusal is an answer, not an outage. Where the server answers and declines an
+expense, the tablet SHALL stop resending it, SHALL keep the server's words, and
+SHALL present it as needing attention rather than as still sending. Only pending
+entries SHALL count as unsent. Every held entry SHALL be labelled on the list,
+and a refused one SHALL be discardable so it cannot block the end of the day
+indefinitely.
+
+#### Scenario: An expense is recorded during an outage
+
+- **WHEN** the operator records an expense with no backend reachable, whether or not the tablet has reloaded
+- **THEN** it is held on the device, shown in the list as not sent yet, and sent on the next drain after the backend answers again
+
+#### Scenario: The server refuses a held expense
+
+- **WHEN** the backend answers a queued expense with a constraint or a policy refusal
+- **THEN** the tablet stops retrying it, shows it as refused with what the server said, counts it as needing attention rather than as unsent, and offers to discard it
 
 ### Requirement: The day cannot be finished offline
 

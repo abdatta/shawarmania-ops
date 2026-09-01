@@ -124,6 +124,10 @@ export function ExpenseList({
    */
   function mayChange(expense: ExpenseRecord): boolean {
     if (expense.voidedAt !== null) return false
+    // A row the server has never seen cannot be edited or withdrawn there —
+    // both paths address it by an id no table holds. A refused one gets its own
+    // action below; a pending one waits for the drain.
+    if (expense.delivery) return false
     if (viewer.mayTouchAnyRow) return true
     // A row no person recorded is nobody's own row, so nobody may change it here.
     // Correcting a synced figure means correcting it at the aggregator.
@@ -131,8 +135,18 @@ export function ExpenseList({
     return expense.recordedBy.id === viewer.id && expense.businessDate === currentBusinessDate
   }
 
+  /**
+   * A refused counter expense is discardable, and only that. It is the way out
+   * of a queue entry the server has already answered no to — without it the
+   * row blocks Finish Day for the rest of the day with nothing the operator can
+   * do about it.
+   */
+  function mayDiscard(expense: ExpenseRecord): boolean {
+    return expense.delivery?.state === 'needs_attention' && Boolean(adapter.discardRefusedExpense)
+  }
+
   /** Whether this list holds a kebab at all — see where the slot is rendered. */
-  const anyChangeable = expenses?.some(mayChange) ?? false
+  const anyChangeable = expenses?.some((row) => mayChange(row) || mayDiscard(row)) ?? false
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -226,6 +240,7 @@ export function ExpenseList({
             const isOpen = expanded === expense.id
             const panelId = `ledger-expense-detail-${expense.id}`
             const changeable = mayChange(expense)
+            const discardable = mayDiscard(expense)
             return (
               <li key={expense.id}>
                 <Card
@@ -301,6 +316,31 @@ export function ExpenseList({
                           <>
                             <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-content">
                               {expense.category}
+                              {/*
+                                **A queued expense says which it is**, in the
+                                counter's existing vocabulary. `Not sent yet` is
+                                the phrase an unsent bill already carries, and it
+                                is never "provisional": the entry is real, the
+                                server simply has not seen it. `Refused` is the
+                                other answer — the server *did* see it and said
+                                no — and it reads differently because retrying
+                                will never change it.
+                              */}
+                              {expense.delivery && (
+                                <span
+                                  data-testid={`expense-delivery-${expense.id}`}
+                                  data-delivery={expense.delivery.state}
+                                  className={
+                                    expense.delivery.state === 'needs_attention'
+                                      ? 'inline-flex items-center rounded-lg border border-danger px-2 py-0.5 text-xs font-semibold text-content'
+                                      : 'inline-flex items-center rounded-lg border border-warning px-2 py-0.5 text-xs font-semibold text-content'
+                                  }
+                                >
+                                  {expense.delivery.state === 'needs_attention'
+                                    ? 'Refused'
+                                    : 'Not sent yet'}
+                                </span>
+                              )}
                               {expense.isCash ? (
                                 <span
                                   data-testid={`ledger-cash-${expense.id}`}
@@ -387,6 +427,33 @@ export function ExpenseList({
                         anyChangeable ? 'order-first flex w-8 shrink-0 justify-center' : 'hidden'
                       }
                     >
+                      {discardable && (
+                        <RowActionsMenu
+                          compact
+                          align="start"
+                          label={`Actions for ${expense.category}`}
+                          actions={[
+                            {
+                              label: 'Discard',
+                              testId: `discard-expense-${expense.id}`,
+                              onSelect: () => {
+                                setError(null)
+                                void (async () => {
+                                  setBusy(true)
+                                  try {
+                                    await adapter.discardRefusedExpense?.(expense.id)
+                                    await onChanged()
+                                  } catch {
+                                    setError('That entry could not be discarded. Try again.')
+                                  } finally {
+                                    setBusy(false)
+                                  }
+                                })()
+                              },
+                            },
+                          ]}
+                        />
+                      )}
                       {changeable && (
                         <RowActionsMenu
                           compact

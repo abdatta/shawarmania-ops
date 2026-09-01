@@ -17,13 +17,6 @@ import {
   type RememberedCustomerResult,
 } from './resume-record'
 
-function cutoverInstant(businessDate: string, cutover: string): string {
-  const day = new Date(`${businessDate}T00:00:00.000Z`)
-  day.setUTCDate(day.getUTCDate() + 1)
-  const next = day.toISOString().slice(0, 10)
-  return new Date(`${next}T${cutover}:00+05:30`).toISOString()
-}
-
 /**
  * Collects successful authorised reads made by the four real adapters. It
  * never persists a partial answer; the previous row remains current until all
@@ -92,42 +85,50 @@ export class CounterResumeCoordinator {
   }
 
   private queueCommit(): void {
-    this.commitSequence = this.commitSequence.then(async () => {
-      await this.previous
-      const shift = this.session.shift
-      if (!shift || !this.outlet || !this.menu || !this.pipeline || !this.bills || !this.clock)
-        return
-      const now = new Date().toISOString()
-      const record: CounterResumeRecord = {
-        tabletId: this.session.device.deviceId,
-        schemaVersion: COUNTER_RESUME_SCHEMA_VERSION,
-        complete: true,
-        tablet: {
-          id: this.session.device.deviceId,
-          label: this.session.device.label,
-          outletId: this.session.device.outletId,
-        },
-        shift: {
-          id: shift.id,
-          personId: shift.personId,
-          operatorName: 'Counter operator',
-          outletId: shift.outletId,
-          openedAt: shift.openedAt,
-          businessDate: shift.businessDate,
-          expiresAt: shift.expiresAt,
-        },
-        outlet: structuredClone(this.outlet),
-        outletCutover: this.outlet.business_day_cutover,
-        outletCutoverAt: cutoverInstant(shift.businessDate, this.outlet.business_day_cutover),
-        menu: structuredClone(this.menu),
-        pipeline: structuredClone(this.pipeline),
-        bills: structuredClone(this.bills),
-        rememberedCustomers: retainRememberedCustomers(this.rememberedCustomers),
-        lastSuccessfulReadAt: now,
-        serverObservedAt: this.clock.serverObservedAt,
-        deviceObservedAt: this.clock.deviceObservedAt,
-      }
-      await writeCounterResume(record, this.database)
-    })
+    // Each commit is chained onto the last so a partial record can never
+    // interleave with a complete one — and each one catches, because a
+    // rejection here would otherwise poison the chain and silently stop every
+    // later write for the life of this coordinator.
+    this.commitSequence = this.commitSequence
+      .then(async () => {
+        await this.previous
+        const shift = this.session.shift
+        if (!shift || !this.outlet || !this.menu || !this.pipeline || !this.bills || !this.clock)
+          return
+        const now = new Date().toISOString()
+        const record: CounterResumeRecord = {
+          tabletId: this.session.device.deviceId,
+          schemaVersion: COUNTER_RESUME_SCHEMA_VERSION,
+          complete: true,
+          tablet: {
+            id: this.session.device.deviceId,
+            label: this.session.device.label,
+            outletId: this.session.device.outletId,
+          },
+          shift: {
+            id: shift.id,
+            personId: shift.personId,
+            outletId: shift.outletId,
+            openedAt: shift.openedAt,
+            businessDate: shift.businessDate,
+            expiresAt: shift.expiresAt,
+          },
+          outlet: structuredClone(this.outlet),
+          menu: structuredClone(this.menu),
+          pipeline: structuredClone(this.pipeline),
+          bills: structuredClone(this.bills),
+          rememberedCustomers: retainRememberedCustomers(this.rememberedCustomers),
+          lastSuccessfulReadAt: now,
+          serverObservedAt: this.clock.serverObservedAt,
+          deviceObservedAt: this.clock.deviceObservedAt,
+        }
+        await writeCounterResume(record, this.database)
+      })
+      .catch((cause) => {
+        // Resuming is a convenience over an outage; failing to save must never
+        // break the online counter that is working right now. Say so once, out
+        // loud, and let the next successful read try again.
+        console.error('The counter resume record could not be written.', cause)
+      })
   }
 }

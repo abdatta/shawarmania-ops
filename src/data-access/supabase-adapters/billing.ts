@@ -40,6 +40,8 @@ import {
   BillingDrainCoordinator,
   BillingUnsentReporter,
   counterResumeStopAt,
+  drainCounterExpenses,
+  listCounterExpenses,
   type BillingDeliveryEnvelopeRecord,
   type BillingLockManager,
   type CounterResumeCoordinator,
@@ -876,12 +878,33 @@ export function createSupabaseBillingAdapter(
     return [...bills.values()]
   }
 
+  /**
+   * Send this tablet's queued expenses. The insert carries the envelope's own
+   * id, so a lost response replays into `23505` and resolves as delivered
+   * rather than as a second expense.
+   */
+  async function drainQueuedExpenses(database: BillingDeliveryDatabase): Promise<void> {
+    if (!counterSession) return
+    await drainCounterExpenses(database, counterSession.device.deviceId, async (entry) => {
+      const { error } = await client.from('expenses').insert({
+        id: entry.id,
+        outlet_id: entry.input.outletId,
+        business_date: entry.input.businessDate,
+        category: entry.input.category,
+        is_cash: entry.input.isCash,
+        amount_paise: entry.input.amountPaise,
+        description: entry.input.note?.trim() ? entry.input.note.trim() : null,
+      })
+      return { error: error ? { code: error.code, message: error.message } : null }
+    })
+  }
+
   async function startRuntime(): Promise<void> {
     if (!counterSession || !store || !database || deliverySubscription) return
     const tabletId = counterSession.device.deviceId
     deliverySubscription = liveQuery(async () => ({
       envelopes: await database.envelopes.where('tabletId').equals(tabletId).toArray(),
-      expenses: await database.expenseEnvelopes.where('tabletId').equals(tabletId).toArray(),
+      expenses: await listCounterExpenses(database, tabletId),
     })).subscribe({
       next: ({ envelopes, expenses }) => {
         const queued = envelopes
@@ -905,9 +928,13 @@ export function createSupabaseBillingAdapter(
           ...state,
           queued,
           sync: {
+            // A refused expense is not "still sending". It counts as needing
+            // attention, exactly as a refused command does, so the indicator
+            // stops promising delivery that will never happen.
             ...deliverySync(
-              envelopes.length + expenses.length,
-              envelopes.some((envelope) => envelope.state === 'needs_attention'),
+              envelopes.length + expenses.filter((row) => row.state === 'pending').length,
+              envelopes.some((envelope) => envelope.state === 'needs_attention') ||
+                expenses.some((row) => row.state === 'needs_attention'),
             ),
           },
         }
@@ -948,6 +975,10 @@ export function createSupabaseBillingAdapter(
         state = { ...state, sync: deliverySync(state.sync.pending) }
         notify()
       },
+      // Queued expenses ride the command drain's tick and mutex rather than a
+      // second scheduler — and rather than a surface happening to read a list,
+      // which is what used to send them.
+      secondary: () => drainQueuedExpenses(database),
     })
     reporter = new BillingUnsentReporter({
       store,
@@ -1034,11 +1065,17 @@ export function createSupabaseBillingAdapter(
       const needsAttentionCount = envelopes.filter(
         (envelope) => envelope.state === 'needs_attention',
       ).length
-      const unsentExpenseCount = await store.database.expenseEnvelopes
-        .where('tabletId')
-        .equals(session.device.deviceId)
-        .count()
-      const unsentCount = envelopes.length - needsAttentionCount + unsentExpenseCount
+      // Scoped to this shift's business date, like the envelopes above: an
+      // expense filed against another date is not this day's blocker.
+      const queuedExpenses = (
+        await listCounterExpenses(store.database, session.device.deviceId)
+      ).filter((row) => row.input.businessDate === shift.businessDate)
+      const unsentCount =
+        envelopes.length -
+        needsAttentionCount +
+        queuedExpenses.filter((row) => row.state === 'pending').length
+      const attentionCount =
+        needsAttentionCount + queuedExpenses.filter((row) => row.state === 'needs_attention').length
 
       let openOrderCount = 0
       let editablePaymentCount = 0
@@ -1073,13 +1110,13 @@ export function createSupabaseBillingAdapter(
 
       return {
         unsentCount,
-        needsAttentionCount,
+        needsAttentionCount: attentionCount,
         openOrderCount,
         editablePaymentCount,
         serverReachable,
         attributionExceptionCount: 0,
         canFinish:
-          serverReachable && unsentCount === 0 && needsAttentionCount === 0 && openOrderCount === 0,
+          serverReachable && unsentCount === 0 && attentionCount === 0 && openOrderCount === 0,
       }
     },
     async closeShift(shiftId: string): Promise<void> {

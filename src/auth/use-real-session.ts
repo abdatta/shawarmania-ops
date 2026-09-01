@@ -66,8 +66,12 @@ type Resolution =
   | { kind: 'session'; session: Session }
   | { kind: 'counter'; device: CounterDeviceSession }
   | { kind: 'ended'; reason: SessionEndReason }
-  /** Nothing could be determined: change nothing at all. */
-  | { kind: 'indeterminate' }
+  /**
+   * Nothing could be determined: change nothing at all. `resume` rides along
+   * rather than deciding, because whether a remembered counter may be opened
+   * depends on what is already on screen — which only `apply` knows.
+   */
+  | { kind: 'indeterminate'; resume?: CounterDeviceSession }
 
 function sessionFrom(profile: Profile, assignments: Assignment[]): Session {
   return {
@@ -101,30 +105,28 @@ async function resolveSession(): Promise<Resolution> {
     const resumed = await readCounterResume(user.userId).catch(() => ({
       status: 'missing' as const,
     }))
-    if (resumed.status === 'ready') {
-      const record = resumed.record
-      return {
-        kind: 'counter',
+    if (resumed.status !== 'ready') return { kind: 'indeterminate' }
+    const record = resumed.record
+    return {
+      kind: 'indeterminate',
+      resume: {
+        kind: 'counter-device',
         device: {
-          kind: 'counter-device',
-          device: {
-            deviceId: record.tablet.id,
-            outletId: record.tablet.outletId,
-            label: record.tablet.label,
-          },
-          shift: {
-            id: record.shift.id,
-            personId: record.shift.personId,
-            outletId: record.shift.outletId,
-            openedAt: record.shift.openedAt,
-            businessDate: record.shift.businessDate,
-            expiresAt: record.shift.expiresAt,
-          },
-          offlineResume: record,
+          deviceId: record.tablet.id,
+          outletId: record.tablet.outletId,
+          label: record.tablet.label,
         },
-      }
+        shift: {
+          id: record.shift.id,
+          personId: record.shift.personId,
+          outletId: record.shift.outletId,
+          openedAt: record.shift.openedAt,
+          businessDate: record.shift.businessDate,
+          expiresAt: record.shift.expiresAt,
+        },
+        offlineResume: record,
+      },
     }
-    return { kind: 'indeterminate' }
   }
 
   let profile: Profile | null
@@ -185,11 +187,21 @@ export function useRealSession(): RealSession {
           return
         case 'indeterminate':
           // Never downgrade a working session because one request failed: only
-          // the very first attempt, which has nothing to preserve, turns into
-          // a visible "could not confirm" with a retry.
-          setState((previous) =>
-            previous.status === 'loading' ? { status: 'unavailable' } : previous,
-          )
+          // the very first attempt, which has nothing to preserve, changes
+          // anything here. That first attempt opens the remembered counter if
+          // one is resumable, and otherwise turns into a visible "could not
+          // confirm" with a retry.
+          //
+          // A remembered counter is a COLD START answer, never a mid-shift
+          // one. A tablet trading happily online that loses a single
+          // revalidation must keep its live session: swapping it for the
+          // snapshot would relabel current reads as remembered and stop the
+          // resume record being refreshed until the next success.
+          setState((previous) => {
+            if (previous.status !== 'loading') return previous
+            if (resolution.resume) return { status: 'counter', device: resolution.resume }
+            return { status: 'unavailable' }
+          })
           return
       }
     }

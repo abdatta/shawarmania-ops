@@ -23,15 +23,12 @@ const resume: CounterResumeRecord = {
   shift: {
     id: 'shift-1',
     personId: 'person-1',
-    operatorName: 'Rina',
     outletId: 'outlet-1',
     openedAt: '2026-09-01T03:30:00.000Z',
     businessDate: '2026-09-01',
     expiresAt: '2026-09-01T18:30:00.000Z',
   },
-  outlet: { id: 'outlet-1', business_day_cutover: '03:00' } as CounterResumeRecord['outlet'],
-  outletCutover: '03:00',
-  outletCutoverAt: '2026-09-01T21:30:00.000Z',
+  outlet: { id: 'outlet-1', business_day_cutover: '03:00:00' } as CounterResumeRecord['outlet'],
   menu: [],
   pipeline: [],
   bills: [],
@@ -96,11 +93,15 @@ describe('counter expenses after an offline cold start', () => {
     database.close()
   })
 
-  it('replays the exact row identity once after the same live shift resolves online', async () => {
+  it('does not send queued expenses as a side effect of reading a list', async () => {
+    // Sending used to happen inside `listExpenses`, so an expense only reached
+    // the server if some surface happened to read one — with no retry, no
+    // ordering guarantee and no way out of a refusal. Delivery now belongs to
+    // the drain coordinator's tick; a read is only a read.
     const offline = createSupabaseExpensesAdapter(unusedClient(), resumedSession)
     const created = await offline.createExpense(expense)
-    const inserted: Record<string, unknown>[] = []
 
+    const inserted: Record<string, unknown>[] = []
     const empty = { data: [], error: null }
     const from = vi.fn((table: string) => {
       if (table === 'expenses') {
@@ -128,11 +129,37 @@ describe('counter expenses after an offline cold start', () => {
     await online.listExpenses(expense.outletId, expense.businessDate)
     await online.listExpenses(expense.outletId, expense.businessDate)
 
-    expect(inserted).toEqual([
-      expect.objectContaining({ id: created.id, outlet_id: 'outlet-1', amount_paise: 12_500 }),
-    ])
+    expect(inserted).toEqual([])
     const database = new BillingDeliveryDatabase()
-    await expect(database.expenseEnvelopes.count()).resolves.toBe(0)
+    await expect(database.expenseEnvelopes.count()).resolves.toBe(1)
     database.close()
+
+    // And the queued row still reads back as this tablet's, marked unsent.
+    const [pending] = await offline.listExpenses(expense.outletId, expense.businessDate)
+    expect(pending).toMatchObject({
+      id: created.id,
+      delivery: { state: 'pending', refusal: null },
+    })
+  })
+
+  it('queues an expense during an ordinary drop, without waiting for a reload', async () => {
+    // The queue used to open only for a session that had already resumed from
+    // a record, so the same outage behaved differently depending on whether
+    // the page happened to reload. This is the rule the billing adapter
+    // already applies to a settled bill.
+    const online = navigator.onLine
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+    try {
+      const { offlineResume: _offlineResume, ...droppedSession } = resumedSession
+      const adapter = createSupabaseExpensesAdapter(unusedClient(), droppedSession)
+      const created = await adapter.createExpense(expense)
+      expect(created).toMatchObject({ delivery: { state: 'pending' } })
+
+      const database = new BillingDeliveryDatabase()
+      await expect(database.expenseEnvelopes.count()).resolves.toBe(1)
+      database.close()
+    } finally {
+      Object.defineProperty(navigator, 'onLine', { configurable: true, value: online })
+    }
   })
 })

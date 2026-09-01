@@ -42,3 +42,12 @@ export {
 } from './drain'
 export { BillingUnsentReporter, type BillingUnsentReporterOptions } from './reporter'
 export { CounterResumeCoordinator } from './resume-coordinator'
+export {
+  discardCounterExpense,
+  drainCounterExpenses,
+  enqueueCounterExpense,
+  listCounterExpenses,
+  type CounterExpenseState,
+  type ExpenseInsertOutcome,
+  type QueuedCounterExpense,
+} from './expense-queue'

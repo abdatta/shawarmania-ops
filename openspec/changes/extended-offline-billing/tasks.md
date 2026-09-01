@@ -33,3 +33,58 @@
 - [x] 4.6 Run `npm run db:start && npm run db:reset`, then `npm run test:db`, `npm run test:rls` and `npm run test:e2e:auth` against the local backend, confirming no RPC, policy or grant changed.
 - [x] 4.7 PHASE GATE — Billing V2.1 extended offline: after one online shift approval the tablet is closed, updated and reloaded with no backend and reopens the same counter with everything labelled as of its last read; twenty mixed commands survive an extended outage and a second restart and land exactly once on reconnect; the counter stops at expiry and cutover and opens no shift without the backend and the operator's phone; Finish Day refuses offline and says why; readiness keeps naming the tablet until it confirms online; and the four-role demo walkthrough still walks.
 - [x] 4.8 Unplanned release-gate repair: make the attendance server-time pgTAP independent of the wall clock by using the legal 24:00 and 00:00 cutover boundaries, after the first production push exposed the relative-time setup wrapping both outlets onto the same business date just after midnight IST.
+
+## 5. Post-Release Repair
+
+The gate was signed on a suite that never exercised the production write path.
+Every item here is a defect in the shipped change, found by reviewing it against
+the schema and the CI workflow rather than against its own tasks.
+
+- [x] 5.1 The resume record was never written in production. `cutoverInstant`
+      pasted `:00` onto `outlets.business_day_cutover`, which is a Postgres
+      `time` and therefore reaches the client as `04:00:00`, so every commit
+      threw `RangeError` into an unawaited chain — silently, and poisoning it
+      for the life of the coordinator. Remove the function: `expires_at` is
+      already `app_next_cutover(now(), cutover)` and `loadCounterShift` admits a
+      shift only while it is ahead, so the server's own instant is the stop.
+      Drop `outletCutover`/`outletCutoverAt`, bump the record schema, and pin
+      the format with a test that drives the coordinator from an outlet row in
+      the shape PostgREST actually returns.
+- [x] 5.2 Make a failed resume write loud. The commit chain now catches and
+      reports rather than rejecting unobserved, so the next silent stop is not
+      silent.
+- [x] 5.3 Resume only on a **first** resolution, as 2.1 and the spec both say.
+      The fallback returned a counter session from any failed revalidation, so
+      one blink on a healthy online tablet relabelled every current read as
+      remembered, disabled Hand over, refused Finish Day and stopped the record
+      being refreshed. The decision moves to `apply`, which is what knows
+      whether there is a live session to preserve.
+- [x] 5.4 Prove the cold start against the real backend. `e2e-auth` still
+      asserted that an offline reload left the counter closed — the behaviour
+      this change exists to remove. It now reopens the counter from its record,
+      captures more work, survives a second restart, refuses Finish Day, and
+      lands every command exactly once on reconnect.
+- [x] 5.5 Drop `operatorName` from the record. It was a hardcoded
+      `'Counter operator'` for every shift, read nowhere: `CounterShift` holds
+      `personId` and no name, and the only name the server offers is a
+      manager-facing snapshot this tablet neither reads nor is granted. The
+      spec asked for a fact the tablet has never had; unmake the promise rather
+      than add a read and a grant to keep it.
+- [x] 5.6 Give queued expenses a real sender and a way out. Delivery was a side
+      effect of reading an expense list — no schedule, no lock, no ordering
+      guarantee — and a permanently refused row retried forever while blocking
+      Finish Day with no explanation. Move the queue into `src/outbox`, drain it
+      on the command coordinator's own tick and mutex, park a server *refusal*
+      as `needs_attention` rather than retrying an answer, count refusals as
+      attention and only pending rows as unsent, scope readiness to the shift's
+      business date, label a queued row on the list, and let the operator
+      discard a refused one.
+- [x] 5.7 Queue an expense on an ordinary drop, not only after a reload. The
+      queue opened solely for a session that had already resumed from a record,
+      so one outage behaved two ways depending on whether the page refreshed.
+      Apply the rule the billing adapter already applies to a settled bill.
+- [x] 5.8 Enforce remembered-customer retention on the read path as well as the
+      write path, so the cap `docs/SECURITY_AND_PRIVACY.md` states holds for a
+      record that stopped being rewritten.
+- [x] 5.9 Re-run every job in `.github/workflows/verify.yml`, read rather than
+      remembered, including the Docker-backed database job.

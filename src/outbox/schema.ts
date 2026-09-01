@@ -69,12 +69,22 @@ export interface BillingDeliveryLeaseRecord {
   expiresAtMs: number
 }
 
-/** A counter expense uses the row UUID itself as its replay identity. */
+/**
+ * A counter expense uses the row UUID itself as its replay identity.
+ *
+ * `state`, `attemptCount` and `lastRefusal` are optional on the type rather
+ * than in a migration: rows written before they existed read as pending and
+ * untried through `expense-queue`'s normaliser, so no upgrader has to sweep
+ * this store. See `src/outbox/expense-queue.ts`.
+ */
 export interface CounterExpenseEnvelopeRecord {
   id: string
   tabletId: string
   shiftId: string
   createdAtMs: number
+  state?: 'pending' | 'needs_attention'
+  attemptCount?: number
+  lastRefusal?: string | null
   input: NewExpense
 }
 

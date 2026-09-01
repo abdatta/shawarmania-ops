@@ -14,6 +14,12 @@ const LOCAL_ANON_KEY =
   process.env['VITE_SUPABASE_ANON_KEY'] ??
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'
 const AFTER_LOCAL_ACCEPTANCE_MS = 6_500
+/**
+ * How long a resumed counter may take to fill in. Each remembered read runs its
+ * request first and falls back only once the browser has given up on it, so the
+ * menu arrives around seven seconds after a cold start rather than at once.
+ */
+const OFFLINE_READ_MS = 30_000
 
 async function signInSeededTablet(page: Page, request: APIRequestContext) {
   // The local seed already represents an enrolled tablet. Put that synthetic
@@ -38,8 +44,9 @@ async function signInSeededTablet(page: Page, request: APIRequestContext) {
   await expect(page.getByTestId('menu-grid')).toBeVisible()
 
   // Ensure the next navigation is controlled before deliberately losing the
-  // network. The queue is IndexedDB-backed; the app shell is what lets a reload
-  // reach the honest "cannot confirm this tablet" boundary while offline.
+  // network. The queue is IndexedDB-backed, and since extended-offline-billing
+  // the app shell reopens this same counter from its resume record rather than
+  // reaching the "cannot confirm this tablet" boundary.
   await page.evaluate(() => navigator.serviceWorker.ready)
   await page.reload()
   await expect(page.getByTestId('menu-grid')).toBeVisible()
@@ -210,11 +217,57 @@ test('the real tablet survives network loss and settles each local acceptance ex
   await expect(finish.getByRole('button', { name: 'Keep billing' })).toBeVisible()
   await expect(finish.getByRole('button', { name: /finish day now/i })).toHaveCount(0)
 
+  // THE COLD START, against the real backend and with it unreachable. Before
+  // extended-offline-billing this reload ended at "cannot confirm this
+  // tablet"; the assertion here was that the counter did NOT come back. It
+  // must now reopen from the resume record, labelled as remembered, with every
+  // captured command still on the device.
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('Loading the app…')).toBeVisible()
-  await expect(page.getByTestId('settle')).toHaveCount(0)
+
+  await expect(page.getByTestId('offline-resume-status')).toBeVisible({
+    timeout: OFFLINE_READ_MS,
+  })
+  await expect(page.getByTestId('offline-resume-status')).toContainText(
+    'Offline · last successful read',
+  )
+  // Every remembered read has to fail through the network stack before its
+  // fallback runs, so a resumed counter fills in over several seconds rather
+  // than instantly. `OFFLINE_READ_MS` is that budget, not a flake allowance.
+  await expect(page.getByTestId('menu-grid')).toBeVisible({ timeout: OFFLINE_READ_MS })
+  await expect(page.getByTestId('menu-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
+  await expect(page.getByTestId('pipeline-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
+  await expect(page.getByTestId('bills-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
+  await expect(page.getByRole('button', { name: 'Hand over' })).toBeDisabled()
+  // Nothing was lost across the restart: both commands are still unsent, and
+  // the counter says so as `stalled` rather than `pending` — a resumed tablet
+  // deliberately does not drain until it has re-resolved itself online.
+  await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'stalled')
+
+  // New work is still accepted after the cold start, and survives a SECOND
+  // restart inside the same outage.
+  const afterRestartCustomer = `E2E after restart ${run}`
+  await markPaid(page, afterRestartCustomer)
+  await page.waitForTimeout(AFTER_LOCAL_ACCEPTANCE_MS)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('offline-resume-status')).toBeVisible({
+    timeout: OFFLINE_READ_MS,
+  })
+  await expect(page.getByTestId('menu-grid')).toBeVisible({ timeout: OFFLINE_READ_MS })
+  await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'stalled')
+
+  // Finish Day still refuses, and says why, from the resumed counter.
+  await page.getByRole('button', { name: 'Finish day' }).click()
+  const offlineFinish = page.getByRole('dialog', { name: 'Finish day' })
+  // The sheet drains and probes the server before it answers, and offline both
+  // have to time out first.
+  await expect(offlineFinish.getByText(/finish day is unavailable offline/i)).toBeVisible({
+    timeout: OFFLINE_READ_MS,
+  })
+  await expect(offlineFinish.getByRole('button', { name: /finish day now/i })).toHaveCount(0)
+  await offlineFinish.getByRole('button', { name: 'Keep billing' }).click()
 
   await restoreOnlineCounter(context, page)
+  await expect(page.getByTestId('offline-resume-status')).toHaveCount(0)
   await expect(page.getByTestId('sync-indicator').first()).toHaveAttribute('data-sync', 'synced', {
     timeout: 20_000,
   })
@@ -229,6 +282,10 @@ test('the real tablet survives network loss and settles each local acceptance ex
   await expect
     .poll(() => effectiveTender(request, managerToken, offlineBillId!), { timeout: 15_000 })
     .toEqual(['upi'])
+  // Captured after the cold start, through two restarts, and still exactly one.
+  await expect
+    .poll(() => billCount(request, managerToken, afterRestartCustomer), { timeout: 15_000 })
+    .toBe(1)
 
   // The server commits the next bill but its response is discarded. Delivery
   // retries the same command identity and receives exact replay, never a second

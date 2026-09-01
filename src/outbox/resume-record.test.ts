@@ -31,18 +31,17 @@ function record(overrides: Partial<CounterResumeRecord> = {}): CounterResumeReco
     shift: {
       id: 'shift-1',
       personId: 'person-1',
-      operatorName: 'Asha',
       outletId: 'outlet-1',
       openedAt: '2026-09-01T12:00:00.000Z',
       businessDate: '2026-09-01',
       expiresAt: '2026-09-02T00:00:00.000Z',
     },
+    // The shape Postgres `time` actually reaches the client as, through
+    // PostgREST: `HH:MM:SS`, never `HH:MM`.
     outlet: {
       id: 'outlet-1',
-      business_day_cutover: '04:00',
+      business_day_cutover: '04:00:00',
     } as CounterResumeRecord['outlet'],
-    outletCutover: '04:00',
-    outletCutoverAt: '2026-09-01T22:30:00.000Z',
     menu: [],
     pipeline: [],
     bills: [],
@@ -86,6 +85,42 @@ describe('counter resume record', () => {
     expect((await database.resumeRecords.get('tablet-1'))?.complete).toBe(true)
   })
 
+  it('publishes from an outlet row in the shape PostgREST actually returns', async () => {
+    // The first release of this feature built the cutover instant by pasting
+    // `:00` onto `business_day_cutover`. `outlets.business_day_cutover` is a
+    // Postgres `time`, so PostgREST returns `04:00:00`, the paste produced
+    // `04:00:00:00`, and every write threw — silently, into an unawaited
+    // promise chain, so no record was ever persisted in production.
+    const database = new BillingDeliveryDatabase(name())
+    const session = {
+      kind: 'counter-device' as const,
+      device: { deviceId: 'tablet-1', label: 'Till one', outletId: 'outlet-1' },
+      shift: {
+        id: 'shift-1',
+        personId: 'person-1',
+        outletId: 'outlet-1',
+        openedAt: '2026-09-01T12:00:00.000Z',
+        businessDate: '2026-09-01',
+        expiresAt: '2026-09-02T00:00:00.000Z',
+      },
+    }
+    const coordinator = new CounterResumeCoordinator(session, database)
+    coordinator.noteMenu('outlet-1', [])
+    coordinator.notePipeline('outlet-1', [])
+    coordinator.noteBills('shift-1', [])
+    coordinator.noteServerTime('2026-09-01T12:30:00.000Z')
+    coordinator.noteOutlet({
+      id: 'outlet-1',
+      business_day_cutover: '04:00:00',
+    } as CounterResumeRecord['outlet'])
+
+    await vi.waitFor(async () => expect(await database.resumeRecords.count()).toBe(1))
+    const stored = await database.resumeRecords.get('tablet-1')
+    expect(stored?.outlet.business_day_cutover).toBe('04:00:00')
+    // The stop is the shift expiry the server authored, and it parses.
+    expect(Number.isFinite(counterResumeStopAt(stored!))).toBe(true)
+  })
+
   it('publishes a complete record atomically and reads a defensive copy', async () => {
     const database = new BillingDeliveryDatabase(name())
     const source = record()
@@ -100,7 +135,16 @@ describe('counter resume record', () => {
 
   it('refuses incomplete, unsupported, foreign and expired records without erasing them', async () => {
     const database = new BillingDeliveryDatabase(name())
+    // Version is read before shape, so a record a newer build wrote is
+    // unsupported rather than malformed however little of it we recognise.
     await database.table('resumeRecords').put({ tabletId: 'tablet-1', complete: false })
+    expect((await readCounterResume('tablet-1', Date.now(), database)).status).toBe('unsupported')
+
+    await database.table('resumeRecords').put({
+      tabletId: 'tablet-1',
+      schemaVersion: COUNTER_RESUME_SCHEMA_VERSION,
+      complete: false,
+    })
     expect((await readCounterResume('tablet-1', Date.now(), database)).status).toBe('incomplete')
 
     await database.resumeRecords.put(record({ schemaVersion: 999 }))
@@ -114,15 +158,17 @@ describe('counter resume record', () => {
 
     await database.resumeRecords.put(record())
     expect(
-      (await readCounterResume('tablet-1', Date.parse('2026-09-01T23:00:00Z'), database)).status,
+      (await readCounterResume('tablet-1', Date.parse('2026-09-02T00:30:00Z'), database)).status,
     ).toBe('expired')
   })
 
-  it('stops at the earlier of shift expiry and outlet cutover', () => {
-    expect(counterResumeStopAt(record())).toBe(Date.parse('2026-09-01T22:30:00.000Z'))
-    expect(counterResumeStopAt(record({ outletCutoverAt: '2026-09-02T01:00:00.000Z' }))).toBe(
-      Date.parse('2026-09-02T00:00:00.000Z'),
-    )
+  it('stops at the shift expiry the server authored, which is the outlet cutover', () => {
+    expect(counterResumeStopAt(record())).toBe(Date.parse('2026-09-02T00:00:00.000Z'))
+    expect(
+      counterResumeStopAt(
+        record({ shift: { ...record().shift, expiresAt: '2026-09-01T22:30:00.000Z' } }),
+      ),
+    ).toBe(Date.parse('2026-09-01T22:30:00.000Z'))
   })
 
   it('caps exact-phone results by age and count without logging PII', () => {

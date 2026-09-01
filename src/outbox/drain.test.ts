@@ -369,4 +369,38 @@ describe('BillingDrainCoordinator', () => {
     await expect(firstRun).resolves.toBe(1)
     database.close()
   })
+
+  it('runs the secondary drain on every tick, even with no commands waiting', async () => {
+    // The counter expense queue rides this hook. It has to run when the
+    // command queue is empty — an outage that produced only expenses is the
+    // ordinary case — and a failure in it must never fail command delivery.
+    const database = new BillingDeliveryDatabase(databaseName())
+    const store = new BillingDeliveryStore(database)
+    let calls = 0
+    const coordinator = new BillingDrainCoordinator({
+      store,
+      tabletId: 'tablet-1',
+      ownerId: 'tab-a',
+      locks: null,
+      now: () => 10,
+      isVisible: () => true,
+      execute: async (serverCommand) => ({
+        status: 'accepted',
+        commandId: serverCommand.commandId,
+      }),
+      secondary: async () => {
+        calls += 1
+        throw new Error('the expense queue is having a bad time')
+      },
+    })
+
+    await expect(coordinator.runOnce()).resolves.toBe(0)
+    expect(calls).toBe(1)
+
+    // And it still runs alongside commands, after they have gone.
+    const only = command(crypto.randomUUID(), 'order-a')
+    await accept(store, only, 'order-a')
+    await expect(coordinator.runOnce()).resolves.toBe(1)
+    expect(calls).toBe(2)
+  })
 })

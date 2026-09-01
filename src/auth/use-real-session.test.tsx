@@ -182,6 +182,57 @@ describe('useRealSession, resolving a counter tablet', () => {
     expect(auth.signOut).not.toHaveBeenCalled()
   })
 
+  it('keeps a live online counter when one revalidation fails, record or not', async () => {
+    // The snapshot is a COLD START answer. A tablet already trading resolves
+    // its shift from the server; one failed 5-minute revalidation must not
+    // relabel every current read as remembered, disable Hand over, refuse
+    // Finish Day and stop the resume record being refreshed — all for a blip
+    // the operator never saw.
+    auth.currentUser.mockResolvedValue({ userId: 'device-1', username: 'counter' })
+    auth.loadOwnCounterDevice.mockResolvedValue({
+      deviceId: 'device-1',
+      outletId: KALYANI,
+      label: 'Kalyani counter tablet',
+    })
+    auth.loadCounterShift.mockResolvedValue({
+      id: 'shift-1',
+      personId: 'u-9',
+      outletId: KALYANI,
+      openedAt: '2026-09-01T12:00:00.000Z',
+      businessDate: '2026-09-01',
+      expiresAt: '2026-09-02T00:00:00.000Z',
+    })
+    resume.readCounterResume.mockResolvedValue({
+      status: 'ready',
+      record: {
+        tablet: { id: 'device-1', outletId: KALYANI, label: 'Kalyani counter tablet' },
+        shift: {
+          id: 'shift-1',
+          personId: 'u-9',
+          outletId: KALYANI,
+          openedAt: '2026-09-01T12:00:00.000Z',
+          businessDate: '2026-09-01',
+          expiresAt: '2026-09-02T00:00:00.000Z',
+        },
+      },
+    })
+
+    const { result } = renderHook(() => useRealSession())
+    await waitFor(() => expect(result.current.state.status).toBe('counter'))
+    expect(
+      result.current.state.status === 'counter' && result.current.state.device.offlineResume,
+    ).toBeUndefined()
+
+    auth.loadOwnCounterDevice.mockRejectedValue(new Error('one blink'))
+    act(() => result.current.revalidate())
+
+    await waitFor(() => expect(auth.loadOwnCounterDevice).toHaveBeenCalledTimes(2))
+    expect(result.current.state.status).toBe('counter')
+    expect(
+      result.current.state.status === 'counter' && result.current.state.device.offlineResume,
+    ).toBeUndefined()
+  })
+
   it('reopens the same approved counter from a complete same-installation record', async () => {
     auth.currentUser.mockResolvedValue({ userId: 'device-1', username: 'counter' })
     auth.loadOwnCounterDevice.mockRejectedValue(new Error('offline'))

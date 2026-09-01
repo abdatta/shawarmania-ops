@@ -33,6 +33,13 @@ export interface BillingDrainCoordinatorOptions {
   random?: () => number
   connectivityTarget?: EventTarget | null
   onReachability?: (reachable: boolean) => void
+  /**
+   * Anything else this tablet owes the server, sent on the same tick and under
+   * the same mutex as the command queue. The counter expense queue uses it, so
+   * that sending is a scheduled act rather than a side effect of some surface
+   * happening to read a list. A throw here never fails the command drain.
+   */
+  secondary?: () => Promise<void>
 }
 
 export function billingRetryDelayMs(attempt: number, random = Math.random): number {
@@ -164,6 +171,9 @@ export class BillingDrainCoordinator {
         }
       }
       if (!progressed) break
+    }
+    if (!this.stopped) {
+      await this.options.secondary?.().catch(() => undefined)
     }
     return delivered
   }

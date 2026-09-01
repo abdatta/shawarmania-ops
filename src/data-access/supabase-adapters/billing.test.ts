@@ -259,11 +259,14 @@ describe('the live tablet acceptance boundary', () => {
     })
     await expect(expired.settleBill(draft)).rejects.toMatchObject({ code: 'no_shift' })
 
+    // The record governs, not the session object beside it. The shift on this
+    // session is still years ahead; the remembered shift it resumed from has
+    // passed its expiry — which IS the outlet cutover, authored by
+    // `app_next_cutover` when the shift opened — so new work stops.
     const cutOver = createSupabaseBillingAdapter(clientWithRpc(), {
       ...session,
       offlineResume: {
-        shift: { expiresAt: '2099-01-01T00:00:00.000Z' },
-        outletCutoverAt: '2020-01-01T00:00:00.000Z',
+        shift: { expiresAt: '2020-01-01T00:00:00.000Z' },
       } as CounterResumeRecord,
     })
     await expect(cutOver.settleBill(draft)).rejects.toMatchObject({ code: 'no_shift' })
@@ -354,10 +357,8 @@ describe('the live tablet acceptance boundary', () => {
         label: session.device.label,
         outletId: session.device.outletId,
       },
-      shift: { ...session.shift!, operatorName: 'Asha' },
-      outlet: { id: 'outlet-1', business_day_cutover: '04:00' },
-      outletCutover: '04:00',
-      outletCutoverAt: '2099-08-12T00:00:00.000Z',
+      shift: { ...session.shift! },
+      outlet: { id: 'outlet-1', business_day_cutover: '04:00:00' },
       menu: [],
       pipeline: [rememberedOrder],
       bills: [],

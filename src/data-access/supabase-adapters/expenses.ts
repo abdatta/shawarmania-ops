@@ -9,7 +9,13 @@ import {
   type NewExpense,
 } from '../adapters'
 import type { Database, Tables } from '../database.types'
-import { BillingDeliveryDatabase } from '@/outbox'
+import {
+  BillingDeliveryDatabase,
+  discardCounterExpense,
+  enqueueCounterExpense,
+  listCounterExpenses,
+  type QueuedCounterExpense,
+} from '@/outbox'
 import type { CounterDeviceSession } from '@/session/counter-session'
 import { newUuid } from '@/lib/uuid'
 
@@ -82,48 +88,31 @@ export function createSupabaseExpensesAdapter(
     voidedReason: null,
   })
 
+  /** A queued expense reads as itself, and says which it is. */
+  const fromQueue = (row: QueuedCounterExpense): ExpenseRecord => ({
+    ...optimistic(row.id, row.input, new Date(row.createdAtMs).toISOString()),
+    delivery:
+      row.state === 'needs_attention'
+        ? { state: 'needs_attention', refusal: row.lastRefusal }
+        : { state: 'pending', refusal: null },
+  })
+
   async function localExpenses(
     outletId: string,
     businessDates: readonly string[],
   ): Promise<ExpenseRecord[]> {
     if (!database) return []
-    const rows = await database.expenseEnvelopes
-      .where('tabletId')
-      .equals(counterSession!.device.deviceId)
-      .toArray()
+    const rows = await listCounterExpenses(database, counterSession!.device.deviceId)
     return rows
       .filter(
         (row) => row.input.outletId === outletId && businessDates.includes(row.input.businessDate),
       )
-      .sort((left, right) => right.createdAtMs - left.createdAtMs)
-      .map((row) => optimistic(row.id, row.input, new Date(row.createdAtMs).toISOString()))
-  }
-
-  async function drainExpenses(): Promise<void> {
-    if (!database || counterSession?.offlineResume) return
-    const rows = await database.expenseEnvelopes
-      .where('tabletId')
-      .equals(counterSession!.device.deviceId)
-      .sortBy('createdAtMs')
-    for (const row of rows) {
-      const { error } = await client.from('expenses').insert({
-        id: row.id,
-        outlet_id: row.input.outletId,
-        business_date: row.input.businessDate,
-        category: row.input.category,
-        is_cash: row.input.isCash,
-        amount_paise: row.input.amountPaise,
-        description: trimmed(row.input.note),
-      })
-      if (error && error.code !== '23505') return
-      await database.expenseEnvelopes.delete(row.id)
-    }
+      .map(fromQueue)
   }
 
   return {
     async listExpenses(outletId, businessDate) {
       if (counterSession?.offlineResume) return localExpenses(outletId, [businessDate])
-      await drainExpenses()
       const [{ data, error }, people] = await Promise.all([
         client
           .from('expenses')
@@ -143,7 +132,6 @@ export function createSupabaseExpensesAdapter(
 
     async listRecentExpenses(outletId, businessDates) {
       if (counterSession?.offlineResume) return localExpenses(outletId, businessDates)
-      await drainExpenses()
       const [{ data, error }, people] = await Promise.all([
         client
           .from('expenses')
@@ -163,17 +151,27 @@ export function createSupabaseExpensesAdapter(
     },
 
     async createExpense(expense: NewExpense) {
-      if (database && counterSession?.shift && counterSession.offlineResume) {
+      // The same rule the billing adapter already applies: a resumed counter is
+      // offline by construction, and a browser saying it has no network is
+      // enough to queue rather than to fail. A refusal while genuinely online
+      // still surfaces, because that is an answer rather than an outage.
+      const offline =
+        Boolean(counterSession?.offlineResume) ||
+        (typeof navigator !== 'undefined' && !navigator.onLine)
+      if (database && counterSession?.shift && offline) {
         const id = newUuid()
         const createdAtMs = Date.now()
-        await database.expenseEnvelopes.add({
+        await enqueueCounterExpense(database, {
           id,
           tabletId: counterSession.device.deviceId,
           shiftId: counterSession.shift.id,
           createdAtMs,
-          input: structuredClone(expense),
+          input: expense,
         })
-        return optimistic(id, expense, new Date(createdAtMs).toISOString())
+        return {
+          ...optimistic(id, expense, new Date(createdAtMs).toISOString()),
+          delivery: { state: 'pending' as const, refusal: null },
+        }
       }
       const { data, error } = await client
         .from('expenses')
@@ -216,6 +214,11 @@ export function createSupabaseExpensesAdapter(
         .single()
       if (error) throw toExpenseError(error)
       return toRecord(data, await readPeople(client))
+    },
+
+    async discardRefusedExpense(id) {
+      if (!database) return
+      await discardCounterExpense(database, id)
     },
   }
 }
