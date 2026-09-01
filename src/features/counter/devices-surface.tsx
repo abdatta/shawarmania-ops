@@ -1,5 +1,6 @@
 import { RefreshCw, TabletSmartphone } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useParams } from 'react-router'
 
 import { ConfirmDialog } from '@/components/layout/confirm-dialog'
 import { EmptyState } from '@/components/layout/empty-state'
@@ -36,7 +37,14 @@ export function DevicesSurface() {
   // counter healthy?" is a question about the business rather than about one
   // shop, and answering it by switching outlets one at a time is how a tablet
   // that stopped reporting two days ago goes unnoticed.
-  const { outletIds, selector, managed } = useOutletScope({ multiple: true })
+  // `devices/:outletId` opens on the outlet its card named (#51). The bare
+  // `devices` path is unchanged and still opens on the remembered selection,
+  // so no link anybody holds changes meaning.
+  const { outletId: fromAddress } = useParams()
+  const { outletIds, selector, managed } = useOutletScope({
+    multiple: true,
+    openOn: fromAddress ?? null,
+  })
   // The owner administers tablets everywhere, unlike the drawer: both privileged
   // functions carry an explicit `super_admin` branch, so narrowing this to
   // managed outlets would hide a control the database accepts.

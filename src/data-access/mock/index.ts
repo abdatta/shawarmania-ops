@@ -123,7 +123,13 @@ export function createMockAdapters(
   }
 
   return {
-    outlets: createMockOutletsAdapter(),
+    // `outlets_select`: the owner reads every outlet, everybody else reads the
+    // ones their live assignments name.
+    outlets: createMockOutletsAdapter(
+      role === 'super_admin'
+        ? null
+        : persona.assignments.filter((a) => a.endedOn === null).map((a) => a.outletId ?? ''),
+    ),
     // The persona's role and id reach the accounts mock so it refuses a
     // manager assigning themselves exactly where the database will.
     accounts: createMockAccountsAdapter(accounts, role, persona.profile.id),

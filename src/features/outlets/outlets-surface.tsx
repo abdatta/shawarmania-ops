@@ -1,4 +1,12 @@
-import { Crosshair, LoaderCircle, MapPin, MapPinOff, Store, TriangleAlert } from 'lucide-react'
+import {
+  Crosshair,
+  LoaderCircle,
+  MapPin,
+  MapPinOff,
+  Store,
+  TabletSmartphone,
+  TriangleAlert,
+} from 'lucide-react'
 import {
   useCallback,
   useEffect,
@@ -20,10 +28,13 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { LoadingList } from '@/components/ui/loading'
+import { Link } from 'react-router'
+
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
   type AddressSuggestion,
+  type CounterDeviceSummary,
   type NewOutlet,
   type OutletReference,
 } from '@/data-access/adapters'
@@ -34,10 +45,13 @@ import {
   describeCutover,
   formatDateTime,
   formatMetres,
+  isCounterTelemetryFresh,
   QUIET_HOURS_FROM,
   QUIET_HOURS_UNTIL,
 } from '@/domain'
 import { cn } from '@/lib/cn'
+import { useSession } from '@/session/context'
+import { holdsRole } from '@/session/session'
 import {
   watchBestPosition,
   type GeolocationFailureKind,
@@ -174,8 +188,25 @@ function toPayload(draft: Draft): NewOutlet {
 }
 
 export function OutletsSurface() {
-  const { outlets: adapter } = useAdapters()
+  const { outlets: adapter, counter } = useAdapters()
+  const session = useSession()
+  /**
+   * **The Super Admin writes; a Franchise Admin reads** (#51).
+   *
+   * The manager's Outlets surface exists because tablet administration is
+   * reached from the outlet the tablet stands in, and `admin-devices` is the
+   * only place a setup code is minted — so without this, a manager whose tablet
+   * dies has no door to the one screen that can replace it.
+   *
+   * This decides what is *offered*, never what is *allowed*. Create, edit,
+   * close, reopen, delete and capture are refused by `outlets_insert`,
+   * `outlets_update` and `outlets_delete` in Postgres, and the isolation suite
+   * proves it with a hand-crafted request. Hiding a control the database would
+   * refuse is courtesy; it is not the boundary (design D4).
+   */
+  const mayWrite = holdsRole(session, 'super_admin')
   const [outlets, setOutlets] = useState<Tables<'outlets'>[] | null>(null)
+  const [devices, setDevices] = useState<CounterDeviceSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [capturing, setCapturing] = useState<Tables<'outlets'> | null>(null)
   const [editing, setEditing] = useState<Tables<'outlets'> | null>(null)
@@ -186,12 +217,38 @@ export function OutletsSurface() {
   const [pendingDeletion, setPendingDeletion] = useState<Tables<'outlets'> | null>(null)
   const [blocked, setBlocked] = useState<{ id: string; references: OutletReference[] } | null>(null)
 
+  /**
+   * The tablets, for the card's "is this shop all right?" line.
+   *
+   * A separate read from a separate adapter, and a failure of it is not a
+   * failure of this screen: the outlets still list, and the card says the
+   * tablet's state could not be read rather than claiming there is no tablet.
+   * Saying "no tablet at this counter" because a request failed would send
+   * somebody to mint a setup code for hardware that is standing there working.
+   */
+  useEffect(() => {
+    let active = true
+    void counter
+      .listDevices()
+      .then((list) => {
+        if (active) setDevices(list)
+      })
+      .catch(() => {
+        if (active) setDevices(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [counter])
+
   useEffect(() => {
     let active = true
     void adapter
       // The owner's management view is the one place a closed outlet must
-      // still be visible — otherwise reactivating it would be impossible.
-      .listOutlets({ includeInactive: true })
+      // still be visible — otherwise reactivating it would be impossible. A
+      // manager cannot reopen one, so a closed shop on their list would be a
+      // row with nothing to do about it.
+      .listOutlets({ includeInactive: mayWrite })
       .then((list) => {
         if (active) setOutlets(list)
       })
@@ -201,7 +258,7 @@ export function OutletsSurface() {
     return () => {
       active = false
     }
-  }, [adapter])
+  }, [adapter, mayWrite])
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true)
@@ -329,8 +386,12 @@ export function OutletsSurface() {
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title="Outlets"
-        subtitle="Where each outlet is, and how far staff may be when they check in."
-        action={outlets && outlets.length > 0 ? addButton : undefined}
+        subtitle={
+          mayWrite
+            ? 'Where each outlet is, and how far staff may be when they check in.'
+            : 'The outlets you manage, and the tablet standing at each counter.'
+        }
+        action={mayWrite && outlets && outlets.length > 0 ? addButton : undefined}
       />
 
       {error && (
@@ -355,8 +416,12 @@ export function OutletsSurface() {
       ) : outlets.length === 0 ? (
         <EmptyState
           icon={Store}
-          title="Nothing exists yet — start with the shop. An outlet has to exist before anyone can be given an account, put on the staff list, or check in."
-          action={addButton}
+          title={
+            mayWrite
+              ? 'Nothing exists yet — start with the shop. An outlet has to exist before anyone can be given an account, put on the staff list, or check in.'
+              : 'No outlets are assigned to you. A Super Admin assigns an outlet before it appears here.'
+          }
+          action={mayWrite ? addButton : undefined}
         />
       ) : (
         <div data-testid="outlet-list" className="space-y-3">
@@ -365,6 +430,11 @@ export function OutletsSurface() {
               key={outlet.id}
               outlet={outlet}
               busy={busy}
+              mayWrite={mayWrite}
+              devices={devices}
+              tabletsHref={`${session.mode === 'demo' ? '/demo' : ''}/${
+                mayWrite ? 'owner' : 'admin'
+              }/devices/${outlet.id}`}
               blockedBy={blocked?.id === outlet.id ? blocked.references : null}
               onCapture={() => setCapturing(outlet)}
               onEdit={() => openEdit(outlet)}
@@ -461,6 +531,9 @@ export function OutletsSurface() {
 function OutletCard({
   outlet,
   busy,
+  mayWrite,
+  devices,
+  tabletsHref,
   blockedBy,
   onCapture,
   onEdit,
@@ -469,6 +542,11 @@ function OutletCard({
 }: {
   outlet: Tables<'outlets'>
   busy: boolean
+  /** Whether to offer the writes. The database is what refuses them. */
+  mayWrite: boolean
+  /** Every tablet the reader can see; null while loading or unreadable. */
+  devices: CounterDeviceSummary[] | null
+  tabletsHref: string
   /** Non-null once a delete has been refused: what is still attached. */
   blockedBy: OutletReference[] | null
   onCapture: () => void
@@ -479,6 +557,7 @@ function OutletCard({
   const surveyed = outlet.location_captured_at !== null
   const positioned = outlet.latitude !== null && outlet.longitude !== null
   const handle = outletHandle(outlet)
+  const tablet = devices?.find((device) => device.outletId === outlet.id) ?? null
 
   return (
     <Card className="space-y-3" data-testid={`outlet-${handle}`}>
@@ -551,6 +630,8 @@ function OutletCard({
         </p>
       )}
 
+      <OutletRaising outlet={outlet} devices={devices} tablet={tablet} handle={handle} />
+
       <p className="text-xs text-content-muted">
         Staff may check in within {formatMetres(outlet.geofence_radius_m)} of this point. The day
         rolls over at {toTimeInput(outlet.business_day_cutover)}, and staff are expected by{' '}
@@ -558,34 +639,132 @@ function OutletCard({
       </p>
 
       <div className="flex flex-wrap gap-2">
-        <Button variant={surveyed ? 'secondary' : 'primary'} size="phone" onClick={onCapture}>
-          <Crosshair aria-hidden size={16} />
-          {surveyed ? 'Capture again' : 'Capture position here'}
-        </Button>
-        <Button variant="ghost" size="phone" disabled={busy} onClick={onEdit}>
-          Edit
-        </Button>
-        <Button variant="ghost" size="phone" disabled={busy} onClick={onToggleActive}>
-          {outlet.is_active ? 'Mark closed' : 'Reopen'}
-        </Button>
         {/*
-          Closed first. An active outlet gets the reversible action and nothing
-          else, so a mis-tap on a trading shop lands on Mark closed rather than
-          on the one thing that cannot be undone (design D3).
+          The way in to administer this counter, and **the only route to a setup
+          code for a manager** — `admin-devices` is where one is minted and
+          nowhere else. It carries the outlet in the address, so it opens on this
+          shop's tablets rather than on a picker the reader has to set.
         */}
-        {!outlet.is_active && (
-          <Button
-            variant="ghost"
-            size="phone"
-            disabled={busy}
-            onClick={onDelete}
-            data-testid={`delete-${handle}`}
-          >
-            Delete
-          </Button>
+        <Link
+          to={tabletsHref}
+          className={buttonVariants({ variant: 'secondary', size: 'phone' })}
+          data-testid={`tablets-${handle}`}
+        >
+          <TabletSmartphone aria-hidden size={16} />
+          Tablets
+        </Link>
+        {mayWrite && (
+          <>
+            <Button variant={surveyed ? 'secondary' : 'primary'} size="phone" onClick={onCapture}>
+              <Crosshair aria-hidden size={16} />
+              {surveyed ? 'Capture again' : 'Capture position here'}
+            </Button>
+            <Button variant="ghost" size="phone" disabled={busy} onClick={onEdit}>
+              Edit
+            </Button>
+            <Button variant="ghost" size="phone" disabled={busy} onClick={onToggleActive}>
+              {outlet.is_active ? 'Mark closed' : 'Reopen'}
+            </Button>
+            {/*
+              Closed first. An active outlet gets the reversible action and
+              nothing else, so a mis-tap on a trading shop lands on Mark closed
+              rather than on the one thing that cannot be undone (design D3).
+            */}
+            {!outlet.is_active && (
+              <Button
+                variant="ghost"
+                size="phone"
+                disabled={busy}
+                onClick={onDelete}
+                data-testid={`delete-${handle}`}
+              >
+                Delete
+              </Button>
+            )}
+          </>
         )}
       </div>
     </Card>
+  )
+}
+
+/**
+ * **What this outlet is raising**, as text on the card (#51).
+ *
+ * The Alerts surface was deleted in the same change that added this, so it is
+ * deliberately **not a link** — there is nowhere to click through to, and a chip
+ * pointing at a screen that no longer exists is the exact thing that change was
+ * getting rid of. What replaces the alert thread is not a smaller alert thread:
+ * it is the conditions this app can already derive from rows that exist, said
+ * plainly at the shop they are about.
+ *
+ * Nothing here is typed by anybody. An alert used to be a sentence somebody
+ * wrote, which is why it needed a status machine and a thread — this needs
+ * none, because every line resolves itself when the thing it describes stops
+ * being true.
+ *
+ * **A quiet outlet says so.** An absent list would leave the reader unable to
+ * tell "nothing wrong" from "not loaded", which is the one thing a screen
+ * answering *is this shop all right?* must never be ambiguous about.
+ */
+function OutletRaising({
+  outlet,
+  devices,
+  tablet,
+  handle,
+}: {
+  outlet: Tables<'outlets'>
+  devices: CounterDeviceSummary[] | null
+  tablet: CounterDeviceSummary | null
+  handle: string
+}) {
+  const raised: string[] = []
+
+  if (devices === null) {
+    // Not "no tablet" — "no answer". Sending somebody to mint a setup code for
+    // hardware that is standing there working is worse than saying nothing.
+    raised.push('The tablet at this counter could not be read just now.')
+  } else if (!tablet) {
+    raised.push(
+      outlet.is_active
+        ? 'No tablet is set up at this counter, so nothing can be billed here. Tablets issues a setup code.'
+        : 'No tablet is set up at this counter.',
+    )
+  } else {
+    if (tablet.lastSeenAt === null) {
+      raised.push(`${tablet.label} was set up but has never reported in.`)
+    } else if (!isCounterTelemetryFresh(tablet.lastSeenAt)) {
+      raised.push(`${tablet.label} was last heard from ${formatDateTime(tablet.lastSeenAt)}.`)
+    }
+    if (tablet.lastReportedUnresolved > 0) {
+      raised.push(
+        tablet.lastReportedUnresolved === 1
+          ? `${tablet.label} is holding 1 bill it has not managed to send.`
+          : `${tablet.label} is holding ${tablet.lastReportedUnresolved} bills it has not managed to send.`,
+      )
+    }
+  }
+
+  return (
+    <div className="space-y-1" data-testid={`raising-${handle}`}>
+      <h3 className="text-xs font-bold uppercase tracking-wide text-content-muted">
+        What this outlet is raising
+      </h3>
+      {raised.length === 0 ? (
+        <p className="text-xs text-content-muted">
+          Nothing. The counter tablet is reporting in and holding no unsent bills.
+        </p>
+      ) : (
+        <ul className="space-y-1 text-xs text-content">
+          {raised.map((line) => (
+            <li key={line} className="flex items-start gap-2">
+              <TriangleAlert aria-hidden size={14} className="mt-0.5 shrink-0 text-warning" />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 

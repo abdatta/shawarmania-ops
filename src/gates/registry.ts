@@ -393,6 +393,29 @@ const defs = {
     },
     state: 'live',
   },
+  /**
+   * The outlets this manager runs, **read-only** (#51).
+   *
+   * They had none until that change, and the gap became a hole when Tablets
+   * stopped being a top-level entry: `admin-devices` is the only place a
+   * counter setup code is minted, so without a door to the outlet the tablet
+   * stands in, a manager whose tablet dies has no route to the one screen that
+   * can replace it. That is the one repair they cannot make anywhere else.
+   *
+   * Same label and same group as `owner-outlets`, so label dedup can only ever
+   * produce one Outlets entry and it is always drawn in the same drawer. The
+   * surface is shared too; what differs is which controls it offers — and that
+   * is courtesy rather than the boundary. Create, edit, close, reopen, delete
+   * and capture stay the Super Admin's, refused by `outlets_insert`,
+   * `outlets_update` and `outlets_delete` in Postgres, and proved by the
+   * isolation suite with a hand-crafted request.
+   */
+  'admin-outlets': {
+    role: 'franchise_admin',
+    path: 'outlets',
+    nav: { label: 'Outlets', icon: Store, order: 1, group: 'setup' },
+    state: 'live',
+  },
   'admin-menu': {
     role: 'franchise_admin',
     path: 'menu',

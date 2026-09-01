@@ -212,6 +212,24 @@ export const roleSurfaceRoutes: RouteObject[] = [
     ),
   },
   {
+    // The same surface, opened on the outlet whose card sent the reader here
+    // (#51). Gated against the parent pattern, the way `ledger/delivery/:channel`
+    // is: the gate is a question about the surface, not about which of its
+    // addresses is being opened.
+    //
+    // A route rather than a query parameter on `devices`, because it is the
+    // stronger thing to hold: it survives a link being tidied, and the router
+    // asserts it. Tablet administration is reached from the outlet the tablet
+    // stands in, and must arrive already scoped to it rather than to a picker
+    // the reader has to set.
+    path: 'devices/:outletId',
+    element: (
+      <GatedSurface path="devices">
+        <DevicesSurface />
+      </GatedSurface>
+    ),
+  },
+  {
     // The outlet switcher's destination. The parameter is part of the surface's
     // declared path, so the gate is looked up against the pattern rather than
     // against whichever outlet id happens to be in the URL.

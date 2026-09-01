@@ -57,7 +57,20 @@ function trimmed(value: string | null | undefined): string | null {
   return text ? text : null
 }
 
-export function createMockOutletsAdapter(): OutletsAdapter {
+/**
+ * The mock's copy of `outlets_select`.
+ *
+ * **The owner reads every outlet; everybody else reads the ones their live
+ * assignments name.** The real adapter does not filter at all — the policy
+ * does, in Postgres — so the boundary has to be drawn here instead, exactly as
+ * the insights mock draws its own. Without it the demo manager's Outlets
+ * surface would list two shops they cannot open, which is precisely the thing
+ * the requirement says the surface must never do.
+ */
+export function createMockOutletsAdapter(
+  /** Null for the Super Admin, who reads all of them. */
+  readable: readonly string[] | null = null,
+): OutletsAdapter {
   // Captures and edits mutate, so this mock keeps its own copy: a demo where
   // saving a position changes nothing would be demonstrating the wrong thing,
   // and the shared fixture array must survive the walkthrough unedited.
@@ -81,11 +94,15 @@ export function createMockOutletsAdapter(): OutletsAdapter {
 
   return {
     async listOutlets(options = {}) {
-      const visible = options.includeInactive ? outlets : outlets.filter((o) => o.is_active)
+      const mine = readable === null ? outlets : outlets.filter((o) => readable.includes(o.id))
+      const visible = options.includeInactive ? mine : mine.filter((o) => o.is_active)
       return structuredClone(visible).sort((a, b) => a.name.localeCompare(b.name))
     },
 
     async getOutlet(id: string) {
+      // An outlet outside the caller's reach is absent rather than refused —
+      // an excluded row is what RLS produces.
+      if (readable !== null && !readable.includes(id)) return null
       const outlet = outlets.find((candidate) => candidate.id === id)
       return outlet ? structuredClone(outlet) : null
     },

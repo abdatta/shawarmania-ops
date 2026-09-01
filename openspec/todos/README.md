@@ -17,6 +17,7 @@ Keep entries behavior-focused:
 | [Bill GST Breakup](./bill-gst-breakup.md) | Feature | Anticipated | Billing | The business registers for GST or a customer requires a tax invoice |
 | [Bill Digital Share](./bill-digital-share.md) | Feature | Anticipated | Billing | The owner wants digital receipts, or paper is being skipped anyway |
 | [Supply Bills Paid Outside The Payout](./supply-bills-paid-outside-the-payout.md) | Feature | Owner asked to explore, 2026-08-18 | Outlet expenses | The owner asks in earnest and picks a route: supplier portal, invoice email, or bank statement |
+| [Outlet Scope From The Address](./outlet-scope-from-the-address.md) | Feature | Anticipated | App shell | Somebody wants to send a link to one shop's figures |
 | [Aggregator Settlement](./aggregator-settlement.md) | Feature | Anticipated | Reporting | Aggregator volume grows enough to distort a decision |
 | [Swiggy Detail Calls Must Stay Bounded As Open-Cycle Order Volume Grows](./swiggy-open-cycle-detail-call-scaling.md) | Scaling risk | Watch after #47 | Aggregator sync | The reader approaches its time budget or receives throttling, or open-cycle detail reads become materially expensive |
 | [Shared Menu Catalogue](./shared-menu-catalogue.md) | Feature | Anticipated | Menu | Per-outlet menu drift becomes a brand consistency problem |

@@ -64,6 +64,26 @@ export function useOutletScope(
      * it — a dropdown has nowhere to put one.
      */
     badgeFor?: (outletId: string, selected: boolean) => ReactNode
+    /**
+     * Open on exactly this outlet, ignoring what was remembered (#51).
+     *
+     * For a surface reached from **one outlet**, where the address names which:
+     * Tablets is opened from an outlet's card, and "administer this counter"
+     * cannot mean "administer whichever counter you last looked at". Only the
+     * *initial* selection is set — the picker still renders, still shows what
+     * the reader may reach, and the database still decides what they may read.
+     * **The address is a starting position, not a grant.**
+     *
+     * Deliberately narrow. A general scope-from-URL rule would change arrival
+     * behaviour for the Drawer, the Ledger, Delivery and Expenses too, and
+     * would have to answer what a remembered outlet disagreeing with a URL
+     * means on each — which is not this change's question. See
+     * `openspec/todos/outlet-scope-from-the-address.md`.
+     *
+     * An outlet the reader cannot see is dropped by the same check that drops a
+     * stale remembered one, so this can never widen anybody's reach.
+     */
+    openOn?: string | null
   } = {},
 ): {
   /**
@@ -133,6 +153,10 @@ export function useOutletScope(
   // instead, at `scope` below, which is the only place it needs to be.
   const [chosen, setChosen] = useState<string[]>(() => {
     if (!needsList) return mine[0] ? [mine[0]] : []
+    // An address naming one outlet outranks what was remembered, and is not
+    // written back over it: arriving by a link is a visit, not a change of
+    // preference, so the next surface still opens where the reader left off.
+    if (options.openOn) return [options.openOn]
     const remembered = readRememberedOutlets(session)
     if (remembered.length > 0) return remembered
     const fallback = manages[0] ?? mine[0]

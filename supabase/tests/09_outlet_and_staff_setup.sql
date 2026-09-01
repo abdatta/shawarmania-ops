@@ -82,6 +82,32 @@ select is((select name from public.outlets
             where id = '00000000-0000-4000-a000-000000000001'),
   'Shawarmania Kalyani', 'and the name is unchanged');
 
+-- The other two writes the manager's read-only Outlets surface declines to
+-- offer (#51). The surface hiding a control is courtesy; THIS is the boundary,
+-- and it holds against a request that never went near the surface.
+select is(pg_temp.rows_touched($q$
+  update public.outlets set is_active = false
+   where id = '00000000-0000-4000-a000-000000000001'
+$q$), 0::bigint, 'nor close their own outlet — the update touches no rows');
+
+select is((select is_active from public.outlets
+            where id = '00000000-0000-4000-a000-000000000001'),
+  true, 'and the outlet is still trading');
+
+select is(pg_temp.rows_touched($q$
+  delete from public.outlets
+   where id = '00000000-0000-4000-a000-000000000001'
+$q$), 0::bigint, 'nor delete it — the delete touches no rows');
+
+select is((select count(*) from public.outlets
+            where id = '00000000-0000-4000-a000-000000000001'), 1::bigint,
+  'and the outlet row is still there');
+
+-- And the read half of the same surface: a manager's Outlets list is one
+-- outlet because `outlets_select` says so, not because a screen filtered it.
+select is((select count(*) from public.outlets), 1::bigint,
+  'a franchise admin''s outlets list is their own outlet and nothing else');
+
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000001'::uuid);
 
 select lives_ok($q$

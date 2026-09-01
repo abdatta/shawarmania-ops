@@ -48,12 +48,12 @@ Nothing in `src/` currently knows what a navigation group is.
 
 ## 5. Outlets For Managers, And The Outlet Card
 
-- [ ] 5.1 Add a Franchise Admin Outlets surface, read-only, scoped to the outlets their live assignments name, reaching the same card the owner reads.
-- [ ] 5.2 Prove in the isolation suite that a Franchise Admin reads only their assigned outlets from this surface, with a hand-crafted request, and that every create, edit, close and delete is refused by the database rather than by the UI.
-- [ ] 5.3 Put what the outlet is raising on its card as text on the card. The Alerts surface is deleted in this change, so this is not a link — settle the wording before building it.
-- [ ] 5.4 Put the state of the tablet standing at that counter on the card, and a Tablets button that opens the tablet administration for **that** outlet.
-- [ ] 5.5 Resolve the scope blocker for 5.4: either seed `src/features/outlet-scope.tsx` from the URL, or give Tablets a per-outlet address. Say which and why in the change folder, because the sketch's shared-page link is explicitly not the answer.
-- [ ] 5.6 Confirm the owner's Outlets surface keeps every write it has, and that the manager's shares the component without sharing the actions.
+- [x] 5.1 Add a Franchise Admin Outlets surface, read-only, scoped to the outlets their live assignments name, reaching the same card the owner reads.
+- [x] 5.2 Prove in the isolation suite that a Franchise Admin reads only their assigned outlets from this surface, with a hand-crafted request, and that every create, edit, close and delete is refused by the database rather than by the UI.
+- [x] 5.3 Put what the outlet is raising on its card as text on the card. The Alerts surface is deleted in this change, so this is not a link — settle the wording before building it.
+- [x] 5.4 Put the state of the tablet standing at that counter on the card, and a Tablets button that opens the tablet administration for **that** outlet.
+- [x] 5.5 Resolve the scope blocker for 5.4: either seed `src/features/outlet-scope.tsx` from the URL, or give Tablets a per-outlet address. Say which and why in the change folder, because the sketch's shared-page link is explicitly not the answer.
+- [x] 5.6 Confirm the owner's Outlets surface keeps every write it has, and that the manager's shares the component without sharing the actions.
 
 ## 6. Roadmap And Docs
 
