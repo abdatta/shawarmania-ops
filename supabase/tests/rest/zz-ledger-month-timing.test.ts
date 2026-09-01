@@ -62,19 +62,22 @@ describe('the derived ledger month is measured, not assumed', () => {
       const month = await adapter.getMonth(outletId, '2026-08')
       const monthMs = performance.now() - monthStarted
 
-      expect(month.days).toHaveLength(31)
-      // Every day renders, including ones nobody touched — which is the property
-      // the derived reading exists for.
-      for (const entry of month.days) {
-        expect(entry.businessDate).toMatch(/^2026-08-\d{2}$/)
-        expect(['counted', 'carried', 'not-tracked-yet']).toContain(entry.state)
+      // Every day is read, including ones nobody touched — which is the property
+      // the derived reading exists for. #52 stopped returning the thirty-one
+      // rows and returns their tallies instead, so the count is asserted through
+      // those: every date lands in exactly one of the three states.
+      const { countedDays, carriedDays, notTrackedDays } = month.reading
+      expect(countedDays + carriedDays + notTrackedDays).toBe(31)
+      expect(month.reading.daysWithSales + month.reading.datesWithoutSales.length).toBe(31)
+      for (const date of month.reading.datesWithoutSales) {
+        expect(date).toMatch(/^2026-08-\d{2}$/)
       }
 
       // eslint-disable-next-line no-console -- the measurement IS the output.
       console.log(
         `  ${name.padEnd(13)} one day ${dayMs.toFixed(0).padStart(5)} ms   ` +
           `month ${monthMs.toFixed(0).padStart(6)} ms   ` +
-          `per day ${(monthMs / month.days.length).toFixed(0).padStart(4)} ms`,
+          `per day ${(monthMs / 31).toFixed(0).padStart(4)} ms`,
       )
 
       expect(monthMs).toBeLessThan(MONTH_CEILING_MS)

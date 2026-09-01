@@ -3,13 +3,15 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 
-import type { DataAdapters } from '@/data-access/adapters'
+import type { DataAdapters, LedgerStatementMonth } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters } from '@/data-access/mock'
 import { personaFixtures } from '@/data-access/mock/fixtures/personas'
 import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
+
+import { readMonth, type MonthDayInput } from '@/domain'
 
 import { LedgerStatementSurface } from './ledger-statement-surface'
 
@@ -282,5 +284,324 @@ describe('the day control is the shared one, and refuses the future', () => {
     // ISO dates sort lexicographically, which is why the whole app compares them
     // as strings rather than parsing first.
     expect((picker.getAttribute('min') ?? '') < (today ?? '')).toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The month (#52).
+//
+// The arithmetic behind these figures is proved in `src/domain/ledger-month.test.ts`,
+// against the wrong implementations as well as the right one. What is asserted
+// here is the SURFACE: that the three cards are back, that a ceiling says it is
+// one, and — the two the owner's design turns on — that a date with no bills is
+// named without a cause being claimed, and that a month with no sales at all
+// offers no profit figure rather than a fabricated loss.
+
+function monthDay(businessDate: string, over: Partial<MonthDayInput> = {}): MonthDayInput {
+  return {
+    businessDate,
+    cashPaise: 0,
+    upiPaise: 0,
+    channels: [],
+    expenses: [],
+    drawerState: 'counted',
+    ...over,
+  }
+}
+
+function unsettled(grossPaise: number) {
+  return {
+    channel: 'swiggy',
+    grossPaise,
+    commissionPaise: null,
+    netPaise: null,
+    asOfAt: null,
+  }
+}
+
+/** Render the month view over a month reading we control exactly. */
+async function renderMonth(days: MonthDayInput[]) {
+  const adapters = createMockAdapters('franchise_admin')
+  const month: LedgerStatementMonth = {
+    outletId: 'outlet-under-test',
+    month: '2026-08',
+    reading: readMonth(days, { expectedChannels: ['zomato', 'swiggy'] }),
+    spends: [],
+  }
+  const patched: DataAdapters = {
+    ...adapters,
+    ledgerStatement: {
+      ...adapters.ledgerStatement,
+      // Echo the requested outlet and month: the surface only renders once
+      // `reading.month` matches the key it asked for, which is how it avoids
+      // showing August's figures under September's heading mid-fetch.
+      getMonth: (outletId: string, requested: string) =>
+        Promise.resolve({ ...month, outletId, month: requested }),
+    },
+  }
+
+  const view = renderLedger(patched)
+  await waitFor(() => expect(screen.getByTestId('ledger-revenue')).toBeInTheDocument())
+  await userEvent.click(screen.getByRole('button', { name: /the month/i }))
+  return view
+}
+
+describe('the month reports what it earned, spent and kept', () => {
+  const august = [
+    monthDay('2026-08-01', {
+      cashPaise: 500000,
+      upiPaise: 200000,
+      channels: [
+        {
+          channel: 'zomato',
+          grossPaise: 100000,
+          commissionPaise: 20000,
+          netPaise: 80000,
+          asOfAt: '2026-08-02T00:00:00.000Z',
+        },
+      ],
+      expenses: [
+        {
+          businessDate: '2026-08-01',
+          category: 'Chicken',
+          note: '12 kg',
+          amountPaise: 300000,
+          isCash: true,
+        },
+      ],
+    }),
+    monthDay('2026-08-02', { cashPaise: 400000 }),
+  ]
+
+  it('brings back the three cards the notebook had', async () => {
+    await renderMonth(august)
+
+    await waitFor(() => expect(screen.getByTestId('month-revenue')).toBeInTheDocument())
+    expect(screen.getByTestId('month-expenses')).toBeInTheDocument()
+    expect(screen.getByTestId('month-profit')).toBeInTheDocument()
+  })
+
+  it('names the basis beside the profit figure', async () => {
+    await renderMonth(august)
+
+    await waitFor(() => expect(screen.getByTestId('month-profit-basis')).toBeInTheDocument())
+    expect(screen.getByTestId('month-profit-basis')).toHaveTextContent(/cash basis operating/i)
+  })
+
+  it('groups expenses by category with every line beneath', async () => {
+    await renderMonth(august)
+
+    await waitFor(() => expect(screen.getByTestId('month-category-Chicken')).toBeInTheDocument())
+    expect(screen.getByTestId('month-category-Chicken')).toHaveTextContent('12 kg')
+  })
+
+  it('reads as final when every commission is settled', async () => {
+    await renderMonth(august)
+
+    await waitFor(() => expect(screen.getByTestId('month-revenue')).toBeInTheDocument())
+    expect(screen.queryByTestId('month-undetermined')).not.toBeInTheDocument()
+    expect(screen.getByTestId('month-revenue')).toHaveTextContent(/revenue actually received/i)
+  })
+
+  it('replaces the thirty-one drawer rows with one line', async () => {
+    await renderMonth([
+      monthDay('2026-08-01', { cashPaise: 1, drawerState: 'counted' }),
+      monthDay('2026-08-02', { cashPaise: 1, drawerState: 'carried' }),
+    ])
+
+    await waitFor(() => expect(screen.getByTestId('month-drawer-summary')).toBeInTheDocument())
+    expect(screen.getByTestId('month-drawer-summary')).toHaveTextContent('1 of 2 days counted')
+    // The wall of rows is gone, not merely restyled.
+    expect(screen.queryByTestId('month-day-2026-08-01')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('ledger-month')).not.toBeInTheDocument()
+  })
+})
+
+describe('the month says how far its figures can be trusted', () => {
+  it('reads as a ceiling and counts the days still waiting', async () => {
+    await renderMonth([
+      monthDay('2026-08-01', { cashPaise: 1, channels: [unsettled(100000)] }),
+      monthDay('2026-08-02', { cashPaise: 1, channels: [unsettled(100000)] }),
+    ])
+
+    await waitFor(() => expect(screen.getByTestId('month-undetermined')).toBeInTheDocument())
+    expect(screen.getByTestId('month-undetermined')).toHaveTextContent(
+      /2 days are still waiting for their commission/i,
+    )
+    expect(screen.getByTestId('month-revenue')).toHaveTextContent(/revenue received, at most/i)
+    expect(screen.getByTestId('month-profit')).toHaveTextContent(/estimated profit, at most/i)
+  })
+})
+
+describe('a date with no bills is named, and no cause is claimed', () => {
+  /** August at both outlets: billing began part-way through the month. */
+  const straddling = [
+    ...Array.from({ length: 11 }, (_, index) => {
+      const date = `2026-08-${String(index + 1).padStart(2, '0')}`
+      return monthDay(date, {
+        expenses: [
+          { businessDate: date, category: 'Gas', note: null, amountPaise: 10000, isCash: true },
+        ],
+      })
+    }),
+    ...Array.from({ length: 20 }, (_, index) =>
+      monthDay(`2026-08-${String(index + 12).padStart(2, '0')}`, { cashPaise: 100000 }),
+    ),
+  ]
+
+  it('says how many dates had no sales, on both the revenue and the profit', async () => {
+    await renderMonth(straddling)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('month-no-sales-note-revenue')).toBeInTheDocument(),
+    )
+    expect(screen.getByTestId('month-no-sales-note-revenue')).toHaveTextContent(
+      /11 dates had no sales/i,
+    )
+    // The one that matters: expenses on those dates are real, so the PROFIT is
+    // understated and has to say so too.
+    expect(screen.getByTestId('month-no-sales-note-profit')).toHaveTextContent(
+      /11 dates had no sales/i,
+    )
+  })
+
+  it('names every one of those dates on a tap', async () => {
+    await renderMonth(straddling)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('month-no-sales-dates-revenue')).toBeInTheDocument(),
+    )
+    await userEvent.click(screen.getByTestId('month-no-sales-dates-revenue'))
+
+    const dialog = await screen.findByRole('dialog')
+    // Zero-padded, and asserted that way: `'1 Aug 2026'` is a substring of
+    // `'01 Aug 2026'` and would pass without proving the first date rendered.
+    expect(dialog).toHaveTextContent('01 Aug 2026')
+    expect(dialog).toHaveTextContent('11 Aug 2026')
+    expect(dialog).not.toHaveTextContent('12 Aug 2026')
+    // All eleven, not a truncated sample.
+    expect(dialog.querySelectorAll('li')).toHaveLength(11)
+  })
+
+  it('still reports the aggregate and still offers a profit figure', async () => {
+    await renderMonth(straddling)
+
+    await waitFor(() => expect(screen.getByTestId('month-profit-figure')).toBeInTheDocument())
+    // 20 dates x 1,000 revenue, less 11 x 100 of gas.
+    expect(screen.getByTestId('month-revenue-net')).toHaveTextContent('20,000')
+    expect(screen.getByTestId('month-profit-figure')).toHaveTextContent('18,900')
+  })
+
+  it('claims no reason a date was empty', async () => {
+    await renderMonth(straddling)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('month-no-sales-dates-revenue')).toBeInTheDocument(),
+    )
+    await userEvent.click(screen.getByTestId('month-no-sales-dates-revenue'))
+    const dialog = await screen.findByRole('dialog')
+
+    // The assertion is the ABSENCE of a claim, in the manner #11 asserts that no
+    // nearby instant is proposed. An earlier draft of this change printed "the
+    // outlet was not billing yet", which the app cannot know.
+    //
+    // The three causes DO appear — inside the sentence that refuses to choose
+    // between them, which is the point. So the test strips that sentence and
+    // asserts nothing causal survives anywhere else: a later edit that promotes
+    // one of them to a claim fails here.
+    expect(dialog).toHaveTextContent(/it does not say whether/i)
+    const withoutDisclaimer = (dialog.textContent ?? '').replace(
+      /This says only what the record holds:.*?could not bill\./i,
+      '',
+    )
+    expect(withoutDisclaimer).not.toMatch(/billing/i)
+    expect(withoutDisclaimer).not.toMatch(/closed/i)
+    expect(withoutDisclaimer).not.toMatch(/shut/i)
+  })
+})
+
+describe('a month with no sales at all offers no profit figure', () => {
+  const barren = [
+    monthDay('2026-08-01', {
+      expenses: [
+        {
+          businessDate: '2026-08-01',
+          category: 'Rent',
+          note: null,
+          amountPaise: 4000000,
+          isCash: false,
+        },
+      ],
+    }),
+    monthDay('2026-08-02'),
+  ]
+
+  it('says so, and renders no profit card', async () => {
+    await renderMonth(barren)
+
+    await waitFor(() => expect(screen.getByTestId('month-no-sales')).toBeInTheDocument())
+    // Not a ceiling, and not a loss. The two must not look alike.
+    expect(screen.queryByTestId('month-profit')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('month-profit-figure')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('month-revenue')).not.toBeInTheDocument()
+  })
+
+  it('still lists what was spent', async () => {
+    await renderMonth(barren)
+
+    await waitFor(() => expect(screen.getByTestId('month-expenses')).toBeInTheDocument())
+    expect(screen.getByTestId('month-category-Rent')).toBeInTheDocument()
+    expect(screen.getByTestId('month-expenses-total')).toHaveTextContent('40,000')
+  })
+})
+
+describe('a channel that reported nothing is said, not omitted', () => {
+  it('names each silent channel instead of leaving it out of the breakdown', async () => {
+    // The screenshot that prompted this: September showed Cash and UPI and no
+    // Zomato or Swiggy at all, so the revenue total looked complete.
+    await renderMonth([monthDay('2026-08-01', { cashPaise: 55600, upiPaise: 68700 })])
+
+    await waitFor(() => expect(screen.getByTestId('month-zomato-silent')).toBeInTheDocument())
+    expect(screen.getByTestId('month-zomato-silent')).toHaveTextContent(
+      /Zomato recorded nothing this month/i,
+    )
+    expect(screen.getByTestId('month-swiggy-silent')).toHaveTextContent(
+      /Swiggy recorded nothing this month/i,
+    )
+    // And it does not fabricate a nought figure for them.
+    expect(screen.queryByTestId('month-zomato-gross')).not.toBeInTheDocument()
+  })
+
+  it('says a silent channel could be a sync that has not run, not only no orders', async () => {
+    await renderMonth([monthDay('2026-08-01', { cashPaise: 55600 })])
+
+    await waitFor(() => expect(screen.getByTestId('month-zomato-silent-why')).toBeInTheDocument())
+    await userEvent.click(screen.getByTestId('month-zomato-silent-why'))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent(/sync that has not run/i)
+    expect(dialog).toHaveTextContent(/cannot tell the two apart/i)
+  })
+
+  it('renders the full block once the channel has reported', async () => {
+    await renderMonth([
+      monthDay('2026-08-01', {
+        cashPaise: 1,
+        channels: [
+          {
+            channel: 'zomato',
+            grossPaise: 100000,
+            commissionPaise: 20000,
+            netPaise: 80000,
+            asOfAt: null,
+          },
+        ],
+      }),
+    ])
+
+    await waitFor(() => expect(screen.getByTestId('month-zomato-gross')).toBeInTheDocument())
+    expect(screen.queryByTestId('month-zomato-silent')).not.toBeInTheDocument()
+    // Swiggy still had nothing, and still says so.
+    expect(screen.getByTestId('month-swiggy-silent')).toBeInTheDocument()
   })
 })

@@ -70,6 +70,7 @@ This alphabetical list maps every capability required now. For planned work, rea
 - [`order-lifecycle`](order-lifecycle/spec.md) — editable counter orders with daily customer-facing numbers, ownership, terminal states, attributed cancellation, and day-close participation.
 - [`outlet-expenses`](outlet-expenses/spec.md) — explicit-business-date, integer-paise outlet expenses, where only a cash payment moves the drawer and does so by the instant it happened.
 - [`outlet-tenancy`](outlet-tenancy/spec.md) — database-enforced outlet isolation, immediate deactivation and device revocation, and schema-enumerated coverage that a new table cannot skip.
+- [`profit-estimates`](profit-estimates/spec.md) — a named cash-basis operating profit estimate on the Ledger's month, presented as a ceiling while any commission is undetermined and withheld entirely where nothing was billed.
 - [`project-scaffold`](project-scaffold/spec.md) — a buildable, testable repository whose security and delivery boundaries are enforced by tooling and CI.
 - [`pwa-and-deployment`](pwa-and-deployment/spec.md) — installable, offline shell access, non-disruptive updates, identifiable builds, and safe static sub-path hosting.
 - [`statement-uploads`](statement-uploads/spec.md) — content-recognised operator files that restore figures without a live reader, discard customer data, preserve outlet isolation, and ask before restating closed periods.

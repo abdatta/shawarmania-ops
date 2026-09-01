@@ -1,4 +1,5 @@
 import { useAdapters } from '@/data-access'
+import type { DeliveryChannel } from '@/domain'
 import type { AggregatorSyncAdapter } from '@/data-access/adapters'
 import type { AttentionSourceId } from '@/gates/registry'
 
@@ -49,15 +50,14 @@ export interface AggregatorChannelConfig {
   lapsedTitle: string
 }
 
-/** Every restaurant channel the Delivery surface serves, in switch order. */
-export const DELIVERY_CHANNELS = ['zomato', 'swiggy'] as const
-
-export type DeliveryChannel = (typeof DELIVERY_CHANNELS)[number]
-
-/** Whether a route segment names a channel this surface actually serves. */
-export function isDeliveryChannel(value: string | undefined): value is DeliveryChannel {
-  return DELIVERY_CHANNELS.some((channel) => channel === value)
-}
+/**
+ * Every restaurant channel the Delivery surface serves, in switch order.
+ *
+ * Re-exported from the domain, where it moved so the Ledger month could reach
+ * it without importing a feature: the month needs the list of EXPECTED channels
+ * to say that one of them reported nothing at all.
+ */
+export { DELIVERY_CHANNELS, isDeliveryChannel, type DeliveryChannel } from '@/domain'
 
 /**
  * Zomato's identity: its adapter instance, its words, and the Hyperpure line

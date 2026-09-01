@@ -1,11 +1,18 @@
-import { nextOpeningPaise, resolveBusinessDate, shiftBusinessDate } from '@/domain'
+import {
+  DELIVERY_CHANNELS,
+  nextOpeningPaise,
+  readMonth,
+  resolveBusinessDate,
+  shiftBusinessDate,
+  type MonthDayInput,
+} from '@/domain'
 
 import {
   LedgerStatementActionError,
+  toMonthDayInput,
   type LedgerDrawerEvent,
   type LedgerStatementAdapter,
   type LedgerStatementDay,
-  type LedgerStatementMonthDay,
 } from '../adapters'
 import type { Tables } from '../database.types'
 
@@ -186,6 +193,9 @@ export function createMockLedgerStatementAdapter(
       .map((row) => ({
         id: row.id,
         label: row.description ?? row.category,
+        // Carried separately: `label` prefers the description, so grouping the
+        // month by category is impossible from `label` alone (#52 design D6).
+        category: row.category,
         paise: row.amountPaise,
         isCash: row.isCash,
         instant: row.instant,
@@ -389,29 +399,27 @@ export function createMockLedgerStatementAdapter(
       }
       const daysInMonth = new Date(year, monthNumber, 0).getDate()
 
-      const days: LedgerStatementMonthDay[] = []
+      // The same day readings the real adapter folds, folded by the same
+      // function — see `readMonth`. Nothing is read here that `dayFor` was not
+      // already building (#52).
+      const days: MonthDayInput[] = []
       for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber += 1) {
         const businessDate = `${month}-${String(dayNumber).padStart(2, '0')}`
-        const day = dayFor(outletId, businessDate)
-        const observation = day.drawer.timeline.find((event) => event.kind === 'observation')
-        days.push({
-          businessDate,
-          openingPaise: day.drawer.openingPaise,
-          closingPaise: day.drawer.closingPaise,
-          state: day.drawer.state,
-          countedAt: observation?.kind === 'observation' ? observation.observation.countedAt : null,
-          isLegacyImprecise:
-            observation?.kind === 'observation' ? observation.observation.isLegacyImprecise : false,
-          differencePaise:
-            observation?.kind === 'observation' ? observation.observation.differencePaise : null,
-          observationCoversDays: day.drawer.observationCoversDays,
-        })
+        days.push(toMonthDayInput(dayFor(outletId, businessDate)))
       }
 
       return {
         outletId,
         month,
-        days,
+        // Bounded by what has actually happened — see `readMonth`.
+        reading: readMonth(days, {
+          throughBusinessDate: resolveBusinessDate(new Date(), CUTOVER),
+          // Both channels, because both demo outlets trade on both. The real
+          // adapter reads `outlet_channel_restaurants` instead, because a real
+          // outlet may not sell on a channel at all — Kanchrapara does not sell
+          // on Swiggy — and the demo store does not model that mapping.
+          expectedChannels: DELIVERY_CHANNELS,
+        }),
         // Deliberately outside the month's operating figure, and reported here so
         // a ₹40,000 fridge is findable without remembering the date (open
         // question 2).

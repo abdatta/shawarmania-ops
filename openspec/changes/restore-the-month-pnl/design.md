@@ -64,11 +64,11 @@ are exactly two channels. It does not need reopening when there is a third.
 lexicographic comparison the notebook used, which is safe because ISO-8601 UTC
 sorts as it orders and constructs no `Date` to compare two strings.
 
-## D3. A date with no bills is reported as a date with no sales, and nothing more
+## D3. A date with no recorded sales is named, and nothing more is claimed
 
 **Decision.** The month always reports its aggregate. Where some of its dates
-carry no bills, the reading says **how many** and offers their exact dates behind
-a tap. Where none of them do, it says there are no recorded sales for that month.
+recorded no sales at all, the reading says **how many** and offers their exact
+dates behind a tap. Where none of them do, it says there are no recorded sales for that month.
 No boundary is computed, and the outlet's first bill is never read.
 
 **This replaces a boundary design, and the owner was right to reject it.** The
@@ -76,7 +76,7 @@ first version read the outlet's earliest bill and withheld the revenue and profi
 figures for any month before it, on the grounds that ₹0 revenue against recorded
 expenses is a loss the business did not make. It bought that protection with an
 extra query, a three-case table, and a sentence — *"the outlet was not billing
-yet"* — that **claims a cause the app cannot observe**. A date with no bills
+yet"* — that **claims a cause the app cannot observe**. A silent date
 might precede billing, or be a day the shop was shut, or be a day the tablet was
 broken. The boundary version guessed, and dressed the guess as a fact.
 
@@ -87,19 +87,19 @@ themselves. `outlets.billing_live_from`, dropped by #12, stays dropped, and the
 unreachable `archived_manual_ledger_days` stays unreachable.
 
 **It costs nothing.** The count and the dates fall out of the thirty-one day
-readings the month already sums — a date with no bills is one whose cash, UPI and
+readings the month already sums — a silent date is one whose cash, UPI and
 channel grosses are all nought. The `min(business_date)` read is deleted from the
 design rather than kept as a fallback, so this change issues **no new query at
 all**.
 
-**The note qualifies the profit figure, not only the revenue.** Expenses on an
-unbilled date are real and recorded, so a month with unbilled dates reports
+**The note qualifies the profit figure, not only the revenue.** Expenses on a
+silent date are real and recorded, so a month with silent dates reports
 revenue for some dates and costs for all of them, and its profit is understated
 by exactly the trade nobody rang up. The note therefore sits where the ceiling
 sentence sits — against the profit figure as well as the revenue total — because
 a reader who takes it only as a fact about sales will take the profit as final.
 
-**A month with no billed dates at all offers no profit figure.** Its expenses
+**A month with no sale on any date offers no profit figure.** Its expenses
 still list, because they were recorded and they are real. But profit needs both
 halves, and with one wholly absent the answer is not a smaller number, it is not
 a number. This is the July case that prompted the question, and it is the one
@@ -186,3 +186,91 @@ Swiggy commissions are genuinely undetermined and the month will read *"received
 at most"* on ordinary days. That is the design working. It does mean the ceiling
 path must be **verified as the normal rendering** rather than assumed rare, and
 that the determined path needs a seeded month to be seen at all.
+
+## D8. A channel that reported nothing is named, never omitted
+
+**Added after the owner opened the built screen** and found September showing
+Cash and UPI and no Zomato or Swiggy at all, under a confident
+*"Revenue actually received"*.
+
+**Decision.** The month presents a section per channel in `DELIVERY_CHANNELS`
+whether or not that channel produced a figure, and where it produced none it says
+so in words rather than rendering nought.
+
+**Why it is not merely cosmetic.** A channel that took no orders and a channel
+whose sync never ran are the same absence in the data. Omitting the channel makes
+a revenue total that appears complete and may not be — the exact shape of the
+defect `sync-degradation-is-visible` fixed one level up, where a dead channel and
+a healthy one rendered identically. It is the live case rather than a
+hypothetical: Swiggy's payouts query is broken as this ships, and a broken sync
+writes no rows.
+
+**Per outlet, not per application — the owner had to tell us.** Kanchrapara does
+not sell on Swiggy, and the sync writes it nineteen ₹0 Swiggy rows a month
+regardless. Assuming both channels everywhere put three nought rows on that
+outlet’s screen every month, and would have raised a *recorded nothing* alarm in
+any month the rows were absent. So the expected set is read from
+`outlet_channel_restaurants` where the state is `enabled` — one indexed read per
+month, and the mapping the sync itself is driven by. A channel the outlet is not
+mapped to is still shown, and still counted, **where it reported revenue**:
+hiding a channel and losing its money must not be the same edit.
+
+**Where the list lives.** `DELIVERY_CHANNELS` moved from
+`src/features/aggregator-sync/channel-config.ts` into `src/domain/channels.ts`,
+because three layers now need it and the domain may not import a feature. The
+feature re-exports it, so no caller moved.
+
+**A channel reporting nought is not a channel reporting nothing**, and the two
+render differently. Production settles that this matters: Kanchrapara's Swiggy
+recorded ₹0 on nineteen August dates. Rows exist and they say nought — that is a
+measurement, and it shows as figures.
+
+**Inherited, and deliberately not fixed on the day view.** `getDay` has the same
+shape, and a day with no Zomato orders is entirely ordinary; saying *Zomato
+recorded nothing* on every single day would be noise. The month is the altitude at
+which a silent channel is a fact worth stating.
+
+## D9. A silent date is one with no revenue, not one with no bill
+
+**Corrected by reading production**, which is the only place it would have shown.
+
+The fold counts a date as having no sales when cash, UPI **and every channel
+gross** are nought. The first draft of the prose around it said "a date with no
+bills", which is a different and wrong rule, and August 2026 at Kalyani is the
+counter-example: the counter did not begin billing until the twelfth, yet the
+month holds **no** silent date, because Zomato and Swiggy recorded revenue
+throughout. Under the "no bills" reading the screen would have named eleven dates
+as having no sales when eleven dates had sales.
+
+The implementation was right and the words were loose. The words now match.
+
+## D10. The channel mapping is owner-readable only, and that is left open
+
+**A consequence of D8 that needs a decision this change does not make.**
+
+`outlet_channel_restaurants` carries exactly one SELECT policy —
+`app_is_owner() AND app_account_active()`. A Franchise Admin therefore reads
+**nought rows with no error**, because RLS filters rather than refusing. Proved
+against the local stack rather than inferred from the policy text: the read
+returns `rows=0, error=none`.
+
+So the mapping cannot be trusted as "this outlet trades on nothing". An empty
+result means *cannot tell*, and the month falls back to every known channel.
+
+**Why that direction.** The fallback may show a *recorded nothing* line for a
+channel the outlet does not use — a false alarm. Trusting the empty result
+instead would silently drop the alarm for a manager on a month where the owner
+sees it, so two people reading the same figures would disagree about whether a
+sales channel is missing. On a financial screen, saying too much beats saying too
+little, and an inconsistency between roles is worse than either.
+
+**The real fix is a policy**, letting a Franchise Admin read the mapping for the
+outlets their live assignment names, exactly as every other outlet-scoped table
+works. That is a migration, and it needs its own `test:rls` coverage; this change
+adds no migration, so it is **not done here**.
+
+**Until it lands**, the owner sees Kanchrapara's month without a Swiggy section
+and a manager sees it with a *recorded nothing* line. Both are defensible
+readings of what each can see, and neither hides money — but they are not the
+same screen, and that is the cost being carried deliberately rather than
+discovered later.

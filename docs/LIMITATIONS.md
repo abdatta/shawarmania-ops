@@ -124,8 +124,28 @@ drawer:
   figure somebody counted is evidence and a recomputed one is not. The notebook's
   chain really did break in August, at both outlets, and the carry-over reported
   every break rather than tidying it away.
-- **No profit figure at all**, on any basis: #51 withdrew the estimate with the screens that showed it. No stock is valued here either. Raw materials
-  are taken as zero on hand at the start of tracking, by owner decision.
+- **One profit basis, and only one.** The Ledger's month reports a cash-basis
+  operating estimate and names the basis on screen (#52). There is no
+  consumption-basis figure and there will not be one until inventory movements
+  make it computable, because a named basis that returns nothing is worse than
+  one basis honestly offered. No stock is valued here; raw materials are taken as
+  zero on hand at the start of tracking, by owner decision.
+- **The month does not say why a date recorded no sales, nor why a channel went
+  quiet.** It reports how many such dates there were and names them exactly, and
+  for a channel that produced no figure at all it says the channel recorded
+  nothing and that no-orders and a sync that never ran cannot be told apart. Whether the
+  outlet had not started billing, was closed, or could not bill is not
+  distinguishable from the records the app holds, and an earlier draft of #52
+  that asserted the first of those was rejected for claiming what it could not
+  know. Revenue for such a date is not recoverable either: the notebook rows that
+  would hold it survive only as `archived_manual_ledger_days`, deliberately with
+  no policy and no runtime grant.
+- **A profit figure is withheld, not zeroed, for a period with no sale on any date.**
+  Profit needs both halves, and a month whose expenses are real but whose sales
+  were never rung would otherwise render as a confident loss the business did not
+  make.
+- **No export, anywhere.** No surface produces a downloadable or shareable file
+  of any figure.
 - **It granted the owner no authority that survived it.** They could type cash
   figures into the notebook only because no real drawer record existed yet to
   corrupt. #11 decided its own boundary on its own merits and decided it the other

@@ -63,3 +63,32 @@ is the version of this problem to check for.
 Somebody reads the demo Ledger over a month and the figure looks wrong, or the
 walkthrough is shown to somebody whose opinion matters. **Not** #13, which no
 longer exists.
+
+## Reopened 2026-09-01: the P&L came back, and so did the figure
+
+`#52 restore-the-month-pnl` restored the profit figure to the Ledger's month,
+because the owner asked what a month earned and the Ledger could not answer.
+So the wrong figure this note reports **exists again**, and the paragraph above
+saying it "stops existing rather than gets fixed" no longer holds.
+
+Measured on the demo the day #52 landed: August reads **−₹20,564.15** estimated
+profit, on ₹18,346.85 of revenue against ₹38,911 of expenses. The cause is
+exactly the fixture shape this note preserved — the demo's expenses cover a
+notebook month while its bills cover a few days, so the figure compares unlike
+periods.
+
+**#52 did not fix it, deliberately.** It restores a reader over whatever fixtures
+exist; balancing demo data is a separate concern from computing a month
+correctly, and the arithmetic is proved against production rather than against
+the demo. What #52 did add is the sentence that makes the figure legible rather
+than alarming: the month names how many of its dates recorded no sales, against
+the profit figure as well as the revenue total, so a reader is told the estimate
+is understated by the trade nobody rang up.
+
+**Status: open again**, and now genuinely reachable by anybody walking the demo.
+
+## Trigger to promote, restated
+
+Somebody reads the demo Ledger's month and the figure looks wrong, or the
+walkthrough is shown to somebody whose opinion matters. The surface exists again,
+so this no longer waits on anything.

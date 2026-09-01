@@ -1,13 +1,19 @@
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
-import { nextOpeningPaise, resolveBusinessDate, shiftBusinessDate } from '@/domain'
+import {
+  DELIVERY_CHANNELS,
+  nextOpeningPaise,
+  readMonth,
+  resolveBusinessDate,
+  shiftBusinessDate,
+} from '@/domain'
 
 import {
   LedgerStatementActionError,
+  toMonthDayInput,
   type LedgerDrawerEvent,
   type LedgerStatementAdapter,
   type LedgerStatementDay,
-  type LedgerStatementMonthDay,
 } from '../adapters'
 import type { Database, Tables } from '../database.types'
 
@@ -253,6 +259,9 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       .map((row) => ({
         id: row.id ?? '',
         label: row.description ?? row.category ?? 'Expense',
+        // Carried separately: `label` prefers the description, so grouping the
+        // month by category is impossible from `label` alone (#52 design D6).
+        category: row.category ?? 'Expense',
         paise: row.amount_paise ?? 0,
         // The view normalises the two shapes: `payment_method = 'cash'` on one
         // side, `is_cash` on the other, one boolean out.
@@ -474,27 +483,58 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       // against a real August in `docs/TESTING.md`, and the remedy if it does not
       // is a materialised read model — never a stored day row that can disagree
       // with its sources.
-      const days: LedgerStatementMonthDay[] = await Promise.all(
-        dates.map(async (businessDate) => {
-          const day = await dayFor(outletId, businessDate)
-          const observation = day.drawer.timeline.find((event) => event.kind === 'observation')
-          return {
-            businessDate,
-            openingPaise: day.drawer.openingPaise,
-            closingPaise: day.drawer.closingPaise,
-            state: day.drawer.state,
-            countedAt:
-              observation?.kind === 'observation' ? observation.observation.countedAt : null,
-            isLegacyImprecise:
-              observation?.kind === 'observation'
-                ? observation.observation.isLegacyImprecise
-                : false,
-            differencePaise:
-              observation?.kind === 'observation' ? observation.observation.differencePaise : null,
-            observationCoversDays: day.drawer.observationCoversDays,
-          }
-        }),
+      //
+      // **These reads are unchanged by #52.** They already produced every figure
+      // the month's revenue, expenses and profit need; the month simply stopped
+      // discarding them. No query was added here.
+      const days = await Promise.all(
+        dates.map(async (businessDate) => toMonthDayInput(await dayFor(outletId, businessDate))),
       )
+      // Bounded by what has actually happened, so an unfinished month does not
+      // report its remaining dates as days with no sales (see `readMonth`).
+      // Which channels this OUTLET trades on, from the mapping the sync itself
+      // is driven by. One indexed read per month.
+      //
+      // Not every known channel: Kanchrapara does not sell on Swiggy, and the
+      // sync writes it a month of nought rows regardless. Assuming both channels
+      // everywhere put three nought rows on that outlet's screen every month, and
+      // where the rows were absent it would have raised a "recorded nothing"
+      // alarm about a channel nobody expected to report [owner, 2026-09-01].
+      const mappedResult = await client
+        .from('outlet_channel_restaurants')
+        .select('channel, state')
+        .eq('outlet_id', outletId)
+      if (mappedResult.error) refuse(mappedResult.error)
+      const mapped = [
+        ...new Set(
+          (mappedResult.data ?? [])
+            .filter((row) => row.state === 'enabled')
+            .map((row) => row.channel),
+        ),
+      ]
+      /*
+       * An unreadable mapping falls back to every known channel, and the
+       * direction of that fallback is the point.
+       *
+       * The only SELECT policy on `outlet_channel_restaurants` is owner-only, so
+       * a Franchise Admin reads **nought rows with no error** — RLS filters, it
+       * does not refuse. Trusting an empty result would mean a manager silently
+       * loses the alarm this change exists to raise, on the same month where the
+       * owner sees it: two people disagreeing about whether a channel is missing.
+       *
+       * So an empty mapping means "cannot tell", not "trades on nothing", and the
+       * month errs toward saying too much rather than too little. The cost is a
+       * possible "recorded nothing" line for a channel the outlet does not use;
+       * the alternative cost is a missing sales channel nobody is told about.
+       * Giving the manager the same read is a policy change, and therefore a
+       * migration, which this change does not make.
+       */
+      const expectedChannels = mapped.length > 0 ? mapped : DELIVERY_CHANNELS
+
+      const reading = readMonth(days, {
+        throughBusinessDate: resolveBusinessDate(new Date(), CUTOVER),
+        expectedChannels,
+      })
 
       const spendsResult = await client
         .from('drawer_cash_out')
@@ -508,7 +548,7 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       return {
         outletId,
         month,
-        days,
+        reading,
         spends: (spendsResult.data ?? []).map((row) => ({
           id: row.id,
           outletId: row.outlet_id,

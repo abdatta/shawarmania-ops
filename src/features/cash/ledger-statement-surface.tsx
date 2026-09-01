@@ -1,7 +1,10 @@
+import { Settings2 } from 'lucide-react'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { Link } from 'react-router'
 
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { AsOfChip } from '@/components/ui/as-of-chip'
 import { Card } from '@/components/ui/card'
 import { LoadingBlock, LoadingFigures } from '@/components/ui/loading'
@@ -272,7 +275,7 @@ export function LedgerStatementSurface() {
           <DayReading day={day} busy={busy} onVerify={verify} />
         )
       ) : !monthReady ? (
-        <LoadingFigures label="the month" rows={[10, 3]} data-testid="ledger-month-loading" />
+        <LoadingFigures label="the month" rows={[7, 6, 4]} data-testid="ledger-month-loading" />
       ) : (
         <MonthReading month={month} />
       )}
@@ -532,69 +535,314 @@ function DayReading({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-
 /**
- * The month, one row per business date.
+ * The month: what it earned, what it cost, what it kept.
  *
- * `carried` is the word doing the work here: it is the only thing on this view
- * that says how much the numbers can be trusted, and a month of it in a row is
- * the signal that nobody has counted the drawer in a while.
+ * **This is the notebook's month view, restored** (#52). #11 scoped the derived
+ * month to the drawer alone and #12 then deleted the notebook that still carried
+ * the P&L, so between them the app lost the ability to say what a month earned
+ * without either change intending it. The cards below are the deleted screen's,
+ * in its order and largely its words, because the owner already knows how to read
+ * them: `git show 6c228b6^:src/features/manual-ledger/ledger-month.tsx`.
+ *
+ * Three things it has to say out loud, because a figure that does not say them is
+ * misread — all three carried across unchanged:
+ *
+ *  - **the aggregators are netted per day**, from each day's own stored rate, so
+ *    a rate renegotiated mid-month is right on both sides of the change;
+ *  - **the profit is cash basis**, as `profit-estimates` requires of any profit
+ *    figure in this app;
+ *  - **it is an operating figure**, because nothing here records equipment. It
+ *    answers whether trading covered running costs, not where every rupee went.
+ *
+ * And one it did not have to say, because the owner typed its revenue in by hand:
+ * **a date with no bills contributes nothing**. That is now reported rather than
+ * folded silently into the month, and reported without a cause — a date might
+ * precede billing, or be a closure, or be a broken tablet, and the app cannot
+ * tell which (design D3).
  */
 function MonthReading({ month }: { month: LedgerStatementMonth }) {
+  const reading = month.reading
+  const pending = reading.undeterminedDays > 0
+  const missing = reading.datesWithoutSales.length
+  /** Nothing was rung up all month: there is no profit to state, only expenses. */
+  const nothingSold = reading.daysWithSales === 0
+
   return (
     <div className="space-y-3">
-      <Card className="space-y-1" data-testid="ledger-month">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-content-muted">
-          The drawer, day by day
-        </h3>
-        {month.days.map((entry) => (
-          <div
-            key={entry.businessDate}
-            className="flex items-baseline justify-between gap-2 border-t border-border py-1 first:border-t-0"
-            data-testid={`month-day-${entry.businessDate}`}
-          >
-            <span className="min-w-0 text-sm text-content-muted">
-              {formatBusinessDate(entry.businessDate)}
-              <span className="block text-xs">
-                {entry.state === 'counted' ? (
-                  <>
-                    {/*
-                      The date leads this row already, and a carried count has
-                      no time to put after `counted` — which is the whole of
-                      what it has to say. It used to say so in words as well.
-                    */}
-                    {entry.isLegacyImprecise
-                      ? 'counted'
-                      : `counted ${entry.countedAt ? formatTime(entry.countedAt) : ''}`}
-                    {entry.differencePaise === 0
-                      ? ' · matched'
-                      : entry.differencePaise !== null
-                        ? ` · ${entry.differencePaise < 0 ? 'short' : 'over'}`
-                        : ''}
-                    {entry.observationCoversDays !== null && entry.observationCoversDays > 1
-                      ? ` · covers ${entry.observationCoversDays} days`
-                      : ''}
-                  </>
-                ) : entry.state === 'carried' ? (
-                  'carried'
-                ) : (
-                  'not tracked yet'
-                )}
-              </span>
-            </span>
-            <span className="shrink-0 whitespace-nowrap text-right text-sm">
-              {entry.openingPaise === null || entry.closingPaise === null ? (
-                <span className="text-content-muted">—</span>
-              ) : (
-                <>
-                  <Money paise={entry.openingPaise} className="text-content-muted" />
-                  <span className="text-content-muted"> → </span>
-                  <Money paise={entry.closingPaise} />
-                </>
-              )}
-            </span>
+      {nothingSold ? (
+        <Card className="space-y-1" data-testid="month-no-sales">
+          <h2 className="text-sm font-bold text-content">No recorded sales this month</h2>
+          <p className="text-xs text-content-muted">
+            No bill was rung at this outlet on any date in this month, so there is no revenue to
+            report and no profit to estimate. Anything spent is still listed below.
+          </p>
+        </Card>
+      ) : (
+        <Card className="space-y-2" data-testid="month-revenue">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+            <h2 className="text-sm font-bold text-content">Sales breakdown</h2>
+            <p className="text-xs text-content-muted" data-testid="month-days-with-sales">
+              {reading.daysWithSales === 1
+                ? '1 day with sales'
+                : `${reading.daysWithSales} days with sales`}
+            </p>
           </div>
-        ))}
+          <Row label="Cash" paise={reading.cashPaise} testId="month-cash" />
+          <Row label="UPI" paise={reading.upiPaise} testId="month-upi" />
+
+          {/*
+            One block per channel, from a map rather than two named fields, so a
+            third channel needs no edit here (design D2).
+          */}
+          {reading.channels.map((channel) =>
+            /*
+              A channel that reported nothing is SAID, never omitted.
+
+              Nought rows and nought orders are identical in the data, so a
+              breakdown that leaves the channel out reports a revenue total that
+              looks complete and may not be. That is exactly what a broken sync
+              looks like from here — and Swiggy's payouts query is broken as this
+              ships, so it is the live case rather than the hypothetical one.
+              Same rule as a commission nobody has stated: never render an
+              unknown as an absence.
+            */
+            channel.reportedDays === 0 ? (
+              <div
+                key={channel.channel}
+                className="border-t border-border pt-2"
+                data-testid={`month-${channel.channel}-silent`}
+              >
+                <p className="text-sm text-content-muted">
+                  <Explain
+                    label={`what no ${channelLabel(channel.channel)} figures means`}
+                    data-testid={`month-${channel.channel}-silent-why`}
+                    explanation={
+                      <p>
+                        No {channelLabel(channel.channel)} figure reached this outlet for any date
+                        in this month. That is either a month with no{' '}
+                        {channelLabel(channel.channel)} orders or a sync that has not run, and this
+                        page cannot tell the two apart. <strong>Delivery</strong> says when each
+                        channel last read successfully.
+                      </p>
+                    }
+                  >
+                    <strong>{channelLabel(channel.channel)} recorded nothing this month</strong>
+                  </Explain>
+                  . It adds nothing to the figures below.
+                </p>
+              </div>
+            ) : (
+              <div key={channel.channel} className="border-t border-border pt-2">
+                <Row
+                  label={`${channelLabel(channel.channel)}, as stated`}
+                  paise={channel.grossPaise}
+                  testId={`month-${channel.channel}-gross`}
+                  tag={<AsOfChip at={channel.asOfAt} testId={`month-${channel.channel}-as-of`} />}
+                />
+                <Row
+                  label={
+                    channel.undeterminedDays > 0
+                      ? `Less ${channelLabel(channel.channel)} commission, so far`
+                      : `Less ${channelLabel(channel.channel)} commission`
+                  }
+                  paise={-channel.commissionPaise}
+                  testId={`month-${channel.channel}-commission`}
+                />
+                <Row
+                  label={
+                    channel.undeterminedDays > 0
+                      ? `${channelLabel(channel.channel)}, received at most`
+                      : `${channelLabel(channel.channel)}, actually received`
+                  }
+                  paise={channel.netPaise}
+                  testId={`month-${channel.channel}-net`}
+                />
+              </div>
+            ),
+          )}
+
+          <div className="flex items-baseline justify-between border-t border-border pt-2">
+            <span className="text-sm font-bold text-content">
+              {pending ? 'Revenue received, at most' : 'Revenue actually received'}
+            </span>
+            <Money
+              paise={reading.netRevenuePaise}
+              className="font-bold"
+              data-testid="month-revenue-net"
+            />
+          </div>
+          <p className="text-xs text-content-muted">
+            Each aggregator day is reduced by the commission charged on that day, and the results
+            added up. A day charged differently therefore affects only itself.
+          </p>
+          {pending && (
+            /*
+             * The sentence that makes every figure above honest.
+             *
+             * A ceiling shown without it is an approximation presented as a fact.
+             * It names the count and the reason the wait ends, so the reader knows
+             * both how much is still moving and that it will stop.
+             */
+            <p className="text-xs text-content" data-testid="month-undetermined">
+              <strong>
+                {reading.undeterminedDays === 1
+                  ? '1 day is still waiting for its commission'
+                  : `${reading.undeterminedDays} days are still waiting for their commission`}
+                .
+              </strong>{' '}
+              An aggregator only states what it kept once a week closes, so these figures are the
+              most that can have arrived. They settle by themselves.
+            </p>
+          )}
+          {missing > 0 && <NoSalesNote dates={reading.datesWithoutSales} where="revenue" />}
+        </Card>
+      )}
+
+      <Card className="space-y-2" data-testid="month-expenses">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-bold text-content">Expenses breakdown</h2>
+          {/*
+            `relative="path"` is load-bearing. Without it React Router resolves
+            `..` against the ROUTE hierarchy, and this surface's route is the
+            single pattern `ledger`, so `..` would pop to the role root rather
+            than to `ledger/categories`, which sits beside this screen.
+          */}
+          <Link
+            to="../ledger/categories"
+            relative="path"
+            className={buttonVariants({ variant: 'secondary', size: 'phone' })}
+          >
+            <Settings2 aria-hidden size={15} />
+            Manage categories
+          </Link>
+        </div>
+        {reading.expensesByCategory.length === 0 ? (
+          <p className="text-sm text-content-muted">
+            No expenses recorded this month. Cash taken out of the drawer is not an expense and is
+            not counted here.
+          </p>
+        ) : (
+          <>
+            {reading.expensesByCategory.map((total) => (
+              <div key={total.category} data-testid={`month-category-${total.category}`}>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm font-semibold text-content">{total.category}</span>
+                  <Money paise={total.amountPaise} className="text-sm font-semibold" />
+                </div>
+                {/*
+                  Every row behind the total. The category identifies the cost; an
+                  optional note adds detail such as quantity.
+                */}
+                <ul className="mt-0.5 space-y-0.5">
+                  {total.lines.map((line, index) => (
+                    <li
+                      key={`${line.businessDate}-${index}`}
+                      className="flex items-baseline justify-between gap-2 text-xs text-content-muted"
+                    >
+                      <span className="min-w-0">
+                        {formatBusinessDate(line.businessDate)}
+                        {line.note ? ` — ${line.note}` : ''}
+                        {line.isCash ? '' : ' (not cash)'}
+                      </span>
+                      <Money paise={line.amountPaise} className="shrink-0" />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+
+            <div className="flex items-baseline justify-between border-t border-border pt-2">
+              <span className="text-sm font-bold text-content">Everything spent</span>
+              <Money
+                paise={reading.totalExpensesPaise}
+                className="font-bold"
+                data-testid="month-expenses-total"
+              />
+            </div>
+            <Row
+              label="Of which came out of the drawer"
+              paise={reading.cashExpensesPaise}
+              testId="month-expenses-cash"
+            />
+            <p className="text-xs text-content-muted">
+              Aggregator commission is not here: it is already taken off the revenue above, and
+              counting it twice would understate the month.
+            </p>
+          </>
+        )}
+      </Card>
+
+      {/*
+        No profit figure where nothing was sold. Profit needs both halves, and
+        with one wholly absent the answer is not a smaller number — rendering the
+        expenses back as a loss would invent one the business did not make (D3).
+      */}
+      {!nothingSold && (
+        <Card className="space-y-2" data-testid="month-profit">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-sm font-bold text-content">
+              {pending ? 'Estimated profit, at most' : 'Estimated profit'}
+            </span>
+            <Money paise={reading.profitPaise ?? 0} display data-testid="month-profit-figure" />
+          </div>
+          {/*
+            The basis, in words, beside the figure — required of every profit
+            figure in this app by `profit-estimates`, because cash basis and
+            consumption basis answer different questions and a blend is wrong.
+          */}
+          <p className="text-sm font-semibold text-content" data-testid="month-profit-basis">
+            Cash basis operating estimate
+          </p>
+          <p className="text-xs text-content-muted">
+            Revenue actually received, less everything recorded as spent. It answers whether this
+            month&rsquo;s trading covered its running costs.
+          </p>
+          {/*
+            The note sits here as well as on revenue, and deliberately.
+            Expenses on an unbilled date are real, so the month reports revenue
+            for some dates and costs for all of them — the profit is understated
+            by exactly the trade nobody rang up. A reader who meets this only
+            beside the sales figure reads the profit as final (D3).
+          */}
+          {missing > 0 && <NoSalesNote dates={reading.datesWithoutSales} where="profit" />}
+          <p className="text-xs text-content-muted">
+            <strong>An operating figure, not a full account of money out.</strong> Equipment and
+            anything else outliving the month is deliberately not recorded as an expense, so nothing
+            here accounts for it. Where such a purchase came out of the drawer it is recorded as a
+            spend, which keeps that count honest without entering this figure.
+          </p>
+          <p className="text-xs text-content-muted">
+            Stock is not valued here either, so there is no consumption-basis figure to offer.
+          </p>
+        </Card>
+      )}
+
+      {/*
+        The drawer, in one line rather than thirty-one rows.
+
+        The owner's objection is right — the month is about revenue, costs and
+        profit, and a drawer count is a different question. But `carried` is the
+        only word in this capability that says how far the numbers can be
+        trusted, and a month of it means nobody has counted in weeks. Deleting it
+        outright would make an uncounted month look exactly like a counted one,
+        so it survives at the size it deserves (D4).
+      */}
+      <Card className="space-y-1" data-testid="month-drawer-tally">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-content-muted">The drawer</h3>
+        <p className="text-sm text-content" data-testid="month-drawer-summary">
+          {reading.countedDays === 0 && reading.carriedDays === 0
+            ? 'This outlet was not tracking its drawer yet in this month.'
+            : `${reading.countedDays} of ${reading.countedDays + reading.carriedDays} ${
+                reading.countedDays + reading.carriedDays === 1 ? 'day' : 'days'
+              } counted, ${reading.carriedDays} carried.`}
+        </p>
+        {reading.carriedDays > 0 && (
+          <p className="text-xs text-content-muted">
+            A carried day is the app&rsquo;s belief about the drawer, unchecked. Open a day to see
+            what it was measured against.
+          </p>
+        )}
       </Card>
 
       {/*
@@ -628,6 +876,59 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
       )}
     </div>
   )
+}
+
+/**
+ * How many dates carried no bills, and — on a tap — exactly which.
+ *
+ * **It names the dates and claims nothing about them.** A date with no bills
+ * might precede billing at this outlet, or be a day the shop was shut, or be a
+ * day the tablet was broken; the app cannot distinguish those, and an earlier
+ * draft of this change asserted the first of them as a fact. Naming the dates
+ * lets the reader recognise which it was, which is both the smaller claim and
+ * the more useful one (design D3).
+ *
+ * A list of eleven dates rendered inline is the paragraph a reader learns to
+ * skip, so it opens in a modal over the surface and nothing reflows.
+ */
+function NoSalesNote({ dates, where }: { dates: readonly string[]; where: 'revenue' | 'profit' }) {
+  return (
+    <p className="text-xs text-content" data-testid={`month-no-sales-note-${where}`}>
+      <Explain
+        label="which dates had no sales"
+        data-testid={`month-no-sales-dates-${where}`}
+        explanation={
+          <div className="space-y-2">
+            <p>
+              No bill was rung at this outlet on {dates.length === 1 ? 'this date' : 'these dates'}.
+              This says only what the record holds: it does not say whether the outlet was closed,
+              had not started billing yet, or could not bill.
+            </p>
+            <ul className="space-y-0.5">
+              {dates.map((date) => (
+                <li key={date} className="text-sm text-content">
+                  {formatBusinessDate(date)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        }
+      >
+        <strong>
+          {dates.length === 1 ? '1 date had no sales' : `${dates.length} dates had no sales`}
+        </strong>
+      </Explain>
+      .{' '}
+      {where === 'profit'
+        ? 'Anything spent on those dates is still counted here, so this figure is lower than a month that traded throughout.'
+        : 'Nothing was rung up on them, so they add nothing to the figures above.'}
+    </p>
+  )
+}
+
+/** Channel keys are stored lower-case; the screen has always said them properly. */
+function channelLabel(channel: string): string {
+  return channel.charAt(0).toUpperCase() + channel.slice(1)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

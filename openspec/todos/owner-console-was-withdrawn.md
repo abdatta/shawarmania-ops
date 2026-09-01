@@ -68,3 +68,23 @@ The owner asks what a period actually earned and the Ledger cannot answer it; or
 a franchisee, a lender or an accountant needs a stated-basis profit figure the
 business does not currently produce; or aggregator commission reconciliation
 (`aggregator-settlement.md`) needs somewhere to land a net figure.
+
+## The first of those fired on 2026-09-01, and #52 answered it
+
+The owner opened the Ledger's month view, found it reported the drawer and
+nothing else, and asked for the P&L back. **`#52 restore-the-month-pnl` restored
+the profit figure**, and `profit-estimates` returns with it — narrowed to cash
+basis, and now naming the Ledger month as the surface that must state that basis,
+which the original requirement could not, having no reader to name.
+
+It cost far less than "a change of its own size" estimated above, and the reason
+is worth keeping: the derived month reader was **already computing** every figure
+the P&L needed, for all thirty-one days, and discarding all but eight drawer
+fields per day. No migration, no new query.
+
+**The other three are still withdrawn.** The two-outlet comparison, the period
+reports and the export path were not part of the ask and remain deleted on the
+owner's review. The two-basis arithmetic did not come back either: stock is still
+not valued, so cash basis remains the only honest basis available, and the
+consumption basis returns with inventory or not at all. Reopen this note if one of
+those is what somebody wants.

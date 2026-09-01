@@ -6,17 +6,17 @@
 > grouped by category with every line beneath, and a cash-basis operating profit
 > naming its basis on screen; a month in which any commission is undetermined
 > reads as a ceiling on every affected figure and says how many days are still
-> waiting; a month carrying dates with no bills reports its aggregate all the
-> same, says how many such dates there were and names them exactly on a tap, and
-> qualifies its profit figure as well as its revenue; a month with no billed date
-> at all says there are no recorded sales for it, still lists its expenses and
-> offers no profit figure; the drawer's thirty-one rows become one line saying how
+> waiting; a month carrying dates that recorded no sales at all — from the counter
+> or from any channel — reports its aggregate all the same, says how many such
+> dates there were and names them exactly on a tap, and qualifies its profit figure
+> as well as its revenue; a month with no sale on any date says there are no
+> recorded sales for it, still lists its expenses and offers no profit figure; the drawer's thirty-one rows become one line saying how
 > many days were counted and how many are carried, which opens the day view; cash
 > out that is not an operating cost stays listed and stays outside the profit
 > figure; a Franchise Admin reads all of it for the outlets their assignments name
-> and no other, proved by a hand-crafted request; no migration is added and no new
-> query is issued, every figure coming from reads `getMonth` already performs; and
-> the four-role demo walkthrough still walks.
+> and no other, proved by a hand-crafted request; no migration is added, and every figure comes from
+> reads `getMonth` already performs plus one indexed read for the outlet’s own
+> channel mapping; and the four-role demo walkthrough still walks.
 
 ## Why
 
@@ -77,7 +77,9 @@ mock at [`ledger-statement.ts:385`](../../../src/data-access/mock/ledger-stateme
 So this is not a rebuild. It is **widening `LedgerStatementMonth` to carry what
 the reads already produce**, and rendering it. No migration, no new per-day query,
 and #11's measured answer to its own open question 3 — that a derived month holds
-comfortably at this scale — is untouched, because the reads are unchanged.
+comfortably at this scale — is untouched, because the per-day reads are unchanged.
+One read is added for the whole month: the outlet's own channel mapping, over an
+indexed column.
 
 ## What changes
 
@@ -90,14 +92,17 @@ both sides of the change; the ceiling language while any commission is
 undetermined; and the standing warning that this is an *operating* figure that
 accounts for no equipment.
 
-**A date with no bills is named as a date with no sales.** Revenue now comes from
-bills, so a date nobody rang up contributes nought — and a faithful copy of the
-notebook's screen would fold that silently into the month, or print a large
-confident loss for a July that had no billing at all.
+**A date that recorded no sales is named as one.** Revenue now comes from recorded
+rows, so a date nothing was sold on contributes nought — and a faithful copy of
+the notebook's screen would fold that silently into the month, or print a large
+confident loss for a month that had no trade at all.
 
-The month reports its aggregate regardless, and says how many of its dates carried
-no bills, with the exact dates one tap away in a `Why` modal. A month with no
-billed date at all says there are no recorded sales for it and offers no profit
+The month reports its aggregate regardless, and says how many of its dates
+recorded no sales, with the exact dates one tap away in a `Why` modal. **Every
+revenue source counts, not bills alone**, which production is what settled: the
+counter at Kalyani was not billing until 12 August and that month still holds no
+silent date, because the aggregators recorded revenue throughout. A month with no sale
+on any date says there are no recorded sales for it and offers no profit
 figure, its expenses still listed. **This is new**; the notebook's month view had
 no equivalent, because the owner typed its revenue in by hand.
 
@@ -105,6 +110,16 @@ It deliberately claims nothing about *why* a date is empty. Before billing began
 a closure and a broken tablet are indistinguishable to the app, and the earlier
 draft of this change guessed between them. Naming the dates lets the reader
 recognise which it was.
+
+**A channel that reported nothing is named, never omitted.** The month shows a
+section per delivery channel *that outlet* trades on, read from its own mapping.
+Where a mapped channel produced no figure it says so, because a channel with no
+orders and a channel whose sync never ran are the same absence in the data, and a
+breakdown missing a channel reports a total that looks complete and may not be —
+the same defect `sync-degradation-is-visible` fixed one level up. Where the outlet
+does not trade on the channel at all it is absent entirely: Kanchrapara does not
+sell on Swiggy, and the sync writes it a month of nought rows anyway. A channel
+that reported revenue is always shown and always counted, mapped or not.
 
 **The drawer's thirty-one rows become one line** — *"28 of 31 days counted, 3
 carried"* — which opens the day view. The `carried` warning survives at the size it

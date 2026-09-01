@@ -1,4 +1,4 @@
-import type { BillingCommandResult, SyncStateKind } from '@/domain'
+import type { BillingCommandResult, MonthDayInput, MonthReading, SyncStateKind } from '@/domain'
 import type { PositionReading } from '@/lib/geolocation'
 
 import type { BillingCommand } from '../../shared/billing-command'
@@ -2703,6 +2703,12 @@ export interface LedgerStatementDay {
     rows: Array<{
       id: string
       label: string
+      /**
+       * The category on its own, because `label` prefers the description and a
+       * described expense therefore loses its category entirely. The month
+       * groups by this; the day still renders `label` (#52 design D6).
+       */
+      category: string
       paise: number
       isCash: boolean
       instant: string
@@ -2722,28 +2728,59 @@ export interface LedgerStatementDay {
   changedSinceVerified: string[]
 }
 
-/** One row of the month view. */
-export interface LedgerStatementMonthDay {
-  businessDate: string
-  openingPaise: number | null
-  closingPaise: number | null
-  state: 'counted' | 'carried' | 'not-tracked-yet'
-  countedAt: string | null
-  isLegacyImprecise: boolean
-  differencePaise: number | null
-  observationCoversDays: number | null
-}
-
 export interface LedgerStatementMonth {
   outletId: string
   month: string
-  days: LedgerStatementMonthDay[]
+  /**
+   * What the month earned, spent and kept — folded from the same day readings
+   * `getDay` builds, by `readMonth` in the domain layer so both adapters cannot
+   * fold it differently (#52).
+   *
+   * **The thirty-one drawer rows are gone.** They answered one question — has
+   * anybody counted the drawer lately — and answered it at the cost of the whole
+   * screen. The reading carries the counted / carried / not-tracked tallies
+   * instead, and the detail lives on the day view where it always belonged.
+   */
+  reading: MonthReading
   /**
    * Cash out that is deliberately outside the month's operating figure — a
    * spend. Reported so a ₹40,000 fridge is findable without touching the P&L
    * (open question 2).
    */
   spends: DrawerCashOutRecord[]
+}
+
+/**
+ * One day reading, reduced to what the month's fold needs from it.
+ *
+ * Here rather than in either adapter because both build the same
+ * `LedgerStatementDay` and must reduce it identically; the fold itself is
+ * `readMonth` in the domain layer, which cannot import this file.
+ */
+export function toMonthDayInput(day: LedgerStatementDay): MonthDayInput {
+  return {
+    businessDate: day.businessDate,
+    cashPaise: day.revenue.cashPaise,
+    upiPaise: day.revenue.upiPaise,
+    channels: day.revenue.channels.map((channel) => ({
+      channel: channel.channel,
+      grossPaise: channel.grossPaise,
+      commissionPaise: channel.commissionPaise,
+      netPaise: channel.netPaise,
+      asOfAt: channel.asOfAt,
+    })),
+    expenses: day.expenses.rows.map((row) => ({
+      businessDate: day.businessDate,
+      category: row.category,
+      // `label` is the description where one exists and the category otherwise,
+      // so a label equal to the category carries no note — printing it again
+      // beside the heading it already sits under would say the same word twice.
+      note: row.label === row.category ? null : row.label,
+      amountPaise: row.paise,
+      isCash: row.isCash,
+    })),
+    drawerState: day.drawer.state,
+  }
 }
 
 export class LedgerStatementActionError extends DataActionError {

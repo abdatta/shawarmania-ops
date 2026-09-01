@@ -122,3 +122,58 @@ test('a manager opens the derived ledger at the outlet they manage', async ({ pa
   // read whether the month covered its costs is running half a shop.
   await expect(page.getByTestId('ledger-revenue')).toBeVisible()
 })
+
+/**
+ * The month's P&L, for both roles that read it (#52).
+ *
+ * The comment on the test above turned out to be a promise the app was not
+ * keeping: between #11 and #12 the month view carried the drawer and no revenue
+ * at all, so a manager reading "whether the month covered its costs" could not.
+ * These assert the three cards actually arrive, in the shell each role gets.
+ */
+for (const segment of ['owner', 'admin'] as const) {
+  test(`the month's P&L opens for a ${segment}`, async ({ page }) => {
+    await page.goto(`demo/${segment}/ledger`)
+    await expect(page.getByTestId('ledger-revenue')).toBeVisible()
+
+    await page.getByRole('button', { name: 'The month' }).click()
+
+    // Three cards, and the basis named on the third — `profit-estimates`
+    // requires that of every profit figure in this app.
+    await expect(page.getByTestId('month-revenue')).toBeVisible()
+    await expect(page.getByTestId('month-expenses')).toBeVisible()
+    await expect(page.getByTestId('month-profit-basis')).toHaveText(/cash basis operating/i)
+
+    // The thirty-one drawer rows are gone, replaced by one line.
+    await expect(page.getByTestId('month-drawer-summary')).toBeVisible()
+    await expect(page.getByTestId('ledger-month')).toHaveCount(0)
+
+    // Still nothing typeable, which is the standing claim of this whole surface.
+    for (const card of ['month-revenue', 'month-expenses', 'month-profit'] as const) {
+      await expect(page.getByTestId(card).locator('input')).toHaveCount(0)
+      await expect(page.getByTestId(card).locator('select')).toHaveCount(0)
+    }
+  })
+}
+
+test('a month with dates that carried no bills names them without saying why', async ({ page }) => {
+  await page.goto('demo/owner/ledger')
+  await expect(page.getByTestId('ledger-revenue')).toBeVisible()
+  await page.getByRole('button', { name: 'The month' }).click()
+
+  // August: the demo outlets were not billing for most of it, so the note is
+  // there. Step back one month from the current one to reach it.
+  await page.getByRole('button', { name: /previous month/i }).click()
+  await expect(page.getByTestId('month-no-sales-note-revenue')).toBeVisible()
+
+  // It qualifies the PROFIT too, not only the revenue: expenses on those dates
+  // are real, so the figure is understated by the trade nobody rang up.
+  await expect(page.getByTestId('month-no-sales-note-profit')).toBeVisible()
+
+  await page.getByTestId('month-no-sales-dates-revenue').click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText('Aug 2026')
+  // The claim it must NOT make. An earlier draft printed "the outlet was not
+  // billing yet", which the app cannot know.
+  await expect(dialog).toContainText(/does not say whether/i)
+})

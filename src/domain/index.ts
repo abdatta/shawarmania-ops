@@ -52,6 +52,16 @@ export {
   type DrawerIntervalInputs,
   type NearbyCashBill,
 } from './drawer'
+export { DELIVERY_CHANNELS, isDeliveryChannel, type DeliveryChannel } from './channels'
+export {
+  readMonth,
+  type MonthCategoryTotal,
+  type MonthChannelDay,
+  type MonthChannelTotal,
+  type MonthDayInput,
+  type MonthExpenseLine,
+  type MonthReading,
+} from './ledger-month'
 export {
   describeCutover,
   earliestOffered,
