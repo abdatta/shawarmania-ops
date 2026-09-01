@@ -82,15 +82,22 @@ describe('the owner’s navigation', () => {
     expect(linkTo('Overview')).toBe('/owner')
     // `admin-dashboard` is the manager's home. A home belongs to a role you
     // hold, so an owner who manages no outlet does not collect a second one.
-    expect(screen.queryByRole('link', { name: /^Today/ })).not.toBeInTheDocument()
+    expect(
+      screen.getAllByRole('link', { name: /^Overview/ }).map((l) => l.getAttribute('href')),
+    ).toEqual(['/owner', '/owner'])
   })
 
-  it('keeps the manager’s own home when the owner really does run an outlet', () => {
+  it('still offers one home when the owner really does run an outlet', () => {
     renderShell(sessionWith([...ownerOnly, live('a2', 'franchise_admin', OUTLET_KALYANI_ID)]))
 
+    // **Both homes are the same screen since #51**, so they share the label
+    // `Overview` and dedup keeps the senior role's. This person used to get a
+    // second tab that showed exactly what the first one showed.
     expect(linkTo('Overview')).toBe('/owner')
-    // Two homes, two addresses. This one is theirs by assignment.
-    expect(linkTo('Today')).toBe('/admin')
+    const homes = new Set(
+      screen.getAllByRole('link', { name: /^Overview/ }).map((link) => link.getAttribute('href')),
+    )
+    expect([...homes]).toEqual(['/owner'])
   })
 
   it('does not reach the counter or a staff surface', () => {
@@ -122,9 +129,11 @@ describe('a person holding two roles', () => {
   it('keeps both homes, each at its own address', () => {
     renderShell(sessionWith(managerAndStaff))
 
-    // The staff home is where the check-in button lives, so losing it would cost
-    // this person the one action their other role cannot do for them.
-    expect(linkTo('Today')).toBe('/admin')
+    // Two homes survive here and should: `Home` is the staff surface carrying
+    // this person's own check-in, which their manager role cannot do for them,
+    // so it is a different screen rather than a second copy of one. The labels
+    // differ, so dedup leaves both.
+    expect(linkTo('Overview')).toBe('/admin')
     expect(linkTo('Home')).toBe('/staff')
   })
 

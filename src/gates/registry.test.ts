@@ -209,8 +209,15 @@ describe('gate registry', () => {
     expect(count(['super_admin', 'franchise_admin'], ['super_admin'])).toBe(4)
     expect(count(['franchise_admin'], ['franchise_admin'])).toBe(4)
     expect(count(['employee'], ['employee'])).toBe(3)
-    // The two that exceed four, both by holding a second home.
-    expect(count(['super_admin', 'franchise_admin'], ['super_admin', 'franchise_admin'])).toBe(5)
+    // **An owner who also runs a shop gets four as well**, where they used to
+    // get five. Both homes are the same screen since #51, so they share the
+    // label `Overview` and label dedup leaves one — which is the point of
+    // sharing it. The second tab showed exactly what the first one showed.
+    expect(count(['super_admin', 'franchise_admin'], ['super_admin', 'franchise_admin'])).toBe(4)
+    // Six, and the only shape that exceeds the ceiling: a manager who also
+    // works a shift holds the Employee home too, and `Home` is a different
+    // screen carrying their own check-in — so it is not a duplicate to fold
+    // away. See `openspec/todos/six-tabs-for-one-person.md`.
     expect(count(['franchise_admin', 'employee'], ['franchise_admin', 'employee'])).toBe(6)
   })
 
@@ -270,7 +277,6 @@ describe('gate registry', () => {
       'People',
       'Delivery',
       'Menu',
-      'Tablets',
     ])
   })
 

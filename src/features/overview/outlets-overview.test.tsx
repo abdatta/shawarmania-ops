@@ -14,13 +14,15 @@ import { SessionContext } from '@/session/context'
 import type { Session } from '@/session/session'
 import { deriveSessionScope } from '@/session/session'
 
-import { OwnerHome } from './owner-home'
+import { OutletsOverview } from './outlets-overview'
 
 /**
- * The owner console. Two things carry these tests: the figures on it are the
- * rows behind them, and an outlet whose figures cannot be resolved is still
- * listed with the absence stated — because the real adapter answers `null`
- * today.
+ * The outlets overview, which is the home of **both** the owner's shell and a
+ * manager's since #51. Three things carry these tests: the figures on it are
+ * the rows behind them; an outlet whose figures cannot be resolved is still
+ * listed with the absence stated, because the real adapter answers `null`
+ * today; and the page reads the same for both roles while offering a manager
+ * nothing the gate would refuse them.
  */
 
 const ownerSession: Session = {
@@ -42,7 +44,7 @@ function renderConsole(
       <MemoryRouter>
         <SessionContext.Provider value={session}>
           <AdaptersContext.Provider value={adapters}>
-            <OwnerHome />
+            <OutletsOverview />
           </AdaptersContext.Provider>
         </SessionContext.Provider>
       </MemoryRouter>,
@@ -50,7 +52,7 @@ function renderConsole(
   }
 }
 
-describe('OwnerHome — the console', () => {
+describe('the outlets overview', () => {
   it('shows every outlet side by side with its own figures', async () => {
     renderConsole()
 
@@ -202,6 +204,61 @@ describe('OwnerHome — the console', () => {
     expect(screen.getByTestId(`open-outlet-${OUTLET_KALYANI_ID}`)).toHaveAttribute(
       'href',
       `/owner/outlet/${OUTLET_KALYANI_ID}`,
+    )
+  })
+})
+
+describe('the same page, read by a manager', () => {
+  const managerSession: Session = {
+    mode: 'demo',
+    userId: personaFixtures.franchise_admin.profile.id,
+    assignments: personaFixtures.franchise_admin.assignments,
+    ...deriveSessionScope(personaFixtures.franchise_admin.assignments),
+    displayName: personaFixtures.franchise_admin.profile.full_name,
+    persona: personaFixtures.franchise_admin,
+  }
+
+  const renderAsManager = () => renderConsole(createMockAdapters('franchise_admin'), managerSession)
+
+  it('shows the outlets their assignments name, and no others', async () => {
+    renderAsManager()
+
+    // The component filters nothing. `outlets_select` hands a manager their own
+    // outlets and the mock mirrors it, which is why one card arrives.
+    expect(await screen.findByTestId(`outlet-card-${OUTLET_KALYANI_ID}`)).toBeInTheDocument()
+    expect(screen.queryByTestId(`outlet-card-${OUTLET_KANCHRAPARA_ID}`)).not.toBeInTheDocument()
+  })
+
+  it('is titled for what is on it, not for the query behind it', async () => {
+    renderAsManager()
+
+    await screen.findByTestId(`outlet-card-${OUTLET_KALYANI_ID}`)
+    // "All outlets" above a single card is true of the read and false of the
+    // page. The owner, with two, still gets it.
+    // Level 1 is the page's own title; the card carries its name at level 2.
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Shawarmania Kalyani' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'All outlets' })).not.toBeInTheDocument()
+  })
+
+  it('offers no Open, because the day view is the Super Admin’s', async () => {
+    renderAsManager()
+
+    await screen.findByTestId(`outlet-card-${OUTLET_KALYANI_ID}`)
+    // A button leading to "that page does not exist" is worse than no button.
+    expect(screen.queryByTestId(`open-outlet-${OUTLET_KALYANI_ID}`)).not.toBeInTheDocument()
+  })
+
+  it('reads the same figures the owner reads', async () => {
+    renderAsManager()
+
+    // Not a lesser screen: the same sales, the same drawer expectation, the
+    // same attention line the owner gets for that shop.
+    expect(await screen.findByTestId(`sales-${OUTLET_KALYANI_ID}`)).toBeInTheDocument()
+    expect(screen.getByTestId(`cash-${OUTLET_KALYANI_ID}`)).toBeInTheDocument()
+    expect(screen.getByTestId(`attention-${OUTLET_KALYANI_ID}`)).toHaveTextContent(
+      /waiting for approval/i,
     )
   })
 })

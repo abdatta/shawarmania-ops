@@ -26,7 +26,7 @@ finding homes for entries about to be deleted.
 
 - **Two-level navigation.** Four top-level entries: Overview, **Finances**
   (Billing, Drawer, Expenses, Ledger), **Attendance**, and **Setup** (Outlets,
-  People, Delivery, Menu, Tablets). A group is a heading with surfaces under it
+  People, Delivery, Menu). A group is a heading with surfaces under it
   and no surface of its own; it is never a link, and only its children navigate.
 - **Grouping is metadata, not addresses.** Every surface keeps the path it has
   today, so every link the owner already holds keeps working.

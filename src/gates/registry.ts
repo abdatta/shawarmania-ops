@@ -3,14 +3,13 @@ import {
   Banknote,
   Bike,
   CalendarCheck,
-  Coins,
+  IndianRupee,
   Home,
   KeyRound,
   LayoutDashboard,
   NotepadText,
   Settings2,
   Store,
-  TabletSmartphone,
   UserRound,
   Users,
   UtensilsCrossed,
@@ -87,7 +86,7 @@ export interface NavGroup {
 }
 
 /**
- * `Coins` for Finances and `Settings2` for Setup (owner decision, 2026-09-01).
+ * `IndianRupee` for Finances and `Settings2` for Setup (owner decision, 2026-09-01).
  *
  * Neither may take a child's icon: `Wallet` is Expenses's and `Banknote` is the
  * Drawer's, so either would read as one of the entries inside it rather than as
@@ -102,7 +101,7 @@ export interface NavGroup {
  * has to give.
  */
 export const NAV_GROUPS: Record<NavGroupId, NavGroup> = {
-  finances: { id: 'finances', label: 'Finances', icon: Coins, order: 3 },
+  finances: { id: 'finances', label: 'Finances', icon: IndianRupee, order: 3 },
   setup: { id: 'setup', label: 'Setup', icon: Settings2, order: 5 },
 }
 
@@ -363,11 +362,10 @@ const defs = {
    * The owner's counterpart to `admin-devices`, across every outlet.
    *
    * Two entries rather than one, for the reason the ledger has two: a surface
-   * belongs to exactly one role's shell here. It declares no navigation of its
-   * own because it needs none — the owner reaches every manager surface, so
-   * `admin-devices`'s entry is already in their bar under `/owner/devices`, and a
-   * second "Tablets" would be deduplicated by label anyway. What this entry does
-   * is make that path resolve inside the owner's shell.
+   * belongs to exactly one role's shell here. **Neither declares navigation**
+   * since #51 — tablets are administered from the outlet they stand in, and
+   * every outlet card carries the button. What this entry does is make the path
+   * resolve inside the owner's shell.
    */
   'owner-devices': {
     role: 'super_admin',
@@ -382,11 +380,27 @@ const defs = {
   },
 
   // ── Franchise Admin — one outlet, on a phone ─────────────────────────────
+  /**
+   * **Labelled `Overview`, the same word the owner's home carries**, because
+   * since #51 it is the same screen: `outlets-overview.tsx`, scoped by the
+   * database to the outlets this reader's assignments name.
+   *
+   * It said `Today` and rendered a placeholder of its own. Once both homes
+   * became one component that name was two things at once — a second word for
+   * one screen, and, for anybody holding **both** roles, a second tab showing
+   * exactly what the first one showed. Sharing the label lets `visibleSurfaces`
+   * do what it already does: dedupe by label, keep the senior role's entry, and
+   * leave that person one home instead of two identical ones.
+   *
+   * It is still a separate surface at its own address. `/admin` has to land
+   * somewhere, and a manager who holds no owner role reaches this entry and
+   * nothing else.
+   */
   'admin-dashboard': {
     role: 'franchise_admin',
     path: '',
     nav: {
-      label: 'Today',
+      label: 'Overview',
       icon: LayoutDashboard,
       order: 2,
       attention: 'counter-request-waiting',
@@ -504,7 +518,22 @@ const defs = {
   'admin-devices': {
     role: 'franchise_admin',
     path: 'devices',
-    nav: { label: 'Tablets', icon: TabletSmartphone, order: 5, group: 'setup' },
+    // **No navigation entry, deliberately** (owner decision, 2026-09-01).
+    //
+    // A tablet is administered from the outlet it stands in. Every outlet card
+    // now carries that counter's state and a Tablets button addressed to it, so
+    // an entry here would be a second door into one room — the same thing
+    // `counter-billing` and `counter-my-shift` decline, for the same reason.
+    //
+    // It also restores the argument for the manager's Outlets surface. That
+    // surface exists *because* this one is only reachable through an outlet; an
+    // entry beside it would have made the door redundant while the reasoning
+    // still claimed it was the only one.
+    //
+    // The surface stays `live`: the gate is still what decides whether the path
+    // resolves, and it must, because this is the only place a counter setup code
+    // is minted. `devices/:outletId` is what the card links to, and the bare
+    // `devices` path still answers for anybody holding that link.
     state: 'live',
   },
   /**

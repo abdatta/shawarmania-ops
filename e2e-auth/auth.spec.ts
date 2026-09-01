@@ -13,7 +13,8 @@ const PERSONAS = {
   admin: {
     username: 'admin.kalyani',
     segment: 'admin',
-    lands: (page: Page) => page.getByText('Outlet details'),
+    // The outlets overview, scoped by `outlets_select` to their own outlet.
+    lands: (page: Page) => page.getByRole('heading', { level: 1, name: 'Shawarmania Kalyani' }),
   },
   biller: {
     username: 'biller.kalyani',
@@ -354,12 +355,14 @@ test.describe('username sign-in and role routing', () => {
     await expect(page.getByRole('heading', { name: 'Attendance' })).toBeVisible()
 
     // One home, not two: `admin-dashboard` belongs to a role they do not hold.
+    // Both homes carry the label `Overview` since #51, so the claim is that
+    // exactly one entry carries it rather than that a second word is absent.
     await expect(
       page
         .getByRole('navigation', { name: 'Primary' })
         .first()
-        .getByRole('link', { name: /^Today/ }),
-    ).toHaveCount(0)
+        .getByRole('link', { name: /^Overview/ }),
+    ).toHaveCount(1)
 
     // The manager's own address still renders for them rather than redirecting,
     // because they can reach that role's surfaces.

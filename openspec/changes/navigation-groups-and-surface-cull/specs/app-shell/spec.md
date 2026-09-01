@@ -60,17 +60,18 @@ application while the code claimed a single source.
 - **WHEN** two roles declare a navigation entry sharing a label
 - **THEN** both declare the same group, and a mismatch is a defect
 
-### Requirement: A group the reader is inside cannot be collapsed away from them
+### Requirement: Which group is presented follows the address, and every group toggles
 
 Where a navigation group is presented in a form that shows one group's children
-at a time, activating the group the reader is currently inside SHALL NOT hide
-those children. A reader SHALL never be left standing on a surface whose siblings
-have become unreachable without navigating away first.
+at a time, which group that is SHALL be derived from the reader's current
+address on arrival, and SHALL be re-derived when the reader crosses into or out
+of a group. It SHALL NOT be re-derived while the reader moves between siblings
+within one group, so a group opened deliberately stays open.
 
-Which group is presented SHALL be derived from the reader's current address on
-arrival, and SHALL be re-derived when the reader crosses into or out of a group.
-It SHALL NOT be re-derived while the reader moves between siblings within one
-group, so a group opened deliberately stays open.
+**Activating a group SHALL toggle it, including the group the reader is
+currently inside.** A reader inside a group whose children are hidden SHALL be
+able to bring them back by activating it again, so its siblings are never
+further away than any other entry.
 
 The space the expanded form occupies SHALL be reserved whether or not a group is
 expanded, so expanding one does not move the content beneath the reader.
@@ -84,6 +85,12 @@ expanded, so expanding one does not move the content beneath the reader.
 
 - **WHEN** a reader navigates to a top-level entry outside every group
 - **THEN** no group's children are presented
+
+#### Scenario: Closing the group you are standing in
+
+- **WHEN** a reader inside a group activates that group
+- **THEN** its children are hidden, the entry stays lit because the reader has
+  not moved, and activating it again brings them back
 
 #### Scenario: Expanding shifts nothing
 

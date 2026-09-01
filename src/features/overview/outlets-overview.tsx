@@ -20,20 +20,35 @@ import {
   shiftBusinessDate,
 } from '@/domain'
 import { useSession } from '@/session/context'
+import { holdsRole } from '@/session/session'
 
 /**
- * The owner console: every outlet side by side, read in ten seconds while doing
- * something else.
+ * The outlets this reader can see, side by side, read in ten seconds while
+ * doing something else.
+ *
+ * **It is the home of both the Super Admin's shell and the Franchise Admin's**
+ * (owner decision, 2026-09-01). The manager's used to be a separate screen
+ * showing an address and a phone number under a promise that today's figures
+ * would land there once they were real — a promise `#13` was going to keep and
+ * did not, because it was withdrawn. One screen serves both because the
+ * question is the same one, and **the database already scopes the answer**:
+ * asked to list outlets, it hands the owner every shop and a manager only the
+ * ones their live assignments name. So the owner reads two cards and a manager
+ * reads their own, from one component that filters nothing itself.
+ *
+ * What differs by role is only what is *offered* on a card, never what is
+ * *shown*: `Open` leads to a Super Admin surface, so a manager is not given a
+ * door that would answer them with a not-found.
  *
  * **This screen never asks what mode it is in.** It lists outlets from the
  * outlets adapter — real in both modes — and asks the insights adapter for each
  * one's figures. In demo mode that adapter returns the scenario; in real mode it
- * returns `null`, because there are no real bills yet, and the card says so
- * rather than rendering a zero that would read as *you took nothing today*.
- * The seam is still exactly one adapter wide, which is what makes the screen
- * mode-blind — but no roadmap change is coming to swap it: #13 would have, and
- * was withdrawn (`openspec/todos/owner-console-was-withdrawn.md`). The absence
- * is the honest state, stated on the card, for as long as it lasts (design D3).
+ * returns `null`, and the card says so rather than rendering a zero that would
+ * read as *you took nothing today*. The seam is still exactly one adapter wide,
+ * which is what makes the screen mode-blind — but nothing on the roadmap is
+ * coming to swap it: #13 would have, and was withdrawn
+ * (`openspec/todos/owner-console-was-withdrawn.md`). Connecting it is
+ * `openspec/todos/the-home-page-reads-the-money.md`.
  */
 
 const ALL_OUTLETS = 'all'
@@ -51,8 +66,11 @@ interface OutletFigures {
   previous: OutletDaySummary | null
 }
 
-export function OwnerHome() {
+export function OutletsOverview() {
   const session = useSession()
+  // What is offered, never what is read — the outlets adapter has already
+  // decided the latter, from the assignment, in the database.
+  const mayOpenDayView = holdsRole(session, 'super_admin')
   const { outlets, insights } = useAdapters()
   const [rows, setRows] = useState<OutletFigures[]>()
   const [scope, setScope] = useState<string>(ALL_OUTLETS)
@@ -87,8 +105,14 @@ export function OwnerHome() {
 
   return (
     <div className="mx-auto max-w-3xl">
+      {/*
+        Named for what is on screen — `shown` rather than `rows`, so it follows
+        the outlet switcher too. A manager running one shop met a heading
+        reading "All outlets" above a single card, which is true of the query
+        and false of the page; so did an owner who had scoped to one.
+      */}
       <PageHeader
-        title="All outlets"
+        title={shown.length === 1 ? (shown[0]?.outlet.name ?? 'Your outlet') : 'All outlets'}
         subtitle={
           rows?.[0] ? `Today — ${formatBusinessDate(rows[0].businessDate)}` : 'Today at a glance'
         }
@@ -125,17 +149,29 @@ export function OwnerHome() {
       ) : rows.length === 0 ? (
         <EmptyState
           icon={Store}
-          title="No outlets yet — create the first one from Outlets. Nothing else in the app works until an outlet exists."
+          title={
+            mayOpenDayView
+              ? 'No outlets yet — create the first one from Outlets. Nothing else in the app works until an outlet exists.'
+              : 'No outlet is assigned to you. A Super Admin assigns one before anything appears here.'
+          }
           action={
-            <Link to={`${base}/outlets`} className={buttonVariants({ size: 'phone' })}>
-              Go to Outlets
-            </Link>
+            mayOpenDayView ? (
+              <Link to={`${base}/outlets`} className={buttonVariants({ size: 'phone' })}>
+                Go to Outlets
+              </Link>
+            ) : undefined
           }
         />
       ) : (
         <div className="space-y-3">
           {shown.map((row) => (
-            <OutletCard key={row.outlet.id} figures={row} base={base} />
+            <OutletCard
+              key={row.outlet.id}
+              figures={row}
+              base={base}
+              mayOpenDayView={mayOpenDayView}
+              solo={shown.length === 1}
+            />
           ))}
         </div>
       )}
@@ -143,30 +179,59 @@ export function OwnerHome() {
   )
 }
 
-function OutletCard({ figures, base }: { figures: OutletFigures; base: string }) {
+function OutletCard({
+  figures,
+  base,
+  mayOpenDayView,
+  solo,
+}: {
+  figures: OutletFigures
+  base: string
+  /** `owner-outlet-view` is a Super Admin surface; a manager has no such gate. */
+  mayOpenDayView: boolean
+  /**
+   * The only card on the page, in which case **the page title already names
+   * this outlet** and the card repeating it puts the same words twice, one
+   * line apart. A manager running one shop meets this every time.
+   */
+  solo: boolean
+}) {
   const { outlet, summary } = figures
+  const header = !solo || mayOpenDayView
 
   return (
     <Card className="space-y-3" data-testid={`outlet-card-${outlet.id}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="truncate text-base font-bold text-content">{outlet.name}</h2>
-          <p className="truncate text-xs text-content-muted">{outlet.location_label}</p>
+      {header && (
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          {!solo && (
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-bold text-content">{outlet.name}</h2>
+              <p className="truncate text-xs text-content-muted">{outlet.location_label}</p>
+            </div>
+          )}
+          {/*
+          Not offered to a manager. `owner-outlet-view` is declared for the
+          Super Admin alone, so the gate answers a manager with a not-found —
+          and a button that leads to "that page does not exist" is worse than
+          no button. They are standing in their own outlet's figures already.
+        */}
+          {mayOpenDayView && (
+            <Link
+              to={`${base}/outlet/${outlet.id}`}
+              className={buttonVariants({ variant: 'secondary', size: 'phone' })}
+              data-testid={`open-outlet-${outlet.id}`}
+            >
+              Open
+            </Link>
+          )}
         </div>
-        <Link
-          to={`${base}/outlet/${outlet.id}`}
-          className={buttonVariants({ variant: 'secondary', size: 'phone' })}
-          data-testid={`open-outlet-${outlet.id}`}
-        >
-          Open
-        </Link>
-      </div>
+      )}
 
       {summary === null ? (
         /* A real answer, not an error. See the module note. */
         <p className="text-sm text-content-muted" data-testid={`no-figures-${outlet.id}`}>
-          Today’s figures are not available yet — this console is not connected to live trading
-          data. The outlet is here; the numbers arrive when billing does.
+          Today’s figures are not available yet — this page is not connected to live trading data.
+          The outlet is here; the counter, the drawer and the Ledger have the numbers.
         </p>
       ) : (
         <>

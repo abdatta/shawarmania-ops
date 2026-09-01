@@ -16,7 +16,13 @@ import { expect, test, type Page } from '@playwright/test'
  */
 const SHELLS = [
   { segment: 'owner', anchor: (page: Page) => page.getByRole('heading', { name: 'All outlets' }) },
-  { segment: 'admin', anchor: (page: Page) => page.getByText('Outlet details') },
+  // The manager's home is the outlets overview since #51, scoped by the
+  // database to the one outlet they run — so the page is titled for that
+  // outlet, and the card below it drops the name rather than repeating it.
+  {
+    segment: 'admin',
+    anchor: (page: Page) => page.getByRole('heading', { level: 1, name: 'Shawarmania Kalyani' }),
+  },
   // The Biller's shell is the enrolled tablet's own, so its chrome names the
   // *device*: a tablet is set up rather than signed in. The demo store starts
   // with a shift open on it, so a walkthrough lands able to ring a bill rather

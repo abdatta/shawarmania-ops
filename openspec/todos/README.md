@@ -17,6 +17,7 @@ Keep entries behavior-focused:
 | [Bill GST Breakup](./bill-gst-breakup.md) | Feature | Anticipated | Billing | The business registers for GST or a customer requires a tax invoice |
 | [Bill Digital Share](./bill-digital-share.md) | Feature | Anticipated | Billing | The owner wants digital receipts, or paper is being skipped anyway |
 | [Supply Bills Paid Outside The Payout](./supply-bills-paid-outside-the-payout.md) | Feature | Owner asked to explore, 2026-08-18 | Outlet expenses | The owner asks in earnest and picks a route: supplier portal, invoice email, or bank statement |
+| [The Home Page Reads The Money](./the-home-page-reads-the-money.md) | Feature | **Owner asked, 2026-09-01** | Overview / Reporting | Wanted now; deferred out of #51 to keep that change about navigation |
 | [Six Tabs For One Person](./six-tabs-for-one-person.md) | Gap | Open | App shell | Somebody holding two roles says the bar is crowded, or a new surface pushes a common shape past five |
 | [Outlet Scope From The Address](./outlet-scope-from-the-address.md) | Feature | Anticipated | App shell | Somebody wants to send a link to one shop's figures |
 | [Aggregator Settlement](./aggregator-settlement.md) | Feature | Anticipated | Reporting | Aggregator volume grows enough to distort a decision |

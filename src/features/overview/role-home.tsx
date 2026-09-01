@@ -1,9 +1,8 @@
 import { CounterHandshakeCards } from '@/features/counter/counter-handshake-cards'
 import { useSession } from '@/session/context'
 
-import { AdminHome } from './admin-home'
 import { CounterHome } from './counter-home'
-import { OwnerHome } from './owner-home'
+import { OutletsOverview } from './outlets-overview'
 import { StaffHome } from './staff-home'
 
 /**
@@ -24,8 +23,17 @@ export function RoleHome() {
   return (
     <>
       <CounterHandshakeCards />
-      {session.role === 'super_admin' && <OwnerHome />}
-      {session.role === 'franchise_admin' && <AdminHome />}
+      {/*
+        **One screen for both** (#51). The owner and a manager ask the same
+        question of the same page — how are my shops doing today — and the
+        database is what makes the answers differ: it hands the owner every
+        outlet and a manager only the ones their assignments name. The manager
+        had a separate placeholder here, showing an address and a phone under a
+        promise of figures that #13 was going to keep and did not.
+      */}
+      {(session.role === 'super_admin' || session.role === 'franchise_admin') && (
+        <OutletsOverview />
+      )}
       {session.role === 'biller' && session.mode === 'demo' && <CounterHome />}
       {(session.role === 'employee' || (session.role === 'biller' && session.mode === 'real')) && (
         <StaffHome />

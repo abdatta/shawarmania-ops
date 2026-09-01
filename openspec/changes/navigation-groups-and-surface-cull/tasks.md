@@ -19,9 +19,9 @@ Nothing in `src/` currently knows what a navigation group is.
 
 ## 2. Groups In The Registry
 
-- [x] 2.1 Add `NavGroupId`, `NavGroup` and a `NAV_GROUPS` record to `src/gates/registry.ts` for `finances` and `setup`, each with label, icon and order. Finances takes `Coins` and Setup takes `Settings2`; `Wallet` is Expenses's and `Banknote` is the Drawer's, so neither can label the group that contains them.
-- [x] 2.2 Add `group?: NavGroupId` to the `nav` block and assign every entry: Finances takes Billing, Drawer, Expenses, Ledger; Setup takes Outlets, People, Delivery, Menu, Tablets; Overview, Attendance and My attendance stay top-level. Do this for the owner's and the manager's entries alike, so label dedup cannot produce a grouped and an ungrouped copy of one door.
-- [x] 2.3 Restore navigation to `admin-devices` inside Setup, so a Franchise Admin reaches Tablets while the owner reaches it through Setup too.
+- [x] 2.1 Add `NavGroupId`, `NavGroup` and a `NAV_GROUPS` record to `src/gates/registry.ts` for `finances` and `setup`, each with label, icon and order. Finances takes `IndianRupee` and Setup takes `Settings2`; `Wallet` is Expenses's and `Banknote` is the Drawer's, so neither can label the group that contains them.
+- [x] 2.2 Add `group?: NavGroupId` to the `nav` block and assign every entry: Finances takes Billing, Drawer, Expenses, Ledger; Setup takes Outlets, People, Delivery, Menu; Overview, Attendance and My attendance stay top-level. *(Tablets was listed for Setup here and is not in it — see 2.3.)* Do this for the owner's and the manager's entries alike, so label dedup cannot produce a grouped and an ungrouped copy of one door.
+- [x] 2.3 ~~Restore navigation to `admin-devices` inside Setup~~ — **reversed by the owner on 2026-09-01, on seeing it built.** `admin-devices` carries no navigation entry at all. An entry in Setup is a second door into a room the outlet card already opens, and it falsifies the stated reason for the manager's Outlets surface, which is that Tablets has no door of its own. Both `admin-devices` and `owner-devices` are now navigation-free and reached only from an outlet.
 - [x] 2.4 Add `navTree(items)` returning top-level nodes that are either a surface or a group with sorted children, with groups and ungrouped surfaces sorted against each other on one scale, and a group appearing only when at least one child is visible in this session and mode.
 - [x] 2.5 Re-set `nav.order` so it is unique **per sibling set** rather than per role, and rewrite the uniqueness test in `src/gates/registry.test.ts` to assert that — a collision inside one group is still a defect, a repeat across two groups is not.
 - [x] 2.6 Add a test that entries sharing a navigation label agree on their group, so a senior role's placement cannot silently win over a junior role's different one.
@@ -34,7 +34,7 @@ Nothing in `src/` currently knows what a navigation group is.
 - [x] 3.3 Build the card's entries as bar tabs one size smaller — 56px tall, icon 18px, 11px label, against the bar's 64px and 20px — icon over label and the same lit colour. Not pills and not a segmented control: both were tried and rejected, because the second row must read as navigation rather than as a filter.
 - [x] 3.4 Draw the card as `rounded-2xl` with a one-pixel border, `bg-surface-raised` and a soft shadow, **inside the bar's own block** so no page content shows through the gap between card and bar, and hide its scrollbar so it does not cut the bottom edge.
 - [x] 3.5 Draw the tail as a 12px square rotated 45° with only its bottom and right borders, positioned at `((index + 0.5) / count) * 100%` of the bar width, so it needs no measurement and stays correct when the card scrolls sideways.
-- [x] 3.6 Seed the open group from the address, re-seed it only when the reader crosses into or out of a group, and refuse to close a group the reader is standing inside.
+- [x] 3.6 Seed the open group from the address, re-seed it only when the reader crosses into or out of a group, and ~~refuse to close a group the reader is standing inside~~ — **the refusal was dropped by the owner on 2026-09-01**; see `design.md`. Every group toggles.
 - [x] 3.7 Reserve the taller bottom padding whether or not a group is open, so opening one shifts nothing.
 - [x] 3.8 Light a group tab whenever the reader is inside it, open or shut, and keep lighting only the most specific entry among its children.
 - [x] 3.9 Verify the group control carries an accessible name and an accurate `aria-expanded`, and that a shut group's children are genuinely absent from the page rather than hidden.
@@ -92,3 +92,16 @@ does not read it as implementation having started:
 - [x] 7.6 Run `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm test`, `npm run contrast`, `npm run build` and `npm run test:e2e`, then inspect the phone bar, the open card and the rail in light and dark.
 - [x] 7.7 Run `npm run db:start && npm run db:reset`, then `npm run test:db`, `npm run test:rls` and `npm run test:e2e:auth` — the isolation suite must still pass for the tables this change deliberately left standing.
 - [x] 7.8 PHASE GATE — the owner's phone shows four navigation entries and every surface they reach is one they still use; tapping a group opens its children in a card anchored to the tab that opened it; a shut Setup still shows that Delivery is waiting, and opening it replaces that sum with the parts; a Franchise Admin reads their own outlets and generates a tablet setup code from the outlet it stands in, while the database refuses them every outlet write; seven surfaces are gone from the codebase with `inventory_movements`, `outlet_alerts` and `alert_responses` untouched and still covered by the isolation suite; and the four-role demo walkthrough still walks.
+
+## 8. Added During Review (owner, 2026-09-01)
+
+Four things the owner asked for on seeing the change built. They are recorded
+here rather than folded into the sections above, because the sections above are
+what was agreed before implementation and this was not.
+
+- [x] 8.1 Take Tablets out of navigation entirely rather than putting it in Setup. Reverses task 2.3, and restores the stated reason the manager's Outlets surface exists — see `design.md`.
+- [x] 8.2 Move the phone bar's rule from between the card and the tabs to the top of the whole block, so it rises as a group opens and the card is enclosed by the bar rather than floating on it.
+- [x] 8.3 Make the manager's home the owner's Overview, scoped by the database; delete `admin-home.tsx`, rename `owner-home.tsx` to `outlets-overview.tsx`, title the page for what is shown, and withhold the `Open` button from a manager whose gate would refuse it.
+- [x] 8.4 Remove the placeholders for screens nobody will build: `admin-home`'s empty state, `counter-home`'s unreachable one, and the Overview card's promise that the numbers arrive with billing.
+- [x] 8.5 Seed `openspec/todos/the-home-page-reads-the-money.md` for the redesign the owner wants — a summary of ongoing finances and what is raised against them — recording that the page reads no figures in production today and that `owner-outlet-view`'s `Open` button answers a not-found there.
+- [x] 8.6 Fix the intermittent test failures rather than retrying them. `RowActionsMenu` was the real one: a `<details>` both controlled by React state and toggled natively by the browser, which could write `open={false}` back over the browser's `true` and shut the menu as it opened. Two others were bad assertions — waiting on one condition and asserting a later one on the next line.

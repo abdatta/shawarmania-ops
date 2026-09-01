@@ -202,18 +202,24 @@ function useOpenGroup(tree: NavNode[], linkFor: (surface: Surface) => string) {
     setOpenGroup(groupOfLocation)
   }, [groupOfLocation])
 
+  /**
+   * A plain toggle, including for the group the reader is standing in.
+   *
+   * **It used to refuse that case**, on the reasoning that closing Finances
+   * while standing on the Drawer would leave the reader with no sibling row and
+   * no way back to one. That hazard was real against a first implementation
+   * which refused the whole tap — but the fix for *that* made a second tap
+   * reopen the group, and once reopening costs one tap the siblings are never
+   * unreachable: they are exactly as far away as any other tab.
+   *
+   * The guard also never held the line it was drawn for. From inside Finances a
+   * reader could open Setup and close it again, landing on precisely the state
+   * the rule forbade — still inside Finances, nothing open — by a route two
+   * taps long. A rule that only makes the honest path awkward while leaving the
+   * roundabout one open is worse than no rule.
+   */
   const toggleGroup = (group: NavGroupId) => {
-    setOpenGroup((current) => {
-      // **A group the reader is inside cannot be closed from in there.** Tapping
-      // it would leave them on a Finances page with no sibling row and no way
-      // back to one except by tapping again.
-      //
-      // It is the *closing* that is refused, not the tap. A reader standing on
-      // the Ledger with Setup open must be able to get back to their own
-      // siblings, and the only control that does it is this one.
-      if (current === group) return group === groupOfLocation ? current : null
-      return group
-    })
+    setOpenGroup((current) => (current === group ? null : group))
   }
 
   return { openGroup, toggleGroup, groupOfLocation }
@@ -413,7 +419,14 @@ function PhoneBar({
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+      /*
+        The rule sits on the **whole block**, not between the card and the tabs,
+        so it rises as a group opens and the card is enclosed by the same
+        container the bar is. A rule underneath the card drew a full-width line
+        straight across the tail and left the card reading as a separate thing
+        floating on top of the navigation rather than as part of it.
+      */
+      className="fixed inset-x-0 bottom-0 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       {open?.kind === 'group' && (
         // Full bar width, so the tail's fraction needs no measuring.
@@ -450,7 +463,7 @@ function PhoneBar({
         </div>
       )}
 
-      <div className="flex border-t border-border">
+      <div className="flex">
         {tree.map((node) =>
           node.kind === 'surface' ? (
             <BarTab
@@ -567,14 +580,28 @@ function GroupTab({
       className={cn(TAB, 'h-[64px] text-xs', inside ? 'text-accent-text' : 'text-content-muted')}
       data-testid={`nav-group-${node.group.id}`}
     >
-      <span className="relative">
-        <Icon aria-hidden size={20} />
-        {/* The sum only while the parts are out of sight (spec: attention-badges). */}
-        {!open && (
-          <span className="absolute -right-2.5 -top-1.5">
-            <NavGroupAttentionBadge group={node.group.label} sources={sourcesOf(node)} />
-          </span>
-        )}
+      {/*
+        The icon carries a **copy of the chevron, invisible**, so that this row
+        and the label row below it have the same trailing box and therefore the
+        same centre. Without it the label row is `label + gap + chevron` while
+        the icon row is just the icon, so the two centre on different points and
+        the icon floats right of the word it belongs to.
+
+        A copy of the real element rather than a spacer of a measured width:
+        the two stay in step because they are the same thing, not because a
+        number was kept up to date.
+      */}
+      <span className="flex items-center gap-0.5">
+        <span className="relative">
+          <Icon aria-hidden size={20} />
+          {/* The sum only while the parts are out of sight (spec: attention-badges). */}
+          {!open && (
+            <span className="absolute -right-2.5 -top-1.5">
+              <NavGroupAttentionBadge group={node.group.label} sources={sourcesOf(node)} />
+            </span>
+          )}
+        </span>
+        <ChevronRight aria-hidden size={12} className="invisible" />
       </span>
       <span className="flex items-center gap-0.5">
         {node.group.label}

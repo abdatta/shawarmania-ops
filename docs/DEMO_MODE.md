@@ -205,6 +205,8 @@ Then open **Attendance** from the owner's own navigation — no appointment, no 
 
 **2 — The manager, where the numbers come from** (Admin in the banner)
 
+**Overview** — the same page the owner just read, under the same name, and say so out loud: the manager did not get a lesser screen, they got the same one with the database answering it differently. One card instead of two, because `outlets_select` hands them the outlet their assignment names and nothing else. The page is titled for that shop rather than "All outlets", and there is no **Open** button — that leads to a Super Admin surface, and a button that ends in a not-found is worse than no button.
+
 **Expenses** — today's spending, with the cash rows marked. Only those reach the drawer.
 
 **Cash** — everything above the one input is worked out. Type a figure a couple of hundred short of the expected closing and watch the difference appear *as you type*, in words as well as sign. Then switch the day picker to yesterday: that day is closed, it was ₹240 short, and **a bill arrived after it was signed off** — reported as a reconciliation exception, with the closed figures untouched. That is the single most important thing this app does.

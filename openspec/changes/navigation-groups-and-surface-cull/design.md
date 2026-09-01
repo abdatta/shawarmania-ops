@@ -75,12 +75,22 @@ structure over four entries is one more than the reader needs.
 
 **Finances** — Billing, Drawer, Expenses, Ledger. Named Finances rather than
 Sales: it holds Expenses, which is money out, so Sales was the wrong word for the
-drawer it labels. Its icon is `Coins` (owner decision, 2026-09-01) — `Wallet` is
+drawer it labels. Its icon is `IndianRupee` (owner decision, 2026-09-01) — `Wallet` is
 Expenses's and `Banknote` is the Drawer's, so the group cannot take either
 without reading as one of its own children.
 
-**Setup** — Outlets, People, Delivery, Menu, Tablets. Things you change when
-something changes, rather than things you read every evening.
+**Setup** — Outlets, People, Delivery, Menu. Things you change when something
+changes, rather than things you read every evening.
+
+**Tablets is not in it, and is not in navigation at all** (owner decision,
+2026-09-01, on seeing it built). The proposal and task 2.3 both put it in Setup;
+that was wrong, and wrong in a way the folder already contradicted itself about.
+The stated reason for giving a Franchise Admin an Outlets surface is that
+*"Tablets stops being a top-level entry, and `admin-devices` is the only place a
+setup code is generated — without an Outlets surface, a manager whose tablet
+dies has no door to it."* An entry sitting in Setup **is** that door, which
+makes the Outlets surface a second one into the same room and the reasoning
+false. Tablets is reached from the outlet it stands in, and nowhere else.
 
 **Delivery is in Setup, not Finances**, and the owner's reason is worth keeping
 verbatim: *that page is not much about revenue and more about checking if the
@@ -453,3 +463,105 @@ the alternatives change what every reader sees to fix what one reader sees. It
 is recorded in `openspec/todos/six-tabs-for-one-person.md`, and
 `registry.test.ts` now pins every shape's count and asserts the width property
 for all of them, so neither can drift further in silence.
+
+### The manager's home is the owner's Overview, and Today is gone as a screen
+
+Raised by the owner on 2026-09-01 looking at the built bar: *"why do we have a
+Today and an Overview — I feel like Today can be merged with Overview."*
+
+**They never appeared together in production.** They are two shells' landing
+addresses — `/owner` and `/admin` — and `visibleSurfaces` gives a reader a home
+only for a role they **hold**, not one they merely reach. Production has two
+Super Admins and no live Franchise Admin assignment at either outlet (recorded
+when #28 landed), so both owners see four entries and Today is not among them.
+The demo owner persona holds a Kalyani manager assignment on purpose, so the
+walkthrough can demonstrate the owner/manager boundary, and that is the fifth
+tab in the screenshot.
+
+**But the instinct was right about the screen itself.** `admin-dashboard`
+rendered an outlet's address, phone and cutover under an empty state promising
+that *"Today at a glance lands here once these figures are real"* — figures #13
+was going to supply. Its copy still named Stock and Cash, both deleted earlier
+in this same change.
+
+So the manager's home is now the owner's Overview component, and
+`admin-home.tsx` is deleted. It works because **the database already scopes the
+answer**: asked to list outlets it hands the owner every shop and a manager only
+the ones their assignments name, so one component that filters nothing itself
+serves both. `owner-home.tsx` is renamed `outlets-overview.tsx`, because a file
+called *owner*-home rendering for a manager is exactly the drift this repo names
+things carefully to avoid.
+
+Three edges, all settled by the owner in the same message:
+
+- **The title** said "All outlets" above a single card, which is true of the
+  query and false of the page. It is now the outlet's name when one is shown,
+  and it follows the outlet switcher rather than the load, so an owner scoped to
+  one shop gets it too.
+- **The `Open` button** leads to `owner-outlet-view`, declared for the Super
+  Admin alone — a manager tapping it would meet a not-found. It is not offered
+  to them. The owner keeps it, as the proposal recorded.
+- **With one card the card drops its own name**, which otherwise repeated the
+  page heading one line below it.
+
+**What was deliberately not done here.** The page shows no figures in
+production: the adapter behind it was left answering `null` when #13 was
+withdrawn, and nothing replaced that half. The owner wants the page redesigned
+around a summary of ongoing finances and whatever is raised against them, and
+asked for that as its own change — so it is
+`openspec/todos/the-home-page-reads-the-money.md`, which also records that
+`owner-outlet-view` is still `demo`-gated and therefore that the `Open` button
+answers a not-found in production.
+
+### Placeholders for things nobody will build
+
+The owner asked for these out in the same message, and they were all promises of
+screens rather than screens:
+
+- `admin-home.tsx`'s empty state — gone with the file.
+- `counter-home.tsx`'s empty state, which described the counter that was
+  arriving. `billing-live` (#10) made `counter-billing` `live`, so the gate has
+  answered yes ever since and the branch under it was unreachable. A screen
+  nobody can reach promising a screen that exists is worth less than its lines.
+- The Overview card's *"the numbers arrive when billing does"* — billing
+  arrived, and the numbers did not. It now says where the numbers actually are.
+
+`staff-home`'s "your account is not assigned to an outlet yet" and the day
+view's "these figures are not available yet" are **not** placeholders: both
+state a real, current condition, and both are the honest answer to it.
+
+### The manager's home carries the owner's label too
+
+Caught by the owner on 2026-09-01, looking at the built demo: *"if Today is
+gone as a screen, then why do I still see it?"*
+
+Because deleting `admin-home.tsx` removed the **content** and left the
+**entry**. And it left something worse than a stale tab: for anybody holding
+both roles — which the demo owner does, by deliberate staging — Overview and
+Today then rendered *the same component against the same data*. Two tabs, one
+screen. Before the merge they were at least two different screens, so the merge
+made that case worse rather than better.
+
+`admin-dashboard` is therefore labelled `Overview`, the same word
+`owner-dashboard` carries. Nothing new was needed to fix it: `visibleSurfaces`
+already deduplicates by label and keeps the senior role's entry, so a person
+holding both now gets one home instead of two identical ones. Measured, both
+before and after:
+
+| Session | Before | After |
+|---|---|---|
+| Owner (production, holds `super_admin` only) | 4 | 4 |
+| Owner who also runs a shop | 5 | **4** |
+| Manager | 4 | 4 |
+| Manager who also works a shift elsewhere | 6 | 6 |
+
+**The `app-shell` scenario that protects two homes still holds**, and it is
+worth being precise about why. *"Two held roles keep two homes"* is stated of a
+Franchise Admin who also holds an Employee assignment, so that the surface
+carrying their own check-in stays reachable. Those two homes are genuinely
+different screens and keep different labels — `Overview` at `/admin` and `Home`
+at `/staff` — so dedup leaves both. What collapses is only the pair that had
+become one screen.
+
+`/admin` still resolves and still lands somewhere: a manager holding no owner
+role reaches this entry and nothing else.

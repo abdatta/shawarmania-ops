@@ -51,9 +51,14 @@ describe('demo mode safety', () => {
     expect(await screen.findByRole('heading', { name: 'Shawarmania Kalyani' })).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
-    // Role switcher: Admin.
+    // Role switcher: Admin. Their home is the same page as the owner's since
+    // #51, scoped by the adapter to the one outlet they run — so the heading is
+    // that outlet rather than "All outlets", and the figures are real ones.
     await user.click(screen.getByRole('link', { name: 'Admin' }))
-    expect(await screen.findByText('Outlet details')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Shawarmania Kalyani' }),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId(`sales-${OUTLET_KALYANI_ID}`)).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
     // Biller. Since the demo mounts the enrolled tablet's own shell, the chrome

@@ -68,12 +68,16 @@ describe('a navigation group', () => {
   it('folds the owner’s bar down to entries they can reach without scrolling', () => {
     const { bar } = renderAt('/demo/owner')
 
-    // The demo owner holds a manager assignment at Kalyani, so `Today` is
-    // genuinely theirs — five, which is the ceiling `app-shell` allows.
-    const top = [...bar.querySelectorAll('a,button')]
-      .filter((entry) => entry.parentElement?.className.includes('border-t'))
-      .map((entry) => entry.textContent?.replace(/\d|:.*/g, '').trim())
-    expect(top).toEqual(['Overview', 'Today', 'Finances', 'Attendance', 'Setup'])
+    // The demo owner holds a manager assignment at Kalyani, so they hold both
+    // homes — but both are the same screen since #51 and share the label
+    // `Overview`, so dedup leaves one and the bar is four.
+    // The tab row is the bar's last child; a group's card, when one is open,
+    // sits above it. Found structurally rather than by a styling class, which
+    // this test used to do and which broke the moment the rule moved.
+    const top = [...(bar.lastElementChild?.children ?? [])].map((entry) =>
+      entry.textContent?.replace(/\d|:.*/g, '').trim(),
+    )
+    expect(top).toEqual(['Overview', 'Finances', 'Attendance', 'Setup'])
   })
 
   it('keeps a shut group’s children off the page rather than merely hidden', () => {
@@ -105,15 +109,28 @@ describe('a navigation group', () => {
     )
   })
 
-  it('refuses to close under the reader standing inside it', async () => {
+  /**
+   * Including the group the reader is standing in. That case was refused until
+   * the owner drove it: the guard existed because a first implementation
+   * refused the whole tap, so closing really did strand you — and once the fix
+   * for that made a second tap reopen the group, the hazard was gone and the
+   * guard was not. It never held the line anyway: opening another group and
+   * closing that one reached the same state by a longer route.
+   */
+  it('closes and reopens from inside the group, like any other tab', async () => {
     const user = userEvent.setup()
     const { bar } = renderAt('/demo/owner/ledger')
 
     const finances = within(bar).getByRole('button', { name: /^Finances/ })
-    await user.click(finances)
+    expect(finances).toHaveAttribute('aria-expanded', 'true')
 
-    // Closing it would leave them on a Finances page with no sibling row and no
-    // way back to one except by tapping again.
+    await user.click(finances)
+    expect(finances).toHaveAttribute('aria-expanded', 'false')
+    expect(within(bar).queryByRole('link', { name: /^Billing/ })).toBeNull()
+    // Still lit, because the reader has not moved: the bar says where you are.
+    expect(finances.className).toContain('accent-text')
+
+    await user.click(finances)
     expect(finances).toHaveAttribute('aria-expanded', 'true')
     expect(within(bar).getByRole('link', { name: /^Billing/ })).toBeInTheDocument()
   })
@@ -129,7 +146,7 @@ describe('a navigation group', () => {
     )
     expect(within(bar).getByRole('link', { name: /^Menu/ })).toBeInTheDocument()
 
-    // The only control that gets them back to their own siblings.
+    // And back to their own siblings.
     await user.click(within(bar).getByRole('button', { name: /^Finances/ }))
     expect(within(bar).getByRole('link', { name: /^Ledger/ })).toBeInTheDocument()
   })

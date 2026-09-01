@@ -809,9 +809,15 @@ describe('BillingCounter', () => {
     await person.type(screen.getByPlaceholderText('Phone number'), '9000000999')
     await person.click(screen.getByTestId('save-order'))
 
-    await waitFor(() => expect(saveOrder).toHaveBeenCalledOnce())
     // The panel cleared even though the directory request never answered.
-    expect(screen.getByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
+    //
+    // Both inside one `waitFor`: the heading arrives on the render that follows
+    // the save, so waiting only for the call and asserting the heading on the
+    // next line is a race the test loses under load.
+    await waitFor(() => {
+      expect(saveOrder).toHaveBeenCalledOnce()
+      expect(screen.getByRole('heading', { name: 'Bills this shift' })).toBeInTheDocument()
+    })
   })
 
   it('says what to do when no shift is open, rather than showing a dead settle button', async () => {

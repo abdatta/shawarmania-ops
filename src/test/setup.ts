@@ -28,6 +28,28 @@ vi.stubEnv(
  */
 if (typeof window !== 'undefined') {
   await import('@testing-library/jest-dom/vitest')
+
+  /**
+   * The budget `waitFor` and every `findBy*` actually run on.
+   *
+   * `vite.config.ts` raised Vitest's own `testTimeout` to 20s for a stated
+   * reason — jsdom per file, several files in parallel, `userEvent` typing one
+   * key at a time — but that is the ceiling on a whole test. **Testing
+   * Library keeps a separate one for a single wait, and it defaults to a
+   * second**, which the outer number does nothing about.
+   *
+   * A second is plenty on an idle machine and not always enough on a loaded
+   * one: a test that fills four fields and waits for the row to appear can
+   * exceed it while the app is behaving perfectly. That produced intermittent
+   * red across the suite, in different files each run — the worst kind,
+   * because it teaches people to re-run rather than to look.
+   *
+   * Five seconds is a ceiling for a wait that is not going to resolve, not a
+   * budget to spend, and it stays well under the 20s test timeout so a
+   * genuinely stuck wait still fails inside its own test with its own message.
+   */
+  const { configure } = await import('@testing-library/react')
+  configure({ asyncUtilTimeout: 5_000 })
   // Enrolled tablets keep their durable delivery subscriber mounted even on
   // the no-shift screen. jsdom therefore needs the browser storage boundary
   // whenever an app-route test resolves a counter session, not only in the

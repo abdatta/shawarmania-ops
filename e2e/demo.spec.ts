@@ -33,7 +33,8 @@ test('walking all four demo role shells makes no request beyond the app origin',
   // The switcher, through all four roles.
   const switcher = page.getByRole('navigation', { name: 'Demo role switcher' })
   await switcher.getByRole('link', { name: 'Admin' }).click()
-  await expect(page.getByText('Outlet details')).toBeVisible()
+  // The same page the owner just read, scoped to the one outlet they run.
+  await expect(page.getByRole('heading', { level: 1, name: 'Shawarmania Kalyani' })).toBeVisible()
 
   await switcher.getByRole('link', { name: 'Biller' }).click()
   // The Biller walkthrough is the enrolled tablet's own shell, whose chrome
@@ -102,10 +103,10 @@ test('the demo can be left, and leaving is not dismissing', async ({ page }) => 
 
 test('a demo deep link reconstructs the same role and surface on reload', async ({ page }) => {
   await page.goto('demo/admin')
-  await expect(page.getByText('Outlet details')).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Shawarmania Kalyani' })).toBeVisible()
 
   await page.reload()
-  await expect(page.getByText('Outlet details')).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Shawarmania Kalyani' })).toBeVisible()
   await expect(page.getByTestId('demo-banner')).toBeVisible()
 
   // And from a cold start with no prior navigation (fresh SPA boot via the

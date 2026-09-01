@@ -46,7 +46,9 @@ test('the owner’s whole navigation fits the bar without scrolling sideways', a
   expect(overflow, 'the bottom bar scrolls sideways').toBeLessThanOrEqual(1)
 
   const labels = await topLevel(page)
-  expect(labels).toEqual(['Overview', 'Today', 'Finances', 'Attendance', 'Setup'])
+  // Four. The demo owner holds a manager assignment too, but both homes are
+  // the same screen since #51 and share a label, so dedup leaves one.
+  expect(labels).toEqual(['Overview', 'Finances', 'Attendance', 'Setup'])
 })
 
 test('a group opens a card above the bar, anchored to the tab that opened it', async ({ page }) => {
@@ -125,14 +127,21 @@ test('arriving inside a group opens it, and leaving closes it', async ({ page })
   await expect(finances).toHaveAttribute('aria-expanded', 'false')
 })
 
-test('a group cannot be shut under the reader standing in it', async ({ page }) => {
+test('a group closes and reopens from inside it, like any other tab', async ({ page }) => {
   await page.goto('demo/owner/ledger')
   const finances = page.locator(`${BAR} [data-testid="nav-group-finances"]`)
+  await expect(finances).toHaveAttribute('aria-expanded', 'true')
+
+  // This was refused until the owner drove it. The guard was written against a
+  // first implementation that refused the whole tap and so really did strand
+  // the reader; the fix for that made a second tap reopen the group, which left
+  // the guard protecting nothing — and a reader could reach the same state
+  // anyway by opening another group and closing it.
+  await finances.click()
+  await expect(finances).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator(BAR).getByRole('link', { name: /^Drawer/ })).toHaveCount(0)
 
   await finances.click()
-
-  // Shutting it would leave them on a Finances page with no sibling row and no
-  // way back to one except by tapping again.
   await expect(finances).toHaveAttribute('aria-expanded', 'true')
   await expect(page.locator(BAR).getByRole('link', { name: /^Drawer/ })).toBeVisible()
 })

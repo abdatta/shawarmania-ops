@@ -57,12 +57,16 @@ describe('demo reset', () => {
     await reset(user)
 
     // Gone, and back to exactly the count the walkthrough started from.
-    await waitFor(() =>
-      expect(screen.getByTestId('ledger-expense-list')).not.toHaveTextContent('Reset probe'),
-    )
-    expect(within(screen.getByTestId('ledger-expense-list')).getAllByRole('listitem')).toHaveLength(
-      before,
-    )
+    //
+    // Both halves inside one `waitFor`, because **waiting on an absence alone
+    // is not waiting at all**: a list that has not rendered yet also fails to
+    // contain "Reset probe", so the count on the next line could be read
+    // mid-reset. Under a full suite it occasionally was.
+    await waitFor(() => {
+      const list = screen.getByTestId('ledger-expense-list')
+      expect(within(list).getAllByRole('listitem')).toHaveLength(before)
+      expect(list).not.toHaveTextContent('Reset probe')
+    })
 
     // Still on the manager's expenses surface. A reset that sent the reader
     // back to the owner would cost them their place mid-walkthrough.

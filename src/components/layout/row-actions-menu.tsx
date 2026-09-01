@@ -24,6 +24,20 @@ export interface RowAction {
  *
  * Native `<details>`/`<summary>` for the disclosure itself, same as
  * AccountMenu: less to get subtly wrong than a hand-built popover.
+ *
+ * **The element is left uncontrolled, deliberately.** It used to carry
+ * `open={open}` beside an `onToggle` that set that same state, which is a race
+ * rather than a redundancy: the browser flips `details.open` itself on a click
+ * and *then* fires `toggle`, so between the two there is a window in which
+ * React's last committed prop still says `false`. Any render landing in that
+ * window writes `false` back over the browser's `true` and the menu shuts as
+ * it opens. It is rare, load-dependent and it did bite — the component's own
+ * tests failed intermittently under a full suite, on both opening and closing.
+ *
+ * So the element owns whether it is open, `onToggle` reports that upward for
+ * the panel to render against, and the two paths that close it from outside a
+ * click — Escape, and a pointer landing elsewhere — set `details.open`
+ * directly. React never writes the attribute, so there is nothing to race.
  */
 export function RowActionsMenu({
   label,
@@ -51,6 +65,13 @@ export function RowActionsMenu({
     right?: number
   } | null>(null)
 
+  /** Shut it the way the element itself does, so `toggle` reports it upward. */
+  function close() {
+    const details = detailsRef.current
+    if (details) details.open = false
+    else setOpen(false)
+  }
+
   useEffect(() => {
     if (!open) return
 
@@ -68,11 +89,13 @@ export function RowActionsMenu({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape') return
-      setOpen(false)
+      // Focus first, then close: the panel is about to leave the document, and
+      // if the reader had tabbed into it their focus would go with it.
       detailsRef.current?.querySelector('summary')?.focus()
+      close()
     }
     function onPointerDown(event: PointerEvent) {
-      if (!detailsRef.current?.contains(event.target as Node)) setOpen(false)
+      if (!detailsRef.current?.contains(event.target as Node)) close()
     }
 
     window.addEventListener('resize', place)
@@ -90,7 +113,6 @@ export function RowActionsMenu({
   return (
     <details
       ref={detailsRef}
-      open={open}
       className="inline-block"
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
@@ -118,7 +140,7 @@ export function RowActionsMenu({
               data-testid={action.testId}
               disabled={action.disabled}
               onClick={() => {
-                setOpen(false)
+                close()
                 action.onSelect()
               }}
             >

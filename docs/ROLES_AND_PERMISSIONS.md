@@ -256,11 +256,14 @@ for the stopgap and how it was discharged.
 ### A Franchise Admin reads their outlets, and writes none of them
 
 They had no Outlets surface at all until #51, and the gap became a hole in the
-same change: Tablets stopped being a top-level entry, and `admin-devices` is the
-only place a counter setup code is minted. Without a door to the outlet the
-tablet stands in, a manager whose tablet died had no route to the one repair
-they cannot make anywhere else — so the surface exists for the counter, not for
-the outlet record.
+same change: **Tablets left navigation entirely**, and `admin-devices` is the
+only place a counter setup code is minted. A tablet is administered from the
+outlet it stands in and from nowhere else, so without this surface a manager
+whose tablet died had no route to the one repair they cannot make anywhere else
+— the surface exists for the counter, not for the outlet record.
+
+That is also why Tablets has no entry beside Outlets. One would be a second door
+into a room this surface already opens, and it would falsify the sentence above.
 
 **It reads, and the database is what makes that true.** `outlets_select` already
 gave them the outlets their live assignments name and no others; `outlets_insert`,
