@@ -151,6 +151,46 @@ describe('a navigation group', () => {
     expect(within(bar).getByRole('link', { name: /^Ledger/ })).toBeInTheDocument()
   })
 
+  /**
+   * The card used to be re-seeded by comparing the *group* the address names
+   * rather than the address itself, so a move between two entries that both sit
+   * outside every group — Attendance to Overview, the pair a phone bar shows
+   * side by side — changed nothing and left the card standing. Reported by the
+   * owner on 2026-09-01: *"I clicked on Setup to open its subtabs, but next if I
+   * click on Overview, it doesn't collapse the Setup children."*
+   */
+  it('collapses a hand-opened group on going somewhere else entirely', async () => {
+    const user = userEvent.setup()
+    const { bar } = renderAt('/demo/owner/attendance')
+
+    await user.click(within(bar).getByRole('button', { name: /^Setup/ }))
+    expect(within(bar).getByRole('link', { name: /^Menu/ })).toBeInTheDocument()
+
+    await user.click(within(bar).getByRole('link', { name: /^Overview/ }))
+
+    expect(within(bar).getByRole('button', { name: /^Setup/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(within(bar).queryByRole('link', { name: /^Menu/ })).toBeNull()
+  })
+
+  it('keeps a group open while the reader moves between its own entries', async () => {
+    const user = userEvent.setup()
+    const { bar } = renderAt('/demo/owner/ledger')
+
+    // Finances opened by the address. Hopping to a sibling must not shut the
+    // row the reader is hopping along: the address names Finances on both
+    // sides of the move.
+    await user.click(within(bar).getByRole('link', { name: /^Expenses/ }))
+
+    expect(within(bar).getByRole('button', { name: /^Finances/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(within(bar).getByRole('link', { name: /^Ledger/ })).toBeInTheDocument()
+  })
+
   it('says where the reader is, not what they last tapped', async () => {
     const user = userEvent.setup()
     const { bar } = renderAt('/demo/owner')

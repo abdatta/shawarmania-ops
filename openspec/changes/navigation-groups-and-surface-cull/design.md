@@ -191,18 +191,32 @@ they are not: a group is a peer of Overview, not a heading above it.
 Sections are open by default and collapsible. There is vertical room on a rail,
 so hiding things behind a click there buys nothing.
 
-### A group cannot be closed from inside it
+### Every group toggles, and the address decides what is open
 
-Tapping the group tab you are standing in would leave the reader on a Finances
-page with no sibling row and no way back to one except by tapping again. The
-group tab toggles only when the reader is elsewhere.
+**A group could not be closed from inside it, and that rule is gone** — dropped
+by the owner on 2026-09-01. It was written because tapping the group tab you are
+standing in would leave the reader on a Finances page with no sibling row and no
+way back to one, which was true of a first implementation that refused the whole
+tap. The fix for *that* made a second tap reopen the group, and once reopening
+costs one tap the siblings are never unreachable: they are exactly as far away as
+any other tab. The guard also never held its own line, because opening Setup from
+inside Finances and closing it again reached the forbidden state by a route two
+taps long.
 
-Which group is open is seeded from the address and re-seeded whenever the reader
-crosses into or out of a group, so arriving on the Ledger opens Finances and
-going to Overview closes it. It is deliberately *not* re-seeded while moving
-between siblings, which is what leaves a group the reader opened by hand open
-under them. It is not persisted: the address re-opens the right group on arrival,
-which is the only case that matters.
+Which group is open is seeded from the address and re-seeded **on every move**,
+so arriving on the Ledger opens Finances and going to Overview closes it. Moving
+between siblings inside one group leaves that group open, and needs no exception
+to do it: the address names `finances` on both sides of a Billing-to-Expenses
+hop, so there is nothing to change. It is not persisted: the address re-opens the
+right group on arrival, which is the only case that matters.
+
+**It first compared the group the address names rather than the address itself**,
+and that is a different rule wherever two entries share the same answer. Every
+move between two ungrouped entries — Attendance to Overview, a pair the phone bar
+draws side by side — went from no group to no group, so nothing was re-seeded and
+a hand-opened card stayed standing over a tab it had nothing to do with. Reported
+by the owner on 2026-09-01, on the built demo. Keying on the address answers it
+without special-casing the sibling hop the narrower rule was written for.
 
 The taller bottom padding is reserved whether or not a group is open, so opening
 one does not shift the page under the reader's thumb.

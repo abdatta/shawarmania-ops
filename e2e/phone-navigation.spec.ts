@@ -127,6 +127,41 @@ test('arriving inside a group opens it, and leaving closes it', async ({ page })
   await expect(finances).toHaveAttribute('aria-expanded', 'false')
 })
 
+/**
+ * The move the crossing rule missed, because both ends of it name no group:
+ * Attendance to Overview, the two ungrouped tabs the bar draws side by side.
+ * Reported by the owner on 2026-09-01, walking the built demo.
+ */
+test('a hand-opened group closes on going somewhere else entirely', async ({ page }) => {
+  await page.goto('demo/owner/attendance')
+  const setup = page.locator(`${BAR} [data-testid="nav-group-setup"]`)
+
+  await setup.click()
+  await expect(page.locator(BAR).getByRole('link', { name: /^Menu/ })).toBeVisible()
+
+  await page
+    .locator(BAR)
+    .getByRole('link', { name: /^Overview/ })
+    .click()
+  await expect(page).toHaveURL(/\/demo\/owner$/)
+  await expect(setup).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.locator(BAR).getByRole('link', { name: /^Menu/ })).toHaveCount(0)
+})
+
+test('a group stays open while the reader moves along its own entries', async ({ page }) => {
+  await page.goto('demo/owner/ledger')
+  const finances = page.locator(`${BAR} [data-testid="nav-group-finances"]`)
+  await expect(finances).toHaveAttribute('aria-expanded', 'true')
+
+  await page
+    .locator(BAR)
+    .getByRole('link', { name: /^Expenses/ })
+    .click()
+  await expect(page).toHaveURL(/\/demo\/owner\/ledger\/expenses$/)
+  await expect(finances).toHaveAttribute('aria-expanded', 'true')
+  await expect(page.locator(BAR).getByRole('link', { name: /^Ledger/ })).toBeVisible()
+})
+
 test('a group closes and reopens from inside it, like any other tab', async ({ page }) => {
   await page.goto('demo/owner/ledger')
   const finances = page.locator(`${BAR} [data-testid="nav-group-finances"]`)

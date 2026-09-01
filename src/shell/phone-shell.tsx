@@ -169,11 +169,22 @@ export function PhoneShell({
 /**
  * Which group the phone bar is showing the children of.
  *
- * Seeded from the address and re-seeded **only when the reader crosses into or
- * out of a group**, so arriving on the Ledger opens Finances and going to
- * Overview closes it, while moving between siblings leaves a group the reader
- * opened by hand open under them. It is deliberately not persisted: the address
- * re-opens the right group on arrival, which is the only case that matters.
+ * Seeded from the address and re-seeded **on every move**, so arriving on the
+ * Ledger opens Finances and going to Overview closes it, while moving between
+ * siblings inside one group leaves that group open — the address says
+ * `finances` on both sides of a Billing-to-Expenses hop, so there is nothing to
+ * change. It is deliberately not persisted: the address re-opens the right
+ * group on arrival, which is the only case that matters.
+ *
+ * **It used to re-seed only when the reader crossed into or out of a group**,
+ * comparing the group the address names rather than the address itself. That
+ * left a hand-opened card standing over a tab it had nothing to do with, for
+ * every move between two entries that are both outside every group: open Setup
+ * from Attendance, tap Overview, and Overview lights up under a card of
+ * Outlets, People, Delivery and Menu, because the address named no group before
+ * the move and names none after it. Keying on the address instead answers that
+ * without touching the sibling case, which was the only reason the narrower
+ * rule existed.
  */
 function useOpenGroup(tree: NavNode[], linkFor: (surface: Surface) => string) {
   const { pathname } = useLocation()
@@ -194,13 +205,13 @@ function useOpenGroup(tree: NavNode[], linkFor: (surface: Surface) => string) {
   }
 
   const [openGroup, setOpenGroup] = useState<NavGroupId | null>(groupOfLocation)
-  const crossed = useRef(groupOfLocation)
+  const seededAt = useRef(pathname)
 
   useEffect(() => {
-    if (crossed.current === groupOfLocation) return
-    crossed.current = groupOfLocation
+    if (seededAt.current === pathname) return
+    seededAt.current = pathname
     setOpenGroup(groupOfLocation)
-  }, [groupOfLocation])
+  }, [pathname, groupOfLocation])
 
   /**
    * A plain toggle, including for the group the reader is standing in.

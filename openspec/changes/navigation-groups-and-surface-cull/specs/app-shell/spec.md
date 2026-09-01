@@ -64,9 +64,10 @@ application while the code claimed a single source.
 
 Where a navigation group is presented in a form that shows one group's children
 at a time, which group that is SHALL be derived from the reader's current
-address on arrival, and SHALL be re-derived when the reader crosses into or out
-of a group. It SHALL NOT be re-derived while the reader moves between siblings
-within one group, so a group opened deliberately stays open.
+address, on arrival and again on every move. A group the reader expanded by hand
+SHALL therefore survive a move between siblings within it, because the address
+names the same group on both sides of that move — and SHALL NOT survive a move
+to anywhere outside it, whether or not the entry left behind belonged to a group.
 
 **Activating a group SHALL toggle it, including the group the reader is
 currently inside.** A reader inside a group whose children are hidden SHALL be
@@ -84,7 +85,14 @@ expanded, so expanding one does not move the content beneath the reader.
 #### Scenario: Leaving a group
 
 - **WHEN** a reader navigates to a top-level entry outside every group
-- **THEN** no group's children are presented
+- **THEN** no group's children are presented, including where the entry they
+  came from was also outside every group
+
+#### Scenario: Moving between one group's own entries
+
+- **WHEN** a reader navigates from one entry inside a group to another inside
+  the same group
+- **THEN** that group's children stay presented
 
 #### Scenario: Closing the group you are standing in
 
