@@ -18,15 +18,15 @@ begin
 end;
 $$;
 
--- Put one outlet after its cutover/deadline and the other before its cutover.
--- These relative values make the two date assertions deterministic without a
--- test-only clock seam in production code.
+-- Put one outlet before its cutover/deadline and the other after its cutover.
+-- The boundary values avoid wrapping around midnight: 24:00 always resolves
+-- to the prior business date, while 00:00 always resolves to the current one.
 update public.outlets
-   set business_day_cutover = ((statement_timestamp() at time zone 'Asia/Kolkata') - interval '10 minutes')::time,
-       arrival_deadline = ((statement_timestamp() at time zone 'Asia/Kolkata') - interval '5 minutes')::time
+   set business_day_cutover = time '24:00',
+       arrival_deadline = time '00:00'
  where id = '00000000-0000-4000-a000-000000000001';
 update public.outlets
-   set business_day_cutover = ((statement_timestamp() at time zone 'Asia/Kolkata') + interval '10 minutes')::time
+   set business_day_cutover = time '00:00'
  where id = '00000000-0000-4000-a000-000000000002';
 
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000e');
@@ -80,7 +80,7 @@ $q$, 'the manager leaves the denied attempt eligible for one retry');
 
 reset role;
 update public.outlets
-   set business_day_cutover = ((statement_timestamp() at time zone 'Asia/Kolkata') + interval '10 minutes')::time
+   set business_day_cutover = time '00:00'
  where id = '00000000-0000-4000-a000-000000000001';
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000e');
 select lives_ok($q$
@@ -109,7 +109,7 @@ $q$, 'P0001', 'attempt id was reused with a changed payload', 'changed legacy ti
 -- than create a second day at the target outlet.
 reset role;
 update public.outlets
-   set business_day_cutover = ((statement_timestamp() at time zone 'Asia/Kolkata') - interval '10 minutes')::time
+   set business_day_cutover = time '24:00'
  where id = '00000000-0000-4000-a000-000000000001';
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000e');
 select throws_ok($q$
