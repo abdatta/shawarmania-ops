@@ -185,3 +185,47 @@ NOT discard what the same run obtained for another.**
 - **WHEN** a quiet scheduled run is followed by a failed run and then another
   quiet scheduled run
 - **THEN** the history shows three lines and collapses none of them together
+
+#### Scenario: A group spanning a page boundary reads as one group
+
+- **WHEN** seven consecutive quiet runs straddle the boundary between the first
+  and second loaded page
+- **THEN** after the second page loads the history shows one line standing for
+  seven runs, not one for three and another for four
+
+#### Scenario: Recording a summary does not change a figure
+
+- **WHEN** a cycle is ingested by the function that records run summaries
+- **THEN** every day figure, expense and reconciliation row written is identical
+  to what the same cycle produced before summaries were recorded
+
+#### Scenario: A restated figure that did not move is not reported as movement
+
+- **WHEN** a run re-reads a fortnight-old week whose figures still match what is
+  stored
+- **THEN** that week contributes nothing to the run's summary and the run reads
+  as having moved nothing
+
+#### Scenario: How a run began is reported, not guessed
+
+- **WHEN** a scheduled run and a run the owner asked for start within the same
+  minute
+- **THEN** each is labelled from what the running process reported, and the two
+  are not distinguished by their timing
+
+#### Scenario: A rehearsal is not a run in the history
+
+- **WHEN** a rehearsal completes
+- **THEN** it appears nowhere in the history
+
+#### Scenario: A failed fetch writes nothing
+
+- **WHEN** the sync cannot retrieve a date's data
+- **THEN** no row is written or modified for that date, any previously stored
+  figure is unchanged, and the failure is reported
+
+#### Scenario: Failure states are told apart
+
+- **WHEN** the sync fails
+- **THEN** the report names which of the three states occurred, and a lapsed
+  session is not reported as a shape change or a discrepancy

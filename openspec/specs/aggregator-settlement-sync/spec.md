@@ -372,6 +372,23 @@ with the actions available on each. A matter resolved by a later run SHALL leave
 this section. The surface SHALL state when the sync last ran and whether it
 succeeded.
 
+**A channel that has stopped running SHALL read as stopped, and SHALL NOT read as
+its last success.** Where the time since a channel's last run exceeds its own
+reported cadence by a stated margin, the surface SHALL present that channel as at
+fault, name that a read was due and did not happen, and offer the read it is
+already able to offer. The margin SHALL be derived from the cadence the runner
+reports rather than from a constant in this repository, so that it moves when the
+schedule moves.
+
+This SHALL be evaluated at read time. A channel that has stopped running cannot
+record that it has, because the process that would record it is the process that
+is missing; nothing SHALL be relied upon to write that fact.
+
+A channel that has never run, one not switched on for the outlet, one with a run
+under way, and one whose last run recorded a failure SHALL each keep the more
+specific statement, because each names its state more precisely than being
+overdue does.
+
 **What has happened SHALL be a history of runs, newest first, and it SHALL list
 every run.** A row SHALL be a run: one the owner asked for and one that ran to
 schedule, one that succeeded and one that failed, one that moved figures and one
@@ -425,7 +442,21 @@ SHALL be surfaced to the owner as an action they can take.
 
 Where the sync cannot obtain data for a date, it SHALL write nothing for that
 date and report the failure. It SHALL NOT write a zero, and SHALL NOT overwrite
-an existing figure with an empty one.
+an existing figure with an empty one. **Reporting a failure for one date SHALL
+NOT discard what the same run obtained for another.**
+
+#### Scenario: A channel that stopped reads as stopped
+
+- **WHEN** a channel scheduled four times a day last ran successfully nine hours
+  ago and has recorded nothing since
+- **THEN** the surface presents that channel as at fault, says a read was due, and
+  offers Read now
+
+#### Scenario: A stuck channel is not merely overdue
+
+- **WHEN** a channel is both past due and its last run recorded a changed portal
+  shape
+- **THEN** the surface says the shape changed rather than that a read was due
 
 #### Scenario: A quiet week is one line, not six
 
@@ -512,6 +543,46 @@ an existing figure with an empty one.
 - **WHEN** the sync fails
 - **THEN** the report names which of the three states occurred, and a lapsed
   session is not reported as a shape change or a discrepancy
+
+### Requirement: A run that wrote part of what it read is recorded once, as both
+
+A run that obtained some of the data it went for and not the rest SHALL be
+recorded as **one run** carrying both facts: the figures it moved, and the reason
+it fell short. It SHALL NOT be recorded as a success, and its writes SHALL NOT be
+discarded because it fell short.
+
+The reason SHALL be named with the same vocabulary a wholly failed run uses,
+because a partial failure needs the same person a total one does. **Completeness
+SHALL be read from what the run recorded as moved** — a degraded run that moved
+nothing and one that moved six weeks are distinguished by that record, not by a
+separate word. Money in that record SHALL be integer paise.
+
+Where a run both falls short of its read and fails on its writes, the recorded
+reason SHALL be the one naming the more specific fault, and the other SHALL NOT
+be silently dropped from what the run says about itself.
+
+A caller declaring success alongside figures SHALL be treated as a caller
+declaring nothing: a run SHALL NOT be able to assert that it succeeded.
+
+#### Scenario: A settled week survives an unreadable open week
+
+- **WHEN** a run reads six settled weeks, cannot read the open one, and posts both
+  the six weeks and the reason the seventh failed
+- **THEN** the six weeks are written, and the history shows one run stating what
+  those weeks moved and why the open week is missing
+
+#### Scenario: A partial run is not a success
+
+- **WHEN** the owner looks at a channel whose last run wrote figures and fell
+  short
+- **THEN** the surface does not report that channel as healthy
+
+#### Scenario: Money that does not add up outranks a short read
+
+- **WHEN** a run posts a declared shortfall and one of its cycles also fails to
+  reconcile against the stated payout
+- **THEN** the run is recorded as a reconciliation failure and the shortfall is
+  still readable in what the run says about itself
 
 ### Requirement: A disputed week may be re-checked or accepted with its difference recorded, and by nothing that conceals it
 
