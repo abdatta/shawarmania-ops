@@ -1823,7 +1823,9 @@ export type Database = {
           last_reported_unsent: number
           last_seen_at: string | null
           outlet_id: string
+          proof_expires_at: string | null
           removed_at: string | null
+          session_proven_at: string | null
           set_up_at: string
           set_up_by: string | null
         }
@@ -1834,7 +1836,9 @@ export type Database = {
           last_reported_unsent?: number
           last_seen_at?: string | null
           outlet_id: string
+          proof_expires_at?: string | null
           removed_at?: string | null
+          session_proven_at?: string | null
           set_up_at?: string
           set_up_by?: string | null
         }
@@ -1845,7 +1849,9 @@ export type Database = {
           last_reported_unsent?: number
           last_seen_at?: string | null
           outlet_id?: string
+          proof_expires_at?: string | null
           removed_at?: string | null
+          session_proven_at?: string | null
           set_up_at?: string
           set_up_by?: string | null
         }
@@ -3447,6 +3453,10 @@ export type Database = {
       app_may_look_up_customer: { Args: never; Returns: boolean }
       app_may_manage_person: { Args: { person: string }; Returns: boolean }
       app_may_reach_drawer: { Args: { outlet: string }; Returns: boolean }
+      app_may_read_counter_device: {
+        Args: { p_device: string }
+        Returns: boolean
+      }
       app_may_see_person: { Args: { person: string }; Returns: boolean }
       app_next_cutover: {
         Args: { cutover: string; ts: string }
@@ -4203,6 +4213,7 @@ export type Database = {
           username: string
         }[]
       }
+      prove_counter_device_session: { Args: never; Returns: string }
       provision_account_with_invite: {
         Args: {
           p_account_email: string
@@ -4363,6 +4374,10 @@ export type Database = {
       }
       remove_counter_device: {
         Args: { p_device_id: string; p_removed_by: string }
+        Returns: string
+      }
+      rename_counter_device: {
+        Args: { p_device_id: string; p_label: string; p_renamed_by: string }
         Returns: string
       }
       rename_expense_category: {

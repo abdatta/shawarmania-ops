@@ -68,12 +68,22 @@ begin
       ('10000000-0000-4000-a000-000000000003'::uuid, 'admin.kanchrapara@login.shawarmania.invalid'),
       ('10000000-0000-4000-a000-000000000004'::uuid, 'tablet.kalyani@login.shawarmania.invalid'),
       ('10000000-0000-4000-a000-000000000005'::uuid, 'tablet.kanchrapara@login.shawarmania.invalid'),
+      -- Kalyani's second counter. Two tablets at one outlet is the state this
+      -- suite could not hold before multiple-billing-devices, and every
+      -- concurrency, ownership and readiness test needs it seeded rather than
+      -- built: a handshake needs a code somebody read off a screen.
+      ('10000000-0000-4000-a000-00000000000f'::uuid, 'tablet.kalyani.two@login.shawarmania.invalid'),
       ('10000000-0000-4000-a000-000000000006'::uuid, 'staff.kalyani@login.shawarmania.invalid'),
       ('10000000-0000-4000-a000-000000000007'::uuid, 'staff.kanchrapara@login.shawarmania.invalid'),
       ('10000000-0000-4000-a000-000000000008'::uuid, 'deactivated.kalyani@login.shawarmania.invalid'),
       ('10000000-0000-4000-a000-000000000009'::uuid, 'revoked.tablet.kalyani@login.shawarmania.invalid'),
       ('10000000-0000-4000-a000-00000000000a'::uuid, 'biller.kalyani@login.shawarmania.invalid'),
       ('10000000-0000-4000-a000-00000000000b'::uuid, 'biller.kanchrapara@login.shawarmania.invalid'),
+      -- Kalyani's second biller, who holds the spare till in the suites that
+      -- activate it. A new account rather than an existing one: every
+      -- candidate already on the books is the subject of some test asserting
+      -- they hold no shift.
+      ('10000000-0000-4000-a000-000000000010'::uuid, 'biller.kalyani.two@login.shawarmania.invalid'),
       -- Two accounts that exist only to carry an outstanding one-time code, so
       -- the invite policies have rows to isolate and the activation flow has
       -- something to redeem. Nothing else signs in as these, so a test that
@@ -142,6 +152,7 @@ values
   ('10000000-0000-4000-a000-000000000008', 'Deactivated Admin Kal',  '911111111008', false, 'Manager'),
   ('10000000-0000-4000-a000-00000000000a', 'Synthetic Biller Kal',   '911111111010', true,  null),
   ('10000000-0000-4000-a000-00000000000b', 'Synthetic Biller Kpa',   '911111111011', true,  null),
+  ('10000000-0000-4000-a000-000000000010', 'Synthetic Biller Kal 2', '911111111017', true,  null),
   ('10000000-0000-4000-a000-00000000000c', 'Pending Staff Kal',      '911111111014', true,  'Prep'),
   ('10000000-0000-4000-a000-00000000000d', 'Pending Staff Kpa',      '911111111015', true,  'Prep'),
   ('10000000-0000-4000-a000-00000000000e', 'Synthetic Two Outlets',  '911111111016', true,  'Counter staff'),
@@ -189,6 +200,7 @@ values
   ('10000000-0000-4000-a000-000000000008', 'franchise_admin', '00000000-0000-4000-a000-000000000001', current_date - 400),
   ('10000000-0000-4000-a000-00000000000a', 'biller',          '00000000-0000-4000-a000-000000000001', current_date - 300),
   ('10000000-0000-4000-a000-00000000000b', 'biller',          '00000000-0000-4000-a000-000000000002', current_date - 300),
+  ('10000000-0000-4000-a000-000000000010', 'biller',          '00000000-0000-4000-a000-000000000001', current_date - 100),
   ('10000000-0000-4000-a000-00000000000c', 'employee',        '00000000-0000-4000-a000-000000000001', current_date - 10),
   ('10000000-0000-4000-a000-00000000000d', 'employee',        '00000000-0000-4000-a000-000000000002', current_date - 10),
   -- One person, two outlets.
@@ -219,26 +231,55 @@ values
    '10000000-0000-4000-a000-000000000003', now(), now() + interval '7 days');
 
 -- ---------------------------------------------------------------------------
--- Counter devices. One active per outlet — the database now enforces that — plus
--- one removed, so the partial index is exercised by data rather than only by a
--- test, and so the tests have a still-tokened tablet that must be refused.
+-- Counter devices. **One active tablet per outlet**, which is the shape the
+-- business actually runs, plus two removed ones.
+--
+-- That default matters more than it looks. Roughly fifty pgTAP files, the REST
+-- probes and both e2e suites run against this shop, so whatever shape it has is
+-- the shape almost everything is tested against. Every outlet in production has
+-- one till and a third outlet would open with one, so a seed that gave an outlet
+-- two would mean the ordinary case was tested nowhere and the exception
+-- everywhere — and `billing-offline.spec.ts`, whose whole job is one tablet
+-- surviving an outage, would quietly be running at a two-till outlet.
+--
+-- `multiple-billing-devices` allows several, and a **spare** is seeded for it
+-- below: removed, so it counts as no counter, holds no label and appears
+-- nowhere. The three suites that need two tills activate it themselves and say
+-- so. Two tablets at one outlet is therefore a state a test asks for, never one
+-- every test inherits.
+--
+-- Every active row is **proven**: `session_proven_at` is what makes a row a
+-- counter, and a seeded tablet has no browser to prove itself. The removed ones
+-- are proven too — the retired tablet traded before it was retired, and the
+-- spare is a tablet that was set up and then taken out of service. An unproven
+-- row is created only by a redemption whose sign-in never landed, which is a
+-- state the tests construct deliberately rather than one the shop is seeded
+-- into.
 --
 -- None of these has a profile or an assignment. That is the point: a tablet is a
 -- machine principal, and what it reaches comes from the shift below rather than
 -- from a synthetic Biller assignment it used to carry.
 
 insert into public.counter_devices
-  (id, outlet_id, label, set_up_by, set_up_at, removed_at, last_seen_at, last_reported_unsent)
+  (id, outlet_id, label, set_up_by, set_up_at, removed_at, last_seen_at,
+   last_reported_unsent, session_proven_at)
 values
   ('10000000-0000-4000-a000-000000000004', '00000000-0000-4000-a000-000000000001',
    'Kalyani counter tablet', '10000000-0000-4000-a000-000000000002',
-   now() - interval '30 days', null, now(), 0),
+   now() - interval '30 days', null, now(), 0, now() - interval '30 days'),
+  -- The spare. Removed, so the default shop is one till per outlet; the suites
+  -- that need a second one bring it back and open a shift on it.
+  ('10000000-0000-4000-a000-00000000000f', '00000000-0000-4000-a000-000000000001',
+   'Kalyani second counter', '10000000-0000-4000-a000-000000000002',
+   now() - interval '2 days', now() - interval '1 day', now() - interval '1 day', 0,
+   now() - interval '2 days'),
   ('10000000-0000-4000-a000-000000000005', '00000000-0000-4000-a000-000000000002',
    'Kanchrapara counter tablet', '10000000-0000-4000-a000-000000000003',
-   now() - interval '30 days', null, now(), 3),
+   now() - interval '30 days', null, now(), 3, now() - interval '30 days'),
   ('10000000-0000-4000-a000-000000000009', '00000000-0000-4000-a000-000000000001',
    'Kalyani old tablet (removed)', '10000000-0000-4000-a000-000000000002',
-   now() - interval '90 days', now() - interval '7 days', now() - interval '8 days', 0);
+   now() - interval '90 days', now() - interval '7 days', now() - interval '8 days', 0,
+   now() - interval '90 days');
 
 -- ---------------------------------------------------------------------------
 -- A live shift on each active tablet, held by that outlet's Biller.
@@ -248,6 +289,18 @@ values
 -- suite is the state every counter policy is written against: this tablet, this
 -- person, this outlet, this trading day. Expiry is the outlet's own next
 -- cutover, so a seeded shift dies at 04:00 exactly as a real one does.
+--
+-- One shift per active tablet, so the spare has none: it is out of service, and
+-- a shift on a removed tablet is not a state the app can reach. The suites that
+-- activate the spare open its shift in the same breath, held by the second
+-- Kalyani Biller below — not by its manager and not by its first Biller, because
+-- each of those is the subject of a test elsewhere asserting they hold no
+-- counter, and a seeded shift would quietly change what those tests proved. One person holding BOTH tills
+-- is legal and is the harder case -- shifts are per device and
+-- `app_may_hold_counter_shift` never asks whether somebody already holds one
+-- elsewhere -- but seeding it globally would silently widen what several
+-- unrelated tests are asserting, so it is opened deliberately in
+-- `23_counter_tablet_and_shift.sql` instead, where it is the subject.
 
 insert into public.counter_shifts
   (id, device_id, outlet_id, person_id, opened_at, business_date, expires_at)
