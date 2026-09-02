@@ -300,7 +300,97 @@ describe('mock billing adapter', () => {
     expect((await adapter.listOpenOrders(DEMO_OUTLET_ID)).map((order) => order.id)).toContain(
       saved.id,
     )
-    await expect(adapter.markOrderPrepared(saved.id, true)).rejects.toThrow(/not on this tablet/)
+    await expect(adapter.markOrderPrepared(saved.id, true)).rejects.toThrow(
+      /can only be changed there/,
+    )
+  })
+
+  /**
+   * Every ordinary action on a neighbour's order, refused in one place.
+   *
+   * The pipeline is outlet-wide, so the card is on screen; the refusal is what
+   * stays per tablet. Asserting all four together is the point: a guard added to
+   * one path and forgotten on another is exactly the shape that ships, because
+   * each path has its own test and none of them asks about the others.
+   */
+  /**
+   * The refusal must be unreachable at a one-till outlet.
+   *
+   * This is the regression that matters most about `multiple-billing-devices`,
+   * because the shop it ships to has one tablet per outlet and does not need a
+   * second one yet. Ownership enforcement is new code on the path every payment
+   * takes, so the question is not whether it refuses the right things -- the
+   * test above covers that -- but whether it ever refuses at a counter that has
+   * no neighbour to be confused with.
+   *
+   * It walks the whole ordinary evening on one tablet: save, revise, prepare,
+   * pay. If any of those paths compares an order's tablet to something other
+   * than the tablet that made it, this fails and single-till billing was broken
+   * by a feature nobody is using yet.
+   */
+  it('never refuses its own work at an outlet with one till', async () => {
+    const store = createDemoStore()
+    const adapter = createMockBillingAdapter(store)
+
+    const saved = await adapter.saveOrder(orderDraft(store, '10000000-0000-4000-8000-000000000021'))
+    await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+    // Every ordinary act on an order this tablet took, in the order an evening
+    // takes them.
+    const revised = await adapter.reviseOrder(saved.id, orderDraft(store, saved.id))
+    expect(revised.id).toBe(saved.id)
+
+    const prepared = await adapter.markOrderPrepared(saved.id, true)
+    expect(prepared.preparedAt).not.toBeNull()
+
+    const bill = await adapter.payOrder(saved.id, [
+      { method: 'cash', amountPaise: revised.totalPaise },
+    ])
+    expect(bill).not.toBeNull()
+    await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+    // The order is paid and its bill exists, which is the whole of an ordinary
+    // sale. Nothing about having ownership checks changed any of it.
+    expect(store.orders.find((order) => order.id === saved.id)?.status).toBe('paid')
+
+    // And a cancellation of a different order this tablet owns is accepted too,
+    // since cancel is the one path where the neighbouring tablet is refused
+    // even though a manager is not.
+    const second = await adapter.saveOrder(
+      orderDraft(store, '10000000-0000-4000-8000-000000000022'),
+    )
+    await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+    const cancelled = await adapter.cancelOrder(second.id, 'customer left')
+    expect(cancelled.status).toBe('cancelled')
+  })
+
+  it('refuses revise, pay, cancel and prepare on the other till order, and captures nothing', async () => {
+    const store = createDemoStore()
+    const adapter = createMockBillingAdapter(store)
+    // The demo store opens with a shift already held, so this needs none.
+    const saved = await adapter.saveOrder(orderDraft(store, '10000000-0000-4000-8000-00000000000f'))
+    await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+    // It becomes the other counter's work. Nothing else about it changes, which
+    // is what makes the refusals below about ownership and nothing else.
+    store.orders.find((order) => order.id === saved.id)!.device_id = 'another-tablet'
+    const before = store.orders.length
+
+    for (const attempt of [
+      () => adapter.reviseOrder(saved.id, orderDraft(store, saved.id)),
+      () =>
+        adapter.payOrder(saved.id, [{ method: 'cash' as const, amountPaise: saved.totalPaise }]),
+      () => adapter.cancelOrder(saved.id, 'wrong order'),
+      () => adapter.markOrderPrepared(saved.id, true),
+    ]) {
+      await expect(attempt()).rejects.toThrow(/can only be changed there/)
+    }
+
+    // Refused in place, so nothing was queued to fail later. Offline that is the
+    // whole difference: a captured command would sit in the queue until it
+    // drained, long after the operator had moved on.
+    expect(store.orders).toHaveLength(before)
+    expect(store.orders.find((order) => order.id === saved.id)?.status).toBe('open')
   })
 
   it('reports a manager-cancelled order by name when the tablet tries to pay it', async () => {

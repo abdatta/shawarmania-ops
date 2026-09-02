@@ -27,6 +27,7 @@ export function PipelineCard({
   order,
   section,
   currentBillerId = null,
+  currentDeviceId = null,
   showItems = true,
   busy = false,
   editDisabled = false,
@@ -44,6 +45,12 @@ export function PipelineCard({
   section: 'preparing' | 'unpaid-prepared'
   /** Omitted creator chip when this is the person holding the tablet. */
   currentBillerId?: string | null
+  /**
+   * The tablet reading this card, so a card from the other till can say so.
+   * Null off the counter, where every card is somebody else's by definition and
+   * the creator's name is the honest attribution.
+   */
+  currentDeviceId?: string | null
   /** Off on the docked card: the composer beside it shows the same items. */
   showItems?: boolean
   busy?: boolean
@@ -112,6 +119,36 @@ export function PipelineCard({
   // The creator chip appears for everybody except the person holding the
   // tablet — including on paid cards, whose money someone else may have taken.
   const showCreator = order.creatorId !== currentBillerId
+  /*
+    And the TILL chip appears whenever the order came from a different one.
+
+    The creator's name used to carry this on its own, and did so correctly while
+    an outlet had one tablet: another name meant another till. With two tablets
+    one person may hold a shift on each, and then the neighbouring tablet's order
+    carries the reader's own name — no creator chip, nothing to distinguish it
+    from their own work, and a refusal they meet with no warning. Ownership is
+    per tablet, so the tablet is the fact that predicts it.
+
+    Only on the counter, and only when the label was readable: a tablet may read
+    its own outlet's labels, and a null means "not this tablet's" rather than
+    "this tablet's", so it is never claimed as own work.
+  */
+  /*
+    Whether this order belongs to a different till, which is the ownership
+    question, and separately whether its label could be read, which is only
+    presentation. An unreadable label must never be mistaken for own work, so
+    the gate below is keyed on the tablet and the chip on the label.
+  */
+  const foreignTill = currentDeviceId !== null && order.deviceId !== currentDeviceId
+  const otherTill = foreignTill ? order.deviceLabel : null
+  /*
+    A neighbour's order is read-only here, and the controls stand down rather
+    than disappearing: a card that still looks like a card, with its till named
+    beside the time, explains the refusal before somebody meets it. The
+    boundary is still the database's, and the adapter refuses locally too, so
+    this is the third of three and the only one an operator ever sees.
+  */
+  const actionsDisabled = busy || foreignTill
 
   const kebabRows: Array<{
     label: string
@@ -125,7 +162,7 @@ export function PipelineCard({
       // another order holds the composer.
       kebabRows.push({
         label: 'Edit',
-        disabled: editDisabled,
+        disabled: editDisabled || foreignTill,
         act: () => {
           setMenuOpen(false)
           onEdit(order)
@@ -135,6 +172,7 @@ export function PipelineCard({
     kebabRows.push({
       label: 'Cancel order',
       dangerous: true,
+      disabled: foreignTill,
       act: () => {
         setMenuOpen(false)
         onCancel(order)
@@ -144,6 +182,7 @@ export function PipelineCard({
     kebabRows.push({
       label: 'Cancel after paid',
       dangerous: true,
+      disabled: foreignTill,
       act: () => {
         setMenuOpen(false)
         setCancellingAfterPaid(true)
@@ -182,6 +221,11 @@ export function PipelineCard({
           >
             <span>{formatRecentAge(order.orderedAt)}</span>
             {showCreator && <span className="truncate">· {order.creatorName}</span>}
+            {otherTill && (
+              <span className="truncate font-semibold" data-testid={`order-till-${order.id}`}>
+                · on {otherTill}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 self-center items-center gap-1.5">
@@ -219,7 +263,7 @@ export function PipelineCard({
             <Button
               size="phone"
               className="h-9 flex-1 bg-success px-3 text-on-success"
-              disabled={busy}
+              disabled={actionsDisabled}
               onClick={() => onMarkPaid(order)}
             >
               Paid
@@ -228,7 +272,7 @@ export function PipelineCard({
               variant="secondary"
               size="phone"
               className="h-9 flex-1 px-3"
-              disabled={busy}
+              disabled={actionsDisabled}
               onClick={() => onUnprepare(order)}
             >
               Reprepare
@@ -239,7 +283,7 @@ export function PipelineCard({
             <Button
               size="phone"
               className="h-9 flex-1 px-3"
-              disabled={busy}
+              disabled={actionsDisabled}
               onClick={() => onMarkPrepared(order)}
             >
               Prepared
@@ -249,7 +293,7 @@ export function PipelineCard({
                 variant="secondary"
                 size="phone"
                 className="h-9 flex-1 px-3"
-                disabled={busy}
+                disabled={actionsDisabled}
                 onClick={() => setUnpaying(true)}
               >
                 Un-pay
@@ -259,7 +303,7 @@ export function PipelineCard({
                 variant="secondary"
                 size="phone"
                 className="h-9 flex-1 px-3"
-                disabled={busy || isPaid}
+                disabled={actionsDisabled || isPaid}
                 onClick={() => onMarkPaid(order)}
               >
                 Paid
@@ -276,7 +320,7 @@ export function PipelineCard({
               className="h-9 w-9 px-0"
               aria-label={`More actions for ${reference}`}
               aria-expanded={menuOpen}
-              disabled={busy}
+              disabled={actionsDisabled}
               onClick={() => {
                 if (!menuOpen) placeMenu()
                 setMenuOpen((open) => !open)

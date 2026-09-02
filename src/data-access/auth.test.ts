@@ -10,6 +10,7 @@ const supabase = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
   invoke: vi.fn(),
   setSession: vi.fn(),
+  rpc: vi.fn(),
 }))
 
 vi.mock('./supabase', () => ({
@@ -19,6 +20,7 @@ vi.mock('./supabase', () => ({
       setSession: supabase.setSession,
     },
     functions: { invoke: supabase.invoke },
+    rpc: supabase.rpc,
   }),
 }))
 
@@ -329,13 +331,17 @@ describe('setting a tablet up, and who is to blame', () => {
   })
 
   it('still names the outlet-level refusal, which describes no code', async () => {
+    // `tablet_exists` became unreachable with multiple-billing-devices: an
+    // outlet holding a counter refuses nothing. The label is what can still
+    // collide, and it is still allowed to be specific for the same reason --
+    // it describes the outlet the caller named, not which codes exist.
     supabase.invoke.mockResolvedValue({
       data: null,
-      error: functionHttpError('tablet_exists', 409),
+      error: functionHttpError('label_taken', 409),
     })
 
     await expect(setUpCounterDevice('ABCDE-FGHJK')).rejects.toEqual(
-      expect.objectContaining<Partial<CounterSetupError>>({ code: 'tablet_exists' }),
+      expect.objectContaining<Partial<CounterSetupError>>({ code: 'label_taken' }),
     )
   })
 
@@ -374,5 +380,66 @@ describe('setting a tablet up, and who is to blame', () => {
     }
 
     expect(messages.size, 'a code refusal must not vary with anything').toBe(1)
+  })
+
+  /**
+   * The step that makes the row a counter.
+   *
+   * Redemption and the browser holding a session cannot share a transaction, so
+   * the row `counter-setup` writes reaches nothing until this lands. That is
+   * what stops a lost response costing the outlet a till — and it is also why
+   * the call is easy to lose in a refactor: every refusal path above returns
+   * before it, so a version that never proved anything would pass all of them
+   * and fail only at a counter.
+   */
+  it('proves the session, because until it does the tablet is not a counter', async () => {
+    supabase.invoke.mockResolvedValue({
+      data: { email: 'tablet@machine.invalid', password: 'machine-secret' },
+      error: null,
+    })
+    supabase.signInWithPassword.mockResolvedValue({ data: {}, error: null })
+    supabase.rpc.mockResolvedValue({ data: 'ok', error: null })
+
+    await setUpCounterDevice('ABCDE-FGHJK')
+
+    expect(supabase.rpc).toHaveBeenCalledWith('prove_counter_device_session')
+    // Signed in first, proved second: the proof is evidence of the session, so
+    // proving before signing in would be proving nothing.
+    expect(supabase.signInWithPassword.mock.invocationCallOrder[0]).toBeLessThan(
+      supabase.rpc.mock.invocationCallOrder[0]!,
+    )
+  })
+
+  it('says a lost proof needs the same code again, not an admin', async () => {
+    supabase.invoke.mockResolvedValue({
+      data: { email: 'tablet@machine.invalid', password: 'machine-secret' },
+      error: null,
+    })
+    supabase.signInWithPassword.mockResolvedValue({ data: {}, error: null })
+    supabase.rpc.mockResolvedValue({ data: null, error: new Error('lost') })
+
+    // The window is still open and the row is not a counter, so the advice is a
+    // retry rather than the admin the old flow needed.
+    await expect(setUpCounterDevice('ABCDE-FGHJK')).rejects.toThrow(/try the same code again/i)
+  })
+
+  it('blames no code when the machine sign-in fails, and asks for a fresh one', async () => {
+    supabase.invoke.mockResolvedValue({
+      data: { email: 'tablet@machine.invalid', password: 'machine-secret' },
+      error: null,
+    })
+    supabase.signInWithPassword.mockResolvedValue({ data: {}, error: new Error('nope') })
+
+    const failure = await setUpCounterDevice('ABCDE-FGHJK').then(
+      () => null,
+      (cause: CounterSetupError) => cause,
+    )
+
+    expect(failure?.message).toMatch(/it was not set up/i)
+    expect(failure?.message).toMatch(/fresh code/i)
+    // The sentence this must no longer contain: the row it left behind is not a
+    // counter and lapses on its own, so nobody has to remove anything.
+    expect(failure?.message).not.toMatch(/remove/i)
+    expect(supabase.rpc).not.toHaveBeenCalled()
   })
 })

@@ -474,6 +474,13 @@ export function ManagerBillingHistory() {
                       <span className="mt-1 block text-sm font-normal text-content-muted">
                         {methodLabel(bill.paymentMethod)} · {formatDayTime(bill.paidAt)} · by{' '}
                         {bill.billerName}
+                        {/*
+                          And which till, where the outlet has more than one.
+                          The operator's name does not answer it: one person may
+                          hold a shift on both counters, so reconciling a
+                          two-till evening needs the till named.
+                        */}
+                        {bill.tillLabel && <> · on {bill.tillLabel}</>}
                       </span>
                     </span>
                     <span className="flex shrink-0 items-center gap-2">

@@ -40,6 +40,64 @@ function renderHistory(adapters = createMockAdapters('franchise_admin')) {
   }
 }
 
+/**
+ * Reconciling an outlet that has two tills.
+ *
+ * Two things have to hold, and only one of them is obvious. The obvious one is
+ * that each bill is counted once: two tablets produce two streams of bills into
+ * one outlet's history, and a history that joined its way to a duplicate would
+ * overstate the day's takings.
+ *
+ * The other is that the history has to say **which till**. The operator's name
+ * cannot answer it, because one person may hold a shift on both counters -- so a
+ * manager reading two bills a minute apart under one name cannot tell whether
+ * one counter was busy or two were.
+ *
+ * Neither could be asserted before `multiple-billing-devices`, because an outlet
+ * could not hold two tablets.
+ */
+describe('manager billing history at a two-till outlet', () => {
+  it('names the till on a bill, and counts each bill exactly once', async () => {
+    const adapters = createMockAdapters('franchise_admin')
+    const real = adapters.billing.listManagerHistory.bind(adapters.billing)
+    adapters.billing.listManagerHistory = async (filters) => {
+      // The same bills, relabelled onto two tills. Relabelling rather than
+      // inventing keeps every other figure on the screen the demo's own, so a
+      // duplicate would have to come from the rendering rather than the fixture.
+      return (await real(filters)).map((bill, index) => ({
+        ...bill,
+        tillLabel: index % 2 === 0 ? 'Counter tablet' : 'Takeaway counter',
+      }))
+    }
+
+    renderHistory(adapters)
+    const list = await screen.findByTestId('manager-bill-list')
+    const rows = within(list).getAllByTestId(/^manager-bill-/)
+
+    expect(rows.length).toBeGreaterThan(1)
+    // One row per bill: no id appears twice.
+    const ids = rows.map((row) => row.dataset.testid)
+    expect(new Set(ids).size).toBe(ids.length)
+    // And the till is named, under a single operator holding both counters.
+    expect(within(list).getAllByText(/on Counter tablet/).length).toBeGreaterThan(0)
+    expect(within(list).getAllByText(/on Takeaway counter/).length).toBeGreaterThan(0)
+  })
+
+  it('says nothing about a till it was not told about', async () => {
+    // A single-till outlet, and a bill still draining locally, both carry no
+    // label. Neither may be rendered as a guess.
+    const adapters = createMockAdapters('franchise_admin')
+    const real = adapters.billing.listManagerHistory.bind(adapters.billing)
+    adapters.billing.listManagerHistory = async (filters) =>
+      (await real(filters)).map((bill) => ({ ...bill, tillLabel: null }))
+
+    renderHistory(adapters)
+    const list = await screen.findByTestId('manager-bill-list')
+
+    expect(within(list).queryByText(/ · on /)).not.toBeInTheDocument()
+  })
+})
+
 describe('manager billing history asks two questions', () => {
   it('offers a day bar with a step either side, and no status or payment picker', async () => {
     renderHistory()

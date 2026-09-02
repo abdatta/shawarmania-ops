@@ -156,7 +156,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     })
     const row = firstRow(data)
     if (error) return json({ error: 'unavailable' }, 503)
-    if (row?.['status'] === 'tablet_exists') return json({ error: 'tablet_exists' }, 409)
+    if (row?.['status'] === 'label_taken') return json({ error: 'label_taken' }, 409)
     if (row?.['status'] !== 'ok') return json(FORBIDDEN, 403)
 
     // Once. There is no way to ask for it again, because only its hash was kept.

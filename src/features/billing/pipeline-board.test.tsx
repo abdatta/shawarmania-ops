@@ -43,6 +43,7 @@ function order(over: Partial<BillingOrder>): BillingOrder {
     status: 'open',
     creatorId: personaFixtures.biller.profile.id,
     creatorName: personaFixtures.biller.profile.full_name,
+    deviceLabel: null,
     customerName: null,
     customerPhone: null,
     lines: [

@@ -12,6 +12,7 @@ import {
 import {
   counterDeviceFixtures,
   DEMO_COUNTER_DEVICE_ID,
+  DEMO_COUNTER_DEVICE_TWO_ID,
   DEMO_KANCHRAPARA_DEVICE_ID,
 } from './fixtures/billing'
 import { resolveBusinessDate } from '@/domain'
@@ -102,12 +103,20 @@ export function createDemoCounter(): DemoCounter {
         // Kalyani reported a minute ago; Kanchrapara has said nothing for two
         // days, so the management surface has something genuinely stale to mark
         // rather than a screenshot of one healthy row.
+        //
+        // Kalyani's SECOND counter carries the third state, and it is the one
+        // worth demonstrating: it reported hours ago and reported **nothing
+        // outstanding**. A zero is the figure a manager acts on, and a zero
+        // nobody has refreshed since is exactly the one they must not, so the
+        // demo shows a till that reads clean and says how old that reading is.
         lastSeenAt:
           device.id === DEMO_COUNTER_DEVICE_ID
             ? new Date(Date.now() - 60_000).toISOString()
             : device.id === DEMO_KANCHRAPARA_DEVICE_ID
               ? new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
-              : null,
+              : device.id === DEMO_COUNTER_DEVICE_TWO_ID
+                ? new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
+                : null,
         // Both outlets hold work, in different amounts, and Kalyani holds some
         // deliberately: it is the outlet the drawer opens on, so this is what
         // puts an **explainable chip on the demo's first screen** — the walk
@@ -267,15 +276,26 @@ export function createMockCounterAdapter(
       if (!mayAdminister(outletId)) {
         throw new CounterActionError('forbidden', 'You are not allowed to do that.')
       }
-      if (counter.devices.some((device) => device.outletId === outletId)) {
+      /*
+        An outlet holding a tablet is no longer a refusal. The label is: it has
+        to be unique among an outlet's live counters, and the demo refuses it
+        here for the same reason the database does, so a walkthrough meets the
+        real answer rather than a friendlier one.
+      */
+      if (
+        counter.devices.some(
+          (device) =>
+            device.outletId === outletId &&
+            device.label.trim().toLowerCase() === label.trim().toLowerCase(),
+        )
+      ) {
         throw new CounterActionError(
-          'tablet_exists',
-          'This outlet already has a tablet. Remove that one first.',
+          'label_taken',
+          'A tablet at this outlet is already called this. Choose a different name.',
         )
       }
       // Shown once here too, because "write it down now" is the habit the real
       // flow depends on and a demo that let you look again would not teach it.
-      void label
       return { code: 'DEMO0-SETUP', validFor: '15 minutes' }
     },
 

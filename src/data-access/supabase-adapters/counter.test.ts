@@ -83,7 +83,11 @@ describe('classifying a counter action failure', () => {
 
   it.each([
     ['forbidden', 403, 'You are not allowed to do that.'],
-    ['tablet_exists', 409, 'This outlet already has a tablet. Remove that one first.'],
+    [
+      'label_taken',
+      409,
+      'A tablet at this outlet is already called this. Choose a different name.',
+    ],
   ])('keeps the named refusal %s exactly as it was', async (reason, status, message) => {
     const counter = adapterWith(answering(httpError({ error: reason }, status)))
 

@@ -338,6 +338,7 @@ describe('the live tablet acceptance boundary', () => {
       status: 'open',
       creatorId: 'person-1',
       creatorName: 'Asha',
+      deviceLabel: null,
       customerName: null,
       customerPhone: null,
       lines: draft.lines,

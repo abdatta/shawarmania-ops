@@ -14,7 +14,7 @@ import { deviceEmail, generateDevicePassword } from '../_shared/counter-code.ts'
  * What keeps it honest:
  *
  *  1. It decides nothing. `redeem_counter_device_setup_code` checks the code,
- *     enforces one active tablet per outlet, consumes the code and writes the
+ *     enforces label uniqueness at the outlet, consumes the code and writes the
  *     row, all in one transaction — so there is no check-then-act window here.
  *  2. Every code failure looks identical. Unknown, wrong, expired, consumed,
  *     superseded, attempts exhausted: one status, one body.
@@ -24,15 +24,19 @@ import { deviceEmail, generateDevicePassword } from '../_shared/counter-code.ts'
  *  4. No human credential is anywhere near this. The password it mints is
  *     random, is never shown, and belongs to a machine.
  *
- * `tablet_exists` is the single specific refusal, and it is allowed to be
- * specific because it describes the OUTLET rather than the code, to a caller who
- * already holds a live code for that outlet.
+ * `label_taken` is the single specific refusal, and it is allowed to be specific
+ * because it describes the OUTLET rather than the code, to a caller who already
+ * holds a live code for that outlet.
+ *
+ * The row this writes is **not yet a counter**. The browser signs in with the
+ * credential below and then proves the session, and only that makes it one — so
+ * a lost response here costs a code and no longer costs the outlet a till.
  *
  * Registered with verify_jwt = false in supabase/config.toml.
  */
 
 const INVALID = { error: 'invalid_code' }
-const TABLET_EXISTS = { error: 'tablet_exists' }
+const LABEL_TAKEN = { error: 'label_taken' }
 
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return preflight()
@@ -81,7 +85,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   if (error || !row || row.status !== 'ok' || !row.device_id) {
     await discard()
-    if (row?.status === 'tablet_exists') return json(TABLET_EXISTS, 409)
+    if (row?.status === 'label_taken') return json(LABEL_TAKEN, 409)
     return json(INVALID, 400)
   }
 

@@ -345,6 +345,10 @@ export function createMockBillingAdapter(
       status: row.status,
       creatorId: row.created_by,
       creatorName: actorName(row.created_by) ?? 'Unknown operator',
+      // The tablet that took it, so the demo pipeline explains a refusal the
+      // same way the live one does.
+      deviceLabel:
+        store.counterDevices.find((device) => device.id === row.device_id)?.label ?? null,
       customerName: row.customer_name,
       customerPhone: row.customer_phone,
       lines: store.orderItems
@@ -397,6 +401,8 @@ export function createMockBillingAdapter(
       paymentMethod: payments.length === 1 ? payments[0]!.method : 'mixed',
       status: row.status,
       billerName: actorName(row.biller_profile_id) ?? 'Counter operator',
+      tillLabel:
+        store.counterDevices.find((device) => device.id === row.counter_device_id)?.label ?? null,
       billerId: row.biller_profile_id,
       recordedAfterShiftEnd: row.recorded_after_shift_end,
       attributionShiftEndedAt: row.attribution_shift_ended_at,
@@ -844,6 +850,7 @@ export function createMockBillingAdapter(
             status: 'open',
             creatorId: creatorShift?.person_id ?? '',
             creatorName: actorName(creatorShift?.person_id ?? null) ?? 'Counter operator',
+            deviceLabel: null,
             customerName: input.customerName?.trim() || null,
             customerPhone: input.customerPhone?.trim() || null,
             lines: structuredClone(input.lines),
@@ -1060,6 +1067,9 @@ export function createMockBillingAdapter(
       paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
       status: 'settled',
       billerName: content.billerName,
+      // Locally projected, so there is no server read to name the till yet.
+      // The history names it once the bill has landed.
+      tillLabel: null,
       customerName: content.customerName,
       customerPhone: content.customerPhone,
       lines: content.lines,
@@ -1324,6 +1334,7 @@ export function createMockBillingAdapter(
         status: 'open',
         creatorId: shift.person_id,
         creatorName: actorName(shift.person_id) ?? 'Counter operator',
+        deviceLabel: null,
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
         lines: structuredClone(input.lines),
@@ -1339,8 +1350,20 @@ export function createMockBillingAdapter(
     async reviseOrder(orderId, input) {
       const shift = requireOpenShift()
       const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (!projected || projected.deviceId !== shift.device_id) {
-        throw new BillingActionError('not_found', 'That order is not on this tablet.')
+      if (!projected) {
+        throw new BillingActionError('not_found', 'That order is no longer on the pipeline.')
+      }
+      // Ownership is per tablet, and the refusal names the till rather than
+      // claiming the order does not exist: it is visible on the outlet
+      // pipeline, so "not found" would be a sentence the screen contradicts.
+      if (projected.deviceId !== shift.device_id) {
+        throw new BillingActionError(
+          'not_this_tablet',
+          `That order was taken on ${
+            store.counterDevices.find((device) => device.id === projected.deviceId)?.label ??
+            'another counter'
+          }, so it can only be changed there.`,
+        )
       }
       if (projected.status !== 'open') {
         const by = projected.cancelledByName
@@ -1388,8 +1411,20 @@ export function createMockBillingAdapter(
     async markOrderPrepared(orderId, prepared) {
       const shift = requireOpenShift()
       const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (!projected || projected.deviceId !== shift.device_id) {
-        throw new BillingActionError('not_found', 'That order is not on this tablet.')
+      if (!projected) {
+        throw new BillingActionError('not_found', 'That order is no longer on the pipeline.')
+      }
+      // Ownership is per tablet, and the refusal names the till rather than
+      // claiming the order does not exist: it is visible on the outlet
+      // pipeline, so "not found" would be a sentence the screen contradicts.
+      if (projected.deviceId !== shift.device_id) {
+        throw new BillingActionError(
+          'not_this_tablet',
+          `That order was taken on ${
+            store.counterDevices.find((device) => device.id === projected.deviceId)?.label ??
+            'another counter'
+          }, so it can only be changed there.`,
+        )
       }
       // The same guards the database applies at delivery, evaluated against the
       // projected state: only an open order moves, and a paid order may still
@@ -1515,8 +1550,20 @@ export function createMockBillingAdapter(
     async payOrder(orderId, paymentsInput) {
       const shift = requireOpenShift()
       const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (!projected || projected.deviceId !== shift.device_id) {
-        throw new BillingActionError('not_found', 'That order is not on this tablet.')
+      if (!projected) {
+        throw new BillingActionError('not_found', 'That order is no longer on the pipeline.')
+      }
+      // Ownership is per tablet, and the refusal names the till rather than
+      // claiming the order does not exist: it is visible on the outlet
+      // pipeline, so "not found" would be a sentence the screen contradicts.
+      if (projected.deviceId !== shift.device_id) {
+        throw new BillingActionError(
+          'not_this_tablet',
+          `That order was taken on ${
+            store.counterDevices.find((device) => device.id === projected.deviceId)?.label ??
+            'another counter'
+          }, so it can only be changed there.`,
+        )
       }
       if (projected.status === 'cancelled') {
         const by = projected.cancelledByName
@@ -1573,8 +1620,21 @@ export function createMockBillingAdapter(
     async cancelOrder(orderId, reason) {
       const shift = requireOpenShift()
       const projected = projectedOrders(shift.outlet_id).find((order) => order.id === orderId)
-      if (!projected || projected.deviceId !== shift.device_id)
-        throw new BillingActionError('not_found', 'That order is not on this tablet.')
+      if (!projected) {
+        throw new BillingActionError('not_found', 'That order is no longer on the pipeline.')
+      }
+      // Ownership is per tablet, and the refusal names the till rather than
+      // claiming the order does not exist: it is visible on the outlet
+      // pipeline, so "not found" would be a sentence the screen contradicts.
+      if (projected.deviceId !== shift.device_id) {
+        throw new BillingActionError(
+          'not_this_tablet',
+          `That order was taken on ${
+            store.counterDevices.find((device) => device.id === projected.deviceId)?.label ??
+            'another counter'
+          }, so it can only be changed there.`,
+        )
+      }
       if (projected.status !== 'open')
         throw new BillingActionError(
           'order_closed',

@@ -273,6 +273,7 @@ export function OpenOrdersSurface({
                 order={order}
                 section={section}
                 currentBillerId={shift?.billerProfileId ?? null}
+                currentDeviceId={counterDevice?.device.deviceId ?? null}
                 busy={busy}
                 {...(onEditOrder ? { onEdit: onEditOrder } : {})}
                 tenderLabel={order.billId ? (tenders.get(order.billId) ?? null) : null}

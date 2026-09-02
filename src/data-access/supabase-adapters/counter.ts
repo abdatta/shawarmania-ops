@@ -41,7 +41,7 @@ const SHIFT_COLUMNS =
 
 const MESSAGES: Record<string, string> = {
   forbidden: 'You are not allowed to do that.',
-  tablet_exists: 'This outlet already has a tablet. Remove that one first.',
+  label_taken: 'A tablet at this outlet is already called this. Choose a different name.',
   wrong_code: 'That is not the code on the tablet. Check it and try again.',
   exhausted: 'Too many wrong codes. Ask the tablet to try again with a new one.',
   not_eligible: 'You are not set up to bill at that outlet.',

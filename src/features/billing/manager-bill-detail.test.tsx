@@ -22,6 +22,7 @@ const bill: BillingBill = {
   paymentMethod: 'upi',
   status: 'settled',
   billerName: 'Demo Biller',
+  tillLabel: null,
   customerName: 'Demo Customer',
   customerPhone: null,
   lines: [

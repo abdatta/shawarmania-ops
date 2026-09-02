@@ -245,22 +245,31 @@ export function DevicesSurface() {
         <LoadingFigures label="tablets and their counters" rows={outletIds.map(() => 7)} />
       ) : (
         /*
-          A card per outlet in scope, rather than a list of the tablets that
-          happen to exist. With several outlets selected the two questions are
-          different: a list of tablets answers "what is out there", and this
-          answers "is every counter covered" — which is the one an empty counter
-          is the interesting answer to.
+          Grouped by outlet, and every tablet at each one, rather than a flat
+          list of the tablets that happen to exist. With several outlets selected
+          the two questions are different: a list of tablets answers "what is out
+          there", and this answers "is every counter covered" — which is the one
+          an outlet with no tablet is the interesting answer to.
+
+          An outlet holds as many tablets as it has tills since
+          multiple-billing-devices, so this filters where it used to `find`. A
+          tablet awaiting proof of its session is absent from the read itself, so
+          nothing here has to know about one: an outlet mid-setup looks exactly
+          like an outlet with one fewer tablet, which is the point.
         */
         <ul className="space-y-3">
           {outletIds.map((outletId) => {
-            const device = inScope.find((candidate) => candidate.outletId === outletId)
+            const outletName = names[outletId] ?? 'This outlet'
+            const outletDevices = inScope.filter((candidate) => candidate.outletId === outletId)
             return (
-              <li key={outletId}>
-                {device ? (
-                  <Card>
+              <li key={outletId} className="space-y-3">
+                {outletDevices.length > 0 && (
+                  <h2 className="text-sm font-semibold text-content-muted">{outletName}</h2>
+                )}
+                {outletDevices.map((device) => (
+                  <Card key={device.id}>
                     <CardTitle>{device.label}</CardTitle>
                     <CardBody className="space-y-2">
-                      <p>{names[outletId] ?? 'This outlet'}</p>
                       {/*
                         "Last reported", never "current". This status is written
                         by the tablet's own heartbeat, so a tablet that is off,
@@ -311,19 +320,26 @@ export function DevicesSurface() {
                           onClick={() => setRemoving(device)}
                           className={buttonVariants({ variant: 'secondary', size: 'phone' })}
                         >
-                          Remove
+                          {/*
+                            Named, not just "Remove". An outlet may have two
+                            counters open on this screen, and a permanent action
+                            that does not say which one it takes is an action
+                            somebody performs on the wrong till.
+                          */}
+                          Remove {device.label}
                         </button>
                       )}
                     </CardBody>
                   </Card>
-                ) : (
+                ))}
+                {outletDevices.length === 0 ? (
                   <EmptyState
                     icon={TabletSmartphone}
-                    title={`No tablet is set up at ${names[outletId] ?? 'this outlet'} yet.`}
+                    title={`No tablet is set up at ${outletName} yet.`}
                     action={
                       mayAdminister ? (
                         <AddButton
-                          label={`Set up a tablet at ${names[outletId] ?? 'this outlet'}`}
+                          label={`Set up a tablet at ${outletName}`}
                           onClick={() => {
                             setAddOutletId(outletId)
                             setAdding(true)
@@ -332,6 +348,16 @@ export function DevicesSurface() {
                       ) : undefined
                     }
                   />
+                ) : (
+                  mayAdminister && (
+                    <AddButton
+                      label={`Set up another tablet at ${outletName}`}
+                      onClick={() => {
+                        setAddOutletId(outletId)
+                        setAdding(true)
+                      }}
+                    />
+                  )
                 )}
               </li>
             )
@@ -382,7 +408,7 @@ export function DevicesSurface() {
       */}
       <ConfirmDialog
         open={removing !== null}
-        title="Remove this tablet?"
+        title={removing ? `Remove ${removing.label}?` : 'Remove this tablet?'}
         danger
         consequence={
           removing

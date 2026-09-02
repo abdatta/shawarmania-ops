@@ -24,6 +24,12 @@ import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from './outlets'
 
 export const DEMO_COUNTER_DEVICE_ID = 'd5000000-0000-4000-a000-000000000001'
 export const DEMO_KANCHRAPARA_DEVICE_ID = 'd5000000-0000-4000-a000-000000000002'
+/**
+ * Kalyani's second counter. Two tablets at one outlet is what
+ * multiple-billing-devices exists for, so the demo shows a shop that has two
+ * rather than a management surface that could hypothetically list them.
+ */
+export const DEMO_COUNTER_DEVICE_TWO_ID = 'd5000000-0000-4000-a000-000000000003'
 
 /** The persona biller, and a colleague — a handover needs two people. */
 export const DEMO_BILLER_ID = 'd1000000-0000-4000-a000-000000000003'
@@ -61,6 +67,8 @@ export const counterDeviceFixtures: Tables<'counter_devices'>[] = [
   {
     id: DEMO_COUNTER_DEVICE_ID,
     outlet_id: OUTLET_KALYANI_ID,
+    // Labels are unique among an outlet's live counters. This one keeps the name
+    // the demo walkthrough has always used; the second says which till it is.
     label: 'Counter tablet',
     set_up_at: '2026-07-26T00:00:00+00:00',
     set_up_by: null,
@@ -68,6 +76,24 @@ export const counterDeviceFixtures: Tables<'counter_devices'>[] = [
     last_reported_unsent: 0,
     last_reported_oldest_unresolved_at: null,
     removed_at: null,
+    // Proven: a demo tablet has no browser to prove itself, and an unproven row
+    // is deliberately invisible, which would make the fixture a tablet nobody
+    // can see.
+    session_proven_at: '2026-07-26T00:00:00+00:00',
+    proof_expires_at: null,
+  },
+  {
+    id: DEMO_COUNTER_DEVICE_TWO_ID,
+    outlet_id: OUTLET_KALYANI_ID,
+    label: 'Takeaway counter',
+    set_up_at: '2026-08-30T00:00:00+00:00',
+    set_up_by: null,
+    last_seen_at: null,
+    last_reported_unsent: 0,
+    last_reported_oldest_unresolved_at: null,
+    removed_at: null,
+    session_proven_at: '2026-08-30T00:00:00+00:00',
+    proof_expires_at: null,
   },
   {
     id: DEMO_KANCHRAPARA_DEVICE_ID,
@@ -79,6 +105,8 @@ export const counterDeviceFixtures: Tables<'counter_devices'>[] = [
     last_reported_unsent: 0,
     last_reported_oldest_unresolved_at: null,
     removed_at: null,
+    session_proven_at: '2026-07-26T00:00:00+00:00',
+    proof_expires_at: null,
   },
 ]
 

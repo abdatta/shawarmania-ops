@@ -65,10 +65,12 @@ type OrderReadRow = Tables<'orders'> & {
   order_items: Tables<'order_items'>[]
   creator: { full_name: string } | { full_name: string }[] | null
   canceller: { full_name: string } | { full_name: string }[] | null
+  device: { label: string } | { label: string }[] | null
 }
 
 type BillReadRow = Tables<'bills'> & {
   bill_items: Tables<'bill_items'>[]
+  counter_device: { label: string } | { label: string }[] | null
   bill_payments: Tables<'bill_payments'>[]
   order: { order_number: number } | { order_number: number }[] | null
   biller: { full_name: string } | { full_name: string }[] | null
@@ -115,6 +117,7 @@ function orderView(row: OrderReadRow): BillingOrder {
     status: row.status,
     creatorId: row.created_by,
     creatorName: joined(row.creator)?.full_name ?? 'Counter operator',
+    deviceLabel: joined(row.device)?.label ?? null,
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
     lines: row.order_items.map(lineView),
@@ -125,6 +128,33 @@ function orderView(row: OrderReadRow): BillingOrder {
     paidAt: row.paid_at,
     billId: row.bill_id,
   }
+}
+
+/**
+ * The same refusal the database gives for an order this tablet does not own,
+ * given in place and before a command exists.
+ *
+ * Ownership has always been the database's to enforce, and it still is. What
+ * changes with several tablets at one outlet is **when** the operator finds
+ * out. The pipeline is outlet-wide, so a neighbouring tablet's order has always
+ * been on screen; while an outlet had one tablet there was no neighbour, and
+ * once there is, a refusal that only arrives from the server arrives late --
+ * and offline it does not arrive at all until the queue drains, by which time
+ * the operator has moved on and the command is waiting to fail.
+ *
+ * So the refusal is local, and it captures nothing. That is the whole of what
+ * `offline-billing-resumption` requires of a resumed tablet: it is handed a
+ * remembered pipeline holding work it may not touch, with no server to ask.
+ *
+ * It names the till where it can, because "this order is not yours" is not
+ * actionable and "it was taken on the takeaway counter" is.
+ */
+function requireOwnOrder(order: BillingOrder, deviceId: string): void {
+  if (order.deviceId === deviceId) return
+  throw new BillingActionError(
+    'not_this_tablet',
+    `That order was taken on ${order.deviceLabel ?? 'another counter'}, so it can only be changed there.`,
+  )
 }
 
 function billView(
@@ -173,6 +203,7 @@ function billView(
     paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
     status: row.status,
     billerName: joined(row.biller)?.full_name ?? 'Counter operator',
+    tillLabel: joined(row.counter_device)?.label ?? null,
     billerId: row.biller_profile_id,
     recordedAfterShiftEnd: row.recorded_after_shift_end,
     attributionShiftEndedAt: row.attribution_shift_ended_at,
@@ -446,6 +477,10 @@ export function createSupabaseBillingAdapter(
             status: 'open',
             creatorId: counterSession?.shift?.personId ?? '',
             creatorName: 'Counter operator',
+            // Locally created, so it is this tablet's by construction. The
+            // pipeline names only a tablet that is NOT this one, so there is
+            // nothing to say here; the label arrives on the first server read.
+            deviceLabel: null,
             customerName: payload.customerName,
             customerPhone: payload.customerPhone,
             lines: payload.lines.map((line) => ({
@@ -593,7 +628,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('orders')
       .select(
-        '*, order_items(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)',
+        '*, order_items(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name), device:counter_devices!orders_device_id_fkey(label)',
       )
       .eq('outlet_id', outletId)
       .order('ordered_at', { ascending: false })
@@ -625,7 +660,7 @@ export function createSupabaseBillingAdapter(
     const { data, error } = await client
       .from('orders')
       .select(
-        '*, order_items(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name)',
+        '*, order_items(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name), device:counter_devices!orders_device_id_fkey(label)',
       )
       .eq('id', orderId)
       .maybeSingle()
@@ -647,7 +682,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('bills')
       .select(
-        '*, bill_items(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name))',
+        '*, bill_items(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name)), counter_device:counter_devices!bills_counter_device_id_fkey(label)',
       )
     if (filters.id) query = query.eq('id', filters.id)
     if (filters.outletId) query = query.eq('outlet_id', filters.outletId)
@@ -756,6 +791,7 @@ export function createSupabaseBillingAdapter(
           status: 'open',
           creatorId: counterSession.shift?.personId ?? '',
           creatorName: previous?.creatorName ?? 'Counter operator',
+          deviceLabel: previous?.deviceLabel ?? null,
           customerName: command.payload.customerName,
           customerPhone: command.payload.customerPhone,
           lines: command.payload.lines.map((line) => ({
@@ -794,6 +830,7 @@ export function createSupabaseBillingAdapter(
             command.payload.payments.length > 1 ? 'mixed' : command.payload.payments[0]!.method,
           status: 'settled',
           billerName: 'Counter operator',
+          tillLabel: null,
           customerName: command.payload.customerName,
           customerPhone: command.payload.customerPhone,
           lines: command.payload.lines.map((line) => ({
@@ -836,6 +873,7 @@ export function createSupabaseBillingAdapter(
               command.payload.payments.length > 1 ? 'mixed' : command.payload.payments[0]!.method,
             status: 'settled',
             billerName: order.creatorName,
+            tillLabel: null,
             customerName: order.customerName,
             customerPhone: order.customerPhone,
             lines: order.lines,
@@ -1208,6 +1246,7 @@ export function createSupabaseBillingAdapter(
         paymentMethod: draft.payments.length > 1 ? 'mixed' : draft.payments[0]!.method,
         status: 'settled',
         billerName: 'Counter operator',
+        tillLabel: null,
         customerName: draft.customerName?.trim() || null,
         customerPhone: draft.customerPhone?.trim() || null,
         lines: [...draft.lines],
@@ -1302,6 +1341,7 @@ export function createSupabaseBillingAdapter(
         status: 'open',
         creatorId: shift.personId,
         creatorName: 'Counter operator',
+        deviceLabel: null,
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
         lines: [...input.lines],
@@ -1320,6 +1360,7 @@ export function createSupabaseBillingAdapter(
       const { session, shift } = requireTablet()
       const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
       if (!existing) throw new BillingActionError('not_found', 'That order is no longer open.')
+      requireOwnOrder(existing, session.device.deviceId)
       const command = await createBillingCommand({
         commandId: newUuid(),
         tabletId: session.device.deviceId,
@@ -1342,6 +1383,7 @@ export function createSupabaseBillingAdapter(
       const { session, shift } = requireTablet()
       const existing = await projectOrder(orderId)
       if (!existing) throw new BillingActionError('not_found', 'That order is no longer open.')
+      requireOwnOrder(existing, session.device.deviceId)
       // The same refusal the database would give, given in place and before a
       // command exists. Keyed on the projected state and never on whether this
       // order has been paid before: taking a payment back reopens an order
@@ -1402,6 +1444,7 @@ export function createSupabaseBillingAdapter(
         paymentMethod: payments.length > 1 ? 'mixed' : payments[0]!.method,
         status: 'settled',
         billerName: existing.creatorName,
+        tillLabel: null,
         customerName: existing.customerName,
         customerPhone: existing.customerPhone,
         lines: existing.lines,
@@ -1419,6 +1462,10 @@ export function createSupabaseBillingAdapter(
       const { session, shift } = requireTablet()
       const existing = orderCache.get(orderId) ?? (await readOrder(orderId))
       if (!existing) throw new BillingActionError('not_found', 'That order is no longer open.')
+      // A stranded order is the outlet manager's to cancel, with a reason, from
+      // their own device. The neighbouring tablet is not a recovery path and is
+      // refused here as it is at the database.
+      requireOwnOrder(existing, session.device.deviceId)
       if (!reason.trim())
         throw new BillingActionError('blank_reason', 'A cancellation needs a reason.')
       const command = await createBillingCommand({
@@ -1440,6 +1487,7 @@ export function createSupabaseBillingAdapter(
       const existing = await projectOrder(orderId)
       if (!existing)
         throw new BillingActionError('not_found', 'That order is no longer on the pipeline.')
+      requireOwnOrder(existing, session.device.deviceId)
       // Paid and already prepared is the one shape the database refuses on the
       // marking side, and it is reachable from the screen whenever a refresh
       // loses an accepted preparation. Refuse it here instead.

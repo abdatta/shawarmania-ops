@@ -1118,6 +1118,18 @@ export interface BillingOrder {
   status: OrderStatus
   creatorId: Tables<'orders'>['created_by']
   creatorName: string
+  /**
+   * The label of the tablet that took the order, where the reader is allowed to
+   * know it.
+   *
+   * The creator's name stopped predicting a refusal when one person became able
+   * to hold a shift on two tablets at one outlet: their own name on a
+   * neighbouring tablet's order says nothing about who may act on it. Ownership
+   * is per tablet, so the tablet is the fact that explains the refusal before
+   * somebody meets it. Null where the label was not readable, which a surface
+   * treats as "not this tablet" and never as "this one".
+   */
+  deviceLabel: string | null
   customerName: Tables<'orders'>['customer_name']
   customerPhone: Tables<'orders'>['customer_phone']
   lines: BillLineDraft[]
@@ -1166,6 +1178,15 @@ export interface BillingBill {
   status: BillStatus
   /** Snapshotted attribution resolved for display; never inferred from the reader's session. */
   billerName: string
+  /**
+   * The till that took the payment, where the reader may know it.
+   *
+   * A manager reconciling a two-counter outlet needs to know which till a bill
+   * came off, and the operator's name does not say: one person may hold a shift
+   * on both. Null where the label was not readable, which a surface renders as
+   * nothing rather than as a guess.
+   */
+  tillLabel: string | null
   /** The original shift operator id. It never changes when attribution is reviewed. */
   billerId?: string
   /** True only when the server accepted this sale in the bounded remote-leave gap. */

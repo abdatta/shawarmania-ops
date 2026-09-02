@@ -119,30 +119,75 @@ describe('the Tablets surface', () => {
     expect(text).toMatch(/Out of touch/)
   })
 
-  it('offers no setup code where a tablet is already standing', async () => {
+  /**
+   * The zero that must not read as an empty queue.
+   *
+   * A tablet's unresolved count is the tablet's own claim about itself, so one
+   * that is switched off, offline or broken simply stops moving it. A zero from
+   * hours ago therefore says nothing about whether that till has unsent money on
+   * it -- and "0 unresolved" with no age beside it is exactly the sentence a
+   * manager would act on.
+   */
+  it('never lets a stale zero read as an empty queue', async () => {
+    // Kalyani's second counter is the demo's stale-zero till: it reported hours
+    // ago, and reported nothing outstanding.
+    const adapters = createMockAdapters('super_admin', createDemoData())
+
+    renderSurface('super_admin', adapters)
+    const rows = await screen.findAllByTestId('device-telemetry')
+    const stale = rows.find((row) => /0 unresolved/.test(row.textContent ?? ''))!
+
+    // The count is dated, and the card says the figures are old. Either alone
+    // would be a zero somebody trusts.
+    expect(stale).toHaveTextContent(/Last reported/)
+    expect(stale).toHaveTextContent(/Out of touch/)
+  })
+
+  it('lists every tablet at an outlet, and offers another', async () => {
     const adapters = createMockAdapters('franchise_admin', createDemoData())
     renderSurface('franchise_admin', adapters)
 
+    // Kalyani has two counters in the demo shop. The assertion here used to be
+    // that a setup control is withheld once a tablet is standing, because one
+    // active tablet per outlet was a database invariant. It is not one any more,
+    // so the control is offered and it says it is offering another.
+    expect(await screen.findAllByTestId('device-telemetry')).toHaveLength(2)
+    expect(screen.getAllByText('Counter tablet').length).toBeGreaterThan(0)
+    expect(screen.getByText('Takeaway counter')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /set up another tablet at Shawarmania Kalyani/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('names the tablet on every action that acts on one', async () => {
+    const user = userEvent.setup()
+    const adapters = createMockAdapters('super_admin', createDemoData())
+    renderSurface('super_admin', adapters)
     await screen.findAllByTestId('device-telemetry')
-    // One active tablet per outlet is a database invariant, so the control that
-    // would be refused is simply not offered.
-    expect(screen.queryByRole('button', { name: /set up a tablet/i })).not.toBeInTheDocument()
+
+    // Two counters on screen, so a bare "Remove" would be an action somebody
+    // performs on the wrong till.
+    await user.click(screen.getByRole('button', { name: 'Remove Takeaway counter' }))
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Remove Takeaway counter?' }),
+    ).toBeInTheDocument()
   })
 
   it('names the outlet with no tablet, beside the ones that have one', async () => {
     const adapters = createMockAdapters('super_admin', createDemoData())
     const devices = await adapters.counter.listDevices()
-    await adapters.counter.removeDevice(
-      devices.find((device) => device.outletId === OUTLET_KANCHRAPARA_ID)!.id,
-    )
+    for (const device of devices.filter((d) => d.outletId === OUTLET_KANCHRAPARA_ID)) {
+      await adapters.counter.removeDevice(device.id)
+    }
 
     renderSurface('super_admin', adapters)
     await addOutlet(OUTLET_KANCHRAPARA_ID)
 
-    // Both counters on one screen: one covered, one not, and the empty one says
-    // which shop it is rather than "this outlet". That is the whole reason the
-    // surface takes several outlets at once.
-    expect(await screen.findByTestId('device-telemetry')).toBeInTheDocument()
+    // Both outlets on one screen: one covered by two counters, one not covered
+    // at all, and the empty one says which shop it is rather than "this outlet".
+    // That is the whole reason the surface takes several outlets at once.
+    expect(await screen.findAllByTestId('device-telemetry')).toHaveLength(2)
     expect(
       await screen.findByText(/No tablet is set up at Shawarmania Kanchrapara yet/i),
     ).toBeInTheDocument()
@@ -153,8 +198,10 @@ describe('the Tablets surface', () => {
     renderSurface('super_admin', adapters)
     await addOutlet(OUTLET_KANCHRAPARA_ID)
 
-    expect(await screen.findByText('Nobody is at this counter.')).toBeInTheDocument()
-    const emptyCounter = screen.getByText('Nobody is at this counter.').closest('section')!
+    // Kalyani's second counter and Kanchrapara's are both unheld, so this asks
+    // for the first of several rather than the only one.
+    const [unheld] = await screen.findAllByText('Nobody is at this counter.')
+    const emptyCounter = unheld!.closest('section')!
     expect(within(emptyCounter).queryByText('Bills rung')).not.toBeInTheDocument()
     expect(within(emptyCounter).queryByText('Cash')).not.toBeInTheDocument()
   })
@@ -162,7 +209,11 @@ describe('the Tablets surface', () => {
   it('keeps billing totals out of Tablets', async () => {
     const adapters = createMockAdapters('super_admin', createDemoData())
     renderSurface('super_admin', adapters)
-    const card = await screen.findByTestId(/device-operations-/)
+    // One card per tablet now, so this reads the one with somebody on it.
+    const cards = await screen.findAllByTestId(/device-operations-/)
+    const card = cards.find((candidate) =>
+      /has held this counter since/i.test(candidate.textContent ?? ''),
+    )!
 
     expect(card).toHaveTextContent(/has held this counter since/i)
     expect(within(card).queryByText('Bills rung')).not.toBeInTheDocument()
@@ -195,13 +246,14 @@ describe('the Tablets surface', () => {
 
     await addOutlet(OUTLET_KANCHRAPARA_ID)
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(screen.getAllByTestId('device-telemetry')).toHaveLength(2))
+    // Kalyani's two counters plus Kanchrapara's one.
+    await waitFor(() => expect(screen.getAllByTestId('device-telemetry')).toHaveLength(3))
 
     await act(async () => resolveFirst(firstScope))
 
     // The old Kalyani-only answer cannot erase Kanchrapara or briefly claim it
     // has no tablet after the wider question has already been answered.
-    expect(screen.getAllByTestId('device-telemetry')).toHaveLength(2)
+    expect(screen.getAllByTestId('device-telemetry')).toHaveLength(3)
     expect(
       screen.queryByText(/No tablet is set up at Shawarmania Kanchrapara/i),
     ).not.toBeInTheDocument()
@@ -213,11 +265,11 @@ describe('the Tablets surface', () => {
     const adapters = createMockAdapters('franchise_admin', data)
     // Nothing at this counter: the manager's outlet is empty, so setting one up
     // is the act available.
-    await adapters.counter.removeDevice(
-      (await adapters.counter.listDevices()).find(
-        (device) => device.outletId === OUTLET_KALYANI_ID,
-      )!.id,
-    )
+    for (const device of (await adapters.counter.listDevices()).filter(
+      (candidate) => candidate.outletId === OUTLET_KALYANI_ID,
+    )) {
+      await adapters.counter.removeDevice(device.id)
+    }
 
     renderSurface('franchise_admin', adapters)
     await user.click(await screen.findByRole('button', { name: /set up a tablet/i }))
@@ -243,11 +295,11 @@ describe('the Tablets surface', () => {
   it('reports a backend fault as a fault to report, not as a bad connection', async () => {
     const user = userEvent.setup()
     const adapters = createMockAdapters('franchise_admin', createDemoData())
-    await adapters.counter.removeDevice(
-      (await adapters.counter.listDevices()).find(
-        (device) => device.outletId === OUTLET_KALYANI_ID,
-      )!.id,
-    )
+    for (const device of (await adapters.counter.listDevices()).filter(
+      (candidate) => candidate.outletId === OUTLET_KALYANI_ID,
+    )) {
+      await adapters.counter.removeDevice(device.id)
+    }
     adapters.counter.issueSetupCode = () => {
       throw new CounterActionError(
         'unsendable',
@@ -278,12 +330,12 @@ describe('the Tablets surface', () => {
     renderSurface('super_admin', adapters)
 
     // Kanchrapara's tablet is the one carrying three unsent, which is the number
-    // somebody will ask about afterwards. Kalyani's is deselected so there is one
-    // Remove button on screen and no ambiguity about which it belongs to.
+    // somebody will ask about afterwards. It is named on its own button now, so
+    // Kalyani no longer has to be deselected to remove the ambiguity.
     await addOutlet(OUTLET_KANCHRAPARA_ID)
     await removeOutlet(OUTLET_KALYANI_ID)
     await screen.findAllByTestId('device-telemetry')
-    await user.click(await screen.findByRole('button', { name: /^remove$/i }))
+    await user.click(await screen.findByRole('button', { name: /^remove counter tablet$/i }))
 
     const consequence = await screen.findByText(/This is permanent/i)
     expect(consequence).toHaveTextContent(/3 unresolved/i)

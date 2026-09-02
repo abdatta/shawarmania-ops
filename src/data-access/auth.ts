@@ -349,14 +349,18 @@ export async function redeemInvite(
  * A tablet setup refusal.
  *
  * `invalid_code` covers every code-related reason for the same reason activation
- * does: telling them apart would confirm which codes exist. `tablet_exists` is
+ * does: telling them apart would confirm which codes exist. `label_taken` is
  * allowed to be specific because it describes the outlet rather than the code,
  * to somebody who is holding a live code for that outlet and therefore already
  * knows which one it is.
+ *
+ * `tablet_exists` is gone with multiple-billing-devices: an outlet holding a
+ * counter is no longer a reason to refuse another. What can still collide is the
+ * label the code was issued under.
  */
 export class CounterSetupError extends Error {
   constructor(
-    readonly code: 'invalid_code' | 'tablet_exists' | 'unavailable' | 'unsendable',
+    readonly code: 'invalid_code' | 'label_taken' | 'unavailable' | 'unsendable',
     message: string,
   ) {
     super(message)
@@ -416,10 +420,10 @@ export async function setUpCounterDevice(code: string): Promise<void> {
   if (error) {
     if (isUnreachable(error)) throw new CounterSetupError('unavailable', UNREACHABLE)
     const reason = await failureCode(error)
-    if (reason === 'tablet_exists') {
+    if (reason === 'label_taken') {
       throw new CounterSetupError(
-        'tablet_exists',
-        'That outlet already has a tablet set up. Remove it first, then use this code.',
+        'label_taken',
+        'A tablet at that outlet is already called this. Ask for a code with a different name.',
       )
     }
     if (reason === 'invalid_code') throw new CounterSetupError('invalid_code', DEAD_SETUP_CODE)
@@ -434,13 +438,52 @@ export async function setUpCounterDevice(code: string): Promise<void> {
     password: data.password,
   })
   if (signInError) {
-    // The code is spent by now. Say so plainly rather than blaming the code: the
-    // tablet row exists, and an admin has to remove it and issue another.
+    /*
+      The code is spent by now, and the row it wrote is NOT a counter: it holds
+      no label, reaches nothing, appears on no surface, and lapses on its own
+      when the code's own expiry passes. So the honest advice is a fresh code
+      rather than an admin, which is the whole of what
+      `tablet-setup-consumes-its-slot-before-it-is-proven` was about.
+    */
     throw new CounterSetupError(
       'unavailable',
-      'This tablet was set up but could not sign in. Ask an admin to remove it and try again.',
+      'This tablet could not sign in, so it was not set up. Ask for a fresh code and try again.',
     )
   }
+
+  /*
+    The session exists, so say so. Until this lands the row that redemption
+    wrote is not a counter, which is exactly the point: redemption and the
+    browser holding a session cannot share a transaction, so the row waits for
+    evidence rather than assuming it.
+
+    A failure here is the same lost response as before, and it is not fatal in
+    the same way: the window is still open, so the tablet retries on its next
+    start rather than costing anybody a code. It is idempotent server-side, so a
+    retry after a response that was merely lost is success.
+  */
+  const { error: proofError } = await client.rpc('prove_counter_device_session')
+  if (proofError) {
+    throw new CounterSetupError(
+      'unavailable',
+      'This tablet signed in but could not finish setting up. Try the same code again.',
+    )
+  }
+}
+
+/**
+ * Finish a setup whose proof never landed, on a tablet that already holds a
+ * session.
+ *
+ * The failure this exists for is narrow and real: the browser signed in, the
+ * proof request was lost, and the tablet now has a machine session belonging to
+ * a row that is not a counter. Nothing else can rescue it, because no admin can
+ * see it and no code is left to spend. Called on start, before the app decides
+ * the tablet is unconfigured, and it is a no-op for a tablet already proven.
+ */
+export async function proveCounterDeviceSession(): Promise<boolean> {
+  const { data, error } = await getSupabaseClient().rpc('prove_counter_device_session')
+  return !error && data === 'ok'
 }
 
 /**
