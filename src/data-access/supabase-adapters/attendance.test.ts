@@ -282,6 +282,49 @@ describe('denying a set of days', () => {
   })
 })
 
+describe('recording a historical arrival', () => {
+  it('sends the named business date and manager-attested instant without a forgeable enterer', async () => {
+    const rpc = succeeds()
+    await adapterWith(rpc).recordManualEntry({
+      personId: 'p-1',
+      outletId: 'o-1',
+      businessDate: '2026-08-03',
+      at: '2026-08-03T03:30:00.000Z',
+      enteredBy: 'forged-client-id',
+    })
+
+    const [name, args] = rpc.mock.calls[0] as [string, Record<string, unknown>]
+    expect(name).toBe('attendance_record_manual')
+    expect(args).toEqual({
+      p_attempt_id: expect.any(String),
+      p_decision_id: expect.any(String),
+      p_person_id: 'p-1',
+      p_outlet_id: 'o-1',
+      p_business_date: '2026-08-03',
+      p_attempted_at: '2026-08-03T03:30:00.000Z',
+    })
+    expect(JSON.stringify(args)).not.toContain('forged-client-id')
+  })
+
+  it.each([
+    ['a manual entry cannot be recorded for a future business day', 'future_date'],
+    ['manual entry time does not belong to the named business date', 'wrong_day'],
+    ['person was not staff at this outlet on the named business date', 'manual_refused'],
+    ['person is not current staff at this outlet', 'manual_refused'],
+  ])('turns %s into the stable %s refusal', async (message, code) => {
+    const rpc = vi.fn().mockResolvedValue({ data: null, error: { code: 'P0001', message } })
+    await expect(
+      adapterWith(rpc).recordManualEntry({
+        personId: 'p-1',
+        outletId: 'o-1',
+        businessDate: '2026-08-03',
+        at: '2026-08-03T03:30:00.000Z',
+        enteredBy: 'm-1',
+      }),
+    ).rejects.toMatchObject({ code })
+  })
+})
+
 describe('a refusal on the way back', () => {
   it('reports a command the backend cannot accept, and does not offer a retry', async () => {
     // PostgREST's answer when no function matches the arguments sent.

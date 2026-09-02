@@ -332,24 +332,28 @@ describe('the attendance adapter', () => {
     expect(record.arrivalDeadline).toBe(outlet!.arrival_deadline)
   })
 
-  it('records a manual entry as the manager, and the database stamps the enterer', async () => {
+  it('records a historical manual entry as the manager, and the database stamps the enterer', async () => {
     const attendance = createSupabaseAttendanceAdapter(managerClient)
     const today = resolveBusinessDate(new Date(), '04:00')
+    const businessDate = shiftBusinessDate(today, -3)
+    const at = instantOnBusinessDay(businessDate, '09:00', '04:00')
 
     // Survives a re-run against the same reset: the manual check-in is read
     // back rather than made twice.
-    const existing = await attendance.getDay(PENDING_STAFF_KAL, today)
+    const existing = await attendance.getDay(PENDING_STAFF_KAL, businessDate)
     const record =
       existing?.checkIn?.source === 'manual'
         ? existing
         : await attendance.recordManualEntry({
             personId: PENDING_STAFF_KAL,
             outletId: OUTLET_KALYANI,
-            businessDate: today,
-            at: new Date(Date.now() - 60_000).toISOString(),
+            businessDate,
+            at,
             enteredBy: FA_KALYANI_SUB,
           })
 
+    expect(record.businessDate).toBe(businessDate)
+    expect(instantValue(record.checkIn!.at)).toBe(instantValue(at))
     expect(record.checkIn?.source).toBe('manual')
     expect(record.checkIn?.enteredBy).toBe(FA_KALYANI_SUB)
     expect(record.checkIn?.enteredByName).toBe('Synthetic Admin Kal')
@@ -360,6 +364,39 @@ describe('the attendance adapter', () => {
     // position — nobody read one.
     expect(record.approval?.by).toBe(FA_KALYANI_SUB)
     expect(record.approval?.distanceMetres).toBeNull()
+  })
+
+  it('records a manual entry on the current business day through the same call', async () => {
+    // The historical case above rewrote what used to be this test rather than
+    // joining it. One RPC now serves both dates, so the date that was always
+    // allowed has to keep its own proof over PostgREST — otherwise a future
+    // narrowing of the command would only be caught on the branch that was
+    // added last.
+    const attendance = createSupabaseAttendanceAdapter(managerClient)
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
+    // The first moment of the named day: never in the future, and never on the
+    // day before, which the command refuses as an instant outside its date.
+    const at = instantOnBusinessDay(businessDate, '04:00', '04:00')
+
+    // Survives a re-run against the same reset, as the historical case does.
+    const existing = await attendance.getDay(PENDING_STAFF_KAL, businessDate)
+    const record =
+      existing?.checkIn?.source === 'manual'
+        ? existing
+        : await attendance.recordManualEntry({
+            personId: PENDING_STAFF_KAL,
+            outletId: OUTLET_KALYANI,
+            businessDate,
+            at,
+            enteredBy: FA_KALYANI_SUB,
+          })
+
+    expect(record.businessDate).toBe(businessDate)
+    expect(record.checkIn?.source).toBe('manual')
+    expect(record.checkIn?.enteredBy).toBe(FA_KALYANI_SUB)
+    expect(record.checkIn?.latitude).toBeNull()
+    expect(record.status).toBe('present')
+    expect(record.approval?.by).toBe(FA_KALYANI_SUB)
   })
 
   it('settles the outlet’s waiting days in one call, with the manager’s reason', async () => {

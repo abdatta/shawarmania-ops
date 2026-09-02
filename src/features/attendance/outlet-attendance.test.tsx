@@ -6,10 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DataAdapters, WaitingCount } from '@/data-access/adapters'
 import { AttendanceActionError } from '@/data-access/adapters'
 import { AdaptersContext } from '@/data-access/adapters-context'
-import { resolveBusinessDate } from '@/domain'
+import {
+  formatBusinessDate,
+  instantOnBusinessDay,
+  resolveBusinessDate,
+  shiftBusinessDate,
+} from '@/domain'
 import {
   createMockAdapters,
   DEMO_GRILLER_ACCOUNT_ID,
+  DEMO_HELPER_ACCOUNT_ID,
   DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
   DEMO_PREP_COOK_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
@@ -972,17 +978,20 @@ describe('the outlet attendance day', () => {
     expect(read.mock.calls.length).toBe(settled)
   })
 
-  it('moves between business days and cannot walk into the future', async () => {
+  it('moves between business days, offers the same arrival process in the past, and cannot walk into the future', async () => {
     const user = userEvent.setup()
-    renderDay()
+    const adapters = createMockAdapters()
+    const outlet = await adapters.outlets.getOutlet(OUTLET_KALYANI_ID)
+    const cutover = outlet!.business_day_cutover
+    const yesterday = shiftBusinessDate(await todayAt(adapters, OUTLET_KALYANI_ID), -1)
+    const record = vi.spyOn(adapters.attendance, 'recordManualEntry')
+    renderDay(adapters)
 
     expect(await screen.findByTestId('day-label')).toHaveTextContent('Today')
     expect(screen.getByRole('button', { name: 'Next day' })).toBeDisabled()
-    // Today offers manual entry to somebody with no arrival recorded; a past day
-    // must not — the database refuses back-filling prior days, so the surface
-    // does not offer it. The griller already arrived today, so the person with
-    // nothing recorded is the one to ask.
-    const staffId = personaFixtures.employee.profile.id
+    // The griller already arrived today, so the person with nothing recorded is
+    // the one to ask on both today and the prior business day.
+    const staffId = DEMO_HELPER_ACCOUNT_ID
     await screen.findByTestId('attendance-day')
     await openRow(user, staffId)
     expect(await screen.findByTestId(`manual-${staffId}`)).toBeInTheDocument()
@@ -991,7 +1000,25 @@ describe('the outlet attendance day', () => {
     await waitFor(() => expect(screen.getByTestId('day-label')).not.toHaveTextContent('Today'))
     expect(screen.getByRole('button', { name: 'Next day' })).toBeEnabled()
     await openRow(user, staffId)
-    expect(screen.queryByTestId(`manual-${staffId}`)).not.toBeInTheDocument()
+    await user.click(await screen.findByTestId(`manual-${staffId}`))
+    expect(screen.getByRole('heading', { name: 'Record an arrival' })).toBeInTheDocument()
+    // The sheet names the day being recorded. Describing a past entry as
+    // today's would be the manager attesting to the wrong date.
+    expect(screen.getByText(new RegExp(`on ${formatBusinessDate(yesterday)}`))).toBeInTheDocument()
+    await user.type(screen.getByLabelText('When did they arrive?'), '04:00')
+    await user.click(screen.getByRole('button', { name: 'Record it under my name' }))
+
+    await waitFor(() => expect(record).toHaveBeenCalledTimes(1))
+    // The selected date, not today's, and an instant that resolves back to it —
+    // the two facts the database refuses the command for disagreeing about.
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        personId: staffId,
+        outletId: OUTLET_KALYANI_ID,
+        businessDate: yesterday,
+        at: instantOnBusinessDay(yesterday, '04:00', cutover),
+      }),
+    )
   })
 
   it('records a manual check-in with the manager stamped as enterer', async () => {
@@ -1432,6 +1459,35 @@ describe('the roll-call is the outlet’s staff', () => {
     expect(within(card).getByRole('heading')).toHaveTextContent('Demo Manager')
     // Listed as staff, so nothing calls them a stranger to the list.
     expect(within(card).queryByText(/not on this outlet’s staff list/)).not.toBeInTheDocument()
+  })
+
+  it('does not turn dates before a current employee joined into absences or manual-entry targets', async () => {
+    const adapters = createMockAdapters()
+    const today = await todayAt(adapters, OUTLET_KALYANI_ID)
+    const real = await adapters.accounts.listAccounts()
+    vi.spyOn(adapters.accounts, 'listAccounts').mockResolvedValue(
+      real.map((account) =>
+        account.id === DEMO_HELPER_ACCOUNT_ID
+          ? {
+              ...account,
+              assignments: account.assignments.map((assignment) =>
+                assignment.outletId === OUTLET_KALYANI_ID
+                  ? { ...assignment, startedOn: today }
+                  : assignment,
+              ),
+            }
+          : account,
+      ),
+    )
+    const user = userEvent.setup()
+    renderDay(adapters)
+
+    expect(await screen.findByTestId(`day-${DEMO_HELPER_ACCOUNT_ID}`)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Previous day' }))
+    await waitFor(() =>
+      expect(screen.queryByTestId(`day-${DEMO_HELPER_ACCOUNT_ID}`)).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByTestId(`manual-${DEMO_HELPER_ACCOUNT_ID}`)).not.toBeInTheDocument()
   })
 
   it('lists somebody off the staff list who carries a row, and lets the day be settled', async () => {

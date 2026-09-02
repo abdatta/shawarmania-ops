@@ -102,6 +102,83 @@ describe('the demo attendance reference clock', () => {
     expect(manual.checkIn?.at).toBe(manualAt)
     expect(manual.checkIn?.source).toBe('manual')
   })
+
+  it('accepts a historical manual arrival only inside the staff assignment and outlet business day', async () => {
+    const adapter = createMockAttendanceAdapter({
+      now: () => new Date('2026-08-20T06:00:00.000Z'),
+    })
+    const outlet = outletFixtures.find((candidate) => candidate.id === OUTLET_KALYANI_ID)!
+    const input = {
+      personId: DEMO_HELPER_ACCOUNT_ID,
+      outletId: OUTLET_KALYANI_ID,
+      businessDate: '2026-08-19',
+      at: instantOnBusinessDay('2026-08-19', '09:00', outlet.business_day_cutover),
+      enteredBy: personaFixtures.franchise_admin.profile.id,
+    }
+
+    const recorded = await adapter.recordManualEntry(input)
+    expect(recorded).toMatchObject({
+      businessDate: '2026-08-19',
+      status: 'present',
+      checkIn: {
+        at: input.at,
+        source: 'manual',
+        enteredBy: personaFixtures.franchise_admin.profile.id,
+        latitude: null,
+        longitude: null,
+      },
+      approval: { by: personaFixtures.franchise_admin.profile.id },
+    })
+    expect(recorded.attempts).toHaveLength(1)
+    expect(recorded.decisions).toHaveLength(1)
+
+    await expect(
+      createMockAttendanceAdapter({
+        now: () => new Date('2026-08-20T06:00:00.000Z'),
+      }).recordManualEntry({
+        ...input,
+        businessDate: '2026-08-21',
+        at: instantOnBusinessDay('2026-08-21', '09:00', outlet.business_day_cutover),
+      }),
+    ).rejects.toMatchObject({ code: 'future_date' } satisfies Partial<AttendanceActionError>)
+
+    await expect(
+      createMockAttendanceAdapter({
+        now: () => new Date('2026-08-20T06:00:00.000Z'),
+      }).recordManualEntry({
+        ...input,
+        at: instantOnBusinessDay('2026-08-18', '09:00', outlet.business_day_cutover),
+      }),
+    ).rejects.toMatchObject({ code: 'wrong_day' } satisfies Partial<AttendanceActionError>)
+
+    await expect(
+      createMockAttendanceAdapter({
+        now: () => new Date('2026-08-20T06:00:00.000Z'),
+      }).recordManualEntry({
+        ...input,
+        businessDate: '2026-04-19',
+        at: instantOnBusinessDay('2026-04-19', '09:00', outlet.business_day_cutover),
+      }),
+    ).rejects.toMatchObject({ code: 'manual_refused' } satisfies Partial<AttendanceActionError>)
+
+    await expect(
+      createMockAttendanceAdapter({
+        now: () => new Date('2026-08-20T06:00:00.000Z'),
+      }).recordManualEntry({
+        ...input,
+        outletId: OUTLET_KANCHRAPARA_ID,
+      }),
+    ).rejects.toMatchObject({ code: 'manual_refused' } satisfies Partial<AttendanceActionError>)
+
+    await expect(
+      createMockAttendanceAdapter({
+        now: () => new Date('2026-08-20T06:00:00.000Z'),
+      }).recordManualEntry({
+        ...input,
+        enteredBy: personaFixtures.employee.profile.id,
+      }),
+    ).rejects.toMatchObject({ code: 'manual_refused' } satisfies Partial<AttendanceActionError>)
+  })
 })
 
 describe('mock attendance denial and retries', () => {

@@ -60,13 +60,24 @@ select is((select status from public.attendance where outcome_attempt_id = '8100
 select is((select actor_name from public.attendance_decisions where id = '82000000-0000-4000-a000-000000000001'),
   'Synthetic Admin Kal', 'manager identity is snapshotted by the database');
 
+-- "Ten minutes ago, or the moment this business day opened, whichever is later."
+-- This case names TODAY, so its instant has to sit inside today: for the ten
+-- minutes after the 04:00 cutover a flat `now() - interval '10 minutes'` is a
+-- time on the previous business day, and the command refuses an instant that
+-- resolves to a date other than the one named. Clamping keeps the assertion
+-- about the write contract rather than about the hour the suite happens to run
+-- in (17_owner_reach.sql carries the same clamp for the same reason).
 select lives_ok($q$
   select public.attendance_record_manual(
     '81000000-0000-4000-a000-000000000002',
     '82000000-0000-4000-a000-000000000002',
-    '10000000-0000-4000-a000-000000000008',
+    '10000000-0000-4000-a000-00000000000c',
     '00000000-0000-4000-a000-000000000001',
-    public.app_business_date(now(), time '04:00'), now() - interval '10 minutes')
+    public.app_business_date(now(), time '04:00'),
+    greatest(
+      now() - interval '10 minutes',
+      (public.app_business_date(now(), time '04:00') + time '04:00')
+        at time zone 'Asia/Kolkata'))
 $q$, 'a manager records and settles a manual arrival through its command');
 select is((select kind from public.attendance_decisions where id = '82000000-0000-4000-a000-000000000002'),
   'manual_present'::public.attendance_decision_kind, 'manual settlement is an explicit decision');

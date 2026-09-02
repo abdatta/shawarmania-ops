@@ -180,8 +180,21 @@ select ok((select attempted_at > statement_timestamp() - interval '1 minute'
 
 -- Manual entry is intentional testimony: an authorised manager's past instant
 -- remains the event time, while self check-in does not get that privilege.
+--
+-- "Seven minutes ago, or the moment this business day opened, whichever is
+-- later", both halves read from `now()` — the same clock the call below names
+-- its date from. That call names TODAY, and for the seven minutes after the
+-- outlet's cutover a flat `now() - interval '7 minutes'` lands on the previous
+-- business day, which the command refuses as an instant that does not belong to
+-- the named date. The claim under test is that the asserted instant survives,
+-- not which minute the suite happens to run in.
 create temporary table pg_temp.manual_time as
-select statement_timestamp() - interval '7 minutes' as at;
+select greatest(
+         now() - interval '7 minutes',
+         (public.app_business_date(now(), o.business_day_cutover)
+            + o.business_day_cutover) at time zone 'Asia/Kolkata') as at
+  from public.outlets o
+ where o.id = '00000000-0000-4000-a000-000000000001';
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
 select lives_ok($q$
   select public.attendance_record_manual(

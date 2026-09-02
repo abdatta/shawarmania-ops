@@ -379,6 +379,27 @@ export function isStaffAt(account: Pick<AccountSummary, 'assignments'>, outletId
   )
 }
 
+/**
+ * Was this person staff at this outlet on an inclusive business date?
+ *
+ * Unlike `isStaffAt`, this answers a historical fact and therefore includes
+ * ended assignments. It does not confer present authority or present list
+ * visibility; callers that need both must ask both questions explicitly.
+ */
+export function wasStaffAtOn(
+  account: Pick<AccountSummary, 'assignments'>,
+  outletId: string,
+  businessDate: string,
+): boolean {
+  return account.assignments.some(
+    (a) =>
+      a.outletId === outletId &&
+      isStaffRole(a.role) &&
+      a.startedOn <= businessDate &&
+      (a.endedOn === null || businessDate <= a.endedOn),
+  )
+}
+
 /** The one-time code, returned once and never retrievable again. */
 export interface AccountHandover {
   profileId: string
@@ -664,8 +685,10 @@ export interface AttendanceCurrentContext {
 /**
  * An admin recording an arrival on somebody's behalf — the escape hatch that
  * keeps a hard arrival rule humane: the phone died, the person forgot, the
- * network was down. Past times only, on the outlet's current business day; the
- * database refuses a future time and stamps the enterer itself.
+ * network was down, or the miss was only noticed the next morning. Past times
+ * only, on the current or an earlier business day the person was staff there;
+ * the database refuses a future date, a future time, an instant belonging to a
+ * different business day, and stamps the enterer itself.
  *
  * Recording it is also settling it. The admin has already attested to the
  * arrival by typing it in, and asking them to then approve their own entry
@@ -861,10 +884,11 @@ export interface AttendanceAdapter {
    */
   checkIn(input: CheckInInput): Promise<AttendanceRecord>
   /**
-   * Record an arrival on somebody's behalf, at a past time on the current
-   * business day. Admin only, and the row permanently shows who entered it —
-   * the database stamps the enterer, settles the day under their name, and
-   * refuses the write from anyone else.
+   * Record an arrival on somebody's behalf, at a past time on the business day
+   * named in the input — the current one or an earlier one inside the person's
+   * staff assignment there. Admin only, and the row permanently shows who
+   * entered it — the database stamps the enterer, settles the day under their
+   * name, and refuses the write from anyone else.
    */
   recordManualEntry(input: ManualEntryInput): Promise<AttendanceRecord>
   /**

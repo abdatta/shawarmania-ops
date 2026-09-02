@@ -386,10 +386,33 @@ function toActionError(error: PostgrestError): AttendanceActionError {
   if (detail.includes('a manual entry cannot be recorded for the future')) {
     return new AttendanceActionError('future_entry', 'A manual entry cannot be in the future.')
   }
-  if (detail.includes('current business day')) {
+  if (detail.includes('future business day')) {
     return new AttendanceActionError(
-      'not_today',
-      'A manual entry can only be recorded for the current business day.',
+      'future_date',
+      'A manual entry cannot be recorded for a future business day.',
+    )
+  }
+  /*
+    Both eligibility refusals, in one sentence. The command asks two separate
+    questions — is this person visible staff here NOW, and were they staff here
+    on the named date — and either answer can be no while a stale client list
+    still offers the action. A manager can act on neither distinction, and the
+    demo adapter answers both with this same refusal (design D6), so splitting
+    them here would only make demo and live disagree about the same request.
+  */
+  if (
+    detail.includes('was not staff at this outlet') ||
+    detail.includes('not current staff at this outlet')
+  ) {
+    return new AttendanceActionError(
+      'manual_refused',
+      'This person was not eligible for attendance at this outlet on that day.',
+    )
+  }
+  if (detail.includes('named business date')) {
+    return new AttendanceActionError(
+      'wrong_day',
+      'The arrival time must belong to the business day being recorded.',
     )
   }
   if (detail.includes('manual entry')) {

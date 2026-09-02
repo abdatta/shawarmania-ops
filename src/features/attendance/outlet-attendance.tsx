@@ -27,7 +27,12 @@ import type {
   AttendanceRecord,
   WaitingCount,
 } from '@/data-access/adapters'
-import { AttendanceActionError, isRecoverableSetRefusal, isStaffAt } from '@/data-access/adapters'
+import {
+  AttendanceActionError,
+  isRecoverableSetRefusal,
+  isStaffAt,
+  wasStaffAtOn,
+} from '@/data-access/adapters'
 import { attentionChanged } from '@/features/attention/attention'
 import {
   evaluateFence,
@@ -69,7 +74,8 @@ import { useWaitingCounts, waitingAt, waitingLabel } from './waiting-counts'
  *
  * **By outlet** is the roll-call: who arrived, when, from where, whether they
  * were late, and which days are still waiting for a decision — with the approval
- * and the manual entry made from here. Every current staff member appears,
+ * and the manual entry made from here. Every currently visible staff member who
+ * belonged to the selected outlet on the day appears,
  * including those with nothing recorded and those whose account is deactivated;
  * cutting access does not falsify the day. A view that listed only the rows that
  * exist would quietly hide the people who never turned up, which is the one
@@ -895,28 +901,34 @@ function OutletAxis({
     }
   }
 
-  const onStaff: RollCallRow[] = people.map((person) => {
+  const onStaff: RollCallRow[] = people.flatMap((person) => {
     const record = records.find((candidate) => candidate.personId === person.id) ?? null
     // Only the selected outlets this person is actually staff at get to decide
     // whether they are late arriving. Their day is judged against those clocks
-    // and no others (design D7).
-    const theirs = outlets.filter((outlet) => isStaffAt(person, outlet.id))
+    // and no others (design D7). A rowless historical day is limited to the
+    // person's assignment window; a real record remains visible after it.
+    const theirs = outlets.filter(
+      (outlet) => isStaffAt(person, outlet.id) && wasStaffAtOn(person, outlet.id, businessDate),
+    )
+    if (record === null && theirs.length === 0) return []
     const worked = outletOf(record?.outletId ?? null)
-    return {
-      person: {
-        id: person.id,
-        fullName: person.fullName,
-        note: person.roleTitle,
-        deactivated: !person.isActive,
-        offList: false,
+    return [
+      {
+        person: {
+          id: person.id,
+          fullName: person.fullName,
+          note: person.roleTitle,
+          deactivated: !person.isActive,
+          offList: false,
+        },
+        record,
+        reading: readDay(record, theirs, businessDate, {
+          accountedForElsewhere: day?.elsewhere.includes(person.id) ?? false,
+        }),
+        late: record !== null && worked !== null && isLate(record, worked.business_day_cutover),
+        outlet: worked ?? theirs[0] ?? null,
       },
-      record,
-      reading: readDay(record, theirs, businessDate, {
-        accountedForElsewhere: day?.elsewhere.includes(person.id) ?? false,
-      }),
-      late: record !== null && worked !== null && isLate(record, worked.business_day_cutover),
-      outlet: worked ?? theirs[0] ?? null,
-    }
+    ]
   })
 
   /**
@@ -1083,7 +1095,6 @@ function OutletAxis({
               // accounted for elsewhere: their day is taken, and the database
               // would refuse a second one.
               offerManual={
-                businessDate === today &&
                 !row.person.offList &&
                 row.record?.checkIn == null &&
                 row.reading.kind !== 'elsewhere'
@@ -1222,9 +1233,17 @@ function OutletAxis({
       <ManualEntrySheet
         key={manualFor?.id ?? 'no-manual'}
         person={manualFor}
-        // Only the selected outlets they are staff at: with one of those the
-        // target is resolved and nothing is asked (design D10).
-        outlets={manualFor ? outlets.filter((outlet) => isStaffAt(manualFor, outlet.id)) : []}
+        // Present list visibility and historical membership are separate
+        // questions. Both must be true before an outlet can receive an entry.
+        outlets={
+          manualFor
+            ? outlets.filter(
+                (outlet) =>
+                  isStaffAt(manualFor, outlet.id) &&
+                  wasStaffAtOn(manualFor, outlet.id, businessDate),
+              )
+            : []
+        }
         businessDate={businessDate}
         onClose={() => setManualFor(null)}
         onRecord={(outletId, at) => {
@@ -2127,9 +2146,9 @@ function CorrectionSheet({
 /**
  * A manual entry: the escape hatch that keeps a hard arrival rule humane. The
  * phone died, the person forgot — the manager records the arrival at the time it
- * happened, and the row permanently shows who typed it in. Past times only, on
- * today's business day; the database enforces both, and recording it settles the
- * day without a second decision.
+ * happened, and the row permanently shows who typed it in. The instant must
+ * belong to the named business day and cannot be in the future; the database
+ * enforces both, and recording it settles the day without a second decision.
  *
  * **Which outlet is asked only when it is genuinely ambiguous** (design D10):
  * more than one selected outlet where this person is staff. With one, it is
@@ -2153,6 +2172,7 @@ function ManualEntrySheet({
   const [chosen, setChosen] = useState('')
   const outletId = chosen || (outlets[0]?.id ?? '')
   const outlet = outlets.find((candidate) => candidate.id === outletId) ?? null
+  const dayName = formatBusinessDate(businessDate)
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -2179,8 +2199,8 @@ function ManualEntrySheet({
       <form id="manual-entry" onSubmit={submit} className="space-y-4" noValidate>
         {person && (
           <p className="text-sm text-content-muted">
-            You are recording an arrival for {person.fullName} on today’s business day. The record
-            will permanently show that you entered it — it is not a self check-in, it carries no
+            You are recording an arrival for {person.fullName} on {dayName}. The record will
+            permanently show that you entered it — it is not a self check-in, it carries no
             location, and recording it counts the day without a separate approval.
           </p>
         )}
@@ -2215,7 +2235,7 @@ function ManualEntrySheet({
             onChange={(event) => setTime(event.target.value)}
           />
           <p className="text-xs text-content-muted">
-            A past time on today’s business day. A future time will be refused.
+            The time must belong to {dayName}. A future time will be refused.
           </p>
         </div>
       </form>

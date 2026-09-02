@@ -69,6 +69,8 @@ JavaScript silently removes `undefined`, while PostgREST resolves an RPC from th
 function name and the JSON keys it actually receives. Omission is valid only for
 a parameter whose final database signature declares a default.
 
+**A historical attendance command proves both clocks and both assignment questions.** Its database contract covers an accepted earlier business date, future date and instant refusals, a cutover-mismatched instant, pre-join and departed-only subjects, cross-outlet and non-manager callers, exact replay, changed-id reuse, server-stamped enterer identity, and the absence of location evidence. The REST adapter test then proves the historical payload is accepted over PostgREST rather than only by a direct SQL call.
+
 **`npm run lint` also gates Edge Function configuration.** Every directory under `supabase/functions/` except `_shared` must carry a `[functions.<name>]` block in `supabase/config.toml`. A function with no block does not fail — it silently receives `verify_jwt = true`, and the gateway then refuses every unauthenticated request before the function's own code runs. That is correct for three of the five functions and fatal for the two that exist to answer a caller holding no token, where it surfaces as a rejected invite code or a rejected tablet setup code, blaming the one thing that was not at fault. The check asserts the judgement was made, never which way it went; whether the platform honoured it needs a live probe, which `docs/OPERATIONS.md` carries in the first-deploy runbook.
 
 **`npm run functions:typecheck` gates the typed restaurant-mapping contract.**

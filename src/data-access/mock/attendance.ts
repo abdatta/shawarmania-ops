@@ -12,7 +12,13 @@ import type {
   AttendanceStatus,
   WaitingCount,
 } from '../adapters'
-import { AttendanceActionError, assignedOutlets } from '../adapters'
+import {
+  AttendanceActionError,
+  assignedOutlets,
+  isStaffAt,
+  liveAssignments,
+  wasStaffAtOn,
+} from '../adapters'
 import { accountFixtures, assignmentFixtures } from './fixtures/accounts'
 import { attendanceSeeds, type AttendanceSeed } from './fixtures/attendance'
 import { OUTLET_KALYANI_ID, outletFixtures } from './fixtures/outlets'
@@ -705,20 +711,55 @@ export function createMockAttendanceAdapter(
     },
 
     /**
-     * Mirrors the guard where the demo can feel it: past times only, the enterer
-     * stamped from the recording session, no coordinates ever, and the recording
-     * settles the day under the enterer's name rather than queueing a second
-     * decision. Role authority is the surface's business here — the real
-     * boundary lives in the database this mock stands in for.
+     * Mirrors the database guard where the demo can feel it: the named date may
+     * be today or earlier, the time must belong to it and cannot be in the
+     * future, and the person must be current visible staff who belonged to the
+     * outlet on that date. The enterer is stamped with no coordinates and the
+     * recording settles the day rather than queueing a second decision.
      */
     async recordManualEntry({ personId, outletId, businessDate, at, enteredBy }) {
-      if (new Date(at).getTime() > referenceNow().getTime()) {
+      const now = referenceNow()
+      const outlet = outletFor(outletId)
+      const currentBusinessDate = resolveBusinessDate(now, businessDayCutover(outlet))
+      if (businessDate > currentBusinessDate) {
+        throw new AttendanceActionError(
+          'future_date',
+          'A manual entry cannot be recorded for a future business day.',
+        )
+      }
+      if (new Date(at).getTime() > now.getTime()) {
         throw new AttendanceActionError('future_entry', 'A manual entry cannot be in the future.')
+      }
+      if (resolveBusinessDate(new Date(at), businessDayCutover(outlet)) !== businessDate) {
+        throw new AttendanceActionError(
+          'wrong_day',
+          'The arrival time must belong to the business day being recorded.',
+        )
+      }
+
+      const subject = { assignments: assignmentFixtures[personId] ?? [] }
+      if (!isStaffAt(subject, outletId) || !wasStaffAtOn(subject, outletId, businessDate)) {
+        throw new AttendanceActionError(
+          'manual_refused',
+          'This person was not eligible for attendance at this outlet on that day.',
+        )
+      }
+
+      const actorAssignments = assignmentFixtures[enteredBy] ?? []
+      const mayEnter = liveAssignments(actorAssignments).some(
+        (assignment) =>
+          assignment.role === 'super_admin' ||
+          (assignment.role === 'franchise_admin' && assignment.outletId === outletId),
+      )
+      if (!mayEnter) {
+        throw new AttendanceActionError(
+          'manual_refused',
+          'Only a manager for this outlet can record an entry on someone’s behalf.',
+        )
       }
 
       const entererAccount = accountFixtures.find((candidate) => candidate.id === enteredBy)
       const entererName = entererAccount?.full_name ?? null
-      const outlet = outletFor(outletId)
 
       const existing = records.find(
         (candidate) => candidate.personId === personId && candidate.businessDate === businessDate,

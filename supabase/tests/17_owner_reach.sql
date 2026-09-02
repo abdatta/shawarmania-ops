@@ -122,11 +122,10 @@ select is(
 -- `now() - interval '2 hours'` is a time on the PREVIOUS business day for the
 -- two hours after the 04:00 cutover, so validate_business_date reads the
 -- timestamp as one day and the stated business date as the next and refuses
--- them, and the guard's own rule that a manual entry belongs to the outlet's
--- current business day would refuse the alternative. That is the database being
--- right on both counts: back-filling a closed day is deliberately out of scope
--- (20260729000003_manual_attendance_entry.sql), so the entry this test records
--- has to sit inside the day it names.
+-- them. Naming the earlier day instead would be a different test. An earlier
+-- day is recordable since historical-attendance-manual-entry, but only when the
+-- instant resolves to the date it names — the clamp is what keeps this case
+-- about the owner's reach rather than about the hour it runs in.
 select lives_ok(
   format($q$
     select public.attendance_record_manual(

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { DEMO_HELPER_ACCOUNT_ID } from '../src/data-access/mock/fixtures/accounts'
 
 /**
  * The four-shells × both-themes × both-viewports matrix (design D7/risk
@@ -65,6 +66,23 @@ for (const viewport of VIEWPORTS) {
           contentType: 'image/png',
         })
       }
+
+      // The historical escape hatch is a real working state, not merely the
+      // attendance landing page. Keep its date-specific copy and time-only
+      // sheet readable in every visual cell the surface supports.
+      await page.goto('demo/admin/attendance')
+      await page.getByRole('button', { name: 'Previous day' }).click()
+      const helper = page.getByTestId(`expand-${DEMO_HELPER_ACCOUNT_ID}`)
+      if ((await helper.getAttribute('aria-expanded')) === 'false') await helper.click()
+      await page.getByTestId(`manual-${DEMO_HELPER_ACCOUNT_ID}`).click()
+      await page.getByLabel('When did they arrive?').fill('09:00')
+      await expect(page.getByRole('heading', { name: 'Record an arrival' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Record it under my name' })).toBeEnabled()
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      await testInfo.attach(`historical-arrival-${theme}-${viewport.name}`, {
+        body: await page.screenshot(),
+        contentType: 'image/png',
+      })
     })
   }
 }

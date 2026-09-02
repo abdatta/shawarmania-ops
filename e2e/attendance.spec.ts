@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
+  DEMO_HELPER_ACCOUNT_ID,
   DEMO_KANCHRAPARA_STAFF_ACCOUNT_ID,
   DEMO_PREP_COOK_ACCOUNT_ID,
   DEMO_RUNNER_ACCOUNT_ID,
@@ -472,18 +473,34 @@ test('a manager reads one person’s month, and the figures reconcile with the d
   await expect(page.getByTestId('range-picker')).toBeVisible()
 })
 
-test('a manager records a manual entry, and the row names who typed it in', async ({ page }) => {
+test('a manager records a historical manual entry through today’s same process', async ({
+  page,
+  baseURL,
+}) => {
+  const origin = new URL(baseURL ?? E2E_ORIGIN).origin
+  const unexpectedRequests: string[] = []
+  const consoleErrors: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).origin !== origin) unexpectedRequests.push(request.url())
+  })
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
   await page.goto('demo/admin/attendance')
   await expect(page.getByTestId('attendance-day')).toBeVisible()
+  await page.getByRole('button', { name: 'Previous day' }).click()
+  const businessDateLabel = await page.getByTestId('day-label').textContent()
 
-  // Demo Staff has nothing recorded today, so an arrival can still be typed in.
-  // 04:00 is the earliest moment of any business day — the one time guaranteed
-  // not to be in the future while that day is current.
-  const staffId = 'd1000000-0000-4000-a000-000000000004'
+  // Demo Helper has nothing recorded on the prior day. The same button and
+  // time-only manager testimony used today must remain available there.
+  const staffId = DEMO_HELPER_ACCOUNT_ID
   await page.getByTestId(`expand-${staffId}`).click()
+  await expect(page.getByTestId(`manual-${staffId}`)).toHaveText('Record arrival')
   await page.getByTestId(`manual-${staffId}`).click()
+  await expect(page.getByRole('heading', { name: 'Record an arrival' })).toBeVisible()
+  await expect(page.getByText(new RegExp(`on ${businessDateLabel}`))).toBeVisible()
   await expect(page.getByText(/permanently show that you entered it/)).toBeVisible()
-  await page.getByLabel('When did they arrive?').fill('04:00')
+  await page.getByLabel('When did they arrive?').fill('09:00')
   await page.getByRole('button', { name: 'Record it under my name' }).click()
 
   const card = page.getByTestId(`day-${staffId}`)
@@ -493,6 +510,34 @@ test('a manager records a manual entry, and the row names who typed it in', asyn
   await expect(card.getByText('phone')).toHaveCount(0)
   // Recording it settled it: the enterer's stamp is the decision, so nobody has
   // to approve their own typing.
+  await expect(card.getByTestId('approval-note')).toContainText('Demo Manager,')
+  expect(unexpectedRequests).toEqual([])
+  expect(consoleErrors).toEqual([])
+})
+
+test('a manager records a manual entry on the current business day', async ({ page }) => {
+  // The historical case above and this one are the SAME action on two dates,
+  // and that is exactly why both are here: the day view no longer gates the
+  // button on the date, so the case that used to be the only one has to keep
+  // proving today still works rather than being replaced by its own extension.
+  await page.goto('demo/admin/attendance')
+  await expect(page.getByTestId('attendance-day')).toBeVisible()
+  await expect(page.getByTestId('day-label')).toHaveText('Today')
+
+  // Demo Staff has nothing recorded today, so an arrival can still be typed in.
+  // 04:00 is the earliest moment of any business day — the one time guaranteed
+  // neither to be in the future nor to fall on the day before, which the
+  // command now refuses as an instant outside the date it names.
+  const staffId = 'd1000000-0000-4000-a000-000000000004'
+  await page.getByTestId(`expand-${staffId}`).click()
+  await page.getByTestId(`manual-${staffId}`).click()
+  await expect(page.getByText(/permanently show that you entered it/)).toBeVisible()
+  await page.getByLabel('When did they arrive?').fill('04:00')
+  await page.getByRole('button', { name: 'Record it under my name' }).click()
+
+  const card = page.getByTestId(`day-${staffId}`)
+  await expect(card.getByTestId('entered-by')).toContainText('Entered by: Demo Manager')
+  await expect(card.getByText('phone')).toHaveCount(0)
   await expect(card.getByTestId('approval-note')).toContainText('Demo Manager,')
 })
 
