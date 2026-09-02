@@ -66,12 +66,19 @@ yet determined SHALL NOT read as nought.
 - **WHEN** every day's commission in the month is determined
 - **THEN** no ceiling language appears and the figures read as final
 
-### Requirement: A date with no bills is reported as a date with no sales, and no cause is claimed
+### Requirement: A date with no recorded sales is named, and no cause is claimed
 
-Revenue is derived from bills, so a date carrying none contributes nothing to the
-month. The reading SHALL report its aggregate regardless, and SHALL state **how
-many** of the period's dates carried no bills. Those dates SHALL be nameable
-exactly, on an action, rather than only counted.
+A date on which nothing was sold — not at the counter and not on any channel —
+contributes nothing to the month. The reading SHALL report its aggregate
+regardless, and SHALL state **how many** of the period's dates recorded no sales
+at all. Those dates SHALL be nameable exactly, on an action, rather than only
+counted.
+
+**Every revenue source counts toward this, not bills alone.** A date the counter
+never billed but an aggregator did is a trading date and SHALL NOT be reported as
+having no sales. August 2026 at Kalyani is the case that settles it: the counter
+did not bill until the twelfth, and the month still holds no silent date, because
+Zomato and Swiggy recorded revenue throughout.
 
 That statement SHALL claim only what the record holds. It SHALL NOT assert a
 reason — that the outlet was not yet billing, was closed, or was unable to bill —
@@ -83,27 +90,83 @@ reports revenue for some of its dates and costs for all of them, and its profit 
 understated. The statement SHALL therefore qualify **the profit figure as well as
 the revenue total**, and SHALL NOT be presented as a fact about sales alone.
 
-Where **no** date in the period carries a bill, the reading SHALL state that there
+Where **no** date in the period records a sale, the reading SHALL state that there
 are no recorded sales for it and SHALL offer **no profit figure**: profit requires
 both halves, and with one wholly absent there is no figure to state rather than a
 smaller one. That period's expenses SHALL still be reported.
 
-#### Scenario: Some dates carried no bills
+#### Scenario: Some dates recorded no sales
 
-- **WHEN** eleven of a month's thirty-one dates carry no bills
+- **WHEN** eleven of a month's thirty-one dates record no sales from any source
 - **THEN** the reading reports the month's figures, states that eleven dates had
   no sales, names those eleven dates on an action, and qualifies the profit figure
 
 #### Scenario: No cause is asserted
 
-- **WHEN** a date carries no bills
+- **WHEN** a date records no sales
 - **THEN** the reading says no sales were recorded for it and does not say why
 
-#### Scenario: A month with no billed date at all
+#### Scenario: A month with no sale on any date
 
-- **WHEN** no date in the month carries a bill
+- **WHEN** no date in the month records a sale
 - **THEN** the reading states there are no recorded sales for that month, offers
   no profit figure, and still lists that month's expenses
+
+### Requirement: A channel that reported nothing is named, never omitted
+
+The month reading SHALL present a section for **every delivery channel that
+outlet trades on**, whether or not the channel produced a figure for any date in
+the period. Where such a channel produced none, the reading SHALL say so in words
+and SHALL NOT render a nought figure for it.
+
+Which channels an outlet trades on SHALL be read from the outlet’s own channel
+mapping, not assumed from the set of channels the application supports. An outlet
+that does not sell on a channel SHALL NOT have that channel reported at all,
+neither as figures nor as having recorded nothing: figures of nought would be
+noise on every period, and an alarm about a channel nobody expected to report is
+a false one.
+
+A channel the outlet is not mapped to SHALL still be presented, and SHALL still
+count toward the revenue total, **where it reported revenue**. Money SHALL NOT be
+hidden because a mapping is absent.
+
+A channel that took no orders and a channel whose sync never ran are
+indistinguishable in the recorded data. Omitting the channel therefore reports a
+revenue total that appears complete and may not be, which is the same failure as
+rendering an unstated commission as nought. The reading SHALL say that the two
+cannot be told apart and SHALL point at where the sync's health is stated.
+
+A channel that produced figures of nought is **not** a channel that reported
+nothing: rows exist and they say nought, which is a measurement. The two SHALL be
+rendered differently.
+
+#### Scenario: A channel the outlet trades on produced no figures all month
+
+- **WHEN** no figure for a mapped channel reached the outlet on any date in the period
+- **THEN** the reading names that channel, says it recorded nothing, and does not
+  show a nought figure for it
+
+#### Scenario: A mapped channel reported nought
+
+- **WHEN** a channel the outlet trades on reported a figure of nought on nineteen dates
+- **THEN** it renders as a channel with figures, not as one that recorded nothing
+
+#### Scenario: An outlet that does not sell on a channel is not told about it
+
+- **WHEN** an outlet has no mapping for a channel and that channel reported no revenue
+- **THEN** the reading omits that channel entirely, reporting neither figures nor
+  that it recorded nothing
+
+#### Scenario: An unmapped channel that took money is still reported
+
+- **WHEN** a channel the outlet is not mapped to reports revenue for the period
+- **THEN** it appears in the breakdown and counts toward the revenue total
+
+#### Scenario: A silent channel does not silently shrink the total
+
+- **WHEN** a channel recorded nothing for the period
+- **THEN** the reading states that the two possible reasons cannot be told apart,
+  rather than leaving the reader to infer the channel took no orders
 
 ### Requirement: The month states how far its drawer figures can be trusted, in one line
 

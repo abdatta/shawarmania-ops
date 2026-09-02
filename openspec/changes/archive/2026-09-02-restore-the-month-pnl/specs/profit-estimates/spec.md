@@ -40,11 +40,11 @@ The figure remains a cash-basis **operating** estimate. Capital spending is not
 recorded as an expense, so drawer cash spent on equipment is a drawer spend with
 its reason and does not enter this figure. The surface SHALL continue to say so.
 
-Where **no** date in the period carries a bill there is no revenue to derive, and
+Where **no** date in the period records a sale there is no revenue to derive, and
 **no profit figure SHALL be offered at all**. A ceiling is a figure that may fall;
 this is the absence of a measurement, and the two SHALL NOT be rendered alike.
 
-Where **some** dates in the period carry no bills, a profit figure SHALL be
+Where **some** dates in the period record no sales, a profit figure SHALL be
 offered and SHALL be qualified by how many such dates there were. It is
 understated by the trade nobody rang up, and a reader SHALL be told so beside the
 figure rather than only beside the revenue total.
@@ -69,15 +69,15 @@ figure rather than only beside the revenue total.
 - **WHEN** drawer cash pays for equipment and is recorded as a drawer spend
 - **THEN** the drawer reconciles and the period's profit figure is unchanged
 
-#### Scenario: A period with no billed date offers no figure
+#### Scenario: A period with no sale on any date offers no figure
 
-- **WHEN** no date in the period carries a bill
+- **WHEN** no date in the period records a sale
 - **THEN** no profit figure is shown, and the reading says there are no recorded
   sales for the period rather than reporting a loss
 
 #### Scenario: A period with some unbilled dates qualifies its figure
 
-- **WHEN** eleven of the period's dates carry no bills
+- **WHEN** eleven of the period's dates record no sales
 - **THEN** a profit figure is shown and the eleven dates are named against it, not
   against the revenue total alone
 
