@@ -24,6 +24,12 @@ that has to exist before either is safe.
 - **Remove the one-active-tablet-per-outlet index**, and reshape it in the same
   migration as the pending-setup fix it collides with (below), so one invariant
   is rewritten once rather than twice.
+- **Reshape the second singleton, found while implementing.** An outlet is also
+  held to one live setup code, enforced by issuing silently superseding whatever
+  live code was already there, which made the spec's own two-admin scenario
+  unreachable. An outlet MAY now hold several live codes, issuing invalidates
+  nothing, and a label an active tablet already holds is refused on the admin's
+  own phone rather than at the counter [owner, 2026-09-02].
 - **Fix the slot a failed setup takes with it.** Redemption succeeding and the
   browser establishing its session are two acts that cannot share a transaction;
   today a lost response between them spends the outlet's only counter and needs an
@@ -88,8 +94,9 @@ that has to exist before either is safe.
 
 ## Impact
 
-One migration reshapes the active-tablet invariant and adds the unproven-setup
-state and the active-label uniqueness. Setup, removal and management adapters and
+One migration reshapes both per-outlet singletons — the active-tablet index and
+the live-setup-code index — and adds the unproven-setup state and the
+active-label uniqueness. Setup, removal and management adapters and
 surfaces stop assuming one row. Generated types, demo fixtures and the RLS,
 concurrency and browser suites gain a second tablet. **No command RPC, ownership
 rule, numbering allocator or readiness query changes** — the point of the

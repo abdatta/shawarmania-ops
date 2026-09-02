@@ -391,7 +391,9 @@ The repeatable path. **If any step here requires a code change, that is a bug** 
    Three things worth knowing before you do it. The code is shown **once**, is
    good for **fifteen minutes**, and works **once** — generate another if you
    lose it, which costs nothing. **No password is ever typed on the tablet**, at
-   setup or afterwards. And an outlet holds **one active tablet**: replacing one
+   setup or afterwards. An outlet may hold **several** tablets, each set up by
+   its own code and each removable alone; what it may not hold is two live
+   counters answering to the same label. Replacing one
    means removing the old one first, which is permanent and immediate.
 7. **Add employees and billers** (People), sending each activation link.
    Creating a person requires name, username, one role and one or more outlets;

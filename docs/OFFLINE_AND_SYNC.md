@@ -215,7 +215,7 @@ re-close, or automatic recovery path.
 | Server rejects a bill as malformed | Quarantined, not silently dropped; surfaced to the manager with the reason |
 | Clock skew on the tablet | Both client and server timestamps are stored. Material disagreement is a signal worth surfacing, not something to paper over |
 | App update cannot read the record schema | Resume is refused without deleting the record or any delivery evidence; reconnect remains the recovery path |
-| Two tablets at one outlet | Deferred to `multiple-billing-devices` (#35). The command and number allocators are concurrency-safe, but launch setup permits one active tablet per outlet |
+| Two tablets at one outlet | Supported. Each keeps its own Dexie stores, resume record and drain leader, and reads or writes nothing of the other's; they converge only through command-UUID idempotency, row locks, transactional per-outlet numbering and outlet RLS. A resumed tablet is handed the **outlet's** remembered pipeline, so it sees work it may not touch and refuses it locally with no server reachable |
 | Tablet removed while holding a queue | Draining stops and envelopes remain on that tablet. The removal confirmation names what it last reported unresolved, so the admin is told before rather than after |
 | A command is accepted while the pipeline is refreshing | The read consults the outbox before the server, so the acceptance is never lost between them and the order does not return to the counter as unpaid |
 | A refusal a resend cannot fix | Discard is the only resolution offered. Correcting it would earn the same refusal and add another permanent diagnostics row |

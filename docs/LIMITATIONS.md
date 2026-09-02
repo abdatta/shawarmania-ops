@@ -578,11 +578,23 @@ then and remains on the device. There is deliberately no privileged recovery
 upload. This is a longer exposure window than a tab that merely stayed open,
 bounded by the same shift and cutover and disclosed persistently on the tablet.
 
-### One active tablet per outlet at launch
+### A bill number no longer implies the order of service
 
-The database enforces one active tablet per outlet. Multiple counters are
-deferred to `multiple-billing-devices` (#35); command execution is already
-concurrency-safe, but setup and operations are not yet a multi-tablet product.
+Bill numbers are allocated in successful server-acceptance order, per outlet,
+and remain unique, sequential and never reused. With two tablets at one outlet
+that can differ from the order customers were served in, and it certainly does
+when one tablet has been offline and syncs late: the earlier sale takes the
+later number.
+
+`ordered_at`, `paid_at` and their explicit business dates are what carry the
+economic chronology, and every surface shows them. No surface sorts accounting
+history by bill number, and none may start: orders read in `ordered_at` order
+and bills in `paid_at` order.
+
+Forcing event-time numbering was rejected in `multiple-billing-devices` because
+disconnected tablets cannot agree the next number without either colliding or
+renumbering later, and a renumbered bill is a bill somebody has already been
+handed.
 
 ## Operational gaps
 
@@ -649,30 +661,19 @@ habit.
 admin deactivates the account, which ends every session it holds, and issues a
 fresh activation link.
 
-### A tablet setup that fails at the last step needs an admin, not a retry
+### A stray setup code stays usable until it expires
 
-Setting a tablet up is two acts that cannot share one transaction: a machine
-identity is created in Auth, then the setup code is redeemed in Postgres, and
-only then does the tablet sign in. The first boundary is handled — if redemption
-is refused for any reason, the identity is deleted again, the code is not
-consumed, and the same code still works.
+An outlet may hold several live setup codes at once, one per tablet being set
+up, and issuing a code no longer invalidates another. That is deliberate: while
+issuing supersedes, two admins setting up two tablets is a race one of them
+always loses, and the loser is told only that their code is invalid.
 
-**The second boundary is not, and this is the honest statement of it.** Once
-redemption succeeds the code is spent and the tablet row exists, holding that
-outlet's one active slot. If the response is then lost, or the sign-in fails, the
-tablet has no session and there is nothing on the device to retry with. The
-screen says so plainly rather than blaming the code, and the recovery is manual:
-an admin removes that tablet under Tablets and generates another code.
-
-That is two taps and a walk, on a failure that needs a network interruption
-inside a window of a few hundred milliseconds. The alternative is a pending
-device state that does not hold the one-tablet slot until the browser proves it
-signed in, which is a schema change to the invariant that everything else about
-tablets rests on. It was judged not worth making that invariant more complicated
-for this; if setup ever fails in practice, that is the fix. It is tracked in
-[A tablet setup that fails at the last step takes the outlet's slot](../openspec/todos/tablet-setup-consumes-its-slot-before-it-is-proven.md),
-whose trigger is `multiple-billing-devices` (#35) — that change reshapes the same
-index, so the two belong in one migration rather than two on the same invariant.
+The cost is that a code left unredeemed in somebody's hand keeps working until
+it expires. That window is bounded by the ceiling the code already carries -- at
+most an hour, fifteen minutes by default -- the code is single-use, it is stored
+only as a hash, and redeeming it now buys a row that is not a counter until a
+browser proves a session. Nothing revokes a code early; the recovery for a
+mistyped label is a second code, not a cancellation.
 
 ### No automated data retention
 

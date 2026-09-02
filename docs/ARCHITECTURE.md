@@ -153,6 +153,19 @@ fallback. Exact replay, durable refusals and correction/discard traces all land
 back in the same store. Detail and failure modes are in
 [Offline And Sync](OFFLINE_AND_SYNC.md).
 
+**Everything below is per tablet, and an outlet may hold several.** Each tablet
+keeps its own Dexie stores, its own resume record and its own drain leader, and
+reads or writes nothing of another's; two tablets at one outlet converge only
+through the server, by command-UUID and canonical-hash idempotency, row locks,
+transactional per-outlet bill numbering and outlet RLS. There is no peer sync and
+no shared browser storage, deliberately: a second coordinator is a second thing
+that can be wrong about money with nobody to arbitrate.
+
+What a tablet reads is wider than what it owns. The preparation pipeline is the
+**outlet's**, because one kitchen serves both tills, so a counter sees orders it
+may not act on and refuses them locally rather than capturing a command destined
+to fail. Ownership stays the database's, and stays per tablet.
+
 The drain and reporter are enrolled-device services, not children of the
 billing workspace. They stay subscribed while the tablet is showing its
 no-shift request screen, so retained work can finish without granting that

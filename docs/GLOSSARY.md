@@ -66,7 +66,7 @@ The copy of `item_name` and `unit_price_paise` stored on a bill line at the mome
 
 The tablet **set up** to one outlet. It is a machine principal: its Auth user *is* its `counter_devices` row, and it has no profile and no assignment. It holds a long-lived session scoped by Row-Level Security to that outlet alone, and what it may reach comes from the shift open on it rather than from anything it is.
 
-At most one active tablet per outlet, enforced by a partial unique index. **Removal is permanent** — there is no paused state, and setting one up again costs a fresh setup code typed at the counter.
+An outlet may hold several active tablets. What a partial unique index enforces is that no two live counters at one outlet share a **label**. A tablet is a counter only once its browser has **proven a session**; until then the row reaches nothing and lapses with the code that created it. **Removal is permanent** — there is no paused state, and setting one up again costs a fresh setup code typed at the counter.
 
 Called a *counter device* before `counter-devices-and-offline`; the schema still says `counter_devices`, and the screens say Tablets, because a phone is a device too and every person reading those screens is holding one.
 

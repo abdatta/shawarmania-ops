@@ -53,5 +53,13 @@ not wait on somebody thinking to read the backlog:
   half. #35 depends on #34 and its delta already carries that corrected
   scenario.
 
-Whichever of the two runs last closes this note. If both are reordered or
-dropped, the trigger falls back to the next change touching either capability.
+**#34 archived on 2026-09-02** and took the `app-shell` half with it, so one
+contradiction remains: the composer scenario in the living `counter-billing`
+spec still ends in **Open orders** while the requirement eight lines below it
+says **Preparing**.
+
+#35's delta carries the corrected scenario inside its MODIFIED
+`The composer supports immediate payment and saving an order`, which is the
+requirement that sentence lives in, so **archiving #35 closes this note** with
+no separate edit. There is no code change either way: the app has said Preparing
+everywhere it shows a person anything since #45.

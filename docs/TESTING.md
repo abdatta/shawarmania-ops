@@ -92,6 +92,19 @@ version.
 |---|---|---|
 | Domain unit tests | Vitest | Money maths, expected cash, business-date resolution, geofence distance |
 | Database policy tests | pgTAP (`supabase/tests/`) + REST probes | RLS isolation and the write contract, on every outlet-scoped table |
+| Two tablets at one outlet | `supabase/tests/46_multiple_billing_devices.sql`, the two-till cases in `supabase/tests/rest/zz-billing-command-races.test.ts`, and `e2e-auth/billing-two-tablets.spec.ts` | Ownership under a neighbour, per-tablet removal, both-tablets readiness, simultaneous payment into one per-outlet number sequence, and two real browsers billing one outlet at once |
+
+**The seed is one active tablet per outlet, and that is deliberate.** It is the
+shape the business runs, the shape a third outlet would open with, and therefore
+the shape roughly fifty pgTAP files, the REST probes and both e2e suites need to
+keep seeing — `billing-offline.spec.ts` above all, whose entire subject is one
+tablet surviving an outage and which would otherwise be running at a two-till
+outlet without saying so.
+
+A spare tablet is seeded **removed**, so it counts as no counter, holds no label
+and appears nowhere. The four suites that need two tills bring it into service
+themselves and say so in the file: two tablets at one outlet is a state a test
+asks for, never one every test inherits. A test that activates it puts it back.
 | Identity migration/tooling | Vitest + local rehearsal + deployment probe | Canonical namespace, private approval seal, permanent dual sign-in, drift refusal, password/session/history preservation, rollback, fail-closed publication |
 | Component tests | Vitest + Testing Library | Interactive components, especially the billing surface |
 | End-to-end | Playwright | The critical paths, including username activation/reset and offline billing |

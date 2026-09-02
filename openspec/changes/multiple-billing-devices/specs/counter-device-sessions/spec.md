@@ -50,6 +50,18 @@ afterwards.
 An outlet MAY hold several active tablets, so a valid code SHALL NOT be refused
 merely because a counter already exists there.
 
+**An outlet MAY hold several live codes at once**, one per tablet being set up,
+and issuing a code SHALL NOT invalidate any other. Setting up two tablets is
+therefore not a sequence anybody has to observe, and no admin's unredeemed code
+is voided by another admin's.
+
+Because a label must be unique among an outlet's active tablets, an issue naming
+a label an active tablet there already holds SHALL be refused **at the point of
+asking**, so the admin learns it on their own phone rather than at the counter.
+Where two live codes nonetheless carry one label, the first redemption SHALL
+succeed and the second SHALL be refused for the label, not fail as an unhandled
+write. Neither refusal SHALL disclose anything about another outlet.
+
 **A redeemed code creates a tablet that is not yet a counter.** Redemption and
 the browser establishing its session cannot share one transaction, so the row
 created by redemption SHALL NOT count as an active tablet, SHALL NOT appear on
@@ -103,6 +115,18 @@ and every count.
 #### Scenario: Two admins set up at once
 - **WHEN** two setup codes for one outlet are redeemed at the same moment and both browsers prove their sessions
 - **THEN** two distinct active tablets exist, each with its own identity and a label unique at that outlet
+
+#### Scenario: A second code is issued while the first is unredeemed
+- **WHEN** an FA at the outlet and an SA away from it each generate a setup code for that outlet
+- **THEN** both codes remain live and each sets up its own tablet, neither voiding the other
+
+#### Scenario: An issue names a label already at that outlet
+- **WHEN** an admin generates a setup code under a label an active tablet at that outlet already holds
+- **THEN** it is refused on the admin's own device, naming the collision and nothing about any other outlet
+
+#### Scenario: Two live codes carry one label
+- **WHEN** two live codes for one outlet were issued under the same label and both are redeemed
+- **THEN** the first becomes an active tablet and the second is refused for the label, with no unhandled write and no half-created identity
 
 ### Requirement: Tablet management exposes operational facts without queued contents
 

@@ -123,7 +123,9 @@ identifier, never raw addresses, and have no client-readable policy.
 
 `id` **is** the machine's `auth.users.id`. A tablet has no profile and no assignment: it is a machine principal, and what it may reach comes from the shift open on it rather than from anything it is.
 
-At most one active tablet per outlet, by a partial unique index on `(outlet_id) where removed_at is null`. A removed tablet's session must stop working immediately, so every policy it goes through checks `removed_at is null` — and removal is permanent, taking the live shift and any pending request with it in the same transaction.
+An outlet may hold **several** active tablets, each with its own machine identity and bound to that one outlet for life. What is unique is the **label**, among an outlet's live counters, by a partial unique index on `(outlet_id, lower(btrim(label))) where removed_at is null and session_proven_at is not null` — so a manager choosing which counter to remove, and an operator reading which till took an order, are never guessing.
+
+A row is a counter only when `removed_at is null and session_proven_at is not null`, which is the canonical predicate every policy and helper asks. A redeemed setup code writes a row that is **not yet** a counter: it reaches nothing, appears nowhere, and lapses on its own when the code's own `proof_expires_at` passes, so a setup whose sign-in never lands costs a code and not a counter. Removal is permanent, taking the live shift and any pending request with it in the same transaction.
 
 The tablet heartbeat writes `last_seen_at`, the number of locally unresolved
 outbox envelopes and the creation time of the oldest one. The deployed

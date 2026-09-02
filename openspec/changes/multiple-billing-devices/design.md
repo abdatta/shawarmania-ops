@@ -100,6 +100,49 @@ read needs no deletion to be harmless. Keeping the row indefinitely and letting
 the admin clear it was rejected outright: that is the current behaviour and the
 whole complaint.
 
+### One live code per outlet was the other singleton, and it is reshaped here too
+
+Found while implementing, on 2026-09-02, and decided by the owner the same day.
+`counter_device_setup_codes_one_live_per_outlet` holds an outlet to a single
+unredeemed setup code, and `issue_counter_device_setup_code` enforces it by
+**silently superseding** whatever live code the outlet already had. Neither the
+proposal nor this design had noticed it, and the spec's own scenario of two
+admins setting up at once was therefore unreachable: the second issue killed the
+first code before either tablet was touched.
+
+Both go. An outlet MAY hold several live codes at once, one per tablet being set
+up, and issuing a code no longer invalidates another. Redemption needs no change
+at all, because it already finds a code by its hash rather than by its outlet.
+
+The reason for taking it here rather than leaving it is that silent supersession
+is only harmless while an outlet has exactly one tablet. Today `tablet_exists`
+refuses the second issue outright, so two admins can barely collide. Once several
+tablets are the point, issuing codes becomes a repeated act, and the failure it
+produces is the worst shape available: an FA at the outlet and an SA away from it
+each generate a code, the second silently voids the first, and the admin who
+walks to the counter is told only that their code is `invalid`, which is the one
+response deliberately designed to explain nothing.
+
+What replaces it is a refusal at the point of asking, in the shape the function
+already uses for that purpose: an issue naming a label an active tablet at that
+outlet already holds is refused as `label_taken`, so the admin learns it on their
+own phone rather than at the counter. The active-label unique index remains the
+boundary, and redemption translates its violation into the same `label_taken`
+rather than failing as an unhandled write, because two codes issued with one
+label is now a reachable state.
+
+Widening the window in which a stray code still works is the cost, and it is
+bounded by what already exists: a code lives at most an hour by the ceiling
+`#adversarial-review` put on it, is single use, is stored only as a hash, and now
+buys a row that is not a counter until a browser proves a session.
+
+Keeping the index and rewriting the scenario to match was rejected: setting up
+two tablets sequentially does work, but it leaves the footgun in place at exactly
+the moment the change makes it reachable. Refusing an issue while any live code
+exists, with an explicit replace, was rejected as a new path to build and explain
+for a problem that per-label refusal answers, and because it can make an admin
+wait out an hour for their own typo.
+
 ### The server is the only coordinator, and stays the only one
 
 Each tablet keeps its own Dexie stores, its own resume record and its own drain
@@ -205,14 +248,28 @@ the other one may be holding accepted money.
 
 ## Migration Plan
 
-1. Add the unproven-setup state, active-label uniqueness and management metadata
-   **with the singleton index still in place**, and prove existing tablet rows,
-   credentials, pending local work and historical attribution are untouched.
-2. Build the collection management surfaces and per-tablet actions, still against
-   one tablet per outlet.
-3. Run the two-tablet database, RLS, removal and concurrency suites.
-4. Drop the singleton index only once those pass.
-5. Set up a second tablet at one test outlet, verify online and offline
+**Corrected on 2026-09-02, during implementation.** As first written this plan
+kept the singleton index in place through step 3 and dropped it in step 4, with
+step 3 running the two-tablet suites. That ordering cannot execute: a unique
+index on `(outlet_id) where removed_at is null` makes a second active tablet
+unwritable, so there is no way to run a two-tablet suite while it stands.
+
+What the ordering was protecting is real and is kept: never allow a second tablet
+while an unproven row still counts as a counter. One migration satisfies that
+better than two, because both land in the same statement and there is no window
+between them at all. So:
+
+1. **One migration** adds the unproven-setup state, the active-label uniqueness,
+   the proof helpers and both index reshapes, atomically. A separate gate
+   (`scripts/check-multiple-billing-devices-migration.test.mjs`) asserts it stays
+   additive, backfills before it constrains, and never renames or repopulates
+   `counter_devices` — which is what keeps existing tablet rows, machine
+   credentials, pending local work and historical attribution in place.
+2. Seed and demo fixtures gain a second tablet at one outlet, so every suite
+   below runs against a shop that has two.
+3. Build the collection management surfaces and per-tablet actions.
+4. Run the two-tablet database, RLS, removal and concurrency suites.
+5. Set up a second tablet at one live outlet, verify online and offline
    coexistence and a full trading evening, then allow a second tablet elsewhere.
 
 Rollback stops new setups and must never delete or merge a tablet identity. An
