@@ -205,17 +205,37 @@ describe('setting a tablet up takes no session, and says nothing when it fails',
     expect(missing).toEqual({ status: 400, body: { error: 'invalid_code' } })
   })
 
-  it('refuses an outlet that already has a tablet, and consumes nothing doing it', async () => {
+  it('issues a code for a second tablet at an outlet that already has one', async () => {
+    // An outlet holding a counter refused a code until multiple-billing-devices.
+    // It does not any more: a second till is the point, and this is the path an
+    // admin actually walks to open one.
     const issued = await call<{ code?: string }>(
       'counter-devices',
       { action: 'issue-setup-code', outletId: OUTLET_KANCHRAPARA, label: 'Second tablet' },
       ownerToken,
     )
-    // The refusal comes before a code is ever minted: the outlet is full, and an
-    // admin is told at the point of asking rather than after walking to the
-    // counter.
+
+    expect(issued.status).toBe(200)
+    expect(issued.body.code).toMatch(/^[A-Z0-9]{5}-[A-Z0-9]{5}$/)
+  })
+
+  it('refuses a label a live counter already holds, and consumes nothing doing it', async () => {
+    // What replaces the outlet-level refusal. It still comes before a code is
+    // ever minted, so an admin is told at the point of asking rather than after
+    // walking to the counter, and it still describes only the outlet they named.
+    const issued = await call<{ code?: string; error?: string }>(
+      'counter-devices',
+      {
+        action: 'issue-setup-code',
+        outletId: OUTLET_KANCHRAPARA,
+        label: 'kanchrapara COUNTER tablet',
+      },
+      ownerToken,
+    )
+
     expect(issued.status).toBe(409)
-    expect(issued.body).toEqual({ error: 'tablet_exists' })
+    expect(issued.body).toEqual({ error: 'label_taken' })
+    expect(issued.body.code).toBeUndefined()
   })
 })
 

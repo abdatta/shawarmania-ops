@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
   billingCommandRpcArguments,
@@ -25,6 +25,9 @@ const PASSWORD = 'shawarmania-local'
 const OUTLET = '00000000-0000-4000-a000-000000000001'
 const TABLET = '10000000-0000-4000-a000-000000000004'
 const SHIFT = '90000000-0000-4000-a000-000000000001'
+const TABLET_TWO = '10000000-0000-4000-a000-00000000000f'
+const SHIFT_TWO = '90000000-0000-4000-a000-000000000003'
+const BILLER_TWO = '10000000-0000-4000-a000-000000000010'
 const MENU_ITEM = '31000000-0000-4000-a000-000000000001'
 
 type Client = SupabaseClient<Database>
@@ -81,13 +84,15 @@ function payNowPayload(billId: string, lineId: string, businessDate: string): Pa
 }
 
 let tablet: Client
+let tabletTwo: Client
 let manager: Client
 let otherOutletManager: Client
 let service: Client
 
 beforeAll(async () => {
-  ;[tablet, manager, otherOutletManager] = await Promise.all([
+  ;[tablet, tabletTwo, manager, otherOutletManager] = await Promise.all([
     signIn('tablet.kalyani'),
+    signIn('tablet.kalyani.two'),
     signIn('admin.kalyani'),
     signIn('admin.kanchrapara'),
   ])
@@ -98,7 +103,65 @@ beforeAll(async () => {
   service = createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   })
+
+  /*
+    Bring the spare till into service, because the seed does not.
+
+    The seed is one active tablet per outlet: that is what the business runs,
+    what a third outlet would open with, and therefore the shape almost every
+    other suite has to keep seeing. Two tills is a state the handful of files
+    that need it ask for, and this is one of them asking.
+
+    Done with the service key rather than through the setup code because this
+    file is about what happens when two tills submit at once; setup itself is
+    proved in `23_counter_tablet_and_shift.sql`.
+  */
+  const { error: revive } = await service
+    .from('counter_devices')
+    .update({ removed_at: null, last_seen_at: new Date().toISOString() })
+    .eq('id', TABLET_TWO)
+  if (revive) throw new Error(`could not bring the spare till into service: ${revive.message}`)
+
+  const outlet = await service
+    .from('outlets')
+    .select('business_day_cutover')
+    .eq('id', OUTLET)
+    .single()
+  if (outlet.error) throw new Error(`could not read the outlet cutover: ${outlet.error.message}`)
+
+  const { error: shift } = await service.from('counter_shifts').upsert({
+    id: SHIFT_TWO,
+    device_id: TABLET_TWO,
+    outlet_id: OUTLET,
+    person_id: BILLER_TWO,
+    opened_at: new Date(Date.now() - 60 * 60_000).toISOString(),
+    business_date: resolveBusinessDate(new Date(), outlet.data.business_day_cutover),
+    expires_at: new Date(Date.now() + 6 * 60 * 60_000).toISOString(),
+  })
+  if (shift) throw new Error(`could not open a shift on the spare till: ${shift.message}`)
 }, 30_000)
+
+/*
+  Put the spare till back out of service.
+
+  The seed is one active tablet per outlet on purpose, and a suite that
+  activates a second one owes it to the phases after it to leave the shop as it
+  found it. The shift is ended rather than deleted, because bills taken above
+  reference it and money history is never removed -- which is what removal does
+  in production too.
+*/
+afterAll(async () => {
+  if (!service) return
+  await service
+    .from('counter_shifts')
+    .update({ ended_at: new Date().toISOString(), ended_reason: 'device_removed' })
+    .eq('id', SHIFT_TWO)
+    .is('ended_at', null)
+  await service
+    .from('counter_devices')
+    .update({ removed_at: new Date().toISOString() })
+    .eq('id', TABLET_TWO)
+})
 
 describe.sequential('billing command races over PostgREST', () => {
   it('serializes two exact retries into one bill and one permanent number', async () => {
@@ -313,6 +376,193 @@ describe.sequential('billing command races over PostgREST', () => {
       'accepted',
       'identity_conflict',
     ])
+  })
+
+  /**
+   * Two tills paying at the same instant.
+   *
+   * The command layer was written for this before there was anything concurrent
+   * to run on it, and a unique index made a second tablet unwritable, so it had
+   * never been run. Numbering is the part that cannot be argued: it is allocated
+   * inside the paying transaction and per outlet, so two simultaneous payments
+   * either serialize into two distinct sequential numbers or the claim was
+   * wrong.
+   */
+  it('gives two tills paying at once two distinct sequential numbers', async () => {
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
+    const createdAt = new Date().toISOString()
+
+    const before = await manager
+      .from('bills')
+      .select('bill_number')
+      .eq('outlet_id', OUTLET)
+      .order('bill_number', { ascending: false })
+      .limit(1)
+    const high = before.data?.[0]?.bill_number ?? 0
+
+    const tills = [
+      {
+        client: tablet,
+        tabletId: TABLET,
+        shiftId: SHIFT,
+        commandId: 'fb100000-0000-4000-a000-000000000001',
+        billId: 'fb200000-0000-4000-a000-000000000001',
+        lineId: 'fb300000-0000-4000-a000-000000000001',
+      },
+      {
+        client: tabletTwo,
+        tabletId: TABLET_TWO,
+        shiftId: SHIFT_TWO,
+        commandId: 'fb100000-0000-4000-a000-000000000002',
+        billId: 'fb200000-0000-4000-a000-000000000002',
+        lineId: 'fb300000-0000-4000-a000-000000000002',
+      },
+    ]
+    const commands = await Promise.all(
+      tills.map((till) =>
+        createBillingCommand({
+          commandId: till.commandId,
+          tabletId: till.tabletId,
+          shiftId: till.shiftId,
+          type: 'pay_now',
+          createdAt,
+          payload: payNowPayload(till.billId, till.lineId, businessDate),
+        }),
+      ),
+    )
+    // Submitted together, so the allocator is genuinely contended rather than
+    // handed one request at a time.
+    const [one, two] = await Promise.all(
+      commands.map((command, index) =>
+        tills[index]!.client.rpc('pay_billing_now', rpcArgs(command)),
+      ),
+    )
+
+    expect(status(one!.data)).toBe('accepted')
+    expect(status(two!.data)).toBe('accepted')
+
+    const bills = await manager
+      .from('bills')
+      .select('id, bill_number, counter_device_id')
+      .in('id', ['fb200000-0000-4000-a000-000000000001', 'fb200000-0000-4000-a000-000000000002'])
+      .order('bill_number')
+
+    expect(bills.data).toHaveLength(2)
+    const numbers = bills.data!.map((bill) => bill.bill_number)
+    // Distinct, sequential from wherever the outlet had reached, and one per
+    // till. A shared counter would have produced a duplicate or a gap.
+    expect(new Set(numbers).size).toBe(2)
+    expect(numbers).toEqual([high + 1, high + 2])
+    expect(new Set(bills.data!.map((bill) => bill.counter_device_id)).size).toBe(2)
+  })
+
+  /**
+   * A lost response replayed against a live competitor.
+   *
+   * The retry is the same command; what differs from the single-tablet case is
+   * that the other till is paying into the same per-outlet sequence while it
+   * happens. The replay must return its ORIGINAL number rather than the next
+   * one, or a bill somebody has already been handed gets renumbered.
+   */
+  it('replays a lost response to its original number while the other till pays', async () => {
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
+    const createdAt = new Date().toISOString()
+    const command = await createBillingCommand({
+      commandId: 'fb400000-0000-4000-a000-000000000001',
+      tabletId: TABLET,
+      shiftId: SHIFT,
+      type: 'pay_now',
+      createdAt,
+      payload: payNowPayload(
+        'fb500000-0000-4000-a000-000000000001',
+        'fb600000-0000-4000-a000-000000000001',
+        businessDate,
+      ),
+    })
+    const first = await tablet.rpc('pay_billing_now', rpcArgs(command))
+    expect(status(first.data)).toBe('accepted')
+
+    const original = await manager
+      .from('bills')
+      .select('bill_number')
+      .eq('id', 'fb500000-0000-4000-a000-000000000001')
+      .single()
+    const originalNumber = original.data!.bill_number
+
+    // The neighbour trades, moving the outlet's sequence on, and only then is
+    // the lost response retried.
+    const neighbour = await createBillingCommand({
+      commandId: 'fb400000-0000-4000-a000-000000000002',
+      tabletId: TABLET_TWO,
+      shiftId: SHIFT_TWO,
+      type: 'pay_now',
+      createdAt: new Date().toISOString(),
+      payload: payNowPayload(
+        'fb500000-0000-4000-a000-000000000002',
+        'fb600000-0000-4000-a000-000000000002',
+        businessDate,
+      ),
+    })
+    expect(status((await tabletTwo.rpc('pay_billing_now', rpcArgs(neighbour))).data)).toBe(
+      'accepted',
+    )
+
+    const retry = await tablet.rpc('pay_billing_now', rpcArgs(command))
+    expect(status(retry.data)).toBe('replay')
+
+    const after = await manager
+      .from('bills')
+      .select('id, bill_number')
+      .eq('id', 'fb500000-0000-4000-a000-000000000001')
+    expect(after.data).toHaveLength(1)
+    expect(after.data![0]!.bill_number).toBe(originalNumber)
+  })
+
+  /**
+   * One command identity, two tills.
+   *
+   * `billing_commands` is keyed on the command UUID, and a UUID minted on one
+   * tablet must not be usable from another: it would let a till claim a
+   * neighbour's accepted work as its own replay.
+   */
+  it('refuses a command identity borrowed from the other till', async () => {
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
+    const command = await createBillingCommand({
+      commandId: 'fb700000-0000-4000-a000-000000000001',
+      tabletId: TABLET,
+      shiftId: SHIFT,
+      type: 'pay_now',
+      createdAt: new Date().toISOString(),
+      payload: payNowPayload(
+        'fb800000-0000-4000-a000-000000000001',
+        'fb900000-0000-4000-a000-000000000001',
+        businessDate,
+      ),
+    })
+    expect(status((await tablet.rpc('pay_billing_now', rpcArgs(command))).data)).toBe('accepted')
+
+    // The same command id, submitted by the neighbour under its own shift.
+    const borrowed = await createBillingCommand({
+      commandId: command.commandId,
+      tabletId: TABLET_TWO,
+      shiftId: SHIFT_TWO,
+      type: 'pay_now',
+      createdAt: new Date().toISOString(),
+      payload: payNowPayload(
+        'fb800000-0000-4000-a000-000000000002',
+        'fb900000-0000-4000-a000-000000000002',
+        businessDate,
+      ),
+    })
+    const stolen = await tabletTwo.rpc('pay_billing_now', rpcArgs(borrowed))
+
+    // Refused, and no second bill exists under the borrowed identity.
+    expect(status(stolen.data)).not.toBe('accepted')
+    const bills = await manager
+      .from('bills')
+      .select('id')
+      .eq('id', 'fb800000-0000-4000-a000-000000000002')
+    expect(bills.data).toEqual([])
   })
 
   it('keeps remote-leave work on the old operator, flags it, and isolates its review', async () => {

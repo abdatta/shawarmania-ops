@@ -209,10 +209,15 @@ $q$, 'P0001', 'attendance state is stale', 'an invented or superseded attempt is
 -- their session id belongs to a counter tablet that has been removed. The
 -- single-row commands this change drops never asked.
 select pg_temp.as_service();
-insert into public.counter_devices (id, outlet_id, label, set_up_by, set_up_at, removed_at)
+insert into public.counter_devices (id, outlet_id, label, set_up_by, set_up_at, removed_at,
+                                   session_proven_at)
 values ('10000000-0000-4000-a000-000000000002', '00000000-0000-4000-a000-000000000001',
         'Synthetic removed tablet sharing a manager session',
-        '10000000-0000-4000-a000-000000000001', now() - interval '10 days', now() - interval '1 day');
+        '10000000-0000-4000-a000-000000000001', now() - interval '10 days', now() - interval '1 day',
+        -- Proven, because this fixture is a tablet that traded and was then
+        -- removed. An unproven row would be refused for a different reason than
+        -- the one this test is about.
+        now() - interval '10 days');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
 select throws_ok($q$

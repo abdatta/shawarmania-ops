@@ -17,9 +17,14 @@
 --   3. **The tablet learns nothing.** An unknown username produces the same
 --      request, the same code and the same timeout as a real one, so the counter
 --      cannot be used to find out who works here.
---   4. **One active tablet per outlet**, in the database rather than in a
---      screen, because two tablets at one counter is a money-attribution
---      problem before it is a UI problem.
+--   4. **Several tablets per outlet, each proven and each labelled uniquely**,
+--      in the database rather than in a screen. Until
+--      multiple-billing-devices an outlet was held to one, because two tablets
+--      at one counter was a money-attribution problem before it was a UI
+--      problem; that attribution is now asserted rather than avoided, and what
+--      the database enforces instead is that a redeemed code is not a counter
+--      until a browser proves a session, and that no two live counters at one
+--      outlet answer to the same label.
 
 begin;
 create extension if not exists pgtap with schema extensions;
@@ -60,6 +65,7 @@ $$;
 \set FA_KAL '10000000-0000-4000-a000-000000000002'
 \set FA_KPA '10000000-0000-4000-a000-000000000003'
 \set DEVICE_KAL '10000000-0000-4000-a000-000000000004'
+\set DEVICE_KAL2 '10000000-0000-4000-a000-00000000000f'
 \set DEVICE_KPA '10000000-0000-4000-a000-000000000005'
 \set DEVICE_GONE '10000000-0000-4000-a000-000000000009'
 \set EMPLOYEE_KAL '10000000-0000-4000-a000-000000000006'
@@ -88,36 +94,150 @@ select is(
   'a counter tablet holds no assignment');
 
 -- ---------------------------------------------------------------------------
--- 1. One active tablet per outlet, in the database.
+-- 1. Several tablets per outlet, and what the database enforces instead.
+--
+-- The seed is one active tablet per outlet, because that is the shape the
+-- business runs and almost every other suite has to keep seeing it. The spare
+-- is seeded removed; this section brings it back for the label rules that need
+-- two live counters, and puts it away again before the handshake sections
+-- below, which are about one tablet and a person's phone.
 
-select has_index('public', 'counter_devices', 'counter_devices_one_active_per_outlet',
-  'the one-active-tablet-per-outlet invariant is an index, not a convention');
+update public.counter_devices set removed_at = null
+ where id = '10000000-0000-4000-a000-00000000000f';
+
+select hasnt_index('public', 'counter_devices', 'counter_devices_one_active_per_outlet',
+  'the one-active-tablet-per-outlet index is gone rather than merely unused');
+
+select has_index('public', 'counter_devices', 'counter_devices_one_active_label_per_outlet',
+  'what replaces it is label uniqueness among an outlet''s live counters');
+
+select is(
+  (select count(*) from public.counter_devices
+    where outlet_id = :'KAL' and removed_at is null and session_proven_at is not null),
+  2::bigint,
+  'an outlet holds two active tablets at once');
 
 select pg_temp.unimpersonate();
 
-select throws_ok($$
-  insert into auth.users (instance_id, id, aud, role, email, email_confirmed_at,
-                          raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
-                          confirmation_token, recovery_token, email_change_token_new,
-                          email_change_token_current, email_change, phone_change,
-                          phone_change_token, reauthentication_token, is_sso_user)
-  values ('00000000-0000-0000-0000-000000000000',
-          'dddddddd-0000-4000-a000-000000000001', 'authenticated', 'authenticated',
-          'second.tablet.kalyani@login.shawarmania.invalid', now(),
-          '{}'::jsonb, '{}'::jsonb, now(), now(), '', '', '', '', '', '', '', '', false);
-  insert into public.counter_devices (id, outlet_id, label, set_up_by)
-  values ('dddddddd-0000-4000-a000-000000000001',
-          '00000000-0000-4000-a000-000000000001', 'Second Kalyani tablet',
-          '10000000-0000-4000-a000-000000000002')
-$$, '23505', null, 'a second active tablet at one outlet is refused by the database');
+-- The identity has to exist before the row can reference it, exactly as the Edge
+-- Function does it in production.
+insert into auth.users (instance_id, id, aud, role, email, email_confirmed_at,
+                        raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+                        confirmation_token, recovery_token, email_change_token_new,
+                        email_change_token_current, email_change, phone_change,
+                        phone_change_token, reauthentication_token, is_sso_user)
+values ('00000000-0000-0000-0000-000000000000',
+        'dddddddd-0000-4000-a000-000000000001', 'authenticated', 'authenticated',
+        'third.tablet.kalyani@login.shawarmania.invalid', now(),
+        '{}'::jsonb, '{}'::jsonb, now(), now(), '', '', '', '', '', '', '', '', false);
 
--- The removed Kalyani tablet proves the index is partial rather than a plain
--- unique constraint: history keeps as many removed tablets as an outlet has had.
+select throws_ok($$
+  insert into public.counter_devices (id, outlet_id, label, set_up_by, session_proven_at)
+  values ('dddddddd-0000-4000-a000-000000000001',
+          '00000000-0000-4000-a000-000000000001', 'kalyani SECOND counter',
+          '10000000-0000-4000-a000-000000000002', now())
+$$, '23505', null,
+  'two live counters at one outlet cannot answer to the same label, whatever its case');
+
+-- The same label at the OTHER outlet is not a collision: the label tells one
+-- shop's counters apart and is not an identifier anything joins on.
+select lives_ok($$
+  insert into public.counter_devices (id, outlet_id, label, set_up_by, session_proven_at)
+  values ('dddddddd-0000-4000-a000-000000000001',
+          '00000000-0000-4000-a000-000000000002', 'Kalyani second counter',
+          '10000000-0000-4000-a000-000000000003', now())
+$$, 'the same label at a different outlet is accepted');
+
+select lives_ok($$
+  update public.counter_devices set label = 'Kalyani old tablet (removed)'
+   where id = 'dddddddd-0000-4000-a000-000000000001'
+$$, 'a removed tablet''s label may be taken by a live counter elsewhere');
+
+delete from public.counter_devices where id = 'dddddddd-0000-4000-a000-000000000001';
+
+-- The index is partial, so history keeps as many removed tablets as an outlet
+-- has had, and none of them holds a label against a live one.
 select is(
   (select count(*) from public.counter_devices
     where outlet_id = :'KAL' and removed_at is not null),
   1::bigint,
-  'a removed tablet stays in the table and does not block the active one');
+  'a removed tablet stays in the table and blocks no label');
+
+select lives_ok($$
+  insert into public.counter_devices (id, outlet_id, label, set_up_by, session_proven_at)
+  values ('dddddddd-0000-4000-a000-000000000001',
+          '00000000-0000-4000-a000-000000000001', 'Kalyani old tablet (removed)',
+          '10000000-0000-4000-a000-000000000002', now())
+$$, 'a removed tablet''s own label is reusable at its own outlet');
+
+delete from public.counter_devices where id = 'dddddddd-0000-4000-a000-000000000001';
+
+-- Neither proven nor pending is not a state anything can read, so it cannot be
+-- written either.
+select throws_ok($$
+  insert into public.counter_devices (id, outlet_id, label, set_up_by)
+  values ('dddddddd-0000-4000-a000-000000000001',
+          '00000000-0000-4000-a000-000000000001', 'Neither proven nor pending',
+          '10000000-0000-4000-a000-000000000002')
+$$, '23514', null, 'a tablet row is either proven or inside a proof window');
+
+-- ---------------------------------------------------------------------------
+-- 1a. Renaming a counter.
+--
+-- Label uniqueness turns renaming from an UPDATE into a path: an admin who
+-- cannot rename cannot resolve a collision they created, and the refusal has to
+-- be a value rather than an error because reusing a removed tablet's label is
+-- legitimate.
+
+select is(
+  public.rename_counter_device(:'DEVICE_KAL2', :'BILLER_KAL', 'Anything'),
+  'not_authorised',
+  'a Biller cannot rename the tablet they bill on');
+
+select is(
+  public.rename_counter_device(:'DEVICE_KAL2', :'FA_KPA', 'Anything'),
+  'not_authorised',
+  'a manager cannot rename the other outlet''s tablet');
+
+select is(
+  public.rename_counter_device(:'DEVICE_KAL2', :'FA_KAL', 'kalyani COUNTER tablet'),
+  'label_taken',
+  'a rename onto a live sibling''s label is refused as a value, not an error');
+
+select is(
+  (select label from public.counter_devices where id = :'DEVICE_KAL2'),
+  'Kalyani second counter',
+  'the refused rename left the label alone');
+
+select is(
+  public.rename_counter_device(:'DEVICE_KAL2', :'FA_KAL', '   '),
+  'invalid',
+  'a blank label is refused');
+
+select is(
+  public.rename_counter_device(:'DEVICE_KAL2', :'FA_KAL', '  Kalyani till two  '),
+  'ok',
+  'the outlet''s own manager renames its counter');
+
+select is(
+  (select label from public.counter_devices where id = :'DEVICE_KAL2'),
+  'Kalyani till two',
+  'the new label is stored without its surrounding space');
+
+select is(
+  public.rename_counter_device(:'DEVICE_KAL2', :'FA_KAL', 'Kalyani old tablet (removed)'),
+  'ok',
+  'a removed tablet''s label may be taken by a live counter');
+
+select is(
+  public.rename_counter_device(:'DEVICE_KAL2', :'FA_KAL', 'Kalyani second counter'),
+  'ok',
+  'and renaming it back leaves the spare as this file found it');
+
+-- Put the spare away. Everything below is about one tablet, a username and four
+-- digits on somebody's own phone, and it should read the ordinary shop.
+update public.counter_devices set removed_at = now() - interval '1 day'
+ where id = '10000000-0000-4000-a000-00000000000f';
 
 -- ---------------------------------------------------------------------------
 -- 2. The setup code.
@@ -146,14 +266,32 @@ select is(
   0::bigint,
   'the refused cross-outlet issue left no row behind');
 
+-- An outlet holding counters is no longer a reason to refuse a code. The label
+-- is, and it is refused here rather than at the counter so the admin reads it on
+-- the phone they typed it on.
 select is(
   (select status from public.issue_counter_device_setup_code(
-     :'KAL', :'FA_KAL', 'Replacement Kalyani tablet', pg_temp.hash('SETUP1'),
+     :'KAL', :'FA_KAL', 'kalyani counter TABLET', pg_temp.hash('NOPE2'),
      interval '10 minutes')),
-  'tablet_exists',
-  'a setup code is refused while the outlet already has an active tablet');
+  'label_taken',
+  'a code naming a label a live counter already holds is refused at the point of asking');
 
--- Remove the Kalyani tablet so the rest of this section has an outlet to set up.
+select is(
+  (select count(*) from public.counter_device_setup_codes
+    where outlet_id = :'KAL' and code_hash = pg_temp.hash('NOPE2')),
+  0::bigint,
+  'the refused label left no code behind');
+
+select is(
+  (select status from public.issue_counter_device_setup_code(
+     :'KAL', :'FA_KAL', '   ', pg_temp.hash('NOPE3'), interval '10 minutes')),
+  'invalid',
+  'a blank label is refused rather than stored');
+
+-- Remove the Kalyani tablet. Not because the outlet has to be emptied to accept
+-- another one any more, but because the removal refusals below are asserted on a
+-- tablet that is genuinely there, and because the rest of this file wants a
+-- replacement tablet it set up itself.
 select is(
   public.remove_counter_device(:'DEVICE_KAL', :'BILLER_KAL'),
   'not_authorised',
@@ -179,7 +317,7 @@ select is(
      :'KAL', :'FA_KAL', 'Replacement Kalyani tablet', pg_temp.hash('SETUP1'),
      interval '10 minutes')),
   'ok',
-  'the outlet''s manager issues a setup code once the outlet has no active tablet');
+  'the outlet''s manager issues a setup code under a label nothing live holds');
 
 select is(
   (select status from public.issue_counter_device_setup_code(
@@ -188,11 +326,14 @@ select is(
   'ok',
   'the owner issues a setup code for any outlet');
 
+-- Two admins setting a tablet up each is the case the old one-live-code index
+-- made unreachable: the second issue silently voided the first, and the admin
+-- holding it was told only that their code was invalid.
 select is(
   (select count(*) from public.counter_device_setup_codes
     where outlet_id = :'KAL' and consumed_at is null and superseded_at is null),
-  1::bigint,
-  'issuing supersedes the outstanding code rather than leaving two live');
+  2::bigint,
+  'two live codes coexist at one outlet, and neither issue voided the other');
 
 -- A fresh machine identity for the replacement tablet. In production the Edge
 -- Function creates this immediately before redeeming, and deletes it again if
@@ -214,15 +355,9 @@ values ('00000000-0000-0000-0000-000000000000',
 
 select is(
   (select status from public.redeem_counter_device_setup_code(
-     pg_temp.hash('SETUP1'), 'dddddddd-0000-4000-a000-000000000002')),
-  'invalid',
-  'a superseded code is refused, and says only that it is invalid');
-
-select is(
-  (select status from public.redeem_counter_device_setup_code(
      pg_temp.hash('WRONG'), 'dddddddd-0000-4000-a000-000000000002')),
   'invalid',
-  'an unknown code is refused with the same answer as a superseded one');
+  'an unknown code is refused, and says only that it is invalid');
 
 select is(
   (select outlet_id from public.redeem_counter_device_setup_code(
@@ -230,9 +365,75 @@ select is(
   :'KAL'::uuid,
   'the live code sets the tablet up at the outlet it was issued for');
 
+-- ---------------------------------------------------------------------------
+-- 2a. A redeemed code is not yet a counter.
+--
+-- Redemption and the browser establishing its session cannot share one
+-- transaction, so the row that redemption writes reaches nothing until the
+-- browser proves it holds a session. This is the failure the backlog note
+-- described: a lost response here used to spend the outlet's only counter and
+-- need an admin to clear it. It is injected genuinely below -- a redemption that
+-- committed followed by a sign-in that has not happened -- rather than asserted
+-- from the code path that handles it.
+
 select is(
   (select count(*) from public.counter_devices
     where id = 'dddddddd-0000-4000-a000-000000000002' and removed_at is null),
+  1::bigint,
+  'redemption wrote a row');
+
+select is(
+  (select count(*) from public.counter_devices
+    where id = 'dddddddd-0000-4000-a000-000000000002'
+      and removed_at is null and session_proven_at is not null),
+  0::bigint,
+  'the row it wrote is not a counter yet');
+
+select isnt(
+  (select proof_expires_at from public.counter_devices
+    where id = 'dddddddd-0000-4000-a000-000000000002'),
+  null,
+  'it carries the redeemed code''s own expiry as its proof window');
+
+select is(
+  (select proof_expires_at from public.counter_devices
+    where id = 'dddddddd-0000-4000-a000-000000000002'),
+  (select expires_at from public.counter_device_setup_codes
+    where code_hash = pg_temp.hash('SETUP2')),
+  'that window is the code''s expiry rather than a second duration');
+
+select is(
+  (select status from public.request_counter_shift(
+     'dddddddd-0000-4000-a000-000000000002', 'biller.kalyani',
+     pg_temp.hash('9999'), interval '2 minutes')),
+  'device_unknown',
+  'an unproven tablet cannot open a shift, so nothing downstream of a shift can reach it');
+
+select pg_temp.impersonate('dddddddd-0000-4000-a000-000000000002');
+
+select is(public.app_device_ok(), false,
+  'an unproven tablet is refused by the predicate every policy asks');
+
+select is(public.app_counter_device(), null,
+  'and it is not a tablet as far as any policy is concerned');
+
+-- The browser signs in and says so. This is the whole of the proof: it holds a
+-- session, so the row it names may become a counter.
+select is(public.prove_counter_device_session(), 'ok',
+  'the tablet proves its session and becomes a counter');
+
+select is(public.prove_counter_device_session(), 'ok',
+  'proving twice is success, because a lost response is the failure this survives');
+
+select is(public.app_device_ok(), true,
+  'a proven tablet passes the predicate it failed a moment ago');
+
+select pg_temp.unimpersonate();
+
+select is(
+  (select count(*) from public.counter_devices
+    where id = 'dddddddd-0000-4000-a000-000000000002'
+      and removed_at is null and session_proven_at is not null),
   1::bigint,
   'the tablet row exists and is active');
 
@@ -242,15 +443,21 @@ select is(
   'invalid',
   'a consumed code cannot set up a second tablet');
 
--- The one refusal that is allowed to be specific, because it describes the
--- OUTLET rather than the code, and the caller already holds a live code for that
--- outlet and therefore already knows which outlet it is.
+-- An outlet is never full. A further code is issued for a further counter, and
+-- the code SETUP1 that used to be superseded by this one is still live and still
+-- redeemable, which is the whole of the second singleton going.
 select pg_temp.unimpersonate();
 select is(
   (select status from public.issue_counter_device_setup_code(
      :'KAL', :'OWNER', 'Third Kalyani tablet', pg_temp.hash('SETUP3'), interval '10 minutes')),
-  'tablet_exists',
-  'the outlet is full again, so no further code is issued');
+  'ok',
+  'a further code is issued for a further counter');
+
+select is(
+  (select status from public.redeem_counter_device_setup_code(
+     pg_temp.hash('SETUP1'), 'dddddddd-0000-4000-a000-000000000003')),
+  'ok',
+  'the code issued first is still live after two more were issued, and still sets a tablet up');
 
 -- ---------------------------------------------------------------------------
 -- 3. The shift request.

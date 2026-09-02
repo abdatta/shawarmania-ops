@@ -83,22 +83,25 @@ values (:'OPEN_ORDER',:'KAL',:'DEVICE_KAL',9001,
   public.app_business_date(now(),time '04:00'),now()-interval '150 minutes',
   :'BILLER_KAL',:'OLD_SHIFT',17900,17900,'open');
 
+-- Keyed on the tablet rather than the outlet from multiple-billing-devices on:
+-- Kalyani holds two counters, so an outlet no longer names one row of this
+-- snapshot. Every figure below belongs to the tablet that produced it.
 select pg_temp.impersonate(:'OWNER'::uuid);
 create temporary table pg_temp.owner_snapshot as
 select * from public.counter_operations_snapshot(array[:'KAL'::uuid,:'KPA'::uuid]);
 select is((select count(distinct read_at) from pg_temp.owner_snapshot),1::bigint,
   'every outlet and figure in one read has the same server timestamp');
-select is((select operator_name from pg_temp.owner_snapshot where outlet_id=:'KAL'),
+select is((select operator_name from pg_temp.owner_snapshot where device_id=:'DEVICE_KAL'),
   'Synthetic Biller Kal','the owner sees the live shift operator name');
-select is((select bill_count from pg_temp.owner_snapshot where outlet_id=:'KAL'),4::bigint,
+select is((select bill_count from pg_temp.owner_snapshot where device_id=:'DEVICE_KAL'),4::bigint,
   'bills rung includes seeded bills plus the settled and void fixture bills');
-select is((select cash_total_paise from pg_temp.owner_snapshot where outlet_id=:'KAL'),13900::bigint,
+select is((select cash_total_paise from pg_temp.owner_snapshot where device_id=:'DEVICE_KAL'),13900::bigint,
   'the corrected fixture Cash is absent while the unrelated seeded Cash remains');
-select is((select upi_total_paise from pg_temp.owner_snapshot where outlet_id=:'KAL'),29800::bigint,
+select is((select upi_total_paise from pg_temp.owner_snapshot where device_id=:'DEVICE_KAL'),29800::bigint,
   'the latest effective UPI correction is added once beside seeded UPI');
-select is((select drawer_cash_paise from pg_temp.owner_snapshot where outlet_id=:'KAL'),13900::bigint,
+select is((select drawer_cash_paise from pg_temp.owner_snapshot where device_id=:'DEVICE_KAL'),13900::bigint,
   'drawer contribution follows effective Cash rather than original tender');
-select is((select open_order_count from pg_temp.owner_snapshot where outlet_id=:'KAL'),1::bigint,
+select is((select open_order_count from pg_temp.owner_snapshot where device_id=:'DEVICE_KAL'),1::bigint,
   'a waiting order inherited from the same tablet and business date remains visible');
 
 select pg_temp.impersonate(:'FA_KAL'::uuid);

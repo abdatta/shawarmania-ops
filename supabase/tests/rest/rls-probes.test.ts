@@ -74,6 +74,13 @@ const PERSONAS = {
     email: 'tablet.kanchrapara@login.shawarmania.invalid',
     sub: '10000000-0000-4000-a000-000000000005',
   },
+  // Kalyani's second counter. Two tablets at one outlet is what
+  // multiple-billing-devices exists for, and the sibling-label read below is
+  // the one boundary it widened.
+  deviceKalyaniTwo: {
+    email: 'tablet.kalyani.two@login.shawarmania.invalid',
+    sub: '10000000-0000-4000-a000-00000000000f',
+  },
 } as const
 
 /** The seeded customer with a bill at each outlet — the shared identity. */
@@ -894,6 +901,9 @@ describe('the management counter snapshot over HTTP', () => {
       p_outlet_ids: [OUTLETS.kalyani],
     })
     expect(own.error).toBeNull()
+    // The ordinary shop: one till per outlet, which is what the seed holds and
+    // what the business runs. That a manager reads EVERY counter at a two-till
+    // outlet is asserted in `46_multiple_billing_devices.sql`, which builds one.
     expect(own.data).toHaveLength(1)
     expect(own.data?.every((row) => row.outlet_id === OUTLETS.kalyani)).toBe(true)
 
@@ -1067,5 +1077,75 @@ describe('the promoted expense record over HTTP', () => {
     const owner = (await session(PERSONAS.superAdmin.email)).client
     const result = await owner.from('archived_manual_ledger_days' as 'expenses').select('*')
     expect(result.error?.code).toBe('42501')
+  })
+})
+
+/**
+ * A tablet may name the other till at its own outlet, and no further.
+ *
+ * `a-counter-can-name-the-other-till` widened `counter_devices_select` so the
+ * outlet-wide pipeline can say which tablet took an order -- the only fact that
+ * predicts a refusal once one person may hold a shift on two tablets. A label is
+ * explicitly not a security identifier, but the widening is still a widening, so
+ * the boundary it must not cross is asserted here by hand-crafted request rather
+ * than inferred from a screen that does not offer one.
+ */
+describe('a tablet reading the other tills at its outlet', () => {
+  it('reads its own outlet tablets, including one already removed', async () => {
+    const tablet = (await session(PERSONAS.deviceKalyani.email)).client
+
+    const { data, error } = await tablet
+      .from('counter_devices')
+      .select('id, label, outlet_id')
+      .order('label')
+
+    expect(error).toBeNull()
+    // Both live counters and the retired one: an order taken on a tablet since
+    // removed still sits on the pipeline, and a card that cannot name the till
+    // it came from is the confusion this widening exists to remove.
+    expect(data?.map((row) => row.label)).toEqual([
+      'Kalyani counter tablet',
+      'Kalyani old tablet (removed)',
+      'Kalyani second counter',
+    ])
+    expect(data?.every((row) => row.outlet_id === OUTLETS.kalyani)).toBe(true)
+  })
+
+  it('reads nothing of the other outlet, asked for by name', async () => {
+    const tablet = (await session(PERSONAS.deviceKalyani.email)).client
+
+    const { data, error } = await tablet
+      .from('counter_devices')
+      .select('id, label')
+      .eq('outlet_id', OUTLETS.kanchrapara)
+
+    // Filtered, not refused: RLS removes the rows, which is what makes naming
+    // the other outlet explicitly worth no more than not naming it.
+    expect(error).toBeNull()
+    expect(data).toEqual([])
+  })
+
+  it('cannot reach the other outlet tablet by its own id', async () => {
+    const tablet = (await session(PERSONAS.deviceKalyaniTwo.email)).client
+
+    const { data } = await tablet
+      .from('counter_devices')
+      .select('id, label')
+      .eq('id', PERSONAS.deviceKanchrapara.sub)
+
+    expect(data).toEqual([])
+  })
+
+  it('still writes nothing to any tablet row, its own included', async () => {
+    const tablet = (await session(PERSONAS.deviceKalyani.email)).client
+
+    const { error } = await tablet
+      .from('counter_devices')
+      .update({ label: 'Renamed by the hardware' })
+      .eq('id', PERSONAS.deviceKalyani.sub)
+
+    // Reading a label is not holding one. Renaming stays an admin act through
+    // `rename_counter_device`, and the table grants the counter no write at all.
+    expect(error).not.toBeNull()
   })
 })
