@@ -98,6 +98,21 @@ async function setSpareTillInService(request: APIRequestContext, inService: bool
     return
   }
 
+  /*
+    Every column stated, `ended_at` and `ended_reason` included.
+
+    An upsert only writes the columns its payload carries, so omitting them left
+    whatever was there — and the two-till race suite, which runs earlier on the
+    same stack in CI, ends this very shift in its own teardown. The spare
+    therefore came back as a tablet with a DEAD shift: the counter rendered its
+    shift-request screen, which still shows the till's label, and the menu grid
+    that only a live shift produces never appeared.
+
+    It passed locally for the least useful reason available: a `db:reset`
+    immediately beforehand meant the row did not exist yet, so the upsert was an
+    insert. Activation has to be idempotent against any prior state, because in
+    CI it never runs against a fresh one.
+  */
   const shift = await request.post(`${SUPABASE_URL}/rest/v1/counter_shifts`, {
     headers: { ...headers, prefer: 'resolution=merge-duplicates,return=minimal' },
     data: {
@@ -108,6 +123,8 @@ async function setSpareTillInService(request: APIRequestContext, inService: bool
       opened_at: new Date(Date.now() - 60 * 60_000).toISOString(),
       business_date: new Date().toISOString().slice(0, 10),
       expires_at: new Date(Date.now() + 6 * 60 * 60_000).toISOString(),
+      ended_at: null,
+      ended_reason: null,
     },
   })
   expect(shift.ok(), 'could not open a shift on the spare till').toBe(true)
@@ -234,23 +251,36 @@ test('two tablets bill one outlet at once, own their own orders, and neither dra
     // the counter that took it, and every control on it stands down. Without
     // the till chip this card is indistinguishable from its own work whenever
     // one person holds both shifts.
-    const neighbourCard = two.page
-      .getByTestId('counter-activity-rail')
-      .getByText('Kitchen Owes This')
-    await expect(neighbourCard).toBeVisible({ timeout: 20_000 })
-    await expect(
-      two.page.getByTestId('counter-activity-rail').getByText(`on ${TILL_ONE.label}`).first(),
-    ).toBeVisible()
-    await expect(
-      two.page.getByTestId('counter-activity-rail').getByRole('button', { name: 'Prepared' }),
-    ).toBeDisabled()
+    /*
+      Scoped to THIS order's card, not to the rail.
 
-    // And its own order is still fully actionable on the till that took it,
+      The rail is the outlet's, so it carries whatever else the outlet has open
+      — including an order left by the spec that runs before this one. A
+      rail-wide locator for `Prepared` therefore matched two buttons and failed
+      on strict mode, with both of them correctly disabled: the assertion was
+      right and the locator was sloppy. Naming the card is also what the
+      assertion means, since the claim is about one order rather than about
+      every control on screen.
+    */
+    const cardFor = (page: Page, customer: string) =>
+      page
+        .getByTestId('counter-activity-rail')
+        .locator('[data-testid^="open-order-"]')
+        .filter({ hasText: customer })
+
+    const neighbourCard = cardFor(two.page, 'Kitchen Owes This')
+    await expect(neighbourCard).toBeVisible({ timeout: 20_000 })
+    await expect(neighbourCard).toContainText(`on ${TILL_ONE.label}`)
+    await expect(neighbourCard.getByRole('button', { name: 'Prepared' })).toBeDisabled()
+
+    // And the same order is still fully actionable on the till that took it,
     // which is the assertion that keeps the gate from being "disable
     // everything".
-    await expect(
-      one.page.getByTestId('counter-activity-rail').getByRole('button', { name: 'Prepared' }),
-    ).toBeEnabled()
+    const ownCard = cardFor(one.page, 'Kitchen Owes This')
+    await expect(ownCard).toBeVisible({ timeout: 20_000 })
+    await expect(ownCard.getByRole('button', { name: 'Prepared' })).toBeEnabled()
+    // Its own card names no till: the order is this counter's own work.
+    await expect(ownCard).not.toContainText(`on ${TILL_ONE.label}`)
 
     // ---------------------------------------------------------------------
     // 3. One till loses the network while the other keeps trading.
