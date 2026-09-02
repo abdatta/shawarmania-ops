@@ -241,6 +241,12 @@ A refresh SHALL NOT disturb work in progress. It SHALL replace only the menu
 being chosen from; lines already captured on the panel keep their snapshots, an
 order under edit remains under edit, and a suspended draft is preserved.
 
+**A persisted menu MAY start the counter, and only inside a shift already
+approved online.** The tablet SHALL retain the menu it is selling from as part of
+its resume record, MAY open the counter from it after a cold start with no
+backend reachable, SHALL label the grid with the read it came from, and SHALL
+replace it with the latest menu on the first successful response.
+
 #### Scenario: A price changes while the counter is online
 - **WHEN** the counter refreshes after an authorised price change and the backend responds
 - **THEN** newly added lines use the latest price while captured order and bill lines keep their snapshots
@@ -262,5 +268,13 @@ order under edit remains under edit, and a suspended draft is preserved.
 - **THEN** the counter may continue from that shift's snapshot, marks the screen offline, and snapshots the displayed name and price into each new line
 
 #### Scenario: The app starts with no reachable backend
-- **WHEN** the tablet reloads or starts and cannot reach the backend for approval or a fresh menu
-- **THEN** V1 opens no new billing work from a persisted cache, and shows unsent-work status instead
+- **WHEN** the tablet reloads or starts with no backend response, and holds a complete resume record whose approved shift has not expired
+- **THEN** the counter opens from the persisted menu, labels it with the read it came from, and each new line snapshots the displayed name and price
+
+#### Scenario: The app starts with no reachable backend and no live shift
+- **WHEN** the tablet reloads or starts with no backend response and no unexpired approved shift to resume
+- **THEN** it opens no new billing work from a persisted menu, and shows unsent-work status instead
+
+#### Scenario: A price changed elsewhere during the outage
+- **WHEN** lines were created from the persisted menu and the tablet later reconnects to a server-side price change
+- **THEN** those lines retain their captured name and price while the refreshed menu governs every line added afterwards

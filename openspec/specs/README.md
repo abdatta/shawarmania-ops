@@ -67,6 +67,7 @@ This alphabetical list maps every capability required now. For planned work, rea
 - [`identity-and-access`](identity-and-access/spec.md) — admin-provisioned four-role accounts, username or private-email sign-in, assignment-derived authority, and immediate deactivation.
 - [`ledger-statement`](ledger-statement/spec.md) — a trading day derived on every read and never stored: revenue by channel, the drawer ordered by instant, no editable field, and an unconfirmed balance that says so.
 - [`menu-management`](menu-management/spec.md) — outlet menus with role-bounded availability and deliberate non-retroactive price changes.
+- [`offline-billing-resumption`](offline-billing-resumption/spec.md) — a counter tablet reopening its own approved shift from a complete resume record during an outage, granting no authority the server did not, labelling every remembered figure with the read it came from, and refusing to finish the day offline.
 - [`order-lifecycle`](order-lifecycle/spec.md) — editable counter orders with daily customer-facing numbers, ownership, terminal states, attributed cancellation, and day-close participation.
 - [`outlet-expenses`](outlet-expenses/spec.md) — explicit-business-date, integer-paise outlet expenses, where only a cash payment moves the drawer and does so by the instant it happened.
 - [`outlet-tenancy`](outlet-tenancy/spec.md) — database-enforced outlet isolation, immediate deactivation and device revocation, and schema-enumerated coverage that a new table cannot skip.
