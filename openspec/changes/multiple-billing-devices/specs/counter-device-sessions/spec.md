@@ -56,6 +56,13 @@ created by redemption SHALL NOT count as an active tablet, SHALL NOT appear on
 the Tablets surface, and SHALL reach nothing, until that session is proven. An
 unproven row SHALL expire on its own without any administrative action.
 
+**An unproven row expires with the code that created it.** Its window SHALL be
+the expiry already carried by the setup code it redeemed, so no second duration
+is introduced and no scheduled job is required: expiry SHALL be evaluated where
+the row is read, exactly as code validity already is. A row whose window has
+passed SHALL be indistinguishable from one that never existed, to every reader
+and every count.
+
 #### Scenario: An unconfigured installed tablet reaches setup
 - **WHEN** the signed-out app opens on an unconfigured counter tablet
 - **THEN** its sign-in screen offers a clearly labelled link to the setup form,
@@ -84,6 +91,14 @@ unproven row SHALL expire on its own without any administrative action.
 #### Scenario: Setup fails after the code is consumed
 - **WHEN** redemption succeeds but the tablet does not establish its session — the response is lost, or the sign-in fails
 - **THEN** the code is spent and the unproven row is not a counter: it appears nowhere, reaches nothing, expires on its own, and a fresh code sets the hardware up without an admin removing anything first
+
+#### Scenario: The tablet proves its session late, inside the window
+- **WHEN** a browser that redeemed a code establishes its session before that code's expiry has passed
+- **THEN** the row becomes an active tablet at that outlet, with no further code and no admin action
+
+#### Scenario: An unproven row outlives its code's window
+- **WHEN** the redeemed code's expiry passes with the session still unproven
+- **THEN** the row counts as no tablet anywhere, is absent from management and from every count, and a later sign-in attempt with that identity establishes nothing
 
 #### Scenario: Two admins set up at once
 - **WHEN** two setup codes for one outlet are redeemed at the same moment and both browsers prove their sessions

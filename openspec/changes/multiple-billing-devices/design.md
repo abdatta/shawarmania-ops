@@ -81,6 +81,25 @@ remove-and-reissue path must keep working as the fallback. The failure is inject
 in test — a redemption that commits followed by a sign-in that does not — rather
 than asserted from the code path that handles it.
 
+**The unproven row expires with the code that created it** [owner, 2026-09-02].
+The window is the `expires_at` the setup code already carries, evaluated where the
+row is read, in the same shape as `expires_at > now()` on the code itself. This
+was chosen because it introduces no second duration for anybody to learn, tune or
+find wrong later, and no scheduled cleanup: an expiry a reader evaluates cannot
+fall behind, and there is no job to notice has stopped running. It is also the
+honest window, since the browser proving its session is the tail of the same act
+the code authorises, and an admin who watched a setup fail reissues rather than
+waits.
+
+A short fixed window measured from redemption, fifteen minutes being the obvious
+candidate, was rejected for being a number with no source: it would have to be
+defended against a slow tablet on a bad connection, and defending it means tuning
+it. A scheduled sweep that deletes unproven rows was rejected because it makes
+correctness depend on a job continuing to run, and a row that is invisible when
+read needs no deletion to be harmless. Keeping the row indefinitely and letting
+the admin clear it was rejected outright: that is the current behaviour and the
+whole complaint.
+
 ### The server is the only coordinator, and stays the only one
 
 Each tablet keeps its own Dexie stores, its own resume record and its own drain
@@ -94,6 +113,22 @@ strongly than the database already does, and because it would make two tablets
 capable of disagreeing about money with nobody to arbitrate. Client-reserved
 blocks of bill numbers were rejected because an offline gap or a reuse becomes
 visible in the accounting.
+
+**Resumption is already per-tablet, and one fact about it is not.**
+`offline-billing-resumption`, which arrived with #34 after this proposal was
+first written, uses a record only where its tablet "is this installation, and no
+other" and already refuses a record naming another tablet. Two tablets need no
+correction to that. What a single tablet could not expose is that the record
+holds the **outlet's** pipeline, which since #45 includes the neighbour's orders:
+resuming offline therefore hands a tablet a remembered list of work it may see
+and may not touch, with no server to ask. So ownership has to be refused locally,
+and the remembered pipeline has to read as a past read rather than as the
+outlet's present. That is the capability's one delta here.
+
+Leaving it unwritten was rejected. The phase gate gives one tablet an outage
+while the other trades, so the behaviour is being tested either way, and a tested
+behaviour no requirement states is the exact shape of the two sentences #45 left
+behind.
 
 ### Ownership is unchanged, and there is still no transfer
 
@@ -183,13 +218,22 @@ the other one may be holding accepted money.
 Rollback stops new setups and must never delete or merge a tablet identity. An
 already active tablet is removed individually through ordinary operations.
 
-## Open Questions
+## Resolved Questions
 
-**Is the dependency on #34 still a dependency?** It is now sequencing judgement
-rather than a code dependency. Nothing in this change reads a resume record, and
-the constraint, label, setup, management and concurrency work would all pass with
-V1 offline behaviour. What #34 buys is confidence: proving single-tablet offline
-resumption first means a bug found afterwards is not being debugged through two
-tablets and interleaved reconnects at the same time. If the two are reordered or
-split, the halves that genuinely need #34 are the offline coexistence in step 5
-and the extended-outage cases in the gate.
+**Is the dependency on #34 still a dependency?** Moot: #34 archived on
+2026-09-02, so single-tablet offline resumption is proven and in the living
+specs before this change starts. It was never a code dependency in any case, and
+the sequencing argument it rested on has been paid: a bug found here is not being
+debugged through two tablets and interleaved reconnects at the same time.
+
+**How long does an unproven tablet row live?** Answered above: the expiry its own
+setup code already carries, evaluated at read time. Recorded as a decision rather
+than left to the implementation, because it was the one number this change would
+otherwise have invented.
+
+**Does `offline-billing-resumption` need a delta?** Yes, one added requirement,
+for the outlet-wide remembered pipeline. Reasoned above.
+
+**Does the Kalyani code-request complaint belong here?** No, and the Non-goals
+say why. It is the only backlog note adjacent to this change that is deliberately
+not being taken.

@@ -39,3 +39,23 @@ saying no.
 - The tablet's name field: `src/features/counter/shift-request-screen.tsx:117-134`
 - Where the request is created (before checking eligibility): `supabase/migrations/20260810000001_counter_tablet_and_shift.sql:578-633`
 - Where eligibility is finally checked (too late): `supabase/migrations/20260810000001_counter_tablet_and_shift.sql:739-745`
+
+## Considered and declined by #35
+
+`multiple-billing-devices` (#35) opens both files named above: it reshapes the
+same migration and rebuilds the shift-request path so each tablet runs its own
+shifts. Taking this note there would have cost almost nothing in edits, and it
+was declined anyway on 2026-09-02.
+
+The reason is that the two changes want opposite things from a refusal. #35's
+setup story depends on every refusal being **one indistinguishable response** so
+a stranger cannot learn who works at an outlet by reading error messages, and
+this note asks for a refusal that says more, sooner, to the admin who typed the
+name. Both are right for their own reader. Deciding how much a refusal may
+disclose, and to whom, is a policy question with an RLS shape, and it deserves a
+change that argues it rather than a paragraph inside a concurrency one.
+
+So this stays open with its own home to be chosen. The cheap half of the fix, the
+final message saying clearly that this is an eligibility problem rather than a
+typo, does not need the policy argument settled and can travel in any change that
+touches the shift-request screen.

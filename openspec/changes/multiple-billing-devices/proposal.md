@@ -77,8 +77,14 @@ that has to exist before either is safe.
   capability, two names for one rail. The standalone page and the manager's
   history tab keep the plain Open orders heading by the owner's call, so only the
   counter rail's name is at issue.
+- `offline-billing-resumption`: a resume record is one tablet's, and the outlet
+  pipeline it remembers holds the neighbour's orders, so ownership is refused
+  locally with no server reachable and a remembered pipeline reads as the past
+  read it is. The capability arrived with #34 after this proposal was first
+  written and is already per-tablet everywhere else, so this is its one delta.
 - `app-shell`: management navigation lists tablets and requires an explicit one
-  for every action.
+  for every action. Its existing requirements are untouched; this is one added
+  requirement rather than a rewrite of any of them.
 
 ## Impact
 
@@ -106,6 +112,16 @@ local work and historical attribution migrate in place, untouched.
 - Shared local storage or peer-to-peer sync between tablets. The server is the
   only coordinator, and adding a second one adds a second thing that can be wrong.
 - A fixed tablet quota, or setup without an admin's one-time code.
+- **Telling an admin sooner that a person is not eligible to bill.**
+  [`openspec/todos/code-request-before-eligibility-check.md`](../../todos/code-request-before-eligibility-check.md)
+  is the most tempting neighbour this change has: it lives in the same migration
+  and the same shift-request screen, and this change is already opening both. It
+  is left alone deliberately, because it argues for a **more** revealing refusal
+  while this change's whole setup story depends on keeping refusals
+  indistinguishable, and deciding how much a refusal may disclose is a policy
+  question that deserves its own change rather than a paragraph inside a
+  concurrency one. Two edits to one screen is cheap; two opposing rules about
+  what a refusal may say is not.
 - Emergency billing on an unregistered personal device. Registered spares are
   expected to remove most of its cases; re-evaluate
   [`openspec/todos/emergency-billing-continuity.md`](../../todos/emergency-billing-continuity.md)
