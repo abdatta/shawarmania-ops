@@ -112,7 +112,14 @@ describe('a measured figure says when it was last confirmed', () => {
       // A bare time is today; anything older carries its date. Never empty,
       // which is what shipped: production has no `as_of_at` and the chip
       // rendered nothing at all.
-      expect(chip).toHaveTextContent(/^(\d{1,2} \w{3}, )?\d{2}:\d{2} [ap]m$/)
+      //
+      // The month is `[A-Za-z]+` and the hour `\d{1,2}` because that is what
+      // `formatFreshness` can actually produce. `en-IN` abbreviates September
+      // to **Sept**, four letters where every other month takes three, and it
+      // renders a single-digit hour as `9:05 am` whatever `hour: '2-digit'`
+      // asks for. A stricter pattern passes for eleven months and for hours
+      // after ten, which is why this only came up in September.
+      expect(chip).toHaveTextContent(/^(\d{1,2} [A-Za-z]+, )?\d{1,2}:\d{2} [ap]m$/)
     }
   })
 })

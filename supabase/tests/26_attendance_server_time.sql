@@ -18,16 +18,38 @@ begin
 end;
 $$;
 
--- Put one outlet before its cutover/deadline and the other after its cutover.
--- The boundary values avoid wrapping around midnight: 24:00 always resolves
--- to the prior business date, while 00:00 always resolves to the current one.
+-- Put one outlet after its cutover/deadline and the other before its cutover.
+-- The boundary values avoid wrapping around midnight: 00:00 always resolves to
+-- the CURRENT business date, while 24:00 always resolves to the PRIOR one.
+--
+-- Which outlet gets which is not free. The seed checks these people in at
+-- Kalyani on `current_date - 1`, and `current_date` is the container's UTC
+-- date, so between 00:00 and 05:30 IST it names a different day than it does
+-- for the rest of the day. Kalyani must therefore resolve to the CURRENT
+-- business date, which is strictly later than any seeded row at every hour, or
+-- the first check-in here collides with a seeded one and the suite fails for
+-- most of the day. IST is ahead of UTC, so `today` in Asia/Kolkata is never
+-- earlier than `current_date` in the container: that inequality is what makes
+-- this arrangement hold at every hour rather than at the hour it was written.
 update public.outlets
-   set business_day_cutover = time '24:00',
+   set business_day_cutover = time '00:00',
        arrival_deadline = time '00:00'
  where id = '00000000-0000-4000-a000-000000000001';
 update public.outlets
-   set business_day_cutover = time '00:00'
+   set business_day_cutover = time '24:00'
  where id = '00000000-0000-4000-a000-000000000002';
+
+-- The arrangement above, asserted rather than trusted. This suite has broken
+-- twice on a date it assumed: once when relative cutovers wrapped past
+-- midnight, and once when the boundary values were the right idea applied to
+-- the wrong outlets and Kalyani's derived day landed on a seeded check-in. If a
+-- future seed reaches today, this line fails first and says so, instead of
+-- eleven assertions failing as "another check-in is not allowed".
+select ok(
+  (select count(*) = 0 from public.attendance a
+    where a.outlet_id = '00000000-0000-4000-a000-000000000001'
+      and a.business_date >= public.app_business_date(now(), time '00:00')),
+  'no seeded check-in occupies the business date these check-ins resolve to');
 
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000e');
 
@@ -64,8 +86,9 @@ select attempted_at, business_date
   from public.attendance_attempts
  where id = '87000000-0000-4000-a000-000000000101';
 
--- Open the one legal retry, then move Kalyani past its cutover. The exact
--- original command must still replay before any current-date calculation.
+-- Open the one legal retry, then move Kalyani past its cutover: 24:00 puts its
+-- current business date a day behind the attempt's. The exact original command
+-- must still replay before any current-date calculation.
 select pg_temp.impersonate('10000000-0000-4000-a000-000000000002');
 select lives_ok($q$
   select * from public.attendance_decide_set(
@@ -80,7 +103,7 @@ $q$, 'the manager leaves the denied attempt eligible for one retry');
 
 reset role;
 update public.outlets
-   set business_day_cutover = time '00:00'
+   set business_day_cutover = time '24:00'
  where id = '00000000-0000-4000-a000-000000000001';
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000e');
 select lives_ok($q$
@@ -109,7 +132,7 @@ $q$, 'P0001', 'attempt id was reused with a changed payload', 'changed legacy ti
 -- than create a second day at the target outlet.
 reset role;
 update public.outlets
-   set business_day_cutover = time '24:00'
+   set business_day_cutover = time '00:00'
  where id = '00000000-0000-4000-a000-000000000001';
 select pg_temp.impersonate('10000000-0000-4000-a000-00000000000e');
 select throws_ok($q$
