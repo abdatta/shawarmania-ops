@@ -88,3 +88,15 @@ the schema and the CI workflow rather than against its own tasks.
       record that stopped being rewritten.
 - [x] 5.9 Re-run every job in `.github/workflows/verify.yml`, read rather than
       remembered, including the Docker-backed database job.
+- [x] 5.10 Say why a resumed counter is still filling in. Proving 5.4 measured
+      the cost of preferring the server: each remembered read runs its request
+      and falls back only once the browser gives up, so the menu, pipeline and
+      bills arrive around seven seconds after a cold start. The app's
+      placeholders are deliberately wordless, which is right for a moment and
+      wrong for seven seconds with no connection — silent shimmer reads as a
+      frozen tablet, and the operator's recovery is another force-close, which
+      starts the wait again. Each waiting column now carries one line, and it
+      goes with that column rather than standing as a notice. The latency
+      itself is kept and recorded in `docs/LIMITATIONS.md`: preferring the
+      record would be faster and would show a stale menu to a shop whose wifi
+      is up and whose line is dead.

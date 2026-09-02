@@ -556,11 +556,18 @@ the warning is evidence rather than repair.
 Every remembered read runs its request first and falls back to the resume record
 only once the browser has given up on it, so after a cold start the menu, the
 pipeline and Bills this shift arrive around seven seconds in rather than at
-once — measured against the local stack, and the operator watches loading
-placeholders until then. Serving the record first would be faster and less
-honest: the tablet would stop trying the server it is supposed to prefer. The
+once — measured against the local stack. Serving the record first would be
+faster and less honest: the tablet would stop trying the server it is supposed
+to prefer, and a shop whose wifi is up but whose line is dead reports itself
+online, so it would show yesterday's menu while the connection was fine. The
 cost is a slow open, not a wrong one, and Finish Day pays it twice because it
 drains and probes before it answers.
+
+Each waiting column says so while it waits, because the wordless shimmer this
+app uses everywhere else is right for a read that takes a moment and wrong for
+one that takes seven seconds: three columns of silent grey blocks read as a
+frozen tablet, and the recovery an operator reaches for is another force-close,
+which starts the seven seconds again.
 
 ### Offline resumption cannot learn removal
 

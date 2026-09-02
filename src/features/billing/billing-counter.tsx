@@ -34,6 +34,7 @@ import { CounterDeviceContext } from '@/session/counter-context'
 import { validateIndianPhone } from '../../../shared/phone'
 
 import { BillComposerFooter } from './bill-composer-footer'
+import { OfflineFillHint } from './offline-fill-hint'
 import { BillPanel } from './bill-panel'
 import { CounterActivityRail } from './counter-activity-rail'
 import { EditingOrderPin } from './editing-order-pin'
@@ -617,6 +618,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           // tiles at the tile's height. Only this pane waits — the bill panel
           // beside it is the write path and is never replaced by a placeholder.
           <LoadingRegion label="the menu" className="space-y-3" data-testid="menu-loading">
+            <OfflineFillHint />
             {[6, 3].map((tiles, section) => (
               <div key={section}>
                 <Shimmer className="mb-1.5 h-4 w-24" />

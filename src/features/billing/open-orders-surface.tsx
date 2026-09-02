@@ -20,6 +20,7 @@ import { PipelineCard } from './pipeline-card'
 import { splitPipeline } from './pipeline'
 import { PaymentDialog } from './payment-dialog'
 import { useCounterState } from './use-counter-state'
+import { OfflineFillHint } from './offline-fill-hint'
 
 /**
  * The pipeline, whole-outlet, in two colour-coded bands: **Preparing** (ember)
@@ -226,6 +227,7 @@ export function OpenOrdersSurface({
     // shape stands.
     return (
       <LoadingRegion label="the pipeline" className="space-y-1">
+        <OfflineFillHint />
         <Shimmer className="h-[92px]" />
         <Shimmer className="h-[92px]" />
         <div className="my-1 border-t border-border" />

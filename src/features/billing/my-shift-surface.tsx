@@ -21,6 +21,7 @@ import { PaymentTotalCards } from './payment-total-cards'
 import { UnpayDialog, CancelAfterPaidDialog } from './pipeline-card'
 import { useFlip } from './flip'
 import { useCounterState } from './use-counter-state'
+import { OfflineFillHint } from './offline-fill-hint'
 
 export function MyShiftSurface({
   embedded = false,
@@ -87,6 +88,7 @@ export function MyShiftSurface({
       // rows — reshaped beside this column's new layout, per the standing
       // placeholder rule.
       <LoadingRegion label="this shift" className="space-y-2" data-testid="bills-loading">
+        <OfflineFillHint />
         <div className="grid grid-cols-2 gap-2">
           <Shimmer className="h-12" />
           <Shimmer className="h-12" />

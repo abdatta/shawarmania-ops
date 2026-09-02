@@ -233,10 +233,15 @@ test('the real tablet survives network loss and settles each local acceptance ex
   // Every remembered read has to fail through the network stack before its
   // fallback runs, so a resumed counter fills in over several seconds rather
   // than instantly. `OFFLINE_READ_MS` is that budget, not a flake allowance.
+  // While it fills in, each waiting column says why rather than sitting on
+  // silent shimmer that reads as a frozen tablet.
+  await expect(page.getByTestId('offline-fill-hint').first()).toBeVisible()
   await expect(page.getByTestId('menu-grid')).toBeVisible({ timeout: OFFLINE_READ_MS })
   await expect(page.getByTestId('menu-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
   await expect(page.getByTestId('pipeline-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
   await expect(page.getByTestId('bills-as-of')).toBeVisible({ timeout: OFFLINE_READ_MS })
+  // And it goes with the column it explained, rather than standing as a notice.
+  await expect(page.getByTestId('offline-fill-hint')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Hand over' })).toBeDisabled()
   // Nothing was lost across the restart: both commands are still unsent, and
   // the counter says so as `stalled` rather than `pending` — a resumed tablet
