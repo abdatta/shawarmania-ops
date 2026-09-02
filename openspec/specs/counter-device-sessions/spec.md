@@ -23,11 +23,39 @@ softened.
 An authorised admin SHALL generate a single-use setup code for one outlet: a
 Franchise Admin only for an outlet they manage, a Super Admin for any active
 outlet. The code SHALL be stored only as a hash, be readable by no client role,
-expire, and be consumed by its first successful use. An unconfigured tablet
-SHALL offer a clearly labelled in-app route from the signed-out front door to
-the setup form. Entering the code on that tablet SHALL create the device
-session. No account password SHALL be accepted on a tablet at setup or at any
-time afterwards.
+expire, and be consumed by its first successful use. An unconfigured tablet SHALL
+offer a clearly labelled in-app route from the signed-out front door to the setup
+form. Entering the code on that tablet SHALL create the device session. No
+account password SHALL be accepted on a tablet at setup or at any time
+afterwards.
+
+An outlet MAY hold several active tablets, so a valid code SHALL NOT be refused
+merely because a counter already exists there.
+
+**An outlet MAY hold several live codes at once**, one per tablet being set up,
+and issuing a code SHALL NOT invalidate any other. Setting up two tablets is
+therefore not a sequence anybody has to observe, and no admin's unredeemed code
+is voided by another admin's.
+
+Because a label must be unique among an outlet's active tablets, an issue naming
+a label an active tablet there already holds SHALL be refused **at the point of
+asking**, so the admin learns it on their own phone rather than at the counter.
+Where two live codes nonetheless carry one label, the first redemption SHALL
+succeed and the second SHALL be refused for the label, not fail as an unhandled
+write. Neither refusal SHALL disclose anything about another outlet.
+
+**A redeemed code creates a tablet that is not yet a counter.** Redemption and
+the browser establishing its session cannot share one transaction, so the row
+created by redemption SHALL NOT count as an active tablet, SHALL NOT appear on
+the Tablets surface, and SHALL reach nothing, until that session is proven. An
+unproven row SHALL expire on its own without any administrative action.
+
+**An unproven row expires with the code that created it.** Its window SHALL be
+the expiry already carried by the setup code it redeemed, so no second duration
+is introduced and no scheduled job is required: expiry SHALL be evaluated where
+the row is read, exactly as code validity already is. A row whose window has
+passed SHALL be indistinguishable from one that never existed, to every reader
+and every count.
 
 #### Scenario: An unconfigured installed tablet reaches setup
 - **WHEN** the signed-out app opens on an unconfigured counter tablet
@@ -35,12 +63,12 @@ time afterwards.
   without asking the tablet for a personal account password
 
 #### Scenario: Manager sets up their outlet tablet
-- **WHEN** an FA generates a setup code on their own phone and it is entered on the counter tablet, and no active tablet exists for that outlet
-- **THEN** one active tablet is created for that outlet and the browser receives its device session
+- **WHEN** an FA generates a setup code on their own phone and it is entered on the counter tablet
+- **THEN** an active tablet is created for that outlet once the browser proves its session, and the browser holds that device session
 
-#### Scenario: A second active tablet is refused
-- **WHEN** a setup code is used while the outlet already has an active tablet
-- **THEN** setup is refused and neither tablet changes
+#### Scenario: A second tablet is set up at the same outlet
+- **WHEN** a setup code is redeemed on another tablet while the outlet already has an active one
+- **THEN** setup succeeds, both tablets are active and independently removable, and neither existing shift, queue nor open order is disturbed
 
 #### Scenario: Cross-outlet setup is refused
 - **WHEN** an FA hand-crafts a setup code request for an outlet they do not manage
@@ -56,7 +84,31 @@ time afterwards.
 
 #### Scenario: Setup fails after the code is consumed
 - **WHEN** redemption succeeds but the tablet does not establish its session — the response is lost, or the sign-in fails
-- **THEN** the code is spent and the tablet row stands, the tablet says so plainly rather than blaming the code, and an admin removes it and issues another
+- **THEN** the code is spent and the unproven row is not a counter: it appears nowhere, reaches nothing, expires on its own, and a fresh code sets the hardware up without an admin removing anything first
+
+#### Scenario: The tablet proves its session late, inside the window
+- **WHEN** a browser that redeemed a code establishes its session before that code's expiry has passed
+- **THEN** the row becomes an active tablet at that outlet, with no further code and no admin action
+
+#### Scenario: An unproven row outlives its code's window
+- **WHEN** the redeemed code's expiry passes with the session still unproven
+- **THEN** the row counts as no tablet anywhere, is absent from management and from every count, and a later sign-in attempt with that identity establishes nothing
+
+#### Scenario: Two admins set up at once
+- **WHEN** two setup codes for one outlet are redeemed at the same moment and both browsers prove their sessions
+- **THEN** two distinct active tablets exist, each with its own identity and a label unique at that outlet
+
+#### Scenario: A second code is issued while the first is unredeemed
+- **WHEN** an FA at the outlet and an SA away from it each generate a setup code for that outlet
+- **THEN** both codes remain live and each sets up its own tablet, neither voiding the other
+
+#### Scenario: An issue names a label already at that outlet
+- **WHEN** an admin generates a setup code under a label an active tablet at that outlet already holds
+- **THEN** it is refused on the admin's own device, naming the collision and nothing about any other outlet
+
+#### Scenario: Two live codes carry one label
+- **WHEN** two live codes for one outlet were issued under the same label and both are redeemed
+- **THEN** the first becomes an active tablet and the second is refused for the label, with no unhandled write and no half-created identity
 
 ### Requirement: A shift opens only when the named person enters the tablet's code on their own device
 
@@ -196,10 +248,11 @@ to service SHALL require a fresh setup code. Any live shift on it SHALL end.
 
 ### Requirement: Tablet management exposes operational facts without queued contents
 
-An FA SHALL see the tablet for outlets they manage and an SA SHALL see every
+An FA SHALL see **every** tablet at outlets they manage and an SA SHALL see every
 tablet, each with its setup state, last seen time, last reported unsent count,
 and removal. The surface SHALL NOT expose queued payload contents or customer
-phone numbers.
+phone numbers. Inspect, removal and health SHALL each name one explicit tablet;
+no action SHALL apply to an outlet's tablets collectively.
 
 Each tablet SHALL additionally carry only the counter status needed to manage
 hardware: whether a shift is open, the name of the person holding it, and when
@@ -207,9 +260,9 @@ it opened. It SHALL NOT show bills rung, open-order counts, payment totals, or
 cash contributed to the drawer. Managers read outlet-day Cash and UPI totals in
 Billing History Totals and activity counts in their dedicated Billing views.
 
-The reader's authority governs the tablet exactly as it governs its outlet. A
-Franchise Admin SHALL receive it only for outlets they are assigned to, and
-the database SHALL be what refuses a request for another outlet's — not the
+The reader's authority governs each tablet exactly as it governs its outlet. A
+Franchise Admin SHALL receive only the tablets at outlets they are assigned to,
+and the database SHALL be what refuses a request for another outlet's — not the
 surface. The operator's name is the only personal fact this surface carries;
 customer names, phone numbers and bill contents SHALL remain absent.
 
@@ -219,17 +272,20 @@ SHALL re-read when it is opened. It SHALL NOT subscribe, poll or run a timer:
 this is an oversight screen consulted occasionally on a battery-powered phone,
 not the counter itself, and the app's badge convention already forbids both.
 
-#### Scenario: Manager checks their tablet
-- **WHEN** an FA opens Tablets
-- **THEN** only their outlets' tablets and non-identifying status appear
+A reported count SHALL be labelled with the time that tablet reported it, and a
+zero SHALL NOT be read as an empty queue on a tablet that has not reported since.
+
+#### Scenario: Manager checks their tablets
+- **WHEN** an FA opens Tablets at an outlet with two counters
+- **THEN** both appear with their own labels and non-identifying status, no other outlet's tablet appears, and every action names one of them
 
 #### Scenario: Telemetry is stale
-- **WHEN** the tablet has not reported since its displayed timestamp
+- **WHEN** a tablet has not reported since its displayed timestamp
 - **THEN** the surface labels the status as last reported rather than claiming it is current
 
-#### Scenario: The owner checks a counter from away from the outlet
-- **WHEN** an SA opens Tablets while a shift is open at Kalyani
-- **THEN** the card names the person holding that counter and when it opened, without displaying bills, orders, payment totals or drawer cash
+#### Scenario: The owner checks the counters from away from the outlet
+- **WHEN** an SA opens Tablets while a shift is open on one of Kalyani's two tablets
+- **THEN** each card names its own shift state and, where one is open, the person holding it and when, without displaying bills, orders, payment totals or drawer cash
 
 #### Scenario: No shift is open
 - **WHEN** a tablet is set up but nobody holds its counter
@@ -241,7 +297,7 @@ not the counter itself, and the app's badge convention already forbids both.
 
 #### Scenario: The reader wants the status again
 - **WHEN** the reader re-reads the surface
-- **THEN** every status fact and the stated reading time move together, and nothing on the card updates between reads
+- **THEN** every status fact and the stated reading time move together for every tablet, and nothing on any card updates between reads
 
 ### Requirement: A server-side fault on the tablet path is reported as a fault, not as a bad code or a bad connection
 
@@ -328,3 +384,37 @@ substitute for the four-digit confirmation.
 
 - **WHEN** the tablet is removed by an admin while it is offline
 - **THEN** the resumed counter cannot learn of it, says plainly that this cannot be checked while offline, and every command it captured is refused by the database once it reconnects
+
+### Requirement: An active tablet's label is unique within its outlet
+
+An active tablet SHALL carry a human-readable label unique among the active
+tablets at its outlet, so a manager choosing which counter to remove, and an
+operator reading a creator's name on a pipeline card, are never guessing which
+till is meant. A label SHALL NOT be a security identifier, and a refusal SHALL
+disclose nothing about another outlet's labels.
+
+#### Scenario: A duplicate active label is submitted
+
+- **WHEN** an admin sets up or renames a tablet to a label already held by an active tablet at that outlet
+- **THEN** the database refuses it and names the collision without revealing any other outlet's labels
+
+#### Scenario: A removed tablet's label is reused
+
+- **WHEN** a tablet is removed and a replacement is set up under the same label at that outlet
+- **THEN** it is accepted, and the removed tablet's history keeps the label it carried
+
+### Requirement: Each tablet runs its own shifts
+
+Every tablet SHALL create and enforce its own shifts. A shift SHALL authorise
+only the tablet and outlet recorded on it, and ending, expiring or removing one
+tablet's shift SHALL NOT touch a shift on another tablet.
+
+#### Scenario: One operator holds two counters
+
+- **WHEN** one eligible person opens a shift on each of two tablets at the same outlet, confirming each from their own phone
+- **THEN** two distinct shifts exist, and every command is attributed to the tablet and shift that actually produced it
+
+#### Scenario: One shift ends
+
+- **WHEN** a person leaves the counter on one tablet from their phone
+- **THEN** only that tablet returns to its shift-request screen, and the other counter is unaffected

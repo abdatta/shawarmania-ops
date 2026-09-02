@@ -555,7 +555,7 @@ carry `discount_paise` as zero.
 
 #### Scenario: Food has to be made first
 - **WHEN** an operator chooses Order
-- **THEN** the order appears in Open orders with its order number and no bill number
+- **THEN** the order appears in Preparing with its order number and no bill number
 
 #### Scenario: Customer identification is missing
 - **WHEN** the current bill has items but both customer name and phone are blank
@@ -1305,3 +1305,24 @@ proceed.
 
 - **WHEN** the backend becomes reachable and the drain resolves every command
 - **THEN** the ordinary readiness sheet applies unchanged, including its advisory tender-edit prompt
+
+### Requirement: A shift summary is one tablet's, and outlet history is both
+
+Bills this shift and My shift SHALL show only what this tablet's current shift
+produced. Authorised FA and SA outlet history MAY aggregate every tablet at the
+outlet, SHALL count each bill exactly once, and SHALL identify the tablet that
+took the order and the tablet that took the payment wherever accountability
+depends on it.
+
+Neither surface SHALL order accounting history by bill number as a proxy for
+time; ordered time, payment time and business date are what say when.
+
+#### Scenario: Two counters work one outlet
+
+- **WHEN** each tablet has taken payments during its own shift
+- **THEN** each counter shows its own totals only, while the manager's outlet history reconciles both with no bill counted twice
+
+#### Scenario: A late sync reorders the numbers
+
+- **WHEN** one tablet's earlier sale is numbered after the other tablet's later one because it synced late
+- **THEN** the history reads in time order with both times shown, and the numbers are presented as identifiers rather than as sequence
