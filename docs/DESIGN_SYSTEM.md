@@ -141,8 +141,6 @@ Both themes are first-class. Neither is an afterthought bolted on later, and **b
 - **Default follows the device.** `prefers-color-scheme` decides on first load, so the app matches whatever the user's phone already does at that time of day.
 - **A manual toggle overrides it**, reachable from every screen, and the choice **persists across reloads and app restarts**. A manager who prefers dark should not have to re-choose each morning.
 - **No flash of the wrong theme.** The resolved theme is applied before first paint; a white flash on a dark phone at 11pm is exactly the kind of small thing that makes an app feel unfinished.
-- **Browser chrome follows the canvas.** The HTML bootstrap reads `--canvas` from the loaded stylesheet and sets `theme-color` before the application bundle executes; runtime theme changes keep that same metadata synchronized. The manifest colour is only a fallback, and tests must check startup metadata as well as the document's theme attribute.
-- **The phone shell reserves the top safe area.** Its outer container uses `env(safe-area-inset-top)` so the banner, header and all loading/content regions stay below system icons when an installed PWA draws behind the status bar; browsers without a top inset add no spacing.
 - Both themes are checked on a phone viewport and a tablet viewport before a UI change is done.
 
 The counter tablet will usually sit in light mode — shops are bright and glare is the enemy — while manager and employee phones will often be dark. Both are real usage, not preference.

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
 // baseURL carries the deployment sub-path, so every goto here is relative.
 // A leading slash would resolve against the origin and skip the base.
@@ -16,55 +16,17 @@ test('the shell loads and shows the running build', async ({ page }) => {
   await expect(page.getByTestId('build-version')).toContainText(/Build \S+/)
 })
 
-async function expectThemeColor(page: Page, theme: 'light' | 'dark') {
-  await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
-  const canvas = await page
-    .locator('html')
-    .evaluate((root) => getComputedStyle(root).getPropertyValue('--canvas').trim())
-  expect(canvas).not.toBe('')
-  const meta = page.locator('meta[name="theme-color"]')
-  await expect(meta).toHaveCount(1)
-  await expect(meta).toHaveAttribute('content', canvas)
-}
-
-test('the theme colour matches before app startup and persists across a reload', async ({
-  page,
-}) => {
-  // The old test only checked data-theme after React loaded. Android can use
-  // the manifest's light fallback before then, despite a dark document.
-  await page.route('**/assets/*.js', (route) => route.abort())
-  await page.emulateMedia({ colorScheme: 'dark' })
+test('the theme toggle persists across a reload', async ({ page }) => {
   await page.goto('.')
-  await expectThemeColor(page, 'dark')
 
-  await page.emulateMedia({ colorScheme: 'light' })
-  await page.reload()
-  await expectThemeColor(page, 'light')
+  const initial = await page.locator('html').getAttribute('data-theme')
+  const target = initial === 'dark' ? 'light' : 'dark'
 
-  await page.evaluate(() => localStorage.setItem('shawarmania.theme', 'dark'))
-  await page.reload()
-  await expectThemeColor(page, 'dark')
-
-  await page.evaluate(() => localStorage.removeItem('shawarmania.theme'))
-  await page.unroute('**/assets/*.js')
-  await page.reload()
-  await expect(page.getByRole('button', { name: 'Switch to dark theme' })).toBeVisible()
-  await page.emulateMedia({ colorScheme: 'dark' })
-  await expectThemeColor(page, 'dark')
-  await page.emulateMedia({ colorScheme: 'light' })
-  await expectThemeColor(page, 'light')
-
-  await page.getByRole('button', { name: 'Switch to dark theme' }).click()
-  await expectThemeColor(page, 'dark')
+  await page.getByRole('button', { name: `Switch to ${target} theme` }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', target)
 
   await page.reload()
-  await expectThemeColor(page, 'dark')
-  await page.getByRole('button', { name: 'Switch to light theme' }).click()
-  await expectThemeColor(page, 'light')
-  await page.emulateMedia({ colorScheme: 'dark' })
-  await expectThemeColor(page, 'light')
-  await page.reload()
-  await expectThemeColor(page, 'light')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', target)
 })
 
 test('an unknown route renders the not-found surface, not a hosting 404', async ({ page }) => {

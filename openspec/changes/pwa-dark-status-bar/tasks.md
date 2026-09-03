@@ -1,4 +1,16 @@
-## Quickfix
+## Rollback requested by the user
+
+The user rejected coupling production app changes with a personal Chrome experiment. The implementation recorded below is withdrawn. The original Chrome native-bar issue remains unresolved.
+
+- [x] Restore all six app, test and design-document files touched by this task exactly to the state before `c856ddd`.
+- [x] Restore Chrome's cutout setting to Default and verify it after relaunch.
+- [x] Verify the restored build and affected tests.
+- [ ] Deploy the rollback through the mandatory gate.
+- [ ] ROLLBACK GATE: production runs the restored app, the Pixel runs Chrome defaults with no temporary DOM styling, and only this diagnostic change folder differs from the pre-task repository.
+
+Rollback preparation: `git diff c856ddd^ --exit-code` is clean for all six restored files. `npx vite build`, `npm run typecheck` and the two affected browser specs passed (18 tests across phone, tablet and desktop). Chrome's visible flag reads Default after Relaunch; reopening the installed PWA gives a 995-pixel viewport, 0-pixel shell top padding and no inline styling. The native issue remains unresolved. Screenshot evidence is local under `logs/pwa-rollback-default-restarted.png`.
+
+## Withdrawn quickfix — historical evidence
 
 - [x] Reproduce the missing startup metadata in a production browser build and check the existing design-system requirements.
 - [x] Publish token-derived theme colour before application startup while retaining runtime synchronization.

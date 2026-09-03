@@ -3,8 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" />
-    <link rel="stylesheet" href="/src/index.css" />
     <!--
       Root-absolute on purpose: Vite rewrites these with the deployment base at
       build time. A `./` relative path would resolve against the *document* URL,
@@ -41,18 +39,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script>
-      /*
-       * The head stylesheet blocks this classic script until tokens resolve.
-       * Publish browser chrome colour before the app bundle is downloaded or
-       * executed, using the same canvas token as syncThemeColorMeta().
-       */
-      document.querySelector('meta[name="theme-color"]').content = getComputedStyle(
-        document.documentElement,
-      )
-        .getPropertyValue('--canvas')
-        .trim()
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

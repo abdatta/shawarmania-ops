@@ -119,7 +119,7 @@ export function PhoneShell({
   const { openGroup, toggleGroup, groupOfLocation } = useOpenGroup(tree, linkFor)
 
   return (
-    <div className="flex min-h-dvh flex-col bg-canvas pt-[env(safe-area-inset-top)] text-content">
+    <div className="flex min-h-dvh flex-col bg-canvas text-content">
       {banner}
       <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-2">
         <div className="min-w-0">
