@@ -37,6 +37,30 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByTestId('demo-banner')).toBeVisible()
 })
 
+test('the phone shell keeps its banner and header below the Android status area', async ({
+  page,
+  context,
+}) => {
+  // Desktop emulation otherwise reports zero insets, hiding the overlap that
+  // Chrome's installed-PWA edge-to-edge mode exposed on the owner's Pixel.
+  const cdp = await context.newCDPSession(page)
+  const banner = page.getByTestId('demo-banner')
+  const header = page.getByRole('banner')
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme })
+    for (const top of [0, 60, 0]) {
+      await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top } })
+      await expect.poll(() => banner.evaluate((node) => node.getBoundingClientRect().top)).toBe(top)
+      const bannerBottom = await banner.evaluate((node) => node.getBoundingClientRect().bottom)
+      expect(
+        await header.evaluate((node) => node.getBoundingClientRect().top),
+      ).toBeGreaterThanOrEqual(bannerBottom)
+      await expect(page.getByRole('button', { name: /Switch to .* theme/ })).toBeVisible()
+    }
+  }
+  await cdp.detach()
+})
+
 test('the owner’s whole navigation fits the bar without scrolling sideways', async ({ page }) => {
   const bar = page.locator(BAR)
   await expect(bar).toBeVisible()
