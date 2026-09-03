@@ -9,6 +9,7 @@ recorded approval makes a day present, and an approval given away from the outle
 closed carries the approver's position and their written reason. These requirements bind what the
 schema records, what the geofence may and may not decide, and what every surface must show about it.
 ## Requirements
+
 ### Requirement: A staff assignment, for attendance, is Employee or Biller
 
 Every requirement in this capability that turns on a **staff assignment** SHALL
@@ -724,66 +725,42 @@ remains a manager's decision recorded in the status.
 
 ### Requirement: No check-in by the deadline reads absent
 
-A person holding a live assignment SHALL read as absent on every
-surface — the manager's day, the person view, the employee's own history, and
-every count derived from them — once that outlet's arrival deadline for a
-business day has passed with no attendance row recorded for them **anywhere**
-that day. Before that deadline has passed, the same person SHALL read as not yet
-arrived.
+A person holding an Employee or Biller assignment SHALL read as absent on every
+attendance surface once the applicable outlet arrival deadline for a business
+day in that assignment window has passed with no attendance row recorded for
+them anywhere that day. Before the deadline has passed, the same person SHALL
+read as not yet arrived.
 
 Absence SHALL be judged once per person per business date, never once per outlet.
 A person carrying a row at one outlet SHALL NOT read as absent at another on the
-same date, on any surface or in any count.
+same date, on any surface or in any count. A stored row SHALL always take
+precedence.
 
-A stored row SHALL always take precedence: a day recorded as leave, half day
-or anything else stays what it was recorded as.
+This state SHALL remain derived from stored rows, outlet clocks and assignment
+windows. No scheduled process SHALL manufacture attendance rows. On the
+manager's day view, a row-less day SHALL appear only where an Employee or Biller
+assignment at a selected outlet covers that business date; a current staff
+member SHALL NOT be shown absent before starting there or after that assignment
+ended.
 
-This state SHALL be derived from the stored rows and the outlet's clock. No
-scheduled process SHALL manufacture attendance rows.
+#### Scenario: A current staff member missed a past deadline
 
-A day SHALL only be read this way inside the person's assignment window, so days
-before they joined or after they left are not counted at all.
+- **WHEN** a manager opens a past business day covered by a current visible
+  staff member's Employee or Biller assignment and no row exists anywhere
+- **THEN** that person reads as absent once, with the missed deadline stated
 
-#### Scenario: Nobody checked in, and the deadline passed
+#### Scenario: The selected day precedes employment
 
-- **WHEN** a manager opens a business day whose arrival deadline has passed and
-  a staff member has no attendance row
-- **THEN** that person reads as absent for the day
+- **WHEN** a current staff member's assignment started after the selected
+  business date and no earlier staff assignment covers it
+- **THEN** the manager's day does not show them absent or offer an attendance
+  action for that date
 
-#### Scenario: A day worked at another outlet is not absent
-
-- **WHEN** a person assigned to two outlets holds a recorded arrival at one of
-  them, and the other outlet's deadline for that date passes
-- **THEN** that person does not read as absent, and the day is counted once
-
-#### Scenario: The deadline has not passed yet
-
-- **WHEN** a manager opens today before the outlet's arrival deadline and a
-  staff member has no attendance row
-- **THEN** that person reads as not yet arrived rather than absent
-
-#### Scenario: A late check-in after reading absent
-
-- **WHEN** a person with no row on a day past its deadline then checks in
-- **THEN** the row is recorded as a late arrival waiting for approval, and the
-  day stops reading absent
-
-#### Scenario: A recorded leave day is not overwritten
-
-- **WHEN** a manager has marked a day as leave and its arrival deadline passes
-- **THEN** the day still reads as leave
-
-#### Scenario: No row is invented
+#### Scenario: No row is invented by time passing
 
 - **WHEN** any number of business days pass with nobody checking in
-- **THEN** no attendance row exists for those days, and the absent reading is
-  derived when the day is read
-
-#### Scenario: Days outside the assignment are not counted
-
-- **WHEN** a person's days are read over a range extending before they were
-  assigned or after their assignment ended
-- **THEN** those days are not shown or counted as absent
+- **THEN** no attendance row exists until an authorised person deliberately
+  records or corrects attendance
 
 ### Requirement: The geofence verdict is computed by the database from the stored evidence
 
@@ -1746,67 +1723,73 @@ week of unsettled days behind it.
 
 ### Requirement: An admin records attendance on someone's behalf
 
-A Franchise Admin SHALL be able to record a check-in for a person at their own
-outlet, and a Super Admin for a person at any outlet, at a past or current
-time on the outlet's current business day — never a future time. This is the
-escape hatch that keeps a hard arrival rule humane: the phone died, the person
-forgot, the network was down.
+A Franchise Admin SHALL be able to use **Record arrival** for a current visible
+staff member at their own outlet, and a Super Admin at any outlet in scope, on
+the outlet's current or a past business date—never a future date. The person
+SHALL have held an Employee or Biller assignment at that outlet on the named
+business date. A date before the assignment began, after its historical window
+ended, or at another outlet SHALL be refused by the database.
 
-Where more than one outlet is in scope and the person holds a staff assignment
-at more than one of them, the entry SHALL ask which outlet it is being recorded
-against. Where the outlet is unambiguous, nothing SHALL be asked.
+The action SHALL be the same on every eligible date: it asks when the person
+arrived, and where more than one selected outlet was an eligible staff outlet on
+that date it also asks which outlet. The asserted instant SHALL be in the past
+or present and SHALL belong to the explicit named business date under that
+outlet's cutover. The database SHALL refuse a future instant or an instant that
+belongs to a different business date.
 
-A manual entry SHALL be stamped by the database with who entered it — the
-enterer's id and a snapshot of their name, never client-supplied — and with a
-source that names it manual. It SHALL carry no coordinates, because the admin
-was not standing where the person was and fabricated evidence is worse than
-none; the geofence SHALL NOT judge a manual event. The enterer stamp is the
-accountability in evidence's place, and it is also the approval: a day an
-admin recorded is settled by the act of recording it.
+A successful manual entry SHALL append one immutable manual attempt and one
+`manual_present` decision, stamp the acting session's id and name as enterer and
+actor, carry no coordinates, and settle the day without a second approval. The
+sheet SHALL state the selected business date; a past entry SHALL not be
+described as today's. The action SHALL require no reason and SHALL read no
+manager position.
 
-An Employee or counter-device session SHALL be refused a manual entry by the
-database, not only by the absence of a control.
+An Employee, Biller device, unauthorised Franchise Admin, forged enterer or
+second person-day at any outlet SHALL remain refused by the database. Exact
+successful command replay SHALL create no duplicate attempt or decision.
 
-#### Scenario: A past-time check-in for someone else
+#### Scenario: A past derived absence is recorded present
 
-- **WHEN** a Franchise Admin records a check-in for a person at their outlet
-  with this morning's time
-- **THEN** the row holds that time, source manual, and the admin's identity
-  and name as enterer, stamped by the database, and the day is settled without
-  a separate approval
+- **WHEN** an authorised manager opens an eligible past derived-absent row,
+  presses **Record arrival**, supplies a time belonging to that business date
+  and submits **Record it under my name**
+- **THEN** the row becomes one settled present day with that asserted time,
+  source manual, the database-stamped manager identity, no GPS evidence and no
+  waiting approval
 
-#### Scenario: The outlet is asked for when it is ambiguous
+#### Scenario: Today's process is unchanged
 
-- **WHEN** an admin records an arrival for a person holding staff assignments at
-  two outlets, both of which are in scope
-- **THEN** the entry asks which outlet the arrival is being recorded against
+- **WHEN** an authorised manager records an arrival on the outlet's current
+  business date
+- **THEN** the same button, time field, attribution, no-location evidence and
+  settled result are used
 
-#### Scenario: The outlet is not asked for when it is not ambiguous
+#### Scenario: The arrival instant belongs to another business date
 
-- **WHEN** an admin records an arrival while one outlet is in scope
-- **THEN** no outlet question is shown and the arrival is recorded there
+- **WHEN** a hand-crafted manual-entry command names one explicit business date
+  but supplies an instant that the outlet cutover places on another
+- **THEN** the database refuses the command and writes no attendance, attempt or
+  decision row
 
-#### Scenario: A manual entry is visibly not a self check-in
+#### Scenario: The person had not joined that outlet
 
-- **WHEN** any surface renders an attendance event that was entered manually
-- **THEN** it shows who entered it in place of GPS evidence, distinct from a
-  phone self check-in, wherever attendance is read
+- **WHEN** a manager hand-crafts a manual entry for a date outside the person's
+  Employee/Biller assignment window at the target outlet
+- **THEN** the database refuses it even if the person is staff there today
 
-#### Scenario: A future time is refused
+#### Scenario: Another outlet already owns the person-day
 
-- **WHEN** an admin attempts a manual entry with a time later than now
-- **THEN** the database refuses the write
+- **WHEN** the person already carries attendance at another outlet on the named
+  business date
+- **THEN** no **Record arrival** action is offered where that fact is known, a
+  handcrafted second entry is refused, and the existing row remains unchanged
 
-#### Scenario: A non-admin cannot fabricate a manual entry
+#### Scenario: The enterer remains the writing session
 
-- **WHEN** an Employee or counter-device session hand-crafts a write with
-  source manual
-- **THEN** the database refuses it
-
-#### Scenario: The enterer stamp cannot be forged
-
-- **WHEN** a manual entry is written naming some other account as its enterer
-- **THEN** the stored enterer is the session that actually wrote it
+- **WHEN** an authorised manager records a historical arrival while naming
+  another account as the convenience enterer input
+- **THEN** the attempt and decision name the authenticated writing manager and
+  preserve the separately database-stamped decision time
 
 ### Requirement: A manager maintains the outlet's staff list
 

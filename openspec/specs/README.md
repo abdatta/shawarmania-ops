@@ -54,6 +54,7 @@ This alphabetical list maps every capability required now. For planned work, rea
 - [`app-shell`](app-shell/spec.md) — four role-appropriate shells, gate-derived navigation, uniform real and demo sessions, reachable theme controls, stable role paths, and shared layout primitives.
 - [`attention-badges`](attention-badges/spec.md) — a consistent, contextual count of work waiting for a reader, visible wherever that work can be reached.
 - [`attendance-and-location`](attendance-and-location/spec.md) — reviewable attendance evidence: capture coordinates, accuracy, distance, source, verdict, and approval beside each business-day record.
+- [`bill-discounts`](bill-discounts/spec.md) — a discount recorded beside the price it reduces rather than folded into it, from the menu or from the biller, combining additively against gross, capped at the subtotal, and every bill landing on a whole rupee no lower than ₹1.
 - [`billing-command-contract`](billing-command-contract/spec.md) — an atomic, replay-safe database command boundary for billing writers, historical shift attribution, and day-close readiness.
 - [`billing-delivery`](billing-delivery/spec.md) — durable local counter acceptance, single-leader dependency-aware draining, evidence-based retry classification, and resolved online day finish.
 - [`cash-drawer`](cash-drawer/spec.md) — an outlet's drawer as a continuous balance observed at instants, with database-computed interval figures, approximate count times that say so, and no figure the app may change on a person's behalf.
