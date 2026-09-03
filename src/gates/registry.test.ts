@@ -517,3 +517,30 @@ describe('recording an expense stays reachable for every role that spends', () =
     expect(expenses).toHaveLength(1)
   })
 })
+
+/**
+ * The Share control the public receipt adds lives on the manager's expanded
+ * bill, and the owner asked for the owner and franchise admin surfaces only.
+ * The tablet is shared hardware standing in a shop.
+ *
+ * Asserted here rather than as a component test, because the control's reach is
+ * decided by which roles the surface holding it is gated to — not by anything
+ * the component does. If a later change gives a Biller `billing-history`, they
+ * gain the Share button in the same breath, and this is the line that says so.
+ */
+describe('the receipt Share control reaches no counter tablet', () => {
+  const BILLING_HISTORY = 'billing-history'
+
+  it.each(['super_admin', 'franchise_admin'] as const)('%s reaches it, live', (role) => {
+    const entry = surfaces.find(
+      (surface) => surface.role === role && surface.path === BILLING_HISTORY,
+    )
+    expect(entry?.state).toBe('live')
+  })
+
+  it.each(['biller', 'employee'] as const)('%s has no route to it at all', (role) => {
+    expect(
+      surfaces.find((surface) => surface.role === role && surface.path === BILLING_HISTORY),
+    ).toBeUndefined()
+  })
+})

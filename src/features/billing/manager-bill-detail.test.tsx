@@ -40,6 +40,7 @@ const bill: BillingBill = {
   voidReason: null,
   voidedAt: null,
   voidedBy: null,
+  receiptUrl: 'https://shawarmania.in/bill/Ab3-_x9QzT',
 }
 
 describe('manager bill detail', () => {
@@ -277,5 +278,128 @@ describe('manager bill detail', () => {
     await user.click(screen.getByRole('button', { name: /record review/i }))
 
     expect(onReview).toHaveBeenCalledWith('assigned_other', 'priya', null)
+  })
+  /*
+   * Share before Cancel, which is the reason this change touched the action row
+   * at all: a destructive control should not be the first thing a thumb reaches
+   * when a bill expands.
+   */
+  it('offers Share before Cancel in the action row', () => {
+    render(
+      <ManagerBillDetail
+        bill={bill}
+        cancelling={false}
+        reason=""
+        onReasonChange={vi.fn()}
+        onStartCancelling={vi.fn()}
+        onKeepBill={vi.fn()}
+        onConfirmCancellation={vi.fn()}
+      />,
+    )
+
+    const share = screen.getByRole('button', { name: /share receipt/i })
+    const cancel = screen.getByRole('button', { name: 'Cancel this bill' })
+    expect(share.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+  })
+
+  /*
+   * One row, not two [owner, 2026-09-03]. Asserted through the shared parent
+   * rather than a class name: what matters is that the two controls are siblings
+   * in one flex row, which is what puts them side by side.
+   */
+  it('puts Share and Cancel in one row', () => {
+    render(
+      <ManagerBillDetail
+        bill={bill}
+        cancelling={false}
+        reason=""
+        onReasonChange={vi.fn()}
+        onStartCancelling={vi.fn()}
+        onKeepBill={vi.fn()}
+        onConfirmCancellation={vi.fn()}
+      />,
+    )
+
+    const share = screen.getByRole('button', { name: /share receipt/i })
+    const cancel = screen.getByRole('button', { name: 'Cancel this bill' })
+    expect(share.parentElement).toBe(cancel.parentElement)
+    expect(share.parentElement).toHaveClass('flex')
+  })
+
+  /*
+   * The revealed link wraps onto its own line beneath both, because a URL has no
+   * room beside two buttons at 375px.
+   */
+  it('drops a revealed link below the row rather than into it', async () => {
+    const user = userEvent.setup()
+    Object.defineProperty(window.navigator, 'share', { configurable: true, value: undefined })
+    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: undefined })
+
+    render(
+      <ManagerBillDetail
+        bill={bill}
+        cancelling={false}
+        reason=""
+        onReasonChange={vi.fn()}
+        onStartCancelling={vi.fn()}
+        onKeepBill={vi.fn()}
+        onConfirmCancellation={vi.fn()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /share receipt/i }))
+    const link = screen.getByTestId('receipt-link')
+    const cancel = screen.getByRole('button', { name: 'Cancel this bill' })
+    expect(link.parentElement).toBe(cancel.parentElement)
+    // `order-last` as well, or the link would push Cancel onto a third line: it
+    // sits between the two buttons in DOM order.
+    expect(link).toHaveClass('basis-full')
+    expect(link).toHaveClass('order-last')
+  })
+
+  it('offers no Share on a cancelled bill', () => {
+    render(
+      <ManagerBillDetail
+        bill={{
+          ...bill,
+          status: 'void',
+          voidReason: 'Duplicate bill',
+          voidedAt: '2026-08-12T12:30:00.000Z',
+          voidedBy: { id: 'person-1', name: 'Demo Manager' },
+        }}
+        cancelling={false}
+        reason=""
+        onReasonChange={vi.fn()}
+        onStartCancelling={vi.fn()}
+        onKeepBill={vi.fn()}
+        onConfirmCancellation={vi.fn()}
+      />,
+    )
+
+    // A cancelled bill is not something to proactively send. A link already
+    // sent for it keeps working and reports the cancellation, which is the
+    // receipt's job rather than this row's.
+    expect(screen.queryByRole('button', { name: /share receipt/i })).not.toBeInTheDocument()
+  })
+
+  it('offers no Share for a bill the server has not accepted yet', () => {
+    render(
+      <ManagerBillDetail
+        bill={{ ...bill, receiptUrl: null }}
+        cancelling={false}
+        reason=""
+        onReasonChange={vi.fn()}
+        onStartCancelling={vi.fn()}
+        onKeepBill={vi.fn()}
+        onConfirmCancellation={vi.fn()}
+      />,
+    )
+
+    // The token is minted when the row reaches Postgres, so a queued bill has
+    // no link. Nothing is offered rather than a URL that would refuse.
+    expect(screen.queryByRole('button', { name: /share receipt/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel this bill' })).toBeVisible()
   })
 })

@@ -58,3 +58,6 @@ test-results/
 
 # Playwright MCP session artifacts (snapshots, console/network logs) — may carry live tokens
 .playwright-mcp/
+
+# Local Browser-pane server config: machine-specific absolute paths.
+.claude/launch.json

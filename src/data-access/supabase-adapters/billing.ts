@@ -33,6 +33,7 @@ import {
   PAYMENT_EDIT_WINDOW_MS,
   provisionalToken,
 } from '@/domain'
+import { receiptLink } from '@/lib/receipt-link'
 import { newUuid } from '@/lib/uuid'
 import {
   BillingDeliveryDatabase,
@@ -73,6 +74,11 @@ type OrderReadRow = Tables<'orders'> & {
 type BillReadRow = Tables<'bills'> & {
   bill_items: Tables<'bill_items'>[]
   bill_discounts: Tables<'bill_discounts'>[]
+  // A **to-one** embed, because `bill_public_links.bill_id` is its primary key
+  // referencing `bills`. PostgREST returns one object rather than an array for
+  // that shape, so this goes through `joined()` like every other to-one here —
+  // typed both ways because the client's own types describe it as either.
+  bill_public_links: PublicLinkReadRow | PublicLinkReadRow[] | null
   counter_device: { label: string } | { label: string }[] | null
   bill_payments: Tables<'bill_payments'>[]
   order: { order_number: number } | { order_number: number }[] | null
@@ -80,6 +86,8 @@ type BillReadRow = Tables<'bills'> & {
   voider: { id: string; full_name: string } | { id: string; full_name: string }[] | null
   attribution_reviews: ReviewReadRow[] | ReviewReadRow | null
 }
+
+type PublicLinkReadRow = { token: string; revoked_at: string | null }
 
 type ReviewReadRow = Tables<'billing_attribution_reviews'> & {
   resolved_operator: { full_name: string } | { full_name: string }[] | null
@@ -179,6 +187,7 @@ function billView(
 ): BillingBill {
   const voider = joined(row.voider)
   const review = joined(row.attribution_reviews)
+  const publicLink = joined(row.bill_public_links)
   const effectiveForBill = effective.filter((payment) => payment.bill_id === row.id)
   const payments =
     effectiveForBill.length > 0
@@ -249,6 +258,9 @@ function billView(
     voidReason: row.void_reason,
     voidedAt: row.voided_at,
     voidedBy: voider ? { id: voider.id, name: voider.full_name } : null,
+    // A revoked link is not offered for sharing again. It resolves for nobody,
+    // and re-sending a killed URL would be handing out a refusal.
+    receiptUrl: receiptLink(publicLink && publicLink.revoked_at === null ? publicLink.token : null),
   }
 }
 
@@ -732,7 +744,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('bills')
       .select(
-        '*, bill_items(*), bill_discounts(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name)), counter_device:counter_devices!bills_counter_device_id_fkey(label)',
+        '*, bill_items(*), bill_discounts(*), bill_public_links(token, revoked_at), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name)), counter_device:counter_devices!bills_counter_device_id_fkey(label)',
       )
     if (filters.id) query = query.eq('id', filters.id)
     if (filters.outletId) query = query.eq('outlet_id', filters.outletId)
@@ -901,6 +913,9 @@ export function createSupabaseBillingAdapter(
           voidReason: null,
           voidedAt: null,
           voidedBy: null,
+          // No link yet: the token is minted when the row reaches Postgres,
+          // and this bill has only been accepted locally.
+          receiptUrl: null,
         })
         continue
       }
@@ -941,6 +956,9 @@ export function createSupabaseBillingAdapter(
             voidReason: null,
             voidedAt: null,
             voidedBy: null,
+            // No link yet: the token is minted when the row reaches Postgres,
+            // and this bill has only been accepted locally.
+            receiptUrl: null,
           })
         }
         continue
@@ -1322,6 +1340,9 @@ export function createSupabaseBillingAdapter(
         voidReason: null,
         voidedAt: null,
         voidedBy: null,
+        // No link yet: the token is minted when the row reaches Postgres,
+        // and this bill has only been accepted locally.
+        receiptUrl: null,
       })
     },
 
@@ -1542,6 +1563,9 @@ export function createSupabaseBillingAdapter(
         voidReason: null,
         voidedAt: null,
         voidedBy: null,
+        // No link yet: the token is minted when the row reaches Postgres,
+        // and this bill has only been accepted locally.
+        receiptUrl: null,
       }
       localBillCache.set(localBill.id, localBill)
       return localBill

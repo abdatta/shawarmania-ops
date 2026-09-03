@@ -1368,6 +1368,20 @@ export interface BillingBill {
   voidedAt: Tables<'bills'>['voided_at']
   /** The actor stamped by the database when the immutable bill was cancelled. */
   voidedBy: ExpenseActor | null
+  /**
+   * The customer's own receipt, at the URL a surface shares.
+   *
+   * Read, never created: the database mints one link per bill on insert, so
+   * there is nothing here for a surface to enable, mint or revoke — sharing is
+   * a read of a link that already exists, and grants no visibility a role did
+   * not already hold.
+   *
+   * Null where the bill has no link yet, which is a real state and not an
+   * error: the token is written when the row reaches Postgres, so a bill still
+   * in a tablet's outbox has none. A surface renders nothing rather than a URL
+   * that would refuse.
+   */
+  receiptUrl: string | null
 }
 
 export type BillingAttributionOutcome = 'confirmed_original' | 'assigned_other' | 'operator_unknown'

@@ -22,6 +22,7 @@ import {
 } from '../../../shared/billing-command'
 import { splitPipeline } from '@/features/billing/pipeline'
 
+import { RECEIPT_BASE_URL } from '@/lib/receipt-link'
 import { createSupabaseBillingAdapter } from './billing'
 import { createSupabaseBillingCommandAdapter } from './billing-command'
 
@@ -100,7 +101,19 @@ function emptyReadableClient() {
   return { rpc: vi.fn(), from: () => query } as unknown as SupabaseClient<Database>
 }
 
-function managerHistoryClient() {
+function managerHistoryClient(
+  /*
+   * PostgREST returns a **to-one** embed as a single object, not an array, and
+   * `bill_public_links.bill_id` is its primary key referencing `bills` — so
+   * that is the shape the real reader gets. Passed in as one object here for
+   * exactly that reason: an array fixture would have made this suite green over
+   * a mapper the live surface could not use.
+   */
+  publicLink: { token: string; revoked_at: string | null } | null = {
+    token: 'Ab3-_x9QzT',
+    revoked_at: null,
+  },
+) {
   const bill = {
     id: 'bill-1',
     outlet_id: 'outlet-1',
@@ -129,6 +142,7 @@ function managerHistoryClient() {
     bill_payments: [{ method: 'upi', amount_paise: 13_900 }],
     order: { order_number: 9 },
     biller: { full_name: 'Demo Biller' },
+    bill_public_links: publicLink,
   }
   const selected: string[] = []
   const from = vi.fn((table: string) => {
@@ -173,6 +187,45 @@ describe('the live tablet acceptance boundary', () => {
     ])
     expect(selected[0]).toContain('biller:profiles!bills_biller_profile_id_fkey(full_name)')
     expect(selected[0]).toContain('voider:profiles!bills_voided_by_fkey(id, full_name)')
+  })
+
+  /*
+   * The link is read from a to-one embed, which PostgREST serialises as one
+   * object rather than an array. Treating it as an array threw at read time and
+   * emptied the whole surface, so these three cases pin the shape.
+   */
+  it('resolves a receipt link from the to-one embed PostgREST actually returns', async () => {
+    const { client, selected } = managerHistoryClient()
+    const billing = createSupabaseBillingAdapter(client)
+
+    // Built from `RECEIPT_BASE_URL` rather than written out, because the base is
+    // configurable -- pointing a local `.env` at a Worker for browsing must not
+    // turn this red. The claim here is that the token becomes a link at all.
+    await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
+      { receiptUrl: `${RECEIPT_BASE_URL}/bill/Ab3-_x9QzT` },
+    ])
+    expect(selected[0]).toContain('bill_public_links(token, revoked_at)')
+  })
+
+  it('offers no link for a revoked one, rather than a URL that would refuse', async () => {
+    const { client } = managerHistoryClient({
+      token: 'Ab3-_x9QzT',
+      revoked_at: '2026-09-03T10:00:00.000Z',
+    })
+    const billing = createSupabaseBillingAdapter(client)
+
+    await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
+      { receiptUrl: null },
+    ])
+  })
+
+  it('offers no link for a bill whose row carries none yet', async () => {
+    const { client } = managerHistoryClient(null)
+    const billing = createSupabaseBillingAdapter(client)
+
+    await expect(billing.listManagerHistory({ outletId: 'outlet-1' })).resolves.toMatchObject([
+      { receiptUrl: null },
+    ])
   })
 
   it('commits an exact split-tender, zero-discount command locally before any request', async () => {

@@ -3,7 +3,7 @@ import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Money } from '@/components/ui/money'
 import type { BillDiscountDraft, BillLineDraft } from '@/data-access/adapters'
-import { formatPaise } from '@/domain'
+import { formatPaise, groupMenuDiscounts, menuDiscountLabel } from '@/domain'
 
 /**
  * What came off, as rows in the bill column beside the items.
@@ -28,44 +28,31 @@ interface DiscountRow {
 }
 
 /**
- * Group the menu's line discounts into the rows a person reads.
+ * Turn the shared grouping into the rows this column draws.
  *
- * Three cases, in order, and they are the owner's:
- *   - every category on the menu covered → one row saying `All Items`
- *   - several categories at one value → one row listing them
- *   - different values → a row each
+ * The grouping itself lives in `@/domain` because the customer's receipt needs
+ * the same rule and cannot reuse this component: it renders a settled bill in
+ * SQL, and this renders a draft that has no rows in the database yet. The two
+ * are held together by `discount-row-cases.json`.
  *
- * Derived from the lines rather than stored, so a row can never disagree with
- * the lines it is describing.
+ * What stays here is the wording, and one case that is deliberately only the
+ * counter's: **every category on the menu covered reads as `All Items`**. That
+ * is a claim about what the menu contains, which this surface can make while
+ * the sale is happening and a later reader cannot -- which is why the manager's
+ * bill detail passes an infinite `categoryCount` and the receipt does not offer
+ * the phrase at all.
  */
 function menuDiscountRows(lines: readonly BillLineDraft[], categoryCount: number): DiscountRow[] {
-  const groups = new Map<string, { label: string; categories: Set<string>; paise: number }>()
-
-  for (const line of lines) {
-    const paise = line.discountPaise ?? 0
-    if (paise <= 0) continue
-
-    // Grouped by what the customer was actually given: a percentage groups by
-    // that percentage, and a rupee discount by its per-unit amount, because two
-    // lines at "₹20 off each" are one discount however different their totals.
-    const label =
-      line.discountPercentBp != null
-        ? `${line.discountPercentBp / 100}%`
-        : formatPaise(Math.round(paise / Math.max(1, line.quantity)))
-
-    const group = groups.get(label) ?? { label, categories: new Set<string>(), paise: 0 }
-    if (line.categoryName) group.categories.add(line.categoryName)
-    group.paise += paise
-    groups.set(label, group)
-  }
-
-  return [...groups.values()].map((group) => {
-    const names = [...group.categories]
+  return groupMenuDiscounts(lines).map((group) => {
+    const label = menuDiscountLabel(group, formatPaise)
     return {
-      key: `menu-${group.label}`,
-      title: `Menu Discount (${group.label})`,
-      subtext: names.length > 0 && names.length === categoryCount ? 'All Items' : names.join(', '),
-      amountPaise: group.paise,
+      key: `menu-${label}`,
+      title: `Menu Discount (${label})`,
+      subtext:
+        group.categories.length > 0 && group.categories.length === categoryCount
+          ? 'All Items'
+          : group.categories.join(', '),
+      amountPaise: group.amountPaise,
     }
   })
 }

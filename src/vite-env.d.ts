@@ -12,6 +12,12 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL?: string
   /** Public anon key. The service-role key never appears in client config. */
   readonly VITE_SUPABASE_ANON_KEY?: string
+  /**
+   * Where the customer's receipt is served, if not `https://shawarmania.in`.
+   * A public URL -- the local Worker under `wrangler dev`, or a `workers.dev`
+   * one before the apex route exists.
+   */
+  readonly VITE_RECEIPT_BASE_URL?: string
 }
 
 interface ImportMeta {

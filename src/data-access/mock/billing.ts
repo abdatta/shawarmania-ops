@@ -5,6 +5,7 @@ import {
   PAYMENT_EDIT_WINDOW_MS,
   provisionalToken,
 } from '@/domain'
+import { demoReceiptToken, receiptLink } from '@/lib/receipt-link'
 
 import {
   BillingActionError,
@@ -458,6 +459,12 @@ export function createMockBillingAdapter(
       voidReason: row.void_reason,
       voidedAt: row.voided_at,
       voidedBy: row.voided_by ? { id: row.voided_by, name: actorName(row.voided_by) } : null,
+      // A demonstration walks the whole receipt story, share sheet included, so
+      // the link is present and operable. It is built never to resolve: minted
+      // tokens are base64url and carry no `~`, so `demo~` cannot name a real
+      // bill by construction rather than by luck. A demo that hands out a live
+      // URL over fixture data is a demo that leaks.
+      receiptUrl: receiptLink(demoReceiptToken(row.bill_number)),
     }
   }
 
@@ -1137,6 +1144,9 @@ export function createMockBillingAdapter(
     const revisions = paymentCorrections.get(billId)
     const payments = revisions?.at(-1) ?? content.payments
     return {
+      // No link, matching the live adapter: this bill has only been accepted
+      // locally, and the token is minted when the row reaches Postgres.
+      receiptUrl: null,
       id: billId,
       outletId: content.outletId,
       billNumber: 0,
