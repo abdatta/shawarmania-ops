@@ -127,6 +127,14 @@ export function createMockOutletsAdapter(
         geofence_radius_m: 150,
         business_day_cutover: outlet.businessDayCutover ?? '04:00:00',
         arrival_deadline: outlet.arrivalDeadline ?? '13:00:00',
+        // The counter's discount presets, at the same default the database
+        // gives a new outlet. A franchise that wants different ones changes them
+        // on its own Menu screen.
+        discount_presets: [
+          { basis: 'percent', value: 1000 },
+          { basis: 'percent', value: 1500 },
+          { basis: 'percent', value: 2000 },
+        ],
         // A new outlet is unlinked from any aggregator until it is deliberately connected.
         zomato_res_id: null,
         hyperpure_delivery: false,

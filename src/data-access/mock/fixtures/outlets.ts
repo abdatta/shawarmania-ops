@@ -42,6 +42,11 @@ export const outletFixtures: Tables<'outlets'>[] = [
     business_day_cutover: '04:00:00',
     arrival_deadline: '13:00:00',
     zomato_res_id: '21917311',
+    discount_presets: [
+      { basis: 'percent', value: 1000 },
+      { basis: 'percent', value: 1500 },
+      { basis: 'percent', value: 2000 },
+    ],
     hyperpure_delivery: false,
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
@@ -74,6 +79,11 @@ export const outletFixtures: Tables<'outlets'>[] = [
     // (docs/LIMITATIONS.md).
     arrival_deadline: '20:00:00',
     zomato_res_id: '22675834',
+    discount_presets: [
+      { basis: 'percent', value: 1000 },
+      { basis: 'percent', value: 1500 },
+      { basis: 'percent', value: 2000 },
+    ],
     hyperpure_delivery: true,
     is_active: true,
     created_at: FIXTURE_CREATED_AT,
@@ -107,6 +117,11 @@ export const outletFixtures: Tables<'outlets'>[] = [
     // ever traded — which is exactly the precondition that makes deleting it
     // destroy no history.
     zomato_res_id: null,
+    discount_presets: [
+      { basis: 'percent', value: 1000 },
+      { basis: 'percent', value: 1500 },
+      { basis: 'percent', value: 2000 },
+    ],
     hyperpure_delivery: false,
     is_active: false,
     created_at: FIXTURE_CREATED_AT,

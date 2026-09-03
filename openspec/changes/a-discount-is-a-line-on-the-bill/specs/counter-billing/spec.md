@@ -8,7 +8,7 @@
 
 The billing composer SHALL offer primary Order and secondary Mark Paid once at
 least one line exists and either customer name or phone is nonblank. Order SHALL
-create a till-owned order without assigning a bill number and SHALL clear the
+create a tablet-owned order without assigning a bill number and SHALL clear the
 composer only after the adapter accepts it. Mark Paid SHALL open the tender dialog
 and create a paid result after exact payment allocation. This identification
 requirement SHALL exist only in the UI; the database SHALL keep both snapshots

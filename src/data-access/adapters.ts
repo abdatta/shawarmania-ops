@@ -931,6 +931,81 @@ export interface MenuCategoryWithItems {
   items: Tables<'menu_items'>[]
 }
 
+/**
+ * One discount the owner is running across part of the menu.
+ *
+ * It carries the categories it covers rather than the items, because categories
+ * are what the owner picks. What it *records* is per line, which is a different
+ * question and lives on the bill.
+ *
+ * There is no date window and no name. It is on or it is off. When scheduling
+ * is wanted it has to key on the outlet's business date, not on `now()`, or a
+ * discount ending on the 31st misses a bill rung at 00:30 on the 1st that
+ * belongs to the 31st.
+ */
+export interface MenuDiscount {
+  id: string
+  outletId: string
+  basis: 'percent' | 'amount'
+  /** Basis points when the basis is a percentage — `1500` is 15%. */
+  valueBp: number | null
+  /** Paise per unit when the basis is an amount. */
+  valuePaise: number | null
+  isActive: boolean
+  categoryIds: string[]
+}
+
+/**
+ * What an existing menu discount is being changed to.
+ *
+ * A discount is edited rather than stopped-and-restarted because the two are
+ * different facts: editing changes what is running now, and every line already
+ * captured keeps the terms it was sold under either way.
+ */
+/**
+ * One discount the counter offers in one tap.
+ *
+ * It carries its own unit, because a rupee discount is as ordinary at a counter
+ * as a percentage. `value` is basis points for a percentage and paise for an
+ * amount, the same integer convention every other discount value uses.
+ */
+export interface DiscountPreset {
+  basis: 'percent' | 'amount'
+  value: number
+}
+
+export interface MenuDiscountPatch {
+  basis: 'percent' | 'amount'
+  valueBp?: number | null
+  valuePaise?: number | null
+  categoryIds: string[]
+}
+
+export interface NewMenuDiscount {
+  outletId: string
+  basis: 'percent' | 'amount'
+  valueBp?: number | null
+  valuePaise?: number | null
+  categoryIds: string[]
+}
+
+/**
+ * The whole menu as the counter reads it: what is for sale, what is discounted,
+ * and the percentages the discount panel offers.
+ *
+ * One shape rather than three reads, because all three have to reach the tablet
+ * by the same path. The counter refreshes on returning to the foreground and on
+ * a reported change, and persists what it last read so a cold start with no
+ * backend can still bill — and a discount fetched separately would be current on
+ * neither of those.
+ */
+export interface OutletMenu {
+  categories: MenuCategoryWithItems[]
+  discounts: MenuDiscount[]
+  /** The counter panel's presets, in order. Between none and four. */
+  presets: DiscountPreset[]
+}
+
 export interface NewMenuCategory {
   outletId: string
   name: string
@@ -1014,6 +1089,39 @@ export interface MenuAdapter {
   setItemAvailability(id: string, isAvailable: boolean): Promise<Tables<'menu_items'>>
   /** Retire without deleting rows referenced by captured order or bill lines. */
   retireItem(id: string): Promise<void>
+
+  /**
+   * Everything the counter prices from, in one read: the menu, the discounts
+   * running over it, and the panel's presets.
+   *
+   * `listMenu` stays for the surfaces that only manage items. This is what the
+   * tablet reads, and what its resume record persists.
+   */
+  readOutletMenu(outletId: string): Promise<OutletMenu>
+
+  listDiscounts(outletId: string): Promise<MenuDiscount[]>
+  /**
+   * Start one discount over a set of categories.
+   *
+   * A rupee discount above the cheapest item in any category it covers is
+   * refused by the database, not by the form — a per-unit amount larger than the
+   * price would drive that line's own discount past its total.
+   */
+  createDiscount(discount: NewMenuDiscount): Promise<MenuDiscount>
+  /**
+   * Change a running discount's value, basis or categories.
+   *
+   * Bound by the same price floor a new one is, and for the same reason. Lines
+   * already captured are untouched: they snapshot their discount at the moment
+   * they were created, so editing changes what is sold from here on and nothing
+   * that has been sold.
+   */
+  updateDiscount(id: string, patch: MenuDiscountPatch): Promise<MenuDiscount>
+  /** Stop one. Existing bills keep what they charged; nothing already sold moves. */
+  removeDiscount(id: string): Promise<void>
+
+  /** The counter panel's presets. Between none and four, ordered. */
+  setDiscountPresets(outletId: string, presets: DiscountPreset[]): Promise<DiscountPreset[]>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1059,6 +1167,39 @@ export interface BillLineDraft {
   itemName: string
   unitPricePaise: number
   quantity: number
+  /**
+   * What a menu discount took off this line, in paise across the whole
+   * quantity. `unitPricePaise` stays the **list** price and the line total stays
+   * gross, so the subtotal still sums the lines and the reduction is a fact
+   * beside the price rather than inside it.
+   */
+  discountPaise?: number
+  /**
+   * The percentage that produced that reduction, or null where it was given in
+   * rupees — in which case the per-unit amount is `discountPaise / quantity`.
+   */
+  discountPercentBp?: number | null
+  /** Snapshotted for the same reason `itemName` is: a bill never joins the menu. */
+  categoryName?: string | null
+}
+
+/**
+ * One discount applied to the whole bill, before it meets an order.
+ *
+ * The rule only: what basis and what value. What it comes to is a function of
+ * the order it is applied to, so it is derived rather than carried here.
+ */
+export interface BillDiscountRule {
+  basis: 'percent' | 'amount'
+  /** Basis points when the basis is a percentage, else null. */
+  valueBp: number | null
+  /** Paise when the basis is an amount, else null. */
+  valuePaise: number | null
+}
+
+/** One discount applied to the whole bill, resolved against that order. */
+export interface BillDiscountDraft extends BillDiscountRule {
+  amountPaise: number
 }
 
 export interface BillDraft {
@@ -1073,6 +1214,8 @@ export interface BillDraft {
   businessDate: string
   payments: PaymentAllocation[]
   lines: BillLineDraft[]
+  /** Discounts applied to the whole bill. Menu discounts ride the lines. */
+  discounts?: BillDiscountDraft[]
   customerName?: string | null
   customerPhone?: string | null
 }
@@ -1133,6 +1276,16 @@ export interface BillingOrder {
   customerName: Tables<'orders'>['customer_name']
   customerPhone: Tables<'orders'>['customer_phone']
   lines: BillLineDraft[]
+  /**
+   * Discounts applied to the whole order. Menu discounts ride the lines.
+   *
+   * Read back so reopening an order for edit restores what was on it. Without
+   * this an edit silently drops every bill-level discount the order carried,
+   * and the revision writes a total the customer was never quoted.
+   */
+  discounts: BillDiscountDraft[]
+  /** What the order was rounded up by to reach a whole rupee. */
+  roundingPaise: Tables<'orders'>['rounding_paise']
   totalPaise: Tables<'orders'>['total_paise']
   cancelReason: Tables<'orders'>['cancel_reason']
   cancelledAt: Tables<'orders'>['cancelled_at']
@@ -1151,6 +1304,8 @@ export interface SaveOrderInput {
   shiftId: string
   businessDate: string
   lines: BillLineDraft[]
+  /** Discounts applied to the whole order. Menu discounts ride the lines. */
+  discounts?: BillDiscountDraft[]
   customerId?: string | null
   customerName?: string | null
   customerPhone?: string | null
@@ -1198,6 +1353,10 @@ export interface BillingBill {
   customerName: Tables<'bills'>['customer_name']
   customerPhone: Tables<'bills'>['customer_phone']
   lines: BillLineDraft[]
+  /** Discounts applied to the whole bill. Menu discounts ride the lines. */
+  discounts: BillDiscountDraft[]
+  /** What the bill was rounded up by to reach a whole rupee. */
+  roundingPaise: Tables<'bills'>['rounding_paise']
   totalPaise: Tables<'bills'>['total_paise']
   /**
    * The structured kind stamped when this bill was voided: `manager_void`,
@@ -1342,7 +1501,10 @@ export interface BillingAdapter {
   saveOrder(input: SaveOrderInput): Promise<BillingOrder>
   reviseOrder(
     orderId: string,
-    input: Pick<SaveOrderInput, 'lines' | 'customerId' | 'customerName' | 'customerPhone'>,
+    input: Pick<
+      SaveOrderInput,
+      'lines' | 'discounts' | 'customerId' | 'customerName' | 'customerPhone'
+    >,
   ): Promise<BillingOrder>
   listOpenOrders(outletId: string): Promise<BillingOrder[]>
   /**
@@ -2740,6 +2902,16 @@ export interface LedgerStatementDay {
     totalPaise: number
     /** True while any channel's commission is undetermined, so the total is a ceiling. */
     isCeiling: boolean
+    /**
+     * What this day's counter bills gave away.
+     *
+     * Reported beside the revenue rather than folded into it, because the
+     * revenue above is already net of it: a reader comparing two days would
+     * otherwise be left to infer why one is lower, which is the whole reason a
+     * promotion looks like a slump. Voided bills are excluded here exactly as
+     * their sales are.
+     */
+    discountPaise: number
   }
   drawer: {
     /**
@@ -2821,6 +2993,7 @@ export function toMonthDayInput(day: LedgerStatementDay): MonthDayInput {
     businessDate: day.businessDate,
     cashPaise: day.revenue.cashPaise,
     upiPaise: day.revenue.upiPaise,
+    discountPaise: day.revenue.discountPaise,
     channels: day.revenue.channels.map((channel) => ({
       channel: channel.channel,
       grossPaise: channel.grossPaise,

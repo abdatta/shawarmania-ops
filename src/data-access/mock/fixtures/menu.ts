@@ -1,3 +1,4 @@
+import type { MenuDiscount } from '../../adapters'
 import type { Tables } from '../../database.types'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID } from './outlets'
 
@@ -185,3 +186,31 @@ export const menuItemFixtures: Tables<'menu_items'>[] = MENU_OUTLET_IDS.flatMap(
     updated_at: CREATED_AT,
   })),
 )
+
+/**
+ * A discount the owner is running, so the demo walks the feature rather than
+ * showing an empty section where it would be.
+ *
+ * Fifteen percent across Kalyani's Burgers: a percentage rather than an amount
+ * because that is the shape a promotion usually takes, and one category rather
+ * than all of them so a bill can show the discounted lines and the undiscounted
+ * ones side by side — which is the case the panel's grouping has to get right.
+ *
+ * Burgers rather than Shawarma because the counter's own suite rings two
+ * shawarmas to assert unrelated things about quantities and tender. Discounting
+ * those would have moved five totals that are not about discounts at all, and a
+ * test whose expected figure moved for a reason it never mentions is a test
+ * nobody can read. Which category carries the demo discount is arbitrary; which
+ * one keeps the rest of the suite meaningful is not.
+ */
+export const menuDiscountFixtures: MenuDiscount[] = [
+  {
+    id: 'd9000000-0000-4000-a000-000000000001',
+    outletId: OUTLET_KALYANI_ID,
+    basis: 'percent',
+    valueBp: 1500,
+    valuePaise: null,
+    isActive: true,
+    categoryIds: [menuCategoryId(OUTLET_KALYANI_ID, 'burgers')],
+  },
+]

@@ -3,6 +3,7 @@ import type {
   BillingOrder,
   CustomerIdentity,
   MenuCategoryWithItems,
+  OutletMenu,
 } from '@/data-access/adapters'
 import type { Tables } from '@/data-access/database.types'
 
@@ -43,6 +44,14 @@ export interface CounterResumeRecord {
   }
   outlet: Tables<'outlets'>
   menu: MenuCategoryWithItems[]
+  /**
+   * The discounts and presets this till last read, beside the menu they price.
+   *
+   * Optional because a record written before discounts existed has none, and a
+   * till holding one must still resume rather than be told its record is
+   * incomplete. Absent reads as no discounts, which is what it meant.
+   */
+  outletMenu?: OutletMenu
   pipeline: BillingOrder[]
   bills: BillingBill[]
   rememberedCustomers: Record<string, RememberedCustomerResult>

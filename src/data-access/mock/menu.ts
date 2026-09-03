@@ -1,6 +1,7 @@
 import type { AppRole } from '../adapters'
 import {
   MenuActionError,
+  type DiscountPreset,
   type MenuAdapter,
   type MenuCategoryPatch,
   type MenuCategoryWithItems,
@@ -48,6 +49,37 @@ function refuseBadPrice(pricePaise: number): number {
 }
 
 export function createMockMenuAdapter(store: DemoStore, role: AppRole): MenuAdapter {
+  /**
+   * The floor the database enforces, enforced here for the same reason: a
+   * per-unit amount above the price would drive that line's own discount past
+   * its total. The mock refuses it so the demo cannot walk a state production
+   * would reject.
+   */
+  function refuseBadDiscount(discount: {
+    basis: 'percent' | 'amount'
+    valuePaise?: number | null
+    categoryIds: string[]
+  }) {
+    if (discount.categoryIds.length === 0) {
+      throw new MenuActionError('invalid', 'Choose at least one category for this discount.')
+    }
+    if (discount.basis !== 'amount') return
+
+    const covered = store.menuItems.filter(
+      (item) => item.is_active && discount.categoryIds.includes(item.category_id),
+    )
+    const cheapest = covered.reduce(
+      (lowest, item) => Math.min(lowest, item.price_paise),
+      Number.POSITIVE_INFINITY,
+    )
+    if (covered.length > 0 && (discount.valuePaise ?? 0) > cheapest) {
+      throw new MenuActionError(
+        'invalid',
+        'That is more than the cheapest item this discount covers.',
+      )
+    }
+  }
+
   const mayWrite = MAY_WRITE.includes(role)
 
   function refuseReadOnly() {
@@ -229,6 +261,84 @@ export function createMockMenuAdapter(store: DemoStore, role: AppRole): MenuAdap
       item.is_available = isAvailable
       item.updated_at = new Date().toISOString()
       return structuredClone(item)
+    },
+
+    async listDiscounts(outletId: string) {
+      return store.menuDiscounts
+        .filter((discount) => discount.outletId === outletId && discount.isActive)
+        .map((discount) => structuredClone(discount))
+    },
+
+    async readOutletMenu(outletId: string) {
+      return {
+        categories: await this.listMenu(outletId),
+        discounts: await this.listDiscounts(outletId),
+        presets: (store.discountPresets.get(outletId) ?? []).map((preset) => ({ ...preset })),
+      }
+    },
+
+    async createDiscount(discount) {
+      refuseReadOnly()
+      refuseBadDiscount(discount)
+
+      const created = {
+        id: `d9000000-0000-4000-a000-${String(store.menuDiscounts.length + 100).padStart(12, '0')}`,
+        outletId: discount.outletId,
+        basis: discount.basis,
+        valueBp: discount.valueBp ?? null,
+        valuePaise: discount.valuePaise ?? null,
+        isActive: true,
+        categoryIds: [...discount.categoryIds],
+      }
+      store.menuDiscounts.push(created)
+      return structuredClone(created)
+    },
+
+    async updateDiscount(id, patch) {
+      refuseReadOnly()
+      refuseBadDiscount(patch)
+      const discount = store.menuDiscounts.find((candidate) => candidate.id === id)
+      if (!discount) throw new MenuActionError('missing', 'That discount no longer exists.')
+
+      discount.basis = patch.basis
+      discount.valueBp = patch.valueBp ?? null
+      discount.valuePaise = patch.valuePaise ?? null
+      // Restated rather than diffed, exactly as the real adapter does.
+      discount.categoryIds = [...patch.categoryIds]
+      return structuredClone(discount)
+    },
+
+    async removeDiscount(id: string) {
+      refuseReadOnly()
+      const discount = store.menuDiscounts.find((candidate) => candidate.id === id)
+      if (!discount) throw new MenuActionError('missing', 'That discount no longer exists.')
+      // Deactivated rather than removed, exactly as the real adapter does, so a
+      // bill rung under it still reads correctly.
+      discount.isActive = false
+    },
+
+    async setDiscountPresets(outletId: string, presets: DiscountPreset[]) {
+      refuseReadOnly()
+      if (presets.length > 4) {
+        throw new MenuActionError('invalid', 'The counter fits four presets.')
+      }
+      const bad = presets.some(
+        (preset) =>
+          !Number.isInteger(preset.value) ||
+          preset.value <= 0 ||
+          (preset.basis === 'percent' && preset.value > 10000),
+      )
+      if (bad) {
+        throw new MenuActionError(
+          'invalid',
+          'A preset needs a value, and a percentage caps at 100.',
+        )
+      }
+      store.discountPresets.set(
+        outletId,
+        presets.map((preset) => ({ ...preset })),
+      )
+      return presets.map((preset) => ({ ...preset }))
     },
 
     async retireItem(id: string) {

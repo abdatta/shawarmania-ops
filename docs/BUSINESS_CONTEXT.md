@@ -52,7 +52,7 @@ The live menu as of this writing. Seven items, all built around chicken shawarma
 Implications for the software:
 
 - **A small menu means the billing screen should show everything at once.** No search-first interaction, no deep category drilling — a grid of large tappable tiles is faster than any list. Design for ~10–20 items visible, not 200.
-- **Prices are round rupees.** Still stored as integer paise, because the moment a discount or a future tax split appears, sub-rupee amounts arrive.
+- **Prices are usually round rupees, and nothing requires them to be.** Money is integer paise throughout, and since discounts arrived a menu price may carry paise without anything downstream minding: a percentage of an odd subtotal already produces them, and the bill rounds **up** to a whole rupee on its own stated line rather than the prices being constrained to avoid it.
 - **Items are veg/non-veg meaningful.** The brand's own CSS already carries `--color-veg` and `--color-nonveg` tokens; the menu carries the distinction. Model it.
 
 ## How money arrives
@@ -84,7 +84,9 @@ This is the workflow the billing screen must not fight:
    the rider collecting, or use pay-now when appropriate.
 5. At close, the manager counts the drawer and reconciles against what the app expected.
 
-V1 has no discount, deposit or partially paid order. A fully paid bill may use exact mixed tender—for example ₹100 Cash and ₹39 UPI on ₹139—and only its Cash allocation reaches drawer reconciliation. Every order and bill carries `discount_paise = 0`; exposing a dormant discount field would make a pricing and authority decision the business has not made.
+There is no deposit and no partially paid order. A fully paid bill may use exact mixed tender—for example ₹100 Cash and ₹39 UPI on ₹139—and only its Cash allocation reaches drawer reconciliation.
+
+**Discounts are real.** A biller takes an amount or a percentage off the order in front of them, and the owner runs discounts across chosen menu categories from the Menu screen. Every discount is stored beside the price it reduces, carrying the basis that produced it, so a bill settled months ago still says what it gave away and why without the menu being consulted. A bill never falls below ₹1: a fully discounted order records the whole giveaway and the rounding line carries the total to the floor, which is why a free meal is visible in a day's takings as the odd rupee on the end.
 
 Two consequences worth stating plainly:
 

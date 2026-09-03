@@ -129,7 +129,7 @@ What that spec measures rather than counts: the bar's own `scrollWidth` against 
 
 Pure functions over integer paise, so they are trivially testable and there is no excuse for gaps.
 
-- Bill totals: `total = subtotal − discount + tax`, across quantities and rounding edges.
+- Bill totals: `total = subtotal − discount + tax + rounding`, across quantities and rounding edges — and against the shared case table, which every implementation of the identity is held to. `npm run lint` fails when the copy in the pgTAP suite drifts from `src/domain/billing-totals-cases.json`, because an identity changed in one place and left alone in the other refuses live bills at a counter rather than turning a test red.
 - **The drawer's interval arithmetic** (#11), in `src/domain/drawer.test.ts`:
   `expected = opening + receipts − expenses − cash out`, `difference = counted −
   expected`, and `next opening = counted − own cash out`. Including the cases that

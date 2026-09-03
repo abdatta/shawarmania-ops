@@ -1,0 +1,98 @@
+{
+  "comment": [
+    "The bill identity total = subtotal - discount + tax + rounding is written in",
+    "three places: billTotals() in src/domain/billing.ts, the check constraints on",
+    "orders and bills, and billing_validate_totals in SQL. A drift between them does",
+    "not fail a test on its own - it refuses live bills at the counter.",
+    "",
+    "So this is the one table of cases all three are held to. It is consumed by",
+    "src/domain/billing-totals-agree.test.ts (the pure function) and by",
+    "supabase/tests/47_bill_discount_arithmetic.sql (the constraints and the",
+    "validator), and scripts/check-totals-cases.mjs fails the lint if the SQL copy",
+    "drifts from this file. Add a case here and the lint tells you the exact block",
+    "to paste into the SQL.",
+    "",
+    "subtotal and discount are the inputs; rounding and total are what all three",
+    "must independently agree the answer is. Tax is nought throughout because v1 is",
+    "no_tax, and the column exists so that stops being true without a migration."
+  ],
+  "cases": [
+    {
+      "name": "nothing discounted",
+      "subtotal": 27800,
+      "discount": 0,
+      "rounding": 0,
+      "total": 27800
+    },
+    {
+      "name": "a flat amount off",
+      "subtotal": 27800,
+      "discount": 5000,
+      "rounding": 0,
+      "total": 22800
+    },
+    {
+      "name": "15% of an odd subtotal",
+      "subtotal": 38900,
+      "discount": 5835,
+      "rounding": 35,
+      "total": 33100
+    },
+    {
+      "name": "10% of a round subtotal",
+      "subtotal": 13900,
+      "discount": 1390,
+      "rounding": 90,
+      "total": 12600
+    },
+    {
+      "name": "12.5%, which divides into no whole paisa",
+      "subtotal": 13900,
+      "discount": 1738,
+      "rounding": 38,
+      "total": 12200
+    },
+    {
+      "name": "a rupee short of the next rupee",
+      "subtotal": 33099,
+      "discount": 0,
+      "rounding": 1,
+      "total": 33100
+    },
+    {
+      "name": "a paisa past a whole rupee",
+      "subtotal": 33001,
+      "discount": 0,
+      "rounding": 99,
+      "total": 33100
+    },
+    {
+      "name": "stacked to more than the order is worth",
+      "subtotal": 27800,
+      "discount": 27800,
+      "rounding": 100,
+      "total": 100
+    },
+    {
+      "name": "a free meal, recorded in full",
+      "subtotal": 13900,
+      "discount": 13900,
+      "rounding": 100,
+      "total": 100
+    },
+    {
+      "name": "lines cheaper than the floor",
+      "subtotal": 50,
+      "discount": 0,
+      "rounding": 50,
+      "total": 100
+    },
+    {
+      "name": "discounted to just under a rupee",
+      "subtotal": 13900,
+      "discount": 13851,
+      "rounding": 51,
+      "total": 100
+    }
+  ]
+}

@@ -45,6 +45,8 @@ function order(over: Partial<BillingOrder>): BillingOrder {
     deviceLabel: null,
     customerName: 'Ravi',
     customerPhone: null,
+    discounts: [],
+    roundingPaise: 0,
     lines: [
       {
         menuItemId: 'm0000000-0000-4000-a000-000000000001',

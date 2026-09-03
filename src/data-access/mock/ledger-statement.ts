@@ -135,6 +135,7 @@ export function createMockLedgerStatementAdapter(
     let cashBills = 0
     let upiPaise = 0
     let upiBills = 0
+    let discountPaise = 0
 
     for (const bill of store.bills) {
       if (bill.outlet_id !== outletId || bill.status !== 'settled') continue
@@ -154,6 +155,9 @@ export function createMockLedgerStatementAdapter(
         upiPaise += upi
         upiBills += 1
       }
+      // Read off the same settled bills the takings are, so a voided bill drops
+      // out of the giveaway and the revenue together.
+      discountPaise += bill.discount_paise
     }
 
     const channels = store.aggregatorChannelDays
@@ -369,7 +373,16 @@ export function createMockLedgerStatementAdapter(
     return {
       outletId,
       businessDate,
-      revenue: { cashPaise, cashBills, upiPaise, upiBills, channels, totalPaise, isCeiling },
+      revenue: {
+        cashPaise,
+        cashBills,
+        upiPaise,
+        upiBills,
+        channels,
+        totalPaise,
+        isCeiling,
+        discountPaise,
+      },
       drawer: {
         state,
         openingPaise: beforeAnchor ? null : balanceAt(store, outletId, from),

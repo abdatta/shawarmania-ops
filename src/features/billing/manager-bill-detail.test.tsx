@@ -33,6 +33,8 @@ const bill: BillingBill = {
       quantity: 1,
     },
   ],
+  discounts: [],
+  roundingPaise: 0,
   totalPaise: 13_900,
   voidKind: null,
   voidReason: null,

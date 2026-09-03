@@ -16,7 +16,10 @@ import {
 } from '@/outbox'
 import type { CounterDeviceSession } from '@/session/counter-session'
 
-import { createBillingCommand } from '../../../shared/billing-command'
+import {
+  BILLING_COMMAND_SCHEMA_VERSION,
+  createBillingCommand,
+} from '../../../shared/billing-command'
 import { splitPipeline } from '@/features/billing/pipeline'
 
 import { createSupabaseBillingAdapter } from './billing'
@@ -191,6 +194,8 @@ describe('the live tablet acceptance boundary', () => {
     expect(envelope?.command.type === 'pay_now' && envelope.command.payload).toMatchObject({
       discountPaise: 0,
       taxPaise: 0,
+      discounts: [],
+      roundingPaise: 0,
       totalPaise: 13_900,
       payments: draft.payments,
     })
@@ -342,6 +347,8 @@ describe('the live tablet acceptance boundary', () => {
       customerName: null,
       customerPhone: null,
       lines: draft.lines,
+      discounts: [],
+      roundingPaise: 0,
       totalPaise: 13_900,
       cancelReason: null,
       cancelledAt: null,
@@ -663,7 +670,7 @@ describe('the server command seam', () => {
       'pay_billing_now',
       expect.objectContaining({
         p_command_id: command.commandId,
-        p_schema_version: 1,
+        p_schema_version: BILLING_COMMAND_SCHEMA_VERSION,
         p_payload_hash: command.payloadHash,
         p_created_at: command.createdAt,
         p_shift_id: command.shiftId,

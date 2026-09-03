@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
@@ -309,6 +309,7 @@ function monthDay(businessDate: string, over: Partial<MonthDayInput> = {}): Mont
     businessDate,
     cashPaise: 0,
     upiPaise: 0,
+    discountPaise: 0,
     channels: [],
     expenses: [],
     drawerState: 'counted',
@@ -610,5 +611,40 @@ describe('a channel that reported nothing is said, not omitted', () => {
     expect(screen.queryByTestId('month-zomato-silent')).not.toBeInTheDocument()
     // Swiggy still had nothing, and still says so.
     expect(screen.getByTestId('month-swiggy-silent')).toBeInTheDocument()
+  })
+})
+
+describe('what the month and the day gave away', () => {
+  it('reports the month’s discounts beside the revenue they already reduced', async () => {
+    await renderMonth([
+      monthDay('2026-08-01', { cashPaise: 500000, discountPaise: 25000 }),
+      monthDay('2026-08-02', { cashPaise: 400000, discountPaise: 15000 }),
+    ])
+
+    const section = await screen.findByTestId('month-discounts')
+    expect(within(section).getByTestId('month-discount-total')).toHaveTextContent('₹400')
+    // The sentence that stops a promotion reading as a slump.
+    expect(section).toHaveTextContent(/revenue above is already net of it/i)
+  })
+
+  it('says a month discounted nothing rather than leaving the section out', async () => {
+    await renderMonth([monthDay('2026-08-01', { cashPaise: 500000 })])
+
+    const section = await screen.findByTestId('month-discounts')
+    expect(within(section).getByTestId('month-discount-total')).toHaveTextContent('₹0')
+    expect(section).toHaveTextContent(/nothing was discounted this month/i)
+  })
+
+  it('carries the ceiling qualification onto the giveaway when revenue is one', async () => {
+    await renderMonth([
+      monthDay('2026-08-01', {
+        cashPaise: 100000,
+        discountPaise: 5000,
+        channels: [unsettled(300000)],
+      }),
+    ])
+
+    const section = await screen.findByTestId('month-discounts')
+    expect(section).toHaveTextContent(/both figures are ceilings while a commission is waiting/i)
   })
 })

@@ -23,7 +23,7 @@ function command(
 ): BillingCommand {
   return {
     commandId,
-    schemaVersion: 1,
+    schemaVersion: 2,
     tabletId: 'tablet-1',
     shiftId: 'shift-1',
     type: 'cancel_order',

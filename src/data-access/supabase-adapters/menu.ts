@@ -2,6 +2,7 @@ import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js'
 
 import {
   MenuActionError,
+  type DiscountPreset,
   type MenuAdapter,
   type MenuCategoryPatch,
   type MenuItemPatch,
@@ -209,6 +210,165 @@ export function createSupabaseMenuAdapter(
     async retireItem(id: string) {
       const { error } = await client.rpc('retire_menu_item', { p_item_id: id })
       if (error) throw menuError(error)
+    },
+
+    async listDiscounts(outletId) {
+      const [discountsResult, linksResult] = await Promise.all([
+        client
+          .from('menu_discounts')
+          .select('*')
+          .eq('outlet_id', outletId)
+          .eq('is_active', true)
+          .order('created_at'),
+        client.from('menu_discount_categories').select('discount_id, category_id'),
+      ])
+      if (discountsResult.error) throw menuError(discountsResult.error)
+      if (linksResult.error) throw menuError(linksResult.error)
+
+      const links = linksResult.data ?? []
+      return (discountsResult.data ?? []).map((row) => ({
+        id: row.id,
+        outletId: row.outlet_id,
+        basis: row.basis,
+        valueBp: row.value_bp,
+        valuePaise: row.value_paise,
+        isActive: row.is_active,
+        categoryIds: links
+          .filter((link) => link.discount_id === row.id)
+          .map((link) => link.category_id),
+      }))
+    },
+
+    async readOutletMenu(outletId) {
+      // One read of all three, because all three have to reach the tablet by the
+      // same path and be persisted together. `listMenu` already falls back to
+      // the resume record when the backend is unreachable, so the discounts have
+      // to come from the same snapshot or an offline till sells at full price
+      // through a discount the owner is running.
+      const categories = await this.listMenu(outletId)
+
+      try {
+        const [discounts, outlet] = await Promise.all([
+          this.listDiscounts(outletId),
+          client.from('outlets').select('discount_presets').eq('id', outletId).single(),
+        ])
+        if (outlet.error) throw menuError(outlet.error)
+        const menu = {
+          categories,
+          discounts,
+          presets: (outlet.data.discount_presets ?? []) as unknown as DiscountPreset[],
+        }
+        resumeCoordinator?.noteOutletMenu(outletId, menu)
+        return menu
+      } catch (cause) {
+        // The categories above already resolved, from the backend or from the
+        // resume record. If the discounts could not, prefer what this tablet
+        // last knew over pricing at full price through a live discount.
+        const remembered = offlineResume?.tablet.outletId === outletId ? offlineResume : null
+        if (remembered?.outletMenu) return structuredClone(remembered.outletMenu)
+        throw cause
+      }
+    },
+
+    async createDiscount(discount) {
+      const inserted = await client
+        .from('menu_discounts')
+        .insert({
+          outlet_id: discount.outletId,
+          basis: discount.basis,
+          value_bp: discount.valueBp ?? null,
+          value_paise: discount.valuePaise ?? null,
+        })
+        .select('*')
+        .single()
+      if (inserted.error) throw menuError(inserted.error)
+
+      const { error: linkError } = await client.from('menu_discount_categories').insert(
+        discount.categoryIds.map((categoryId) => ({
+          discount_id: inserted.data.id,
+          category_id: categoryId,
+        })),
+      )
+      if (linkError) {
+        // The price floor is checked once every category is attached, so this is
+        // where a rupee discount above the cheapest item it covers surfaces.
+        // Take the half-written discount back out rather than leaving one that
+        // covers nothing and reads as active.
+        await client.from('menu_discounts').delete().eq('id', inserted.data.id)
+        throw menuError(linkError)
+      }
+
+      return {
+        id: inserted.data.id,
+        outletId: inserted.data.outlet_id,
+        basis: inserted.data.basis,
+        valueBp: inserted.data.value_bp,
+        valuePaise: inserted.data.value_paise,
+        isActive: inserted.data.is_active,
+        categoryIds: [...discount.categoryIds],
+      }
+    },
+
+    async updateDiscount(id, patch) {
+      const updated = await client
+        .from('menu_discounts')
+        .update({
+          basis: patch.basis,
+          value_bp: patch.valueBp ?? null,
+          value_paise: patch.valuePaise ?? null,
+        })
+        .eq('id', id)
+        .select('*')
+        .single()
+      if (updated.error) throw menuError(updated.error)
+
+      // The categories are restated rather than diffed: the form hands over the
+      // whole set, and a diff would be a second opinion about what it meant.
+      const { error: cleared } = await client
+        .from('menu_discount_categories')
+        .delete()
+        .eq('discount_id', id)
+      if (cleared) throw menuError(cleared)
+
+      const { error: linkError } = await client
+        .from('menu_discount_categories')
+        .insert(
+          patch.categoryIds.map((categoryId) => ({ discount_id: id, category_id: categoryId })),
+        )
+      // The price floor is checked once every category is attached, so a rupee
+      // discount above the cheapest item it now covers surfaces here.
+      if (linkError) throw menuError(linkError)
+
+      return {
+        id: updated.data.id,
+        outletId: updated.data.outlet_id,
+        basis: updated.data.basis,
+        valueBp: updated.data.value_bp,
+        valuePaise: updated.data.value_paise,
+        isActive: updated.data.is_active,
+        categoryIds: [...patch.categoryIds],
+      }
+    },
+
+    async removeDiscount(id: string) {
+      // Deactivated rather than deleted, so a bill that was rung under it keeps
+      // reading correctly and the row it was attached to still resolves.
+      const { error } = await client
+        .from('menu_discounts')
+        .update({ is_active: false })
+        .eq('id', id)
+      if (error) throw menuError(error)
+    },
+
+    async setDiscountPresets(outletId: string, presets: DiscountPreset[]) {
+      const { data, error } = await client
+        .from('outlets')
+        .update({ discount_presets: presets as unknown as Json })
+        .eq('id', outletId)
+        .select('discount_presets')
+        .single()
+      if (error) throw menuError(error)
+      return (data.discount_presets ?? []) as unknown as DiscountPreset[]
     },
   }
 }

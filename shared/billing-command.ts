@@ -5,7 +5,20 @@
  * the cross-runtime vectors in `src/lib/billing-command.test.ts` to change too.
  */
 
-export const BILLING_COMMAND_SCHEMA_VERSION = 1 as const
+/**
+ * The payload shape this build writes.
+ *
+ * Version 2 added the discount records and the rounding line. **The database
+ * still accepts version 1**, and must: a till that went offline before this
+ * release and reconnects after it is holding envelopes written under the old
+ * shape, with hashes already computed over it, and refusing those would lose a
+ * trading day to a deployment. A version-1 payload means no discounts and no
+ * rounding, which is exactly what it meant when it was written.
+ */
+export const BILLING_COMMAND_SCHEMA_VERSION = 2 as const
+
+/** Every payload shape the boundary accepts, newest first. */
+export const BILLING_COMMAND_SCHEMA_VERSIONS = [2, 1] as const
 
 export type BillingCommandType =
   | 'create_order'
@@ -29,6 +42,16 @@ export interface BillingPaymentAllocation {
   readonly amountPaise: number
 }
 
+/**
+ * One line as it was sold.
+ *
+ * `unitPricePaise` is the **list** price and `lineTotalPaise` is gross, so the
+ * subtotal still sums the lines. What a menu discount took off sits beside them
+ * in `discountPaise`, with `discountPercentBp` recording the percentage that
+ * produced it — or null where the discount was given in rupees, in which case
+ * the per-unit amount is `discountPaise / quantity`. `categoryName` is
+ * snapshotted for the same reason `itemName` is.
+ */
 export interface BillingLineSnapshot {
   readonly id: string
   readonly menuItemId: string | null
@@ -36,6 +59,19 @@ export interface BillingLineSnapshot {
   readonly unitPricePaise: number
   readonly quantity: number
   readonly lineTotalPaise: number
+  readonly discountPaise: number
+  readonly discountPercentBp: number | null
+  readonly categoryName: string | null
+}
+
+/** One discount applied to the whole bill rather than to any single line. */
+export interface BillingDiscountSnapshot {
+  readonly basis: 'percent' | 'amount'
+  /** Basis points when the basis is a percentage, else null. */
+  readonly valueBp: number | null
+  /** Paise when the basis is an amount, else null. */
+  readonly valuePaise: number | null
+  readonly amountPaise: number
 }
 
 export interface OrderContentPayload {
@@ -47,9 +83,11 @@ export interface OrderContentPayload {
   readonly subtotalPaise: number
   readonly discountPaise: number
   readonly taxPaise: number
+  readonly roundingPaise: number
   readonly totalPaise: number
   readonly pricingMode: BillingPricingMode
   readonly lines: readonly BillingLineSnapshot[]
+  readonly discounts: readonly BillingDiscountSnapshot[]
 }
 
 export type CreateOrderPayload = OrderContentPayload
@@ -78,10 +116,12 @@ export interface PayNowPayload {
   readonly subtotalPaise: number
   readonly discountPaise: number
   readonly taxPaise: number
+  readonly roundingPaise: number
   readonly totalPaise: number
   readonly pricingMode: BillingPricingMode
   readonly payments: readonly BillingPaymentAllocation[]
   readonly lines: readonly BillingLineSnapshot[]
+  readonly discounts: readonly BillingDiscountSnapshot[]
 }
 
 export interface CorrectBillPaymentPayload {

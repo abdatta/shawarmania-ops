@@ -135,7 +135,7 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
       // are read as their own select below and joined by bill id.
       client
         .from('bills')
-        .select('id, bill_number, business_date, paid_at')
+        .select('id, bill_number, business_date, paid_at, discount_paise')
         .eq('outlet_id', outletId)
         .eq('business_date', businessDate)
         .eq('status', 'settled'),
@@ -441,6 +441,9 @@ export function createSupabaseLedgerStatementAdapter(client: Client): LedgerStat
         upiPaise,
         upiBills,
         channels,
+        // Summed from the same settled bills the takings come from, so a voided
+        // bill drops out of both together.
+        discountPaise: bills.reduce((sum, bill) => sum + (bill.discount_paise ?? 0), 0),
         totalPaise:
           cashPaise +
           upiPaise +

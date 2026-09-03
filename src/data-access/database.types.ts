@@ -1138,9 +1138,60 @@ export type Database = {
           },
         ]
       }
+      bill_discounts: {
+        Row: {
+          amount_paise: number
+          basis: Database["public"]["Enums"]["discount_basis"]
+          bill_id: string
+          created_at: string
+          id: string
+          outlet_id: string
+          value_bp: number | null
+          value_paise: number | null
+        }
+        Insert: {
+          amount_paise: number
+          basis: Database["public"]["Enums"]["discount_basis"]
+          bill_id: string
+          created_at?: string
+          id?: string
+          outlet_id: string
+          value_bp?: number | null
+          value_paise?: number | null
+        }
+        Update: {
+          amount_paise?: number
+          basis?: Database["public"]["Enums"]["discount_basis"]
+          bill_id?: string
+          created_at?: string
+          id?: string
+          outlet_id?: string
+          value_bp?: number | null
+          value_paise?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_discounts_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: false
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bill_discounts_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bill_items: {
         Row: {
           bill_id: string
+          category_name: string | null
+          discount_paise: number
+          discount_percent_bp: number | null
           id: string
           item_name: string
           line_total_paise: number
@@ -1150,6 +1201,9 @@ export type Database = {
         }
         Insert: {
           bill_id: string
+          category_name?: string | null
+          discount_paise?: number
+          discount_percent_bp?: number | null
           id?: string
           item_name: string
           line_total_paise: number
@@ -1159,6 +1213,9 @@ export type Database = {
         }
         Update: {
           bill_id?: string
+          category_name?: string | null
+          discount_paise?: number
+          discount_percent_bp?: number | null
           id?: string
           item_name?: string
           line_total_paise?: number
@@ -1617,6 +1674,7 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["payment_method"] | null
           pricing_mode: Database["public"]["Enums"]["pricing_mode"]
           recorded_after_shift_end: boolean
+          rounding_paise: number
           shift_id: string | null
           status: Database["public"]["Enums"]["bill_status"]
           subtotal_paise: number
@@ -1649,6 +1707,7 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           recorded_after_shift_end?: boolean
+          rounding_paise?: number
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal_paise: number
@@ -1681,6 +1740,7 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["payment_method"] | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
           recorded_after_shift_end?: boolean
+          rounding_paise?: number
           shift_id?: string | null
           status?: Database["public"]["Enums"]["bill_status"]
           subtotal_paise?: number
@@ -2708,6 +2768,74 @@ export type Database = {
           },
         ]
       }
+      menu_discount_categories: {
+        Row: {
+          category_id: string
+          discount_id: string
+        }
+        Insert: {
+          category_id: string
+          discount_id: string
+        }
+        Update: {
+          category_id?: string
+          discount_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_discount_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "menu_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_discount_categories_discount_id_fkey"
+            columns: ["discount_id"]
+            isOneToOne: false
+            referencedRelation: "menu_discounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_discounts: {
+        Row: {
+          basis: Database["public"]["Enums"]["discount_basis"]
+          created_at: string
+          id: string
+          is_active: boolean
+          outlet_id: string
+          value_bp: number | null
+          value_paise: number | null
+        }
+        Insert: {
+          basis: Database["public"]["Enums"]["discount_basis"]
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          outlet_id: string
+          value_bp?: number | null
+          value_paise?: number | null
+        }
+        Update: {
+          basis?: Database["public"]["Enums"]["discount_basis"]
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          outlet_id?: string
+          value_bp?: number | null
+          value_paise?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_discounts_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_items: {
         Row: {
           category_id: string
@@ -2768,8 +2896,59 @@ export type Database = {
           },
         ]
       }
+      order_discounts: {
+        Row: {
+          amount_paise: number
+          basis: Database["public"]["Enums"]["discount_basis"]
+          created_at: string
+          id: string
+          order_id: string
+          outlet_id: string
+          value_bp: number | null
+          value_paise: number | null
+        }
+        Insert: {
+          amount_paise: number
+          basis: Database["public"]["Enums"]["discount_basis"]
+          created_at?: string
+          id?: string
+          order_id: string
+          outlet_id: string
+          value_bp?: number | null
+          value_paise?: number | null
+        }
+        Update: {
+          amount_paise?: number
+          basis?: Database["public"]["Enums"]["discount_basis"]
+          created_at?: string
+          id?: string
+          order_id?: string
+          outlet_id?: string
+          value_bp?: number | null
+          value_paise?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_discounts_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_discounts_outlet_id_fkey"
+            columns: ["outlet_id"]
+            isOneToOne: false
+            referencedRelation: "outlets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
+          category_name: string | null
+          discount_paise: number
+          discount_percent_bp: number | null
           id: string
           item_name: string
           line_total_paise: number
@@ -2779,6 +2958,9 @@ export type Database = {
           unit_price_paise: number
         }
         Insert: {
+          category_name?: string | null
+          discount_paise?: number
+          discount_percent_bp?: number | null
           id: string
           item_name: string
           line_total_paise: number
@@ -2788,6 +2970,9 @@ export type Database = {
           unit_price_paise: number
         }
         Update: {
+          category_name?: string | null
+          discount_paise?: number
+          discount_percent_bp?: number | null
           id?: string
           item_name?: string
           line_total_paise?: number
@@ -2868,6 +3053,7 @@ export type Database = {
           paid_shift_id: string | null
           prepared_at: string | null
           pricing_mode: Database["public"]["Enums"]["pricing_mode"]
+          rounding_paise: number
           status: Database["public"]["Enums"]["order_status"]
           subtotal_paise: number
           tax_paise: number
@@ -2901,6 +3087,7 @@ export type Database = {
           paid_shift_id?: string | null
           prepared_at?: string | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
+          rounding_paise?: number
           status?: Database["public"]["Enums"]["order_status"]
           subtotal_paise: number
           tax_paise?: number
@@ -2934,6 +3121,7 @@ export type Database = {
           paid_shift_id?: string | null
           prepared_at?: string | null
           pricing_mode?: Database["public"]["Enums"]["pricing_mode"]
+          rounding_paise?: number
           status?: Database["public"]["Enums"]["order_status"]
           subtotal_paise?: number
           tax_paise?: number
@@ -3118,6 +3306,7 @@ export type Database = {
           city: string | null
           code: string
           created_at: string
+          discount_presets: Json
           district: string | null
           geofence_radius_m: number
           hyperpure_delivery: boolean
@@ -3141,6 +3330,7 @@ export type Database = {
           city?: string | null
           code: string
           created_at?: string
+          discount_presets?: Json
           district?: string | null
           geofence_radius_m?: number
           hyperpure_delivery?: boolean
@@ -3164,6 +3354,7 @@ export type Database = {
           city?: string | null
           code?: string
           created_at?: string
+          discount_presets?: Json
           district?: string | null
           geofence_radius_m?: number
           hyperpure_delivery?: boolean
@@ -3725,6 +3916,7 @@ export type Database = {
         Args: {
           p_command_id: string
           p_created_at: string
+          p_extra_keys?: string[]
           p_keys: string[]
           p_payload: Json
           p_payload_hash: string
@@ -3750,6 +3942,10 @@ export type Database = {
         Returns: boolean
       }
       billing_payload_hash: { Args: { p_payload: Json }; Returns: string }
+      billing_validate_discounts: {
+        Args: { p_payload: Json }
+        Returns: boolean
+      }
       billing_validate_lines: {
         Args: { p_lines: Json; p_order_id?: string; p_outlet_id: string }
         Returns: boolean
@@ -3927,6 +4123,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      discount_presets_valid: { Args: { p_presets: Json }; Returns: boolean }
       drawer_cash_expenses_by_day: {
         Args: { p_from: string; p_outlet_id: string; p_to: string }
         Returns: {
@@ -4152,6 +4349,10 @@ export type Database = {
       may_reach_operator_statement: {
         Args: { object_name: string }
         Returns: boolean
+      }
+      menu_discount_within_cheapest_item: {
+        Args: { p_discount_id: string }
+        Returns: undefined
       }
       merge_expense_category: {
         Args: { p_from: string; p_into: string }
@@ -4563,6 +4764,7 @@ export type Database = {
       attendance_status: "present" | "absent" | "half_day" | "leave"
       bill_status: "settled" | "void"
       check_in_source: "phone" | "counter_tablet" | "manual"
+      discount_basis: "percent" | "amount"
       inventory_unit: "kg" | "litre" | "packet" | "piece"
       movement_type: "added" | "used" | "wasted" | "correction"
       order_status: "open" | "paid" | "cancelled"
@@ -4724,6 +4926,7 @@ export const Constants = {
       attendance_status: ["present", "absent", "half_day", "leave"],
       bill_status: ["settled", "void"],
       check_in_source: ["phone", "counter_tablet", "manual"],
+      discount_basis: ["percent", "amount"],
       inventory_unit: ["kg", "litre", "packet", "piece"],
       movement_type: ["added", "used", "wasted", "correction"],
       order_status: ["open", "paid", "cancelled"],

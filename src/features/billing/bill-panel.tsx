@@ -29,12 +29,22 @@ export function BillPanel({
   onChangeQuantity,
   editingOrderReference,
   footer,
+  discountRows,
+  addDiscount,
 }: {
   lines: BillLineDraft[]
   onChangeQuantity: (menuItemId: string, delta: number) => void
   editingOrderReference?: string
   /** The composer footer, when this panel is the one holding it. */
   footer?: ReactNode
+  /**
+   * What came off, and the round-up, as rows beneath the items. They belong
+   * inside the scrolling list rather than above the footer, because they are
+   * part of the bill rather than part of the controls that finish it.
+   */
+  discountRows?: ReactNode
+  /** The control that opens the discount panel, pinned under the lines. */
+  addDiscount?: ReactNode
 }) {
   const editing = editingOrderReference !== undefined
 
@@ -124,7 +134,11 @@ export function BillPanel({
             ))}
           </ul>
         )}
+
+        {discountRows}
       </div>
+
+      {addDiscount && <div className="px-3 pb-2">{addDiscount}</div>}
 
       {footer && <div className="border-t border-border p-3">{footer}</div>}
     </aside>

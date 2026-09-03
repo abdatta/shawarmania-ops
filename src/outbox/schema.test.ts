@@ -22,7 +22,7 @@ function databaseName(label: string): string {
 function command(commandId = crypto.randomUUID()): BillingCommand {
   return {
     commandId,
-    schemaVersion: 1,
+    schemaVersion: 2,
     tabletId: 'tablet-1',
     shiftId: 'shift-1',
     type: 'cancel_order',
@@ -133,7 +133,7 @@ describe('BillingDeliveryDatabase', () => {
       tabletId: 'tablet-1',
       shiftId: 'shift-1',
       type: 'cancel_order',
-      schemaVersion: 1,
+      schemaVersion: 2,
       state: 'pending',
       attemptCount: 0,
     })

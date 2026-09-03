@@ -42,7 +42,13 @@ classified as (
         select 1 from pg_attribute a
          where a.attrelid = oid and a.attname = 'outlet_id' and not a.attisdropped
       ) then 'outlet-scoped'
-      when tbl in ('bill_items', 'order_items', 'alert_responses') then 'child-scoped'
+      when tbl in (
+        'bill_items', 'order_items', 'alert_responses',
+        -- Scopes through `menu_discounts`, which carries the outlet. It holds
+        -- only two foreign keys and adding an `outlet_id` to it would create a
+        -- second answer to the question its parent already answers.
+        'menu_discount_categories'
+      ) then 'child-scoped'
       -- Person-scoped: no outlet_id of its own, because the row is about a
       -- PERSON and a person may be at several outlets (multi-outlet-people).
       -- Reach is decided by the person's assignments — `app_may_see_person`

@@ -279,3 +279,204 @@ describe('MenuSurface — a Biller cannot write the menu', () => {
     )
   })
 })
+
+describe('MenuSurface — discounts across the menu', () => {
+  it('shows the discount the owner is running, named by value and by category', async () => {
+    renderMenu()
+    await screen.findByTestId('menu-list')
+
+    const card = screen.getByTestId('menu-discounts')
+    // Named for what it is: a discount the owner runs across the menu, not the
+    // one a biller puts on a single bill.
+    expect(within(card).getByRole('heading', { name: 'Menu Discounts' })).toBeInTheDocument()
+    // The fixture runs 15% across Shawarma, so the row says what and where.
+    expect(card).toHaveTextContent('15% off · Burgers')
+    // No sale, no offer, no promotion — anywhere on the surface.
+    expect(document.body.textContent).not.toMatch(/\b(sale|offer|promotion)\b/i)
+  })
+
+  it('sets a second discount over several categories at once', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await screen.findByTestId('menu-list')
+
+    await user.click(screen.getByTestId('set-discounts'))
+    await user.type(screen.getByLabelText('Discount value'), '10')
+    await user.click(screen.getByTestId('select-all-categories'))
+    await user.click(screen.getByTestId('save-discount'))
+
+    const card = await screen.findByTestId('menu-discounts')
+    await waitFor(() => {
+      // Every category covered reads as one phrase rather than a list of headings.
+      expect(card).toHaveTextContent('10% off · All Items')
+    })
+    // And the first discount is untouched: several run at once, at their own values.
+    expect(card).toHaveTextContent('15% off · Burgers')
+  })
+
+  it('states the limit for the unit chosen, and no other', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await screen.findByTestId('menu-list')
+
+    await user.click(screen.getByTestId('set-discounts'))
+    // A percentage has one limit, and it is not about item prices.
+    expect(screen.getByTestId('discount-limit')).toHaveTextContent('Up to 100%.')
+
+    await user.click(screen.getByTestId('discount-basis-amount'))
+    // Nothing chosen yet, so there is nothing to bound.
+    expect(screen.getByTestId('discount-limit')).toHaveTextContent(/choose categories/i)
+
+    await user.click(screen.getByTestId('select-all-categories'))
+    // The real figure, worked out from the categories now covered: the cheapest
+    // active item on the demo menu is the ₹139 Classic Chicken Shawarma.
+    expect(screen.getByTestId('discount-limit')).toHaveTextContent('Up to ₹139')
+  })
+
+  it('refuses a rupee discount above the cheapest item inside the form, before saving', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await screen.findByTestId('menu-list')
+
+    await user.click(screen.getByTestId('set-discounts'))
+    await user.click(screen.getByTestId('discount-basis-amount'))
+    await user.type(screen.getByLabelText('Discount value'), '99999')
+    await user.click(screen.getByTestId('select-all-categories'))
+    await user.click(screen.getByTestId('save-discount'))
+
+    // In the sheet, naming the actual limit — not on the page after the sheet
+    // has closed, where it would describe a form the reader can no longer see.
+    await waitFor(() => {
+      expect(screen.getByTestId('form-sheet-error')).toHaveTextContent(/more than ₹139/i)
+    })
+    expect(screen.getByTestId('save-discount')).toBeInTheDocument()
+    expect(screen.queryByTestId('menu-error')).not.toBeInTheDocument()
+  })
+
+  it('stops a discount without disturbing the other', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await screen.findByTestId('menu-list')
+
+    await user.click(screen.getByRole('button', { name: /stop the 15% discount/i }))
+
+    // Nothing running means nothing shown — no row, and no sentence saying so.
+    await waitFor(() => {
+      expect(screen.queryByText(/15% off/)).not.toBeInTheDocument()
+    })
+    expect(screen.queryByRole('list', { name: 'Menu discounts' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the counter presets to four, so the panel row never wraps', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await screen.findByTestId('menu-list')
+
+    const presets = screen.getByTestId('discount-presets')
+    // Collapsed by default, and the summary still says what the counter offers,
+    // so the usual question is answered without opening anything.
+    expect(presets).not.toHaveAttribute('open')
+    expect(presets).toHaveTextContent('10% · 15% · 20%')
+
+    await user.click(within(presets).getByText('Counter presets'))
+
+    // The default the database gives a new outlet.
+    expect(within(presets).getByTestId('preset-percent-1000')).toBeInTheDocument()
+    expect(within(presets).getByTestId('preset-percent-1500')).toBeInTheDocument()
+    expect(within(presets).getByTestId('preset-percent-2000')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('New preset value'), '25')
+    await user.click(screen.getByTestId('add-preset'))
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId('discount-presets')).getByTestId('preset-percent-2500'),
+      ).toBeInTheDocument()
+    })
+
+    // A fifth has nowhere to go, so the control that would add one is gone.
+    expect(screen.queryByTestId('add-preset')).not.toBeInTheDocument()
+  })
+
+  it('offers a Biller no way to change what comes off', async () => {
+    const adapters = createMockAdapters('biller')
+    renderMenu('biller', adapters)
+    await screen.findByTestId('menu-list')
+
+    // The refusal is the data layer's, not an absent control's — the same
+    // boundary this surface already relies on for adding an item. A hidden
+    // button proves nothing about what a hand-crafted request can do.
+    await expect(
+      adapters.menu.createDiscount({
+        outletId: personaFixtures.biller.assignments[0]!.outletId!,
+        basis: 'percent',
+        valueBp: 5000,
+        categoryIds: [],
+      }),
+    ).rejects.toThrow(/read it only/i)
+  })
+})
+
+describe('MenuSurface — changing a discount that is already running', () => {
+  it('reopens it filled in, and saves over it rather than adding another', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await screen.findByTestId('menu-list')
+
+    await user.click(screen.getByRole('button', { name: /edit the 15% discount/i }))
+
+    // Filled in from the discount being changed, not blank.
+    expect(screen.getByLabelText('Discount value')).toHaveValue('15')
+    expect(screen.getByRole('button', { name: 'Save discount' })).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText('Discount value'))
+    await user.type(screen.getByLabelText('Discount value'), '25')
+    await user.click(screen.getByTestId('save-discount'))
+
+    const card = await screen.findByTestId('menu-discounts')
+    await waitFor(() => {
+      expect(card).toHaveTextContent('25% off · Burgers')
+    })
+    // One discount, changed — not a second one beside the first.
+    expect(card).not.toHaveTextContent('15% off')
+    expect(within(card).getAllByRole('listitem')).toHaveLength(1)
+  })
+
+  it('holds an edit to the same price floor a new discount is held to', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await screen.findByTestId('menu-list')
+
+    await user.click(screen.getByRole('button', { name: /edit the 15% discount/i }))
+    await user.click(screen.getByTestId('discount-basis-amount'))
+    await user.clear(screen.getByLabelText('Discount value'))
+    await user.type(screen.getByLabelText('Discount value'), '99999')
+    await user.click(screen.getByTestId('save-discount'))
+
+    // Burgers alone, so the floor is the cheapest burger rather than ₹139.
+    await waitFor(() => {
+      expect(screen.getByTestId('form-sheet-error')).toHaveTextContent(/more than ₹/i)
+    })
+  })
+
+  it('offers a rupee preset as readily as a percentage one', async () => {
+    const user = userEvent.setup()
+    renderMenu()
+    await screen.findByTestId('menu-list')
+
+    const presets = screen.getByTestId('discount-presets')
+    await user.click(within(presets).getByText('Counter presets'))
+
+    await user.type(screen.getByLabelText('New preset value'), '20')
+    await user.click(screen.getByTestId('preset-unit-amount'))
+    await user.click(screen.getByTestId('add-preset'))
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId('discount-presets')).getByTestId('preset-amount-2000'),
+      ).toBeInTheDocument()
+    })
+    // The summary reads both units without ambiguity.
+    expect(screen.getByTestId('discount-presets')).toHaveTextContent('₹20')
+  })
+})

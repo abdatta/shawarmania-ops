@@ -1,5 +1,6 @@
 import {
   billTotals,
+  discountAmountPaise,
   instantOnBusinessDay,
   lineTotalPaise,
   normalizeCategory,
@@ -8,7 +9,13 @@ import {
 } from '@/domain'
 
 import type { Tables } from '../database.types'
-import type { BillDraft, PaymentAllocation } from '../adapters'
+import type {
+  BillDiscountDraft,
+  BillDraft,
+  DiscountPreset,
+  MenuDiscount,
+  PaymentAllocation,
+} from '../adapters'
 import {
   billSeedItemId,
   billSeedOutlet,
@@ -25,7 +32,7 @@ import {
   type BillSeed,
 } from './fixtures/billing'
 import { manualLedgerDaySeeds, manualLedgerExpenseSeeds } from './fixtures/retirement-history'
-import { menuCategoryFixtures, menuItemFixtures } from './fixtures/menu'
+import { menuCategoryFixtures, menuDiscountFixtures, menuItemFixtures } from './fixtures/menu'
 import { expenseSeeds, OPENING_CASH_PAISE } from './fixtures/operations'
 import { OUTLET_KALYANI_ID, OUTLET_KANCHRAPARA_ID, outletFixtures } from './fixtures/outlets'
 import { personaFixtures } from './fixtures/personas'
@@ -64,6 +71,15 @@ export interface DemoStore {
   menuCategories: Tables<'menu_categories'>[]
   /** Owned by the menu adapter. */
   menuItems: Tables<'menu_items'>[]
+  /** Owned by the menu adapter: the discounts running across part of the menu. */
+  menuDiscounts: MenuDiscount[]
+  /**
+   * The counter discount panel's presets, per outlet.
+   *
+   * Here rather than on the outlet row because the menu adapter owns the writes,
+   * and a slice with two owners is a design mistake rather than a convenience.
+   */
+  discountPresets: Map<string, DiscountPreset[]>
   /** Read-only here; #9 owns enrolment. */
   counterDevices: Tables<'counter_devices'>[]
   /**
@@ -96,6 +112,14 @@ export interface DemoStore {
   orders: Tables<'orders'>[]
   /** Immutable snapshots belonging to `orders`. */
   orderItems: Tables<'order_items'>[]
+  /**
+   * Bill-level discounts, keyed by the order or bill they belong to.
+   *
+   * Menu discounts ride the lines; these belong to no line, so they are held
+   * beside the parent exactly as `order_discounts` and `bill_discounts` are.
+   */
+  orderDiscounts: Map<string, BillDiscountDraft[]>
+  billDiscounts: Map<string, BillDiscountDraft[]>
   /** Per-outlet, per-business-date order-number counters. */
   orderNumbers: Map<string, number>
   /** Server-side command metadata used by read-only manager diagnostics. */
@@ -321,9 +345,19 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       return { item, quantity: line.quantity }
     })
 
-    const totals = billTotals(
-      lines.map((line) => ({ unitPricePaise: line.item.price_paise, quantity: line.quantity })),
+    const billLines = lines.map((line) => ({
+      unitPricePaise: line.item.price_paise,
+      quantity: line.quantity,
+    }))
+    const subtotalPaise = billLines.reduce(
+      (sum, line) => sum + lineTotalPaise(line.unitPricePaise, line.quantity),
+      0,
     )
+    const totals = billTotals(billLines, {
+      discountPaise: seed.discountBp
+        ? discountAmountPaise({ basis: 'percent', percentBp: seed.discountBp }, subtotalPaise, 1)
+        : 0,
+    })
 
     const nextNumber = (billNumbers.get(outletId) ?? 0) + 1
     billNumbers.set(outletId, nextNumber)
@@ -372,6 +406,7 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       subtotal_paise: totals.subtotalPaise,
       discount_paise: totals.discountPaise,
       tax_paise: totals.taxPaise,
+      rounding_paise: totals.roundingPaise,
       total_paise: totals.totalPaise,
       void_kind: null,
       void_reason: null,
@@ -391,6 +426,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
         unit_price_paise: line.item.price_paise,
         quantity: line.quantity,
         line_total_paise: lineTotalPaise(line.item.price_paise, line.quantity),
+        discount_paise: 0,
+        discount_percent_bp: null,
+        category_name: null,
       })
     })
   }
@@ -540,8 +578,11 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
       customer_phone: sourceBill?.customer_phone ?? null,
       pricing_mode: 'no_tax',
       subtotal_paise: totals.subtotalPaise,
-      discount_paise: 0,
-      tax_paise: 0,
+      // Read off the totals, not hardcoded: the identity these three terms sit
+      // in is a database check constraint.
+      discount_paise: totals.discountPaise,
+      tax_paise: totals.taxPaise,
+      rounding_paise: totals.roundingPaise,
       total_paise: totals.totalPaise,
       prepared_at: preparedAt,
       status: seed.status,
@@ -564,6 +605,9 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
         unit_price_paise: line.unit_price_paise,
         quantity: line.quantity,
         line_total_paise: line.line_total_paise,
+        discount_paise: line.discount_paise,
+        discount_percent_bp: line.discount_percent_bp,
+        category_name: line.category_name,
       }),
     )
     if (sourceBill) sourceBill.order_id = id
@@ -1162,6 +1206,19 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     tradingOutletIds,
     menuCategories: structuredClone(menuCategoryFixtures),
     menuItems,
+    // A discount the owner is running, so the demo shows the feature rather than
+    // hiding it: fifteen percent across the Shawarma category at Kalyani.
+    menuDiscounts: structuredClone(menuDiscountFixtures),
+    discountPresets: new Map(
+      tradingOutletIds.map((id) => [
+        id,
+        [
+          { basis: 'percent' as const, value: 1000 },
+          { basis: 'percent' as const, value: 1500 },
+          { basis: 'percent' as const, value: 2000 },
+        ],
+      ]),
+    ),
     counterDevices: structuredClone(counterDeviceFixtures),
     shifts,
     bills,
@@ -1170,6 +1227,8 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     orderPayments,
     orders,
     orderItems,
+    orderDiscounts: new Map(),
+    billDiscounts: new Map(),
     orderNumbers,
     billingCommands,
     billingQueueSeeds,

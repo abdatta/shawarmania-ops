@@ -399,6 +399,24 @@ function DayReading({
             arrived. It settles when the week does. Of all this, only the cash reached the drawer.
           </p>
         )}
+
+        {/*
+          Named even when it is nought, for the same reason a channel that
+          reported nothing is named rather than omitted: an absent section reads
+          as a question nobody asked, and the reader comparing two days needs to
+          know which of them gave anything away.
+        */}
+        <div className="border-t border-border pt-2" data-testid="day-discounts">
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm font-semibold text-content-muted">Discounts given</span>
+            <Money paise={day.revenue.discountPaise} data-testid="day-discount-total" />
+          </div>
+          <p className="text-xs text-content-muted">
+            {day.revenue.discountPaise > 0
+              ? 'Taken off this day’s bills. The revenue above is already net of it.'
+              : 'Nothing was discounted on this date.'}
+          </p>
+        </div>
       </Card>
 
       {/* ── Drawer: the contents change, the manner does not ─────────────── */}
@@ -676,6 +694,20 @@ function MonthReading({ month }: { month: LedgerStatementMonth }) {
             Each aggregator day is reduced by the commission charged on that day, and the results
             added up. A day charged differently therefore affects only itself.
           </p>
+
+          <div className="border-t border-border pt-2" data-testid="month-discounts">
+            <div className="flex items-baseline justify-between">
+              <span className="text-sm font-semibold text-content-muted">Discounts given</span>
+              <Money paise={reading.discountPaise} data-testid="month-discount-total" />
+            </div>
+            <p className="text-xs text-content-muted">
+              {reading.discountPaise > 0
+                ? `Taken off this month’s bills. The revenue above is already net of it${
+                    pending ? ', and both figures are ceilings while a commission is waiting' : ''
+                  }.`
+                : 'Nothing was discounted this month.'}
+            </p>
+          </div>
           {pending && (
             /*
              * The sentence that makes every figure above honest.

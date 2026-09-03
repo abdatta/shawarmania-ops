@@ -11,6 +11,7 @@ import {
   BILLING_PAYMENT_METHODS,
   BillingActionError,
   type BillDraft,
+  type BillDiscountDraft,
   type BillLineDraft,
   type BillingAdapter,
   type BillingAttentionItem,
@@ -63,6 +64,7 @@ function refusedOrderNumber(result: unknown): number | null {
 
 type OrderReadRow = Tables<'orders'> & {
   order_items: Tables<'order_items'>[]
+  order_discounts: Tables<'order_discounts'>[]
   creator: { full_name: string } | { full_name: string }[] | null
   canceller: { full_name: string } | { full_name: string }[] | null
   device: { label: string } | { label: string }[] | null
@@ -70,6 +72,7 @@ type OrderReadRow = Tables<'orders'> & {
 
 type BillReadRow = Tables<'bills'> & {
   bill_items: Tables<'bill_items'>[]
+  bill_discounts: Tables<'bill_discounts'>[]
   counter_device: { label: string } | { label: string }[] | null
   bill_payments: Tables<'bill_payments'>[]
   order: { order_number: number } | { order_number: number }[] | null
@@ -101,6 +104,11 @@ function lineView(row: Tables<'order_items'> | Tables<'bill_items'>): BillLineDr
     itemName: row.item_name,
     unitPricePaise: row.unit_price_paise,
     quantity: row.quantity,
+    // Without these three a line read back from the server has no discount, so
+    // the bill detail shows none and reopening an order for edit loses it.
+    discountPaise: row.discount_paise,
+    discountPercentBp: row.discount_percent_bp,
+    categoryName: row.category_name,
   }
 }
 
@@ -121,6 +129,13 @@ function orderView(row: OrderReadRow): BillingOrder {
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
     lines: row.order_items.map(lineView),
+    discounts: (row.order_discounts ?? []).map((discount) => ({
+      basis: discount.basis,
+      valueBp: discount.value_bp,
+      valuePaise: discount.value_paise,
+      amountPaise: discount.amount_paise,
+    })),
+    roundingPaise: row.rounding_paise,
     totalPaise: row.total_paise,
     cancelReason: row.cancel_reason,
     cancelledAt: row.cancelled_at,
@@ -222,6 +237,13 @@ function billView(
     customerName: row.customer_name,
     customerPhone: row.customer_phone,
     lines: row.bill_items.map(lineView),
+    discounts: (row.bill_discounts ?? []).map((discount) => ({
+      basis: discount.basis,
+      valueBp: discount.value_bp,
+      valuePaise: discount.value_paise,
+      amountPaise: discount.amount_paise,
+    })),
+    roundingPaise: row.rounding_paise,
     totalPaise: row.total_paise,
     voidKind: row.void_kind,
     voidReason: row.void_reason,
@@ -252,6 +274,24 @@ function requirePayments(
   return payments.map(({ method, amountPaise }) => ({ method, amountPaise }))
 }
 
+/**
+ * The discount a set of lines and bill-level records comes to, together.
+ *
+ * Every discount is already resolved to paise against the gross base of its own
+ * scope by the time it reaches here, so this only adds them up. The cap at the
+ * subtotal is `billTotals`', because the cap belongs with the identity it
+ * protects rather than with the summing.
+ */
+function discountTotalPaise(
+  lines: readonly BillLineDraft[],
+  discounts: readonly BillDiscountDraft[],
+): number {
+  return (
+    lines.reduce((sum, line) => sum + (line.discountPaise ?? 0), 0) +
+    discounts.reduce((sum, discount) => sum + discount.amountPaise, 0)
+  )
+}
+
 function orderPayload(
   orderId: string,
   businessDate: string,
@@ -261,8 +301,9 @@ function orderPayload(
     customerName?: string | null
     customerPhone?: string | null
   },
+  discounts: readonly BillDiscountDraft[] = [],
 ): OrderContentPayload {
-  const totals = billTotals(lines)
+  const totals = billTotals(lines, { discountPaise: discountTotalPaise(lines, discounts) })
   return {
     orderId,
     businessDate,
@@ -278,7 +319,11 @@ function orderPayload(
       unitPricePaise: line.unitPricePaise,
       quantity: line.quantity,
       lineTotalPaise: lineTotalPaise(line.unitPricePaise, line.quantity),
+      discountPaise: line.discountPaise ?? 0,
+      discountPercentBp: line.discountPercentBp ?? null,
+      categoryName: line.categoryName ?? null,
     })),
+    discounts: discounts.map((discount) => ({ ...discount })),
   }
 }
 
@@ -488,7 +533,12 @@ export function createSupabaseBillingAdapter(
               itemName: line.itemName,
               unitPricePaise: line.unitPricePaise,
               quantity: line.quantity,
+              discountPaise: line.discountPaise,
+              discountPercentBp: line.discountPercentBp,
+              categoryName: line.categoryName,
             })),
+            discounts: payload.discounts.map((discount) => ({ ...discount })),
+            roundingPaise: payload.roundingPaise,
             totalPaise: payload.totalPaise,
             cancelReason: null,
             cancelledAt: null,
@@ -628,7 +678,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('orders')
       .select(
-        '*, order_items(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name), device:counter_devices!orders_device_id_fkey(label)',
+        '*, order_items(*), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name), device:counter_devices!orders_device_id_fkey(label)',
       )
       .eq('outlet_id', outletId)
       .order('ordered_at', { ascending: false })
@@ -660,7 +710,7 @@ export function createSupabaseBillingAdapter(
     const { data, error } = await client
       .from('orders')
       .select(
-        '*, order_items(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name), device:counter_devices!orders_device_id_fkey(label)',
+        '*, order_items(*), order_discounts(*), creator:profiles!orders_created_by_fkey(full_name), canceller:profiles!orders_cancelled_by_fkey(full_name), device:counter_devices!orders_device_id_fkey(label)',
       )
       .eq('id', orderId)
       .maybeSingle()
@@ -682,7 +732,7 @@ export function createSupabaseBillingAdapter(
     let query = client
       .from('bills')
       .select(
-        '*, bill_items(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name)), counter_device:counter_devices!bills_counter_device_id_fkey(label)',
+        '*, bill_items(*), bill_discounts(*), bill_payments(*), order:orders!bills_order_id_fkey(order_number), biller:profiles!bills_biller_profile_id_fkey(full_name), voider:profiles!bills_voided_by_fkey(id, full_name), attribution_reviews:billing_attribution_reviews(*, resolved_operator:profiles!billing_attribution_reviews_resolved_operator_id_fkey(full_name), reviewer:profiles!billing_attribution_reviews_reviewed_by_fkey(full_name)), counter_device:counter_devices!bills_counter_device_id_fkey(label)',
       )
     if (filters.id) query = query.eq('id', filters.id)
     if (filters.outletId) query = query.eq('outlet_id', filters.outletId)
@@ -799,7 +849,12 @@ export function createSupabaseBillingAdapter(
             itemName: line.itemName,
             unitPricePaise: line.unitPricePaise,
             quantity: line.quantity,
+            discountPaise: line.discountPaise,
+            discountPercentBp: line.discountPercentBp,
+            categoryName: line.categoryName,
           })),
+          discounts: command.payload.discounts.map((discount) => ({ ...discount })),
+          roundingPaise: command.payload.roundingPaise,
           totalPaise: command.payload.totalPaise,
           cancelReason: null,
           cancelledAt: null,
@@ -818,6 +873,8 @@ export function createSupabaseBillingAdapter(
           orderNumber: null,
           orderId: null,
           businessDate: command.payload.businessDate,
+          discounts: command.payload.discounts.map((discount) => ({ ...discount })),
+          roundingPaise: command.payload.roundingPaise,
           orderedAt: command.createdAt,
           paidAt: command.createdAt,
           paymentBusinessDate: command.payload.paymentBusinessDate,
@@ -860,6 +917,8 @@ export function createSupabaseBillingAdapter(
             billNumber: 0,
             orderNumber: order.orderNumber,
             orderId: command.payload.orderId,
+            discounts: [],
+            roundingPaise: 0,
             businessDate: order.businessDate,
             orderedAt: order.orderedAt,
             paidAt: command.payload.paidAt,
@@ -1199,7 +1258,9 @@ export function createSupabaseBillingAdapter(
         draft.shiftId,
         draft.businessDate,
       )
-      const totals = billTotals(draft.lines)
+      const totals = billTotals(draft.lines, {
+        discountPaise: discountTotalPaise(draft.lines, draft.discounts ?? []),
+      })
       const now = new Date().toISOString()
       const command = await createBillingCommand({
         commandId: draft.clientId,
@@ -1224,7 +1285,11 @@ export function createSupabaseBillingAdapter(
             unitPricePaise: line.unitPricePaise,
             quantity: line.quantity,
             lineTotalPaise: lineTotalPaise(line.unitPricePaise, line.quantity),
+            discountPaise: line.discountPaise ?? 0,
+            discountPercentBp: line.discountPercentBp ?? null,
+            categoryName: line.categoryName ?? null,
           })),
+          discounts: (draft.discounts ?? []).map((discount) => ({ ...discount })),
         },
       })
       await accept(command, draft.outletId, draft.businessDate, draft.clientId)
@@ -1235,6 +1300,8 @@ export function createSupabaseBillingAdapter(
         orderNumber: null,
         orderId: null,
         businessDate: draft.businessDate,
+        discounts: command.payload.discounts.map((discount) => ({ ...discount })),
+        roundingPaise: command.payload.roundingPaise,
         orderedAt: command.createdAt,
         paidAt: command.createdAt,
         paymentBusinessDate: draft.businessDate,
@@ -1345,7 +1412,16 @@ export function createSupabaseBillingAdapter(
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
         lines: [...input.lines],
-        totalPaise: billTotals(input.lines).totalPaise,
+        discounts: [...(input.discounts ?? [])],
+        // Computed with the discounts, not without them. A local order that
+        // reported its gross total showed the till one figure and charged
+        // another the moment it was paid.
+        roundingPaise: billTotals(input.lines, {
+          discountPaise: discountTotalPaise(input.lines, input.discounts ?? []),
+        }).roundingPaise,
+        totalPaise: billTotals(input.lines, {
+          discountPaise: discountTotalPaise(input.lines, input.discounts ?? []),
+        }).totalPaise,
         cancelReason: null,
         cancelledAt: null,
         cancelledByName: null,
@@ -1370,7 +1446,16 @@ export function createSupabaseBillingAdapter(
         payload: orderPayload(orderId, existing.businessDate, input.lines, input),
       })
       await accept(command, existing.outletId, existing.businessDate, orderId)
-      const revised = { ...existing, ...input, totalPaise: billTotals(input.lines).totalPaise }
+      const revisedTotals = billTotals(input.lines, {
+        discountPaise: discountTotalPaise(input.lines, input.discounts ?? []),
+      })
+      const revised = {
+        ...existing,
+        ...input,
+        discounts: [...(input.discounts ?? [])],
+        roundingPaise: revisedTotals.roundingPaise,
+        totalPaise: revisedTotals.totalPaise,
+      }
       orderCache.set(orderId, revised)
       return revised
     },
@@ -1433,6 +1518,10 @@ export function createSupabaseBillingAdapter(
         orderNumber: existing.orderNumber,
         orderId: orderId,
         businessDate: existing.businessDate,
+        // Paying an order settles it at the figures it was saved with, so the
+        // bill inherits them rather than recomputing anything.
+        discounts: [],
+        roundingPaise: 0,
         orderedAt: existing.orderedAt,
         paidAt: command.payload.paidAt,
         paymentBusinessDate: command.payload.paymentBusinessDate,

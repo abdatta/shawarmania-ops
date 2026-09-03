@@ -10,6 +10,7 @@ import {
   BillingActionError,
   BILLING_PAYMENT_METHODS,
   type BillDraft,
+  type BillDiscountDraft,
   type BillLineDraft,
   type BillingAdapter,
   type BillingAttentionItem,
@@ -358,7 +359,12 @@ export function createMockBillingAdapter(
           itemName: line.item_name,
           unitPricePaise: line.unit_price_paise,
           quantity: line.quantity,
+          discountPaise: line.discount_paise,
+          discountPercentBp: line.discount_percent_bp,
+          categoryName: line.category_name,
         })),
+      discounts: (store.orderDiscounts.get(row.id) ?? []).map((discount) => ({ ...discount })),
+      roundingPaise: row.rounding_paise,
       totalPaise: row.total_paise,
       cancelReason: row.cancel_reason,
       cancelledAt: row.cancelled_at,
@@ -416,7 +422,12 @@ export function createMockBillingAdapter(
           itemName: line.item_name,
           unitPricePaise: line.unit_price_paise,
           quantity: line.quantity,
+          discountPaise: line.discount_paise,
+          discountPercentBp: line.discount_percent_bp,
+          categoryName: line.category_name,
         })),
+      discounts: (store.billDiscounts.get(row.id) ?? []).map((discount) => ({ ...discount })),
+      roundingPaise: row.rounding_paise,
       totalPaise: row.total_paise,
       voidKind: row.void_kind,
       voidReason: row.void_reason,
@@ -481,7 +492,11 @@ export function createMockBillingAdapter(
     return requireOpenShift()
   }
 
-  function replaceOrderLines(orderId: string, lines: BillLineDraft[]) {
+  function replaceOrderLines(
+    orderId: string,
+    lines: BillLineDraft[],
+    discounts: readonly BillDiscountDraft[] = [],
+  ) {
     store.orderItems = store.orderItems.filter((line) => line.order_id !== orderId)
     lines.forEach((line, index) =>
       store.orderItems.push({
@@ -492,13 +507,38 @@ export function createMockBillingAdapter(
         unit_price_paise: line.unitPricePaise,
         quantity: line.quantity,
         line_total_paise: lineTotalPaise(line.unitPricePaise, line.quantity),
+        // Written from the line, not as nought. Hardcoding these threw away the
+        // menu discount the counter had already captured, so the order read
+        // back at its list price and the bill detail showed no discount at all.
+        discount_paise: line.discountPaise ?? 0,
+        discount_percent_bp: line.discountPercentBp ?? null,
+        category_name: line.categoryName ?? null,
       }),
+    )
+    // A revision restates the whole order, so its discounts are replaced rather
+    // than merged — the same rule the real `revise_order` command follows.
+    store.orderDiscounts.set(
+      orderId,
+      discounts.map((discount) => ({ ...discount })),
     )
   }
 
-  function totalsOf(lines: BillLineDraft[]) {
+  /**
+   * What an order comes to, discounts and rounding included.
+   *
+   * The discounts are not optional decoration here: this figure is what the
+   * tender is validated against, so computing it gross rejects the exact
+   * payment a biller just allocated against the discounted total the panel
+   * showed them.
+   */
+  function totalsOf(lines: BillLineDraft[], discounts: readonly BillDiscountDraft[] = []) {
     return billTotals(
       lines.map((line) => ({ unitPricePaise: line.unitPricePaise, quantity: line.quantity })),
+      {
+        discountPaise:
+          lines.reduce((sum, line) => sum + (line.discountPaise ?? 0), 0) +
+          discounts.reduce((sum, discount) => sum + discount.amountPaise, 0),
+      },
     )
   }
 
@@ -512,7 +552,7 @@ export function createMockBillingAdapter(
     const shift = store.shifts.find((row) => row.id === draft.shiftId)
     if (!shift) throw new Error(`Queued bill ${draft.clientId} has no shift to attribute to.`)
 
-    const totals = totalsOf(draft.lines)
+    const totals = totalsOf(draft.lines, draft.discounts ?? [])
     const payments = requireExactPayments(draft.payments, totals.totalPaise)
     const acceptedAt = new Date(
       acceptedPaymentTimes.get(draft.clientId) ?? Date.now(),
@@ -547,6 +587,7 @@ export function createMockBillingAdapter(
       subtotal_paise: totals.subtotalPaise,
       discount_paise: totals.discountPaise,
       tax_paise: totals.taxPaise,
+      rounding_paise: totals.roundingPaise,
       total_paise: totals.totalPaise,
       void_kind: null,
       void_reason: null,
@@ -569,6 +610,9 @@ export function createMockBillingAdapter(
         unit_price_paise: line.unitPricePaise,
         quantity: line.quantity,
         line_total_paise: lineTotalPaise(line.unitPricePaise, line.quantity),
+        discount_paise: 0,
+        discount_percent_bp: null,
+        category_name: null,
       })
     }
     pendingPayNowDrafts.delete(draft.clientId)
@@ -577,7 +621,7 @@ export function createMockBillingAdapter(
   function applyCreateOrder(input: SaveOrderInput) {
     const shift = store.shifts.find((row) => row.id === input.shiftId)
     if (!shift) throw new Error(`Queued order ${input.clientId} has no shift to attribute to.`)
-    const totals = totalsOf(input.lines)
+    const totals = totalsOf(input.lines, input.discounts ?? [])
     const counterKey = `${input.outletId}:${input.businessDate}`
     // The number is minted here and nowhere else.
     const orderNumber = (store.orderNumbers.get(counterKey) ?? 0) + 1
@@ -601,8 +645,13 @@ export function createMockBillingAdapter(
       customer_phone: input.customerPhone?.trim() || null,
       pricing_mode: 'no_tax',
       subtotal_paise: totals.subtotalPaise,
-      discount_paise: 0,
-      tax_paise: 0,
+      // Read off the totals rather than written as nought. The identity
+      // `total = subtotal - discount + tax + rounding` is a database check
+      // constraint, so a mock that hardcodes two of its terms while copying the
+      // total is a fixture the database would refuse.
+      discount_paise: totals.discountPaise,
+      tax_paise: totals.taxPaise,
+      rounding_paise: totals.roundingPaise,
       total_paise: totals.totalPaise,
       prepared_at: null,
       status: 'open',
@@ -617,14 +666,14 @@ export function createMockBillingAdapter(
       cancelled_shift_id: null,
     }
     store.orders.push(row)
-    replaceOrderLines(row.id, input.lines)
+    replaceOrderLines(row.id, input.lines, input.discounts ?? [])
   }
 
   function applyReviseOrder(record: { orderId: string; shiftId: string; input: SaveOrderInput }) {
     const row = store.orders.find((candidate) => candidate.id === record.orderId)
     if (!row || row.status !== 'open') return
     const actor = store.shifts.find((candidate) => candidate.id === record.shiftId)
-    const totals = totalsOf(record.input.lines)
+    const totals = totalsOf(record.input.lines, record.input.discounts ?? [])
     row.changed_at = new Date().toISOString()
     row.changed_by = actor?.person_id ?? row.created_by
     row.changed_shift_id = actor?.id ?? row.created_shift_id
@@ -635,7 +684,7 @@ export function createMockBillingAdapter(
     row.discount_paise = 0
     row.tax_paise = 0
     row.total_paise = totals.totalPaise
-    replaceOrderLines(row.id, record.input.lines)
+    replaceOrderLines(row.id, record.input.lines, record.input.discounts ?? [])
   }
 
   function applyCancelOrder(record: { orderId: string; shiftId: string; reason: string }) {
@@ -700,9 +749,12 @@ export function createMockBillingAdapter(
       payment_method: payments.length === 1 ? payments[0]!.method : null,
       pricing_mode: 'no_tax',
       status: 'settled',
+      // Carried from the order, never recomputed: paying an order settles it at
+      // the figures it was saved at, discount and rounding included.
       subtotal_paise: row.subtotal_paise,
-      discount_paise: 0,
-      tax_paise: 0,
+      discount_paise: row.discount_paise,
+      tax_paise: row.tax_paise,
+      rounding_paise: row.rounding_paise,
       total_paise: row.total_paise,
       void_kind: null,
       void_reason: null,
@@ -725,6 +777,9 @@ export function createMockBillingAdapter(
           unit_price_paise: line.unit_price_paise,
           quantity: line.quantity,
           line_total_paise: line.line_total_paise,
+          discount_paise: line.discount_paise,
+          discount_percent_bp: line.discount_percent_bp,
+          category_name: line.category_name,
         }),
       )
     row.bill_id = billId
@@ -854,7 +909,9 @@ export function createMockBillingAdapter(
             customerName: input.customerName?.trim() || null,
             customerPhone: input.customerPhone?.trim() || null,
             lines: structuredClone(input.lines),
-            totalPaise: totalsOf(input.lines).totalPaise,
+            discounts: structuredClone(input.discounts ?? []),
+            roundingPaise: totalsOf(input.lines, input.discounts ?? []).roundingPaise,
+            totalPaise: totalsOf(input.lines, input.discounts ?? []).totalPaise,
             cancelReason: null,
             cancelledAt: null,
             cancelledByName: null,
@@ -872,7 +929,12 @@ export function createMockBillingAdapter(
             customerName: record.input.customerName?.trim() || null,
             customerPhone: record.input.customerPhone?.trim() || null,
             lines: structuredClone(record.input.lines),
-            totalPaise: totalsOf(record.input.lines).totalPaise,
+            // A revision restates the whole order, discounts included, so the
+            // projection has to carry them or an edit reads as having dropped
+            // them until it is delivered.
+            discounts: structuredClone(record.input.discounts ?? []),
+            roundingPaise: totalsOf(record.input.lines, record.input.discounts ?? []).roundingPaise,
+            totalPaise: totalsOf(record.input.lines, record.input.discounts ?? []).totalPaise,
           })
           break
         }
@@ -1072,7 +1134,19 @@ export function createMockBillingAdapter(
       tillLabel: null,
       customerName: content.customerName,
       customerPhone: content.customerPhone,
-      lines: content.lines,
+      // Normalised to the shape a delivered bill reads back as. A draft line
+      // may omit the discount facts because they are optional on the way in;
+      // a line read from `bill_items` never can. Passing the draft through
+      // unchanged made one bill describe its own lines two different ways
+      // either side of delivery.
+      lines: content.lines.map((line) => ({
+        ...line,
+        discountPaise: line.discountPaise ?? 0,
+        discountPercentBp: line.discountPercentBp ?? null,
+        categoryName: line.categoryName ?? null,
+      })),
+      discounts: [],
+      roundingPaise: 0,
       totalPaise: content.totalPaise,
       voidKind: null,
       voidReason: null,
@@ -1220,7 +1294,7 @@ export function createMockBillingAdapter(
         throw new BillingActionError('duplicate', 'That bill has already been recorded.')
       }
 
-      requireExactPayments(draft.payments, totalsOf(draft.lines).totalPaise)
+      requireExactPayments(draft.payments, totalsOf(draft.lines, draft.discounts ?? []).totalPaise)
 
       const draftCopy = structuredClone(draft)
       pendingPayNowDrafts.set(draft.clientId, draftCopy)
@@ -1245,7 +1319,7 @@ export function createMockBillingAdapter(
       const directDraft = pendingPayNowDrafts.get(billId)
       const orderPayment = pendingOrderPayments.get(billId)
       const totalPaise = directDraft
-        ? totalsOf(directDraft.lines).totalPaise
+        ? totalsOf(directDraft.lines, directDraft.discounts ?? []).totalPaise
         : orderPayment
           ? (projectedOrders(openShiftRow()?.outlet_id ?? '').find(
               (order) => order.id === orderPayment.orderId,
@@ -1338,7 +1412,9 @@ export function createMockBillingAdapter(
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
         lines: structuredClone(input.lines),
-        totalPaise: totalsOf(input.lines).totalPaise,
+        discounts: structuredClone(input.discounts ?? []),
+        roundingPaise: totalsOf(input.lines, input.discounts ?? []).roundingPaise,
+        totalPaise: totalsOf(input.lines, input.discounts ?? []).totalPaise,
         cancelReason: null,
         cancelledAt: null,
         cancelledByName: null,
@@ -1396,7 +1472,7 @@ export function createMockBillingAdapter(
         customerName: input.customerName?.trim() || null,
         customerPhone: input.customerPhone?.trim() || null,
         lines: structuredClone(input.lines),
-        totalPaise: totalsOf(input.lines).totalPaise,
+        totalPaise: totalsOf(input.lines, input.discounts ?? []).totalPaise,
       }
     },
 
@@ -1702,7 +1778,7 @@ export function createMockBillingAdapter(
               customerName: draft.customerName?.trim() || null,
               customerPhone: draft.customerPhone?.trim() || null,
               lines: draft.lines,
-              totalPaise: totalsOf(draft.lines).totalPaise,
+              totalPaise: totalsOf(draft.lines, draft.discounts ?? []).totalPaise,
               orderId: null,
               orderNumber: null,
               billerName: actorName(openShiftRow()?.person_id ?? null) ?? 'Counter operator',

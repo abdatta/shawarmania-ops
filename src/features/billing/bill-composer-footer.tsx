@@ -36,6 +36,7 @@ export function BillComposerFooter({
   onPaid,
   onSaveOrder,
   onCancelEdit,
+  discountTotalPaise = 0,
 }: {
   lines: BillLineDraft[]
   customerName: string
@@ -47,10 +48,15 @@ export function BillComposerFooter({
   onPaid: () => void
   onSaveOrder: () => void
   onCancelEdit?: (() => void) | undefined
+  /**
+   * What every discount on this order comes to, so the Total here is the total
+   * the tender dialog opens at. Computed once by the counter and passed down —
+   * a second calculation in this file is how a counter starts quoting one figure
+   * and charging another.
+   */
+  discountTotalPaise?: number
 }) {
-  const totals = billTotals(
-    lines.map((line) => ({ unitPricePaise: line.unitPricePaise, quantity: line.quantity })),
-  )
+  const totals = billTotals(lines, { discountPaise: discountTotalPaise })
 
   /*
     A phone that is not a phone is worse than no phone at all: it is PII written

@@ -367,7 +367,10 @@ begin
       '00000000-0000-4000-a000-000000000002'::uuid,
       '10000000-0000-4000-a000-00000000000b'::uuid,
       '10000000-0000-4000-a000-000000000005'::uuid,
-      now() - make_interval(mins => i), 10000 + i);
+      -- Whole rupees, a rupee apart. These thirteen only need to be distinct
+      -- and inside the window; `10000 + i` made them a paisa apart, which
+      -- `bills_total_whole_rupees` now refuses and no customer could have paid.
+      now() - make_interval(mins => i), 10000 + i * 100);
   end loop;
 end;
 $$;

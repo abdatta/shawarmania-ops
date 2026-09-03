@@ -256,9 +256,15 @@ This keeps the billing screen minimal and ships the counter faster. All three ex
 
 Tracked as three backlog items: `bill-thermal-printing`, `bill-gst-breakup`, `bill-digital-share` in [`openspec/todos/`](../openspec/todos/README.md).
 
-### No discounts or partial payment in billing v1
+### No partial payment in billing
 
-The schema retains integer-paise discount fields for a later pricing-policy change, but the counter exposes no discount control and writes zero. Orders and bills must be paid in full, but that full total may be split across exact tender allocations such as Cash and UPI. There are no deposits, partially paid orders or manager-side payment shortcuts. A later discount change must update both the UI contract and `billing-live` command construction together so the demo and live adapter do not drift.
+Orders and bills must be paid in full, though that full total may be split across exact tender allocations such as Cash and UPI. There are no deposits, partially paid orders or manager-side payment shortcuts.
+
+**Discounts are no longer among these limits.** A biller discounts the order in front of them, and the owner runs discounts across chosen menu categories; both are recorded beside the price rather than folded into it, and the bill rounds up to a whole rupee on its own stated line. There is no ceiling on what a biller may take off and no reason code attached to it — both were offered and declined [owner, 2026-09-03] — so what stands in place of a cap is attribution and the giveaway figure on the day and the month.
+
+### A menu discount has no schedule
+
+A discount is turned on and turned off; it carries no start or end date. When scheduling is wanted it must key on the outlet's **business date** rather than on `now()`, or a discount ending on the 31st misses a bill rung at 00:30 on the 1st that belongs to the 31st.
 
 ### Counter billing accepts Cash and UPI only
 

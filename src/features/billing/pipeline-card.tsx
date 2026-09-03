@@ -101,7 +101,18 @@ export function PipelineCard({
     }
   }, [menuOpen])
 
-  const totalPaise = order.lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
+  /**
+   * What the order actually comes to, read off the order rather than re-added
+   * from its lines.
+   *
+   * Re-adding the lines produces the **gross** figure, which is what this card
+   * showed while the tender dialog behind it asked for the discounted one — two
+   * numbers for one order, a hundred rupees apart, on the same screen.
+   */
+  const totalPaise = order.totalPaise
+  /** The list price, shown struck through only when a discount moved it. */
+  const grossPaise = order.lines.reduce((sum, line) => sum + line.unitPricePaise * line.quantity, 0)
+  const discounted = grossPaise > totalPaise
   const reference = order.localReference ?? `Order #${order.orderNumber}`
   const isPaid = order.status === 'paid'
   // The five-minute clock, measured from stored payment time — never a timer.
@@ -237,7 +248,16 @@ export function PipelineCard({
               PAID
             </span>
           )}
-          <Money paise={totalPaise} display className="font-black text-content" />
+          <span className="flex items-baseline gap-1.5">
+            {discounted && (
+              <Money
+                paise={grossPaise}
+                data-testid={`order-gross-${order.id}`}
+                className="text-xs text-content-muted line-through"
+              />
+            )}
+            <Money paise={totalPaise} display className="font-black text-content" />
+          </span>
         </div>
       </div>
 

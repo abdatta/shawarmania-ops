@@ -133,6 +133,14 @@ export interface BillSeed {
    */
   arrivedAfterClose?: boolean
   /**
+   * A discount taken off this bill, in basis points against its subtotal.
+   *
+   * Seeded history predates the discount feature, so without at least one of
+   * these the Ledger's giveaway section reads nought across the whole demo
+   * month and the walkthrough cannot show the figure it exists for.
+   */
+  discountBp?: number
+  /**
    * The tablet recorded this after its operator had already left remotely, and
    * before it could learn that they had. The bill is genuine and stays in the
    * day's money; what is uncertain is only who was standing at the counter, so
@@ -310,6 +318,11 @@ export const billSeeds: BillSeed[] = [
     time: '12:20',
     paymentMethod: 'upi',
     lines: [{ item: 'mozzarella', quantity: 2 }],
+    // One discounted sale in the demo day, so the Ledger's giveaway figure is a
+    // real number and the round-up line has something to round. Two at ₹199 is
+    // ₹398; ten percent is ₹39.80, leaving ₹358.20, which the bill carries up
+    // to ₹359. The day's UPI takings are ₹39 lighter for it.
+    discountBp: 1000,
   },
   {
     daysAgo: 0,

@@ -19,13 +19,24 @@ import { LoadingRegion, Shimmer } from '@/components/ui/loading'
 import { useAdapters, type Tables } from '@/data-access'
 import {
   DataActionError,
+  type BillDiscountDraft,
+  type BillDiscountRule,
+  type DiscountPreset,
   type BillLineDraft,
   type BillingOrder,
   type CustomerIdentity,
   type MenuCategoryWithItems,
+  type MenuDiscount,
   type PaymentAllocation,
 } from '@/data-access/adapters'
-import { resolveBusinessDate } from '@/domain'
+import {
+  billTotals,
+  discountAmountPaise,
+  lineTotalPaise,
+  menuLineDiscount,
+  resolveBusinessDate,
+  type MenuDiscountRule,
+} from '@/domain'
 import { useOnForeground } from '@/features/attention/attention'
 import { newUuid } from '@/lib/uuid'
 import { declareUnsavedWork } from '@/pwa/occupancy'
@@ -34,6 +45,8 @@ import { CounterDeviceContext } from '@/session/counter-context'
 import { validateIndianPhone } from '../../../shared/phone'
 
 import { BillComposerFooter } from './bill-composer-footer'
+import { BillDiscountRows } from './bill-discount-rows'
+import { DiscountDialog } from './discount-dialog'
 import { OfflineFillHint } from './offline-fill-hint'
 import { BillPanel } from './bill-panel'
 import { CounterActivityRail } from './counter-activity-rail'
@@ -73,6 +86,14 @@ import { useCounterState } from './use-counter-state'
 
 interface Restorable {
   lines: BillLineDraft[]
+  /**
+   * The bill-level discounts on the panel.
+   *
+   * Part of what a draft **is**: suspending a composed bill to edit an order,
+   * or reopening an order, has to give back what was on the panel. Leaving them
+   * out silently dropped every discount on both journeys.
+   */
+  discounts: readonly BillDiscountDraft[]
   customerName: string
   customerPhone: string
   payments: PaymentAllocation[]
@@ -128,6 +149,10 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   const { shift } = useCounterState()
 
   const [menu, setMenu] = useState<MenuCategoryWithItems[] | null>(null)
+  const [menuDiscounts, setMenuDiscounts] = useState<MenuDiscount[]>([])
+  const [discountPresets, setDiscountPresets] = useState<DiscountPreset[]>([])
+  const [billDiscountRules, setBillDiscountRules] = useState<BillDiscountRule[]>([])
+  const [discountDialog, setDiscountDialog] = useState<{ editingIndex: number | null } | null>(null)
   const [menuOffline, setMenuOffline] = useState(false)
   const [outlet, setOutlet] = useState<Tables<'outlets'> | null>(null)
   const [lines, setLines] = useState<BillLineDraft[]>([])
@@ -220,9 +245,11 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
   const refreshMenu = useCallback(async () => {
     if (!outletId) return
     try {
-      const loadedMenu = await menuAdapter.listMenu(outletId)
+      const loaded = await menuAdapter.readOutletMenu(outletId)
       hasMenu.current = true
-      setMenu(loadedMenu)
+      setMenu(loaded.categories)
+      setMenuDiscounts(loaded.discounts)
+      setDiscountPresets(loaded.presets)
       setMenuOffline(Boolean(resume))
       setError((current) =>
         current === 'Could not load the menu. Try again in a moment.' ? null : current,
@@ -317,6 +344,66 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     [lines],
   )
 
+  const discountRules = useMemo<MenuDiscountRule[]>(
+    () =>
+      menuDiscounts.map((discount) => ({
+        basis: discount.basis,
+        ...(discount.basis === 'percent'
+          ? { percentBp: discount.valueBp ?? 0 }
+          : { amountPaise: discount.valuePaise ?? 0 }),
+        categoryIds: discount.categoryIds,
+      })),
+    [menuDiscounts],
+  )
+
+  const categoryNameById = useMemo(
+    () => new Map((menu ?? []).map(({ category }) => [category.id, category.name])),
+    [menu],
+  )
+
+  /**
+   * What each bill-level discount comes to, against this order as it stands.
+   *
+   * Derived rather than stored. A percentage has to stay a percentage of what is
+   * actually on the bill, so the amount changes whenever a line does — and the
+   * amount was never state to begin with. Holding it in state meant an effect
+   * writing state during render, which is a cascade the lint rightly refuses.
+   *
+   * Every rule reads the order's **gross** subtotal, so two of them are additive
+   * and the sequence they were applied in cannot change the total.
+   */
+  const billDiscounts = useMemo<BillDiscountDraft[]>(() => {
+    const subtotal = lines.reduce(
+      (sum, line) => sum + lineTotalPaise(line.unitPricePaise, line.quantity),
+      0,
+    )
+    return billDiscountRules.map((rule) => ({
+      ...rule,
+      amountPaise:
+        rule.basis === 'percent'
+          ? discountAmountPaise({ basis: 'percent', percentBp: rule.valueBp ?? 0 }, subtotal, 1)
+          : Math.min(rule.valuePaise ?? 0, subtotal),
+    }))
+  }, [lines, billDiscountRules])
+
+  /**
+   * What this order comes to, discounts and rounding included.
+   *
+   * One computation feeding the panel, the footer and every settle path, so the
+   * number the biller reads is the number the command carries. A second
+   * calculation anywhere here is how a counter starts quoting one figure and
+   * charging another.
+   */
+  const totals = useMemo(
+    () =>
+      billTotals(lines, {
+        discountPaise:
+          lines.reduce((sum, line) => sum + (line.discountPaise ?? 0), 0) +
+          billDiscounts.reduce((sum, discount) => sum + discount.amountPaise, 0),
+      }),
+    [lines, billDiscounts],
+  )
+
   /**
    * Adding a line **snapshots** the item's name and price right now. A price
    * edited on the manager's phone while this order is open must not rewrite what
@@ -334,6 +421,10 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
             line.menuItemId === item.id ? { ...line, quantity: line.quantity + 1 } : line,
           )
         }
+        const captured = menuLineDiscount(
+          { categoryId: item.category_id, unitPricePaise: item.price_paise, quantity: 1 },
+          discountRules,
+        )
         return [
           ...current,
           {
@@ -341,11 +432,14 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
             itemName: item.name,
             unitPricePaise: item.price_paise,
             quantity: 1,
+            discountPaise: captured.discountPaise,
+            discountPercentBp: captured.discountPercentBp,
+            categoryName: categoryNameById.get(item.category_id) ?? null,
           },
         ]
       })
     },
-    [settling],
+    [settling, discountRules, categoryNameById],
   )
 
   const changeQuantity = useCallback(
@@ -357,7 +451,17 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
           const quantity = line.quantity + delta
           // Below one there is no line: taking the last one off is how a line is
           // removed, so there is no separate delete to hunt for.
-          return quantity < 1 ? [] : [{ ...line, quantity }]
+          if (quantity < 1) return []
+          // The captured terms are re-applied at the new quantity rather than
+          // re-read from today's menu: the line keeps the deal it was created
+          // under, and only its size changes.
+          const scaled =
+            line.discountPercentBp != null
+              ? Math.round((line.unitPricePaise * quantity * line.discountPercentBp) / 10000)
+              : Math.round(((line.discountPaise ?? 0) / line.quantity) * quantity)
+          return [
+            { ...line, quantity, discountPaise: Math.min(scaled, line.unitPricePaise * quantity) },
+          ]
         }),
       )
     },
@@ -366,6 +470,10 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
 
   function clearPanel() {
     setLines([])
+    // Cleared with the lines, and for a sharper reason than tidiness: a
+    // discount left behind after a settle is applied to the next customer, who
+    // never asked for it and whose bill nobody would think to check.
+    setBillDiscountRules([])
     setCustomerName('')
     setCustomerPhone('')
     setCustomerMatch(null)
@@ -379,6 +487,16 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
     setCustomerName(draft.customerName)
     setCustomerPhone(draft.customerPhone)
     setPaymentPreset(structuredClone(draft.payments))
+    // Restored from the draft rather than cleared. Clearing dropped every
+    // bill-level discount the order carried the moment it was reopened, and the
+    // revision then wrote a total the customer had never been quoted.
+    setBillDiscountRules(
+      (draft.discounts ?? []).map((discount) => ({
+        basis: discount.basis,
+        valueBp: discount.valueBp,
+        valuePaise: discount.valuePaise,
+      })),
+    )
     setCustomerMatch(null)
     setCustomerMatchPhone(null)
     setDeclinedPhone(null)
@@ -386,10 +504,17 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
 
   function beginOrderEdit(order: BillingOrder) {
     if (settling || editingOrder) return
-    suspendedDraft.current = { lines, customerName, customerPhone, payments: paymentPreset }
+    suspendedDraft.current = {
+      lines,
+      discounts: billDiscounts,
+      customerName,
+      customerPhone,
+      payments: paymentPreset,
+    }
     setEditingOrder(order)
     putDraftOnPanel({
       lines: order.lines,
+      discounts: order.discounts,
       customerName: order.customerName ?? '',
       customerPhone: order.customerPhone ?? '',
       payments: [],
@@ -428,6 +553,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         shiftId: shift.id,
         businessDate: resolveBusinessDate(new Date(), outlet.business_day_cutover),
         lines,
+        discounts: billDiscounts,
         customerId: null,
         customerName,
         customerPhone,
@@ -449,6 +575,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       void saveCustomerIfComplete().catch(() => undefined)
       await billing.reviseOrder(editingOrder.id, {
         lines,
+        discounts: billDiscounts,
         customerId: null,
         customerName,
         customerPhone,
@@ -470,10 +597,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
       setError('There is nothing on this bill yet.')
       return
     }
-    const totalPaise = lines.reduce(
-      (running, line) => running + line.unitPricePaise * line.quantity,
-      0,
-    )
+    const totalPaise = totals.totalPaise
     if (
       payments.length === 0 ||
       payments.some((payment) => payment.amountPaise <= 0) ||
@@ -503,6 +627,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         businessDate,
         payments,
         lines,
+        discounts: billDiscounts,
         customerName,
         customerPhone,
       })
@@ -560,6 +685,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
         setPaymentDialogOpen(true)
       }}
       onSaveOrder={editingOrder ? saveEditedOrder : saveOrder}
+      discountTotalPaise={totals.discountPaise}
       onCancelEdit={leaveOrderEdit}
     />
   )
@@ -666,12 +792,70 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
             <BillPanel
               lines={lines}
               onChangeQuantity={changeQuantity}
+              discountRows={
+                <BillDiscountRows
+                  lines={lines}
+                  discounts={billDiscounts}
+                  categoryCount={(menu ?? []).length}
+                  roundingPaise={totals.roundingPaise}
+                  editable={!settling}
+                  onEdit={(index) => setDiscountDialog({ editingIndex: index })}
+                  onRemove={(index) =>
+                    setBillDiscountRules((current) =>
+                      current.filter((_, position) => position !== index),
+                    )
+                  }
+                />
+              }
+              addDiscount={
+                lines.length > 0 ? (
+                  <Button
+                    variant="secondary"
+                    size="phone"
+                    className="w-full"
+                    data-testid="add-discount"
+                    disabled={settling}
+                    onClick={() => setDiscountDialog({ editingIndex: null })}
+                  >
+                    Add discount
+                  </Button>
+                ) : null
+              }
               {...(editingOrder
                 ? {
                     editingOrderReference:
                       editingOrder.localReference ?? `order #${editingOrder.orderNumber}`,
                   }
                 : { footer: composerFooter })}
+            />
+
+            <DiscountDialog
+              open={discountDialog !== null}
+              editing={
+                discountDialog?.editingIndex != null
+                  ? (billDiscounts[discountDialog.editingIndex] ?? null)
+                  : null
+              }
+              presets={discountPresets}
+              busy={settling}
+              onClose={() => setDiscountDialog(null)}
+              onConfirm={(discount) => {
+                const rule: BillDiscountRule = {
+                  basis: discount.basis,
+                  valueBp: discount.valueBp,
+                  valuePaise: discount.valuePaise,
+                }
+                setBillDiscountRules((current) => {
+                  const editingIndex = discountDialog?.editingIndex
+                  // Editing replaces that discount rather than adding another,
+                  // which is what "edit" has to mean for the row to be honest.
+                  if (editingIndex == null) return [...current, rule]
+                  return current.map((existing, index) =>
+                    index === editingIndex ? rule : existing,
+                  )
+                })
+                setDiscountDialog(null)
+              }}
             />
 
             {visibleCustomerMatch && (
@@ -778,10 +962,7 @@ export function BillingCounter({ outletId: counterOutletId }: { outletId?: strin
 
       <PaymentDialog
         open={paymentDialogOpen}
-        totalPaise={lines.reduce(
-          (running, line) => running + line.unitPricePaise * line.quantity,
-          0,
-        )}
+        totalPaise={totals.totalPaise}
         initialPayments={paymentPreset}
         busy={settling}
         error={error}

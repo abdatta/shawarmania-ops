@@ -28,6 +28,7 @@ function day(businessDate: string, over: Partial<MonthDayInput> = {}): MonthDayI
     businessDate,
     cashPaise: 0,
     upiPaise: 0,
+    discountPaise: 0,
     channels: [],
     expenses: [],
     drawerState: 'counted',

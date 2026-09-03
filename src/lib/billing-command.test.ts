@@ -20,8 +20,10 @@ const payload: PayNowPayload = {
   subtotalPaise: 13900,
   discountPaise: 0,
   taxPaise: 0,
+  roundingPaise: 0,
   totalPaise: 13900,
   pricingMode: 'no_tax',
+  discounts: [],
   payments: [{ method: 'cash', amountPaise: 13900 }],
   lines: [
     {
@@ -31,6 +33,9 @@ const payload: PayNowPayload = {
       unitPricePaise: 13900,
       quantity: 1,
       lineTotalPaise: 13900,
+      discountPaise: 0,
+      discountPercentBp: null,
+      categoryName: null,
     },
   ],
 }
@@ -86,6 +91,74 @@ describe('billing command canonical identity', () => {
         customerPhone: null,
       },
     })
+  })
+
+  /**
+   * Both payload shapes, hashed by both runtimes.
+   *
+   * The client computes a payload's identity in TypeScript and the database
+   * recomputes it in SQL, and the two are only one rule because a shared vector
+   * says so. Version 2 added the discount records and the rounding, which
+   * changes that identity — and version 1 still has to hash to what it always
+   * hashed to, because a till that went offline before the release is holding
+   * envelopes whose hashes were computed then.
+   *
+   * The SQL half of these vectors lives in
+   * `supabase/tests/49_the_boundary_accepts_both_shapes.sql`.
+   */
+  it('hashes the version-1 shape to what it always hashed to', async () => {
+    const legacy = {
+      orderId: '40000000-0000-4000-a000-000000000001',
+      businessDate: '2026-08-09',
+      customerId: null,
+      customerName: null,
+      customerPhone: null,
+      subtotalPaise: 13900,
+      discountPaise: 0,
+      taxPaise: 0,
+      totalPaise: 13900,
+      pricingMode: 'no_tax',
+      lines: [
+        {
+          id: '30000000-0000-4000-a000-000000000001',
+          menuItemId: '31000000-0000-4000-a000-000000000001',
+          itemName: 'Classic Chicken Shawarma',
+          unitPricePaise: 13900,
+          quantity: 1,
+          lineTotalPaise: 13900,
+        },
+      ],
+    }
+
+    expect(await billingPayloadHash(legacy)).toBe(
+      '55d4e33863f19d9cf07d798e5fdc9307c3faeac644963ef106f23527e64ad93a',
+    )
+  })
+
+  it('gives the version-2 shape a different identity, because it is one', async () => {
+    const withDiscounts = {
+      ...payload,
+      discountPaise: 2085,
+      roundingPaise: 85,
+      totalPaise: 11900,
+      discounts: [{ basis: 'amount', valueBp: null, valuePaise: 1000, amountPaise: 1000 }],
+    }
+
+    const bare = await billingPayloadHash(payload as unknown as Record<string, never>)
+    const discounted = await billingPayloadHash(withDiscounts as unknown as Record<string, never>)
+    expect(discounted).not.toBe(bare)
+  })
+
+  it('sorts the new keys into the canonical order like every other key', () => {
+    expect(
+      canonicalBillingJson({
+        totalPaise: 11900,
+        roundingPaise: 85,
+        discounts: [{ basis: 'amount', amountPaise: 1000 }],
+      }),
+    ).toBe(
+      '{"discounts":[{"amountPaise":1000,"basis":"amount"}],"roundingPaise":85,"totalPaise":11900}',
+    )
   })
 
   it('maps every command type to exactly one RPC', () => {

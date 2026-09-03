@@ -3,6 +3,7 @@ import type {
   BillingOrder,
   CustomerIdentity,
   MenuCategoryWithItems,
+  OutletMenu,
 } from '@/data-access/adapters'
 import type { Tables } from '@/data-access/database.types'
 import type { CounterDeviceSession } from '@/session/counter-session'
@@ -25,6 +26,7 @@ import {
 export class CounterResumeCoordinator {
   private outlet: Tables<'outlets'> | null = null
   private menu: MenuCategoryWithItems[] | null = null
+  private outletMenu: OutletMenu | null = null
   private pipeline: BillingOrder[] | null = null
   private bills: BillingBill[] | null = null
   private rememberedCustomers: Record<string, RememberedCustomerResult> = {}
@@ -54,6 +56,18 @@ export class CounterResumeCoordinator {
   noteMenu(outletId: string, menu: readonly MenuCategoryWithItems[]): void {
     if (outletId !== this.session.device.outletId) return
     this.menu = [...structuredClone(menu)]
+    this.queueCommit()
+  }
+
+  /**
+   * The menu with what is discounted on it, which is what the counter actually
+   * prices from. Kept beside `menu` rather than replacing it, so a surface that
+   * only manages items is unaffected.
+   */
+  noteOutletMenu(outletId: string, menu: OutletMenu): void {
+    if (outletId !== this.session.device.outletId) return
+    this.outletMenu = structuredClone(menu)
+    this.menu = [...structuredClone(menu.categories)]
     this.queueCommit()
   }
 
@@ -115,6 +129,7 @@ export class CounterResumeCoordinator {
           },
           outlet: structuredClone(this.outlet),
           menu: structuredClone(this.menu),
+          ...(this.outletMenu ? { outletMenu: structuredClone(this.outletMenu) } : {}),
           pipeline: structuredClone(this.pipeline),
           bills: structuredClone(this.bills),
           rememberedCustomers: retainRememberedCustomers(this.rememberedCustomers),

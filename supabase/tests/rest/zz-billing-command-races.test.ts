@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
   billingCommandRpcArguments,
+  billingPayloadHash,
   createBillingCommand,
   type BillingCommand,
   type CreateOrderPayload,
@@ -62,6 +63,9 @@ function line(id: string) {
     unitPricePaise: 13900,
     quantity: 1,
     lineTotalPaise: 13900,
+    discountPaise: 0,
+    discountPercentBp: null,
+    categoryName: null,
   } as const
 }
 
@@ -76,8 +80,10 @@ function payNowPayload(billId: string, lineId: string, businessDate: string): Pa
     subtotalPaise: 13900,
     discountPaise: 0,
     taxPaise: 0,
+    roundingPaise: 0,
     totalPaise: 13900,
     pricingMode: 'no_tax',
+    discounts: [],
     payments: [{ method: 'cash', amountPaise: 13900 }],
     lines: [line(lineId)],
   }
@@ -227,8 +233,10 @@ describe.sequential('billing command races over PostgREST', () => {
       subtotalPaise: 13900,
       discountPaise: 0,
       taxPaise: 0,
+      roundingPaise: 0,
       totalPaise: 13900,
       pricingMode: 'no_tax',
+      discounts: [],
       lines: [line('fa600000-0000-4000-a000-000000000001')],
     }
     const create = await createBillingCommand({
@@ -353,8 +361,10 @@ describe.sequential('billing command races over PostgREST', () => {
         subtotalPaise: 13900,
         discountPaise: 0,
         taxPaise: 0,
+        roundingPaise: 0,
         totalPaise: 13900,
         pricingMode: 'no_tax',
+        discounts: [],
         lines: [line('fa600000-0000-4000-a000-000000000020')],
       },
     })
@@ -653,5 +663,89 @@ describe.sequential('billing command races over PostgREST', () => {
     const staleResult = await tablet.rpc('pay_billing_now', rpcArgs(stale))
     expect(staleResult.error).toBeNull()
     expect(status(staleResult.data)).toBe('authorization_refused')
+  })
+
+  /**
+   * The crossing this change is most able to break.
+   *
+   * A till that went offline before discounts existed and reconnects after they
+   * do is holding envelopes at schema version 1, carrying the payload shape
+   * without `roundingPaise` or `discounts`, with hashes computed over that
+   * shape. The key check is an exact set match, so refusing them was one
+   * `||` away — and refusing them loses a trading day to a deployment.
+   *
+   * This builds that envelope by hand rather than through `createBillingCommand`,
+   * because that function now stamps version 2 by construction. A till from
+   * before the release is exactly a client that cannot do that.
+   */
+  it('settles work a till captured before discounts existed, exactly once', async () => {
+    const billId = 'fa500000-0000-4000-a000-000000000040'
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
+    const createdAt = new Date(Date.now() - 60_000).toISOString()
+
+    const legacyPayload = {
+      billId,
+      businessDate,
+      paymentBusinessDate: businessDate,
+      customerId: null,
+      customerName: null,
+      customerPhone: null,
+      subtotalPaise: 13900,
+      discountPaise: 0,
+      taxPaise: 0,
+      totalPaise: 13900,
+      pricingMode: 'no_tax',
+      payments: [{ method: 'cash', amountPaise: 13900 }],
+      lines: [
+        {
+          id: 'fa600000-0000-4000-a000-000000000040',
+          menuItemId: MENU_ITEM,
+          itemName: 'Classic Chicken Shawarma',
+          unitPricePaise: 13900,
+          quantity: 1,
+          lineTotalPaise: 13900,
+        },
+      ],
+    }
+
+    const legacyEnvelope = {
+      p_command_id: 'fa100000-0000-4000-a000-000000000040',
+      p_schema_version: 1,
+      p_payload_hash: await billingPayloadHash(legacyPayload as never),
+      p_created_at: createdAt,
+      p_shift_id: SHIFT,
+      p_payload: legacyPayload,
+    } as unknown as BillingRpcArgs
+
+    const first = await tablet.rpc('pay_billing_now', legacyEnvelope)
+    expect(first.error).toBeNull()
+    expect(status(first.data)).toBe('accepted')
+
+    // The queue retries; the day must not be billed twice for it.
+    const replay = await tablet.rpc('pay_billing_now', legacyEnvelope)
+    expect(replay.error).toBeNull()
+    expect(status(replay.data)).toBe('replay')
+
+    const bills = await manager
+      .from('bills')
+      .select('id, total_paise, discount_paise, rounding_paise')
+      .eq('id', billId)
+    expect(bills.error).toBeNull()
+    expect(bills.data).toHaveLength(1)
+    // Read as it was written: no discount, no rounding, the same total.
+    expect(bills.data?.[0]).toMatchObject({
+      total_paise: 13900,
+      discount_paise: 0,
+      rounding_paise: 0,
+    })
+
+    const lines = await manager
+      .from('bill_items')
+      .select('discount_paise, discount_percent_bp, category_name')
+      .eq('bill_id', billId)
+    expect(lines.error).toBeNull()
+    expect(lines.data).toEqual([
+      { discount_paise: 0, discount_percent_bp: null, category_name: null },
+    ])
   })
 })

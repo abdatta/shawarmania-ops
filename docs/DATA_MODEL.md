@@ -905,7 +905,8 @@ Offline bills can arrive after their business date has been reconciled. Any figu
 Every check below is enforced by the schema and covered by the suites in `supabase/tests/`: pgTAP with simulated claims (`npm run test:db`) plus REST-level probes that sign seeded personas in through the real auth service (`npm run test:rls`).
 
 - Every outlet-scoped table has an RLS policy, and the isolation suite covers it — by enumerating tables from the catalog and failing on any it cannot classify, so a new table without a test fails by name.
-- `total_paise = subtotal_paise − discount_paise + tax_paise` on every bill.
+- `total_paise = subtotal_paise − discount_paise + tax_paise + rounding_paise` on every bill **and every order**, with `total_paise` always a whole number of rupees and never below ₹1. The rounding term exists because a percentage of an odd subtotal produces paise nobody at a counter can be handed; it is always in the business's favour and always stored rather than derived on read. **This identity is written in three places** — the check constraints, `billTotals()` and `billing_validate_totals` — and `npm run lint` fails when the shared case table in `src/domain/billing-totals-cases.json` drifts from its copy in the pgTAP suite.
+- `discount_paise` equals the sum of its lines' `discount_paise` plus its own `bill_discounts` / `order_discounts` rows, enforced by a deferred constraint trigger. A menu discount rides the line it reduced, carrying the percentage that produced it; a discount on the whole bill has no line and gets a row.
 - `line_total_paise = unit_price_paise × quantity` on every bill item.
 - `(outlet_id, bill_number)` is unique, and per-outlet sequences have no gaps attributable to the client.
 - An inventory item's `current_quantity` equals the sum of its movements' `quantity_delta`.

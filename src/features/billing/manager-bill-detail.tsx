@@ -8,6 +8,8 @@ import { Money } from '@/components/ui/money'
 import type { BillingAttributionOutcome, BillingBill, CounterBiller } from '@/data-access/adapters'
 import { formatBusinessDate, formatDayTime, lineTotalPaise } from '@/domain'
 
+import { BillDiscountRows } from './bill-discount-rows'
+
 const CANCELLATION_REASONS = ['Duplicate bill', 'Mistaken entry'] as const
 
 function methodLabel(method: BillingBill['paymentMethod']) {
@@ -245,6 +247,17 @@ export function ManagerBillDetail({
               </li>
             ))}
           </ul>
+
+          <BillDiscountRows
+            lines={bill.lines}
+            discounts={bill.discounts}
+            // A settled bill names the categories it actually carried; "All
+            // Items" is a claim about the menu at sale time that this reader
+            // cannot make months later, so it is never reached from here.
+            categoryCount={Number.POSITIVE_INFINITY}
+            roundingPaise={bill.roundingPaise}
+            editable={false}
+          />
         </Section>
 
         <div className="space-y-3">

@@ -8,6 +8,7 @@ import { AdaptersContext } from '@/data-access/adapters-context'
 import { createMockAdapters, createDemoStore } from '@/data-access/mock'
 import { DEMO_MORNING_BILLER_ID } from '@/data-access/mock/fixtures/billing'
 import {
+  MENU_ITEM_BURGER_ID,
   MENU_ITEM_CLASSIC_ID,
   MENU_ITEM_MAYO_ID,
   MENU_ITEM_STUFFED_ID,
@@ -836,5 +837,216 @@ describe('BillingCounter', () => {
     expect(within(notice).getByText(/No shift is open/i)).toBeInTheDocument()
     expect(screen.queryByTestId('settle')).not.toBeInTheDocument()
     expect(screen.getByTestId('open-shift-link')).toBeInTheDocument()
+  })
+})
+
+describe('BillingCounter — discounts', () => {
+  it('prices a line under the menu discount its category carries, and says so', async () => {
+    const person = user()
+    renderCounter()
+
+    // The demo runs 15% across Burgers. A shawarma beside it carries none, so
+    // one bill shows the discounted and the undiscounted together.
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_BURGER_ID}`))
+    await person.click(screen.getByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+
+    const rows = await screen.findByTestId('bill-discount-rows')
+    expect(within(rows).getByText('Menu Discount (15%)')).toBeInTheDocument()
+    expect(within(rows).getByText('Burgers')).toBeInTheDocument()
+
+    // ₹250 + ₹139 = ₹389, less 15% of the burger (₹37.50) is ₹351.50,
+    // which the round-up carries to ₹352.
+    expect(within(rows).getByTestId('discount-row-rounding')).toBeInTheDocument()
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹352')
+  })
+
+  it('offers a biller no way to change the owner’s discount', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_BURGER_ID}`))
+    const menuRow = await screen.findByTestId('discount-row-menu-15%')
+
+    expect(within(menuRow).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('adds a discount to this bill from the keypad, in percent and in rupees', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+
+    await person.click(screen.getByTestId('add-discount'))
+    // The readout starts at nought and carries its unit.
+    expect(screen.getByTestId('discount-readout')).toHaveTextContent('0%')
+
+    await person.click(screen.getByRole('button', { name: '1' }))
+    await person.click(screen.getByRole('button', { name: '0' }))
+    expect(screen.getByTestId('discount-readout')).toHaveTextContent('10%')
+
+    // The unit switches without the entry being cleared.
+    await person.click(screen.getByTestId('discount-unit-amount'))
+    expect(screen.getByTestId('discount-readout')).toHaveTextContent('₹10')
+    await person.click(screen.getByTestId('discount-unit-percent'))
+    expect(screen.getByTestId('discount-readout')).toHaveTextContent('10%')
+
+    await person.click(screen.getByTestId('apply-discount'))
+
+    // ₹139 less 10% is ₹125.10, carried up to ₹126.
+    await waitFor(() => {
+      expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126')
+    })
+    expect(screen.getByTestId('discount-row-bill-0')).toHaveTextContent('Discount (10%)')
+    expect(screen.getByTestId('discount-row-bill-0')).toHaveTextContent('On this bill')
+  })
+
+  it('uses a preset in one tap, and stacks a second discount additively', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+
+    await person.click(screen.getByTestId('add-discount'))
+    await person.click(screen.getByTestId('discount-preset-percent-1000'))
+    await person.click(screen.getByTestId('apply-discount'))
+
+    await person.click(screen.getByTestId('add-discount'))
+    await person.click(screen.getByTestId('discount-preset-percent-1500'))
+    await person.click(screen.getByTestId('apply-discount'))
+
+    // Additive against the gross subtotal: 25% off ₹139 is ₹34.75, leaving
+    // ₹104.25, carried up to ₹105. Not 23.5% compounded.
+    await waitFor(() => {
+      expect(screen.getByTestId('bill-total')).toHaveTextContent('₹105')
+    })
+  })
+
+  it('edits a discount in place rather than adding another', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('add-discount'))
+    await person.click(screen.getByTestId('discount-preset-percent-1000'))
+    await person.click(screen.getByTestId('apply-discount'))
+
+    await waitFor(() => expect(screen.getByTestId('discount-row-bill-0')).toBeInTheDocument())
+    await person.click(screen.getByRole('button', { name: 'Edit Discount (10%)' }))
+    await person.click(screen.getByTestId('discount-preset-percent-2000'))
+    await person.click(screen.getByTestId('apply-discount'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('discount-row-bill-0')).toHaveTextContent('Discount (20%)')
+    })
+    // One row, not two: editing replaced it.
+    expect(screen.queryByTestId('discount-row-bill-1')).not.toBeInTheDocument()
+  })
+
+  it('removes a discount and the total goes back', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('add-discount'))
+    await person.click(screen.getByTestId('discount-preset-percent-1000'))
+    await person.click(screen.getByTestId('apply-discount'))
+
+    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126'))
+    await person.click(screen.getByRole('button', { name: 'Remove Discount (10%)' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+    })
+  })
+
+  it('floors a fully discounted order at a rupee rather than at nothing', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('add-discount'))
+    await person.click(screen.getByRole('button', { name: '1' }))
+    await person.click(screen.getByRole('button', { name: '0' }))
+    await person.click(screen.getByRole('button', { name: '0' }))
+    await person.click(screen.getByTestId('apply-discount'))
+
+    // A free meal is a ₹1 bill, and it is visible in the day's takings for it.
+    await waitFor(() => {
+      expect(screen.getByTestId('bill-total')).toHaveTextContent('₹1')
+    })
+  })
+})
+
+describe('BillingCounter — a discount survives the whole journey', () => {
+  /**
+   * Every one of these was a real defect found by ringing an order up and
+   * looking at it, not by a type error. They are pinned because each fails
+   * silently: the screen shows a number, it is simply the wrong one.
+   */
+  it('shows the pipeline card the discounted total, with the list price struck through', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_BURGER_ID}`))
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Test customer')
+    await person.click(screen.getByTestId('save-order'))
+
+    // ₹250 less the 15% menu discount is ₹212.50, carried to ₹213.
+    const card = (await screen.findByText('₹213')).closest('article')
+    expect(card).not.toBeNull()
+    // The list price is still readable, struck through beside it — scoped to
+    // the card, because ₹250 is also the burger's price on the menu tile.
+    expect(within(card!).getByText('₹250')).toHaveClass('line-through')
+  })
+
+  it('gives an order its discounts back when it is reopened for edit', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('add-discount'))
+    await person.click(screen.getByTestId('discount-preset-percent-1000'))
+    await person.click(screen.getByTestId('apply-discount'))
+    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126'))
+
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Test customer')
+    await person.click(screen.getByTestId('save-order'))
+    await waitFor(() => expect(screen.queryByTestId('bill-total')).not.toBeInTheDocument())
+
+    // Uncommon actions live behind the kebab; Edit is one of them.
+    const rail = await screen.findByTestId('counter-activity-rail')
+    const card = await within(rail).findByText(/Local ·/)
+    const openOrder = card.closest('article')!
+    await person.click(within(openOrder).getByRole('button', { name: /^More actions/ }))
+    await person.click(within(openOrder).getByRole('menuitem', { name: 'Edit' }))
+
+    // Everything that was on it when it was placed: the line, and the discount.
+    await waitFor(() => {
+      expect(screen.getByTestId('discount-row-bill-0')).toHaveTextContent('Discount (10%)')
+    })
+    // And the control to change it, exactly as when the order was composed.
+    expect(screen.getByTestId('add-discount')).toBeInTheDocument()
+  })
+
+  it('does not carry a discount over to the next customer', async () => {
+    const person = user()
+    renderCounter()
+
+    await person.click(await screen.findByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    await person.click(screen.getByTestId('add-discount'))
+    await person.click(screen.getByTestId('discount-preset-percent-1000'))
+    await person.click(screen.getByTestId('apply-discount'))
+    await waitFor(() => expect(screen.getByTestId('bill-total')).toHaveTextContent('₹126'))
+
+    await person.type(screen.getByPlaceholderText('Customer name'), 'Test customer')
+    await person.click(screen.getByTestId('save-order'))
+    await waitFor(() => expect(screen.queryByTestId('bill-total')).not.toBeInTheDocument())
+
+    // The next sale starts at the list price. A discount inherited here would be
+    // given to somebody who never asked and would never be checked.
+    await person.click(screen.getByTestId(`tile-${MENU_ITEM_CLASSIC_ID}`))
+    expect(screen.getByTestId('bill-total')).toHaveTextContent('₹139')
+    expect(screen.queryByTestId('discount-row-bill-0')).not.toBeInTheDocument()
   })
 })

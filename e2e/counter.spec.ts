@@ -69,8 +69,17 @@ test.describe('the counter', () => {
     await page.getByRole('button', { name: 'Mozzarella Cheese Chicken Shawarma' }).click()
     await page.getByRole('button', { name: 'Fully Loaded Smashed Burger' }).click()
 
-    // 139×2 + 199 + 250
-    await expect(page.getByTestId('bill-total')).toHaveText('₹727')
+    // 139×2 + 199 + 250 is ₹727 at list price, and the burger carries the
+    // outlet's 15% menu discount: ₹37.50 off, leaving ₹689.50, which the
+    // round-up line carries to ₹690. The whole chain in a real browser — the
+    // discount reaching the tablet with the menu, the line capturing it, and the
+    // bill landing on a whole rupee.
+    await expect(page.getByTestId('bill-total')).toHaveText('₹690')
+
+    const discounts = page.getByTestId('bill-discount-rows')
+    await expect(discounts).toContainText('Menu Discount (15%)')
+    await expect(discounts).toContainText('Burgers')
+    await expect(page.getByTestId('discount-row-rounding')).toBeVisible()
 
     await recordPaid(page)
 
@@ -80,7 +89,7 @@ test.describe('the counter', () => {
     await expect(page.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
     await expect(page.getByTestId('settled-confirmation')).toHaveCount(0)
     await expect(
-      page.getByTestId('bill-column').locator('details').filter({ hasText: '₹727' }),
+      page.getByTestId('bill-column').locator('details').filter({ hasText: '₹690' }),
     ).toBeVisible()
   })
 

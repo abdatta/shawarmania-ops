@@ -17,9 +17,16 @@ import { Money } from '@/components/ui/money'
 import { RevealAdded } from '@/components/ui/reveal-added'
 import { VegMarker } from '@/components/ui/veg-marker'
 import { useAdapters, type Tables } from '@/data-access'
-import { DataActionError, type MenuCategoryWithItems } from '@/data-access/adapters'
+import {
+  DataActionError,
+  type MenuCategoryWithItems,
+  type DiscountPreset,
+  type MenuDiscount,
+} from '@/data-access/adapters'
 import { matchCategory, paiseToRupees, rupeesToPaise, type CategoryMatch } from '@/domain'
 import { useOutletScope } from '@/features/outlet-scope'
+
+import { MenuDiscountsCard } from './menu-discounts'
 
 interface ItemDraft {
   categoryName: string
@@ -50,22 +57,34 @@ export function MenuSurface() {
   const [renaming, setRenaming] = useState<Tables<'menu_categories'> | null>(null)
   const [categoryName, setCategoryName] = useState('')
   const [retiring, setRetiring] = useState<Tables<'menu_items'> | null>(null)
+  const [discounts, setDiscounts] = useState<MenuDiscount[]>([])
+  const [presets, setPresets] = useState<DiscountPreset[]>([])
   const [revealedItem, setRevealedItem] = useState<string | null>(null)
   const [revealedCategory, setRevealedCategory] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!outletId) return []
-    const next = await adapter.listMenu(outletId)
-    setMenu(next)
-    return next
+    // One read, because a discount that is current while the menu beside it is
+    // stale prices a line wrong.
+    const next = await adapter.readOutletMenu(outletId)
+    setMenu(next.categories)
+    setDiscounts(next.discounts)
+    setPresets(next.presets)
+    return next.categories
   }, [adapter, outletId])
 
   useEffect(() => {
     let active = true
     void (async () => {
       try {
-        const next = outletId ? await adapter.listMenu(outletId) : []
-        if (active) setMenu(next)
+        const next = outletId
+          ? await adapter.readOutletMenu(outletId)
+          : { categories: [], discounts: [], presets: [] }
+        if (active) {
+          setMenu(next.categories)
+          setDiscounts(next.discounts)
+          setPresets(next.presets)
+        }
       } catch {
         if (active) setError('Could not load the menu. Try again in a moment.')
       }
@@ -228,6 +247,39 @@ export function MenuSurface() {
         <p role="alert" data-testid="menu-error" className="mb-3 text-sm font-semibold text-danger">
           {error}
         </p>
+      )}
+
+      {menu !== null && (
+        <MenuDiscountsCard
+          discounts={discounts}
+          categories={categories}
+          presets={presets}
+          busy={busy}
+          // Deliberately not wrapped in `run`: a refusal belongs inside the
+          // sheet the reader is still looking at, not on the page behind it.
+          onCreate={async (discount) => {
+            if (!outletId) return
+            await adapter.createDiscount({ ...discount, outletId })
+            await load()
+          }}
+          // Also unwrapped: an edit's refusal belongs in the sheet too.
+          onUpdate={async (id, patch) => {
+            await adapter.updateDiscount(id, patch)
+            await load()
+          }}
+          onRemove={(id) =>
+            run(async () => {
+              await adapter.removeDiscount(id)
+              await load()
+            })
+          }
+          onSetPresets={(next) =>
+            run(async () => {
+              if (!outletId) return
+              setPresets(await adapter.setDiscountPresets(outletId, next))
+            })
+          }
+        />
       )}
 
       {menu === null ? (

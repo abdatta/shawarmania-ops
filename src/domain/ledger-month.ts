@@ -61,6 +61,8 @@ export interface MonthDayInput {
   businessDate: string
   cashPaise: number
   upiPaise: number
+  /** What this day's bills gave away. Revenue above is already net of it. */
+  discountPaise: number
   channels: readonly MonthChannelDay[]
   expenses: readonly MonthExpenseLine[]
   drawerState: 'counted' | 'carried' | 'not-tracked-yet'
@@ -101,6 +103,15 @@ export interface MonthCategoryTotal {
 export interface MonthReading {
   cashPaise: number
   upiPaise: number
+  /**
+   * What the month gave away across its bills.
+   *
+   * Beside the revenue rather than inside it: the revenue is already net, and
+   * without this figure a month running a discount reads as a month that traded
+   * badly. It carries the same ceiling qualification as the revenue it sits
+   * beside, because it is read together with it.
+   */
+  discountPaise: number
   channels: MonthChannelTotal[]
   /**
    * Cash + UPI + each channel's net. A ceiling whenever `undeterminedDays > 0`,
@@ -167,6 +178,7 @@ export function readMonth(
     : days
   let cashPaise = 0
   let upiPaise = 0
+  let discountPaise = 0
   let undeterminedDays = 0
   let countedDays = 0
   let carriedDays = 0
@@ -192,6 +204,7 @@ export function readMonth(
 
   for (const day of inScope) {
     cashPaise += assertPaise(day.cashPaise)
+    discountPaise += assertPaise(day.discountPaise)
     upiPaise += assertPaise(day.upiPaise)
 
     if (day.drawerState === 'counted') countedDays += 1
@@ -293,6 +306,7 @@ export function readMonth(
 
   return {
     cashPaise,
+    discountPaise,
     upiPaise,
     channels: orderedChannels,
     netRevenuePaise,
