@@ -47,7 +47,14 @@ classified as (
         -- Scopes through `menu_discounts`, which carries the outlet. It holds
         -- only two foreign keys and adding an `outlet_id` to it would create a
         -- second answer to the question its parent already answers.
-        'menu_discount_categories'
+        'menu_discount_categories',
+        -- Scopes through `bills`, for the same reason: the bill answers which
+        -- outlet a receipt link belongs to, and a column here would be a second
+        -- answer able to disagree. Because the catalog-driven matrix in
+        -- `02_isolation_matrix.sql` can only discover tables carrying
+        -- `outlet_id`, this one's cross-outlet cases are written out by hand in
+        -- `50_public_bill_receipt_links.sql`.
+        'bill_public_links'
       ) then 'child-scoped'
       -- Person-scoped: no outlet_id of its own, because the row is about a
       -- PERSON and a person may be at several outlets (multi-outlet-people).
@@ -84,6 +91,16 @@ classified as (
       -- password, so every client role is refused them outright — by having no
       -- grant AND no policy, proved in 34_aggregator_credentials_and_auth.sql
       -- the way section 6 below proves what the global exception costs.
+      -- The public receipt's two: the kill switch with the salt that keeps the
+      -- access record's address digests non-reversible, and the access record
+      -- itself. Both `service-only` rather than `global`, because nothing in the
+      -- app shows anybody who opened a receipt and nothing lets a client flip
+      -- the switch -- the Worker's service credential is the only thing that
+      -- reaches either. Their teeth are in `51_the_public_receipt_reader.sql`,
+      -- including a column-list assertion on the access record so a later
+      -- migration cannot quietly add something that identifies the customer.
+      when tbl in ('public_receipt_settings', 'bill_public_link_views')
+        then 'service-only'
       when tbl in ('aggregator_channel_credentials', 'aggregator_auth_requests')
         then 'service-only'
     end as class

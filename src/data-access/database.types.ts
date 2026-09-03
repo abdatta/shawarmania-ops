@@ -1426,6 +1426,59 @@ export type Database = {
           },
         ]
       }
+      bill_public_link_views: {
+        Row: {
+          client_address_digest: string | null
+          id: string
+          token: string
+          user_agent: string | null
+          viewed_at: string
+        }
+        Insert: {
+          client_address_digest?: string | null
+          id?: string
+          token: string
+          user_agent?: string | null
+          viewed_at?: string
+        }
+        Update: {
+          client_address_digest?: string | null
+          id?: string
+          token?: string
+          user_agent?: string | null
+          viewed_at?: string
+        }
+        Relationships: []
+      }
+      bill_public_links: {
+        Row: {
+          bill_id: string
+          created_at: string
+          revoked_at: string | null
+          token: string
+        }
+        Insert: {
+          bill_id: string
+          created_at?: string
+          revoked_at?: string | null
+          token: string
+        }
+        Update: {
+          bill_id?: string
+          created_at?: string
+          revoked_at?: string | null
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_public_links_bill_id_fkey"
+            columns: ["bill_id"]
+            isOneToOne: true
+            referencedRelation: "bills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing_attribution_reviews: {
         Row: {
           bill_id: string
@@ -3399,6 +3452,24 @@ export type Database = {
         }
         Relationships: []
       }
+      public_receipt_settings: {
+        Row: {
+          enabled: boolean
+          id: boolean
+          viewer_salt: string
+        }
+        Insert: {
+          enabled?: boolean
+          id?: boolean
+          viewer_salt?: string
+        }
+        Update: {
+          enabled?: boolean
+          id?: boolean
+          viewer_salt?: string
+        }
+        Relationships: []
+      }
       reserved_expense_categories: {
         Row: {
           category: string
@@ -3884,7 +3955,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      backfill_bill_public_links: { Args: never; Returns: number }
       backfill_prepared_history: { Args: never; Returns: number }
+      bill_public_discount_rows: { Args: { p_bill_id: string }; Returns: Json }
+      bill_public_link_token: { Args: never; Returns: string }
+      bill_public_receipt: {
+        Args: {
+          p_client_address?: string
+          p_token: string
+          p_user_agent?: string
+        }
+        Returns: Json
+      }
       billing_begin_command: {
         Args: {
           p_actor_id: string
@@ -4569,6 +4651,7 @@ export type Database = {
         Args: { p_payload: Json; p_permitted_outlets: string[] }
         Returns: Json
       }
+      reissue_bill_public_link: { Args: { p_bill_id: string }; Returns: string }
       reject_counter_shift_request: {
         Args: { p_person_id: string; p_request_id: string }
         Returns: string
@@ -4655,6 +4738,10 @@ export type Database = {
           p_shift_id?: string
         }
         Returns: Json
+      }
+      revoke_bill_public_link: {
+        Args: { p_bill_id: string }
+        Returns: undefined
       }
       save_aggregator_session: {
         Args: { p_channel: string; p_expires_at: string; p_session: string }

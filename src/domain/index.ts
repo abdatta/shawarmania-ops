@@ -113,3 +113,9 @@ export {
   type CategoryMatch,
   type CategoryMatchReason,
 } from './category-match'
+export {
+  groupMenuDiscounts,
+  menuDiscountLabel,
+  type DiscountedLine,
+  type MenuDiscountGroup,
+} from './discount-rows'

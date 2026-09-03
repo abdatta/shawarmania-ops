@@ -219,6 +219,51 @@ describe.sequential('billing command races over PostgREST', () => {
     expect(status(conflict.data)).toBe('identity_conflict')
   })
 
+  /*
+   * The receipt link is minted by a trigger on `bills` rather than by the
+   * commands, and this is the case that proves it. `pay_billing_now` is the path
+   * the counter actually uses, so if the minting lived in a command instead the
+   * real path would be the one path producing an unshareable bill. pgTAP can
+   * only assert the trigger is unconditional; this asserts the outcome.
+   */
+  it('mints a receipt link for a bill created through a billing command', async () => {
+    const businessDate = resolveBusinessDate(new Date(), '04:00')
+    const billId = 'fa500000-0000-4000-a000-000000000050'
+    const command = await createBillingCommand({
+      commandId: 'fa100000-0000-4000-a000-000000000050',
+      tabletId: TABLET,
+      shiftId: SHIFT,
+      type: 'pay_now',
+      createdAt: new Date().toISOString(),
+      payload: payNowPayload(billId, 'fa600000-0000-4000-a000-000000000050', businessDate),
+    })
+
+    const paid = await tablet.rpc('pay_billing_now', rpcArgs(command))
+    expect(paid.error).toBeNull()
+    expect(status(paid.data)).toBe('accepted')
+
+    const links = await manager
+      .from('bill_public_links')
+      .select('token, revoked_at')
+      .eq('bill_id', billId)
+    expect(links.error).toBeNull()
+    expect(links.data).toHaveLength(1)
+    expect(links.data?.[0]?.revoked_at).toBeNull()
+    // URL-safe, and long enough to be the token rather than a placeholder.
+    expect(links.data?.[0]?.token).toMatch(/^[A-Za-z0-9_-]{10,}$/)
+
+    // The counter's own session can read the link on a bill it can see, which is
+    // what the Share button does, and cannot write it.
+    const asTablet = await tablet.from('bill_public_links').select('token').eq('bill_id', billId)
+    expect(asTablet.error).toBeNull()
+    expect(asTablet.data).toHaveLength(1)
+
+    const forged = await tablet
+      .from('bill_public_links')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('bill_id', billId)
+    expect(forged.error).not.toBeNull()
+  })
   it('serializes pay versus manager cancellation without a partial bill or number gap', async () => {
     const businessDate = resolveBusinessDate(new Date(), '04:00')
     const orderId = 'fa400000-0000-4000-a000-000000000001'

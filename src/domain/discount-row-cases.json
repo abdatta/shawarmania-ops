@@ -1,0 +1,227 @@
+{
+  "note": "One case table for two implementations of one grouping rule: groupMenuDiscounts() in src/domain/discount-rows.ts, for the counter's draft, and public.bill_public_discount_rows() in SQL, for the customer's receipt. A draft has no rows in the database, and the receipt must do no arithmetic on the page, so neither can be the other. This file is what holds them together. src/domain/discount-rows.test.ts runs it through the function; supabase/tests/rest/zz-public-receipt.test.ts writes the same lines as a real bill and runs it through the database. Every subtotal here is the sum of its lines and every discount the sum of the rows, so a case that could not be a bill is refused before it can be asserted.",
+  "cases": [
+    {
+      "name": "one percentage over one category",
+      "lines": [
+        {
+          "itemName": "Classic Chicken Shawarma",
+          "unitPricePaise": 13900,
+          "quantity": 1,
+          "discountPaise": 2085,
+          "discountPercentBp": 1500,
+          "categoryName": "Shawarma"
+        },
+        {
+          "itemName": "Cold Coffee",
+          "unitPricePaise": 9900,
+          "quantity": 1,
+          "discountPaise": 0,
+          "discountPercentBp": null,
+          "categoryName": "Drinks"
+        }
+      ],
+      "rows": [
+        {
+          "basis": "percent",
+          "valueBp": 1500,
+          "valuePaise": null,
+          "categories": ["Shawarma"],
+          "amountPaise": 2085
+        }
+      ]
+    },
+    {
+      "name": "one percentage over two categories combines into one row",
+      "lines": [
+        {
+          "itemName": "Classic Chicken Shawarma",
+          "unitPricePaise": 13900,
+          "quantity": 1,
+          "discountPaise": 1390,
+          "discountPercentBp": 1000,
+          "categoryName": "Shawarma"
+        },
+        {
+          "itemName": "Cold Coffee",
+          "unitPricePaise": 9900,
+          "quantity": 2,
+          "discountPaise": 1980,
+          "discountPercentBp": 1000,
+          "categoryName": "Drinks"
+        }
+      ],
+      "rows": [
+        {
+          "basis": "percent",
+          "valueBp": 1000,
+          "valuePaise": null,
+          "categories": ["Shawarma", "Drinks"],
+          "amountPaise": 3370
+        }
+      ]
+    },
+    {
+      "name": "two different percentages get a row each",
+      "lines": [
+        {
+          "itemName": "Classic Chicken Shawarma",
+          "unitPricePaise": 13900,
+          "quantity": 1,
+          "discountPaise": 2085,
+          "discountPercentBp": 1500,
+          "categoryName": "Shawarma"
+        },
+        {
+          "itemName": "Cold Coffee",
+          "unitPricePaise": 9900,
+          "quantity": 1,
+          "discountPaise": 990,
+          "discountPercentBp": 1000,
+          "categoryName": "Drinks"
+        }
+      ],
+      "rows": [
+        {
+          "basis": "percent",
+          "valueBp": 1000,
+          "valuePaise": null,
+          "categories": ["Drinks"],
+          "amountPaise": 990
+        },
+        {
+          "basis": "percent",
+          "valueBp": 1500,
+          "valuePaise": null,
+          "categories": ["Shawarma"],
+          "amountPaise": 2085
+        }
+      ]
+    },
+    {
+      "name": "a rupee discount groups by its per-unit amount, not its line total",
+      "lines": [
+        {
+          "itemName": "Classic Chicken Shawarma",
+          "unitPricePaise": 13900,
+          "quantity": 3,
+          "discountPaise": 6000,
+          "discountPercentBp": null,
+          "categoryName": "Shawarma"
+        },
+        {
+          "itemName": "Cold Coffee",
+          "unitPricePaise": 9900,
+          "quantity": 1,
+          "discountPaise": 2000,
+          "discountPercentBp": null,
+          "categoryName": "Drinks"
+        }
+      ],
+      "rows": [
+        {
+          "basis": "amount",
+          "valueBp": null,
+          "valuePaise": 2000,
+          "categories": ["Shawarma", "Drinks"],
+          "amountPaise": 8000
+        }
+      ]
+    },
+    {
+      "name": "a percentage and a rupee discount are never one row",
+      "lines": [
+        {
+          "itemName": "Classic Chicken Shawarma",
+          "unitPricePaise": 13900,
+          "quantity": 1,
+          "discountPaise": 2000,
+          "discountPercentBp": null,
+          "categoryName": "Shawarma"
+        },
+        {
+          "itemName": "Cold Coffee",
+          "unitPricePaise": 9900,
+          "quantity": 1,
+          "discountPaise": 990,
+          "discountPercentBp": 1000,
+          "categoryName": "Drinks"
+        }
+      ],
+      "rows": [
+        {
+          "basis": "amount",
+          "valueBp": null,
+          "valuePaise": 2000,
+          "categories": ["Shawarma"],
+          "amountPaise": 2000
+        },
+        {
+          "basis": "percent",
+          "valueBp": 1000,
+          "valuePaise": null,
+          "categories": ["Drinks"],
+          "amountPaise": 990
+        }
+      ]
+    },
+    {
+      "name": "a fractional percentage keeps its basis points and its exact paise",
+      "lines": [
+        {
+          "itemName": "Classic Chicken Shawarma",
+          "unitPricePaise": 13900,
+          "quantity": 1,
+          "discountPaise": 1043,
+          "discountPercentBp": 750,
+          "categoryName": "Shawarma"
+        }
+      ],
+      "rows": [
+        {
+          "basis": "percent",
+          "valueBp": 750,
+          "valuePaise": null,
+          "categories": ["Shawarma"],
+          "amountPaise": 1043
+        }
+      ]
+    },
+    {
+      "name": "a line with no category still carries its reduction",
+      "lines": [
+        {
+          "itemName": "Classic Chicken Shawarma",
+          "unitPricePaise": 13900,
+          "quantity": 1,
+          "discountPaise": 1390,
+          "discountPercentBp": 1000,
+          "categoryName": null
+        }
+      ],
+      "rows": [
+        {
+          "basis": "percent",
+          "valueBp": 1000,
+          "valuePaise": null,
+          "categories": [],
+          "amountPaise": 1390
+        }
+      ]
+    },
+    {
+      "name": "an undiscounted bill has no rows at all",
+      "lines": [
+        {
+          "itemName": "Classic Chicken Shawarma",
+          "unitPricePaise": 13900,
+          "quantity": 1,
+          "discountPaise": 0,
+          "discountPercentBp": null,
+          "categoryName": "Shawarma"
+        }
+      ],
+      "rows": []
+    }
+  ]
+}
