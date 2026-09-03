@@ -57,11 +57,58 @@ Auth, session management, password handling, and hosted Postgres are undifferent
 
 ### Vite SPA, not Next.js
 
-Every screen is behind auth, so server-side rendering buys nothing — there is no SEO surface and no anonymous first paint worth optimising. Meanwhile SSR actively complicates the offline story, which is a hard requirement here. A static SPA with a service worker is simpler to reason about, cheaper to host, and deploys as immutable assets to a CDN.
+Every screen in *this* bundle is behind auth, so server-side rendering buys nothing — no SEO surface and no anonymous first paint worth optimising. The one anonymous page the system has, the customer's bill receipt, is deliberately not in this bundle at all: it is a Worker on the brand domain, for the reasons in [The third deployable](#the-third-deployable-and-the-one-page-a-customer-sees). Meanwhile SSR actively complicates the offline story, which is a hard requirement here. A static SPA with a service worker is simpler to reason about, cheaper to host, and deploys as immutable assets to a CDN.
 
 ### Tailwind v4 + shadcn/ui
 
 shadcn components are themed entirely through CSS custom properties, which is what makes the brand-token layering in [Design System](DESIGN_SYSTEM.md) clean rather than a fight. Components are copied into the repo rather than imported from a package, so adapting one for counter use (bigger tap targets, tabular numerals) is a normal edit.
+
+## The third deployable, and the one page a customer sees
+
+Everything above is one bundle behind authentication. The public bill receipt is
+not: it is a **Cloudflare Worker on `shawarmania.in/bill/<token>`**, living in the
+brand site's repo ([`abdatta/shawarmania`](https://github.com/abdatta/shawarmania)),
+and it is the first server-side runtime this system has and the only surface a
+customer ever opens.
+
+```
+customer's phone ──► shawarmania.in/bill/<token>          (Cloudflare Worker)
+                          │
+                          ├─ cache hit  ──► themed HTML, or the PDF
+                          │
+                          └─ cache miss ──► one RPC to Supabase ──► ~2 KB of JSON
+                                              │
+                                              └─ Worker renders HTML / builds PDF
+```
+
+**Why not Supabase.** Supabase ships a few kilobytes of JSON and nothing else,
+ever; Cloudflare ships every byte the customer downloads, and its bandwidth is
+unmetered. At ~1,400 bills a month that is roughly 3 MB of Supabase egress
+against the ~840 MB that serving PDFs from Supabase would cost — and the gap
+widens with every bill. Storing the rendered PDFs would have added rent forever
+for a document opened once, and, worse, **a stored file cannot know its bill was
+voided an hour later or its tender corrected.** Building on demand is not only
+cheaper, it is the only shape that can be correct.
+
+**Why the apex is fronted by Cloudflare.** The brand site is a static bundle on
+GitHub Pages, which cannot set a response header or return
+`application/pdf` — and both are required here: `X-Robots-Tag: noindex, nofollow`,
+`Referrer-Policy: no-referrer`, and a PDF served from its own URL as an ordinary
+navigation. So the zone moves its nameservers to Cloudflare, keeping the same
+apex records; GitHub Pages keeps serving the site, and Cloudflare only adds a
+Worker route on `/bill/*`. Rollback is switching the nameservers back.
+
+The PDF is served from `…/bill/<token>.pdf` as a plain link rather than a
+script-generated `blob:`, because these links are opened inside WhatsApp's in-app
+browser on Android, where `blob:` downloads fail silently. That single delivery
+fact is also what ruled out doing the whole thing statically in the customer's
+browser.
+
+**What crosses the boundary is deliberately small.** The Worker holds the
+service-role key as a Worker secret, server-side, and may call exactly one
+`security definer` function that takes a token and returns one receipt. `anon`
+gains no grant anywhere. See [Privileged operations](#privileged-operations) and
+[Security and Privacy](SECURITY_AND_PRIVACY.md).
 
 ## Layers
 

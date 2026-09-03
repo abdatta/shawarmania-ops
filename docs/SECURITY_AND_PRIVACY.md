@@ -20,6 +20,49 @@
   affected version and path, state whether it is browser-runtime reachable,
   explain the temporary safety rationale, and carry a time-bounded review
   trigger. An accepted exception is removed as soon as a compatible fix exists.
+### The one standing dependency exception: `xlsx` (SheetJS) 0.18.5
+
+The rule above requires an exception to name itself rather than sit in an audit
+nobody reads. This is the only one.
+
+**Affected version and path.** `xlsx@0.18.5`, a production dependency, carrying
+two high advisories: prototype pollution
+([GHSA-4r6h-8v6p-xvw6](https://github.com/advisories/GHSA-4r6h-8v6p-xvw6)) and
+regular-expression denial of service
+([GHSA-5pgg-2g8v-p4x9](https://github.com/advisories/GHSA-5pgg-2g8v-p4x9)).
+
+**No compatible fix exists on the registry.** `npm view xlsx versions` ends at
+0.18.5: SheetJS stopped publishing to npm after it and distributes 0.20.x only
+from `cdn.sheetjs.com`. So `npm audit fix` cannot resolve this, and the lockfile
+already holds the newest published version. `@e965/xlsx@0.20.3` is a
+**third-party republish** and is deliberately not used — trading two bounded,
+well-understood advisories for an unaudited mirror of the code that parses this
+business's financial statements is the worse bargain.
+
+**It is not browser-runtime reachable.** Nothing under `src/` imports it outside
+a test; the only `src/` mentions of the string are upload `accept` attributes.
+The built bundle contains no SheetJS, checked directly. The real runtime use is
+`supabase/functions/parse-operator-statement`, which pins its own
+`npm:xlsx@0.18.5` through Deno — a separate resolution from `node_modules`, so a
+`package.json` bump alone would not even change the exposed path.
+
+**Why it is temporarily safe.** Reaching the parser at all requires either the
+scheduled reader's shared secret (server to server, files fetched from the
+operator portals) or a signed-in **Super Admin or Franchise Admin** uploading a
+file they saved. So a malicious workbook needs an authenticated admin of this
+business, or a compromised operator portal. A ReDoS then stalls one Edge Function
+invocation, which has its own timeout, in an isolate that is discarded; the
+prototype pollution has no persistent surface to reach. Files are also capped at
+20 MB before parsing.
+
+**Review trigger, time-bounded.** Revisit by **2026-12-31**, or sooner if any of
+these becomes true: SheetJS returns to the npm registry; the parser becomes
+reachable by a Biller, an Employee or an unauthenticated caller; or a new advisory
+against 0.18.5 is exploitable without an authenticated upload. The work is
+[`xlsx-is-off-the-registry`](../openspec/todos/xlsx-is-off-the-registry.md) — it
+changes how a money-path dependency is sourced and must run the statement
+fixtures, so it is its own change rather than a bump.
+
 - **The repository is public.** GitHub Pages hosts the app for free only from a public repo, so everything committed here is world-readable — including `docs/`. Assume anything you write down is published. This makes the "never commit" rule above load-bearing rather than tidy.
 
 ## What being a public repo does and does not expose
@@ -179,6 +222,108 @@ Browser geolocation is spoofable — see [Limitations](LIMITATIONS.md). This mat
   type/version/hash, clocks, result references and watermarks—never a phone,
   customer name or line payload.
 
+## The one unauthenticated endpoint
+
+Everything else in this system requires a session. The customer's bill receipt
+does not — `shawarmania.in/bill/<token>` is opened by whoever holds the link, and
+it is the first and only anonymous surface here. The whole design is about it not
+becoming a door.
+
+### The control that makes every other risk small: it names no customer
+
+Not a name, not a phone number, not four masked digits, not the biller, not the
+till. So a link that leaks, is forwarded, is misdelivered to a mistyped number,
+or is guessed against all odds exposes **one order and no person.**
+
+The omission is the database function's own projection — `customer_name`,
+`customer_phone` and `customer_id` are never selected — rather than a page
+choosing not to render them. A future page cannot start showing them without
+changing that function, and a test asserts they appear nowhere in the serialised
+receipt at any depth.
+
+Printing four masked digits was declined too, so that the option of using them as
+a second factor is not spent. That factor is not being built, and would defend
+against none of the three realistic threats: it is useless against misdelivery
+(the wrong recipient knows the wrong number, because it is theirs), weak against
+forwarding, and marginal against a brute force that is already infeasible.
+
+### `anon` gains no grant anywhere
+
+No policy lets an anonymous role read a bill, a line, a payment allocation, a
+discount record or a link row — by token or by any other means. Such a policy
+would mean `anon` holds `select` on `bills`, and one policy mistake would then be
+a full disclosure. Instead:
+
+- The Cloudflare Worker holds the **service-role key as a Worker secret**,
+  server-side, never reaching a browser. The hard rule above is unchanged.
+- It may call **exactly one** `security definer` function, which takes a token
+  and returns one receipt. It accepts no outlet, no bill id, no bill number, no
+  date, no range and no limit, and there is no second overload — both facts
+  asserted from the catalog, because an argument that does not exist cannot be
+  passed.
+- **The outlet boundary is not weakened, because the reader never resolves an
+  outlet at all.** Its only input names one bill.
+- Not granted to `authenticated` either: a signed-in session reads bills through
+  its own policies, and a `security definer` function that ignores those has no
+  business being reachable from one.
+
+### How hard the token is, honestly
+
+The security of a capability URL is not its bit length. An attacker is not
+guessing one bill's token, they are guessing **any valid one**, so valid-token
+density subtracts: *effective bits = token bits − log2(bills)*. Ten base64url
+characters are sixty bits. At an assumed 10,000 requests/second — a thousand-IP
+residential proxy pool, purchasable for about a hundred dollars — recovering one
+random bill takes roughly **200 years** at today's ~17,000 bills a year, and
+years still at volumes this business will not see soon. The prize at the end of
+that attack is one receipt showing an order and no person.
+
+**Misdelivery, not brute force, is the realistic failure** once links start going
+out by phone: a mistyped digit at a busy counter sends a stranger somebody else's
+receipt. No token length defends against that. An anonymous page does.
+
+### Every refusal is one refusal
+
+Unknown, malformed, revoked and switched-off all answer identically, so a caller
+learns nothing about which case occurred and nothing about whether any bill
+exists.
+
+### The access record, and why an invalid token writes nothing
+
+`bill_public_link_views` records the token, the time, a salted digest of the
+client address and the user agent — enough to make a harvesting attempt visible
+after the fact and nothing more. It names the token rather than the bill, so a row
+does not even identify the sale, and the digest is salted from a value held in
+the database so it cannot be reproduced by anybody holding the Worker's source.
+An unsalted hash of an IPv4 address is walkable in seconds and would therefore
+simply *be* the address.
+
+**A request that resolves to nothing causes no write.** A flood of invalid tokens
+must not be turnable into a flood of inserts; that amplification is the edge's to
+absorb with its rate limits, and a write here would hand an attacker the lever.
+
+### Turning it off, and turning one link off
+
+- **The kill switch** is `public_receipt_settings.enabled`, a flag the function
+  itself reads. Flipping it refuses every receipt at once, at the database, for
+  every caller, **with no deploy** — which is the property that matters at the
+  moment somebody needs it.
+- **Revoking one link** is `revoke_bill_public_link(bill_id)`: immediate,
+  permanent for that token, and it kills no other bill's link. A fresh link can
+  be issued afterwards with `reissue_bill_public_link(bill_id)`, so a customer
+  who still needs a receipt is not permanently refused one. Both are service-role
+  only; the runbook is in [Operations](OPERATIONS.md).
+- **Nothing is stored.** No rendered receipt is persisted in any format, so there
+  is no file to find later and no file that could go stale — a bill voided after
+  the link was sent reads `Cancelled`, and a corrected tender reads corrected,
+  because the page is built at the moment it is asked for.
+- **Nothing is invited to index one.** `X-Robots-Tag: noindex, nofollow` and
+  `Referrer-Policy: no-referrer`, and deliberately **no** `Disallow` in
+  `robots.txt` — that would stop a crawler fetching the page and therefore stop
+  it ever reading the `noindex`. The link-preview card a chat app builds carries
+  the logo and "Your receipt" and no amount, item or bill number, so forwarding a
+  link does not spill its contents into a group chat before anybody opens it.
+
 ## Threat model — what actually worries us
 
 Roughly in order of likelihood:
@@ -191,6 +336,12 @@ Roughly in order of likelihood:
 6. **Associated-email sign-in enumeration or credential stuffing.** Mitigated
    by uniform failures, hashed per-input/IP limits, and delegating password
    verification to Supabase without logging raw account-email addresses.
+7. **A forwarded or misdelivered receipt link.** The likely one, and the reason
+   the page names no customer: what the wrong reader learns is one order and
+   nothing about a person. Harvesting receipt tokens sits far below this — see
+   [The one unauthenticated endpoint](#the-one-unauthenticated-endpoint) for the
+   arithmetic — and is bounded by rate limits at the edge, an access record, and
+   a kill switch that needs no deploy.
 
 Not in the model at this scale: sophisticated external attackers, insider database access at the hosting provider, or supply-chain attacks on dependencies. These are real, but the practical controls at a two-outlet business are the boring ones — keep the service-role key out of the browser, keep RLS on, keep secrets out of git.
 
@@ -199,5 +350,14 @@ Not in the model at this scale: sophisticated external attackers, insider databa
 No automated deletion of server operational history in v1. Local remembered
 exact-phone results are the exception: at most 50 for 24 hours on a counter.
 Bills and their audit history remain retained.
+
+**A receipt link never expires**, and that follows from the line above rather
+than from a preference: the mechanism first assumed for killing old links — that
+they would die when stale data was cleared — does not exist, and bills are
+financial records that will be kept for years regardless. So the choice was a
+real expiry or none, and revocation was judged the better off switch because it
+kills a leaked link *now* rather than in a year and never breaks a receipt a
+customer legitimately kept. An expiry can be computed statelessly from
+`business_date` later if it is ever wanted.
 
 Two things to revisit when the business grows: customer PII has no defined retention period, and attendance location data accumulates indefinitely. Both are noted in [Limitations](LIMITATIONS.md) rather than silently deferred. Global customer identity sharpens the first without changing what it collects — a phone and an optional name, exactly as before — because the rows now accumulate in one business-wide list rather than two outlet-sized ones, and a retention rule will have to be written once for the business rather than per outlet. See [`openspec/todos/data-retention-policy.md`](../openspec/todos/data-retention-policy.md).

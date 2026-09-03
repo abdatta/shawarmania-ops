@@ -242,9 +242,12 @@ they already wear.
 
 ## Deliberately deferred from v1
 
-### Bills are record-only
+### Bills are record-only, except that a customer can now be shown one
 
-**No receipt printing, no GST computation, no digital receipts.** A bill is stored in the app and nothing more.
+**No receipt printing and no GST computation.** Digital receipts were the third
+item here and are no longer deferred: every bill is reachable at a public URL and
+the owner and a franchise admin can share it. What remains deferred is
+**delivering** that link, which is [its own limitation](#a-receipt-link-is-shared-by-hand-54).
 
 This keeps the billing screen minimal and ships the counter faster. All three extensions are anticipated in the schema so that adding them later does **not** require migrating historical bills:
 
@@ -254,7 +257,10 @@ This keeps the billing screen minimal and ships the counter faster. All three ex
 - **Per-outlet sequential `bill_number` from day one.** A sequence cannot be retrofitted over existing rows — printing and GST both need it, and this is the one that would genuinely hurt to add late.
 - **`customer_phone` is captured**, so digital receipts work later with no backfill.
 
-Tracked as three backlog items: `bill-thermal-printing`, `bill-gst-breakup`, `bill-digital-share` in [`openspec/todos/`](../openspec/todos/README.md).
+Tracked as two remaining backlog items, `bill-thermal-printing` and
+`bill-gst-breakup`, in [`openspec/todos/`](../openspec/todos/README.md).
+`bill-digital-share` was promoted into #54 and deleted; what it did not answer
+became `bill-receipt-delivery`.
 
 ### No partial payment in billing
 
@@ -612,6 +618,44 @@ backend. When no backend response arrives, the app names the connection problem
 and asks the person to check the device's internet connection; it does not
 mislabel that failure as a wrong username or password. A backend refusal still
 uses one indistinguishable credential message.
+
+### A receipt link is shared by hand (#54)
+
+Every bill is reachable at a public URL from the moment the server has it, and
+the owner and a franchise admin can share one from a bill they are already
+looking at. **Nothing sends it to the customer.** No WhatsApp, no RCS, no SMS.
+
+That is the largest deliberate cut in #54, and it was cut because delivery is
+not one feature but four decisions nobody had made: a WhatsApp Business API
+account against SMS and DLT registration, opt-in per bill against automatic,
+where consent is recorded, and what happens when a number is mistyped at a busy
+counter. Tracked as
+[`bill-receipt-delivery`](../openspec/todos/bill-receipt-delivery.md).
+
+Two consequences worth stating plainly. Until delivery exists, a customer gets a
+receipt only if somebody at the counter or the office deliberately sends them
+one — so the feature is real but its reach is a person's habit. And the counter's
+customer fields stay as they are: today's names are placeholders typed to satisfy
+a UI-only name-or-phone rule, and the phone number will need to become
+near-compulsory once links are delivered. #54 deliberately did not make that
+billing-UI change.
+
+### A receipt link cannot be recalled, only revoked (#54)
+
+Revocation is immediate and permanent for that token, and it kills no other
+bill's link. But it acts on the **link**, not on what somebody already saw: a
+person who opened a receipt before it was revoked has the contents, and nothing
+in any design can take that back.
+
+This is why the page names no customer. What a wrong reader keeps is one order
+and nothing that identifies a person, which is the control that makes a leak,
+a forward or a misdelivery survivable rather than a disclosure.
+
+There is also **no expiry**, deliberately. The mechanism first assumed for
+killing old links — that they would die when stale data was cleared — does not
+exist, because nothing is deleted here and bills are financial records. So the
+choice was a real expiry or none, and revocation won because it acts now rather
+than in a year and never breaks a receipt a customer legitimately kept.
 
 ### Forgotten-password recovery requires an administrator
 

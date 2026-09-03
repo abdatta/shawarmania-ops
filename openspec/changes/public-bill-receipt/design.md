@@ -360,11 +360,77 @@ with noise that hides a real harvest.
 
 ### The PDF
 
-A4 rather than a thermal strip, because it is a document somebody may file or
-forward to an accountant. Themed with the logo and brand faces — the owner
-accepted a larger file for it — but **fonts are subset** to the glyphs actually
-used, which is visually identical and typically an order of magnitude smaller.
-Named recognisably (`Shawarmania-Kalyani-Bill-1247.pdf`), never `download.pdf`.
+> **Superseded during implementation, 2026-09-03.** Three of the four decisions
+> below did not survive contact with the output, and the corrections are recorded
+> here rather than left for somebody to rediscover. Everything else in this
+> section held.
+
+~~A4 rather than a thermal strip~~ — **80 mm wide, height fitted to the
+content.** The owner opened a generated A4 receipt and overruled it on sight
+[owner, 2026-09-03]: a two-line bill on A4 is mostly empty space and does not
+read as a receipt. 80 mm is also the width every thermal roll printer takes, so
+[`bill-thermal-printing`](../../todos/bill-thermal-printing.md), if it is ever
+built, inherits the right shape rather than something to redo. The reasoning for
+A4 — a document somebody may file or forward to an accountant — was not wrong
+about the use, only about the paper.
+
+~~**fonts are subset**~~ — **embedded whole.** Subsetting a *variable* font
+through `pdf-lib` produced a structurally valid PDF in which every Latin letter
+rendered as a missing-glyph box. Found by looking at the output; no test would
+have said so. Whole faces cost about 130 KB, which is the right trade against a
+receipt nobody can read.
+
+**And a font problem the design did not anticipate at all.** `@fontsource`
+splits its fonts by unicode range, and no single Nunito Sans file carries both
+the digits and the rupee sign: `latin` has the digits, `latin-ext` has `₹`. A
+browser stitches the ranges together with two `@font-face` rules and the page was
+therefore always fine. A PDF must embed real fonts and choose one per glyph, so
+the Worker embeds both and routes each character to a face that can draw it. The
+first two attempts each rendered half the receipt as boxes.
+
+Themed with the logo and brand faces, and named recognisably
+(`Shawarmania-Kalyani-Bill-10.pdf`), never `download.pdf` — both as designed. The
+brand name is stripped from the outlet's own name first, because every outlet is
+called "Shawarmania Kalyani" and the obvious template doubles it.
+
+### The page and the PDF are one design, enforced
+
+> **Added during implementation, 2026-09-03, because the owner asked for it.**
+
+The receipt is rendered twice and neither rendering can be produced from the
+other inside a Worker. Two renderers over one design is the arrangement that
+rots: somebody relabels a row on the page, the PDF keeps the old wording, and a
+customer holding both sees two different receipts for one bill — or a row is
+dropped from one and nobody notices for months.
+
+So the renderers decide nothing a reader can read. `worker/src/content.ts` turns
+a receipt payload into the ordered labels, subtexts and formatted amounts a
+receipt *says*; the page and the PDF are then only presentation. `content.test.ts`
+holds them to it over nine shapes of bill: the page must render every string the
+model says, and the PDF's layout must emit **exactly** those strings in the same
+order — equality rather than containment, because the PDF carries no chrome and
+so has no excuse. The single permitted difference is presentational and named in
+the test: the page shouts `Cancelled` with CSS, and the PDF, having no CSS to
+shout with, upper-cases it.
+
+### Printing the page
+
+> **Added during implementation, 2026-09-03.** The owner asked why the browser's
+> own print-to-PDF was not used instead of generating one.
+
+It was a fair question with a two-part answer. It would genuinely delete the
+PDF-drawing code — but it removes nothing about Cloudflare, because the Worker is
+there for the **credential**, not the document: `anon` has no grant on `bills`, so
+a browser cannot read a receipt however the PDF is produced. And it loses the tap
+that matters, since Print is frequently absent from WhatsApp's in-app browser
+menu, and where present it follows the printer's page size, stamps the browser's
+own header and footer with the URL on them, and names the file after the page
+title.
+
+The generated PDF stays, and the page now also carries
+`@page { size: 80mm auto; margin: 0 }` and a print stylesheet that inverts the
+near-black canvas — so somebody reaching for Print gets the same 80 mm receipt
+rather than an A4 sheet, and a printer is not emptied over the brand's canvas.
 
 **Served from its own URL** (`…/bill/<token>.pdf`) as an ordinary link, so the
 browser's own download machinery handles it. Not a script-generated `blob:` — that

@@ -131,7 +131,10 @@ npm run build
 
 Hosting is **GitHub Pages**, published by `.github/workflows/deploy.yml` on
 every push to `main` that passes verification.
-Hostinger holds the `shawarmania.in` DNS zone; the `ops` CNAME points to
+Hostinger held the `shawarmania.in` DNS zone until the receipt page needed a
+Worker on the apex; see [The customer's receipt link](#the-customers-receipt-link-54)
+for the move to Cloudflare and its rollback. This app is unaffected either
+way: the `ops` CNAME points to
 `abdatta.github.io`, while GitHub Pages terminates TLS and serves the
 deployment. Cloudflare Pages or Vercel remain later alternatives if the
 repository becomes private or the hosting requirements outgrow Pages.
@@ -360,6 +363,136 @@ reopen once more, then reconnect: tablet/shift resolution must happen before the
 queue drains, and authoritative reads replace remembered ones only after drain.
 Never clear site data to repair an unsupported record; preserve it and every
 envelope, reconnect, and let a compatible/current build write a fresh record.
+
+## The customer's receipt link *(#54)*
+
+The receipt page is **not deployed from this repo.** It is a Cloudflare Worker
+living in the brand site's repo,
+[`abdatta/shawarmania`](https://github.com/abdatta/shawarmania), routed on
+`shawarmania.in/bill/*`. This repo owns the link, the token and the reader
+function; that one owns the page and the PDF. Neither half is useful alone.
+
+### The DNS move — the owner's step, done once
+
+A Worker cannot be routed on the apex path until the zone is on Cloudflare. This
+touches the **live marketing site's** DNS, so the owner performs it, at a quiet
+hour, and **never while the counter is trading.**
+
+`shawarmania.in` currently resolves at **Hostinger**. Before changing anything,
+write down what is there; Cloudflare will import it, and the import must be
+checked against this list rather than trusted:
+
+| Record | Value |
+|---|---|
+| apex `A` × 4 | `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153` (GitHub Pages) |
+| apex `AAAA` | the matching GitHub Pages addresses |
+| `www` `CNAME` | `abdatta.github.io` |
+| `ops` `CNAME` | `abdatta.github.io` (this app) |
+
+Then:
+
+1. Create the `shawarmania.in` zone in Cloudflare and let it import the existing
+   records.
+2. **Verify every imported record against the table above before touching the
+   nameservers.** This is the step that makes the move safe.
+3. Set SSL mode to **Full**.
+4. Switch the nameservers at Hostinger.
+5. Add the Worker route on `/bill/*`.
+
+GitHub Pages keeps serving everything, including this app on `ops`; Cloudflare
+only adds the one route. **Rollback is switching the nameservers back** to
+Hostinger, whose records are unchanged throughout. The landing site never moves
+and `public/CNAME` never changes.
+
+**Nothing is blocked on this.** Both repos build and verify against a
+`workers.dev` URL first, and the apex route is the last step. If the move is ever
+refused or reverted, the fallback is `bill.shawarmania.in` as a `CNAME` at
+Hostinger pointing at the Worker — a different URL, no migration.
+
+### The Worker's secret
+
+The Worker holds the **ops project's service-role key** as a Cloudflare Worker
+secret. It is the one credential it needs and the only privileged thing it can
+do with it is call `bill_public_receipt()`.
+
+- Never in either repo, never in a committed config file, never in a bundle. The
+  standing rule about the service-role key is unchanged; the Worker is a
+  server-side runtime, not a browser.
+- To rotate: rotate the key in Supabase, set the new Worker secret, redeploy the
+  Worker. Receipts refuse identically while the two disagree, which is a visible
+  outage of the receipt page and nothing else — no counter, no ops surface and no
+  billing path touches it.
+
+### Revoking one link
+
+A link leaked, was screenshotted into a group chat, or went to the wrong number.
+Revocation is immediate, permanent for that token, and kills **no other bill's
+link**:
+
+```sql
+select public.revoke_bill_public_link('<bill id>');
+```
+
+The customer who legitimately needs a receipt is not permanently refused one — a
+fresh token can be minted, and the revoked one stays dead:
+
+```sql
+select public.reissue_bill_public_link('<bill id>');
+```
+
+Both are service-role only and there is no UI for either, so they are run from
+the production project's SQL editor in the Supabase dashboard. **Neither can
+modify the bill**, which is the reason the token lives in its own table.
+
+To find the bill behind a link somebody sends you, read the token, not the URL:
+
+```sql
+select bill_id, created_at, revoked_at
+  from public.bill_public_links where token = '<token>';
+```
+
+### The kill switch
+
+Turning the whole public endpoint off, for every link at once, **with no
+deploy**:
+
+```sql
+update public.public_receipt_settings set enabled = false;
+```
+
+Every request then gets the same refusal an invented token gets, so nobody
+learns from the outside that it was switched off rather than broken. Turning it
+back on restores every link that was not individually revoked:
+
+```sql
+update public.public_receipt_settings set enabled = true;
+```
+
+Reach for this when something is wrong at scale — a harvesting attempt in the
+access record, a page bug showing the wrong bill — and for one bad link reach for
+revocation instead.
+
+### Reading the access record
+
+Written only when a token resolves, so it holds openings rather than attempts.
+The most-opened links, and the busiest clients, over a week:
+
+```sql
+select token, count(*) as opens, max(viewed_at) as last_open
+  from public.bill_public_link_views
+ where viewed_at > now() - interval '7 days'
+ group by token order by opens desc limit 20;
+
+select client_address_digest, count(distinct token) as receipts, count(*) as opens
+  from public.bill_public_link_views
+ where viewed_at > now() - interval '7 days'
+ group by 1 order by receipts desc limit 20;
+```
+
+One client reading many distinct receipts is the shape of a harvest. One receipt
+opened many times is a customer, or a chat app building previews. The digest is
+salted and cannot be turned back into an address; it is there to tell one client
+from another, not to identify anybody.
 
 ## Onboarding a new franchise outlet
 
@@ -928,6 +1061,19 @@ billing or identity data reaches either. If either disappears the address
 block remains manually typeable.
 
 ## Runbook stubs
+
+**A receipt link has to be killed** → revoke that one link rather than switching
+the endpoint off; it is immediate, permanent for that token, and kills no other
+bill's link, and a fresh one can be issued for a customer who still needs a
+receipt. Both commands are in [The customer's receipt link](#the-customers-receipt-link-54).
+Switching the whole endpoint off is for something wrong at scale, and needs no
+deploy. **A revoked link cannot be recalled from somebody who already opened it**
+— nothing can, which is why the page names no customer.
+
+**A receipt link says the bill is cancelled** → that is correct and deliberate.
+The page is built at the moment it is asked for, so a bill voided after its link
+was sent reads `Cancelled` rather than presenting a valid-looking receipt. The
+same is true of a corrected tender split.
 
 **A counter tablet is lost or stolen** → remove it immediately (Tablets → Remove). Removal is permanent and takes the live shift with it, so nothing further can be rung on it. Any unresolved local bills on it are lost; the confirmation names how many it last reported, but an **out of touch** report is old evidence rather than a current count. Record that uncertainty with the physical cash count and set a replacement up with a fresh code. **Nobody's account is compromised** — a tablet holds no password.
 

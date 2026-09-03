@@ -15,7 +15,7 @@ Keep entries behavior-focused:
 | --- | --- | --- | --- | --- |
 | [Bill Thermal Printing](./bill-thermal-printing.md) | Feature | Anticipated | Billing | A customer or regulator asks for a printed bill |
 | [Bill GST Breakup](./bill-gst-breakup.md) | Feature | Anticipated | Billing | The business registers for GST or a customer requires a tax invoice |
-| [Bill Digital Share](./bill-digital-share.md) | Feature | Anticipated | Billing | The owner wants digital receipts, or paper is being skipped anyway |
+| [Bill Receipt Delivery](./bill-receipt-delivery.md) | Feature | Anticipated | Billing | The owner picks a channel — WhatsApp Business API or SMS/DLT — and settles consent and per-bill opt-in |
 | [Supply Bills Paid Outside The Payout](./supply-bills-paid-outside-the-payout.md) | Feature | Owner asked to explore, 2026-08-18 | Outlet expenses | The owner asks in earnest and picks a route: supplier portal, invoice email, or bank statement |
 | [The Home Page Reads The Money](./the-home-page-reads-the-money.md) | Feature | **Owner asked, 2026-09-01** | Overview / Reporting | Wanted now; deferred out of #51 to keep that change about navigation |
 | [Six Tabs For One Person](./six-tabs-for-one-person.md) | Gap | Open | App shell | Somebody holding two roles says the bar is crowded, or a new surface pushes a common shape past five |
@@ -27,6 +27,7 @@ Keep entries behavior-focused:
 | [Shared Menu Catalogue](./shared-menu-catalogue.md) | Feature | Anticipated | Menu | Per-outlet menu drift becomes a brand consistency problem |
 | [Customer Loyalty And Cross-Outlet Insights](./customer-loyalty-and-cross-outlet-insights.md) | Feature | Anticipated | Customers | A concrete loyalty or repeat-customer decision needs activity across outlets |
 | [Audit Log](./audit-log.md) | Feature | Anticipated | Security | The first franchise dispute, or headcount outgrowing "a small trusted team" |
+| [SheetJS Left The npm Registry](./xlsx-is-off-the-registry.md) | Security | Open, exception documented 2026-09-03 | Security / Aggregator sync | The review date **2026-12-31**, SheetJS returning to npm, or the parser becoming reachable by a non-admin role |
 | [Data Retention Policy](./data-retention-policy.md) | Feature | Anticipated | Security | **A quarter of real attendance data in production** — sooner than customer volume |
 | [Self-Service Account Settings](./self-service-account-settings.md) | Feature | Deferred by decision | Auth | The shared Profile/Settings surface is built or the first real request arrives |
 | [Super Admin Email Recovery](./super-admin-email-recovery.md) | Feature | Deferred by decision | Auth | Core live operations are complete, repeated owner lockouts make admin-issued reset painful, or future MFA needs security mail |

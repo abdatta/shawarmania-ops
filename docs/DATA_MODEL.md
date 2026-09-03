@@ -286,6 +286,81 @@ No client session holds `select` on the table itself, so there is no browse, pre
 
 The boundary is proved rather than asserted — `supabase/tests/20_global_customer_identity.sql` and the customer probes in `supabase/tests/rest/rls-probes.test.ts`, including that a customer id legitimately held at one outlet opens none of that customer's bills at the other.
 
+## The customer's receipt link
+
+**`bill_public_links`** — `bill_id` (primary key, references `bills`), `token`
+(unique), `created_at`, `revoked_at`. One row per bill, written by an
+after-insert trigger on `bills`, so **every bill is reachable at a public URL
+from the moment the server has it** with no share step, no application code and
+nothing new happening at the counter. A bill still in a tablet's outbox has no
+link yet, which is correct: nobody can hand out a link to a bill the server has
+not accepted.
+
+The token is ten URL-safe characters — sixty bits — from
+`left(translate(encode(gen_random_bytes(8), 'base64'), '+/', '-_'), 10)`.
+Truncating base64 is sound: every character carries six independent bits of the
+underlying random bytes.
+
+**`token` deliberately carries no length check.** If the business reaches
+franchise scale the generator starts minting twelve or fourteen characters for
+new bills and every link already in a customer's phone keeps working. That is
+what makes ten a reversible choice rather than a one-way door, and a
+`check (length(token) = 10)` would quietly close it.
+
+### The invariant: a bill's link is not its identity
+
+`bills.id` is a CSPRNG UUID and genuinely unguessable, so enumeration was never
+the reason it is not the public key. Three other things were:
+
+1. **No revocation.** `bills` is append-only, so a link that leaked into a group
+   chat could never be killed by any means.
+2. **It would make a primary key sometimes-secret.** `bills.id` is safe today in
+   a log line, an export, a support message, a future ops URL. Make it the
+   credential and every one of those becomes a disclosure, forever, prevented
+   only by somebody remembering. This schema puts invariants in the database
+   precisely so nobody has to.
+3. Every bill in the table becomes reachable the instant the endpoint ships —
+   which was later chosen deliberately anyway, but should be a decision rather
+   than a side effect of a key choice.
+
+The token also lives in its own table rather than on `bills` for a reason worth
+keeping: `bills_void_only()` refuses every update to a bill except
+`settled → void` touching only the void columns, and that trigger is the
+append-only guarantee over the money. Putting the token there would have meant
+amending it so a column could be mutated for a link to be revoked — weakening a
+financial invariant for a publishing concern. Here, revocation is an ordinary
+update on a table that was never append-only, and **no operation on a link can
+reach a bill at all**, asserted by reading the bill byte for byte across a
+revoke, a reissue and an update.
+
+Revocation is the off switch and it is permanent for that token: reissuing mints
+a new one, so the revoked token thereafter names no row. There is no expiry —
+[`data-retention-policy`](../openspec/todos/data-retention-policy.md) records
+that nothing is deleted, ever, and bills are financial records — so revocation
+had to be real, and it is strictly better for a leak because it acts now rather
+than in a year and never breaks a receipt a customer legitimately kept. A link
+row is never deleted; deletion would leave a bill silently unshareable with
+nothing recording that anybody meant it.
+
+**`bill_public_link_views`** — `id`, `token`, `viewed_at`,
+`client_address_digest`, `user_agent`. Enough to make a harvesting attempt
+visible after the fact and nothing more. It records the **token**, not the bill,
+so a row does not even name the sale; and a digest salted from
+`public_receipt_settings.viewer_salt`, never the address, because an unsalted
+hash of an IPv4 address is walkable in seconds and would therefore *be* the
+address. Its column list is asserted from the catalog, so a later migration
+adding something that identifies a customer fails by name.
+
+A row is written **only once a token resolves.** A flood of invalid tokens must
+not be turnable into a flood of inserts; that amplification belongs to the edge
+to absorb, and a write here would hand an attacker the lever.
+
+**`public_receipt_settings`** — one row for the whole business: `enabled`, the
+kill switch, and `viewer_salt`. Flipping `enabled` refuses every receipt at once,
+at the database, for every caller, with no deploy. Both this and the view record
+are `service-only`: no grant and no policy for any client role, because nothing
+in the app shows who opened a receipt and nothing lets a session flip the switch.
+
 ## Inventory
 
 **`inventory_items`** — `id`, `outlet_id`, `name`, `unit` (`kg` | `litre` | `packet` | `piece`), `current_quantity` (`numeric`), `purchase_cost_paise` (per unit), `low_stock_threshold`, `is_active`, `last_updated_at`.
@@ -908,6 +983,8 @@ Every check below is enforced by the schema and covered by the suites in `supaba
 - `total_paise = subtotal_paise − discount_paise + tax_paise + rounding_paise` on every bill **and every order**, with `total_paise` always a whole number of rupees and never below ₹1. The rounding term exists because a percentage of an odd subtotal produces paise nobody at a counter can be handed; it is always in the business's favour and always stored rather than derived on read. **This identity is written in three places** — the check constraints, `billTotals()` and `billing_validate_totals` — and `npm run lint` fails when the shared case table in `src/domain/billing-totals-cases.json` drifts from its copy in the pgTAP suite.
 - `discount_paise` equals the sum of its lines' `discount_paise` plus its own `bill_discounts` / `order_discounts` rows, enforced by a deferred constraint trigger. A menu discount rides the line it reduced, carrying the percentage that produced it; a discount on the whole bill has no line and gets a row.
 - `line_total_paise = unit_price_paise × quantity` on every bill item.
+- Every bill has exactly one `bill_public_links` row with a unique, URL-safe token, including every bill rung before the capability existed — the migration backfills them and **asserts the row counts match**, so a partial backfill aborts it whole rather than leaving some bills silently unshareable. No link operation can modify a bill, asserted by reading the bill byte for byte across a revoke, a reissue and an update.
+- A menu discount's rows on the customer's receipt are grouped by the database, and `npm run lint` fails when the shared case table in `src/domain/discount-row-cases.json` drifts from its copy in the pgTAP suite — the same treatment the bill identity gets, because the grouping is a sum performed both in TypeScript for the counter's draft and in SQL for the receipt, and a divergence would show a customer different rows from the ones the till showed them.
 - `(outlet_id, bill_number)` is unique, and per-outlet sequences have no gaps attributable to the client.
 - An inventory item's `current_quantity` equals the sum of its movements' `quantity_delta`.
 - `expected_closing_paise` matches the invariant above from its own snapshotted inputs.

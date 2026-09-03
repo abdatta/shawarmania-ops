@@ -66,4 +66,4 @@ across outlets, with the audience and privacy boundary decided first.
 `billing-live` (#10). It also named `owner-console-live` (#13) for owner-only
 insights; that change was withdrawn on 2026-08-31. Interacts
 with [`data-retention-policy`](./data-retention-policy.md) and
-[`bill-digital-share`](./bill-digital-share.md).
+[`bill-receipt-delivery`](./bill-receipt-delivery.md).
