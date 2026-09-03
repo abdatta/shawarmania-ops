@@ -127,7 +127,10 @@ export function DemoRoot() {
               offering a phone-shaped copy of a screen the tablet already holds.
             */
             atTabletRoot ? (
-              <DemoCounter banner={<DemoBanner />} />
+              /* The store's connectivity rather than the host's own, so taking
+                 the counter offline survives a step onto a phone and back —
+                 which is precisely the walkthrough this scene exists for. */
+              <DemoCounter banner={<DemoBanner />} connectivity={data.store.connectivity} />
             ) : (
               <>
                 <DemoBanner />

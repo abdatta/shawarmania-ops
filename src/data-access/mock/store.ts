@@ -8,6 +8,8 @@ import {
   shiftBusinessDate,
 } from '@/domain'
 
+import type { CounterResumeRecord } from '@/outbox'
+
 import type { Tables } from '../database.types'
 import type {
   BillDiscountDraft,
@@ -168,6 +170,98 @@ export interface DemoStore {
   drawerObservationAdjustments: Tables<'drawer_observation_adjustments'>[]
   ledgerDayVerifications: Tables<'ledger_day_verifications'>[]
   drawerAcknowledgements: Tables<'drawer_reconciliation_acknowledgements'>[]
+  /**
+   * Whether the demo's backend answers, and which of the two offline scenes the
+   * demonstrator chose. Read by the billing adapter's `isOnline()`; written only
+   * by the demo indicator's connectivity control.
+   *
+   * **On the store rather than on the demo counter host**, which is where it
+   * would first seem to belong. The adapters are rebuilt on every role switch
+   * and the data is not — and the counter host is unmounted outright, because
+   * the tablet is not what a phone role renders. State held beside that host
+   * would silently reconnect the counter the moment a walkthrough stepped onto
+   * a phone to approve a shift request: mid-scene, in the one demo that exists
+   * to show what happens when the network goes away. Here it survives the
+   * switch, and a reset rebuilds the store, so returning to online costs
+   * nothing to implement and cannot be forgotten.
+   *
+   * It is deliberately not the whole story: `isOnline()` also consults
+   * `navigator.onLine`, so a genuinely disconnected demonstration is offline
+   * whatever this says.
+   */
+  connectivity: DemoConnectivity
+}
+
+/**
+ * The two ways a counter tablet meets an unreachable backend, and the state of
+ * having neither.
+ *
+ * They are **not** degrees of one thing, which is why this is a union:
+ *
+ * - `network-dropped` — the app stays open. Reads already made are still on
+ *   screen, new work is accepted, and commands pile up undelivered. In
+ *   production this is `navigator.onLine` going false.
+ * - `closed-and-reopened` — the app was restarted with no backend, so nothing
+ *   is in memory and every read comes from the stored resume record, labelled
+ *   as of when it was last true. In production this is the session read
+ *   throwing and `readCounterResume` answering.
+ *
+ * The second cannot be produced by a browser toggle, because it is a decision
+ * taken at startup. That asymmetry is why the demo needs a control at all.
+ */
+export type DemoConnectivityState = 'online' | 'network-dropped' | 'closed-and-reopened'
+
+/**
+ * The demo's stand-in for a reachable backend.
+ *
+ * A listener set rather than a plain field because the billing mock has to react
+ * to a change the way it reacts to the browser's own `online` event — draining,
+ * then emitting — rather than waiting for something to ask it.
+ */
+export interface DemoConnectivity {
+  /** The chosen state. Mutated in place; read through `subscribe`. */
+  readonly state: DemoConnectivityState
+  /**
+   * The record a resumed tablet reads back, held here for the same reason
+   * IndexedDB holds the real one: it has to outlive the thing that captured it.
+   * Built by the demo counter host, so its shape stays next to the session it
+   * describes.
+   */
+  readonly resume: CounterResumeRecord | undefined
+  isOnline(): boolean
+  set(state: DemoConnectivityState, resume?: CounterResumeRecord): void
+  subscribe(listener: () => void): () => void
+}
+
+function createDemoConnectivity(): DemoConnectivity {
+  const listeners = new Set<() => void>()
+  let state: DemoConnectivityState = 'online'
+  let resume: CounterResumeRecord | undefined
+
+  return {
+    get state() {
+      return state
+    },
+    get resume() {
+      return resume
+    },
+    isOnline: () => state === 'online',
+    set(next, nextResume) {
+      if (state === next && resume === nextResume) return
+      state = next
+      // A record only means anything in the scene that reads one back. Clearing
+      // it otherwise keeps "resumed" from being a state the store can describe
+      // and the counter cannot.
+      resume = next === 'closed-and-reopened' ? nextResume : undefined
+      for (const listener of listeners) listener()
+    },
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+  }
 }
 
 /** The outlet every demo persona but the owner belongs to. */
@@ -1243,5 +1337,6 @@ export function createDemoStore(options: { billingLifecycle?: boolean } = {}): D
     drawerObservationAdjustments,
     ledgerDayVerifications,
     drawerAcknowledgements: [],
+    connectivity: createDemoConnectivity(),
   }
 }

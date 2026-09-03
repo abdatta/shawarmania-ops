@@ -76,6 +76,26 @@
   html {
     /* 14px base for dense tables; inputs opt back up to 16px below. */
     font-size: 14px;
+
+    /*
+      **No `scrollbar-gutter: stable` here.** It was tried and reverted, and the
+      reason is worth keeping so it is not tried again the next time a row moves
+      sideways.
+
+      It does fix the shift: a surface whose content crosses the height of the
+      viewport gains or loses a scrollbar, and on Windows and Linux that changes
+      the width of everything on it. But it charges 15px of permanently reserved,
+      always-empty gutter on **every** screen, scrolling or not — including the
+      counter tablet, where horizontal room is the scarcest thing there is and
+      the whole menu is meant to be visible without scrolling. Paying that on
+      every till, all day, to stop a demonstrator's role tabs moving was the
+      wrong way round.
+
+      The fix that costs nothing is to stop the *document* scrolling at all and
+      let the app's own regions do it, which the counter already does. That is a
+      change to all four shells rather than a line here — see
+      `openspec/todos/the-document-should-not-be-what-scrolls.md`.
+    */
   }
 
   body {

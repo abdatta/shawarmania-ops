@@ -308,7 +308,26 @@ export function createMockBillingAdapter(
     syncTicker()
   }
 
+  /**
+   * The demo indicator's own connectivity, unsubscribed with everything else.
+   * Held here rather than inside `watchConnectivity` so the same on/off pairing
+   * governs it: a demo navigated away from must leave nothing behind on the
+   * store either.
+   */
+  let unwatchStore: (() => void) | null = null
+
   function watchConnectivity(on: boolean) {
+    if (on) {
+      // Routed through the same two handlers the browser's events use, so
+      // reconnecting from the indicator is the ordinary reconnection rather
+      // than a second delivery path that could settle work twice.
+      unwatchStore ??= store.connectivity.subscribe(() =>
+        store.connectivity.isOnline() ? onOnline() : onOffline(),
+      )
+    } else {
+      unwatchStore?.()
+      unwatchStore = null
+    }
     if (typeof window === 'undefined') return
     if (on) {
       window.addEventListener('online', onOnline)
@@ -320,10 +339,16 @@ export function createMockBillingAdapter(
   }
 
   function isOnline(): boolean {
+    // Two sources, and offline if either says so.
+    //
     // `navigator.onLine` reports link state rather than reachability, which is
     // a weak signal — and exactly the right strength for a mock whose only job
-    // is to reach three visual states the way a real tablet reaches them.
-    return typeof navigator === 'undefined' || navigator.onLine !== false
+    // is to reach three visual states the way a real tablet reaches them. The
+    // demo's own flag is what a demonstrator sets deliberately; keeping the
+    // browser's answer beside it means a venue whose wifi actually dies shows
+    // the honest thing rather than a control still claiming to be online.
+    const browserOnline = typeof navigator === 'undefined' || navigator.onLine !== false
+    return store.connectivity.isOnline() && browserOnline
   }
 
   function actorName(id: string | null): string | null {

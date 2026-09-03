@@ -229,4 +229,10 @@ export {
   menuCategoryFixtures,
   menuItemFixtures,
 } from './fixtures/menu'
-export { createDemoStore, DEMO_OUTLET_ID, type DemoStore } from './store'
+export {
+  createDemoStore,
+  DEMO_OUTLET_ID,
+  type DemoConnectivity,
+  type DemoConnectivityState,
+  type DemoStore,
+} from './store'

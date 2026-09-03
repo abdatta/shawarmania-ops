@@ -622,12 +622,24 @@ test.describe('the counter', () => {
   })
 })
 
+/**
+ * The demo's connectivity, which lives in the yellow indicator rather than in a
+ * strip of its own. Selecting by value, so a label rewording does not silently
+ * stop exercising the state it names.
+ */
+async function setConnectivity(
+  page: Page,
+  state: 'online' | 'network-dropped' | 'closed-and-reopened',
+) {
+  await page.getByLabel('Demo connectivity').selectOption(state)
+}
+
 test.describe('the counter offline', () => {
   test('walks cold-start provenance, capture, Finish Day refusal and reconnect', async ({
     page,
   }) => {
     await page.goto('demo/biller')
-    await page.getByRole('button', { name: 'Close and resume offline' }).click()
+    await setConnectivity(page, 'closed-and-reopened')
 
     await expect(page.getByTestId('offline-resume-status')).toContainText(
       'Offline · last successful read',
@@ -648,7 +660,7 @@ test.describe('the counter offline', () => {
     await expect(finishDialog.getByRole('button', { name: /finish day/i })).toHaveCount(0)
     await finishDialog.getByRole('button', { name: 'Keep billing' }).click()
 
-    await page.getByRole('button', { name: 'Reconnect and drain' }).click()
+    await setConnectivity(page, 'online')
     await expect(page.getByTestId('offline-resume-status')).toHaveCount(0)
     await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'synced', {
       timeout: 15_000,
@@ -684,6 +696,162 @@ test.describe('the counter offline', () => {
       timeout: 15_000,
     })
     await expect(page.getByTestId('sync-indicator')).toContainText('synced')
+  })
+
+  /**
+   * The same scene, reached the way a demonstrator reaches it.
+   *
+   * The case above drops the *browser's* network, which is the honest test of
+   * the counter and needs no demo control at all. It is also invisible to
+   * anybody being shown this app, because nobody opens devtools mid-pitch. This
+   * one drives the indicator's own control, and asserts the thing that makes
+   * the two paths safe to have: they arrive at one delivery path, so the queue
+   * drains exactly once.
+   */
+  test('the demonstrator can drop the network from the indicator and bring it back', async ({
+    page,
+  }) => {
+    await page.goto('demo/biller')
+    await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'pending')
+
+    await setConnectivity(page, 'network-dropped')
+
+    // Still open, still taking money — and not resuming from a stored record,
+    // which is what separates this scene from the cold start above.
+    await expect(page.getByTestId('offline-resume-status')).toHaveCount(0)
+    await expect(page.getByTestId('menu-grid')).toBeVisible()
+
+    for (let index = 0; index < 5; index += 1) {
+      await page.getByRole('button', { name: 'Classic Chicken Shawarma', exact: true }).click()
+      await recordPaid(page)
+      await expect(page.getByRole('heading', { name: 'Bills this shift' })).toBeVisible()
+    }
+
+    await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'stalled')
+    await expect(page.getByTestId('sync-indicator')).toContainText('6 waiting')
+    await expect(page.locator('dialog[open]')).toHaveCount(0)
+
+    const billRows = page.locator('details[data-testid^="shift-bill-"]')
+    const billsBefore = await billRows.count()
+
+    await setConnectivity(page, 'online')
+    await expect(page.getByTestId('sync-indicator')).toHaveAttribute('data-sync', 'synced', {
+      timeout: 15_000,
+    })
+
+    // Exactly once: the six that were waiting landed, and nothing was
+    // duplicated by having two ways to reconnect.
+    await expect(billRows).toHaveCount(billsBefore)
+  })
+})
+
+test.describe('the demo indicator on the counter', () => {
+  /**
+   * The complaint this is here for: the role tabs must not move because the
+   * connectivity control came or went.
+   *
+   * Measured **relative to the strip's own right edge**, not as an absolute `x`,
+   * and the difference matters. Two separate things move these tabs. This change
+   * fixed one of them — the control used to sit after the switcher, so arriving
+   * at the counter widened everything to its right. The other is the page
+   * scrollbar: the counter's page scrolls where a phone role's does not, so on
+   * Windows and Linux the whole strip is 15px narrower here, tabs included.
+   *
+   * That second one is unfixed on purpose. `scrollbar-gutter: stable` cures it
+   * and was reverted the same day for charging 15px of permanently empty gutter
+   * on every screen including the till — see
+   * `openspec/todos/the-document-should-not-be-what-scrolls.md`. So an absolute
+   * assertion here would fail for a reason this change is not about, and would
+   * have to be loosened by whoever hit it. An offset says the thing that is
+   * actually true and stays true either way.
+   */
+  test('the role tabs do not move when the walkthrough switches role', async ({ page }) => {
+    const positions = async () =>
+      page.evaluate(async () => {
+        // Await the web font before measuring. These offsets are decided by the
+        // rendered width of the controls to the switcher's right, so a snapshot
+        // taken before the font swaps reports the fallback's metrics and lands a
+        // few pixels out — which is a measurement artefact and not the tabs
+        // moving.
+        await document.fonts.ready
+        const stripRight = document
+          .querySelector('[data-testid="demo-banner"]')!
+          .getBoundingClientRect().right
+        return [...document.querySelectorAll('[aria-label="Demo role switcher"] a')].map(
+          (tab) =>
+            `${tab.textContent}@${Math.round(stripRight - tab.getBoundingClientRect().right)}`,
+        )
+      })
+
+    await page.goto('demo/biller')
+    await expect(page.getByTestId('demo-connectivity')).toBeVisible()
+    const atCounter = await positions()
+    expect(atCounter).toHaveLength(4)
+
+    // Every other role, each of which offers no connectivity control at all.
+    for (const segment of ['owner', 'admin', 'staff']) {
+      await page.getByRole('link', { name: new RegExp(`^${segment}$`, 'i') }).click()
+      await expect(page.getByTestId('demo-connectivity')).toHaveCount(0)
+      expect(await positions()).toEqual(atCounter)
+    }
+
+    // And back, with the control returning.
+    await page.getByRole('link', { name: /^biller$/i }).click()
+    await expect(page.getByTestId('demo-connectivity')).toBeVisible()
+    expect(await positions()).toEqual(atCounter)
+  })
+
+  test('stays one row on a phone and on a tablet, and adds no second strip', async ({ page }) => {
+    await page.goto('demo/biller')
+    const banner = page.getByTestId('demo-banner')
+    await expect(banner).toBeVisible()
+
+    // The strip this control replaced. Asserted by its own words, because the
+    // regression to guard against is somebody putting demo chrome back outside
+    // the one container that marks chrome as chrome.
+    await expect(page.getByText('Extended-outage walkthrough')).toHaveCount(0)
+
+    for (const size of [
+      { width: 375, height: 812 },
+      { width: 1024, height: 768 },
+    ]) {
+      await page.setViewportSize(size)
+      await expect(page.getByLabel('Demo connectivity')).toBeVisible()
+
+      // One row: the strip is no taller than a single line of its own controls,
+      // and the page does not scroll sideways to fit them.
+      const height = (await banner.boundingBox())?.height ?? 0
+      expect(height).toBeLessThanOrEqual(48)
+      const overflows = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      )
+      expect(overflows).toBe(false)
+
+      // The right-hand cluster is anchored to the indicator's right edge, so
+      // the role tabs, the reset and the exit hold one position whether or not
+      // the connectivity control is present. Measured as an offset from the
+      // banner rather than an absolute x, because the Biller's page scrolls and
+      // the owner's does not — a scrollbar's width is a real 15px difference in
+      // the whole strip's width and has nothing to do with this cluster.
+      const clusterRight = await page.evaluate(() => {
+        const strip = document.querySelector('[data-testid="demo-banner"]')!
+        const cluster = strip.children[1]!
+        return Math.round(
+          strip.getBoundingClientRect().right - cluster.getBoundingClientRect().right,
+        )
+      })
+      expect(clusterRight).toBeLessThanOrEqual(16)
+
+      // The product starts immediately beneath the indicator rather than a row
+      // further down. Measured to the shell's own first element — its device
+      // header — because everything below that, the menu grid included, is the
+      // counter's own layout and none of this change's business.
+      const bannerBox = await banner.boundingBox()
+      const headerBox = await page.getByRole('heading', { name: 'Counter tablet' }).boundingBox()
+      const gap = headerBox!.y - (bannerBox!.y + bannerBox!.height)
+      expect(gap).toBeGreaterThanOrEqual(0)
+      expect(gap).toBeLessThan(40)
+    }
   })
 })
 

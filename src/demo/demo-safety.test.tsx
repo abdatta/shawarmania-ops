@@ -262,6 +262,41 @@ describe('demo mode safety', () => {
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
   })
 
+  /**
+   * The same invariant on the one surface that carries a control the sweep
+   * above cannot reach.
+   *
+   * The owner's banner holds only buttons and links; the Biller's also holds
+   * the connectivity picker, which is a `<select>`. That control took the place
+   * of a second strip beneath the banner, so it is exactly the kind of addition
+   * the undismissable rule has to keep covering — and it earns a case of its
+   * own because it is the first thing in this strip that changes what the
+   * screen beneath is doing.
+   */
+  it('the demo banner survives every control on the counter, including connectivity', async () => {
+    const user = userEvent.setup()
+    renderDemo('/demo/biller')
+    await screen.findByRole('heading', { name: 'Counter tablet' })
+    const banner = screen.getByTestId('demo-banner')
+
+    for (const state of ['network-dropped', 'closed-and-reopened', 'online'] as const) {
+      await user.selectOptions(screen.getByLabelText('Demo connectivity'), state)
+      await waitFor(() => expect(screen.getByTestId('demo-banner')).toBeInTheDocument())
+    }
+
+    for (const control of [...banner.querySelectorAll('button')]) {
+      await user.click(control)
+      expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
+      const cancel = screen.queryByRole('button', { name: 'Cancel' })
+      if (cancel) await user.click(cancel)
+    }
+
+    // And the demo still adds exactly one row of chrome: the strip this
+    // control replaced is not back.
+    expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
+    expect(screen.queryByText('Extended-outage walkthrough')).not.toBeInTheDocument()
+  })
+
   it('leaves the demo entirely rather than hiding the banner', async () => {
     const user = userEvent.setup()
     const { router } = renderDemo('/demo/owner')

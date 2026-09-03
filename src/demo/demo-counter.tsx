@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react'
 
 import { useAdapters } from '@/data-access'
 import { useCounterState } from '@/features/billing/use-counter-state'
@@ -6,8 +13,14 @@ import { CounterShell } from '@/features/counter/counter-shell'
 import { counterDeviceFixtures, DEMO_COUNTER_DEVICE_ID } from '@/data-access/mock/fixtures/billing'
 import { CounterDeviceContext } from '@/session/counter-context'
 import type { CounterDeviceSession, CounterShift } from '@/session/counter-session'
-import { Button } from '@/components/ui/button'
 import { COUNTER_RESUME_SCHEMA_VERSION, type CounterResumeRecord } from '@/outbox'
+import type { DemoConnectivity } from '@/data-access/mock'
+
+import {
+  DemoConnectivityContext,
+  type DemoConnectivityControl,
+  type DemoConnectivityState,
+} from './demo-connectivity'
 
 /**
  * The demo's counter tablet — **the same shell the enrolled device runs**.
@@ -26,8 +39,14 @@ import { COUNTER_RESUME_SCHEMA_VERSION, type CounterResumeRecord } from '@/outbo
  * provider and a `shift`/`onShiftChanged` pair; everything a viewer looks at
  * comes from the shared shell.
  */
-export function DemoCounter({ banner }: { banner?: ReactNode }) {
-  const session = useDemoCounterSession()
+export function DemoCounter({
+  banner,
+  connectivity,
+}: {
+  banner?: ReactNode
+  connectivity: DemoConnectivity
+}) {
+  const session = useDemoCounterSession(connectivity)
 
   return (
     <CounterDeviceContext.Provider value={session.device}>
@@ -46,23 +65,22 @@ export function DemoCounter({ banner }: { banner?: ReactNode }) {
         on it is invented, and "always visible, never dismissable" is the demo's
         oldest promise. The phone and role shells get this from a flex column
         that owns the viewport; the tablet, which does not, gets it here.
+
+        **The connectivity control renders inside that banner**, and reaches it
+        from here. A React element passed as a prop is rendered where it is
+        *placed*, not where it was built — `banner` was constructed up in
+        `DemoRoot`, but it resolves context from this position, which is what
+        lets a provider wrapped around it serve a component that is not
+        lexically inside it. The alternative was threading a setter through
+        `DemoRoot` into a slot both shells are meant to treat as opaque.
+
+        The same mechanism is what keeps the control *off* the surfaces that
+        have no counter: outside this tree the context is null and the banner
+        renders nothing.
       */}
-      <div className="sticky top-0 z-40">{banner}</div>
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2">
-        <span className="text-sm font-semibold text-content">Extended-outage walkthrough</span>
-        {session.device.offlineResume ? (
-          <Button size="phone" onClick={session.reconnect}>
-            Reconnect and drain
-          </Button>
-        ) : (
-          <Button size="phone" variant="secondary" onClick={() => void session.resumeOffline()}>
-            Close and resume offline
-          </Button>
-        )}
-        <span className="text-xs text-content-muted">
-          Capture work, resume again if wanted, then reconnect to watch the ordinary queue drain.
-        </span>
-      </div>
+      <DemoConnectivityContext.Provider value={session.connectivity}>
+        <div className="sticky top-0 z-40">{banner}</div>
+      </DemoConnectivityContext.Provider>
       <DemoCounterDelivery />
       <CounterShell shift={session.device.shift} onShiftChanged={session.reread} />
     </CounterDeviceContext.Provider>
@@ -94,15 +112,26 @@ function DemoCounterDelivery() {
  * it. Here the answer comes from the counter adapter's own live-shift read, so
  * the tablet, the Tablets surface and every phone are reading one row.
  */
-function useDemoCounterSession(): {
+function useDemoCounterSession(connectivity: DemoConnectivity): {
   device: CounterDeviceSession
   reread: () => void
-  resumeOffline: () => Promise<void>
-  reconnect: () => void
+  connectivity: DemoConnectivityControl
 } {
   const { billing, counter, menu, outlets } = useAdapters()
   const [shift, setShift] = useState<CounterShift | null>(null)
-  const [offlineResume, setOfflineResume] = useState<CounterResumeRecord | undefined>()
+
+  /**
+   * Both halves of "offline" are read from the store rather than held here.
+   *
+   * This host is **unmounted** when a walkthrough steps onto a phone — the
+   * tablet is not what a phone role renders — so anything kept in its own state
+   * comes back at its initial value. Holding the chosen scene here made a
+   * counter that was offline before the step reconnect itself after it, which is
+   * the one thing this scene must not do. The store outlives the switch, and a
+   * reset rebuilds it.
+   */
+  const connectivityState = useSyncExternalStore(connectivity.subscribe, () => connectivity.state)
+  const offlineResume = useSyncExternalStore(connectivity.subscribe, () => connectivity.resume)
   const [generation, setGeneration] = useState(0)
   const reread = useCallback(() => setGeneration((count) => count + 1), [])
 
@@ -145,7 +174,16 @@ function useDemoCounterSession(): {
     [counter, device.deviceId, reread],
   )
 
-  const resumeOffline = useCallback(async () => {
+  /**
+   * The record the tablet would have found in its own storage.
+   *
+   * Built here rather than anywhere nearer the control, and deliberately kept
+   * **identical in shape and schema version** to what `readCounterResume`
+   * returns from IndexedDB after a real outage. If this drifts, the demo is
+   * showing a scene the app does not actually implement, which is the one
+   * failure a demo of an offline counter cannot afford.
+   */
+  const captureResume = useCallback(async (): Promise<CounterResumeRecord | undefined> => {
     if (!shift) return
     const [outlet, rememberedMenu, pipeline, history] = await Promise.all([
       outlets.getOutlet(device.outletId),
@@ -153,9 +191,9 @@ function useDemoCounterSession(): {
       billing.listOpenOrders(device.outletId),
       billing.listShiftHistory(shift.id),
     ])
-    if (!outlet) return
+    if (!outlet) return undefined
     const now = new Date().toISOString()
-    setOfflineResume({
+    return {
       tabletId: device.deviceId,
       schemaVersion: COUNTER_RESUME_SCHEMA_VERSION,
       complete: true,
@@ -176,13 +214,36 @@ function useDemoCounterSession(): {
       lastSuccessfulReadAt: now,
       serverObservedAt: now,
       deviceObservedAt: now,
-    })
+    }
   }, [billing, device, menu, outlets, shift])
 
-  const reconnect = useCallback(() => {
-    setOfflineResume(undefined)
-    reread()
-  }, [reread])
+  /**
+   * The one place that knows both halves of "offline", and the reason they are
+   * two pieces of state rather than one.
+   *
+   * `connectivity` is whether the mock backend answers — it lives on the demo
+   * store, so it survives a role switch and a reset rebuilds it. `offlineResume`
+   * is a property of this counter session and lives here. Only the transitions
+   * need both, so only this function holds both.
+   *
+   * The resume record is captured **before** the backend is taken away, which is
+   * the order reality uses: the tablet wrote that record while it could still
+   * read, and found it later when it could not.
+   */
+  const setConnectivity = useCallback(
+    (next: DemoConnectivityState) => {
+      if (next === 'closed-and-reopened') {
+        // Captured **before** the backend is taken away, which is the order
+        // reality uses: the tablet wrote that record while it could still read,
+        // and found it later when it could not.
+        void captureResume().then((record) => connectivity.set(next, record))
+        return
+      }
+      connectivity.set(next)
+      if (next === 'online') reread()
+    },
+    [captureResume, connectivity, reread],
+  )
 
   return useMemo(
     () => ({
@@ -193,9 +254,8 @@ function useDemoCounterSession(): {
         ...(offlineResume ? { offlineResume } : {}),
       },
       reread,
-      resumeOffline,
-      reconnect,
+      connectivity: { state: connectivityState, set: setConnectivity },
     }),
-    [device, shift, offlineResume, reread, resumeOffline, reconnect],
+    [device, shift, offlineResume, reread, connectivityState, setConnectivity],
   )
 }

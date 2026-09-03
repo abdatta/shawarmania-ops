@@ -243,6 +243,100 @@ describe('mock billing adapter', () => {
       unsubscribe()
     })
 
+    /**
+     * The same three assertions as the browser-driven case above, reached from
+     * the demo indicator's own control instead.
+     *
+     * Worth its own test rather than a parameter on that one: the demonstrator's
+     * switch and the browser's event are different inputs, and the thing that
+     * must be true of both is that they arrive at *one* delivery path. A second
+     * path would settle the queue twice, which is the failure exactly-once
+     * exists to prevent and the one a demo would hide until production found it.
+     */
+    it('accumulates and drains exactly once when the demo takes the backend away', async () => {
+      const store = createDemoStore()
+      const adapter = createMockBillingAdapter(store)
+      const before = store.bills.length
+      const unsubscribe = adapter.subscribeCounter(() => {})
+
+      // The browser is untouched throughout: this is the demo's own flag.
+      store.connectivity.set('network-dropped')
+      // `inspectFinishDay` is where the counter asks whether the server is
+      // there; its own drain is a no-op while it is not.
+      expect((await adapter.inspectFinishDay(DEMO_OPEN_SHIFT_ID)).serverReachable).toBe(false)
+
+      for (let index = 0; index < SYNC_ESCALATION_COUNT; index += 1) {
+        await adapter.settleBill(draft(store, `0e000000-0000-4000-8000-00000000000${index}`))
+      }
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+      expect(store.bills.length).toBe(before)
+      expect(adapter.getCounterState().sync).toEqual({
+        kind: 'stalled',
+        pending: SYNC_ESCALATION_COUNT,
+      })
+
+      store.connectivity.set('online')
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+      expect(store.bills.length).toBe(before + SYNC_ESCALATION_COUNT)
+      expect(adapter.getCounterState().sync).toEqual({ kind: 'synced', pending: 0 })
+
+      const numbers = store.bills.slice(before).map((bill) => bill.bill_number)
+      expect(new Set(numbers).size).toBe(SYNC_ESCALATION_COUNT)
+      unsubscribe()
+    })
+
+    /**
+     * Offline if *either* source says so, which is the rule that keeps a
+     * demonstration honest in a venue whose wifi has died: the control still
+     * reads Online, and the counter is offline anyway.
+     */
+    it('stays offline while the browser is, whatever the demo says', async () => {
+      const store = createDemoStore()
+      const adapter = createMockBillingAdapter(store)
+      const before = store.bills.length
+      const unsubscribe = adapter.subscribeCounter(() => {})
+
+      setOnline(false)
+      expect(store.connectivity.isOnline()).toBe(true)
+      expect((await adapter.inspectFinishDay(DEMO_OPEN_SHIFT_ID)).serverReachable).toBe(false)
+
+      await adapter.settleBill(draft(store, '0f000000-0000-4000-8000-000000000001'))
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      expect(store.bills.length).toBe(before)
+
+      // And the converse: the browser coming back is not enough while the demo
+      // is still holding the backend away.
+      store.connectivity.set('network-dropped')
+      setOnline(true)
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      expect(store.bills.length).toBe(before)
+
+      store.connectivity.set('online')
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+      expect(store.bills.length).toBe(before + 1)
+      unsubscribe()
+    })
+
+    it('stops listening to the demo flag when the last subscriber leaves', async () => {
+      const store = createDemoStore()
+      const adapter = createMockBillingAdapter(store)
+      const listener = vi.fn()
+
+      const unsubscribe = adapter.subscribeCounter(listener)
+      unsubscribe()
+
+      const calls = listener.mock.calls.length
+      store.connectivity.set('network-dropped')
+      store.connectivity.set('online')
+      await vi.advanceTimersByTimeAsync(AFTER_SEND_MS)
+
+      // A demo navigated away from must leave nothing behind on the store
+      // either — four role switches would otherwise accumulate four.
+      expect(listener.mock.calls.length).toBe(calls)
+    })
+
     it('escalates on age even when only one bill is waiting', async () => {
       const store = createDemoStore()
       const adapter = createMockBillingAdapter(store)
