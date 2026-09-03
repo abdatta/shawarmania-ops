@@ -134,20 +134,26 @@ alter table public.bill_items
   add constraint bill_items_discount_within_line
     check (discount_paise <= line_total_paise);
 
--- Backfill the category where the live menu still resolves it, and leave it
--- null where it does not. A guess here would be indistinguishable from a
--- snapshot, which is the one thing this column must never be.
-update public.order_items i
-   set category_name = c.name
-  from public.menu_items m
-  join public.menu_categories c on c.id = m.category_id
- where i.menu_item_id = m.id;
-
-update public.bill_items i
-   set category_name = c.name
-  from public.menu_items m
-  join public.menu_categories c on c.id = m.category_id
- where i.menu_item_id = m.id;
+-- **Historical lines are left null, deliberately.**
+--
+-- The first version of this migration backfilled `category_name` from the live
+-- menu. Production refused it, and was right to: `billing_order_item_guard`
+-- admits no write to `order_items` outside a billing command and admits none at
+-- all to a line whose order is no longer open, and `bill_items_immutable`
+-- refuses every update to a bill line unconditionally. Those guards are the
+-- append-only contract working exactly as designed.
+--
+-- Working around them would have been possible and pointless. A line's
+-- `category_name` is read in one place — naming the categories a menu discount
+-- covered — and that reader skips any line whose discount is nought. Every line
+-- written before this change carries no discount, so a backfilled category
+-- could never be displayed. The backfill was risk with no reader.
+--
+-- Worth recording for the next backfill written here: **`db:reset` applies
+-- migrations to empty tables and seeds afterwards**, so a statement that
+-- touches existing rows matches nothing locally and passes every gate. Only
+-- production has the rows. CI's `migrate` job is the first place such a
+-- statement is genuinely exercised.
 
 -- ---------------------------------------------------------------------------
 -- The totals validator, rewritten around the same identity.
