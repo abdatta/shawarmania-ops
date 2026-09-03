@@ -8,7 +8,7 @@
 - [x] Reproduce the native browser failure and the phone header overlap under Chrome's experimental cutout mode.
 - [x] Enable the browser setting after the user's authorization and verify it persists after Chrome relaunches.
 - [x] Implement top safe-area spacing on the phone shell, prove the browser regression test fails without it, and check phone/tablet views in both themes.
-- [ ] PHASE GATE: local regression checks pass, then confirm the reported native status bar on the installed Android PWA after an authorized deployment.
+- [x] PHASE GATE: local regression checks pass, then confirm the reported native status bar on the installed Android PWA after an authorized deployment, with the user-approved Chrome workaround enabled.
 
 ## Verification evidence
 
@@ -36,6 +36,8 @@
 
 ### Safe-area follow-up verification
 
+- Commit `f30c7ce` deployed through [run 33735959332](https://github.com/abdatta/shawarmania-ops/actions/runs/33735959332); all verification and release jobs passed. The user's Pixel loaded `Build f30c7ce · 03 Sept 2026, 02:25 pm` through its service-worker update path. Verified no inline spacing remained, switched to each theme and reloaded, then inspected native screenshots: dark canvas with light status icons, light canvas with dark icons, and the header below the 60-pixel safe area in both. Restored the user's dark theme. Native evidence is ignored under `logs/pwa-production-light.png` and `logs/pwa-production-dark.png`.
+- The user refreshed during deployment and saw the overlap return because the earlier temporary DOM correction did not survive a reload. Restored it while waiting, then explicitly verified reloads against the published CSS correction. The Chrome setting remains Enabled as requested. To revert it, open `chrome://flags/#web-app-short-edges-cutout-mode`, select Default and Relaunch. This result is conditional on that setting; Chrome's default native background path is still affected, and other PWAs were not exercised.
 - The user authorized keeping `Web App Short Edges Cutout Mode` enabled. Selected Enabled in Chrome's visible flag control, used Relaunch, and verified Enabled after restart. The installed PWA now reports a 1078-pixel viewport and a 60-pixel top inset. Temporary DOM spacing keeps the current page usable while the permanent shell correction deploys.
 - `npm run build` and `npm run typecheck` passed. `npx vitest run src/shell/phone-shell.test.tsx`: 8 passed. `npx playwright test e2e/phone-navigation.spec.ts --project=phone --workers=2`: 11 passed after restoring the fix.
 - Removal proof: removed only the phone shell's top-inset utility, rebuilt, and ran the new targeted test. It failed with expected banner top 60, received 0. Restored the utility, rebuilt, and reran the complete phone navigation spec successfully. The test covers inset transitions 0 → 60 → 0 in both themes.

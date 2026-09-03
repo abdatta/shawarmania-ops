@@ -1,6 +1,6 @@
 # PWA dark status bar
 
-**Model**: Codex GPT-5.6 Sol · **Kind**: production bug fix, not a roadmap change · **Gate**: browser theme metadata matches the canvas before app startup and after theme changes; installed Android confirmation remains required.
+**Model**: Codex GPT-5.6 Sol · **Kind**: production bug fix, not a roadmap change · **Gate**: browser theme metadata matches the canvas before app startup and after theme changes; installed Android confirmation passes with the user-approved Chrome workaround enabled.
 
 ## Why
 
