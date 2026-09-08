@@ -1,5 +1,9 @@
 # Testing
 
+Overview verification covers independently delayed metric reads, scoped source links and Ledger month reloads, month-first and shorter-month comparisons, tablet presence states, and equality between navigation and attention rows. `supabase/tests/53_overview_reads_the_business.sql` checks the aggregate readers and forged cross-outlet requests. `e2e/owner-console.spec.ts` checks the source-page walk, demo network isolation and phone/tablet layouts in both themes. The heartbeat remains one minute; presence and unresolved-work freshness have separate contracts.
+
+`e2e-auth/overview.spec.ts` checks the same live layout against the local backend, including delayed monthly responses and manager outlet isolation. The Ledger timing REST suite compares Overview sales, revenue, expense totals and commission qualification against the Ledger reader and prints aggregate latency; local seed measurements are not production-scale guarantees.
+
 > The harness landed with `project-foundations`; the database-policy suites landed with `data-model-and-tenancy`.
 
 Testing effort follows risk, and in this app risk is concentrated in three places: **money arithmetic**, **tenancy isolation**, and **the offline path**. Those get disproportionate coverage. A settings form does not.

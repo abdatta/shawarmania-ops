@@ -45,20 +45,17 @@ describe('demo mode safety', () => {
 
     // Owner home, served by the mock outlets adapter (async — the fixture
     // rows land a microtask after the header).
-    expect(await screen.findByText('All outlets')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Overview', level: 1 })).toBeInTheDocument()
     // The card's own heading, not the switcher option that carries the same
     // name — the assertion is that the outlet's figures rendered.
     expect(await screen.findByRole('heading', { name: 'Shawarmania Kalyani' })).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
     // Role switcher: Admin. Their home is the same page as the owner's since
-    // #51, scoped by the adapter to the one outlet they run — so the heading is
-    // that outlet rather than "All outlets", and the figures are real ones.
+    // #51, scoped by the adapter to the one outlet they run.
     await user.click(screen.getByRole('link', { name: 'Admin' }))
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Shawarmania Kalyani' }),
-    ).toBeInTheDocument()
-    expect(screen.getByTestId(`sales-${OUTLET_KALYANI_ID}`)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Overview' })).toBeInTheDocument()
+    expect(await screen.findByTestId(`sales-${OUTLET_KALYANI_ID}`)).toBeInTheDocument()
     expect(screen.getByTestId('demo-banner')).toBeInTheDocument()
 
     // Biller. Since the demo mounts the enrolled tablet's own shell, the chrome

@@ -182,7 +182,7 @@ test('a group closes and reopens from inside it, like any other tab', async ({ p
 })
 
 test('expanding a group shifts nothing under the reader’s thumb', async ({ page }) => {
-  const heading = page.getByRole('heading', { name: 'All outlets' })
+  const heading = page.getByRole('heading', { name: 'Overview' })
   const before = await heading.boundingBox()
 
   await page.locator(`${BAR} [data-testid="nav-group-setup"]`).click()

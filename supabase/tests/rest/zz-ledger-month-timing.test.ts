@@ -20,6 +20,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { describe, expect, it } from 'vitest'
 
 import { createSupabaseLedgerStatementAdapter } from '../../../src/data-access/supabase-adapters/ledger-statement'
+import { createSupabaseOverviewAdapter } from '../../../src/data-access/supabase-adapters/overview'
 import type { Database } from '../../../src/data-access/database.types'
 
 const SUPABASE_URL = process.env['SUPABASE_URL'] ?? 'http://127.0.0.1:54321'
@@ -51,7 +52,8 @@ describe('the derived ledger month is measured, not assumed', () => {
   it.each(Object.entries(OUTLETS))(
     'reads a day and a whole month at %s within a sane bound',
     async (name, outletId) => {
-      const adapter = createSupabaseLedgerStatementAdapter(await ownerClient())
+      const client = await ownerClient()
+      const adapter = createSupabaseLedgerStatementAdapter(client)
 
       const dayStarted = performance.now()
       const day = await adapter.getDay(outletId, '2026-08-26')
@@ -73,7 +75,7 @@ describe('the derived ledger month is measured, not assumed', () => {
         expect(date).toMatch(/^2026-08-\d{2}$/)
       }
 
-      // eslint-disable-next-line no-console -- the measurement IS the output.
+      // Print the measurement so a run supplies evidence, not just a ceiling.
       console.log(
         `  ${name.padEnd(13)} one day ${dayMs.toFixed(0).padStart(5)} ms   ` +
           `month ${monthMs.toFixed(0).padStart(6)} ms   ` +
@@ -81,6 +83,25 @@ describe('the derived ledger month is measured, not assumed', () => {
       )
 
       expect(monthMs).toBeLessThan(MONTH_CEILING_MS)
+
+      // Overview must agree with the independently assembled Ledger without
+      // asking the phone to load thirty-one whole day statements.
+      const overview = createSupabaseOverviewAdapter(client)
+      const overviewStarted = performance.now()
+      const [revenue, expenses, sales] = await Promise.all([
+        overview.revenue(outletId, '2026-08-01', '2026-08-31'),
+        overview.expenses(outletId, '2026-08-01', '2026-08-31'),
+        overview.sales(outletId, day.businessDate),
+      ])
+      const overviewMs = performance.now() - overviewStarted
+      expect(revenue.revenuePaise).toBe(month.reading.netRevenuePaise)
+      expect(revenue.provisional).toBe(month.reading.undeterminedDays > 0)
+      expect(revenue.hasSales).toBe(month.reading.daysWithSales > 0)
+      expect(expenses).toBe(month.reading.totalExpensesPaise)
+      expect(sales).toEqual({ cashPaise: day.revenue.cashPaise, upiPaise: day.revenue.upiPaise })
+      // Report local aggregate timing beside the full statement reading.
+      console.log(`  ${name} Overview revenue + expenses + sales ${overviewMs.toFixed(0)} ms`)
+      expect(overviewMs).toBeLessThan(MONTH_CEILING_MS)
     },
     60_000,
   )

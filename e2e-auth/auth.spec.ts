@@ -8,13 +8,13 @@ const PERSONAS = {
   owner: {
     username: 'owner',
     segment: 'owner',
-    lands: (page: Page) => page.getByRole('heading', { name: 'All outlets' }),
+    lands: (page: Page) => page.getByRole('heading', { name: 'Overview' }),
   },
   admin: {
     username: 'admin.kalyani',
     segment: 'admin',
     // The outlets overview, scoped by `outlets_select` to their own outlet.
-    lands: (page: Page) => page.getByRole('heading', { level: 1, name: 'Shawarmania Kalyani' }),
+    lands: (page: Page) => page.getByRole('heading', { level: 1, name: 'Overview' }),
   },
   biller: {
     username: 'biller.kalyani',

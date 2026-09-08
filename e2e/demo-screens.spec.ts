@@ -16,13 +16,11 @@ import { DEMO_HELPER_ACCOUNT_ID } from '../src/data-access/mock/fixtures/account
  * ambiguous across the two.
  */
 const SHELLS = [
-  { segment: 'owner', anchor: (page: Page) => page.getByRole('heading', { name: 'All outlets' }) },
-  // The manager's home is the outlets overview since #51, scoped by the
-  // database to the one outlet they run — so the page is titled for that
-  // outlet, and the card below it drops the name rather than repeating it.
+  { segment: 'owner', anchor: (page: Page) => page.getByRole('heading', { name: 'Overview' }) },
+  // The manager uses the same Overview, scoped to the outlet they run.
   {
     segment: 'admin',
-    anchor: (page: Page) => page.getByRole('heading', { level: 1, name: 'Shawarmania Kalyani' }),
+    anchor: (page: Page) => page.getByRole('heading', { level: 1, name: 'Overview' }),
   },
   // The Biller's shell is the enrolled tablet's own, so its chrome names the
   // *device*: a tablet is set up rather than signed in. The demo store starts

@@ -12,6 +12,7 @@ import { createDemoCustomers, createMockCustomersAdapter } from './customers'
 import { createMockExpensesAdapter } from './expenses'
 import { createMockExpenseCategoriesAdapter } from './expense-categories'
 import { createMockInsightsAdapter } from './insights'
+import { createMockOverviewAdapter } from './overview'
 import { createMockLedgerStatementAdapter } from './ledger-statement'
 import { createMockMenuAdapter } from './menu'
 import { createMockOutletsAdapter } from './outlets'
@@ -123,8 +124,18 @@ export function createMockAdapters(
   }
 
   return {
-    // `outlets_select`: the owner reads every outlet, everybody else reads the
-    // ones their live assignments name.
+    // Financial Overview is available only to owners and assigned managers.
+    overview: createMockOverviewAdapter(
+      store,
+      data.counter,
+      persona.profile.id,
+      role === 'super_admin'
+        ? null
+        : role === 'franchise_admin'
+          ? assignedOutlets(persona.assignments)
+          : [],
+    ),
+    // `outlets_select`: everybody else reads the outlets their assignments name.
     outlets: createMockOutletsAdapter(
       role === 'super_admin'
         ? null

@@ -4456,6 +4456,23 @@ export type Database = {
           table_name: string
         }[]
       }
+      overview_assert_outlet: {
+        Args: { p_outlet_id: string }
+        Returns: undefined
+      }
+      overview_drawer: { Args: { p_outlet_id: string }; Returns: Json }
+      overview_expenses: {
+        Args: { p_from: string; p_outlet_id: string; p_through: string }
+        Returns: number
+      }
+      overview_revenue: {
+        Args: { p_from: string; p_outlet_id: string; p_through: string }
+        Returns: Json
+      }
+      overview_sales: {
+        Args: { p_from: string; p_outlet_id: string; p_through: string }
+        Returns: Json
+      }
       pay_billing_now: {
         Args: {
           p_command_id?: string

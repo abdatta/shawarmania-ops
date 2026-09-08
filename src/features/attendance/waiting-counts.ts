@@ -71,5 +71,9 @@ export function useWaitingAttention(): Attention | null {
   const { counts } = useWaitingCounts()
   if (counts === null) return null
   const total = counts.reduce((sum, count) => sum + count.waiting, 0)
-  return { count: total, label: waitingLabel(total) }
+  return {
+    count: total,
+    label: waitingLabel(total),
+    summaryLabel: `${total} attendance ${total === 1 ? 'approval' : 'approvals'}`,
+  }
 }

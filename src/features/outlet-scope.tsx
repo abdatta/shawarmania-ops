@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router'
 
 import { useAdapters, type Tables } from '@/data-access'
 import { readRememberedOutlets, rememberOutlets } from '@/features/remembered-outlet'
@@ -74,11 +75,9 @@ export function useOutletScope(
      * the reader may reach, and the database still decides what they may read.
      * **The address is a starting position, not a grant.**
      *
-     * Deliberately narrow. A general scope-from-URL rule would change arrival
-     * behaviour for the Drawer, the Ledger, Delivery and Expenses too, and
-     * would have to answer what a remembered outlet disagreeing with a URL
-     * means on each — which is not this change's question. See
-     * `openspec/todos/outlet-scope-from-the-address.md`.
+     * Overview source links also accept `?outlet=`. An explicit `openOn`
+     * takes precedence, then the address, then the remembered selection.
+     * This only chooses the initial filter; the reader may still change it.
      *
      * An outlet the reader cannot see is dropped by the same check that drops a
      * stale remembered one, so this can never widen anybody's reach.
@@ -133,6 +132,8 @@ export function useOutletScope(
   choose: (outletId: string) => void
 } {
   const session = useSession()
+  const [address] = useSearchParams()
+  const openOn = options.openOn ?? address.get('outlet')
   const { outlets: outletsAdapter } = useAdapters()
   const multiple = options.multiple ?? false
 
@@ -156,7 +157,7 @@ export function useOutletScope(
     // An address naming one outlet outranks what was remembered, and is not
     // written back over it: arriving by a link is a visit, not a change of
     // preference, so the next surface still opens where the reader left off.
-    if (options.openOn) return [options.openOn]
+    if (openOn) return [openOn]
     const remembered = readRememberedOutlets(session)
     if (remembered.length > 0) return remembered
     const fallback = manages[0] ?? mine[0]

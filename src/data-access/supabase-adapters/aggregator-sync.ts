@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { integrationNeedsAttention } from '@/domain/delivery-attention'
 
 import type {
   AggregatorRunOutcome,
@@ -127,6 +128,10 @@ export function createSupabaseAggregatorSyncAdapter(
         }
       : null
 
+    if (run.error) throw run.error
+    if (configured.error) throw configured.error
+    if (credential.error) throw credential.error
+
     return {
       outletId,
       lastRunAt: run.data?.started_at ?? null,
@@ -156,6 +161,8 @@ export function createSupabaseAggregatorSyncAdapter(
       client.rpc('aggregator_credential_health', { p_channel: 'hyperpure' }).maybeSingle(),
     ])
 
+    if (run.error) throw run.error
+    if (credential.error) throw credential.error
     return {
       lastRunAt: run.data?.started_at ?? null,
       lastOutcome: (run.data?.outcome ?? null) as HyperpureHealth['lastOutcome'],
@@ -443,7 +450,7 @@ export function createSupabaseAggregatorSyncAdapter(
        * other outlet, appearing only once that outlet was selected, would be a badge
        * that hides at exactly the moment it is worth having.
        */
-      const [outlets, disputed, lapsed] = await Promise.all([
+      const [outlets, disputed] = await Promise.all([
         client.from('outlet_channel_sync').select('outlet_id').eq('channel', channel),
         client
           .from('aggregator_cycle_reconciliations')
@@ -451,36 +458,27 @@ export function createSupabaseAggregatorSyncAdapter(
           .eq('channel', channel)
           .eq('outcome', 'disputed')
           .is('accepted_at', null),
-        client
-          .from('aggregator_sync_runs')
-          .select('outlet_id, started_at, outcome')
-          .eq('channel', channel)
-          .eq('rehearsal', false)
-          .order('started_at', { ascending: false })
-          .limit(50),
       ])
 
-      // The most recent run per outlet decides whether a session is still lapsed. An
-      // older lapse followed by a success has been dealt with.
-      const latest = new Map<string, string>()
-      for (const run of lapsed.data ?? []) {
-        if (!latest.has(run.outlet_id)) latest.set(run.outlet_id, run.outcome)
-      }
+      if (outlets.error) throw outlets.error
+      if (disputed.error) throw disputed.error
+      const issues = new Set<string>()
 
       const counts = new Map<string, number>()
       for (const outlet of outlets.data ?? []) counts.set(outlet.outlet_id, 0)
       const bump = (outletId: string) => counts.set(outletId, (counts.get(outletId) ?? 0) + 1)
 
       for (const row of disputed.data ?? []) bump(row.outlet_id)
-      for (const [outletId, outcome] of latest) {
-        if (outcome === 'session_lapsed') bump(outletId)
-      }
 
       // Duplicates are per outlet and need the same pairing the page does, so they are
       // asked for through it rather than reimplemented — one rule, one answer.
       await Promise.all(
         [...counts.keys()].map(async (outletId) => {
-          const rows = await events(outletId)
+          const [rows, state] = await Promise.all([events(outletId), health(outletId)])
+          if (integrationNeedsAttention(state)) {
+            issues.add(outletId)
+            bump(outletId)
+          }
           const duplicates = rows.filter(
             (row) => row.event.kind === 'possible-duplicate-expense' && row.resolvedAt === null,
           ).length
@@ -488,7 +486,11 @@ export function createSupabaseAggregatorSyncAdapter(
         }),
       )
 
-      return [...counts].map(([outletId, needing]) => ({ outletId, needing }))
+      return [...counts].map(([outletId, needing]) => ({
+        outletId,
+        needing,
+        integrationIssue: issues.has(outletId),
+      }))
     },
 
     async requestRun(outletId) {

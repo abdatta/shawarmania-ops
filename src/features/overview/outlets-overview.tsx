@@ -1,367 +1,483 @@
-import type { LucideIcon } from 'lucide-react'
-import { Hourglass, Store, TriangleAlert } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
-
-import { EmptyState } from '@/components/layout/empty-state'
-import { PageHeader } from '@/components/layout/page-header'
-import { buttonVariants } from '@/components/ui/button-variants'
-import { Card } from '@/components/ui/card'
-import { LoadingList } from '@/components/ui/loading'
-import { Money } from '@/components/ui/money'
-import { Select } from '@/components/ui/select'
-import { useAdapters, type Tables } from '@/data-access'
-import type { OutletDaySummary } from '@/data-access/adapters'
 import {
-  describeDifference,
-  formatBusinessDate,
-  formatPaise,
-  resolveBusinessDate,
-  shiftBusinessDate,
-} from '@/domain'
+  ArrowDownRight,
+  ArrowUpRight,
+  Banknote,
+  ChartNoAxesCombined,
+  ChartPie,
+  Minus,
+  Store,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react'
+import { useCallback, useEffect, useState, type ComponentProps, type ReactNode } from 'react'
+import { Link } from 'react-router'
+import { PageHeader } from '@/components/layout/page-header'
+import { Card } from '@/components/ui/card'
+import { LoadingRegion, Shimmer } from '@/components/ui/loading'
+import { Money } from '@/components/ui/money'
+import { useAdapters, type Tables } from '@/data-access'
+import { formatPaise, resolveBusinessDate } from '@/domain'
+import { outletPresence, overviewPeriod, revenueChange } from '@/domain/overview'
+import { NeedsAttention } from '@/features/attention/needs-attention'
+import { useOnForeground } from '@/features/attention/attention'
 import { useSession } from '@/session/context'
-import { holdsRole } from '@/session/session'
-
-/**
- * The outlets this reader can see, side by side, read in ten seconds while
- * doing something else.
- *
- * **It is the home of both the Super Admin's shell and the Franchise Admin's**
- * (owner decision, 2026-09-01). The manager's used to be a separate screen
- * showing an address and a phone number under a promise that today's figures
- * would land there once they were real — a promise `#13` was going to keep and
- * did not, because it was withdrawn. One screen serves both because the
- * question is the same one, and **the database already scopes the answer**:
- * asked to list outlets, it hands the owner every shop and a manager only the
- * ones their live assignments name. So the owner reads two cards and a manager
- * reads their own, from one component that filters nothing itself.
- *
- * What differs by role is only what is *offered* on a card, never what is
- * *shown*: `Open` leads to a Super Admin surface, so a manager is not given a
- * door that would answer them with a not-found.
- *
- * **This screen never asks what mode it is in.** It lists outlets from the
- * outlets adapter — real in both modes — and asks the insights adapter for each
- * one's figures. In demo mode that adapter returns the scenario; in real mode it
- * returns `null`, and the card says so rather than rendering a zero that would
- * read as *you took nothing today*. The seam is still exactly one adapter wide,
- * which is what makes the screen mode-blind — but nothing on the roadmap is
- * coming to swap it: #13 would have, and was withdrawn
- * (`openspec/todos/owner-console-was-withdrawn.md`). Connecting it is
- * `openspec/todos/the-home-page-reads-the-money.md`.
- */
-
-const ALL_OUTLETS = 'all'
-
-interface OutletFigures {
-  outlet: Tables<'outlets'>
-  businessDate: string
-  summary: OutletDaySummary | null
-  /**
-   * Yesterday, for one reason: **a drawer that came up short is only known
-   * about once the day is closed**, so today's figures can never carry it. An
-   * owner who has to open each outlet in turn to find out whether last night
-   * balanced is being made to do the console's job.
-   */
-  previous: OutletDaySummary | null
-}
+import { ROLE_SEGMENTS } from '@/session/session'
+import { useOverviewRead } from './use-overview-read'
 
 export function OutletsOverview() {
-  const session = useSession()
-  // What is offered, never what is read — the outlets adapter has already
-  // decided the latter, from the assignment, in the database.
-  const mayOpenDayView = holdsRole(session, 'super_admin')
-  const { outlets, insights } = useAdapters()
-  const [rows, setRows] = useState<OutletFigures[]>()
-  const [scope, setScope] = useState<string>(ALL_OUTLETS)
-
-  useEffect(() => {
-    let active = true
-
-    void (async () => {
-      const list = await outlets.listOutlets()
-      const figures = await Promise.all(
-        list.map(async (outlet) => {
-          // Each outlet's own cutover decides its own today. Two outlets could
-          // legitimately be on different business dates at 03:30.
-          const businessDate = resolveBusinessDate(new Date(), outlet.business_day_cutover)
-          const [summary, previous] = await Promise.all([
-            insights.outletDay(outlet.id, businessDate),
-            insights.outletDay(outlet.id, shiftBusinessDate(businessDate, -1)),
-          ])
-          return { outlet, businessDate, summary, previous }
-        }),
-      )
-      if (active) setRows(figures)
-    })()
-
-    return () => {
-      active = false
-    }
-  }, [outlets, insights])
-
-  const base = session.mode === 'demo' ? '/demo/owner' : '/owner'
-  const shown = rows?.filter((row) => scope === ALL_OUTLETS || row.outlet.id === scope) ?? []
-
+  const { outlets } = useAdapters()
+  const read = useCallback(() => outlets.listOutlets(), [outlets])
+  const rows = useOverviewRead(read)
   return (
-    <div className="mx-auto max-w-3xl">
-      {/*
-        Named for what is on screen — `shown` rather than `rows`, so it follows
-        the outlet switcher too. A manager running one shop met a heading
-        reading "All outlets" above a single card, which is true of the query
-        and false of the page; so did an owner who had scoped to one.
-      */}
+    <div className="mx-auto max-w-3xl space-y-3">
       <PageHeader
-        title={shown.length === 1 ? (shown[0]?.outlet.name ?? 'Your outlet') : 'All outlets'}
-        subtitle={
-          rows?.[0] ? `Today — ${formatBusinessDate(rows[0].businessDate)}` : 'Today at a glance'
-        }
+        title="Overview"
+        subtitle={`${new Intl.DateTimeFormat('en-IN', {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+          timeZone: 'Asia/Kolkata',
+        }).format(new Date())} · Month through yesterday`}
       />
-
-      {rows && rows.length > 1 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <label htmlFor="outlet-scope" className="text-xs font-semibold text-content-muted">
-            Showing
-          </label>
-          <Select
-            id="outlet-scope"
-            data-testid="outlet-scope"
-            className="h-11 w-auto"
-            value={scope}
-            onChange={(event) => setScope(event.target.value)}
-          >
-            {/* Only what the adapter returned. Nothing here can name an outlet
-                the caller was not given (spec: the switcher never widens). */}
-            <option value={ALL_OUTLETS}>All outlets</option>
-            {rows.map((row) => (
-              <option key={row.outlet.id} value={row.outlet.id}>
-                {row.outlet.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-      )}
-
-      {rows === undefined ? (
-        // The same `space-y-3` stack the outlet cards land in, at one card's
-        // height, so the figures fill the space rather than push it open.
-        <LoadingList label="your outlets" rows={2} blockHeight="h-52" />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon={Store}
-          title={
-            mayOpenDayView
-              ? 'No outlets yet — create the first one from Outlets. Nothing else in the app works until an outlet exists.'
-              : 'No outlet is assigned to you. A Super Admin assigns one before anything appears here.'
-          }
-          action={
-            mayOpenDayView ? (
-              <Link to={`${base}/outlets`} className={buttonVariants({ size: 'phone' })}>
-                Go to Outlets
-              </Link>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="space-y-3">
-          {shown.map((row) => (
-            <OutletCard
-              key={row.outlet.id}
-              figures={row}
-              base={base}
-              mayOpenDayView={mayOpenDayView}
-              solo={shown.length === 1}
-            />
+      {rows.error ? (
+        <ReadError retry={rows.retry} />
+      ) : rows.value === undefined ? (
+        <LoadingRegion label="your outlets" className="space-y-3">
+          {[0, 1].map((i) => (
+            <Card key={i} className="!px-3 !py-0">
+              <div className="flex h-13 items-center gap-2 border-b border-border">
+                <Shimmer className="h-10 w-10 !rounded-full" />
+                <Shimmer className="h-4 w-36" />
+              </div>
+              <div className="grid grid-cols-2 [&>*:nth-child(even)]:pl-3 [&>*:nth-child(odd)]:pr-3">
+                {[0, 1, 2, 3].map((j) => (
+                  <MetricShimmer key={j} />
+                ))}
+              </div>
+            </Card>
           ))}
-        </div>
+        </LoadingRegion>
+      ) : rows.value.length === 0 ? (
+        <p className="text-sm text-content-muted">No outlets are available to your account.</p>
+      ) : (
+        rows.value.map((outlet) => <OutletCard key={outlet.id} outlet={outlet} />)
       )}
+      <NeedsAttention />
     </div>
   )
 }
 
-function OutletCard({
-  figures,
-  base,
-  mayOpenDayView,
-  solo,
-}: {
-  figures: OutletFigures
-  base: string
-  /** `owner-outlet-view` is a Super Admin surface; a manager has no such gate. */
-  mayOpenDayView: boolean
-  /**
-   * The only card on the page, in which case **the page title already names
-   * this outlet** and the card repeating it puts the same words twice, one
-   * line apart. A manager running one shop meets this every time.
-   */
-  solo: boolean
-}) {
-  const { outlet, summary } = figures
-  const header = !solo || mayOpenDayView
-
+function OutletCard({ outlet }: { outlet: Tables<'outlets'> }) {
+  const { overview } = useAdapters()
+  const session = useSession()
+  const base = `${session.mode === 'demo' ? '/demo' : ''}/${ROLE_SEGMENTS[session.role ?? 'franchise_admin']}`
+  const [now, setNow] = useState(Date.now)
+  const refreshClock = useCallback(() => setNow(Date.now()), [])
+  useOnForeground(refreshClock)
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
+  const today = resolveBusinessDate(new Date(now), outlet.business_day_cutover)
+  const period = overviewPeriod(today)
+  const salesRead = useCallback(
+    () => overview.sales(outlet.id, today),
+    [overview, outlet.id, today],
+  )
+  const drawerRead = useCallback(() => overview.drawer(outlet.id), [overview, outlet.id])
+  const revenueRead = useCallback(
+    () => overview.revenue(outlet.id, period.from, period.through),
+    [overview, outlet.id, period.from, period.through],
+  )
+  const previousRead = useCallback(
+    () => overview.revenue(outlet.id, period.previousFrom, period.previousThrough),
+    [overview, outlet.id, period.previousFrom, period.previousThrough],
+  )
+  const expensesRead = useCallback(
+    () => overview.expenses(outlet.id, period.from, period.through),
+    [overview, outlet.id, period.from, period.through],
+  )
+  const tabletsRead = useCallback(() => overview.tablets(outlet.id), [overview, outlet.id])
+  const sales = useOverviewRead(salesRead)
+  const drawer = useOverviewRead(drawerRead)
+  const revenue = useOverviewRead(revenueRead)
+  const previous = useOverviewRead(previousRead)
+  const expenses = useOverviewRead(expensesRead)
+  const tablets = useOverviewRead(tabletsRead)
+  const rereadTablets = tablets.retry
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') rereadTablets()
+    }, 60_000)
+    return () => clearInterval(timer)
+  }, [rereadTablets])
+  const status = tablets.value === undefined ? null : outletPresence(tablets.value, now)
+  const monthName = new Intl.DateTimeFormat('en-IN', {
+    month: 'long',
+    timeZone: 'Asia/Kolkata',
+  }).format(new Date(`${period.month}-01T12:00:00+05:30`))
+  const source = (path: string) => `${base}/${path}?outlet=${encodeURIComponent(outlet.id)}`
+  const ledger = `${source('ledger')}&view=month&month=${period.month}`
+  const qualifier = revenue.value?.incomplete
+    ? 'Delivery data incomplete'
+    : revenue.value?.provisional
+      ? 'Commission pending'
+      : null
+  const change =
+    revenue.value &&
+    previous.value &&
+    !qualifier &&
+    !previous.value.incomplete &&
+    !previous.value.provisional &&
+    previous.value.hasSales
+      ? revenueChange(revenue.value.revenuePaise, previous.value.revenuePaise)
+      : null
+  const profit =
+    revenue.value?.hasSales && expenses.value !== undefined
+      ? revenue.value.revenuePaise - expenses.value
+      : null
+  const periodLabel = period.fullMonth ? 'Full month' : 'Through yesterday'
   return (
-    <Card className="space-y-3" data-testid={`outlet-card-${outlet.id}`}>
-      {header && (
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          {!solo && (
-            <div className="min-w-0">
-              <h2 className="truncate text-base font-bold text-content">{outlet.name}</h2>
-              <p className="truncate text-xs text-content-muted">{outlet.location_label}</p>
-            </div>
-          )}
-          {/*
-          Not offered to a manager. `owner-outlet-view` is declared for the
-          Super Admin alone, so the gate answers a manager with a not-found —
-          and a button that leads to "that page does not exist" is worse than
-          no button. They are standing in their own outlet's figures already.
-        */}
-          {mayOpenDayView && (
-            <Link
-              to={`${base}/outlet/${outlet.id}`}
-              className={buttonVariants({ variant: 'secondary', size: 'phone' })}
-              data-testid={`open-outlet-${outlet.id}`}
-            >
-              Open
-            </Link>
-          )}
-        </div>
-      )}
-
-      {summary === null ? (
-        /* A real answer, not an error. See the module note. */
-        <p className="text-sm text-content-muted" data-testid={`no-figures-${outlet.id}`}>
-          Today’s figures are not available yet — this page is not connected to live trading data.
-          The outlet is here; the counter, the drawer and the Ledger have the numbers.
-        </p>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <div>
-              <Money
-                paise={summary.salesPaise}
-                display
-                data-testid={`sales-${outlet.id}`}
-                className="text-content"
-              />
-              <p className="text-xs text-content-muted">
-                {summary.billCount === 1 ? '1 bill today' : `${summary.billCount} bills today`}
-              </p>
-            </div>
-            <div className="text-right">
-              <Money paise={summary.expectedCashPaise} data-testid={`cash-${outlet.id}`} />
-              <p className="text-xs text-content-muted">
-                {summary.dayClosed ? 'counted and closed' : 'should be in the drawer'}
-              </p>
-            </div>
+    <Card
+      className="overflow-hidden bg-gradient-to-br from-surface-raised/30 to-surface !px-3 !py-0"
+      data-testid={`outlet-card-${outlet.id}`}
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-border py-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="rounded-full bg-primary/10 p-2 text-accent-text">
+            <Store size={24} aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-bold leading-5">{outlet.name}</h2>
+            <p className="truncate text-[0.8125rem] leading-[1.125rem] text-content-muted">
+              {outlet.location_label}
+            </p>
           </div>
-
-          {summary.salesByMethod.length > 0 && (
-            <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-content-muted">
-              {summary.salesByMethod.map((total) => (
-                <li key={total.method}>
-                  <span className="font-semibold text-content">{total.method}</span>{' '}
-                  <Money paise={total.amountPaise} />
-                </li>
-              ))}
-            </ul>
+        </div>
+        <Link
+          to={`${base}/devices/${outlet.id}`}
+          data-testid={`open-outlet-${outlet.id}`}
+          className="flex min-h-11 shrink-0 items-center rounded-lg text-[0.8125rem] font-semibold focus-visible:focus-ring"
+          aria-label={
+            status === 'partial' ? 'Open, some tablets unavailable. View Tablets' : undefined
+          }
+        >
+          {tablets.error ? (
+            'Status unavailable'
+          ) : status === null ? (
+            <Shimmer className="h-3 w-10" />
+          ) : (
+            <span className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5">
+              {status === 'closed' ? 'Closed' : 'Open'}
+              <span
+                aria-hidden
+                className={`h-2 w-2 rounded-full ${status === 'closed' ? 'bg-danger' : status === 'partial' ? 'bg-warning' : 'bg-success'}`}
+              />
+            </span>
           )}
-
-          <AttentionRow
-            summary={summary}
-            previous={figures.previous}
-            outletId={outlet.id}
-            base={base}
-          />
-        </>
-      )}
+        </Link>
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-border">
+        <Metric
+          label="Today's counter sales"
+          to={source('billing-history')}
+          loading={sales.value === undefined}
+          error={sales.error}
+          retry={sales.retry}
+        >
+          {sales.value && (
+            <>
+              <MetricValue icon={Banknote} tone="primary">
+                <OverviewMoney
+                  paise={sales.value.cashPaise + sales.value.upiPaise}
+                  data-testid={`sales-${outlet.id}`}
+                />
+              </MetricValue>
+              <Subtext
+                title={`Cash ${formatPaise(sales.value.cashPaise)} · UPI ${formatPaise(sales.value.upiPaise)}`}
+              >
+                Cash <SupportingMoney paise={sales.value.cashPaise} /> · UPI{' '}
+                <SupportingMoney paise={sales.value.upiPaise} />
+              </Subtext>
+            </>
+          )}
+        </Metric>
+        <Metric
+          label="Drawer cash · expected"
+          to={source('drawer')}
+          loading={drawer.value === undefined}
+          error={drawer.error}
+          retry={drawer.retry}
+        >
+          {drawer.value && (
+            <>
+              <MetricValue icon={Wallet} tone="primary">
+                {drawer.value.expectedPaise === null ? (
+                  <p className="text-sm leading-7">Not counted yet</p>
+                ) : (
+                  <OverviewMoney
+                    paise={drawer.value.expectedPaise}
+                    data-testid={`cash-${outlet.id}`}
+                  />
+                )}
+              </MetricValue>
+              <Subtext
+                title={`Last left ${drawer.value.leftPaise === null ? '—' : formatPaise(drawer.value.leftPaise)} · Cash spent since the last count ${formatPaise(drawer.value.spentPaise)}`}
+              >
+                Left{' '}
+                {drawer.value.leftPaise === null ? (
+                  '—'
+                ) : (
+                  <SupportingMoney paise={drawer.value.leftPaise} />
+                )}{' '}
+                · Spent <SupportingMoney paise={drawer.value.spentPaise} />
+              </Subtext>
+            </>
+          )}
+        </Metric>
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-border border-t border-border">
+        <Metric
+          label={`${monthName} revenue`}
+          title={`${monthName} revenue · ${periodLabel}`}
+          to={ledger}
+          loading={revenue.value === undefined}
+          error={revenue.error}
+          retry={revenue.retry}
+        >
+          {revenue.value && (
+            <>
+              <MetricValue
+                icon={
+                  change === null
+                    ? ChartNoAxesCombined
+                    : change > 0
+                      ? TrendingUp
+                      : change < 0
+                        ? TrendingDown
+                        : Minus
+                }
+                tone={
+                  change === null || change === 0 ? 'primary' : change > 0 ? 'success' : 'danger'
+                }
+              >
+                <OverviewMoney
+                  paise={revenue.value.revenuePaise}
+                  data-testid={`revenue-${outlet.id}`}
+                />
+              </MetricValue>
+              <Subtext title={periodLabel}>
+                {qualifier ??
+                  (previous.error ? (
+                    'Comparison unavailable'
+                  ) : previous.value === undefined ? (
+                    <Shimmer className="mt-1 h-3 w-24" />
+                  ) : change === null ? (
+                    'No comparable data'
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      {change < 0 ? (
+                        <ArrowDownRight size={13} aria-hidden />
+                      ) : (
+                        <ArrowUpRight size={13} aria-hidden />
+                      )}
+                      <span className="font-bold">{Math.abs(change).toFixed(1)}%</span> vs{' '}
+                      {new Intl.DateTimeFormat('en-IN', {
+                        month: 'short',
+                        timeZone: 'Asia/Kolkata',
+                      }).format(new Date(`${period.previousFrom}T12:00:00+05:30`))}
+                      {period.fullMonth ? '' : ` 1–${Number(period.previousThrough.slice(8))}`}
+                    </span>
+                  ))}
+              </Subtext>
+            </>
+          )}
+        </Metric>
+        <Metric
+          label={`${monthName} P&L · est.`}
+          title={`${monthName} estimated operating P&L · ${periodLabel}`}
+          to={ledger}
+          loading={revenue.value === undefined || expenses.value === undefined}
+          error={revenue.error || expenses.error}
+          retry={() => {
+            revenue.retry()
+            expenses.retry()
+          }}
+        >
+          {revenue.value && expenses.value !== undefined && (
+            <>
+              <MetricValue
+                icon={
+                  profit === null
+                    ? ChartPie
+                    : profit > 0
+                      ? TrendingUp
+                      : profit < 0
+                        ? TrendingDown
+                        : Minus
+                }
+                tone={
+                  profit === null || profit === 0 ? 'primary' : profit > 0 ? 'success' : 'danger'
+                }
+              >
+                {profit === null ? (
+                  <p className="text-sm leading-7">No sales recorded</p>
+                ) : (
+                  <OverviewMoney paise={profit} data-testid={`profit-${outlet.id}`} />
+                )}
+              </MetricValue>
+              <Subtext
+                title={`Expenses ${formatPaise(expenses.value)}${qualifier ? ` · ${qualifier}` : ' · Percentage is operating margin'}`}
+              >
+                Expenses <SupportingMoney paise={expenses.value} />
+                {!qualifier && profit !== null && revenue.value.revenuePaise > 0 ? (
+                  <>
+                    <span> · </span>
+                    <span className="font-bold">
+                      {((profit / revenue.value.revenuePaise) * 100).toFixed(1)}%
+                    </span>
+                  </>
+                ) : (
+                  ''
+                )}
+              </Subtext>
+            </>
+          )}
+        </Metric>
+      </div>
     </Card>
   )
 }
 
-/**
- * What needs looking at, in words. Each item is a count of rows somebody can go
- * and read — an alert about a problem that exists nowhere else in the data is a
- * sentence somebody typed.
- */
-function AttentionRow({
-  summary,
-  previous,
-  outletId,
-  base,
-}: {
-  summary: OutletDaySummary
-  previous: OutletDaySummary | null
-  outletId: string
-  base: string
-}) {
-  // Today's difference is null by construction until somebody counts the
-  // drawer, so the figure worth surfacing is the last closed day's.
-  const difference = previous?.dayClosed ? previous.cashDifferencePaise : null
-  const items: { key: string; icon: LucideIcon; label: string; to?: string }[] = []
-
-  if (summary.waitingApprovalCount > 0) {
-    items.push({
-      key: 'attendance',
-      icon: Hourglass,
-      // A stranded day is invisible until somebody queries their pay, which is
-      // exactly the kind of thing this list exists to surface.
-      label:
-        summary.waitingApprovalCount === 1
-          ? '1 arrival waiting for approval'
-          : `${summary.waitingApprovalCount} arrivals waiting for approval`,
-      to: `${base}/attendance`,
-    })
-  }
-  if (difference !== null && difference !== 0) {
-    items.push({
-      key: 'cash',
-      icon: TriangleAlert,
-      // Direction in words as well as by sign — a minus is the first thing a
-      // small screen loses, and "₹240 short" is not a sentence anyone misreads.
-      label: `Drawer ${formatPaise(Math.abs(difference))} ${describeDifference(difference)} on ${formatBusinessDate(previous?.businessDate ?? '')}`,
-      to: `${base}/outlet/${outletId}`,
-    })
-  }
-
-  if (items.length === 0) {
-    return (
-      <p className="text-xs text-content-muted" data-testid={`attention-${outletId}`}>
-        {summary.checkedInCount === 1 ? '1 arrival' : `${summary.checkedInCount} arrivals`} recorded
-        and approved · nothing needs attention
-      </p>
-    )
-  }
-
+/** Overview alone drops paise; accounting and source pages keep the exact amount. */
+function OverviewMoney({ paise, ...props }: ComponentProps<typeof Money>) {
   return (
-    <ul
-      className="flex flex-wrap gap-2 text-xs font-semibold"
-      data-testid={`attention-${outletId}`}
+    <Money
+      {...props}
+      title={formatPaise(paise)}
+      paise={paise - (paise % 100)}
+      className={`whitespace-nowrap leading-7 ${Math.abs(paise) >= 100_000_000 ? 'text-lg font-bold' : 'text-[1.375rem] font-extrabold'}`}
+    />
+  )
+}
+
+/** Short display-only values; the title and linked source retain exact paise. */
+function SupportingMoney({ paise }: { paise: number }) {
+  return <span className="font-bold">{compactPaise(paise)}</span>
+}
+
+function compactPaise(paise: number): string {
+  const exact = formatPaise(paise)
+  const absolute = Math.abs(paise)
+  if (absolute < 1_000_000) return exact.replace(/\.\d{2}$/, '')
+  const [unit, suffix] =
+    absolute >= 1_000_000_000
+      ? ([1_000_000_000, 'Cr'] as const)
+      : absolute >= 10_000_000
+        ? ([10_000_000, 'L'] as const)
+        : ([100_000, 'k'] as const)
+  return `${paise < 0 ? '-' : ''}₹${(absolute / unit).toFixed(1).replace(/\.0$/, '')}${suffix}`
+}
+
+function Subtext({ children, title }: { children: ReactNode; title?: string }) {
+  return (
+    <div
+      title={title}
+      data-testid="metric-subtext"
+      className="mt-0.5 whitespace-nowrap text-[0.8125rem] leading-[1.125rem] text-content-muted"
     >
-      {items.map((item) => {
-        const Icon = item.icon
-        const content = (
-          <>
-            <Icon aria-hidden size={14} />
-            {item.label}
-          </>
-        )
-        return (
-          <li key={item.key}>
-            {item.to ? (
-              <Link
-                to={item.to}
-                className="flex items-center gap-1 rounded-lg border border-warning px-2 py-1 text-content hover:bg-surface-raised focus-visible:focus-ring"
-              >
-                {content}
-              </Link>
-            ) : (
-              <span className="flex items-center gap-1 rounded-lg border border-warning px-2 py-1 text-content">
-                {content}
-              </span>
-            )}
-          </li>
-        )
-      })}
-    </ul>
+      {children}
+    </div>
+  )
+}
+function MetricValue({
+  children,
+  icon: Icon,
+  tone,
+}: {
+  children: ReactNode
+  icon: LucideIcon
+  tone: 'success' | 'danger' | 'primary'
+}) {
+  return (
+    <div className="flex min-h-9 items-center justify-between gap-1">
+      <div className="min-w-0">{children}</div>
+      <span
+        aria-hidden
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tone === 'success' ? 'bg-success/10 text-success' : tone === 'danger' ? 'bg-danger/10 text-danger' : 'bg-primary/10 text-accent-text'}`}
+      >
+        <Icon size={22} strokeWidth={1.8} />
+      </span>
+    </div>
+  )
+}
+function MetricShimmer() {
+  return (
+    <div className="min-w-0 py-1.5">
+      <Shimmer className="mb-0.5 h-[1.125rem] w-28 max-w-full" />
+      <div className="flex h-9 items-center justify-between gap-1">
+        <Shimmer className="h-6 w-24 max-w-full" />
+        <Shimmer className="h-9 w-9 shrink-0 !rounded-lg" />
+      </div>
+      <Shimmer className="mt-0.5 h-[1.125rem] w-28 max-w-full" />
+    </div>
+  )
+}
+function ReadError({ retry }: { retry: () => void }) {
+  return (
+    <div className="text-xs text-content-muted">
+      Could not load.{' '}
+      <button
+        className="min-h-11 font-semibold text-accent-text focus-visible:focus-ring"
+        onClick={retry}
+      >
+        Retry
+      </button>
+    </div>
+  )
+}
+function Metric({
+  label,
+  title,
+  to,
+  children,
+  loading,
+  error,
+  retry,
+}: {
+  label: string
+  title?: string
+  to: string
+  children: ReactNode
+  loading: boolean
+  error?: boolean
+  retry: () => void
+}) {
+  if (error)
+    return (
+      <div className="min-h-[5.5rem] py-1.5 first:pr-3 last:pl-3">
+        <p className="text-xs font-bold text-content-muted">{label}</p>
+        <ReadError retry={retry} />
+      </div>
+    )
+  if (loading)
+    return (
+      <LoadingRegion label={label} className="min-w-0 first:pr-3 last:pl-3">
+        <MetricShimmer />
+      </LoadingRegion>
+    )
+  return (
+    <Link
+      to={to}
+      title={title}
+      className="block min-w-0 py-1.5 first:pr-3 last:pl-3 hover:bg-surface-raised/50 focus-visible:focus-ring"
+    >
+      <p className="mb-0.5 text-[0.8125rem] font-bold leading-[1.125rem] text-content-muted">
+        {label}
+      </p>
+      {children}
+    </Link>
   )
 }

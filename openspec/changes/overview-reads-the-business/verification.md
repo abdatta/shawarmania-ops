@@ -1,0 +1,64 @@
+# Verification: Overview reads the business
+
+Verified locally on 2026-09-08. This report covers the demo and real-adapter paths against the local Supabase stack. It does not claim a production deployment or production-scale timing.
+
+## User paths checked
+
+- Inspected Overview at 390 × 844 and 1080 × 810 in light and dark, for demo and a signed-in owner. Checked density, overflow, Open/Closed dots, financial explanations and attention rows. A signed-in manager sees only their assigned outlet.
+- Followed sales to Billing, cash to Drawer, status to Tablets, and monthly figures to the scoped Ledger. Reload preserves the selected Ledger month. October 1 opens full September, while today's sales remain October 1.
+- Delayed monthly responses deliberately: sales and Drawer arrive while monthly cells keep their shimmers. Component tests also delay expenses and comparison independently and retry one failed cell without replacing successful cells.
+- Compared attendance and delivery summary rows with navigation counts. Three blocked integrations produce one row and badge count of 3, even when the same integration affects multiple outlets. Demo keeps its permanent banner and makes no external requests.
+
+- Iterated the layout in the browser before the final test runs: compact inset cards, larger text and icon tiles, fixed neutral tender icons, and directional green/red revenue and P&L icons. Inspected synthetic six-digit totals including -₹9,99,999.99 displayed as -₹9,99,999 in both phone themes; amounts cleared their icons and all eight captions stayed on one line. Restored normal demo data afterwards. Overview alone omits paise at the display edge; source values are unchanged. Browser assertions also prove both outlet cards and the two attention rows stay above the phone navigation.
+
+## Completed implementation
+
+Both Overview modes use the same four-cell outlet cards and typed adapter contract. Read-only SQL aggregates use settled bills, effective tender allocations, effective expenses, daily delivery figures and the existing drawer interval readers. Each function checks owner or assigned-manager authority before reading; no table or RLS policy was added or widened. The existing one-minute tablet heartbeat remains; Overview presence uses a separate three-minute window.
+
+Monthly periods end on yesterday's explicit outlet business date. The first business day shows the previous full month; comparisons clamp shorter months and omit misleading zero/missing/provisional baselines. Drawer explanations preserve Last Left and spent since the last count. Attention summaries reuse navigation sources and permissions, including Hyperpure and one issue per blocked integration.
+
+## Issues found and fixes
+
+- Old landing tests still expected “All outlets”; updated them for the agreed Overview contract.
+- A range-based demo test depended on the current date to contain historical fixtures. Gave that test an explicit clock, preserving its substantive assertion.
+- The new live test initially assumed the seed contained a counted drawer. It now asserts an independently loaded Drawer link, including the valid “Not counted yet” case.
+- Strengthened SQL coverage with explicit nonzero delivery amounts, both outlets, an excluded following day, unknown commission and missing expected channel-days. The fixture obeys the database's requirement that unknown commission also has unknown net.
+- Matched demo financial permissions to live owner/manager permissions and tested rejection for Biller and Employee.
+- Existing receipt and two-tablet test fixtures confuse UTC dates with outlet business dates near cutover. An expired seeded shift also affected a run after a long pause. Recorded these separate harness issues in `openspec/todos/database-tests-cross-the-business-cutover.md`; retained production validation and restored the local database timezone to UTC.
+- Raw `npm run lint` reads pre-existing Git-ignored diagnostic scripts under `logs/` and fails on those files. They were preserved. ESLint excluding only that scratch directory and all six repository invariant scripts pass.
+
+## Reverification
+
+Repeated unit/component tests, browser tests, formatting, TypeScript/build, Edge Function typechecking, contrast and the database suites after the relevant fixes. Ran a fresh reset before pgTAP and REST/RLS in their required order. Generated types matched the reset schema byte-for-byte. OpenSpec strict validation and roadmap reconciliation pass.
+
+## Gate results
+
+| Gate | Result |
+| --- | --- |
+| ESLint | PASS for repository/change files with only `logs/**` excluded; raw command caveat above |
+| Six lint invariants | PASS: tokens, backlog index, spec index, function declarations, bill totals, discount rows |
+| `format:check` | PASS |
+| `typecheck` | PASS |
+| `functions:typecheck` | PASS |
+| `npm test` | PASS: 141 files, 1,715 tests |
+| `contrast` | PASS: 52 pairs across light/dark |
+| `build` | PASS: production builds used by both browser suites; existing large-chunk warning |
+| `test:e2e` | PASS: 264 tests |
+| `db:reset` and `test:db` | PASS: fresh reset, 58 files and 2,300 pgTAP tests |
+| `test:rls` | PASS: 250 probes across all six phases, after pgTAP |
+| `test:e2e:auth` | PASS: 24 tests, including real offline settlement, simultaneous tablets and both new Overview tests |
+| Generated schema | PASS: byte-for-byte regeneration match |
+| OpenSpec and roadmap | PASS: strict validation; roadmap already reconciled |
+| UI and demo isolation | PASS: both modes, both sizes/themes; no page errors or failed Overview RPCs in the focused live walk |
+
+## Query cost and limits
+
+On the small local seed, SQL execution measured approximately 8.9 ms for today's sales, 2.9 ms for monthly revenue, 1.4 ms for expenses and 2.1 ms for Drawer. A separate REST measurement returned the three financial aggregate reads together in 18–20 ms versus 221–404 ms for the existing full Ledger month reader. That August seed period is empty; these figures establish local overhead, not scaling under real trading volume. SQL tests separately prove nonzero financial behavior, and demo tests compare real scenario figures against Ledger and Drawer.
+
+Monthly totals and comparison are bounded date-range aggregates, without loading a full day statement for every date. Drawer work grows with movements since its last physical count. Delivery attention retains the existing event/reconciliation readers, so it can arrive later; it never blocks financial cards. Production-volume load testing remains unperformed.
+
+P&L is an operating estimate using the existing Ledger basis. Missing delivery days and unsettled commission remain visible qualifications. Activated registered spares count toward the expected tablet total; presence does not assert that a person has an active shift. The change remains unarchived. The owner requested a local commit after verification, with no push or deployment.
+
+## Typography amendment
+
+The owner requested extra emphasis after the initial commit: 22px headlines are extra-bold, smaller 18px headlines are bold, and supporting monetary values, percentages and metric headings are bold. Inspected phone and tablet in both themes, with all eight phone captions remaining one line. Re-ran the seven Overview component tests and 16 Overview browser cases, including the production build, scoped links and viewport fit. Focused ESLint and formatting pass. Earlier backend verification remains applicable because this amendment changes presentation only. Today’s sales continues to use the outlet’s configured business-day cutover and stored bill business dates.

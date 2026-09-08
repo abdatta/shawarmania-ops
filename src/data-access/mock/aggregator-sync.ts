@@ -1,3 +1,4 @@
+import { integrationNeedsAttention } from '@/domain/delivery-attention'
 import type {
   AggregatorSyncAdapter,
   AggregatorSyncEventRow,
@@ -378,13 +379,15 @@ export function createMockAggregatorSyncAdapter(
         // The same rule the surface groups by. A count of something other than
         // what the page lists is worse than no count: it sends somebody looking
         // for work that is not there, or hides work that is.
-        needing: state.events.filter(
-          (row) =>
-            row.resolvedAt === null &&
-            (row.event.kind === 'week-disputed' ||
-              row.event.kind === 'session-lapsed' ||
-              row.event.kind === 'possible-duplicate-expense'),
-        ).length,
+        integrationIssue: integrationNeedsAttention(state.health),
+        needing:
+          Number(integrationNeedsAttention(state.health)) +
+          state.events.filter(
+            (row) =>
+              row.resolvedAt === null &&
+              (row.event.kind === 'week-disputed' ||
+                row.event.kind === 'possible-duplicate-expense'),
+          ).length,
       }))
     },
 

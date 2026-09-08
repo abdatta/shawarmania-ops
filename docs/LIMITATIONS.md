@@ -1,5 +1,7 @@
 # Limitations
 
+Overview monthly revenue and operating P&L stop at yesterday's business date; the first business day shows the previous full month. Delivery totals can still await sync or commission settlement and are labelled accordingly. Today’s counter sales and drawer are separate current readings. Open/Closed is tablet presence within three minutes, not opening hours or a guarantee that a person has opened a shift. Every activated non-removed tablet counts as expected, including a registered spare.
+
 Known edges, deliberate non-features, and honest gaps. Everything here is a decision, not an oversight — and each one names what would change if it stopped being acceptable.
 
 ## A multi-outlet person with no position cannot check in

@@ -15,6 +15,7 @@ import { createSupabaseExpenseCategoriesAdapter } from './expense-categories'
 import { createSupabaseExpensesAdapter } from './expenses'
 import { createSupabaseLedgerStatementAdapter } from './ledger-statement'
 import { createSupabaseMenuAdapter } from './menu'
+import { createSupabaseOverviewAdapter } from './overview'
 import { createSupabaseOutletsAdapter } from './outlets'
 import { createSupabaseInsightsAdapter } from './oversight'
 import type { CounterDeviceSession } from '@/session/counter-session'
@@ -44,6 +45,7 @@ export function createSupabaseAdapters(
       })
   }
   return {
+    overview: createSupabaseOverviewAdapter(client),
     outlets: createSupabaseOutletsAdapter(client, resumeCoordinator, offlineResume),
     aggregatorSync: createSupabaseAggregatorSyncAdapter(client),
     swiggySync: createSupabaseSwiggySyncAdapter(client),
@@ -64,8 +66,8 @@ export function createSupabaseAdapters(
     customers: createSupabaseCustomersAdapter(client, resumeCoordinator, offlineResume),
     expenses: createSupabaseExpensesAdapter(client, counterSession),
     expenseCategories: createSupabaseExpenseCategoriesAdapter(client),
-    // `owner-dashboard` is `live` and does call this one — and `null` is its
-    // honest answer, not a stub refusing. See supabase-adapters/oversight.ts.
+    // Legacy outlet-day insights remain unavailable in live mode. Overview
+    // reads its own compact financial adapter above.
     insights: createSupabaseInsightsAdapter(),
     // Real from the day they ship, and both `live` in the registry (#11). The
     // drawer never had a live surface to be a stub for: `daily_cash_records` has

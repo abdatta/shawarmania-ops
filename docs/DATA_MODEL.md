@@ -1,5 +1,7 @@
 # Data Model
 
+Overview reads compact, independent aggregates through `overview_sales`, `overview_revenue`, `overview_expenses` and `overview_drawer`. Each function rechecks owner or assigned-manager authority for the requested outlet before reading. No summary table stores a second financial truth. Sales use settled bills and effective payment allocations; expenses use `effective_expenses`; delivery uses daily net figures, or qualified gross while commission is unknown. Drawer Last Left and expected-now use the existing count and cash interval readers. Monthly filters use explicit business dates.
+
 > The authoritative version is the migration set in `supabase/migrations/` (landed with `data-model-and-tenancy`, 2026-07-26); this page explains intent and invariants. Where implementation settled an open question or diverged from the original sketch, the decision is recorded inline with its reason.
 
 ## Conventions

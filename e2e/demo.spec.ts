@@ -34,7 +34,7 @@ test('walking all four demo role shells makes no request beyond the app origin',
   const switcher = page.getByRole('navigation', { name: 'Demo role switcher' })
   await switcher.getByRole('link', { name: 'Admin' }).click()
   // The same page the owner just read, scoped to the one outlet they run.
-  await expect(page.getByRole('heading', { level: 1, name: 'Shawarmania Kalyani' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
 
   await switcher.getByRole('link', { name: 'Biller' }).click()
   // The Biller walkthrough is the enrolled tablet's own shell, whose chrome
@@ -45,7 +45,7 @@ test('walking all four demo role shells makes no request beyond the app origin',
   await expect(page.getByText('Hello, Demo Staff')).toBeVisible()
 
   await switcher.getByRole('link', { name: 'Owner' }).click()
-  await expect(page.getByRole('heading', { name: 'All outlets' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
 
   // The new owner control is part of this same network-safety walk: opening
   // it must stay as permanently demo-only as the four shells around it.
@@ -103,10 +103,10 @@ test('the demo can be left, and leaving is not dismissing', async ({ page }) => 
 
 test('a demo deep link reconstructs the same role and surface on reload', async ({ page }) => {
   await page.goto('demo/admin')
-  await expect(page.getByRole('heading', { level: 1, name: 'Shawarmania Kalyani' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
 
   await page.reload()
-  await expect(page.getByRole('heading', { level: 1, name: 'Shawarmania Kalyani' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
   await expect(page.getByTestId('demo-banner')).toBeVisible()
 
   // And from a cold start with no prior navigation (fresh SPA boot via the
@@ -154,7 +154,7 @@ test('the demo is still reachable without a session, by URL', async ({ page }) =
   // shared link that demanded a login would not be a demo.
   await page.goto('demo/owner')
   await expect(page.getByTestId('demo-banner')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'All outlets' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
 })
 
 test.describe('with a persisted real session', () => {
@@ -199,7 +199,7 @@ test.describe('with a persisted real session', () => {
 
     await page.getByRole('button', { name: 'Continue to demo' }).click()
     await expect(page.getByTestId('demo-banner')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'All outlets' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
   })
 
   test('the link the owner hands out meets the interstitial too', async ({ page }) => {

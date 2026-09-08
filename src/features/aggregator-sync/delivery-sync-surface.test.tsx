@@ -77,6 +77,14 @@ function countingAdapters(counts: {
     aggregatorSync: {
       ...real.aggregatorSync,
       countNeedsOwner: answer(counts.zomato, counts.zomatoElsewhere ?? 0),
+      getHyperpureHealth: async () => ({
+        lastRunAt: null,
+        lastOutcome: null,
+        running: false,
+        hasSession: false,
+        sessionExpiresAt: null,
+        readsPerDay: null,
+      }),
     },
     swiggySync: {
       ...real.swiggySync,

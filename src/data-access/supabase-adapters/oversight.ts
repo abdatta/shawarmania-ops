@@ -11,11 +11,9 @@ import type { InsightsAdapter } from '../adapters'
  * recorded rows, and an estimate on top of that is a second number to
  * reconcile rather than an answer.
  *
- * **The owner console is `live`**, so `outletDay` here is genuinely called by
- * a signed-in owner today — and `null` is its honest answer, not a stub
- * refusing. The console lists the outlet and states that its figures are not
- * available yet, rather than rendering a zero that would read as "you took
- * nothing today" (design D3).
+ * Overview now uses the separate Overview adapter. This legacy outlet-day
+ * contract remains unavailable in live mode; its demo reader still supports
+ * the older outlet-day detail surface.
  */
 export function createSupabaseInsightsAdapter(): InsightsAdapter {
   return {

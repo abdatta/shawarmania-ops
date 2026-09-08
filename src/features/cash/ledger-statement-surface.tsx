@@ -1,6 +1,6 @@
 import { Settings2 } from 'lucide-react'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 
 import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
@@ -74,10 +74,14 @@ const DIFFERENCE_WORDS = {
 } as const
 
 export function LedgerStatementSurface() {
+  const [address] = useSearchParams()
+  const linkedMonth = address.get('month')
   const { ledgerStatement: adapter, outlets } = useAdapters()
   const { outletId, selector: outletSelector } = useOutletScope()
 
-  const [view, setView] = useState<'day' | 'month'>('day')
+  const [view, setView] = useState<'day' | 'month'>(() =>
+    address.get('view') === 'month' ? 'month' : 'day',
+  )
   const [businessDate, setBusinessDate] = useState<string | null>(null)
   /**
    * The outlet's own today, through its own cutover.
@@ -102,7 +106,13 @@ export function LedgerStatementSurface() {
         const resolved = resolveBusinessDate(new Date(), outlet.business_day_cutover)
         setToday(resolved)
         setBusinessDate(resolved)
-        setMonthKey(resolved.slice(0, 7))
+        setMonthKey(
+          linkedMonth &&
+            /^\d{4}-(0[1-9]|1[0-2])$/.test(linkedMonth) &&
+            linkedMonth <= resolved.slice(0, 7)
+            ? linkedMonth
+            : resolved.slice(0, 7),
+        )
       })
       .catch(() => {
         if (active) setError('Could not work out which day this is.')
@@ -110,7 +120,7 @@ export function LedgerStatementSurface() {
     return () => {
       active = false
     }
-  }, [outlets, outletId])
+  }, [outlets, outletId, linkedMonth])
 
   const loadDay = useCallback(async () => {
     if (!outletId || !businessDate) return

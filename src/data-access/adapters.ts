@@ -2055,6 +2055,7 @@ export type ChannelSettlement = ZomatoSettlement
 
 /** The bag of domain adapters a session provider supplies to its tree. */
 export interface DataAdapters {
+  overview: import('./overview').OverviewAdapter
   outlets: OutletsAdapter
   accounts: AccountsAdapter
   attendance: AttendanceAdapter
@@ -2382,7 +2383,9 @@ export interface AggregatorSyncAdapter {
    *
    * Tenancy comes from the policies, as it does for every other count.
    */
-  countNeedsOwner(): Promise<readonly { outletId: string; needing: number }[]>
+  countNeedsOwner(): Promise<
+    readonly { outletId: string; needing: number; integrationIssue?: boolean }[]
+  >
   /**
    * Start a run now.
    *

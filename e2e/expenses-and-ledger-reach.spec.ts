@@ -157,6 +157,9 @@ for (const segment of ['owner', 'admin'] as const) {
 }
 
 test('a month with dates that carried no bills names them without saying why', async ({ page }) => {
+  // The demo seeds recent trading dates. Day one keeps some of them in August;
+  // an arbitrary later date would leave the previous month wholly empty.
+  await page.clock.setFixedTime(new Date('2026-09-01T12:00:00+05:30'))
   await page.goto('demo/owner/ledger')
   await expect(page.getByTestId('ledger-revenue')).toBeVisible()
   await page.getByRole('button', { name: 'The month' }).click()

@@ -1,11 +1,26 @@
 import { useCallback } from 'react'
+import { deliveryAttentionTotal, integrationNeedsAttention } from '@/domain/delivery-attention'
 
 import { useAdapters } from '@/data-access'
 import type { AggregatorSyncAdapter, AggregatorSyncEventRow } from '@/data-access/adapters'
 import { useSharedRead, type Attention } from '@/features/attention/attention'
 
 /** One outlet's waiting work, as the badge and the page both count it. */
-export type ChannelNeedsYouCounts = readonly { outletId: string; needing: number }[]
+export type ChannelNeedsYouCounts = readonly {
+  outletId: string
+  needing: number
+  integrationIssue?: boolean
+}[]
+
+const hyperKeys = new WeakMap<AggregatorSyncAdapter, object>()
+function hyperKeyFor(adapter: AggregatorSyncAdapter): object {
+  let key = hyperKeys.get(adapter)
+  if (!key) {
+    key = {}
+    hyperKeys.set(adapter, key)
+  }
+  return key
+}
 
 /**
  * How many things on a sync surface want the owner.
@@ -46,14 +61,14 @@ export function useSwiggyNeedsYouCounts(): ChannelNeedsYouCounts | null {
 export function useZomatoAttention(): Attention | null {
   const counts = useNeedsYouCounts()
   if (counts === null) return null
-  const total = counts.reduce((sum, count) => sum + count.needing, 0)
+  const total = deliveryAttentionTotal(counts)
   return { count: total, label: zomatoAttentionLabel(total) }
 }
 
 export function useSwiggyAttention(): Attention | null {
   const counts = useSwiggyNeedsYouCounts()
   if (counts === null) return null
-  const total = counts.reduce((sum, count) => sum + count.needing, 0)
+  const total = deliveryAttentionTotal(counts)
   return { count: total, label: zomatoAttentionLabel(total) }
 }
 
@@ -72,11 +87,22 @@ export function useSwiggyAttention(): Attention | null {
  * different value a moment later with nothing to say it had.
  */
 export function useDeliveryAttention(): Attention | null {
+  const { aggregatorSync } = useAdapters()
+  const hyperKey = hyperKeyFor(aggregatorSync)
+  const readHyper = useCallback(
+    async () => Number(integrationNeedsAttention(await aggregatorSync.getHyperpureHealth())),
+    [aggregatorSync],
+  )
+  const hyper = useSharedRead(hyperKey, readHyper)
   const zomato = useZomatoAttention()
   const swiggy = useSwiggyAttention()
-  if (zomato === null || swiggy === null) return null
-  const total = zomato.count + swiggy.count
-  return { count: total, label: zomatoAttentionLabel(total) }
+  if (zomato === null || swiggy === null || hyper.value === null) return null
+  const total = zomato.count + swiggy.count + hyper.value
+  return {
+    count: total,
+    label: zomatoAttentionLabel(total),
+    summaryLabel: `${total} delivery ${total === 1 ? 'issue' : 'issues'}`,
+  }
 }
 
 /**

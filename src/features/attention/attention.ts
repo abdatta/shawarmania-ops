@@ -27,6 +27,8 @@ export interface Attention {
    * counted and could not write it honestly (design D2).
    */
   label: string
+  /** Concise page summary; otherwise the page name and label are used. */
+  summaryLabel?: string
 }
 
 /** A hook a surface offers so the shell can badge it without knowing why. */
