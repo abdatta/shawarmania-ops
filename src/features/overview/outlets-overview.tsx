@@ -24,12 +24,20 @@ import { NeedsAttention } from '@/features/attention/needs-attention'
 import { useOnForeground } from '@/features/attention/attention'
 import { useSession } from '@/session/context'
 import { ROLE_SEGMENTS } from '@/session/session'
+import {
+  readOverviewOutletCountHint,
+  rememberOverviewOutletCount,
+} from './overview-outlet-count-hint'
 import { useOverviewRead } from './use-overview-read'
 
 export function OutletsOverview() {
   const { outlets } = useAdapters()
   const read = useCallback(() => outlets.listOutlets(), [outlets])
   const rows = useOverviewRead(read)
+  const [loadingOutletCount] = useState(readOverviewOutletCountHint)
+  useEffect(() => {
+    if (rows.value !== undefined) rememberOverviewOutletCount(rows.value.length)
+  }, [rows.value])
   return (
     <div className="mx-auto max-w-3xl space-y-3">
       <PageHeader
@@ -45,8 +53,8 @@ export function OutletsOverview() {
         <ReadError retry={rows.retry} />
       ) : rows.value === undefined ? (
         <LoadingRegion label="your outlets" className="space-y-3">
-          {[0, 1].map((i) => (
-            <Card key={i} className="!px-3 !py-0">
+          {Array.from({ length: loadingOutletCount }, (_, i) => (
+            <Card key={i} className="!px-3 !py-0" data-testid="overview-outlet-shimmer">
               <div className="flex h-13 items-center gap-2 border-b border-border">
                 <Shimmer className="h-10 w-10 !rounded-full" />
                 <Shimmer className="h-4 w-36" />

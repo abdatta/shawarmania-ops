@@ -21,3 +21,4 @@
 - [x] 3.7 Stop advisory delivery-session expiry timestamps from creating badge-only issues; reproduce the production state and verify Delivery, navigation and Overview agree at zero.
 - [x] 3.8 Incorporate the approved roomier outlet identity/status header and matching status shimmer; verify phone/tablet light/dark layout and focused Overview coverage.
 - [x] 3.9 Normalize Hyperpure as Zomato-family attention across Delivery navigation, Overview, outlet chips and channel switch; verify one shared issue remains findable without inflating top-level totals.
+- [x] 3.10 Remember the last successful outlet count browser-wide for Overview loading, default safely to one, preserve the hint on failures and verify the real result remains authoritative.

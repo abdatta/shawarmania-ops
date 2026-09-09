@@ -6,6 +6,50 @@ import {
 import { overviewPeriod } from '../src/domain/overview'
 import { resolveBusinessDate } from '../src/domain/datetime'
 
+async function recordOutletShimmerCounts(page: import('@playwright/test').Page) {
+  await page.addInitScript(() => {
+    const counts: number[] = []
+    Object.defineProperty(window, '__overviewOutletShimmerCounts', { value: counts })
+    const record = () => {
+      const count = document.querySelectorAll('[data-testid="overview-outlet-shimmer"]').length
+      if (count > 0) counts.push(count)
+    }
+    const observer = new MutationObserver(record)
+    observer.observe(document, { childList: true, subtree: true })
+  })
+}
+
+test('Overview remembers its last outlet-card loading shape across tabs', async ({
+  page,
+  baseURL,
+}) => {
+  await recordOutletShimmerCounts(page)
+  await page.goto('demo/owner')
+  await expect(page.locator('[data-testid^="outlet-card-"]')).toHaveCount(2)
+  expect(
+    await page.evaluate(
+      () =>
+        (window as typeof window & { __overviewOutletShimmerCounts: number[] })
+          .__overviewOutletShimmerCounts,
+    ),
+  ).toContain(1)
+  expect(await page.evaluate(() => localStorage.getItem('shawarmania.overview-outlet-count'))).toBe(
+    '2',
+  )
+
+  const secondTab = await page.context().newPage()
+  await recordOutletShimmerCounts(secondTab)
+  await secondTab.goto(new URL('demo/owner', baseURL!).href)
+  await expect(secondTab.locator('[data-testid^="outlet-card-"]')).toHaveCount(2)
+  expect(
+    await secondTab.evaluate(
+      () =>
+        (window as typeof window & { __overviewOutletShimmerCounts: number[] })
+          .__overviewOutletShimmerCounts,
+    ),
+  ).toContain(2)
+})
+
 test('day one shows the completed previous month and links to it', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-10-01T12:00:00+05:30'))
   await page.goto('demo/owner')

@@ -67,3 +67,22 @@ Each outlet card SHALL give its identity and linked Open/Closed status a distinc
 
 - **WHEN** Overview renders an outlet card on a phone
 - **THEN** the outlet icon, two-line identity and status pill remain clearly separated without crowding the metric grid below
+
+### Requirement: Initial outlet shimmers remember the browser's last successful shape
+
+While the outlet list is pending, Overview SHALL reserve one outlet card when the browser has no valid prior count and otherwise SHALL reserve the last successfully loaded count browser-wide, irrespective of user, role or tab. A remembered zero SHALL still reserve one card. Failed reads SHALL NOT overwrite the remembered count. The successful adapter result SHALL replace the hint and SHALL remain the authority for which outlets are shown. The temporary shimmer count MAY be capped to protect the UI from corrupt or obsolete browser storage.
+
+#### Scenario: A second tab opens after two outlets loaded
+
+- **WHEN** Overview has successfully loaded two outlets in this browser and another tab opens Overview
+- **THEN** the second tab initially reserves two outlet cards and then replaces them with its own authorised result
+
+#### Scenario: First load has no hint
+
+- **WHEN** Overview opens with no valid remembered count
+- **THEN** it reserves one outlet card while the authorised outlet list is pending
+
+#### Scenario: Outlet read fails
+
+- **WHEN** a remembered count exists and the next outlet-list read fails
+- **THEN** the existing count remains available for the next load rather than being replaced

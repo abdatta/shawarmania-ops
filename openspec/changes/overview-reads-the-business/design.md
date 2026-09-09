@@ -19,6 +19,8 @@ Deliver useful production and demo summaries without making detailed Ledger requ
 
 8. Use compact inset 2×2 cards, semantic tinted icon tiles, 13px labels/captions and 22px extra-bold headline figures. Omit paise at the Overview display edge without changing stored/calculated values. Metric headings and supporting numbers are bold. Seven-digit totals use 18px bold; six-digit positive/negative amounts retain 22px. Keep one caption row by shortening labels and compacting large supporting amounts; exact values remain in titles and source pages. Top icons remain neutral; revenue follows valid comparison direction and P&L follows its sign. Zero/unavailable values remain neutral. Give the outlet identity/status band roomier gaps, type, controls and vertical padding than the metric cells; its status shimmer reserves the loaded pill. Loading placeholders reserve the matching label, value/icon and single-caption geometry.
 
+9. Treat the last successful outlet-list size as a browser-wide loading hint, not identity or authority. Persist the plain count in local storage without a user, role or mode key, so a directly opened tab can reserve the same number of cards without another login. With no valid hint, or with a remembered zero, reserve one card rather than an empty screen. Cap only the temporary placeholder count at 24 to contain corrupt or obsolete storage; the successful adapter result remains authoritative, is stored exactly, and is not replaced by a failed read.
+
 ## Risks / Trade-offs
 
 - Delivery settlement or absent data can revise the month → carry qualification and suppress misleading growth/margin.

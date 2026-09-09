@@ -53,6 +53,48 @@ afterEach(() => {
 })
 
 describe('progressive Overview', () => {
+  it('defaults to one outlet shimmer while the first list is pending', () => {
+    const base = createMockAdapters('super_admin')
+    setup({
+      ...base,
+      outlets: { ...base.outlets, listOutlets: () => new Promise(() => {}) },
+    })
+    expect(screen.getAllByTestId('overview-outlet-shimmer')).toHaveLength(1)
+  })
+
+  it('reuses and refreshes the last successful browser-wide outlet count', async () => {
+    localStorage.setItem('shawarmania.overview-outlet-count', '3')
+    const base = createMockAdapters('super_admin')
+    const first = setup(base)
+    expect(screen.getAllByTestId('overview-outlet-shimmer')).toHaveLength(3)
+    await screen.findByTestId(`outlet-card-${KAL}`)
+    expect(localStorage.getItem('shawarmania.overview-outlet-count')).toBe('2')
+
+    first.unmount()
+    setup({
+      ...base,
+      outlets: { ...base.outlets, listOutlets: () => new Promise(() => {}) },
+    })
+    expect(screen.getAllByTestId('overview-outlet-shimmer')).toHaveLength(2)
+  })
+
+  it('does not overwrite the remembered count when the outlet list fails', async () => {
+    localStorage.setItem('shawarmania.overview-outlet-count', '3')
+    const base = createMockAdapters('super_admin')
+    setup({
+      ...base,
+      outlets: {
+        ...base.outlets,
+        listOutlets: async () => {
+          throw new Error('network')
+        },
+      },
+    })
+    expect(screen.getAllByTestId('overview-outlet-shimmer')).toHaveLength(3)
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    expect(localStorage.getItem('shawarmania.overview-outlet-count')).toBe('3')
+  })
+
   it('rolls an already-open page over at 4am and polls tablets once a minute', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-10-01T03:59:00+05:30'))
