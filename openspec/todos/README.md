@@ -17,7 +17,6 @@ Keep entries behavior-focused:
 | [Bill GST Breakup](./bill-gst-breakup.md) | Feature | Anticipated | Billing | The business registers for GST or a customer requires a tax invoice |
 | [Bill Receipt Delivery](./bill-receipt-delivery.md) | Feature | Anticipated | Billing | The owner picks a channel — WhatsApp Business API or SMS/DLT — and settles consent and per-bill opt-in |
 | [Supply Bills Paid Outside The Payout](./supply-bills-paid-outside-the-payout.md) | Feature | Owner asked to explore, 2026-08-18 | Outlet expenses | The owner asks in earnest and picks a route: supplier portal, invoice email, or bank statement |
-| [The Home Page Reads The Money](./the-home-page-reads-the-money.md) | Feature | **Owner asked, 2026-09-01** | Overview / Reporting | Wanted now; deferred out of #51 to keep that change about navigation |
 | [Six Tabs For One Person](./six-tabs-for-one-person.md) | Gap | Open | App shell | Somebody holding two roles says the bar is crowded, or a new surface pushes a common shape past five |
 | [The Document Should Not Be What Scrolls](./the-document-should-not-be-what-scrolls.md) | Gap | Open, found 2026-09-03 | App shell | Somebody mis-taps because a row moved under their thumb, or a change is already opening all four shells |
 | [Outlet Scope From The Address](./outlet-scope-from-the-address.md) | Feature | Anticipated | App shell | Somebody wants to send a link to one shop's figures |
